@@ -52,6 +52,41 @@ pub const brEncodedStoredStreamChunksBoundWithOptions = br.encodedStoredStreamCh
 pub const brEncodeStoredStreamAlloc = br.encodeStoredStreamAlloc;
 pub const brEncodeStoredStreamAppend = br.encodeStoredStreamAppend;
 pub const brEncodeStoredStreamInto = br.encodeStoredStreamInto;
+pub const brEncodedRleStreamBound = br.encodedRleStreamBound;
+pub const brEncodeRleStreamAlloc = br.encodeRleStreamAlloc;
+pub const brEncodeRleStreamAppend = br.encodeRleStreamAppend;
+pub const brEncodeRleStreamInto = br.encodeRleStreamInto;
+pub const brEncodeAbabaStreamAlloc = br.encodeAbabaStreamAlloc;
+pub const brEncodeAbabaPatternStreamAlloc = br.encodeAbabaPatternStreamAlloc;
+pub const brEncodeAlternatingStreamAlloc = br.encodeAlternatingStreamAlloc;
+pub const brEncodeRepeatedPrefixStreamAlloc = br.encodeRepeatedPrefixStreamAlloc;
+pub const brEncodePlannedStreamAlloc = br.encodePlannedStreamAlloc;
+pub const brEncodePlannedStreamLazyAlloc = br.encodePlannedStreamLazyAlloc;
+pub const brEncodePlannedStreamRatioAlloc = br.encodePlannedStreamRatioAlloc;
+pub const brEncodePlannedStreamAllocWithStats = br.encodePlannedStreamAllocWithStats;
+pub const brEncodePlannedStreamAllocWithStatsTimed = br.encodePlannedStreamAllocWithStatsTimed;
+pub const BrotliPlannedEncodeStats = br.PlannedEncodeStats;
+pub const BrotliPlannedCompressionLevel = br.PlannedCompressionLevel;
+pub const BrotliPlannedEncodeOptions = br.PlannedEncodeOptions;
+pub const BrotliPlannedParserOptions = br.PlannedParserOptions;
+pub const brEncodePlannedStreamWithOptionsAlloc = br.encodePlannedStreamWithOptionsAlloc;
+pub const brEncodedPlannedStreamBound = br.encodedPlannedStreamBound;
+pub const brEncodedPlannedStreamBoundWithOptions = br.encodedPlannedStreamBoundWithOptions;
+pub const brEncodedPlannedStreamChunksBound = br.encodedPlannedStreamChunksBound;
+pub const brEncodePlannedStreamInto = br.encodePlannedStreamInto;
+pub const brEncodePlannedStreamWithOptionsInto = br.encodePlannedStreamWithOptionsInto;
+pub const brEncodePlannedStreamChunksAlloc = br.encodePlannedStreamChunksAlloc;
+pub const brEncodePlannedStreamChunksAppend = br.encodePlannedStreamChunksAppend;
+pub const brEncodePlannedStreamChunksInto = br.encodePlannedStreamChunksInto;
+pub const brEncodePlannedStreamLazyWithOptionsAlloc = br.encodePlannedStreamLazyWithOptionsAlloc;
+pub const brEncodePlannedStreamStaticDictionaryAlloc = br.encodePlannedStreamStaticDictionaryAlloc;
+pub const brPlannedStaticDictionaryIndexBytes = br.plannedStaticDictionaryIndexBytes;
+pub const brEncodePlannedStreamWithScratchAlloc = br.encodePlannedStreamWithScratchAlloc;
+pub const BrotliPlannedStreamEncoder = br.PlannedStreamEncoder;
+pub const brEncodedSimpleStreamBound = br.encodedSimpleStreamBound;
+pub const brEncodeSimpleStreamAlloc = br.encodeSimpleStreamAlloc;
+pub const brEncodeSimpleStreamAppend = br.encodeSimpleStreamAppend;
+pub const brEncodeSimpleStreamInto = br.encodeSimpleStreamInto;
 pub const brEncodeStoredStreamWithOptionsAlloc = br.encodeStoredStreamWithOptionsAlloc;
 pub const brEncodeStoredStreamWithOptionsAppend = br.encodeStoredStreamWithOptionsAppend;
 pub const brEncodeStoredStreamWithOptionsInto = br.encodeStoredStreamWithOptionsInto;
@@ -71,6 +106,105 @@ pub const BrotliCompressedSupportLimits = br.CompressedSupportLimits;
 pub const BrotliPrefixCode = br.PrefixCode;
 pub const BrotliStoredStreamEncoder = br.StoredStreamEncoder;
 pub const BrotliStreamDecoder = br.StreamDecoder;
+pub const BrotliIncrementalStreamDecoder = br.IncrementalStreamDecoder;
+pub const BrotliIncrementalLiteralStreamDecoder = br.IncrementalLiteralStreamDecoder;
+pub const BrotliIncrementalCopyStreamDecoder = br.IncrementalCopyStreamDecoder;
+pub const BrotliIncrementalRleStreamDecoder = br.IncrementalRleStreamDecoder;
+pub const BrotliIncrementalStoredStreamDecoder = br.IncrementalStoredStreamDecoder;
+pub const BrotliIncrementalStoredStreamEncoder = br.IncrementalStoredStreamEncoder;
+pub const BrotliIncrementalPlannedStreamEncoder = br.IncrementalPlannedStreamEncoder;
+
+test "root Brotli incremental decoder continues framed payloads" {
+    const first = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, "one");
+    defer std.testing.allocator.free(first);
+    const second = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, "two");
+    defer std.testing.allocator.free(second);
+    var decoder = BrotliIncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{ .expected_output_len = 3 }, first.len);
+    defer decoder.deinit();
+    var output: [3]u8 = undefined;
+    _ = try decoder.step(first, &.{});
+    _ = try decoder.step("", &output);
+    try decoder.nextFrameExactCompressedSize(.{ .expected_output_len = 3 }, second.len);
+    _ = try decoder.step(second, &.{});
+    _ = try decoder.step("", &output);
+    try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().frame_count);
+}
+
+test "root Brotli incremental RLE decoder streams compressed output" {
+    const payload = "r" ** 128;
+    const encoded = try br.encodeRleStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    var decoder = BrotliIncrementalRleStreamDecoder.initWithOptions(.{ .expected_output_len = payload.len });
+    var output: [payload.len]u8 = undefined;
+    var written: usize = 0;
+    var input_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const result = try decoder.step(encoded[input_offset..input_end], output[written..][0..@min(7, output.len - written)]);
+        input_offset += result.progress.input_read;
+        written += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "root Brotli incremental literal decoder streams Huffman output" {
+    const encoded = try br.IncrementalTestSupport.encodeCompressedLiteralCycle(std.testing.allocator, 64);
+    defer std.testing.allocator.free(encoded);
+    var decoder = BrotliIncrementalLiteralStreamDecoder.initWithOptions(.{ .expected_output_len = 64 });
+    var output: [64]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 2);
+        const result = try decoder.step(encoded[input_offset..input_end], output[output_offset..][0..@min(5, output.len - output_offset)]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    for (output, 0..) |byte, i| try std.testing.expectEqual("abcd"[i & 3], byte);
+}
+
+test "root Brotli incremental copy decoder streams across output buffers" {
+    const expected = "xy" ** 64;
+    const encoded = try br.encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', expected.len);
+    defer std.testing.allocator.free(encoded);
+    var history: [2]u8 = undefined;
+    var decoder = BrotliIncrementalCopyStreamDecoder.initWithOptions(&history, .{ .expected_output_len = expected.len });
+    var output: [expected.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const result = try decoder.step(encoded[input_offset..input_end], output[output_offset..][0..@min(3, output.len - output_offset)]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, expected, &output);
+}
+
+test "root Brotli incremental stored encoder continues streams" {
+    var encoder = BrotliIncrementalStoredStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var output: [64]u8 = undefined;
+    _ = try encoder.step("one", &output);
+    try encoder.finish();
+    while ((try encoder.step("", &output)).status != .done) {}
+    try encoder.nextStream(.{ .stream = .{ .window_bits = 20 } });
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().stream_index);
+}
+
+test "root Brotli stored decoder continues streams" {
+    const encoded = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, "one");
+    defer std.testing.allocator.free(encoded);
+    var decoder = BrotliIncrementalStoredStreamDecoder.init();
+    var output: [3]u8 = undefined;
+    _ = try decoder.step(encoded, &output);
+    try decoder.finish();
+    try decoder.nextStream(.{});
+    try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().stream_index);
+}
 pub const brCompressedSupportLimits = br.compressedSupportLimits;
 pub const brMinimalStaticDictionaryCoverage = br.minimalStaticDictionaryCoverage;
 pub const brMinimalStaticDictionarySizeBits = br.minimalStaticDictionarySizeBits;
@@ -89,6 +223,14 @@ pub const brSummarizeStream = br.summarizeStream;
 pub const brSummarizeStreamLimited = br.summarizeStreamLimited;
 pub const brSummarizeStreamWithDiagnostics = br.summarizeStreamWithDiagnostics;
 pub const brSummarizeStreamLimitedWithDiagnostics = br.summarizeStreamLimitedWithDiagnostics;
+pub const brSummarizeStreamWithHistory = br.summarizeStreamWithHistory;
+pub const brSummarizeStreamLimitedWithHistory = br.summarizeStreamLimitedWithHistory;
+pub const brSummarizeStreamWithHistoryAndDiagnostics = br.summarizeStreamWithHistoryAndDiagnostics;
+pub const brSummarizeStreamLimitedWithHistoryAndDiagnostics = br.summarizeStreamLimitedWithHistoryAndDiagnostics;
+pub const brSummarizeStreamAlloc = br.summarizeStreamAlloc;
+pub const brSummarizeStreamAllocLimited = br.summarizeStreamAllocLimited;
+pub const brSummarizeStreamAllocWithDiagnostics = br.summarizeStreamAllocWithDiagnostics;
+pub const brSummarizeStreamAllocLimitedWithDiagnostics = br.summarizeStreamAllocLimitedWithDiagnostics;
 pub const brProbeStream = br.probeStream;
 pub const brProbeStreamLimited = br.probeStreamLimited;
 pub const brProbeStreamExactSize = br.probeStreamExactSize;
@@ -107,6 +249,10 @@ pub const brSummarizeStreamChunks = br.summarizeStreamChunks;
 pub const brSummarizeStreamChunksLimited = br.summarizeStreamChunksLimited;
 pub const brSummarizeStreamChunksWithDiagnostics = br.summarizeStreamChunksWithDiagnostics;
 pub const brSummarizeStreamChunksLimitedWithDiagnostics = br.summarizeStreamChunksLimitedWithDiagnostics;
+pub const brSummarizeStreamChunksWithHistory = br.summarizeStreamChunksWithHistory;
+pub const brSummarizeStreamChunksLimitedWithHistory = br.summarizeStreamChunksLimitedWithHistory;
+pub const brSummarizeStreamChunksWithHistoryAndDiagnostics = br.summarizeStreamChunksWithHistoryAndDiagnostics;
+pub const brSummarizeStreamChunksLimitedWithHistoryAndDiagnostics = br.summarizeStreamChunksLimitedWithHistoryAndDiagnostics;
 pub const brProbeStreamChunks = br.probeStreamChunks;
 pub const brProbeStreamChunksLimited = br.probeStreamChunksLimited;
 pub const brProbeStreamChunksExactSize = br.probeStreamChunksExactSize;
@@ -122,6 +268,23 @@ pub const snappyEncodeFrameAppend = snappy.encodeFrameAppend;
 pub const snappyEncodeFrameInto = snappy.encodeFrameInto;
 pub const snappyEncodedFrameBound = snappy.encodedFrameBound;
 pub const SnappyEncoder = snappy.Encoder;
+pub const SnappyIncrementalFrameDecoder = snappy.IncrementalFrameDecoder;
+pub const SnappyIncrementalFrameEncoder = snappy.IncrementalFrameEncoder;
+
+test "root incremental Snappy streams continue" {
+    var encoder = SnappyIncrementalFrameEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var output: [128]u8 = undefined;
+    _ = try encoder.step("one", &output);
+    try encoder.finish();
+    while ((try encoder.step("", &output)).status != .done) {}
+    try encoder.nextStreamExactSize(.{}, 3);
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().stream_index);
+
+    var decoder = SnappyIncrementalFrameDecoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    try std.testing.expectError(error.InvalidBlockPlan, decoder.nextStream(.{}));
+}
 pub const SnappyFrameSummary = snappy.FrameSummary;
 pub const SnappyBlockSummary = snappy.BlockSummary;
 pub const snappySummarizeBlock = snappy.summarizeBlock;
@@ -218,6 +381,18 @@ pub const Lz4BlockMode = lz4.BlockMode;
 pub const Lz4BlockEncoder = lz4.BlockEncoder;
 pub const Lz4BlockDecoder = lz4.BlockDecoder;
 pub const Lz4NativeFrameEncoder = lz4.NativeFrameEncoder;
+pub const Lz4NativeIncrementalFrameEncoder = lz4.NativeIncrementalFrameEncoder;
+
+test "root LZ4 incremental encoder continues frames" {
+    var encoder = try Lz4NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, .{ .include_content_size = true }, 3);
+    defer encoder.deinit();
+    var output: [128]u8 = undefined;
+    _ = try encoder.step("one", &output);
+    encoder.finish();
+    while ((try encoder.step("", &output)).status != .done) {}
+    try encoder.nextFrameExactSize(.{ .include_content_size = true }, 3);
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().frame_index);
+}
 pub const Lz4NativeFrameDecoder = lz4.NativeFrameDecoder;
 pub const Lz4NativeIncrementalFrameDecoder = lz4.NativeIncrementalFrameDecoder;
 pub const Lz4NativeDictionary = lz4.NativeDictionary;
@@ -510,6 +685,8 @@ pub const lz4EncodedBlockBound = lz4.encodedBlockBound;
 
 pub const ZstdError = zstd.Error;
 pub const zstdDefaultCompressionLevel = zstd.default_compression_level;
+pub const zstdMinCompressionLevel = zstd.min_compression_level;
+pub const zstdMaxCompressionLevel = zstd.max_compression_level;
 pub const zstdEncodeFrameAlloc = zstd.encodeFrameAlloc;
 pub const zstdEncodeFrameWithLevelAlloc = zstd.encodeFrameWithLevelAlloc;
 pub const zstdEncodeFrameWithOptionsAlloc = zstd.encodeFrameWithOptionsAlloc;
@@ -705,10 +882,25 @@ pub const ZstdFrameEncoder = zstd.FrameEncoder;
 pub const ZstdFrameDecoder = zstd.FrameDecoder;
 pub const ZstdIncrementalFrameDecoder = zstd.IncrementalFrameDecoder;
 pub const ZstdDictionary = zstd.Dictionary;
+pub const ZstdDictionaryKind = zstd.DictionaryKind;
 pub const ZstdDictionaryTrainOptions = zstd.DictionaryTrainOptions;
 pub const ZstdOwnedDictionary = zstd.OwnedDictionary;
 pub const ZstdDictionarySet = zstd.DictionarySet;
 pub const ZstdOwnedDictionarySet = zstd.OwnedDictionarySet;
+pub const ZstdStandardDictionaryView = zstd.StandardDictionaryView;
+pub const ZstdStandardDictionaryEntropySummary = zstd.StandardDictionaryEntropySummary;
+pub const ZstdStandardDictionaryNativeView = zstd.StandardDictionaryNativeView;
+pub const ZstdOwnedStandardDictionary = zstd.OwnedStandardDictionary;
+pub const zstdInspectStandardDictionary = zstd.inspectStandardDictionary;
+pub const zstdIsStandardDictionary = zstd.isStandardDictionary;
+pub const zstdStandardDictionaryId = zstd.standardDictionaryId;
+pub const zstdSummarizeStandardDictionary = zstd.summarizeStandardDictionary;
+pub const zstdStandardDictionaryHeaderLen = zstd.standard_dictionary_header_len;
+pub const zstdStandardDictionaryFromContentBound = zstd.standardDictionaryFromContentBound;
+pub const zstdStandardDictionaryFromContentInto = zstd.standardDictionaryFromContentInto;
+pub const zstdStandardDictionaryFromContentAlloc = zstd.standardDictionaryFromContentAlloc;
+pub const zstdTrainStandardDictionaryAlloc = zstd.trainStandardDictionaryAlloc;
+pub const zstdTrainValidatedStandardDictionaryAlloc = zstd.trainValidatedStandardDictionaryAlloc;
 pub const zstdTrainDictionaryAlloc = zstd.trainDictionaryAlloc;
 pub const zstdDictionarySetFromMetadataAlloc = zstd.dictionarySetFromMetadataAlloc;
 pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
@@ -733,6 +925,19 @@ pub const ZstdNativeFrameEncodeResult = zstd.NativeFrameEncodeResult;
 pub const ZstdNativeFrameEncodeIntoResult = zstd.NativeFrameEncodeIntoResult;
 pub const ZstdNativeFrameEncodeScratchResult = zstd.NativeFrameEncodeScratchResult;
 pub const ZstdNativeFrameEncoder = zstd.NativeFrameEncoder;
+pub const ZstdLevelFrameEncoder = zstd.LevelFrameEncoder;
+pub const ZstdNativeIncrementalFrameEncoder = zstd.NativeIncrementalFrameEncoder;
+
+test "root Zstd incremental encoder continues frames" {
+    var encoder = try ZstdNativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, .{ .include_content_size = true }, 3);
+    defer encoder.deinit();
+    var output: [128]u8 = undefined;
+    _ = try encoder.step("one", &output);
+    encoder.finish();
+    while ((try encoder.step("", &output)).status != .done) {}
+    try encoder.nextFrameExactSize(.{ .include_content_size = true }, 3);
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().frame_index);
+}
 pub const ZstdNativeFrameDecoder = zstd.NativeFrameDecoder;
 pub const ZstdNativeIncrementalFrameDecoder = zstd.NativeIncrementalFrameDecoder;
 pub const ZstdNativeDictionary = zstd.NativeDictionary;
@@ -752,6 +957,12 @@ pub const ZstdNativeStreamSummary = zstd.NativeStreamSummary;
 pub const ZstdNativeStreamSummaryErrorDiagnostics = zstd.NativeStreamSummaryErrorDiagnostics;
 pub const ZstdNativeStreamSummaryErrorPhase = zstd.NativeStreamSummaryErrorPhase;
 pub const ZstdNativeSkippableFrameHeader = zstd.NativeSkippableFrameHeader;
+pub const ZstdNativeSeekTable = zstd.NativeSeekTable;
+pub const ZstdNativeSeekTableEntry = zstd.NativeSeekTableEntry;
+pub const ZstdNativeSeekTableIterator = zstd.NativeSeekTableIterator;
+pub const ZstdNativeSeekTableFrameSize = zstd.NativeSeekTableFrameSize;
+pub const ZstdNativeSeekIndex = zstd.NativeSeekIndex;
+pub const ZstdNativeSeekableOptions = zstd.NativeSeekableOptions;
 pub const ZstdNativeFrameBlockIterator = zstd.NativeFrameBlockIterator;
 pub const ZstdNativeStreamFrame = zstd.NativeStreamFrame;
 pub const ZstdNativeStreamSkippableFrame = zstd.NativeStreamSkippableFrame;
@@ -765,7 +976,34 @@ pub const zstdInspectNativeFrameBlockSequenceModes = zstd.inspectNativeFrameBloc
 pub const zstdSummarizeNativeFrameBlocks = zstd.summarizeNativeFrameBlocks;
 pub const zstdSummarizeNativeStream = zstd.summarizeNativeStream;
 pub const zstdSummarizeNativeStreamWithDiagnostics = zstd.summarizeNativeStreamWithDiagnostics;
+pub const zstdSummarizeNativeStreamWithDictionarySet = zstd.summarizeNativeStreamWithDictionarySet;
+pub const zstdSummarizeNativeStreamWithDictionary = zstd.summarizeNativeStreamWithDictionary;
+pub const zstdSummarizeNativeStreamWithDictionaryDiagnostics = zstd.summarizeNativeStreamWithDictionaryDiagnostics;
+pub const zstdSummarizeNativeStreamWithDictionarySetAndDiagnostics = zstd.summarizeNativeStreamWithDictionarySetAndDiagnostics;
 pub const zstdInspectNativeSkippableFrame = zstd.inspectNativeSkippableFrame;
+pub const zstdInspectNativeSeekTable = zstd.inspectNativeSeekTable;
+pub const zstdNativeSeekTableFrameIndexForOffset = zstd.nativeSeekTableFrameIndexForOffset;
+pub const zstdBuildNativeSeekIndex = zstd.buildNativeSeekIndex;
+pub const zstdEncodedNativeSeekTableBound = zstd.encodedNativeSeekTableBound;
+pub const zstdEncodeNativeSeekTableAlloc = zstd.encodeNativeSeekTableAlloc;
+pub const zstdEncodeNativeSeekTableAppend = zstd.encodeNativeSeekTableAppend;
+pub const zstdEncodeNativeSeekTableInto = zstd.encodeNativeSeekTableInto;
+pub const zstdEncodeNativeSeekableStreamAlloc = zstd.encodeNativeSeekableStreamAlloc;
+pub const zstdEncodeNativeSeekableStreamAppend = zstd.encodeNativeSeekableStreamAppend;
+pub const zstdEncodeNativeSeekableStreamWithDictionaryAlloc = zstd.encodeNativeSeekableStreamWithDictionaryAlloc;
+pub const zstdEncodeNativeSeekableStreamAppendWithDictionary = zstd.encodeNativeSeekableStreamAppendWithDictionary;
+pub const zstdEncodeNativeSeekableStreamWithDictionarySetAlloc = zstd.encodeNativeSeekableStreamWithDictionarySetAlloc;
+pub const zstdEncodeNativeSeekableStreamAppendWithDictionarySet = zstd.encodeNativeSeekableStreamAppendWithDictionarySet;
+pub const zstdNativeSeekableRangeScratchLen = zstd.nativeSeekableRangeScratchLen;
+pub const zstdNativeSeekableRangeScratchLenWithIndex = zstd.nativeSeekableRangeScratchLenWithIndex;
+pub const zstdDecodeNativeSeekableRangeInto = zstd.decodeNativeSeekableRangeInto;
+pub const zstdDecodeNativeSeekableRangeAlloc = zstd.decodeNativeSeekableRangeAlloc;
+pub const zstdDecodeNativeSeekableRangeIntoWithDictionarySet = zstd.decodeNativeSeekableRangeIntoWithDictionarySet;
+pub const zstdDecodeNativeSeekableRangeAllocWithDictionarySet = zstd.decodeNativeSeekableRangeAllocWithDictionarySet;
+pub const zstdDecodeNativeSeekableRangeIntoWithIndex = zstd.decodeNativeSeekableRangeIntoWithIndex;
+pub const zstdDecodeNativeSeekableRangeAllocWithIndex = zstd.decodeNativeSeekableRangeAllocWithIndex;
+pub const zstdDecodeNativeSeekableRangeIntoWithIndexAndDictionarySet = zstd.decodeNativeSeekableRangeIntoWithIndexAndDictionarySet;
+pub const zstdDecodeNativeSeekableRangeAllocWithIndexAndDictionarySet = zstd.decodeNativeSeekableRangeAllocWithIndexAndDictionarySet;
 pub const zstdIterateNativeFrameBlocks = zstd.iterateNativeFrameBlocks;
 pub const zstdIterateNativeStream = zstd.iterateNativeStream;
 pub const zstdEncodedNativeFrameBound = zstd.encodedNativeFrameBound;
@@ -1245,6 +1483,21 @@ pub const encodeRawFixedSyncFlushChunksAppend = deflate.encodeRawFixedSyncFlushC
 pub const RawFixedSyncFlushEncoder = deflate.RawFixedSyncFlushEncoder;
 pub const encodeRawFixedTokensAlloc = deflate.encodeRawFixedTokensAlloc;
 pub const RawDeflateEncoder = deflate.RawDeflateEncoder;
+pub const RawDeflateIncrementalStoredEncoder = deflate.RawDeflateIncrementalStoredEncoder;
+pub const RawDeflateIncrementalFixedEncoder = deflate.RawDeflateIncrementalFixedEncoder;
+pub const RawDeflateIncrementalBestEncoder = deflate.RawDeflateIncrementalBestEncoder;
+pub const ZlibIncrementalFixedEncoder = deflate.ZlibIncrementalFixedEncoder;
+pub const GzipIncrementalFixedEncoder = deflate.GzipIncrementalFixedEncoder;
+pub const ZlibIncrementalBestEncoder = deflate.ZlibIncrementalBestEncoder;
+pub const GzipIncrementalBestEncoder = deflate.GzipIncrementalBestEncoder;
+pub const RawDeflateIncrementalStoredDecoder = deflate.RawDeflateIncrementalStoredDecoder;
+pub const RawDeflateIncrementalFixedLiteralDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
+pub const ZlibIncrementalDecoder = deflate.ZlibIncrementalDecoder;
+pub const ZlibDictionaryEntry = deflate.ZlibDictionaryEntry;
+pub const ZlibDictionarySet = deflate.ZlibDictionarySet;
+pub const GzipIncrementalDecoder = deflate.GzipIncrementalDecoder;
+pub const zlibIncrementalBestOptionsForLevel = deflate.zlibIncrementalBestOptionsForLevel;
+pub const gzipIncrementalBestOptionsForLevel = deflate.gzipIncrementalBestOptionsForLevel;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
 pub const DeflateDecodeResult = deflate.DecodeResult;
 pub const DeflateOwnedDecodeResult = deflate.OwnedDecodeResult;
@@ -1256,6 +1509,31 @@ pub const AdaptiveSplitOptions = deflate.AdaptiveSplitOptions;
 pub const BlockSelection = deflate.BlockSelection;
 pub const CompressionLevel = deflate.CompressionLevel;
 pub const optionsForCompressionLevel = deflate.optionsForLevel;
+
+test "root gzip incremental fixed encoder exposes member continuation" {
+    var encoder = GzipIncrementalFixedEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var output: [128]u8 = undefined;
+    _ = try encoder.step("one", &output);
+    encoder.finish();
+    while ((try encoder.step("", &output)).status != .done) {}
+    try encoder.nextMember(.{ .filename = "two.txt" });
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().member_index);
+}
+
+test "root incremental zlib decoder exposes dictionary-set selection" {
+    const preset = "root incremental zlib set dictionary";
+    const payload = "root incremental zlib set dictionary payload";
+    const encoded = try encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, payload, preset, .{});
+    defer std.testing.allocator.free(encoded);
+    const entries = [_]ZlibDictionaryEntry{ZlibDictionarySet.entry(preset)};
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try ZlibIncrementalDecoder.initWithDictionarySet(.{ .expected_output_len = payload.len }, &history, ZlibDictionarySet.fromEntries(&entries));
+    var output: [payload.len]u8 = undefined;
+    _ = try decoder.step(encoded, &output);
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
 pub const optionsForZlibLevel = deflate.optionsForZlibLevel;
 pub const normalizeCompressionOptionsForStrategy = deflate.normalizeOptionsForStrategy;
 pub const usesStoredFastPath = deflate.usesStoredFastPath;
@@ -1497,6 +1775,9 @@ pub const decodeZlibConcatenated = deflate.decodeZlibConcatenated;
 pub const decodeZlibConcatenatedWithOptions = deflate.decodeZlibConcatenatedWithOptions;
 pub const decodeZlibConcatenatedWithDictionary = deflate.decodeZlibConcatenatedWithDictionary;
 pub const decodeZlibConcatenatedWithDictionaryAndOptions = deflate.decodeZlibConcatenatedWithDictionaryAndOptions;
+pub const decodeZlibConcatenatedWithDictionarySet = deflate.decodeZlibConcatenatedWithDictionarySet;
+pub const decodeZlibConcatenatedWithDictionarySetAndOptions = deflate.decodeZlibConcatenatedWithDictionarySetAndOptions;
+pub const decodeZlibConcatenatedAllocWithDictionarySetExactSize = deflate.decodeZlibConcatenatedAllocWithDictionarySetExactSize;
 pub const decodeZlibConcatenatedAlloc = deflate.decodeZlibConcatenatedAlloc;
 pub const decodeZlibConcatenatedAllocExactSize = deflate.decodeZlibConcatenatedAllocExactSize;
 pub const decodeZlibConcatenatedAllocLimited = deflate.decodeZlibConcatenatedAllocLimited;
@@ -1876,6 +2157,10 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brEncodeStoredStreamChunksWithOptionsAlloc;
     _ = brEncodeStoredStreamChunksWithOptionsAppend;
     _ = brEncodeStoredStreamChunksWithOptionsInto;
+    _ = brEncodedPlannedStreamChunksBound;
+    _ = brEncodePlannedStreamChunksAlloc;
+    _ = brEncodePlannedStreamChunksAppend;
+    _ = brEncodePlannedStreamChunksInto;
     _ = BrotliStoredStreamOptions;
     _ = BrotliStreamSummary;
     _ = BrotliStreamSummaryDiagnostics;
@@ -1885,6 +2170,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliCompressedSupportLimits;
     _ = BrotliPrefixCode;
     _ = BrotliStoredStreamEncoder;
+    _ = BrotliIncrementalPlannedStreamEncoder;
     _ = BrotliStreamDecoder;
     _ = brCompressedSupportLimits;
     _ = brMinimalStaticDictionaryCoverage;
@@ -1904,6 +2190,14 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brSummarizeStreamLimited;
     _ = brSummarizeStreamWithDiagnostics;
     _ = brSummarizeStreamLimitedWithDiagnostics;
+    _ = brSummarizeStreamWithHistory;
+    _ = brSummarizeStreamLimitedWithHistory;
+    _ = brSummarizeStreamWithHistoryAndDiagnostics;
+    _ = brSummarizeStreamLimitedWithHistoryAndDiagnostics;
+    _ = brSummarizeStreamAlloc;
+    _ = brSummarizeStreamAllocLimited;
+    _ = brSummarizeStreamAllocWithDiagnostics;
+    _ = brSummarizeStreamAllocLimitedWithDiagnostics;
     _ = brProbeStream;
     _ = brProbeStreamLimited;
     _ = brProbeStreamExactSize;
@@ -1922,6 +2216,10 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brSummarizeStreamChunksLimited;
     _ = brSummarizeStreamChunksWithDiagnostics;
     _ = brSummarizeStreamChunksLimitedWithDiagnostics;
+    _ = brSummarizeStreamChunksWithHistory;
+    _ = brSummarizeStreamChunksLimitedWithHistory;
+    _ = brSummarizeStreamChunksWithHistoryAndDiagnostics;
+    _ = brSummarizeStreamChunksLimitedWithHistoryAndDiagnostics;
     _ = brProbeStreamChunks;
     _ = brProbeStreamChunksLimited;
     _ = brProbeStreamChunksExactSize;
@@ -2519,6 +2817,12 @@ test "root exports lz4 and zstd codec helpers" {
     _ = ZstdDictionarySet;
     _ = ZstdOwnedDictionarySet;
     _ = zstdTrainDictionaryAlloc;
+    _ = zstdStandardDictionaryHeaderLen;
+    _ = zstdStandardDictionaryFromContentBound;
+    _ = zstdStandardDictionaryFromContentInto;
+    _ = zstdStandardDictionaryFromContentAlloc;
+    _ = zstdTrainStandardDictionaryAlloc;
+    _ = zstdTrainValidatedStandardDictionaryAlloc;
     _ = zstdDictionarySetFromMetadataAlloc;
     _ = zstdEncodeRawOrRleFrameAlloc;
     _ = zstdEncodeRawOrRleFrameWithOptionsAlloc;
@@ -2542,6 +2846,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = ZstdNativeFrameEncodeIntoResult;
     _ = ZstdNativeFrameEncodeScratchResult;
     _ = ZstdNativeFrameEncoder;
+    _ = ZstdLevelFrameEncoder;
     _ = ZstdNativeFrameDecoder;
     _ = ZstdNativeIncrementalFrameDecoder;
     _ = ZstdNativeDictionary;
@@ -2561,6 +2866,12 @@ test "root exports lz4 and zstd codec helpers" {
     _ = ZstdNativeStreamSummaryErrorDiagnostics;
     _ = ZstdNativeStreamSummaryErrorPhase;
     _ = ZstdNativeSkippableFrameHeader;
+    _ = ZstdNativeSeekTable;
+    _ = ZstdNativeSeekTableEntry;
+    _ = ZstdNativeSeekTableIterator;
+    _ = ZstdNativeSeekTableFrameSize;
+    _ = ZstdNativeSeekIndex;
+    _ = ZstdNativeSeekableOptions;
     _ = ZstdNativeBlockType;
     _ = zstdInspectNativeFrameHeader;
     _ = zstdInspectNativeFrameFirstBlock;
@@ -2569,7 +2880,34 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdSummarizeNativeFrameBlocks;
     _ = zstdSummarizeNativeStream;
     _ = zstdSummarizeNativeStreamWithDiagnostics;
+    _ = zstdSummarizeNativeStreamWithDictionary;
+    _ = zstdSummarizeNativeStreamWithDictionaryDiagnostics;
+    _ = zstdSummarizeNativeStreamWithDictionarySet;
+    _ = zstdSummarizeNativeStreamWithDictionarySetAndDiagnostics;
     _ = zstdInspectNativeSkippableFrame;
+    _ = zstdInspectNativeSeekTable;
+    _ = zstdNativeSeekTableFrameIndexForOffset;
+    _ = zstdBuildNativeSeekIndex;
+    _ = zstdEncodedNativeSeekTableBound;
+    _ = zstdEncodeNativeSeekTableAlloc;
+    _ = zstdEncodeNativeSeekTableAppend;
+    _ = zstdEncodeNativeSeekTableInto;
+    _ = zstdEncodeNativeSeekableStreamAlloc;
+    _ = zstdEncodeNativeSeekableStreamAppend;
+    _ = zstdEncodeNativeSeekableStreamWithDictionaryAlloc;
+    _ = zstdEncodeNativeSeekableStreamAppendWithDictionary;
+    _ = zstdEncodeNativeSeekableStreamWithDictionarySetAlloc;
+    _ = zstdEncodeNativeSeekableStreamAppendWithDictionarySet;
+    _ = zstdNativeSeekableRangeScratchLen;
+    _ = zstdNativeSeekableRangeScratchLenWithIndex;
+    _ = zstdDecodeNativeSeekableRangeInto;
+    _ = zstdDecodeNativeSeekableRangeAlloc;
+    _ = zstdDecodeNativeSeekableRangeIntoWithDictionarySet;
+    _ = zstdDecodeNativeSeekableRangeAllocWithDictionarySet;
+    _ = zstdDecodeNativeSeekableRangeIntoWithIndex;
+    _ = zstdDecodeNativeSeekableRangeAllocWithIndex;
+    _ = zstdDecodeNativeSeekableRangeIntoWithIndexAndDictionarySet;
+    _ = zstdDecodeNativeSeekableRangeAllocWithIndexAndDictionarySet;
     _ = zstdEncodedNativeFrameBound;
     _ = zstdEncodedNativeFrameBoundWithOptions;
     _ = zstdEncodedNativeFrameBoundWithDictionary;
@@ -3101,11 +3439,18 @@ test "root brotli stream summary exposes capability flags" {
 test "root brotli compressed support limits expose current bounded capacities" {
     const limits: BrotliCompressedSupportLimits = brCompressedSupportLimits();
     try std.testing.expectEqual(@as(usize, 32), limits.max_literal_block_types);
-    try std.testing.expectEqual(@as(usize, 32), limits.max_literal_context_trees);
+    try std.testing.expectEqual(@as(usize, 256), limits.max_literal_context_trees);
     try std.testing.expectEqual(@as(usize, 32), limits.max_command_block_types);
-    try std.testing.expectEqual(@as(usize, 32), limits.max_distance_block_types);
-    try std.testing.expectEqual(@as(usize, 32), limits.max_distance_context_trees);
+    try std.testing.expectEqual(@as(usize, 256), limits.max_distance_block_types);
+    try std.testing.expectEqual(@as(usize, 256), limits.max_distance_context_trees);
     try std.testing.expect(limits.max_distance_alphabet_size >= 16 + 120 + (48 << 3));
+}
+
+test "root brotli stream summary exposes compressed tree coverage" {
+    const encoded = try brEncodeRleStreamAlloc(std.testing.allocator, "z" ** 128);
+    defer std.testing.allocator.free(encoded);
+    const summary = try brSummarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 1), summary.max_literal_context_trees);
 }
 
 test "root brotli stream summary diagnostics report failure phases" {
@@ -3151,6 +3496,58 @@ test "root brotli stream summary diagnostics report failure phases" {
     try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamChunksLimitedWithDiagnostics(&chunks, join, payload.len - 1, &diagnostics));
     try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.meta_block_header, diagnostics.phase);
     try std.testing.expectEqual(@as(usize, 0), diagnostics.meta_block_index);
+}
+
+test "root brotli planned chunked encoder produces one multi-block stream" {
+    const first = "root planned first block " ** 32;
+    const middle = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
+    const last = "root planned last block " ** 32;
+    const chunks = [_][]const u8{ first, middle, last };
+    const expected = first ++ middle ++ last;
+    const encoded = try brEncodePlannedStreamChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(encoded);
+    const bound = try brEncodedPlannedStreamChunksBound(&chunks);
+    try std.testing.expect(encoded.len <= bound);
+
+    const output = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(output);
+    const written = try brEncodePlannedStreamChunksInto(&chunks, output);
+    try std.testing.expectEqualSlices(u8, encoded, output[0..written]);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try brEncodePlannedStreamChunksAppend(std.testing.allocator, &appended, &chunks);
+    try std.testing.expectEqualSlices(u8, encoded, appended.items);
+    const decoded = try brDecodeStreamAllocExactSize(std.testing.allocator, encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "root brotli caller-history summaries cover contiguous and chunked streams" {
+    const payload = "caller-owned Brotli summary history" ** 64;
+    const encoded = try brEncodePlannedStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+
+    var history: [64]u8 = undefined;
+    const expected = try brSummarizeStream(encoded);
+    const direct = try brSummarizeStreamWithHistory(encoded, &history);
+    try std.testing.expectEqual(expected, direct);
+    try std.testing.expectEqual(payload.len, (try brSummarizeStreamLimitedWithHistory(encoded, &history, payload.len)).decoded_bytes);
+    try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamLimitedWithHistory(encoded, &history, payload.len - 1));
+
+    var diagnostics: BrotliStreamSummaryDiagnostics = undefined;
+    const empty_history = try brSummarizeStreamWithHistoryAndDiagnostics(encoded, &.{}, &diagnostics);
+    try std.testing.expectEqual(expected, empty_history);
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.stream, diagnostics.phase);
+
+    const chunks = [_][]const u8{ encoded[0..1], encoded[1 .. encoded.len - 1], encoded[encoded.len - 1 ..] };
+    const joined = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(joined);
+    const chunked = try brSummarizeStreamChunksWithHistory(&chunks, joined, &history);
+    try std.testing.expectEqual(expected, chunked);
+    try std.testing.expectEqual(payload.len, (try brSummarizeStreamChunksLimitedWithHistory(&chunks, joined, &history, payload.len)).decoded_bytes);
+    try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamChunksLimitedWithHistoryAndDiagnostics(&chunks, joined, &history, payload.len - 1, &diagnostics));
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.meta_block_header, diagnostics.phase);
 }
 
 test "root brotli stream probe returns non-throwing support results" {
@@ -3945,6 +4342,29 @@ test "root zstd public reusable aliases expose dictionary helpers" {
     defer owned_set.deinit(std.testing.allocator);
     try std.testing.expectEqual(dict.id, metadata_set.dictionaries[0].id);
     try std.testing.expectEqual(dict.id, owned_set.asDictionarySet().dictionaries[0].id);
+
+    const standard = try zstdStandardDictionaryFromContentAlloc(std.testing.allocator, dict.content, dict.id);
+    defer standard.deinit(std.testing.allocator);
+    try std.testing.expectEqual(ZstdDictionaryKind.standard_full, standard.asDictionary().kind());
+    try std.testing.expectEqual(dict.id, zstdStandardDictionaryId(standard.bytes).?);
+    try std.testing.expectEqualSlices(u8, dict.content, standard.view.content);
+    const trained_standard = try zstdTrainStandardDictionaryAlloc(
+        std.testing.allocator,
+        &samples,
+        train_options,
+        dict.id +% 1,
+    );
+    defer trained_standard.deinit(std.testing.allocator);
+    try std.testing.expectEqual(ZstdDictionaryKind.standard_full, trained_standard.asDictionary().kind());
+    const validated_standard = try zstdTrainValidatedStandardDictionaryAlloc(
+        std.testing.allocator,
+        &samples,
+        &.{"root zstd public dictionary sample alpha beta"},
+        train_options,
+        dict.id +% 2,
+    );
+    defer validated_standard.deinit(std.testing.allocator);
+    try std.testing.expectEqual(ZstdDictionaryKind.standard_full, validated_standard.asDictionary().kind());
 
     var options: ZstdAdvancedFrameOptions = .{
         .selection = .literal_only,

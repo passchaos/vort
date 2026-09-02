@@ -20,7 +20,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   raw-block and skippable-frame encode-into/decoded-size preflight, inspectable
   native frame/block/skippable headers plus Zstd sequence-mode summaries, zero-allocation native stream/block
   iterators, reusable raw-block decoder, and
-  caller-owned encode/decode-into/append plus reusable
+  caller-owned encode/decode-into/append, incremental frame encode with optional pledged content size and preset dictionary, plus reusable
   scratch encoder/decoder APIs,
   pure Zig native Zstandard frame encode/bounded/caller-owned decode with header
   options and decoded-size preflight, a
@@ -50,13 +50,19 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   history decode APIs, direct-output incremental decode for raw/RLE/compressed
   native frames (including dictionary, dictionary-set, no-content-size,
   bounded-history multi-block paths, and small-output scratch fallback), zero-allocation native stream/block iterators, and
-  caller-owned encode/decode-into/append plus reusable scratch encoder/decoder API,
+  dependency-free standard full-dictionary generation from caller-selected
+  history content using portable baseline entropy tables, plus first-stage
+  corpus training of a complete literal Huffman alphabet and OF/ML/LL sequence
+  FSE tables while retaining baseline repcodes, with strict parsing and
+  bidirectional libzstd interoperability validation,
+  standardized seekable-stream encoding plus zero-allocation terminal seek-table parsing/iteration and bounded range decode (including preset-dictionary encoding, dictionary-set frame selection, optional per-frame checksum verification, decompressed-offset lookup, and a reusable caller-owned cumulative index with O(1) entry access and O(log n) offset lookup),
+  caller-owned encode/decode-into/append, incremental raw/RLE frame encode with optional pledged content size and Dictionary_ID metadata, reusable native scratch encoder/decoder APIs, plus a reusable level-aware frame encoder that preserves adaptive selection policy while retaining primary scratch,
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
-- dependency-free Brotli `br` stored/uncompressed stream encode/decode bootstrap surface with RFC 7932 window bits 10..24 and metadata meta-block skipping;
-- dependency-free Snappy raw block full decode plus greedy match raw/framed encode with reusable encoder state, encoded-bound helpers, raw-block and framed-stream summaries, split-input and exact-size decode helpers, decoded-size preflight, bounded allocation, masked CRC-32C validation, and skippable framed chunks;
+- dependency-free Brotli `br` stored/uncompressed and planner-backed fast encode/decode surfaces, including arbitrarily large ratio inputs encoded as one bounded-memory multi-meta-block stream, a caller-to-caller incremental planned encoder with flush/metadata, compressed-or-stored arbitration, and bounded cross-block LZ77 history, chunked encoding with bounded parser scratch into one mixed compressed/stored multi-meta-block stream, RFC 7932 window bits 10..24, metadata meta-block skipping, caller-history stream summaries for large-window preflight without hidden allocation, a bounded split-input general facade that validates on explicit finish, byte-progressive stored-subset encode/decode, and bounded-header byte-progressive decoders for insert-only Huffman literals, single-command RLE, and copy streams with literal/distance context maps, entropy block switching with full 256-entry distance type/tree capacity, dynamic direct/regular/recent distances, transformed static-dictionary references, and non-final compressed blocks followed by metadata/stored blocks and a final-empty terminator; compressed output honors caller backpressure and copy history is caller-owned;
+- dependency-free Snappy raw block full decode plus greedy match raw/framed encode with reusable encoder state, encoded-bound helpers, raw-block and framed-stream summaries, split-input and exact-size decode helpers, decoded-size preflight, bounded allocation, masked CRC-32C validation, skippable framed chunks, and caller-owned incremental framed encode/decode with 64 KiB input chunking, optional pledged input/output sizes, split headers/payloads, bounded input/output memory, tiny-output draining, reset, finish, snapshots, and diagnostics;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, frame-index CRC composition, range CRC summaries, caller-owned and batch range decode APIs, and bounded streaming APIs;
 - LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training, match-coverage, patch-codec, native dictionary-patch frame, self-contained dictionary streams, native LDM reference frame, and dictionary-/LDM-aware native best-frame prototypes, long-distance match scanner, LDM-aware block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
 
@@ -74,6 +80,8 @@ zig build test
 zig build check
 zig build -Doptimize=ReleaseFast ci-smoke
 zig build run -- --help
+zig build -Doptimize=ReleaseFast run-zstd-dictionary-trainer-compare -j1
+zig build -Doptimize=ReleaseFast run-dictionary-train-bench-gate -j1
 zig build run -- checksum "hello vort"
 zig build run -- store-roundtrip "hello vort"
 zig build run -- vort-deflate-roundtrip "hello vort"
@@ -124,6 +132,13 @@ zig build run -- encode-br-stored-hex "hello vort" 16 metadata
 zig build run -- decode-br-hex 40001068656c6c6f03 5
 zig build run-br-stored-corpus
 zig build run-br-literal-cli-diff
+zig build run-br-planned-node-diff
+zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
+zig build -Doptimize=ReleaseFast run-br-planned-chunks-bench-gate
+zig build -Doptimize=ReleaseFast run-br-upstream-multiblock-diff
+zig build -Doptimize=ReleaseFast run-br-progressive-copy-bench-gate
+zig build -Doptimize=ReleaseFast run-br-progressive-huffman-bench-gate
+zig build -Doptimize=ReleaseFast run-br-incremental-planned-bench-gate
 zig build run -- zlib-fixed-roundtrip "hello vort"
 zig build run -- gzip-fixed-roundtrip "hello vort"
 zig build run -- decode-raw-hex cb48cdc9c90700
@@ -215,6 +230,8 @@ zig build run-afl-smoke
 zig build run-checksum-diff
 zig build run-checksum-zlib-diff
 zig build -Doptimize=ReleaseFast run-checksum-bench-gate
+zig build -Doptimize=ReleaseFast run-huffman-length-bench-gate
+zig build -Doptimize=ReleaseFast run-deflate-code-length-rle-bench-gate
 zig build run-zlib-diff
 zig build run-gzip-diff
 zig build run-python-zlib-diff
@@ -344,7 +361,18 @@ zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard -- --limit 3
 zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard -- --limit 3
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-checksum-bench-gate
+zig build -Doptimize=ReleaseFast run-snappy-report-gate
+zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate  # optional runtime libsnappy comparison
+zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate  # optional runtime liblz4 comparison
+zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate  # optional runtime libzstd comparison
+zig build run-zstd-compat-probe  # optional system-libzstd decode matrix
 zig build bench-deflate-decode -Doptimize=ReleaseFast
+zig build bench-deflate-incremental-encode -Doptimize=ReleaseFast -- 8
+zig build run-deflate-incremental-encode-gate
+# Optional direct zlib-ng compat-library comparison:
+zig build bench-deflate-incremental-encode -Doptimize=ReleaseFast \
+  -Dzlib-ng-root=$HOME/Work/zlib-ng -- 8
+zig build -Dzlib-ng-root=$HOME/Work/zlib-ng run-deflate-incremental-encode-gate
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report -- --iterations 1000
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv
@@ -648,7 +676,62 @@ var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOp
 });
 defer zstd_bounded_incremental.deinit();
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
+// Brotli's general incremental decoder can instead pledge expected_compressed_len
+// (or use initExactCompressedSize) to auto-validate/decode stored or compressed
+// meta-block streams at a transport-provided boundary, then drain tiny output.
 const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history shared phrase");
+var zstd_incremental_encoder = try vort.ZstdNativeIncrementalFrameEncoder.initWithPresetDictionary(allocator, .{
+    .include_content_size = false,
+    .selection = .literal_only,
+    .dictionary_id = zstd_dict.id,
+}, zstd_dict);
+defer zstd_incremental_encoder.deinit();
+// Feed split input with step(), call finish(), then drain until StepResult.done.
+// The dictionary bytes are borrowed and may be referenced by emitted sequences;
+// completed blocks also seed a bounded indexed rolling window for multiple later
+// block matches without retaining the complete input stream.
+// Call flush(), then step with empty input until need_input, to publish a
+// non-final block before continuing the same frame. Repeated empty flushes are
+// idempotent.
+// LZ4 and framed Snappy incremental encoders expose the same resumable flush
+// acknowledgement contract, as does the Brotli stored-stream encoder.
+// RawDeflateIncrementalStoredEncoder provides the same split-input/tiny-output
+// contract for RFC 1951 stored blocks, including pledged input size and flush.
+// RawDeflateIncrementalFixedEncoder adds fixed-Huffman compression, a rolling
+// 32 KiB history, and zlib-compatible empty stored sync-flush boundaries.
+// ZlibIncrementalFixedEncoder adds CMF/FLG, optional preset DICTID, streaming
+// Adler-32 and the footer while preserving the raw core's flush semantics.
+// GzipIncrementalFixedEncoder adds optional RFC 1952 metadata/FHCRC plus
+// streaming CRC-32 and ISIZE with the same split-input and sync-flush contract.
+// RawDeflateIncrementalBestEncoder evaluates stored, fixed, and dynamic Huffman
+// representations per block while retaining the same rolling history core.
+// Hash and lazy-parser levels additionally retain a bounded 32 KiB predecessor
+// ring and epoch-tagged hash heads across blocks; reset reuses them in O(1).
+// ZlibIncrementalBestEncoder and GzipIncrementalBestEncoder expose that selector
+// through wrapper checksums/metadata; *OptionsForLevel maps zlib levels 0...9.
+// Set adaptive_blocks on a best encoder to use CompressionOptions.split_options
+// for costed, bounded block-boundary selection instead of one fixed block size.
+// Set lookahead_len to retain a bounded suffix and move normal block cuts to a
+// complete LZ77 token boundary discovered with next-call prefix bytes.
+// Set low_entropy_block_len to a larger bounded cap to amortize dynamic-tree
+// headers for byte runs/tiny alphabets while retaining block_len for other data.
+// RawDeflateIncrementalStoredDecoder is the caller-to-caller byte-progressive
+// decode reference path for RFC 1951 stored blocks and bounded hostile input.
+// RawDeflateIncrementalFixedLiteralDecoder adds resumable fixed-Huffman bit
+// decoding plus caller-owned 32 KiB history for split length/distance matches.
+// The same byte-progressive decoder switches between stored and fixed blocks
+// without losing bit-reservoir or history state.
+// Dynamic blocks currently progress through HLIT/HDIST/HCLEN and the split
+// code-length alphabet/repeats into byte-progressive payload literals and matches.
+// ZlibIncrementalDecoder layers split CMF/FLG and streaming Adler/footer
+// validation over that raw decoder without allowing footer prefetch.
+// initWithDictionary validates split DICTID and seeds the raw 32 KiB history
+// from the caller-owned preset dictionary.
+// GzipIncrementalDecoder supports split FEXTRA/FNAME/FCOMMENT/FHCRC plus
+// streaming CRC-32/ISIZE. Set allow_concatenated to continue through RFC 1952
+// members while enforcing max_output_len/expected_output_len cumulatively.
+// snapshot() reports the active/last member index and compressed offset; after
+// an error it preserves the failing member, phase, and detection offset.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,
@@ -975,6 +1058,9 @@ case for small and medium frames.
 | Zstd native | `vort.zstdNativeMaxDirectHuffmanSymbol` | `128` currently | You need to know when the bootstrap writer can use direct Huffman literal weights. | Byte values above this use FSE-compressed Huffman weights when the literal-only plan wins; incompressible shapes can still fall back to raw/RLE or another native plan. |
 | Zstd native | `content_checksum` / `include_content_size` | both on by default | You want self-describing frames and content verification. | Disabling them saves bytes when a container already carries size/checksum metadata. |
 | Zstd native | `ZstdNativeDictionary` | caller-owned bytes plus non-zero `id` | Payloads share preset history. | Dictionary-aware native sequence blocks can be smaller than raw storage; decoders must receive the matching dictionary. |
+| Zstd native | `zstdStandardDictionaryFromContentBound` / `zstdStandardDictionaryFromContentInto` / `zstdStandardDictionaryFromContentAlloc` | non-zero ID and at least 8 bytes of caller-selected history; generated header is `zstdStandardDictionaryHeaderLen` bytes | You need a dependency-free RFC 8878 full-dictionary container accepted by Vort and libzstd. | Uses stable portable baseline Huffman/FSE tables and repcodes `1/4/8`; it wraps selected history but does not train corpus-specific entropy statistics like COVER/FastCover. |
+| Zstd native | `zstdTrainStandardDictionaryAlloc` | representative sample slices, native history `ZstdDictionaryTrainOptions`, and a non-zero ID | You want Vort to train selected history and first-block entropy models without libzstd. | Trains a complete 256-symbol Huffman table from raw sample-byte frequencies and OF/ML/LL FSE tables from dictionary-aware LZ77 sequence codes; repcodes remain `1/4/8`, and the deterministic history selector is not COVER/FastCover. |
+| Zstd native | `zstdTrainValidatedStandardDictionaryAlloc` | training samples, non-empty selector samples, history options, and non-zero ID | You can reserve representative payloads to select a better history without external trainers. | Evaluates total-frequency/cross-sample rankings, phrase configurations, ranked/reverse layouts, raw corpus-tail history, and five history sizes down to 25% using selector coverage plus estimated dictionary/literal/offset cost, then trains standard entropy tables from both input partitions; keep a separate held-out set for evaluation. This remains narrower than COVER/FastCover. |
 | Zstd native | `ZstdOwnedNativeDictionary.metadata()` / `ZstdNativeDictionary.initFromMetadata` / `encodeDictionaryMetadata*` / `decodeDictionaryMetadata*` / `*DictionaryMetadataCatalog*` | shared `DictionaryMetadata` plus `std.compress.zstd.default_window_len`; single records are 32 bytes and catalogs are versioned counted records with strict and prefix decoders | You want to persist trained dictionary catalog metadata from the same object returned by `zstdTrainNativeDictionaryAlloc`, then verify received bytes before decoding. | Metadata uses the wider shared dictionary fingerprint; frame `Dictionary_ID` is still derived from validated bytes; dictionary bytes are still distributed separately. |
 | Zstd native | `ZstdNativeDictionarySet` / `ZstdNativeDictionarySet.initFromMetadata` / `zstdNativeDictionarySetFromMetadataAlloc` | caller-owned slice of dictionaries or validated metadata+bytes catalog | Concatenated streams can carry different `Dictionary_ID` values, or a container provides versioned metadata records beside dictionary bytes. | Shared decoder APIs resolve per-frame IDs and avoid manual stream splitting; metadata construction validates bytes and duplicate IDs before decode; the alloc helper owns only the small catalog array. |
 

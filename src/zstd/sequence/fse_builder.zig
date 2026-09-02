@@ -1,0 +1,155 @@
+const std = @import("std");
+
+pub const Error = error{CorruptFrame};
+
+pub const Entry = struct {
+    symbol: u8,
+    baseline: u16,
+    bits: u8,
+};
+
+/// Build an FSE decode table from Zstd's normalized-count representation.
+/// Values above one encode `count + 1`, one means an absent symbol, and zero
+/// encodes the special -1 count placed at the high end of the state table.
+///
+/// State spreading is followed by one ascending state pass. For a symbol with
+/// probability `p`, the nth encountered state uses `next_state = p + n`; this
+/// is equivalent to sorting every symbol's spread positions, but avoids the
+/// previous per-symbol sort and temporary 512-state array.
+pub noinline fn build(values: []const u16, entries: []Entry) Error!void {
+    if (entries.len == 0 or !std.math.isPowerOfTwo(entries.len)) {
+        return error.CorruptFrame;
+    }
+    if (entries.len > std.math.maxInt(u16) or values.len > 256) {
+        return error.CorruptFrame;
+    }
+
+    var normalized_total: usize = 0;
+    var low_probability_count: usize = 0;
+    for (values) |value| {
+        if (value == 0) {
+            normalized_total += 1;
+            low_probability_count += 1;
+        } else if (value > 1) {
+            normalized_total += value - 1;
+        }
+    }
+    if (normalized_total != entries.len) return error.CorruptFrame;
+
+    const table_size: u16 = @intCast(entries.len);
+    const accuracy_log = std.math.log2_int(u16, table_size);
+    const spread_step = (entries.len >> 1) + (entries.len >> 3) + 3;
+    const normal_end = entries.len - low_probability_count;
+
+    var low_index: usize = 0;
+    for (values, 0..) |value, symbol| {
+        if (value != 0) continue;
+        entries[entries.len - 1 - low_index] = .{
+            .symbol = @intCast(symbol),
+            .baseline = 0,
+            .bits = accuracy_log,
+        };
+        low_index += 1;
+    }
+
+    var position: usize = 0;
+    for (values, 0..) |value, symbol| {
+        if (value <= 1) continue;
+        const probability = value - 1;
+        for (0..probability) |_| {
+            entries[position].symbol = @intCast(symbol);
+            position = (position + spread_step) & (entries.len - 1);
+            while (position >= normal_end) {
+                position = (position + spread_step) & (entries.len - 1);
+            }
+        }
+    }
+    if (position != 0) return error.CorruptFrame;
+
+    var symbol_next: [256]u16 = @splat(0);
+    for (values, 0..) |value, symbol| {
+        if (value > 1) symbol_next[symbol] = value - 1;
+    }
+    for (entries[0..normal_end]) |*entry| {
+        const next_state = symbol_next[entry.symbol];
+        if (next_state == 0) return error.CorruptFrame;
+        symbol_next[entry.symbol] += 1;
+        const state_bits = accuracy_log - std.math.log2_int(u16, next_state);
+        const baseline = (@as(u32, next_state) << @intCast(state_bits)) - table_size;
+        entry.bits = state_bits;
+        entry.baseline = @intCast(baseline);
+    }
+}
+
+fn buildSortedReference(values: []const u16, entries: []Entry) Error!void {
+    const total_probability: u16 = @intCast(entries.len);
+    const accuracy_log = std.math.log2_int(u16, total_probability);
+    var low_probability_count: usize = 0;
+    for (values, 0..) |value, symbol| {
+        if (value == 0) {
+            entries[entries.len - 1 - low_probability_count] = .{
+                .symbol = @intCast(symbol),
+                .baseline = 0,
+                .bits = accuracy_log,
+            };
+            low_probability_count += 1;
+        }
+    }
+
+    var position: usize = 0;
+    var states: [512]u16 = undefined;
+    for (values, 0..) |value, symbol| {
+        if (value <= 1) continue;
+        const probability = value - 1;
+        const state_share_dividend = std.math.ceilPowerOfTwo(u16, probability) catch return error.CorruptFrame;
+        const share_size = @divExact(total_probability, state_share_dividend);
+        const double_state_count = state_share_dividend - probability;
+        const single_state_count = probability - double_state_count;
+        const share_size_log = std.math.log2_int(u16, share_size);
+
+        for (0..probability) |i| {
+            states[i] = @intCast(position);
+            position = (position + (entries.len >> 1) + (entries.len >> 3) + 3) &
+                (entries.len - 1);
+            while (position >= entries.len - low_probability_count) {
+                position = (position + (entries.len >> 1) + (entries.len >> 3) + 3) &
+                    (entries.len - 1);
+            }
+        }
+        std.mem.sort(u16, states[0..probability], {}, std.sort.asc(u16));
+        for (0..probability) |i| {
+            entries[states[i]] = if (i < double_state_count) .{
+                .symbol = @intCast(symbol),
+                .bits = @intCast(share_size_log + 1),
+                .baseline = @intCast(single_state_count * share_size + @as(u16, @intCast(i)) * 2 * share_size),
+            } else .{
+                .symbol = @intCast(symbol),
+                .bits = @intCast(share_size_log),
+                .baseline = @intCast((@as(u16, @intCast(i)) - double_state_count) * share_size),
+            };
+        }
+    }
+}
+
+fn expectMatchesSorted(comptime table_size: usize, values: []const u16) !void {
+    var expected: [table_size]Entry = undefined;
+    var actual: [table_size]Entry = undefined;
+    try buildSortedReference(values, &expected);
+    try build(values, &actual);
+    try std.testing.expectEqualSlices(Entry, &expected, &actual);
+}
+
+test "Zstd linear FSE builder matches sorted construction" {
+    try expectMatchesSorted(32, &.{ 17, 9, 5, 3, 2, 0 });
+    try expectMatchesSorted(32, &.{ 14, 8, 6, 5, 3, 0 });
+    try expectMatchesSorted(32, &.{ 21, 8, 4, 0, 0, 1 });
+    // Exercise the two table widths that select the production linear path.
+    try expectMatchesSorted(256, &.{ 129, 65, 33, 17, 9, 5, 0, 0, 0, 0 });
+    try expectMatchesSorted(512, &.{ 256, 129, 65, 33, 17, 9, 5, 3, 2, 0, 0 });
+}
+
+test "Zstd linear FSE builder rejects invalid normalized totals" {
+    var entries: [32]Entry = undefined;
+    try std.testing.expectError(error.CorruptFrame, build(&.{ 17, 9 }, &entries));
+    try std.testing.expectError(error.CorruptFrame, build(&.{2}, entries[0..31]));
+}

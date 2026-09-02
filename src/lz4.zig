@@ -2,6 +2,11 @@ const std = @import("std");
 const core = @import("core.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
+const block_format = @import("lz4/block_format.zig");
+const length = @import("lz4/length.zig");
+const literal_copy = @import("lz4/literal_copy.zig");
+const incremental_encoder = @import("lz4/incremental/frame_encoder.zig");
+const incremental_tests = @import("lz4/incremental/tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -53,6 +58,78 @@ pub const NativeFrameOptions = struct {
     /// favor encode speed; the default keeps the deeper-ratio parser enabled.
     chain_depth: u8 = native_max_chain_depth,
 };
+
+const IncrementalEncoderCodec = struct {
+    pub const Error = lz4.Error;
+    pub const Options = lz4.NativeFrameOptions;
+    pub const EncoderState = lz4.BlockEncoder;
+    pub fn maxBlockLen(options: Options) usize {
+        return options.block_size_id.maxLen();
+    }
+    pub fn validate(options: Options, expected_input_len: ?usize, dictionary_id: ?u32) lz4.Error!void {
+        if (options.include_content_size != (expected_input_len != null)) return error.InvalidBlockPlan;
+        if (options.dictionary_id != dictionary_id) return error.InvalidBlockPlan;
+        _ = try nativeChainDepth(options);
+    }
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, expected_input_len: ?usize, dictionary_id: ?u32) lz4.Error!void {
+        try out.appendSlice(allocator, &frame_magic);
+        const descriptor_start = out.items.len;
+        var flg: u8 = 0x40;
+        if (options.block_mode == .independent) flg |= 0x20;
+        if (options.block_checksum) flg |= 0x10;
+        if (expected_input_len != null) flg |= 0x08;
+        if (options.content_checksum) flg |= 0x04;
+        if (dictionary_id != null) flg |= 0x01;
+        try out.append(allocator, flg);
+        try out.append(allocator, @intFromEnum(options.block_size_id) << 4);
+        if (expected_input_len) |len| {
+            var content_size: [8]u8 = undefined;
+            std.mem.writeInt(u64, &content_size, try checkedUsizeToU64(len), .little);
+            try out.appendSlice(allocator, &content_size);
+        }
+        if (dictionary_id) |id| {
+            var bytes: [4]u8 = undefined;
+            std.mem.writeInt(u32, &bytes, id, .little);
+            try out.appendSlice(allocator, &bytes);
+        }
+        try out.append(allocator, descriptorChecksum(out.items[descriptor_start..]));
+    }
+    pub fn writeBlock(state: *EncoderState, out: *std.ArrayList(u8), block: []const u8, history: []const u8, options: Options) lz4.Error!void {
+        const allocator = state.allocator;
+        const header_start = out.items.len;
+        try out.appendNTimes(allocator, 0, 4);
+        const encoded_start = out.items.len;
+        const chain_depth = try nativeChainDepth(options);
+        const compressed_len = if (history.len == 0) try state.appendWithChainDepth(out, block, chain_depth) else try state.appendWithPrefixAndChainDepth(out, block, history, chain_depth);
+        if (compressed_len < block.len) {
+            std.mem.writeInt(u32, out.items[header_start..][0..4], @intCast(compressed_len), .little);
+            if (options.block_checksum) try emitBlockChecksum(allocator, out, out.items[encoded_start..][0..compressed_len]);
+        } else {
+            out.items.len = encoded_start;
+            std.mem.writeInt(u32, out.items[header_start..][0..4], 0x8000_0000 | @as(u32, @intCast(block.len)), .little);
+            try out.appendSlice(allocator, block);
+            if (options.block_checksum) try emitBlockChecksum(allocator, out, block);
+        }
+    }
+    pub fn writeFooter(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash32) lz4.Error!void {
+        try out.appendSlice(allocator, &.{ 0, 0, 0, 0 });
+        if (options.content_checksum) {
+            var checksum: [4]u8 = undefined;
+            std.mem.writeInt(u32, &checksum, hasher.final(), .little);
+            try out.appendSlice(allocator, &checksum);
+        }
+    }
+    pub fn writeSkippable(allocator: std.mem.Allocator, out: *std.ArrayList(u8), skippable_id: u4, payload: []const u8) lz4.Error!void {
+        try encodeSkippableFrameAppend(allocator, out, skippable_id, payload);
+    }
+};
+
+const lz4 = @This();
+pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec);
+
+test {
+    _ = incremental_tests;
+}
 
 pub const NativeDictionary = struct {
     id: u32,
@@ -1048,6 +1125,11 @@ pub const NativeIncrementalFrameDecoder = struct {
     direct_frame_len: usize = 0,
     input_received: usize = 0,
     output_written: usize = 0,
+    skippable_output: []u8 = &.{},
+    skippable_written: usize = 0,
+    skippable_total: usize = 0,
+    skippable_events: []SkippableEvent = &.{},
+    skippable_event_count: usize = 0,
     last_error_name: []const u8 = "",
     last_error_phase: ?Phase = null,
 
@@ -1068,7 +1150,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         /// exceed this count and `finish` reports `SizeMismatch` if EOF arrives
         /// before the count is reached.
         expected_output_len: ?usize = null,
+        skippable_output: []u8 = &.{},
+        skippable_events: []SkippableEvent = &.{},
     };
+    pub const SkippableEvent = struct { id: u4, payload_len: usize };
 
     pub const Snapshot = struct {
         phase: Phase,
@@ -1076,6 +1161,11 @@ pub const NativeIncrementalFrameDecoder = struct {
         output_written: usize,
         decoded_len: ?usize,
         decoded_remaining: ?usize,
+        skippable_written: usize,
+        skippable_total: usize,
+        skippable_truncated: bool,
+        skippable_event_count: usize,
+        skippable_events_captured: usize,
         last_error_name: []const u8,
         last_error_phase: ?Phase,
     };
@@ -1085,7 +1175,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) NativeIncrementalFrameDecoder {
-        return .{ .allocator = allocator, .options = options };
+        return .{ .allocator = allocator, .options = options, .skippable_output = options.skippable_output, .skippable_events = options.skippable_events };
     }
 
     pub fn initWithDictionary(allocator: std.mem.Allocator, dictionary: NativeDictionary) NativeIncrementalFrameDecoder {
@@ -1101,7 +1191,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn initWithDictionarySetAndOptions(allocator: std.mem.Allocator, dictionary_set: NativeDictionarySet, options: Options) NativeIncrementalFrameDecoder {
-        return .{ .allocator = allocator, .dictionary_set = dictionary_set, .options = options };
+        return .{ .allocator = allocator, .dictionary_set = dictionary_set, .options = options, .skippable_output = options.skippable_output, .skippable_events = options.skippable_events };
     }
 
     pub fn deinit(self: *NativeIncrementalFrameDecoder) void {
@@ -1122,6 +1212,9 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.output_written = 0;
         self.last_error_name = "";
         self.last_error_phase = null;
+        self.skippable_written = 0;
+        self.skippable_total = 0;
+        self.skippable_event_count = 0;
     }
 
     pub fn snapshot(self: *const NativeIncrementalFrameDecoder) Snapshot {
@@ -1141,6 +1234,11 @@ pub const NativeIncrementalFrameDecoder = struct {
             .output_written = self.output_written,
             .decoded_len = decoded_len,
             .decoded_remaining = decoded_remaining,
+            .skippable_written = self.skippable_written,
+            .skippable_total = self.skippable_total,
+            .skippable_truncated = self.skippable_written != self.skippable_total,
+            .skippable_event_count = self.skippable_event_count,
+            .skippable_events_captured = @min(self.skippable_event_count, self.skippable_events.len),
             .last_error_name = self.last_error_name,
             .last_error_phase = self.last_error_phase,
         };
@@ -1509,6 +1607,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                     return err;
                 };
                 if (self.frame_scratch.items.len < total) return null;
+                self.captureSkippable(magic, self.frame_scratch.items[8..total]);
                 self.discardFrameScratchPrefix(total);
                 continue;
             }
@@ -1535,6 +1634,17 @@ pub const NativeIncrementalFrameDecoder = struct {
         } else {
             _ = try decodeFrameAppendLimited(self.allocator, &self.decoded_scratch, frame, self.options.max_decoded_buffer_len);
         }
+    }
+
+    fn captureSkippable(self: *NativeIncrementalFrameDecoder, magic: u32, payload: []const u8) void {
+        const copy_len = @min(payload.len, self.skippable_output.len -| self.skippable_written);
+        if (copy_len != 0)
+            @memcpy(self.skippable_output[self.skippable_written..][0..copy_len], payload[0..copy_len]);
+        self.skippable_written += copy_len;
+        self.skippable_total += payload.len;
+        if (self.skippable_event_count < self.skippable_events.len)
+            self.skippable_events[self.skippable_event_count] = .{ .id = @intCast(magic - skippable_magic_min), .payload_len = payload.len };
+        self.skippable_event_count += 1;
     }
 
     fn beginDirectOutputIfSupported(self: *NativeIncrementalFrameDecoder, frame_end: usize) Error!bool {
@@ -5110,7 +5220,11 @@ fn decodeBlockIntoBuffer(
         if (literal_len == 15) literal_len = try checkedAdd(literal_len, try readLengthExtension(input, &offset));
         if (input.len - offset < literal_len) return error.TruncatedFrame;
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
-        @memcpy(output[written.*..][0..literal_len], input[offset..][0..literal_len]);
+        if (literal_len >= literal_copy.bulk_min_len and offset + literal_len == input.len) {
+            literal_copy.copyBulk(output[written.*..][0..literal_len], input[offset..][0..literal_len]);
+        } else {
+            @memcpy(output[written.*..][0..literal_len], input[offset..][0..literal_len]);
+        }
         written.* += literal_len;
         offset += literal_len;
         if (offset == input.len) break;
@@ -5228,7 +5342,7 @@ fn encodeBlockInto(
 
     var anchor: usize = 0;
     var index: usize = 0;
-    while (index + 12 <= input.len) {
+    while (block_format.hasMatchSearchRoom(index, input.len)) {
         var match_index = index;
         var best = insertAndFindBest(input, index, table, occupancy_bits, chain_table, chain_depth);
         if (best.len != 0 and index + 13 <= input.len and best.len < good_match_len) {
@@ -5248,6 +5362,11 @@ fn encodeBlockInto(
                 candidate_start -= 1;
                 match_len += 1;
             }
+            match_len = @min(
+                match_len,
+                block_format.maxMatchLen(match_start, input.len),
+            );
+            std.debug.assert(match_len >= block_format.min_match_len);
             try emitSequence(allocator, out, input[anchor..match_start], @intCast(match_start - candidate_start), match_len);
             index = match_start + match_len;
             anchor = index;
@@ -5304,7 +5423,7 @@ fn encodeLinkedBlockInto(
 
     var anchor: usize = block_start;
     var index: usize = block_start;
-    while (index + 12 <= virtual_len) {
+    while (block_format.hasMatchSearchRoom(index, virtual_len)) {
         var match_index = index;
         var best = insertAndFindBestLinked(history, input, index, table, occupancy_bits, chain_table, chain_depth);
         if (best.len != 0 and index + 13 <= virtual_len and best.len < good_match_len) {
@@ -5324,6 +5443,11 @@ fn encodeLinkedBlockInto(
                 candidate_start -= 1;
                 match_len += 1;
             }
+            match_len = @min(
+                match_len,
+                block_format.maxMatchLen(match_start, virtual_len),
+            );
+            std.debug.assert(match_len >= block_format.min_match_len);
             const literal_start = anchor - block_start;
             const literal_end = match_start - block_start;
             try emitSequence(
@@ -5541,6 +5665,13 @@ fn writeLengthExtension(allocator: std.mem.Allocator, out: *std.ArrayList(u8), e
 }
 
 fn readLengthExtension(input: []const u8, offset: *usize) Error!usize {
+    // Keep the common short-extension loop inline and identical to the compact
+    // parser. Only cold, stored-like runs pay the out-of-line vector scanner.
+    if (input.len - offset.* >= 4096 and
+        std.mem.readInt(u32, input[offset.*..][0..4], .little) == std.math.maxInt(u32))
+    {
+        return try length.readLongExtension(input, offset);
+    }
     var len: usize = 0;
     while (true) {
         if (offset.* >= input.len) return error.TruncatedFrame;
@@ -6712,7 +6843,12 @@ test "lz4 native incremental decoder drains concatenated streams and skippable f
     try stream.appendSlice(std.testing.allocator, second);
     try stream.appendSlice(std.testing.allocator, skip);
 
-    var decoder = NativeIncrementalFrameDecoder.init(std.testing.allocator);
+    var captured: [8]u8 = undefined;
+    var events: [2]NativeIncrementalFrameDecoder.SkippableEvent = undefined;
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .skippable_output = &captured,
+        .skippable_events = &events,
+    });
     defer decoder.deinit();
     var output: [first_payload.len + second_payload.len]u8 = undefined;
     const initial = try decoder.step(stream.items, output[0..0]);
@@ -6741,6 +6877,13 @@ test "lz4 native incremental decoder drains concatenated streams and skippable f
     try std.testing.expectEqualSlices(u8, third_payload, &continued);
     try std.testing.expectEqual(stream.items.len + third.len, decoder.snapshot().input_received);
     try std.testing.expectEqual(output.len + third_payload.len, decoder.diagnostics().output_written);
+    const snapshot = decoder.snapshot();
+    try std.testing.expectEqualSlices(u8, "increment"[0..captured.len], &captured);
+    try std.testing.expectEqual(@as(usize, 2 * "incremental metadata".len), snapshot.skippable_total);
+    try std.testing.expect(snapshot.skippable_truncated);
+    try std.testing.expectEqual(@as(usize, 2), snapshot.skippable_event_count);
+    try std.testing.expectEqual(@as(u4, 6), events[0].id);
+    try std.testing.expectEqual("incremental metadata".len, events[1].payload_len);
 }
 
 test "lz4 native incremental decoder enforces buffer limits" {

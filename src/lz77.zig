@@ -6,13 +6,20 @@ pub const Error = core.Error;
 pub const min_match_len: usize = 3;
 pub const max_match_len: usize = 258;
 pub const default_window_len: usize = 32 * 1024;
+pub const max_window_len: usize = std.math.maxInt(u16);
 const hash_head_table_size: usize = 1 << 15;
 const hash_head_init_words: usize = hash_head_table_size / 64;
+const tiny_hash_head_table_size: usize = 4096;
+const tiny_hash_head_init_words: usize = tiny_hash_head_table_size / 64;
 const HashAnchor = enum { three, four };
 // Below this size the full predecessor table is modest and avoids changing
 // allocator reuse behavior for short one-shot streams. Large image-style
 // payloads receive nearly all of the memory benefit from the bounded ring.
 const min_hash_prev_ring_input_len: usize = 512 * 1024;
+const fixed_distance_costs = blk: {
+    @setEvalBranchQuota(1_000_000);
+    break :blk fixedDistanceCostTable(default_window_len);
+};
 
 pub const Token = union(enum) {
     literal: u8,
@@ -43,6 +50,9 @@ pub const GreedyOptions = struct {
     min_match: usize = min_match_len,
     max_match: usize = max_match_len,
     min_savings_bits: usize = 0,
+    /// Extra model cost for introducing a new recent distance in parsers that
+    /// track repeat offsets. Generic LZ77 callers retain the historical zero.
+    new_distance_penalty_bits: u8 = 0,
 };
 
 pub const GreedyPlan = struct {
@@ -51,6 +61,193 @@ pub const GreedyPlan = struct {
 
     pub fn deinit(self: GreedyPlan, allocator: std.mem.Allocator) void {
         allocator.free(self.tokens);
+    }
+};
+
+pub const TinyGreedyScratch = struct {
+    // Only positions with a complete 3-byte hash anchor are stored. At the
+    // 32 KiB input limit the largest stored position is 32765, so signed 16-bit
+    // entries preserve the `-1` sentinel and every reachable predecessor.
+    head: [tiny_hash_head_table_size]i16 = undefined,
+    head_initialized: [tiny_hash_head_init_words]u64 = @splat(0),
+    prev: std.ArrayList(i16) = .empty,
+
+    pub fn retainedCapacity(self: *const TinyGreedyScratch) usize {
+        return self.prev.capacity * @sizeOf(i16);
+    }
+
+    pub fn deinit(self: *TinyGreedyScratch, allocator: std.mem.Allocator) void {
+        self.prev.deinit(allocator);
+        self.* = .{};
+    }
+};
+
+pub const DictionaryGreedyScratch = struct {
+    head: std.ArrayList(i32) = .empty,
+    prev: std.ArrayList(i32) = .empty,
+    head_initialized: [hash_head_init_words]u64 = @splat(0),
+
+    pub fn retainedCapacity(self: *const DictionaryGreedyScratch) usize {
+        return (self.head.capacity + self.prev.capacity) * @sizeOf(i32) + @sizeOf(@FieldType(DictionaryGreedyScratch, "head_initialized"));
+    }
+
+    pub fn deinit(self: *DictionaryGreedyScratch, allocator: std.mem.Allocator) void {
+        self.head.deinit(allocator);
+        self.prev.deinit(allocator);
+        self.* = .{};
+    }
+};
+
+pub const OptimalScratch = struct {
+    costs: std.ArrayList(usize) = .empty,
+    steps: std.ArrayList(Token) = .empty,
+    index: HashIndex = .{},
+    tokens: std.ArrayList(Token) = .empty,
+
+    pub fn deinit(self: *OptimalScratch, allocator: std.mem.Allocator) void {
+        self.costs.deinit(allocator);
+        self.steps.deinit(allocator);
+        self.index.deinit(allocator);
+        self.tokens.deinit(allocator);
+        self.* = .{};
+    }
+};
+
+pub const RepBeamScratch = struct {
+    states: std.ArrayList(RepBeamState) = .empty,
+    lengths: std.ArrayList(u8) = .empty,
+    index: RepBeamIndex = .{},
+    reversed: std.ArrayList(Token) = .empty,
+
+    pub fn deinit(self: *RepBeamScratch, allocator: std.mem.Allocator) void {
+        self.reversed.deinit(allocator);
+        self.index.deinit(allocator);
+        self.lengths.deinit(allocator);
+        self.states.deinit(allocator);
+        self.* = .{};
+    }
+};
+
+const rep_beam_index_empty = std.math.maxInt(u16);
+
+const RepBeamIndex = struct {
+    head: [4096]u16 = @splat(rep_beam_index_empty),
+    prev: std.ArrayList(u16) = .empty,
+    input_len: usize = 0,
+
+    fn deinit(self: *RepBeamIndex, allocator: std.mem.Allocator) void {
+        self.prev.deinit(allocator);
+        self.* = .{};
+    }
+
+    fn build(self: *RepBeamIndex, allocator: std.mem.Allocator, input: []const u8) !void {
+        if (input.len > rep_beam_input_max) return error.InvalidBlockPlan;
+        try self.prev.resize(allocator, input.len);
+        @memset(&self.head, rep_beam_index_empty);
+        self.input_len = input.len;
+        for (0..input.len) |position| {
+            const hash = hashAtInput(input, position, self.head.len, .four) orelse continue;
+            self.prev.items[position] = self.head[hash];
+            self.head[hash] = @intCast(position);
+        }
+    }
+
+    fn matchesAt(self: *const RepBeamIndex, input: []const u8, position: usize, options: GreedyOptions, out: []Token.Match) Error!usize {
+        if (input.len != self.input_len or position > input.len) return error.InvalidBlockPlan;
+        if (position + minMatch(options) > input.len or out.len == 0) return 0;
+        var candidate_i = self.prev.items[position];
+        var checked: usize = 0;
+        var count: usize = 0;
+        const maximum = @min(maxMatch(options), input.len - position);
+        while (candidate_i != rep_beam_index_empty and checked < options.max_chain and count < out.len) : (checked += 1) {
+            const candidate: usize = candidate_i;
+            const distance = position - candidate;
+            if (distance == 0 or distance > options.window_len) break;
+            if (input[candidate + 3] == input[position + 3]) {
+                const length = matchLength(input, candidate, position, maximum);
+                if (length >= minMatch(options)) {
+                    out[count] = .{ .length = @intCast(length), .distance = @intCast(distance) };
+                    count += 1;
+                }
+            }
+            candidate_i = self.prev.items[candidate];
+        }
+        return count;
+    }
+};
+
+pub const HashIndex = struct {
+    head: std.ArrayList(isize) = .empty,
+    prev: std.ArrayList(isize) = .empty,
+    head_initialized: [hash_head_init_words]u64 = @splat(0),
+    best_length_costs: [max_match_len + 1]usize = undefined,
+    best_lengths: [max_match_len + 1]u16 = undefined,
+    input_len: usize = 0,
+
+    pub fn deinit(self: *HashIndex, allocator: std.mem.Allocator) void {
+        self.head.deinit(allocator);
+        self.prev.deinit(allocator);
+        self.* = .{};
+    }
+
+    pub fn build(self: *HashIndex, allocator: std.mem.Allocator, input: []const u8) !void {
+        return self.buildWithHeadLen(allocator, input, hash_head_table_size);
+    }
+
+    fn buildWithHeadLen(self: *HashIndex, allocator: std.mem.Allocator, input: []const u8, head_len: usize) !void {
+        std.debug.assert(std.math.isPowerOfTwo(head_len));
+        std.debug.assert(head_len <= hash_head_table_size);
+        try self.head.resize(allocator, head_len);
+        try self.prev.resize(allocator, input.len);
+        @memset(&self.head_initialized, 0);
+        self.input_len = input.len;
+        for (0..input.len) |i| insertHashWithLayout(input, i, self.head.items, self.prev.items, false, true, &self.head_initialized, .three);
+    }
+
+    pub fn bestMatch(self: *const HashIndex, input: []const u8, pos: usize, options: GreedyOptions) Error!Token.Match {
+        if (input.len != self.input_len or pos > input.len) return error.InvalidBlockPlan;
+        if (pos + minMatch(options) > input.len) return .{ .length = 0, .distance = 0 };
+        const max_len = @min(maxMatch(options), input.len - pos);
+        var chain_i = self.prev.items[pos];
+        var checked: usize = 0;
+        var best = MatchCandidate{};
+        while (chain_i >= 0 and checked < options.max_chain) : (checked += 1) {
+            const candidate: usize = @intCast(chain_i);
+            const distance = pos - candidate;
+            if (distance == 0 or distance > options.window_len) break;
+            const len = matchLength(input, candidate, pos, max_len);
+            if (len >= minMatch(options) and len > best.length) {
+                best = .{ .length = len, .distance = distance };
+                if (len >= options.nice_len or len == max_len) break;
+            }
+            chain_i = self.prev.items[candidate];
+        }
+        return .{ .length = @intCast(best.length), .distance = @intCast(best.distance) };
+    }
+
+    fn matchesAt(self: *const HashIndex, input: []const u8, pos: usize, options: GreedyOptions, out: []Token.Match) Error!usize {
+        if (input.len != self.input_len or pos > input.len) return error.InvalidBlockPlan;
+        if (pos + minMatch(options) > input.len or out.len == 0) return 0;
+        const maximum = @min(maxMatch(options), input.len - pos);
+        var chain_i = self.prev.items[pos];
+        var checked: usize = 0;
+        var count: usize = 0;
+        while (chain_i >= 0 and checked < options.max_chain and count < out.len) : (checked += 1) {
+            const candidate: usize = @intCast(chain_i);
+            const distance = pos - candidate;
+            if (distance == 0 or distance > options.window_len) break;
+            if (minMatch(options) >= 4 and input[candidate + 3] != input[pos + 3]) {
+                chain_i = self.prev.items[candidate];
+                continue;
+            }
+            const length = matchLength(input, candidate, pos, maximum);
+            if (length >= minMatch(options)) {
+                out[count] = .{ .length = @intCast(length), .distance = @intCast(distance) };
+                count += 1;
+            }
+            chain_i = self.prev.items[candidate];
+        }
+        return count;
     }
 };
 
@@ -164,46 +361,95 @@ pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     return hashLazyGreedyPlanAlloc(allocator, input, options);
 }
 
+/// Reusable-token counterpart to `lazyGreedyPlanAlloc` for small blocks. It
+/// preserves the production scan-vs-hash policy while retaining the caller's
+/// token capacity across independent inputs.
+pub fn lazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    if (input.len > 32 * 1024) return error.InvalidBlockPlan;
+    if (preferScanLazy(input)) return scanLazyGreedyPlanReuse(tokens, allocator, input, options);
+    return hashLazyGreedyPlanTinyReuse(tokens, allocator, input, options);
+}
+
 pub fn hashGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !GreedyPlan {
     const dict = activeDictionary(dictionary, options);
     if (dict.len == 0) return hashGreedyPlanAlloc(allocator, input, options);
+    var scratch: DictionaryGreedyScratch = .{};
+    defer scratch.deinit(allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(allocator);
+    const stats = try hashGreedyPlanWithDictionaryReuse(&tokens, &scratch, allocator, input, dict, options);
+    return .{ .tokens = try allocator.dupe(Token, tokens.items), .stats = stats };
+}
 
+pub fn hashGreedyPlanWithDictionaryReuse(tokens: *std.ArrayList(Token), scratch: *DictionaryGreedyScratch, allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !PlanStats {
+    const dict = activeDictionary(dictionary, options);
+    if (dict.len == 0) return hashGreedyPlanAutoTinyReuse(tokens, allocator, input, options);
     const table_size = 1 << 15;
-    const head = try allocator.alloc(isize, table_size);
-    defer allocator.free(head);
-    @memset(head, -1);
+    try scratch.head.resize(allocator, table_size);
+    @memset(&scratch.head_initialized, 0);
     const total = dict.len + input.len;
-    const prev = try allocator.alloc(isize, total);
-    defer allocator.free(prev);
-    seedDictionaryHashes(dict, input, head, prev);
-
-    var tokens = try initTokenList(allocator, input.len);
-    errdefer tokens.deinit(allocator);
+    try scratch.prev.resize(allocator, total);
+    seedDictionaryHashesLazy(dict, input, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
+    tokens.clearRetainingCapacity();
     var stats = PlanStats{};
 
     var pos: usize = 0;
     while (pos < input.len) {
         const current = dict.len + pos;
-        const best = findBestCombinedHashMatch(dict, input, current, options, head, prev);
+        const best = findBestCombinedHashMatchLazy(dict, input, current, options, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
 
         if (acceptMatch(input, pos, best.length, best.distance, options)) {
-            try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+            try appendToken(tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
             stats.matches += 1;
             stats.matched_bytes += best.length;
             const end = @min(input.len, pos + best.length);
-            insertCombinedHash(dict, input, current, head, prev);
+            insertCombinedHashLazy(dict, input, current, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
             const tail_start = if (end > pos + 4) end - 4 else pos + 1;
             pos += 1;
             if (pos < tail_start) pos = tail_start;
-            while (pos < end) : (pos += 1) insertCombinedHash(dict, input, dict.len + pos, head, prev);
+            while (pos < end) : (pos += 1) insertCombinedHashLazy(dict, input, dict.len + pos, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
         } else {
-            try tokens.append(allocator, .{ .literal = input[pos] });
+            try appendToken(tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
-            insertCombinedHash(dict, input, current, head, prev);
+            insertCombinedHashLazy(dict, input, current, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
             pos += 1;
         }
     }
-    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    return stats;
+}
+
+test "dictionary greedy scratch ignores stale head entries" {
+    var scratch: DictionaryGreedyScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    const options: GreedyOptions = .{ .window_len = 32 * 1024, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
+
+    const first_dictionary = "abcdefgh" ** 32;
+    const first_input = "abcdefgh" ** 16;
+    _ = try hashGreedyPlanWithDictionaryReuse(&tokens, &scratch, std.testing.allocator, first_input, first_dictionary, options);
+    try expectDictionaryPlanReplays(first_dictionary, first_input, tokens.items);
+
+    const second_dictionary = "qrstuvwx" ** 32;
+    const second_input = "qrstuvwx" ** 16;
+    _ = try hashGreedyPlanWithDictionaryReuse(&tokens, &scratch, std.testing.allocator, second_input, second_dictionary, options);
+    try expectDictionaryPlanReplays(second_dictionary, second_input, tokens.items);
+}
+
+fn expectDictionaryPlanReplays(dictionary: []const u8, expected: []const u8, tokens: []const Token) !void {
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(std.testing.allocator);
+    for (tokens) |token| switch (token) {
+        .literal => |byte| try output.append(std.testing.allocator, byte),
+        .match => |match| for (0..match.length) |_| {
+            const logical_len = dictionary.len + output.items.len;
+            if (match.distance == 0 or match.distance > logical_len) return error.InvalidMatch;
+            const source = logical_len - match.distance;
+            const byte = if (source < dictionary.len) dictionary[source] else output.items[source - dictionary.len];
+            try output.append(std.testing.allocator, byte);
+        },
+    };
+    try std.testing.expectEqualSlices(u8, expected, output.items);
 }
 
 /// Scan-backed preset-history planner for small discontiguous blocks.
@@ -298,6 +544,7 @@ pub fn lazyGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []
 }
 
 fn preferScanLazy(input: []const u8) bool {
+    const max_scan_trigram_buckets = 64;
     if (input.len < 1024) return true;
 
     var seen: [256]bool = @splat(false);
@@ -321,23 +568,31 @@ fn preferScanLazy(input: []const u8) bool {
             if (!trigrams[bucket]) {
                 trigrams[bucket] = true;
                 trigram_count += 1;
-                if (trigram_count > 96) return false;
+                if (trigram_count > max_scan_trigram_buckets) return false;
             }
         }
     }
     // The backwards scanner wins on tiny and low-entropy inputs because it has
     // no table allocation/clear cost and quickly finds long repeated runs.
     // Byte diversity alone is a weak proxy: Markdown/source often has fewer
-    // than 48 distinct bytes in the first KiB but hundreds of distinct 3-byte
-    // anchors, so a blind backward scan burns time on non-candidates. Use a
-    // small 256-bucket trigram sketch to keep RLE/repetitive text on the scan
-    // path while routing natural text/source blocks to the hash-chain parser.
+    // than 48 distinct bytes in the first KiB but many distinct 3-byte
+    // anchors, so a blind backward scan burns time on non-candidates. The
+    // 64-bucket cutoff routes numbered JSON (83 buckets in the first KiB) to
+    // hashing while keeping the repeated-text benchmark (61) on the cheaper
+    // scan path. Use this small sketch to distinguish structure without a full
+    // trial parse.
     return true;
 }
 
 fn scanLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
+    const stats = try scanLazyGreedyPlanReuse(&tokens, allocator, input, options);
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+fn scanLazyGreedyPlanReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    tokens.clearRetainingCapacity();
     var stats = PlanStats{};
 
     var pos: usize = 0;
@@ -366,7 +621,7 @@ fn scanLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
         pos += best.length;
     }
 
-    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    return stats;
 }
 
 fn hashLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
@@ -397,13 +652,26 @@ fn hashLazyGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8,
 
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
+    const stats = try hashLazyGreedyPlanWithTablesReuse(&tokens, allocator, input, options, head, prev);
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+pub fn hashLazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    if (input.len > 32 * 1024) return error.InvalidBlockPlan;
+    tokens.clearRetainingCapacity();
+    var head: [4096]isize = @splat(-1);
+    var prev_stack: [32 * 1024]isize = undefined;
+    return try hashLazyGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len]);
+}
+
+fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: []isize, prev: []isize) !PlanStats {
     var stats = PlanStats{};
 
     var pos: usize = 0;
     while (pos < input.len) {
         const best = findBestHashMatch(input, pos, options, head, prev);
         if (!acceptMatch(input, pos, best.length, best.distance, options)) {
-            try tokens.append(allocator, .{ .literal = input[pos] });
+            try appendToken(tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
             insertHash(input, pos, head, prev);
             pos += 1;
@@ -419,14 +687,14 @@ fn hashLazyGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8,
             current_inserted = true;
             const next = findBestHashMatch(input, pos + 1, options, head, prev);
             if (next.length >= best.length + options.lazy_min_gain and acceptMatch(input, pos + 1, next.length, next.distance, options)) {
-                try tokens.append(allocator, .{ .literal = input[pos] });
+                try appendToken(tokens, allocator, .{ .literal = input[pos] });
                 stats.literals += 1;
                 pos += 1;
                 continue;
             }
         }
 
-        try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+        try appendToken(tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
         stats.matches += 1;
         stats.matched_bytes += best.length;
         var insert_pos = if (current_inserted) pos + 1 else pos;
@@ -435,34 +703,187 @@ fn hashLazyGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8,
         pos += best.length;
     }
 
-    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    return stats;
 }
 
 pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    var scratch: OptimalScratch = .{};
+    defer scratch.deinit(allocator);
+    const stats = try optimalPlanReuse(&scratch, allocator, input, options);
+    return .{ .tokens = try allocator.dupe(Token, scratch.tokens.items), .stats = stats };
+}
+
+const rep_beam_width = 2;
+const rep_beam_match_candidates = 1;
+const rep_beam_input_max = std.math.maxInt(u16);
+
+const RepBeamState = struct {
+    cost: u32 = std.math.maxInt(u32),
+    rep0: u16 = 1,
+    previous_position: u16 = 0,
+    previous_slot: u8 = 0,
+    token: Token = .{ .literal = 0 },
+};
+
+comptime {
+    // `lengths[position]` is the sole initialized-slot count. Keeping this
+    // invariant explicit lets the hot parser iterate that slice without a
+    // redundant sentinel-cost branch on every state.
+    std.debug.assert(rep_beam_width <= std.math.maxInt(u8));
+}
+
+/// Bounded forward parser that keeps several recent-offset histories at each
+/// byte position. This lets Zstd callers pay once for a farther match when it
+/// enables a long run of cheap repeat-offset sequences.
+pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    var scratch: RepBeamScratch = .{};
+    defer scratch.deinit(allocator);
+    const stats = try optimalRepBeamPlanReuse(&scratch, allocator, input, options);
+    return .{ .tokens = try allocator.dupe(Token, scratch.reversed.items), .stats = stats };
+}
+
+pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    if (input.len == 0 or input.len > rep_beam_input_max) return error.InvalidBlockPlan;
+    try scratch.index.build(allocator, input);
+
+    const state_count = std.math.mul(usize, input.len + 1, rep_beam_width) catch return error.IntegerOverflow;
+    try scratch.states.resize(allocator, state_count);
+    try scratch.lengths.resize(allocator, input.len + 1);
+    const states = scratch.states.items;
+    const lengths = scratch.lengths.items;
+    @memset(lengths, 0);
+    states[0].cost = 0;
+    lengths[0] = 1;
+
+    var matches: [rep_beam_match_candidates]Token.Match = undefined;
+    for (0..input.len) |position| {
+        const can_match = position + minMatch(options) <= input.len;
+        const match_count = if (can_match) try scratch.index.matchesAt(input, position, options, &matches) else 0;
+        const current = states[position * rep_beam_width ..][0..lengths[position]];
+        for (current, 0..) |state, slot| {
+            insertRepBeamState(states, lengths, position + 1, .{
+                .cost = state.cost + @as(u32, @intCast(fixedLiteralCost(input[position]))),
+                .rep0 = state.rep0,
+                .previous_position = @intCast(position),
+                .previous_slot = @intCast(slot),
+                .token = .{ .literal = input[position] },
+            });
+
+            for (matches[0..match_count]) |match| {
+                extendRepBeamMatch(states, lengths, input, options, position, slot, state, match);
+            }
+            const indexed_rep0 = match_count != 0 and matches[0].distance == state.rep0;
+            if (can_match and state.rep0 <= position and !indexed_rep0) {
+                const length = matchLength(input, position - state.rep0, position, @min(maxMatch(options), input.len - position));
+                if (length >= minMatch(options)) {
+                    extendRepBeamMatch(states, lengths, input, options, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
+                }
+            }
+        }
+    }
+
+    const final_states = states[input.len * rep_beam_width ..][0..lengths[input.len]];
+    var best_slot: ?usize = null;
+    for (final_states, 0..) |state, slot| {
+        if (best_slot == null or state.cost < final_states[best_slot.?].cost) best_slot = slot;
+    }
+    scratch.reversed.clearRetainingCapacity();
+    try scratch.reversed.ensureTotalCapacity(allocator, @min(input.len, 4096));
+    var position = input.len;
+    var slot = best_slot orelse return error.InvalidBlockPlan;
+    while (position != 0) {
+        const state = states[position * rep_beam_width + slot];
+        try appendToken(&scratch.reversed, allocator, state.token);
+        position = state.previous_position;
+        slot = state.previous_slot;
+    }
+    std.mem.reverse(Token, scratch.reversed.items);
+
+    var stats: PlanStats = .{};
+    for (scratch.reversed.items) |token| switch (token) {
+        .literal => stats.literals += 1,
+        .match => |match| {
+            stats.matches += 1;
+            stats.matched_bytes += match.length;
+        },
+    };
+    return stats;
+}
+
+inline fn extendRepBeamMatch(states: []RepBeamState, lengths: []u8, _: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) void {
+    if (match.length < minMatch(options) or match.distance == 0 or match.distance > position) return;
+    const distance_cost: u32 = @intCast(if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance) + options.new_distance_penalty_bits);
+    const match_cost: u32 = @as(u32, fixed_length_costs[match.length]) + distance_cost;
+    const cost = state.cost + match_cost;
+    insertRepBeamState(states, lengths, position + match.length, .{
+        .cost = cost,
+        .rep0 = match.distance,
+        .previous_position = @intCast(position),
+        .previous_slot = @intCast(slot),
+        .token = .{ .match = match },
+    });
+}
+
+inline fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: usize, candidate: RepBeamState) void {
+    const slots = states[position * rep_beam_width ..][0..rep_beam_width];
+    const len = lengths[position];
+    if (len == 0) {
+        slots[0] = candidate;
+        lengths[position] = 1;
+        return;
+    }
+    if (slots[0].rep0 == candidate.rep0) {
+        if (candidate.cost < slots[0].cost) slots[0] = candidate;
+        return;
+    }
+    if (len == 1) {
+        slots[1] = candidate;
+        lengths[position] = 2;
+        return;
+    }
+    if (slots[1].rep0 == candidate.rep0) {
+        if (candidate.cost < slots[1].cost) slots[1] = candidate;
+        return;
+    }
+    const replacement: usize = @intFromBool(slots[1].cost > slots[0].cost);
+    // Preserve a distinct recent-offset history when its modeled cost is
+    // within two bits of the current beam boundary. Zstd's actual offset FSE
+    // coding can recover that tiny proxy deficit across later repcode runs.
+    const replacement_cost = slots[replacement].cost;
+    if (candidate.cost <= replacement_cost or candidate.cost - replacement_cost <= 2)
+        slots[replacement] = candidate;
+}
+
+pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    return optimalPlanReuseInternal(scratch, allocator, input, options, true);
+}
+
+fn optimalPlanReuseInternal(
+    scratch: *OptimalScratch,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    comptime enable_prefix_bound: bool,
+) !PlanStats {
     const n = input.len;
-    const costs = try allocator.alloc(usize, n + 1);
-    defer allocator.free(costs);
-    const steps = try allocator.alloc(Token, n);
-    defer allocator.free(steps);
+    try scratch.costs.resize(allocator, n + 1);
+    try scratch.steps.resize(allocator, n);
+    try scratch.index.build(allocator, input);
+    scratch.tokens.clearRetainingCapacity();
+    const costs = scratch.costs.items;
+    const steps = scratch.steps.items;
 
     // Build hash chain for fast match discovery.
-    const table_size = 1 << 15;
-    const head = try allocator.alloc(isize, table_size);
-    defer allocator.free(head);
-    @memset(head, -1);
-    const prev = try allocator.alloc(isize, n);
-    defer allocator.free(prev);
+    const prev = scratch.index.prev.items;
     // `prev` entries are written by the pre-population pass below before the
     // reverse dynamic-programming search reads any insertable position.
 
     // Pre-populate hash chain for all positions.
-    for (0..n) |i| insertHash(input, i, head, prev);
-
     costs[n] = 0;
     var rev_i: usize = n;
     const minimum = minMatch(options);
     const candidate_limit = normalizedMaxCandidates(options);
-    const distance_costs = fixedDistanceCostTable(options.window_len);
+    const distance_costs = &fixed_distance_costs;
 
     while (rev_i > 0) {
         rev_i -= 1;
@@ -472,6 +893,7 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
         if (rev_i + minimum > n) continue;
 
         const max_len = @min(maxMatch(options), n - rev_i);
+        var choices_built_through = minimum - 1;
         var chain_i = prev[rev_i];
         var checked: usize = 0;
         var candidates_seen: usize = 0;
@@ -481,17 +903,50 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
             std.debug.assert(candidate < rev_i);
             const distance = rev_i - candidate;
             if (distance == 0 or distance > options.window_len) break;
+            // The hash is truncated, so verify the full required four-byte
+            // anchor before relying on any prefix-length bound.
+            if (minimum >= 4 and
+                std.mem.readInt(u32, input[candidate..][0..4], .little) !=
+                    std.mem.readInt(u32, input[rev_i..][0..4], .little))
+            {
+                chain_i = prev[candidate];
+                continue;
+            }
+
+            const distance_cost = distance_costs[distance];
+            if (enable_prefix_bound and
+                minimum == 4 and
+                choices_built_through >= minimum and
+                choices_built_through < max_len and
+                input[candidate + choices_built_through] != input[rev_i + choices_built_through] and
+                scratch.index.best_length_costs[choices_built_through] + distance_cost >= costs[rev_i])
+            {
+                // The mismatch proves this candidate cannot extend the range
+                // of reachable lengths. The cached prefix minimum is an
+                // optimistic lower bound for every length it can have, so a
+                // non-improving bound makes exact extension unnecessary.
+                candidates_seen += 1;
+                if (candidates_seen >= candidate_limit) break;
+                chain_i = prev[candidate];
+                continue;
+            }
 
             const length = matchLength(input, candidate, rev_i, max_len);
             if (length >= minimum) {
-                const distance_cost = distance_costs[distance];
-                var len = length;
-                while (len >= minimum) : (len -= 1) {
-                    const cost = fixedLengthSymbolCost(len) + distance_cost + costs[rev_i + len];
-                    if (cost < costs[rev_i]) {
-                        costs[rev_i] = cost;
-                        steps[rev_i] = .{ .match = .{ .length = @intCast(len), .distance = @intCast(distance) } };
-                    }
+                extendOptimalLengthChoices(
+                    costs,
+                    rev_i,
+                    minimum,
+                    choices_built_through,
+                    length,
+                    &scratch.index.best_length_costs,
+                    &scratch.index.best_lengths,
+                );
+                choices_built_through = @max(choices_built_through, length);
+                const cost = scratch.index.best_length_costs[length] + distance_cost;
+                if (cost < costs[rev_i]) {
+                    costs[rev_i] = cost;
+                    steps[rev_i] = .{ .match = .{ .length = scratch.index.best_lengths[length], .distance = @intCast(distance) } };
                 }
                 candidates_seen += 1;
                 if (length == max_len) break;
@@ -502,13 +957,11 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
         }
     }
 
-    var tokens = try initTokenList(allocator, n);
-    errdefer tokens.deinit(allocator);
     var stats = PlanStats{};
     var pos: usize = 0;
     while (pos < n) {
         const token = steps[pos];
-        try tokens.append(allocator, token);
+        try appendToken(&scratch.tokens, allocator, token);
         switch (token) {
             .literal => {
                 stats.literals += 1;
@@ -521,7 +974,96 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
             },
         }
     }
-    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    return stats;
+}
+
+fn extendOptimalLengthChoices(
+    costs: []const usize,
+    position: usize,
+    minimum: usize,
+    built_through: usize,
+    maximum: usize,
+    best_costs: *[max_match_len + 1]usize,
+    best_lengths: *[max_match_len + 1]u16,
+) void {
+    if (maximum <= built_through) return;
+    var best_cost: usize = std.math.maxInt(usize);
+    var best_length: u16 = 0;
+    if (built_through >= minimum) {
+        best_cost = best_costs[built_through];
+        best_length = best_lengths[built_through];
+    }
+    var length = @max(minimum, built_through + 1);
+    while (length <= maximum) : (length += 1) {
+        const cost = fixed_length_costs[length] + costs[position + length];
+        // The reference scans from longest to shortest and updates only on a
+        // strict improvement, so equal costs select the longest length.
+        if (cost < best_cost or (cost == best_cost and length > best_length)) {
+            best_cost = cost;
+            best_length = @intCast(length);
+        }
+        best_costs[length] = best_cost;
+        best_lengths[length] = best_length;
+    }
+}
+
+test "optimal length prefix choices match descending reference" {
+    var suffix_costs: [max_match_len + 1]usize = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&suffix_costs) |*cost| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        cost.* = (state >> 16) % 97;
+    }
+    var best_costs: [max_match_len + 1]usize = undefined;
+    var best_lengths: [max_match_len + 1]u16 = undefined;
+    extendOptimalLengthChoices(&suffix_costs, 0, 4, 3, 37, &best_costs, &best_lengths);
+    extendOptimalLengthChoices(&suffix_costs, 0, 4, 37, 131, &best_costs, &best_lengths);
+    extendOptimalLengthChoices(&suffix_costs, 0, 4, 131, max_match_len, &best_costs, &best_lengths);
+    for (4..max_match_len + 1) |maximum| {
+        var expected_cost: usize = std.math.maxInt(usize);
+        var expected_length: usize = 0;
+        var length = maximum;
+        while (length >= 4) : (length -= 1) {
+            const cost = fixedLengthSymbolCost(length) + suffix_costs[length];
+            if (cost < expected_cost) {
+                expected_cost = cost;
+                expected_length = length;
+            }
+        }
+        try std.testing.expectEqual(expected_cost, best_costs[maximum]);
+        try std.testing.expectEqual(@as(u16, @intCast(expected_length)), best_lengths[maximum]);
+    }
+}
+
+test "repeat beam keeps stable distance across local length gain" {
+    var input: [32 * 1024]u8 = undefined;
+    var random_state: u32 = 0xfeed_beef;
+    for (&input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(random_state >> 16);
+    }
+    const plan = try optimalRepBeamPlanAlloc(std.testing.allocator, &input, .{
+        .window_len = input.len,
+        .max_chain = 128,
+        .nice_len = 258,
+        .max_candidates = 8,
+        .min_match = 4,
+        .max_match = max_match_len,
+        .min_savings_bits = 0,
+        .new_distance_penalty_bits = 4,
+        .lazy_min_gain = 1,
+    });
+    defer plan.deinit(std.testing.allocator);
+
+    var match_count: usize = 0;
+    for (plan.tokens) |token| switch (token) {
+        .literal => {},
+        .match => |match| {
+            try std.testing.expectEqual(@as(u16, 256), match.distance);
+            match_count += 1;
+        },
+    };
+    try std.testing.expectEqual(@as(usize, 508), match_count);
 }
 
 fn normalizedMaxCandidates(options: GreedyOptions) usize {
@@ -561,17 +1103,14 @@ fn acceptsEveryHashMatch(options: GreedyOptions) bool {
     }
     const distance_cost = fixedDistanceSymbolCost(options.window_len);
     const minimum = minMatch(options);
-    const maximum = maxMatch(options);
-    var length = minimum;
-    while (length <= maximum) : (length += 1) {
-        const literal_min_cost = length * 8;
-        const match_cost = fixedLengthSymbolCost(length) + distance_cost;
-        if (match_cost > literal_min_cost) return false;
-        if (options.min_savings_bits > literal_min_cost - match_cost) {
-            return false;
-        }
-    }
-    return true;
+    const literal_min_cost = minimum * 8;
+    const match_cost = fixedLengthSymbolCost(minimum) + distance_cost;
+    // Across the legal match range, each additional byte adds eight literal
+    // bits while the fixed length-symbol cost only changes by one at its
+    // boundaries (and drops at length 258). Therefore the shortest permitted
+    // match is the unique worst case for this lower-bound proof.
+    return match_cost <= literal_min_cost and
+        options.min_savings_bits <= literal_min_cost - match_cost;
 }
 
 pub fn fixedBitCost(tokens: []const Token) usize {
@@ -605,8 +1144,101 @@ fn fixedLengthSymbolCost(length: usize) usize {
     return 8; // 258 is the fixed-Huffman code 285 with no extra bits.
 }
 
+fn fixedLengthCostTable() [max_match_len + 1]u8 {
+    var table: [max_match_len + 1]u8 = @splat(0);
+    for (min_match_len..max_match_len + 1) |length| {
+        table[length] = @intCast(fixedLengthSymbolCost(length));
+    }
+    return table;
+}
+
+const fixed_length_costs = fixedLengthCostTable();
+
+test "compile-time fixed length costs match scalar range" {
+    for (min_match_len..max_match_len + 1) |length| {
+        try std.testing.expectEqual(@as(u8, @intCast(fixedLengthSymbolCost(length))), fixed_length_costs[length]);
+    }
+}
+
+test "rep beam keeps near-cost alternate recent-offset state" {
+    var states: [6]RepBeamState = undefined;
+    var lengths: [3]u8 = @splat(0);
+    insertRepBeamState(&states, &lengths, 1, .{ .cost = 10, .rep0 = 4 });
+    insertRepBeamState(&states, &lengths, 1, .{ .cost = 11, .rep0 = 8 });
+    insertRepBeamState(&states, &lengths, 1, .{ .cost = 12, .rep0 = 16 });
+    try std.testing.expectEqual(@as(u8, 2), lengths[1]);
+    try std.testing.expectEqual(@as(u16, 16), states[rep_beam_width + 1].rep0);
+    try std.testing.expectEqual(@as(u32, 12), states[rep_beam_width + 1].cost);
+}
+
+test "rep beam reusable scratch preserves tokens and capacity" {
+    const input = ("abcdefgh-abcdefgh-" ** 64) ++ ("0123456789abcdef" ** 32);
+    const options: GreedyOptions = .{ .min_match = 4, .new_distance_penalty_bits = 4 };
+    const reference = try optimalRepBeamPlanAlloc(std.testing.allocator, input, options);
+    defer reference.deinit(std.testing.allocator);
+
+    var scratch: RepBeamScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const first_stats = try optimalRepBeamPlanReuse(&scratch, std.testing.allocator, input, options);
+    try std.testing.expectEqual(reference.stats, first_stats);
+    try std.testing.expectEqualSlices(Token, reference.tokens, scratch.reversed.items);
+    const states_capacity = scratch.states.capacity;
+    const lengths_capacity = scratch.lengths.capacity;
+    const tokens_capacity = scratch.reversed.capacity;
+
+    const second_stats = try optimalRepBeamPlanReuse(&scratch, std.testing.allocator, input, options);
+    try std.testing.expectEqual(first_stats, second_stats);
+    try std.testing.expectEqualSlices(Token, reference.tokens, scratch.reversed.items);
+    try std.testing.expectEqual(states_capacity, scratch.states.capacity);
+    try std.testing.expectEqual(lengths_capacity, scratch.lengths.capacity);
+    try std.testing.expectEqual(tokens_capacity, scratch.reversed.capacity);
+}
+
+test "rep beam compact index matches reference beyond u16 positions" {
+    var input: [rep_beam_input_max]u8 = undefined;
+    for (&input, 0..) |*byte, i| byte.* = @truncate(i * 37 + i / 251);
+    const options: GreedyOptions = .{ .window_len = default_window_len, .min_match = 4 };
+    var reference: HashIndex = .{};
+    defer reference.deinit(std.testing.allocator);
+    try reference.buildWithHeadLen(std.testing.allocator, &input, 4096);
+    var compact: RepBeamIndex = .{};
+    defer compact.deinit(std.testing.allocator);
+    try compact.build(std.testing.allocator, &input);
+    var expected: [rep_beam_match_candidates]Token.Match = undefined;
+    var actual: [rep_beam_match_candidates]Token.Match = undefined;
+    for ([_]usize{ 1, 1024, 32 * 1024, input.len - 4 }) |position| {
+        const expected_len = try reference.matchesAt(&input, position, options, &expected);
+        const actual_len = try compact.matchesAt(&input, position, options, &actual);
+        try std.testing.expectEqual(expected_len, actual_len);
+        try std.testing.expectEqualSlices(Token.Match, expected[0..expected_len], actual[0..actual_len]);
+    }
+}
+
+test "rep beam emits literal tail shorter than minimum match" {
+    const input = "abcdabcdxyz";
+    const plan = try optimalRepBeamPlanAlloc(std.testing.allocator, input, .{ .min_match = 4 });
+    defer plan.deinit(std.testing.allocator);
+    const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+    try std.testing.expectEqual(@as(usize, 7), plan.stats.literals);
+    try std.testing.expectEqual(@as(usize, 1), plan.stats.matches);
+}
+
+test "rep beam deduplicates indexed recent offset matches" {
+    const input = "abcdefghabcdefghabcdefgh";
+    var scratch: RepBeamScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const stats = try optimalRepBeamPlanReuse(&scratch, std.testing.allocator, input, .{ .min_match = 4 });
+    try std.testing.expect(stats.matches >= 1);
+    try std.testing.expect(stats.matched_bytes >= 8);
+    const replayed = try replayAlloc(std.testing.allocator, scratch.reversed.items);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
 fn fixedDistanceSymbolCost(distance: usize) usize {
-    std.debug.assert(distance >= 1 and distance <= default_window_len);
+    std.debug.assert(distance >= 1 and distance <= max_window_len);
     return 5 + fixedDistanceExtraBitsFast(distance);
 }
 
@@ -623,6 +1255,13 @@ fn fixedDistanceCostTable(window_len: usize) [default_window_len + 1]u8 {
         table[distance] = @intCast(fixedDistanceSymbolCost(distance));
     }
     return table;
+}
+
+test "compile-time fixed distance costs match scalar range" {
+    try std.testing.expectEqual(@as(u8, 0), fixed_distance_costs[0]);
+    for (1..default_window_len + 1) |distance| {
+        try std.testing.expectEqual(@as(u8, @intCast(fixedDistanceSymbolCost(distance))), fixed_distance_costs[distance]);
+    }
 }
 
 fn lengthExtraBits(length: usize) usize {
@@ -720,6 +1359,74 @@ pub fn hashGreedyPlanAutoTinyAlloc(allocator: std.mem.Allocator, input: []const 
     };
 }
 
+/// Reusable-token counterpart to `hashGreedyPlanAutoTinyAlloc`. Existing
+/// capacity is preserved and overwritten; callers own the ArrayList and can
+/// reuse it across independent inputs without a token allocation per plan.
+pub fn hashGreedyPlanAutoTinyReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    const anchor: HashAnchor = if (minMatch(options) >= 4) .four else .three;
+    if (input.len > 32 * 1024) return error.InvalidBlockPlan;
+    tokens.clearRetainingCapacity();
+    var head: [4096]isize = @splat(-1);
+    var prev_stack: [32 * 1024]isize = undefined;
+    return switch (anchor) {
+        .three => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len], false, {}, .three),
+        .four => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len], false, {}, .four),
+    };
+}
+
+/// Reusable-table counterpart for callers that repeatedly encode small blocks.
+/// The head array stays allocated and uninitialized; a compact bitmap marks
+/// buckets written during the current plan, avoiding a 32 KiB clear per call.
+pub fn hashGreedyPlanAutoTinyScratchReuse(tokens: *std.ArrayList(Token), scratch: *TinyGreedyScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    const anchor: HashAnchor = if (minMatch(options) >= 4) .four else .three;
+    if (input.len > 32 * 1024) return error.InvalidBlockPlan;
+    tokens.clearRetainingCapacity();
+    try scratch.prev.resize(allocator, input.len);
+    @memset(&scratch.head_initialized, 0);
+    return switch (anchor) {
+        .three => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &scratch.head, scratch.prev.items, true, &scratch.head_initialized, .three),
+        .four => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &scratch.head, scratch.prev.items, true, &scratch.head_initialized, .four),
+    };
+}
+
+fn hashGreedyPlanWithTablesReuse(
+    tokens: *std.ArrayList(Token),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    head: anytype,
+    prev: anytype,
+    comptime lazy_head: bool,
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
+    comptime anchor: HashAnchor,
+) !PlanStats {
+    var stats = PlanStats{};
+    const accept_all_matches = acceptsEveryHashMatch(options);
+    var pos: usize = 0;
+    while (pos < input.len) {
+        const search = findBestHashMatchWithLayoutAndHash(input, pos, options, head, prev, false, lazy_head, initialized, anchor);
+        const best = search.best;
+        const accepted = if (accept_all_matches) best.length != 0 else acceptMatch(input, pos, best.length, best.distance, options);
+        if (accepted) {
+            try appendToken(tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+            stats.matches += 1;
+            stats.matched_bytes += best.length;
+            const end = @min(input.len, pos + best.length);
+            insertKnownHashWithLayout(pos, search.hash.?, head, prev, false, lazy_head, initialized);
+            const tail_start = if (end > pos + 4) end - 4 else pos + 1;
+            pos += 1;
+            if (pos < tail_start) pos = tail_start;
+            while (pos < end) : (pos += 1) insertHashWithLayout(input, pos, head, prev, false, lazy_head, initialized, anchor);
+        } else {
+            try appendToken(tokens, allocator, .{ .literal = input[pos] });
+            stats.literals += 1;
+            if (search.hash) |hash| insertKnownHashWithLayout(pos, hash, head, prev, false, lazy_head, initialized);
+            pos += 1;
+        }
+    }
+    return stats;
+}
+
 fn hashGreedyPlanTinyAllocWithAnchor(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -728,19 +1435,30 @@ fn hashGreedyPlanTinyAllocWithAnchor(
 ) !GreedyPlan {
     if (input.len > 32 * 1024) return hashGreedyPlanAllocWithAnchor(allocator, input, options, anchor);
 
+    if (comptime anchor == .three) {
+        // Brotli's three-byte tiny path shares the reusable parser's exact
+        // 32 KiB position bound. Compact signed indices retain the -1 sentinel,
+        // while lazy initialization avoids clearing the full head table. Keep
+        // the four-byte Zstd path unchanged: its primary blocks were neutral
+        // to slightly slower with the extra bitmap checks.
+        var head: [tiny_hash_head_table_size]i16 = undefined;
+        var initialized: [tiny_hash_head_init_words]u64 = @splat(0);
+        var prev_stack: [32 * 1024]i16 = undefined;
+        return hashGreedyPlanWithTables(
+            allocator,
+            input,
+            options,
+            &head,
+            prev_stack[0..input.len],
+            false,
+            true,
+            &initialized,
+            anchor,
+        );
+    }
     var head: [4096]isize = @splat(-1);
     var prev_stack: [32 * 1024]isize = undefined;
-    return hashGreedyPlanWithTables(
-        allocator,
-        input,
-        options,
-        &head,
-        prev_stack[0..input.len],
-        false,
-        false,
-        {},
-        anchor,
-    );
+    return hashGreedyPlanWithTables(allocator, input, options, &head, prev_stack[0..input.len], false, false, {}, anchor);
 }
 
 fn hashPrevTableLen(input_len: usize, window_len: usize) usize {
@@ -761,29 +1479,36 @@ fn hashPrevTableLen(input_len: usize, window_len: usize) usize {
     return input_len;
 }
 
-fn hashPrevIndex(position: usize, prev: []const isize, comptime ring: bool) usize {
+fn hashPrevIndex(position: usize, prev: anytype, comptime ring: bool) usize {
     return if (ring) position & (prev.len - 1) else position;
 }
 
-fn HashHeadInit(comptime lazy_head: bool) type {
+fn HashHeadInit(comptime lazy_head: bool, comptime Head: type) type {
     // Keep this mode as an explicit comptime parameter on the hot parser
     // rather than wrapping entries/state in a generic object. Both designs are
     // semantically equivalent, but the wrapper increased register pressure and
     // regressed the measured RGB/RGBA adaptive paths by about 2.5%. The direct
     // form still shares one parser state machine and compiles the full-clear
     // reference path without any bitmap branches.
-    return if (lazy_head) *[hash_head_init_words]u64 else void;
+    if (!lazy_head) return void;
+    const pointer = @typeInfo(Head).pointer;
+    const head_len = switch (pointer.size) {
+        .one => @typeInfo(pointer.child).array.len,
+        .slice => hash_head_table_size,
+        else => unreachable,
+    };
+    return *[head_len / 64]u64;
 }
 
 fn hashGreedyPlanWithTables(
     allocator: std.mem.Allocator,
     input: []const u8,
     options: GreedyOptions,
-    head: []isize,
-    prev: []isize,
+    head: anytype,
+    prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
     comptime anchor: HashAnchor,
 ) !GreedyPlan {
     // The heap-backed and stack-backed hash parsers share exactly the same
@@ -891,11 +1616,11 @@ fn findBestHashMatchWithLayout(
     input: []const u8,
     pos: usize,
     options: GreedyOptions,
-    head: []const isize,
-    prev: []const isize,
+    head: anytype,
+    prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
     comptime anchor: HashAnchor,
 ) MatchCandidate {
     return findBestHashMatchWithLayoutAndHash(
@@ -915,11 +1640,11 @@ fn findBestHashMatchWithLayoutAndHash(
     input: []const u8,
     pos: usize,
     options: GreedyOptions,
-    head: []const isize,
-    prev: []const isize,
+    head: anytype,
+    prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
     comptime anchor: HashAnchor,
 ) HashMatchSearch {
     const hash = hashAtInput(input, pos, head.len, anchor) orelse return .{};
@@ -958,7 +1683,7 @@ fn maxHashChainWalks(options: GreedyOptions, minimum: usize) usize {
     return options.max_chain * 4;
 }
 
-fn findBestCombinedHashMatch(dict: []const u8, input: []const u8, current: usize, options: GreedyOptions, head: []const isize, prev: []const isize) MatchCandidate {
+fn findBestCombinedHashMatch(dict: []const u8, input: []const u8, current: usize, options: GreedyOptions, head: anytype, prev: anytype) MatchCandidate {
     const minimum = minMatch(options);
     const dict_len = dict.len;
     const pos = current - dict_len;
@@ -1025,8 +1750,27 @@ fn findBestCombinedScanMatch(
     return best;
 }
 
+fn findBestCombinedHashMatchLazy(dict: []const u8, input: []const u8, current: usize, options: GreedyOptions, head: anytype, prev: anytype, initialized: *const [hash_head_init_words]u64) MatchCandidate {
+    const minimum = minMatch(options);
+    const pos = current - dict.len;
+    if (pos + minimum > input.len) return .{};
+    const h = hash3At(dict, input, current) & (head.len - 1);
+    const mask = @as(u64, 1) << @intCast(h & 63);
+    if (initialized[h / 64] & mask == 0) return .{};
+    return findBestCombinedHashMatch(dict, input, current, options, head, prev);
+}
+
 fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
     var len: usize = 0;
+    // Long matches dominate the optimal and repeat-aware Zstd parsers. Compare
+    // four words at once, then use the equality mask to preserve the exact
+    // first-mismatch offset before falling through to the word/scalar tails.
+    while (len + 32 <= max_len) : (len += 32) {
+        const left: @Vector(32, u8) = input[a + len ..][0..32].*;
+        const right: @Vector(32, u8) = input[b + len ..][0..32].*;
+        const differing: u32 = ~@as(u32, @bitCast(left == right));
+        if (differing != 0) return len + @ctz(differing);
+    }
     while (len + 8 <= max_len) : (len += 8) {
         const left = std.mem.readInt(u64, input[a + len ..][0..8], .little);
         const right = std.mem.readInt(u64, input[b + len ..][0..8], .little);
@@ -1036,6 +1780,21 @@ fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
     }
     while (len < max_len and input[a + len] == input[b + len]) len += 1;
     return len;
+}
+
+test "shared match length vector path matches byte reference" {
+    var input: [674]u8 = undefined;
+    for (input[0..337], 0..) |*byte, i| byte.* = @truncate(i * 37 + i / 11);
+    @memcpy(input[337..674], input[0..337]);
+    const maximum: usize = 321;
+
+    for (0..maximum) |mismatch| {
+        input[337 + mismatch] +%= 1;
+        try std.testing.expectEqual(mismatch, matchLength(&input, 0, 337, maximum));
+        input[337 + mismatch] = input[mismatch];
+    }
+    for (0..maximum + 1) |limit|
+        try std.testing.expectEqual(limit, matchLength(&input, 0, 337, limit));
 }
 
 fn combinedMatchLength(dict: []const u8, input: []const u8, candidate: usize, current: usize, max_len: usize) usize {
@@ -1073,6 +1832,15 @@ test "combined dictionary/input match length uses word and tail paths" {
 test "lazy parser scan preference separates repetitive from source-like blocks" {
     try std.testing.expect(preferScanLazy("abcabcabcabc" ** 128));
     try std.testing.expect(preferScanLazy("0123456789abcdef" ** 128));
+
+    var numbered_json: std.ArrayList(u8) = .empty;
+    defer numbered_json.deinit(std.testing.allocator);
+    while (numbered_json.items.len < 2048) {
+        var line: [96]u8 = undefined;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured input\"}}\n", .{numbered_json.items.len / 64});
+        try numbered_json.appendSlice(std.testing.allocator, formatted);
+    }
+    try std.testing.expect(!preferScanLazy(numbered_json.items));
 
     const source_like =
         \\const std = @import("std");
@@ -1112,11 +1880,11 @@ fn insertHash(input: []const u8, pos: usize, head: []isize, prev: []isize) void 
 }
 
 fn hashHeadGet(
-    head: []const isize,
+    head: anytype,
     hash: usize,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
-) isize {
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
+) @TypeOf(head[0]) {
     if (lazy_head) {
         const mask = @as(u64, 1) << @intCast(hash & 63);
         if (initialized[hash / 64] & mask == 0) return -1;
@@ -1127,11 +1895,11 @@ fn hashHeadGet(
 fn insertHashWithLayout(
     input: []const u8,
     pos: usize,
-    head: []isize,
-    prev: []isize,
+    head: anytype,
+    prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
     comptime anchor: HashAnchor,
 ) void {
     const h = hashAtInput(input, pos, head.len, anchor) orelse return;
@@ -1149,11 +1917,11 @@ fn insertHashWithLayout(
 fn insertKnownHashWithLayout(
     pos: usize,
     h: usize,
-    head: []isize,
-    prev: []isize,
+    head: anytype,
+    prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
 ) void {
     if (lazy_head) {
         const mask = @as(u64, 1) << @intCast(h & 63);
@@ -1188,16 +1956,32 @@ fn hashAtInput(
     };
 }
 
-fn seedDictionaryHashes(dict: []const u8, input: []const u8, head: []isize, prev: []isize) void {
+fn seedDictionaryHashes(dict: []const u8, input: []const u8, head: anytype, prev: anytype) void {
     var pos: usize = 0;
     while (pos + min_match_len <= dict.len) : (pos += 1) insertCombinedHash(dict, input, pos, head, prev);
 }
 
-fn insertCombinedHash(dict: []const u8, input: []const u8, pos: usize, head: []isize, prev: []isize) void {
+fn seedDictionaryHashesLazy(dict: []const u8, input: []const u8, head: anytype, prev: anytype, initialized: *[hash_head_init_words]u64) void {
+    var pos: usize = 0;
+    while (pos + min_match_len <= dict.len) : (pos += 1)
+        insertCombinedHashLazy(dict, input, pos, head, prev, initialized);
+}
+
+fn insertCombinedHash(dict: []const u8, input: []const u8, pos: usize, head: anytype, prev: anytype) void {
     if (pos + min_match_len > dict.len + input.len) return;
     const h = hash3At(dict, input, pos) & (head.len - 1);
     prev[pos] = head[h];
     head[h] = @intCast(pos);
+}
+
+fn insertCombinedHashLazy(dict: []const u8, input: []const u8, pos: usize, head: anytype, prev: anytype, initialized: *[hash_head_init_words]u64) void {
+    if (pos + min_match_len > dict.len + input.len) return;
+    const h = hash3At(dict, input, pos) & (head.len - 1);
+    const mask = @as(u64, 1) << @intCast(h & 63);
+    const word = &initialized[h / 64];
+    prev[pos] = if (word.* & mask == 0) -1 else head[h];
+    head[h] = @intCast(pos);
+    word.* |= mask;
 }
 
 fn hash3At(dict: []const u8, input: []const u8, pos: usize) usize {
@@ -1409,6 +2193,80 @@ test "optimal LZ77 prototype round trips and is no worse by fixed bit cost" {
     try std.testing.expect(optimal.stats.tokenCount() <= greedy.stats.tokenCount() + 2);
 }
 
+test "reusable optimal parser preserves tokens and capacities" {
+    const input = "abcabcXabcabcYabcabcZabcabcX" ** 8;
+    const options = GreedyOptions{ .window_len = input.len, .max_chain = 64, .nice_len = 64, .max_candidates = 8, .min_match = 4 };
+    const reference = try optimalPlanAlloc(std.testing.allocator, input, options);
+    defer reference.deinit(std.testing.allocator);
+    var scratch: OptimalScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const stats = try optimalPlanReuse(&scratch, std.testing.allocator, input, options);
+    try expectEqualTokenSlices(reference.tokens, scratch.tokens.items);
+    try std.testing.expectEqual(reference.stats, stats);
+    const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity };
+    _ = try optimalPlanReuse(&scratch, std.testing.allocator, input, options);
+    try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity });
+}
+
+test "optimal prefix bound preserves reference tokens" {
+    var input: [4096]u8 = undefined;
+    var state: u32 = 0x243f_6a88;
+    for (0..32) |seed| {
+        for (&input, 0..) |*byte, i| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed % 4) {
+                0 => @truncate(state >> 24),
+                1 => @truncate(i * 17 + seed),
+                2 => @truncate((i / (3 + seed)) % 23 + 'a'),
+                else => @truncate((i / 31) + (state >> 29)),
+            };
+        }
+        const options: GreedyOptions = .{
+            .window_len = input.len,
+            .max_chain = 128,
+            .nice_len = max_match_len,
+            .max_candidates = 8,
+            .min_match = 4,
+            .max_match = max_match_len,
+        };
+        var reference: OptimalScratch = .{};
+        defer reference.deinit(std.testing.allocator);
+        const reference_stats = try optimalPlanReuseInternal(&reference, std.testing.allocator, &input, options, false);
+        var bounded: OptimalScratch = .{};
+        defer bounded.deinit(std.testing.allocator);
+        const bounded_stats = try optimalPlanReuseInternal(&bounded, std.testing.allocator, &input, options, true);
+        try std.testing.expectEqual(reference_stats, bounded_stats);
+        try std.testing.expectEqualSlices(Token, reference.tokens.items, bounded.tokens.items);
+    }
+}
+
+test "optimal fourth-byte rejection preserves exact four-byte matches" {
+    const input = "abcdXabcdYabcZ";
+    const plan = try optimalPlanAlloc(std.testing.allocator, input, .{ .min_match = 4, .max_match = 32, .max_chain = 64, .max_candidates = 8 });
+    defer plan.deinit(std.testing.allocator);
+    var saw_exact_four = false;
+    for (plan.tokens) |token| switch (token) {
+        .match => |match| saw_exact_four = saw_exact_four or match.length == 4,
+        else => {},
+    };
+    try std.testing.expect(saw_exact_four);
+    const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
+test "reusable hash index exposes deterministic position matches" {
+    const input = "prefix-abcdefghijklmnop-middle-abcdefghijklmnop-tail";
+    var index: HashIndex = .{};
+    defer index.deinit(std.testing.allocator);
+    try index.build(std.testing.allocator, input);
+    const second = std.mem.indexOfPos(u8, input, 8, "abcdefghijklmnop") orelse return error.InvalidMatch;
+    const match = try index.bestMatch(input, second, .{ .window_len = input.len, .max_chain = 64, .nice_len = 258, .min_match = 4 });
+    try std.testing.expectEqual(@as(u16, 17), match.length);
+    try std.testing.expectEqual(@as(u16, @intCast(second - "prefix-".len)), match.distance);
+    try std.testing.expectError(error.InvalidBlockPlan, index.bestMatch(input[0 .. input.len - 1], second, .{}));
+}
+
 test "optimal LZ77 considers multiple match distances" {
     const input = "abcxxxxabcabcxxxxabcabc";
     const plan = try optimalPlanAlloc(std.testing.allocator, input, .{ .max_chain = 64, .nice_len = 258, .max_candidates = 4 });
@@ -1520,6 +2378,107 @@ test "automatic hash anchor preserves three-byte match configurations" {
         error.InvalidMatch,
         hashGreedyPlanFourAlloc(std.testing.allocator, input, options),
     );
+}
+
+test "reusable tiny hash planner preserves tokens and capacity" {
+    const input = "abcabcXabcabcXabcabcX";
+    const options = GreedyOptions{ .window_len = input.len, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
+    const reference = try hashGreedyPlanAutoTinyAlloc(std.testing.allocator, input, options);
+    defer reference.deinit(std.testing.allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    const first_stats = try hashGreedyPlanAutoTinyReuse(&tokens, std.testing.allocator, input, options);
+    try expectEqualTokenSlices(reference.tokens, tokens.items);
+    try std.testing.expectEqual(reference.stats, first_stats);
+    const capacity = tokens.capacity;
+    _ = try hashGreedyPlanAutoTinyReuse(&tokens, std.testing.allocator, input, options);
+    try std.testing.expectEqual(capacity, tokens.capacity);
+}
+
+test "reusable tiny hash scratch preserves tokens across inputs" {
+    try std.testing.expectEqual(@as(usize, 8 * 1024), @sizeOf(@FieldType(TinyGreedyScratch, "head")));
+    try std.testing.expectEqual(@as(usize, tiny_hash_head_table_size / 8), @sizeOf(@FieldType(TinyGreedyScratch, "head_initialized")));
+    const options = GreedyOptions{ .window_len = 32 * 1024, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
+    const inputs = [_][]const u8{
+        "abcabcXabcabcXabcabcX",
+        "different-different-different",
+        "qzxwvbnm1234567890QZXWVBNM",
+        "abcabcXabcabcXabcabcX",
+    };
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    var scratch: TinyGreedyScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    var retained_capacity: ?usize = null;
+    for (inputs) |input| {
+        const reference = try hashGreedyPlanAutoTinyAlloc(std.testing.allocator, input, options);
+        defer reference.deinit(std.testing.allocator);
+        const stats = try hashGreedyPlanAutoTinyScratchReuse(&tokens, &scratch, std.testing.allocator, input, options);
+        try expectEqualTokenSlices(reference.tokens, tokens.items);
+        try std.testing.expectEqual(reference.stats, stats);
+        if (retained_capacity) |capacity|
+            try std.testing.expect(scratch.retainedCapacity() >= capacity)
+        else
+            retained_capacity = scratch.retainedCapacity();
+    }
+}
+
+test "reusable tiny hash scratch covers maximum input position" {
+    var input: [32 * 1024]u8 = undefined;
+    for (&input, 0..) |*byte, i| byte.* = @truncate(i * 37 + i / 11);
+    const options = GreedyOptions{ .window_len = input.len, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
+    const reference = try hashGreedyPlanAutoTinyAlloc(std.testing.allocator, &input, options);
+    defer reference.deinit(std.testing.allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    var scratch: TinyGreedyScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const stats = try hashGreedyPlanAutoTinyScratchReuse(&tokens, &scratch, std.testing.allocator, &input, options);
+    try expectEqualTokenSlices(reference.tokens, tokens.items);
+    try std.testing.expectEqual(reference.stats, stats);
+}
+
+test "one-shot tiny hash planner covers maximum three-byte position" {
+    var input: [32 * 1024]u8 = undefined;
+    for (&input, 0..) |*byte, i| byte.* = @truncate(i * 43 + i / 13);
+    const options = GreedyOptions{ .window_len = input.len, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
+    const reference = try hashGreedyPlanAlloc(std.testing.allocator, &input, options);
+    defer reference.deinit(std.testing.allocator);
+    const tiny = try hashGreedyPlanAutoTinyAlloc(std.testing.allocator, &input, options);
+    defer tiny.deinit(std.testing.allocator);
+    try expectEqualTokenSlices(reference.tokens, tiny.tokens);
+    try std.testing.expectEqual(reference.stats, tiny.stats);
+}
+
+test "reusable tiny lazy hash planner preserves tokens and capacity" {
+    const input = "abcabcXabcabcYabcabcZabcabcX";
+    const options = GreedyOptions{ .window_len = input.len, .max_chain = 64, .nice_len = 64, .max_candidates = 8, .lazy_min_gain = 1 };
+    const reference = try hashLazyGreedyPlanTinyAlloc(std.testing.allocator, input, options);
+    defer reference.deinit(std.testing.allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    const first_stats = try hashLazyGreedyPlanTinyReuse(&tokens, std.testing.allocator, input, options);
+    try expectEqualTokenSlices(reference.tokens, tokens.items);
+    try std.testing.expectEqual(reference.stats, first_stats);
+    const capacity = tokens.capacity;
+    _ = try hashLazyGreedyPlanTinyReuse(&tokens, std.testing.allocator, input, options);
+    try std.testing.expectEqual(capacity, tokens.capacity);
+}
+
+test "reusable lazy planner preserves production scan and hash policies" {
+    const options = GreedyOptions{ .window_len = 32 * 1024, .max_chain = 64, .nice_len = 64, .max_candidates = 1, .lazy_min_gain = 1, .min_match = 3, .max_match = max_match_len };
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    for ([_][]const u8{
+        "abcabcabcabc" ** 128,
+        "pub fn update(state: *State, value: u32) void { state.total += value; }\n" ** 40,
+    }) |input| {
+        const reference = try lazyGreedyPlanAlloc(std.testing.allocator, input, options);
+        defer reference.deinit(std.testing.allocator);
+        const stats = try lazyGreedyPlanTinyReuse(&tokens, std.testing.allocator, input, options);
+        try expectEqualTokenSlices(reference.tokens, tokens.items);
+        try std.testing.expectEqual(reference.stats, stats);
+    }
 }
 
 test "automatic hash anchor selects four-byte planner and round trips" {
@@ -1835,4 +2794,34 @@ test "hash match fast acceptance is a sufficient condition" {
     var oversized_window = fastest;
     oversized_window.window_len = default_window_len + 1;
     try std.testing.expect(!acceptsEveryHashMatch(oversized_window));
+}
+
+test "constant-time hash match acceptance matches exhaustive length scan" {
+    for ([_]usize{ 0, 1, 4, 255, 4096, default_window_len, default_window_len + 1, max_window_len }) |window_len| {
+        for ([_]usize{ 0, 3, 4, 5, 9, 10, 11, 18, 19, 66, 67, 130, 131, 257, 258, 300 }) |minimum| {
+            for ([_]usize{ 3, 4, 10, 66, 130, 257, 258, 300 }) |maximum| {
+                for ([_]usize{ 0, 1, 4, 8, 16, 64, std.math.maxInt(usize) }) |savings| {
+                    const options = GreedyOptions{
+                        .window_len = window_len,
+                        .min_match = minimum,
+                        .max_match = maximum,
+                        .min_savings_bits = savings,
+                    };
+                    try std.testing.expectEqual(acceptsEveryHashMatchReference(options), acceptsEveryHashMatch(options));
+                }
+            }
+        }
+    }
+}
+
+fn acceptsEveryHashMatchReference(options: GreedyOptions) bool {
+    if (options.window_len == 0 or options.window_len > default_window_len) return false;
+    const distance_cost = fixedDistanceSymbolCost(options.window_len);
+    var length = minMatch(options);
+    while (length <= maxMatch(options)) : (length += 1) {
+        const literal_min_cost = length * 8;
+        const match_cost = fixedLengthSymbolCost(length) + distance_cost;
+        if (match_cost > literal_min_cost or options.min_savings_bits > literal_min_cost - match_cost) return false;
+    }
+    return true;
 }

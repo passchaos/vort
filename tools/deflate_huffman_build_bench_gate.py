@@ -12,12 +12,12 @@ sys.dont_write_bytecode = True
 
 EXPECTED_COLUMNS = {"case", "build", "lookup_bits", "symbols", "iterations", "elapsed_ns", "builds_per_s", "checksum"}
 EXPECTED = {
-    "literal-mixed": {"table", "fast9", "fast11", "fast12"},
-    "literal-long-tail": {"table", "fast9", "fast11", "fast12"},
-    "distance-mixed": {"table", "fast5", "fast8"},
-    "code-length": {"table", "fast5", "fast7"},
+    "literal-mixed": {"table", "encoder", "encoder-reference", "fast9", "fast11", "fast12"},
+    "literal-long-tail": {"table", "encoder", "encoder-reference", "fast9", "fast11", "fast12"},
+    "distance-mixed": {"table", "encoder", "encoder-reference", "fast5", "fast8"},
+    "code-length": {"table", "encoder", "encoder-reference", "fast5", "fast7"},
 }
-LOOKUP_BITS = {"table": 0, "fast5": 5, "fast7": 7, "fast8": 8, "fast9": 9, "fast11": 11, "fast12": 12}
+LOOKUP_BITS = {"table": 0, "encoder": 0, "encoder-reference": 0, "fast5": 5, "fast7": 7, "fast8": 8, "fast9": 9, "fast11": 11, "fast12": 12}
 
 
 def positive_int(row: dict[str, str], key: str) -> bool:
@@ -73,6 +73,12 @@ def main() -> int:
     for case, expected in EXPECTED.items():
         if by_case[case] != expected:
             print(f"deflate_huffman_build_bench_gate=missing case={case} builds={sorted(expected - by_case[case])}", file=sys.stderr)
+            return 1
+    for case in EXPECTED:
+        encoder = next(row for row in rows if row["case"] == case and row["build"] == "encoder")
+        reference = next(row for row in rows if row["case"] == case and row["build"] == "encoder-reference")
+        if float(encoder["builds_per_s"]) <= float(reference["builds_per_s"]):
+            print(f"deflate_huffman_build_bench_gate=encoder_not_faster case={case}", file=sys.stderr)
             return 1
     print(f"deflate_huffman_build_bench_gate=ok cases={len(EXPECTED)} rows={len(rows)}")
     return 0

@@ -53,13 +53,90 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
         pub const Encoder = struct {
             codes: [max_symbols]u16 = @splat(0),
             bits: [max_symbols]u4 = @splat(0),
+            const max_sparse_symbols = 64;
 
             pub fn init(lengths: []const u4) Error!Encoder {
-                const table = try Self.init(lengths);
+                @setEvalBranchQuota(20_000);
+                if (lengths.len > max_symbols) return error.CorruptFrame;
+                var counts: [max_code_bits + 1]u16 = @splat(0);
+                var max_bits_seen: u4 = 0;
+                for (lengths) |code_bits| {
+                    if (code_bits > max_code_bits) return error.CorruptFrame;
+                    if (code_bits != 0) {
+                        counts[code_bits] += 1;
+                        max_bits_seen = @max(max_bits_seen, code_bits);
+                    }
+                }
+                if (max_bits_seen == 0) return .{};
+
+                // Canonical encoder construction only needs the length
+                // histogram and next-code recurrence. The previous path built
+                // a fully bucketed decoder table first, then scanned it again
+                // to reconstruct these two arrays. Dynamic DEFLATE builds three
+                // encoders per block, so skipping that intermediate table also
+                // removes its active-symbol list and bucket write passes.
+                var available: i32 = 1;
+                var code: u16 = 0;
+                var next_code: [max_code_bits + 1]u16 = @splat(0);
+                for (1..max_code_bits + 1) |code_bits| {
+                    available = (available << 1) - @as(i32, counts[code_bits]);
+                    if (available < 0) return error.InvalidHuffmanCode;
+                    code = (code + counts[code_bits - 1]) << 1;
+                    next_code[code_bits] = code;
+                }
+
                 var encoder = Encoder{};
-                for (table.entries[0..table.len]) |entry| {
-                    encoder.codes[entry.symbol] = entry.code;
-                    encoder.bits[entry.symbol] = entry.bits;
+                for (lengths, 0..) |code_bits, symbol| {
+                    if (code_bits == 0) continue;
+                    encoder.codes[symbol] = reverseBits(next_code[code_bits], code_bits);
+                    encoder.bits[symbol] = code_bits;
+                    next_code[code_bits] += 1;
+                }
+                return encoder;
+            }
+
+            /// Build canonical codes for a trusted sparse symbol set. Entries
+            /// outside `active_symbols` remain undefined and must never be
+            /// queried; this avoids clearing and scanning a 256+ entry dense
+            /// encoder when a format planner already owns the exact alphabet.
+            pub fn initSparseTrusted(lengths: []const u4, active_symbols: []const u16) Error!Encoder {
+                if (lengths.len > max_symbols or active_symbols.len > max_sparse_symbols) return error.CorruptFrame;
+                if (active_symbols.len == 0) return .{};
+
+                var symbols: [max_sparse_symbols]u16 = undefined;
+                @memcpy(symbols[0..active_symbols.len], active_symbols);
+                // Canonical codes are assigned by increasing symbol value,
+                // while Brotli's planner alphabet is frequency-ordered.
+                for (symbols[1..active_symbols.len], 1..) |symbol, i| {
+                    var j = i;
+                    while (j != 0 and symbol < symbols[j - 1]) : (j -= 1) symbols[j] = symbols[j - 1];
+                    symbols[j] = symbol;
+                }
+
+                var counts: [max_code_bits + 1]u16 = @splat(0);
+                for (symbols[0..active_symbols.len], 0..) |symbol, i| {
+                    if (symbol >= lengths.len or (i != 0 and symbol == symbols[i - 1])) return error.CorruptFrame;
+                    const code_bits = lengths[symbol];
+                    if (code_bits == 0 or code_bits > max_code_bits) return error.CorruptFrame;
+                    counts[code_bits] += 1;
+                }
+
+                var available: i32 = 1;
+                var code: u16 = 0;
+                var next_code: [max_code_bits + 1]u16 = @splat(0);
+                for (1..max_code_bits + 1) |code_bits| {
+                    available = (available << 1) - @as(i32, counts[code_bits]);
+                    if (available < 0) return error.InvalidHuffmanCode;
+                    code = (code + counts[code_bits - 1]) << 1;
+                    next_code[code_bits] = code;
+                }
+
+                var encoder: Encoder = undefined;
+                for (symbols[0..active_symbols.len]) |symbol| {
+                    const code_bits = lengths[symbol];
+                    encoder.codes[symbol] = reverseBits(next_code[code_bits], code_bits);
+                    encoder.bits[symbol] = code_bits;
+                    next_code[code_bits] += 1;
                 }
                 return encoder;
             }
@@ -131,6 +208,115 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             return table;
         }
 
+        /// Build a decoder from a validated ascending list of active symbols.
+        /// Format parsers that already discovered this set can avoid rescanning
+        /// a large sparse alphabet solely to reconstruct the same list.
+        pub fn initSparseTrusted(lengths: []const u4, active_symbols: []const u16) Error!Self {
+            if (lengths.len > max_symbols or active_symbols.len > max_symbols) return error.CorruptFrame;
+            if (active_symbols.len == 0) return Self{};
+
+            var counts: [max_code_bits + 1]u16 = @splat(0);
+            var max_bits_seen: u4 = 0;
+            for (active_symbols, 0..) |symbol, index| {
+                if (symbol >= lengths.len or (index != 0 and symbol <= active_symbols[index - 1])) return error.CorruptFrame;
+                const bits = lengths[symbol];
+                if (bits == 0 or bits > max_code_bits) return error.CorruptFrame;
+                counts[bits] += 1;
+                max_bits_seen = @max(max_bits_seen, bits);
+            }
+
+            var available: i32 = 1;
+            var code: u16 = 0;
+            var next_code: [max_code_bits + 1]u16 = @splat(0);
+            for (1..max_code_bits + 1) |bits| {
+                available = (available << 1) - @as(i32, counts[bits]);
+                if (available < 0) return error.InvalidHuffmanCode;
+                code = (code + counts[bits - 1]) << 1;
+                next_code[bits] = code;
+            }
+
+            var table = Self{ .len = active_symbols.len, .max_bits = max_bits_seen };
+            var offset: u16 = 0;
+            for (1..max_code_bits + 1) |bits| {
+                table.first_by_bits[bits] = offset;
+                table.count_by_bits[bits] = counts[bits];
+                offset += counts[bits];
+            }
+            var write_offsets = table.first_by_bits;
+            for (active_symbols) |symbol| {
+                const bits = lengths[symbol];
+                const canonical = next_code[bits];
+                next_code[bits] += 1;
+                const entry_index = write_offsets[bits];
+                write_offsets[bits] += 1;
+                table.entries[entry_index] = .{
+                    .symbol = symbol,
+                    .code = reverseBits(canonical, bits),
+                    .bits = bits,
+                };
+            }
+            return table;
+        }
+
+        /// Build a small decoder when code lengths and wire symbols are already
+        /// available as parallel lists. Brotli simple trees contain at most four
+        /// symbols, so expanding them into a max-alphabet-sized sparse array is
+        /// unnecessary. Canonical assignment still follows symbol order.
+        pub fn initExplicitSymbols(code_lengths: []const u4, symbols: []const u16) Error!Self {
+            if (code_lengths.len != symbols.len or symbols.len == 0 or symbols.len > max_symbols) return error.CorruptFrame;
+            var sorted_symbols: [4]u16 = undefined;
+            var sorted_lengths: [4]u4 = undefined;
+            if (symbols.len > sorted_symbols.len) return error.CorruptFrame;
+            for (symbols, code_lengths, 0..) |symbol, bits, i| {
+                if (symbol >= max_symbols or bits == 0 or bits > max_code_bits) return error.CorruptFrame;
+                var insert = i;
+                while (insert != 0 and symbol < sorted_symbols[insert - 1]) : (insert -= 1) {
+                    sorted_symbols[insert] = sorted_symbols[insert - 1];
+                    sorted_lengths[insert] = sorted_lengths[insert - 1];
+                }
+                if (insert != 0 and symbol == sorted_symbols[insert - 1]) return error.CorruptFrame;
+                sorted_symbols[insert] = symbol;
+                sorted_lengths[insert] = bits;
+            }
+
+            var counts: [max_code_bits + 1]u16 = @splat(0);
+            var max_bits_seen: u4 = 0;
+            for (sorted_lengths[0..symbols.len]) |bits| {
+                counts[bits] += 1;
+                max_bits_seen = @max(max_bits_seen, bits);
+            }
+            var available: i32 = 1;
+            var code: u16 = 0;
+            var next_code: [max_code_bits + 1]u16 = @splat(0);
+            for (1..max_code_bits + 1) |bits| {
+                available = (available << 1) - @as(i32, counts[bits]);
+                if (available < 0) return error.InvalidHuffmanCode;
+                code = (code + counts[bits - 1]) << 1;
+                next_code[bits] = code;
+            }
+
+            var table = Self{ .len = symbols.len, .max_bits = max_bits_seen };
+            var offset: u16 = 0;
+            for (1..max_code_bits + 1) |bits| {
+                table.first_by_bits[bits] = offset;
+                table.count_by_bits[bits] = counts[bits];
+                offset += counts[bits];
+            }
+            var write_offsets = table.first_by_bits;
+            for (sorted_symbols[0..symbols.len], sorted_lengths[0..symbols.len]) |symbol, bits| {
+                const canonical = next_code[bits];
+                next_code[bits] += 1;
+                const entry_index = write_offsets[bits];
+                write_offsets[bits] += 1;
+                table.entries[entry_index] = .{
+                    .symbol = symbol,
+                    .code = reverseBits(canonical, bits),
+                    .bits = bits,
+                };
+            }
+            return table;
+        }
+
         pub fn decode(self: *const Self, reader: anytype) Error!Symbol {
             const decoded = try self.decodeValueWithBits(reader);
             return .{ .value = decoded.value, .bits = decoded.bits };
@@ -153,6 +339,48 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             return error.InvalidHuffmanCode;
         }
 
+        /// Place an 8-bit lookup in the unused tail of the entry array. Callers
+        /// opt in only when they own enough slack, so this adds no table bytes
+        /// and leaves the ordinary compact decoder completely unchanged.
+        pub fn buildTailLookup8(self: *Self) bool {
+            const lookup_len = 1 << 8;
+            const lookup_bytes = lookup_len * @sizeOf(u16);
+            const entry_count = (lookup_bytes + @sizeOf(Entry) - 1) / @sizeOf(Entry);
+            if (!self.canBuildTailLookup8()) return false;
+            const lookup: *[lookup_len]u16 = @ptrCast(&self.entries[max_symbols - entry_count]);
+            @memset(lookup, 0);
+            for (self.entries[0..self.len]) |entry| {
+                if (entry.bits > 8) continue;
+                const fill = @as(usize, 1) << @intCast(8 - entry.bits);
+                const packed_entry: u16 = (entry.symbol + 1) << 4 | entry.bits;
+                var i: usize = 0;
+                while (i < fill) : (i += 1) lookup[entry.code | (i << entry.bits)] = packed_entry;
+            }
+            return true;
+        }
+
+        pub fn canBuildTailLookup8(self: *const Self) bool {
+            const lookup_bytes = (1 << 8) * @sizeOf(u16);
+            const entry_count = (lookup_bytes + @sizeOf(Entry) - 1) / @sizeOf(Entry);
+            if (comptime max_symbols < entry_count) return false;
+            return self.len + entry_count <= max_symbols;
+        }
+
+        /// Decode through a lookup previously installed by `buildTailLookup8`.
+        pub inline fn decodeValueTailLookup8(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+            const lookup_len = 1 << 8;
+            const lookup_bytes = lookup_len * @sizeOf(u16);
+            const entry_count = (lookup_bytes + @sizeOf(Entry) - 1) / @sizeOf(Entry);
+            if (comptime max_symbols < entry_count) return self.decodeValue(reader);
+            const lookup: *const [lookup_len]u16 = @ptrCast(&self.entries[max_symbols - entry_count]);
+            const packed_entry = lookup[reader.peekBitsPadded(u16, 8)];
+            if (packed_entry == 0) return self.decodeValue(reader);
+            const bits: u4 = @truncate(packed_entry);
+            if (!reader.hasBits(bits)) return error.TruncatedFrame;
+            reader.advanceBitsAssumeAvailable(bits);
+            return (packed_entry >> 4) - 1;
+        }
+
         fn decodeValueWithBits(self: *const Self, reader: anytype) Error!Symbol {
             var code: u16 = 0;
             var bits: u4 = 1;
@@ -172,6 +400,127 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             return error.InvalidHuffmanCode;
         }
     };
+}
+
+test "sparse trusted encoder matches dense canonical codes" {
+    var lengths: [704]u4 = @splat(0);
+    const active = [_]u16{ 500, 3, 241, 17, 700, 99 };
+    for (active) |symbol| lengths[symbol] = if (symbol == 3 or symbol == 17) 2 else 3;
+
+    const dense = try HuffmanTable(704).Encoder.init(&lengths);
+    const sparse = try HuffmanTable(704).Encoder.initSparseTrusted(&lengths, &active);
+    for (active) |symbol| {
+        try std.testing.expectEqual(dense.bits[symbol], sparse.bits[symbol]);
+        try std.testing.expectEqual(dense.codes[symbol], sparse.codes[symbol]);
+    }
+}
+
+test "sparse trusted decoder matches dense canonical table" {
+    var lengths: [704]u4 = @splat(0);
+    const active = [_]u16{ 3, 17, 99, 241, 500, 700 };
+    for (active) |symbol| lengths[symbol] = if (symbol == 3 or symbol == 17) 2 else 3;
+
+    const dense = try HuffmanTable(704).init(&lengths);
+    const sparse = try HuffmanTable(704).initSparseTrusted(&lengths, &active);
+    try std.testing.expectEqual(dense.len, sparse.len);
+    try std.testing.expectEqual(dense.max_bits, sparse.max_bits);
+    try std.testing.expectEqualSlices(HuffmanTable(704).Entry, dense.entries[0..dense.len], sparse.entries[0..sparse.len]);
+    try std.testing.expectEqual(dense.first_by_bits, sparse.first_by_bits);
+    try std.testing.expectEqual(dense.count_by_bits, sparse.count_by_bits);
+}
+
+test "explicit-symbol decoder matches dense simple trees" {
+    const cases = [_]struct {
+        symbols: []const u16,
+        lengths: []const u4,
+    }{
+        .{ .symbols = &.{ 241, 3 }, .lengths = &.{ 1, 1 } },
+        .{ .symbols = &.{ 241, 3, 700 }, .lengths = &.{ 1, 2, 2 } },
+        .{ .symbols = &.{ 241, 3, 700, 17 }, .lengths = &.{ 1, 2, 3, 3 } },
+    };
+    for (cases) |case| {
+        var dense_lengths: [704]u4 = @splat(0);
+        for (case.symbols, case.lengths) |symbol, bits| dense_lengths[symbol] = bits;
+        const dense = try HuffmanTable(704).init(&dense_lengths);
+        const explicit = try HuffmanTable(704).initExplicitSymbols(case.lengths, case.symbols);
+        try std.testing.expectEqual(dense.len, explicit.len);
+        try std.testing.expectEqual(dense.max_bits, explicit.max_bits);
+        try std.testing.expectEqualSlices(HuffmanTable(704).Entry, dense.entries[0..dense.len], explicit.entries[0..explicit.len]);
+        try std.testing.expectEqual(dense.first_by_bits, explicit.first_by_bits);
+        try std.testing.expectEqual(dense.count_by_bits, explicit.count_by_bits);
+    }
+}
+
+test "explicit-symbol decoder rejects malformed lists" {
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initExplicitSymbols(&.{ 1, 1 }, &.{1}));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initExplicitSymbols(&.{ 1, 1 }, &.{ 2, 2 }));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initExplicitSymbols(&.{ 1, 1 }, &.{ 1, 8 }));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initExplicitSymbols(&.{ 1, 0 }, &.{ 1, 2 }));
+}
+
+test "sparse trusted decoder rejects invalid active sets" {
+    var lengths: [8]u4 = @splat(0);
+    lengths[1] = 1;
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initSparseTrusted(&lengths, &.{ 1, 1 }));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initSparseTrusted(&lengths, &.{2}));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initSparseTrusted(&lengths, &.{8}));
+}
+
+test "sparse trusted decoder matches dense randomized tables" {
+    var state: u32 = 0x243f_6a88;
+    for (0..128) |_| {
+        var frequencies: [64]u32 = @splat(0);
+        const active_len: usize = 2 + state % 63;
+        for (0..active_len) |index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            frequencies[index] = 1 + (state >> 20);
+        }
+        const lengths = treeCodeLengths(64, &frequencies, max_code_bits);
+        var active: [64]u16 = undefined;
+        var count: usize = 0;
+        for (lengths, 0..) |bits, symbol| {
+            if (bits == 0) continue;
+            active[count] = @intCast(symbol);
+            count += 1;
+        }
+        const dense = try HuffmanTable(64).init(&lengths);
+        const sparse = try HuffmanTable(64).initSparseTrusted(&lengths, active[0..count]);
+        try std.testing.expectEqual(dense.len, sparse.len);
+        try std.testing.expectEqual(dense.max_bits, sparse.max_bits);
+        try std.testing.expectEqualSlices(HuffmanTable(64).Entry, dense.entries[0..dense.len], sparse.entries[0..sparse.len]);
+        try std.testing.expectEqual(dense.first_by_bits, sparse.first_by_bits);
+        try std.testing.expectEqual(dense.count_by_bits, sparse.count_by_bits);
+    }
+}
+
+test "sparse trusted encoder matches dense randomized alphabets" {
+    var state: u32 = 0x6a09_e667;
+    for (0..64) |round| {
+        var frequencies: [704]u32 = @splat(0);
+        var active: [64]u16 = undefined;
+        const active_len: usize = 5 + state % 60;
+        for (active[0..active_len], 0..) |*symbol, i| {
+            // 37 is coprime to 704, so every symbol in one round is unique.
+            symbol.* = @intCast((round * 53 + i * 37) % frequencies.len);
+            state = state *% 1_664_525 +% 1_013_904_223;
+            frequencies[symbol.*] = 1 + (state >> 20);
+        }
+        const lengths = treeCodeLengths(704, &frequencies, max_code_bits);
+        const dense = try HuffmanTable(704).Encoder.init(&lengths);
+        const sparse = try HuffmanTable(704).Encoder.initSparseTrusted(&lengths, active[0..active_len]);
+        for (active[0..active_len]) |symbol| {
+            try std.testing.expectEqual(dense.bits[symbol], sparse.bits[symbol]);
+            try std.testing.expectEqual(dense.codes[symbol], sparse.codes[symbol]);
+        }
+    }
+}
+
+test "sparse trusted encoder rejects invalid active sets" {
+    var lengths: [8]u4 = @splat(0);
+    lengths[1] = 1;
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).Encoder.initSparseTrusted(&lengths, &.{ 1, 1 }));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).Encoder.initSparseTrusted(&lengths, &.{2}));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).Encoder.initSparseTrusted(&lengths, &.{8}));
 }
 
 pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
@@ -582,7 +931,220 @@ pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n
         }
         return lengths;
     }
+    // Dynamic DEFLATE alphabets are frequently sparse (especially distance and
+    // code-length trees). Specializing the package record width to the active
+    // symbol count avoids moving the full 286-symbol multiplicity vector at
+    // every package-merge depth, then maps the compact result back to symbols.
+    if (active <= 32 and n > 32)
+        return compactPackageMergeCodeLengths(n, freqs, max_bits, active, 32);
+    if (active <= 64 and n > 64)
+        return compactPackageMergeCodeLengths(n, freqs, max_bits, active, 64);
+    if (n > 64)
+        return backrefPackageMergeCodeLengths(n, freqs, max_bits, active);
     return packageMergeCodeLengths(n, freqs, max_bits, active);
+}
+
+/// Build lengths when the caller already tracks every non-zero symbol. The
+/// trusted list is already sorted by symbol so compact package merge can
+/// preserve canonical tie ordering without rescanning the full alphabet.
+pub fn treeCodeLengthsKnownActive(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active_symbols: []const u16,
+) [n]u4 {
+    if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+        for (active_symbols[1..], active_symbols[0..active_symbols.len -| 1]) |symbol, previous|
+            std.debug.assert(previous < symbol);
+    }
+    if (active_symbols.len == 0) return @splat(0);
+    if (active_symbols.len == 1) {
+        var lengths: [n]u4 = @splat(0);
+        lengths[active_symbols[0]] = 1;
+        return lengths;
+    }
+    if (active_symbols.len <= 32 and n > 32)
+        return compactPackageMergeCodeLengthsKnownActive(n, freqs, max_bits, active_symbols, 32);
+    if (active_symbols.len <= 64 and n > 64)
+        return compactPackageMergeCodeLengthsKnownActive(n, freqs, max_bits, active_symbols, 64);
+    return treeCodeLengths(n, freqs, max_bits);
+}
+
+fn compactPackageMergeCodeLengthsKnownActive(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active_symbols: []const u16,
+    comptime compact_n: usize,
+) [n]u4 {
+    std.debug.assert(active_symbols.len <= compact_n);
+    var symbols: [compact_n]u16 = undefined;
+    @memcpy(symbols[0..active_symbols.len], active_symbols);
+    var compact_freqs: [compact_n]u32 = @splat(0);
+    for (symbols[0..active_symbols.len], 0..) |symbol, index| {
+        std.debug.assert(symbol < n and freqs[symbol] != 0);
+        compact_freqs[index] = freqs[symbol];
+    }
+    const compact_lengths = packageMergeCodeLengths(compact_n, &compact_freqs, max_bits, active_symbols.len);
+    var lengths: [n]u4 = @splat(0);
+    for (symbols[0..active_symbols.len], compact_lengths[0..active_symbols.len]) |symbol, code_bits|
+        lengths[symbol] = code_bits;
+    return lengths;
+}
+
+/// Full-alphabet package-merge reference retained for focused equivalence and
+/// performance measurements of the compact sparse production path.
+pub fn treeCodeLengthsFullWidth(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n]u4 {
+    var active: usize = 0;
+    for (freqs.*) |freq| active += @intFromBool(freq != 0);
+    if (active < 2) return treeCodeLengths(n, freqs, max_bits);
+    return packageMergeCodeLengths(n, freqs, max_bits, active);
+}
+
+fn compactPackageMergeCodeLengths(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active: usize,
+    comptime compact_n: usize,
+) [n]u4 {
+    var compact_freqs: [compact_n]u32 = @splat(0);
+    var symbols: [compact_n]u16 = undefined;
+    var compact_i: usize = 0;
+    for (freqs.*, 0..) |freq, symbol| {
+        if (freq == 0) continue;
+        compact_freqs[compact_i] = freq;
+        symbols[compact_i] = @intCast(symbol);
+        compact_i += 1;
+    }
+    std.debug.assert(compact_i == active);
+    const compact_lengths = packageMergeCodeLengths(compact_n, &compact_freqs, max_bits, active);
+    var lengths: [n]u4 = @splat(0);
+    for (symbols[0..active], compact_lengths[0..active]) |symbol, code_bits|
+        lengths[symbol] = code_bits;
+    return lengths;
+}
+
+fn backrefPackageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
+    comptime std.debug.assert(n * max_code_bits <= std.math.maxInt(u16));
+    const invalid = std.math.maxInt(u16);
+    const Node = struct {
+        weight: u64,
+        left: u16 = invalid,
+        right: u16 = invalid,
+        symbol: u16 = invalid,
+        serial: u16,
+    };
+    const Less = struct {
+        nodes: []const Node,
+
+        fn less(context: @This(), lhs: u16, rhs: u16) bool {
+            const left = context.nodes[lhs];
+            const right = context.nodes[rhs];
+            if (left.weight != right.weight) return left.weight < right.weight;
+            // Equal-weight symbols/packages are interchangeable for weighted
+            // cost. A stable creation-order tie-break keeps output deterministic
+            // without reconstructing or storing a 286-symbol count vector.
+            return left.serial < right.serial;
+        }
+    };
+
+    // Each level creates fewer than `active` packages. Keeping one compact
+    // arena of back-references avoids copying an n-symbol multiplicity vector
+    // through every package and defers code-length recovery until selection.
+    var nodes: [n * max_code_bits]Node = undefined;
+    var node_len: usize = 0;
+    var leaves: [n]u16 = undefined;
+    for (freqs.*, 0..) |freq, symbol| {
+        if (freq == 0) continue;
+        const index: u16 = @intCast(node_len);
+        nodes[node_len] = .{ .weight = freq, .symbol = @intCast(symbol), .serial = index };
+        leaves[node_len] = index;
+        node_len += 1;
+    }
+    std.debug.assert(node_len == active);
+    std.mem.sort(u16, leaves[0..active], Less{ .nodes = nodes[0..node_len] }, Less.less);
+
+    var current: [2 * n]u16 = undefined;
+    var next: [n]u16 = undefined;
+    var current_len = active;
+    @memcpy(current[0..current_len], leaves[0..active]);
+
+    var depth: u4 = 1;
+    while (depth < max_bits) : (depth += 1) {
+        var pair_len: usize = 0;
+        var i: usize = 0;
+        while (i + 1 < current_len) : (i += 2) {
+            const left = current[i];
+            const right = current[i + 1];
+            const index: u16 = @intCast(node_len);
+            nodes[node_len] = .{
+                .weight = nodes[left].weight + nodes[right].weight,
+                .left = left,
+                .right = right,
+                .serial = index,
+            };
+            node_len += 1;
+            next[pair_len] = index;
+            pair_len += 1;
+        }
+        const less = Less{ .nodes = nodes[0..node_len] };
+        if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe)
+            std.debug.assert(nodeIndexesAreSorted(Node, next[0..pair_len], less));
+        current_len = mergeNodeIndexLists(Node, &current, leaves[0..active], next[0..pair_len], less);
+    }
+
+    const selected_count = 2 * active - 2;
+    std.debug.assert(selected_count <= current_len);
+    var lengths: [n]u4 = @splat(0);
+    for (current[0..selected_count]) |index|
+        accumulateBackrefLengths(Node, n, nodes[0..node_len], index, &lengths);
+    return lengths;
+}
+
+fn nodeIndexesAreSorted(comptime Node: type, indexes: []const u16, less: anytype) bool {
+    _ = Node;
+    for (indexes[1..], indexes[0..indexes.len -| 1]) |current, previous|
+        if (less.less(current, previous)) return false;
+    return true;
+}
+
+fn mergeNodeIndexLists(comptime Node: type, out: anytype, leaves: []const u16, packages: []const u16, less: anytype) usize {
+    _ = Node;
+    var out_len: usize = 0;
+    var leaf_i: usize = 0;
+    var package_i: usize = 0;
+    while (leaf_i < leaves.len or package_i < packages.len) {
+        const take_leaf = if (package_i >= packages.len)
+            true
+        else if (leaf_i >= leaves.len)
+            false
+        else
+            less.less(leaves[leaf_i], packages[package_i]);
+        out[out_len] = if (take_leaf) leaves[leaf_i] else packages[package_i];
+        out_len += 1;
+        if (take_leaf) leaf_i += 1 else package_i += 1;
+    }
+    return out_len;
+}
+
+fn accumulateBackrefLengths(comptime Node: type, comptime n: usize, nodes: []const Node, root: u16, lengths: *[n]u4) void {
+    const invalid = std.math.maxInt(u16);
+    var stack: [max_code_bits + 1]u16 = undefined;
+    var stack_len: usize = 1;
+    stack[0] = root;
+    while (stack_len != 0) {
+        stack_len -= 1;
+        const node = nodes[stack[stack_len]];
+        if (node.symbol != invalid) {
+            lengths[node.symbol] += 1;
+        } else {
+            std.debug.assert(stack_len + 2 <= stack.len);
+            stack[stack_len] = node.left;
+            stack[stack_len + 1] = node.right;
+            stack_len += 2;
+        }
+    }
 }
 
 fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
@@ -1077,6 +1639,38 @@ test "canonical Huffman decoder handles a small RFC-style tree" {
     try std.testing.expectEqual(@as(u16, 2), (try table.decode(&reader)).value);
 }
 
+test "tail lookup decoder matches compact decoder" {
+    const table_size = @sizeOf(HuffmanTable(256));
+    var frequencies: [256]u32 = @splat(0);
+    for (0..64) |symbol| frequencies[symbol] = @intCast(65 - symbol);
+    const lengths = treeCodeLengths(256, &frequencies, max_code_bits);
+    var table = try HuffmanTable(256).init(&lengths);
+    try std.testing.expect(table.buildTailLookup8());
+
+    const encoder = try HuffmanTable(256).Encoder.init(&lengths);
+    var writer: bitstream.BitWriter = .{};
+    defer writer.deinit(std.testing.allocator);
+    for (0..64) |symbol| try encoder.writeSymbol(&writer, std.testing.allocator, symbol);
+    const encoded = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+
+    var reference = bitstream.BitReader.init(encoded);
+    var lookup = bitstream.BitReader.init(encoded);
+    for (0..64) |_|
+        try std.testing.expectEqual(try table.decodeValue(&reference), try table.decodeValueTailLookup8(&lookup));
+    try std.testing.expectEqual(reference.bitPosition(), lookup.bitPosition());
+    try std.testing.expectEqual(table_size, @sizeOf(HuffmanTable(256)));
+
+    var too_dense = try HuffmanTable(256).init(&([_]u4{8} ** 256));
+    try std.testing.expect(!too_dense.buildTailLookup8());
+
+    const short = try HuffmanTable(256).init(&([_]u4{7} ++ [_]u4{0} ** 255));
+    var short_with_lookup = short;
+    try std.testing.expect(short_with_lookup.buildTailLookup8());
+    var truncated = bitstream.BitReader.init(&.{});
+    try std.testing.expectError(error.TruncatedFrame, short_with_lookup.decodeValueTailLookup8(&truncated));
+}
+
 test "fast Huffman decoder falls back for long codes" {
     const Table = HuffmanTable(4);
     const table = try Table.init(&.{ 2, 1, 3, 3 });
@@ -1368,6 +1962,58 @@ fn expectPackageMergeMatchesReference(
     );
 }
 
+test "compact sparse package-merge matches full-width reference" {
+    var freqs: [286]u32 = @splat(0);
+    for (0..48) |active| {
+        @memset(&freqs, 0);
+        const count = active + 2;
+        for (0..count) |i| {
+            const symbol = (i * 17 + active * 11) % freqs.len;
+            freqs[symbol] = @intCast(1 + ((i * 13 + active * 7) % 97));
+        }
+        var actual_active: usize = 0;
+        for (freqs) |freq| actual_active += @intFromBool(freq != 0);
+        if (actual_active < 2 or actual_active > 64) continue;
+        try std.testing.expectEqual(
+            packageMergeCodeLengths(freqs.len, &freqs, 15, actual_active),
+            treeCodeLengths(freqs.len, &freqs, 15),
+        );
+    }
+}
+
+test "known-active package-merge matches scanned sparse builder" {
+    for (2..65) |active_count| {
+        var freqs: [286]u32 = @splat(0);
+        var active: [64]u16 = undefined;
+        for (0..active_count) |index| {
+            const symbol: u16 = @intCast((index * 97 + 41) % freqs.len);
+            active[index] = symbol;
+            freqs[symbol] = @intCast(1 + ((index * 13 + active_count) % 89));
+        }
+        std.mem.sort(u16, active[0..active_count], {}, std.sort.asc(u16));
+        try std.testing.expectEqual(
+            treeCodeLengths(freqs.len, &freqs, 15),
+            treeCodeLengthsKnownActive(freqs.len, &freqs, 15, active[0..active_count]),
+        );
+    }
+}
+
+test "dense back-reference package-merge preserves optimal weighted cost" {
+    var freqs: [286]u32 = undefined;
+    for (0..24) |seed| {
+        for (&freqs, 0..) |*freq, symbol|
+            freq.* = @intCast(1 + ((symbol * 17 + seed * 31 + symbol * seed) % 251));
+        const production = treeCodeLengths(freqs.len, &freqs, 15);
+        const reference = treeCodeLengthsFullWidth(freqs.len, &freqs, 15);
+        try std.testing.expectEqual(
+            codeLengthCost(freqs.len, &freqs, &reference),
+            codeLengthCost(freqs.len, &freqs, &production),
+        );
+        try std.testing.expect(kraftCost(freqs.len, &production, 15) <= (@as(usize, 1) << 15));
+        try std.testing.expectEqual(production, treeCodeLengths(freqs.len, &freqs, 15));
+    }
+}
+
 test "package-merge Huffman lengths match small optimal costs" {
     {
         const freqs = [_]u32{ 5, 7, 10, 15 };
@@ -1425,6 +2071,27 @@ test "package-merge Huffman length builder covers deflate alphabet sizes" {
         try std.testing.expect(kraftCost(freqs.len, &lengths, 7) <= (@as(usize, 1) << 7));
         for (lengths) |bits| try std.testing.expect(bits > 0 and bits <= 7);
     }
+}
+
+test "direct Huffman encoder matches canonical decoder table entries" {
+    const cases = [_][19]u4{
+        .{ 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .{ 1, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .{ 2, 2, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    };
+    for (cases) |lengths| {
+        const table = try HuffmanTable(lengths.len).init(&lengths);
+        const encoder = try HuffmanTable(lengths.len).Encoder.init(&lengths);
+        for (table.entries[0..table.len]) |entry| {
+            try std.testing.expectEqual(entry.bits, encoder.bits[entry.symbol]);
+            try std.testing.expectEqual(entry.code, encoder.codes[entry.symbol]);
+        }
+    }
+
+    const oversubscribed = [_]u4{ 1, 1, 1 };
+    try std.testing.expectError(error.InvalidHuffmanCode, HuffmanTable(oversubscribed.len).Encoder.init(&oversubscribed));
+    const too_many = [_]u4{ 1, 1, 1, 1 };
+    try std.testing.expectError(error.InvalidHuffmanCode, HuffmanTable(too_many.len).Encoder.init(&too_many));
 }
 
 test "tree Huffman length limiter preserves skewed short codes" {

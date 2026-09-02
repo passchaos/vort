@@ -220,16 +220,39 @@ pub const TrainOptions = struct {
 const Phrase = struct {
     bytes: []const u8,
     score: usize,
+    sample_count: usize = 1,
+    last_sample: usize = 0,
 };
 
+const phrase_hash_threshold = 128;
+
 pub fn trainAlloc(allocator: std.mem.Allocator, samples: []const []const u8, options: TrainOptions) ![]u8 {
+    return trainAllocWithLayout(allocator, samples, options, .ranked, .total_frequency);
+}
+
+const TrainLayout = enum { ranked, best_near_end };
+const TrainRanking = enum { total_frequency, cross_sample };
+
+fn trainAllocWithLayout(allocator: std.mem.Allocator, samples: []const []const u8, options: TrainOptions, layout: TrainLayout, ranking: TrainRanking) ![]u8 {
     if (options.target_size == 0) return allocator.alloc(u8, 0);
     if (options.min_phrase_len == 0 or options.min_phrase_len > options.max_phrase_len) return error.InvalidDictionaryTraining;
 
     var phrases: std.ArrayList(Phrase) = .empty;
     defer phrases.deinit(allocator);
+    var phrase_indexes: std.StringHashMapUnmanaged(usize) = .empty;
+    defer phrase_indexes.deinit(allocator);
+    // Once the bounded candidate set is full, the old implementation scanned
+    // every retained phrase for every new substring. Keep a min-heap of phrase
+    // indexes instead; map indexes remain stable because the phrase array is
+    // not reordered until collection is complete.
+    var worst_heap: std.ArrayList(usize) = .empty;
+    defer worst_heap.deinit(allocator);
+    var heap_positions: std.ArrayList(usize) = .empty;
+    defer heap_positions.deinit(allocator);
+    var index_active = false;
+    var heap_active = false;
 
-    for (samples) |sample| {
+    for (samples, 0..) |sample, sample_index| {
         if (sample.len < options.min_phrase_len) continue;
         var start: usize = 0;
         while (start + options.min_phrase_len <= sample.len) : (start += 1) {
@@ -237,28 +260,179 @@ pub fn trainAlloc(allocator: std.mem.Allocator, samples: []const []const u8, opt
             var len = options.min_phrase_len;
             while (len <= max_len) : (len += 1) {
                 const phrase = sample[start..][0..len];
-                if (findPhrase(phrases.items, phrase)) |idx| {
+                const existing = if (index_active) phrase_indexes.get(phrase) else findPhrase(phrases.items, phrase);
+                if (existing) |idx| {
                     phrases.items[idx].score += len;
+                    if (phrases.items[idx].last_sample != sample_index) {
+                        phrases.items[idx].sample_count += 1;
+                        phrases.items[idx].last_sample = sample_index;
+                    }
+                    if (heap_active) phraseHeapSiftDown(worst_heap.items, heap_positions.items, phrases.items, heap_positions.items[idx]);
                 } else if (phrases.items.len < options.max_phrases) {
-                    try phrases.append(allocator, .{ .bytes = phrase, .score = len });
-                } else {
-                    replaceWorstPhraseIfBetter(phrases.items, .{ .bytes = phrase, .score = len });
+                    try phrases.append(allocator, .{ .bytes = phrase, .score = len, .last_sample = sample_index });
+                    if (!index_active and phrases.items.len == phrase_hash_threshold and options.max_phrases > phrase_hash_threshold) {
+                        try initializePhraseIndex(allocator, &phrase_indexes, phrases.items);
+                        index_active = true;
+                    } else if (index_active) try phrase_indexes.put(allocator, phrase, phrases.items.len - 1);
+                } else if (phrases.items.len != 0) {
+                    if (!heap_active) {
+                        try initializePhraseHeap(allocator, &worst_heap, &heap_positions, phrases.items);
+                        heap_active = true;
+                    }
+                    const new_phrase: Phrase = .{ .bytes = phrase, .score = len, .last_sample = sample_index };
+                    if (phraseBetter({}, new_phrase, phrases.items[worst_heap.items[0]])) {
+                        const index = worst_heap.items[0];
+                        if (index_active) _ = phrase_indexes.remove(phrases.items[index].bytes);
+                        phrases.items[index] = new_phrase;
+                        if (index_active) try phrase_indexes.put(allocator, phrase, index);
+                        phraseHeapSiftDown(worst_heap.items, heap_positions.items, phrases.items, 0);
+                    }
                 }
             }
         }
     }
 
-    std.sort.heap(Phrase, phrases.items, {}, phraseBetter);
+    switch (ranking) {
+        .total_frequency => std.sort.heap(Phrase, phrases.items, {}, phraseBetter),
+        .cross_sample => std.sort.heap(Phrase, phrases.items, {}, phraseCrossSampleBetter),
+    }
 
     var dict: std.ArrayList(u8) = .empty;
     errdefer dict.deinit(allocator);
+    var selected: std.ArrayList([]const u8) = .empty;
+    defer selected.deinit(allocator);
     for (phrases.items) |phrase| {
         if (dict.items.len >= options.target_size) break;
         if (containsSlice(dict.items, phrase.bytes)) continue;
         const remaining = options.target_size - dict.items.len;
-        try dict.appendSlice(allocator, phrase.bytes[0..@min(remaining, phrase.bytes.len)]);
+        const bytes = phrase.bytes[0..@min(remaining, phrase.bytes.len)];
+        try dict.appendSlice(allocator, bytes);
+        if (layout == .best_near_end) try selected.append(allocator, bytes);
+    }
+    if (layout == .best_near_end) {
+        dict.clearRetainingCapacity();
+        var index = selected.items.len;
+        while (index != 0) {
+            index -= 1;
+            try dict.appendSlice(allocator, selected.items[index]);
+        }
     }
     return dict.toOwnedSlice(allocator);
+}
+
+/// Train several bounded deterministic phrase dictionaries and retain the one
+/// with the greatest held-out match coverage. This is a compact validation-
+/// guided selector rather than COVER/FastCover: candidate count is fixed and
+/// scoring uses the same greedy dictionary matcher exposed by this module.
+/// Ties preserve the baseline candidate so existing deterministic output is
+/// stable unless another configuration proves strictly better coverage.
+pub fn trainValidatedAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: TrainOptions,
+) ![]u8 {
+    const Candidate = struct { min_phrase_len: usize, max_phrase_len: usize, max_phrases: usize };
+    const candidates = [_]Candidate{
+        .{ .min_phrase_len = options.min_phrase_len, .max_phrase_len = options.max_phrase_len, .max_phrases = options.max_phrases },
+        .{ .min_phrase_len = 3, .max_phrase_len = 12, .max_phrases = @max(options.max_phrases, 512) },
+        .{ .min_phrase_len = 4, .max_phrase_len = 24, .max_phrases = @max(options.max_phrases, 512) },
+        .{ .min_phrase_len = 6, .max_phrase_len = 32, .max_phrases = @max(options.max_phrases, 1024) },
+    };
+
+    var best: ?[]u8 = null;
+    errdefer if (best) |bytes| allocator.free(bytes);
+    var best_covered: usize = 0;
+    var best_matches: usize = 0;
+    var best_distance_bits: usize = std.math.maxInt(usize);
+    for (candidates) |candidate| {
+        for ([_]TrainRanking{ .total_frequency, .cross_sample }) |ranking| {
+            for ([_]TrainLayout{ .ranked, .best_near_end }) |layout| {
+                const trained = try trainAllocWithLayout(allocator, training_samples, .{
+                    .target_size = options.target_size,
+                    .min_phrase_len = candidate.min_phrase_len,
+                    .max_phrase_len = candidate.max_phrase_len,
+                    .max_phrases = candidate.max_phrases,
+                }, layout, ranking);
+                errdefer allocator.free(trained);
+                var covered: usize = 0;
+                var matches: usize = 0;
+                var distance_bits: usize = 0;
+                for (validation_samples) |sample| {
+                    const summary = try summarizeMatchesAlloc(allocator, trained, sample, options.min_phrase_len);
+                    covered = std.math.add(usize, covered, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
+                    matches = std.math.add(usize, matches, summary.matches) catch return error.InvalidDictionaryTraining;
+                    distance_bits = std.math.add(usize, distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+                }
+                // Coverage and sequence count dominate. For exact ties, prefer the
+                // layout whose matches need fewer offset bits; the original ranked
+                // layout remains first and therefore wins complete ties.
+                if (best == null or covered > best_covered or
+                    (covered == best_covered and matches < best_matches) or
+                    (covered == best_covered and matches == best_matches and distance_bits < best_distance_bits))
+                {
+                    if (best) |bytes| allocator.free(bytes);
+                    best = trained;
+                    best_covered = covered;
+                    best_matches = matches;
+                    best_distance_bits = distance_bits;
+                } else allocator.free(trained);
+            }
+        }
+    }
+
+    // Phrase concatenation is effective for repeated local substrings but can
+    // destroy longer record structure. Keep one raw corpus-tail candidate so
+    // validation can retain naturally adjacent bytes when that structure
+    // generalizes better to held-out payloads.
+    const tail = try trainSampleTailAlloc(allocator, training_samples, options.target_size);
+    errdefer allocator.free(tail);
+    var tail_covered: usize = 0;
+    var tail_matches: usize = 0;
+    var tail_distance_bits: usize = 0;
+    for (validation_samples) |sample| {
+        const summary = try summarizeMatchesAlloc(allocator, tail, sample, options.min_phrase_len);
+        tail_covered = std.math.add(usize, tail_covered, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
+        tail_matches = std.math.add(usize, tail_matches, summary.matches) catch return error.InvalidDictionaryTraining;
+        tail_distance_bits = std.math.add(usize, tail_distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+    }
+    if (best == null or tail_covered > best_covered or
+        (tail_covered == best_covered and tail_matches < best_matches) or
+        (tail_covered == best_covered and tail_matches == best_matches and tail_distance_bits < best_distance_bits))
+    {
+        if (best) |bytes| allocator.free(bytes);
+        best = tail;
+    } else allocator.free(tail);
+    return best orelse try allocator.alloc(u8, 0);
+}
+
+fn trainSampleTailAlloc(allocator: std.mem.Allocator, samples: []const []const u8, target_size: usize) ![]u8 {
+    var available: usize = 0;
+    for (samples) |sample| available = std.math.add(usize, available, sample.len) catch return error.InvalidDictionaryTraining;
+    const len = @min(available, target_size);
+    const dictionary = try allocator.alloc(u8, len);
+    errdefer allocator.free(dictionary);
+    var written = len;
+    var sample_index = samples.len;
+    while (written != 0 and sample_index != 0) {
+        sample_index -= 1;
+        const sample = samples[sample_index];
+        const copy_len = @min(written, sample.len);
+        written -= copy_len;
+        @memcpy(dictionary[written..][0..copy_len], sample[sample.len - copy_len ..]);
+    }
+    return dictionary;
+}
+
+fn phraseBetter(_: void, lhs: Phrase, rhs: Phrase) bool {
+    if (lhs.score != rhs.score) return lhs.score > rhs.score;
+    if (lhs.bytes.len != rhs.bytes.len) return lhs.bytes.len > rhs.bytes.len;
+    return std.mem.lessThan(u8, lhs.bytes, rhs.bytes);
+}
+
+fn phraseCrossSampleBetter(_: void, lhs: Phrase, rhs: Phrase) bool {
+    if (lhs.sample_count != rhs.sample_count) return lhs.sample_count > rhs.sample_count;
+    return phraseBetter({}, lhs, rhs);
 }
 
 fn findPhrase(phrases: []const Phrase, bytes: []const u8) ?usize {
@@ -268,19 +442,80 @@ fn findPhrase(phrases: []const Phrase, bytes: []const u8) ?usize {
     return null;
 }
 
-fn phraseBetter(_: void, lhs: Phrase, rhs: Phrase) bool {
-    if (lhs.score != rhs.score) return lhs.score > rhs.score;
-    if (lhs.bytes.len != rhs.bytes.len) return lhs.bytes.len > rhs.bytes.len;
-    return std.mem.lessThan(u8, lhs.bytes, rhs.bytes);
+fn initializePhraseIndex(allocator: std.mem.Allocator, indexes: *std.StringHashMapUnmanaged(usize), phrases: []const Phrase) !void {
+    try indexes.ensureUnusedCapacity(allocator, @intCast(phrases.len));
+    for (phrases, 0..) |phrase, index| indexes.putAssumeCapacity(phrase.bytes, index);
 }
 
-fn replaceWorstPhraseIfBetter(phrases: []Phrase, candidate: Phrase) void {
-    if (phrases.len == 0) return;
+fn initializePhraseHeap(
+    allocator: std.mem.Allocator,
+    heap: *std.ArrayList(usize),
+    positions: *std.ArrayList(usize),
+    phrases: []const Phrase,
+) !void {
+    try heap.resize(allocator, phrases.len);
+    try positions.resize(allocator, phrases.len);
+    for (heap.items, positions.items, 0..) |*entry, *position, index| {
+        entry.* = index;
+        position.* = index;
+    }
+    var index = heap.items.len / 2;
+    while (index != 0) {
+        index -= 1;
+        phraseHeapSiftDown(heap.items, positions.items, phrases, index);
+    }
+}
+
+fn phraseHeapSiftUp(heap: []usize, positions: []usize, phrases: []const Phrase, start: usize) void {
+    var child = start;
+    while (child != 0) {
+        const parent = (child - 1) / 2;
+        if (!phraseHeapEntryWorse(phrases, heap[child], heap[parent])) break;
+        phraseHeapSwap(heap, positions, child, parent);
+        child = parent;
+    }
+}
+
+fn phraseHeapSiftDown(heap: []usize, positions: []usize, phrases: []const Phrase, start: usize) void {
+    var parent = start;
+    while (true) {
+        const left = parent * 2 + 1;
+        if (left >= heap.len) return;
+        const right = left + 1;
+        var worst = left;
+        if (right < heap.len and phraseHeapEntryWorse(phrases, heap[right], heap[left])) worst = right;
+        if (!phraseHeapEntryWorse(phrases, heap[worst], heap[parent])) return;
+        phraseHeapSwap(heap, positions, parent, worst);
+        parent = worst;
+    }
+}
+
+fn phraseHeapEntryWorse(phrases: []const Phrase, lhs: usize, rhs: usize) bool {
+    if (phraseWorse(phrases[lhs], phrases[rhs])) return true;
+    if (phraseWorse(phrases[rhs], phrases[lhs])) return false;
+    // The reference scan retains the first (lowest-index) member of an equal
+    // worst rank. Include that index in the heap order to remain byte-exact.
+    return lhs < rhs;
+}
+
+fn phraseHeapSwap(heap: []usize, positions: []usize, a: usize, b: usize) void {
+    std.mem.swap(usize, &heap[a], &heap[b]);
+    positions[heap[a]] = a;
+    positions[heap[b]] = b;
+}
+
+const PhraseReplacement = struct { index: usize, removed: []const u8 };
+
+fn replaceWorstPhraseIfBetter(phrases: []Phrase, candidate: Phrase) ?PhraseReplacement {
+    if (phrases.len == 0) return null;
     var worst_i: usize = 0;
     for (phrases[1..], 1..) |phrase, i| {
         if (phraseWorse(phrase, phrases[worst_i])) worst_i = i;
     }
-    if (phraseBetter({}, candidate, phrases[worst_i])) phrases[worst_i] = candidate;
+    if (!phraseBetter({}, candidate, phrases[worst_i])) return null;
+    const removed = phrases[worst_i].bytes;
+    phrases[worst_i] = candidate;
+    return .{ .index = worst_i, .removed = removed };
 }
 
 fn phraseWorse(lhs: Phrase, rhs: Phrase) bool {
@@ -307,12 +542,46 @@ pub const MatchSummary = struct {
     matches: usize = 0,
     covered_bytes: usize = 0,
     longest: usize = 0,
+    distance_bits: usize = 0,
 
     pub fn coverageRatio(self: MatchSummary, sample_len: usize) f64 {
         if (sample_len == 0) return 0.0;
         return @as(f64, @floatFromInt(self.covered_bytes)) / @as(f64, @floatFromInt(sample_len));
     }
 };
+
+pub const ValidationScore = struct {
+    estimated_bits: usize = 0,
+    covered_bytes: usize = 0,
+    matches: usize = 0,
+    distance_bits: usize = 0,
+};
+
+/// Estimate dictionary-coded wire cost without depending on a particular
+/// codec's encoder heuristics. Each unmatched byte costs eight bits; each match
+/// pays its offset width plus a conservative four-bit sequence overhead.
+/// Including dictionary storage makes target-size candidates comparable rather
+/// than rewarding larger histories solely for marginal extra coverage.
+pub fn validationScoreAlloc(
+    allocator: std.mem.Allocator,
+    dict: []const u8,
+    samples: []const []const u8,
+    min_match_len: usize,
+) !ValidationScore {
+    var score: ValidationScore = .{ .estimated_bits = std.math.mul(usize, dict.len, 8) catch return error.InvalidDictionaryTraining };
+    for (samples) |sample| {
+        const summary = try summarizeMatchesAlloc(allocator, dict, sample, min_match_len);
+        score.covered_bytes = std.math.add(usize, score.covered_bytes, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
+        score.matches = std.math.add(usize, score.matches, summary.matches) catch return error.InvalidDictionaryTraining;
+        score.distance_bits = std.math.add(usize, score.distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+        const literal_bits = std.math.mul(usize, sample.len - summary.covered_bytes, 8) catch return error.InvalidDictionaryTraining;
+        score.estimated_bits = std.math.add(usize, score.estimated_bits, literal_bits) catch return error.InvalidDictionaryTraining;
+        score.estimated_bits = std.math.add(usize, score.estimated_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+        const match_overhead = std.math.mul(usize, summary.matches, 4) catch return error.InvalidDictionaryTraining;
+        score.estimated_bits = std.math.add(usize, score.estimated_bits, match_overhead) catch return error.InvalidDictionaryTraining;
+    }
+    return score;
+}
 
 pub fn planTraining(samples: []const []const u8, target_size: usize) TrainingPlan {
     var total: usize = 0;
@@ -345,6 +614,9 @@ pub fn summarizeMatchesAlloc(allocator: std.mem.Allocator, dict: []const u8, sam
     for (matches) |match| {
         summary.covered_bytes += match.length;
         summary.longest = @max(summary.longest, match.length);
+        const logical_position = std.math.add(usize, dict.len, match.sample_offset) catch return error.InvalidDictionaryTraining;
+        const distance = logical_position - match.dictionary_offset;
+        summary.distance_bits += std.math.log2_int(usize, distance) + 1;
     }
     return summary;
 }
@@ -681,6 +953,94 @@ test "dictionary trainer is deterministic and extracts repeated phrases" {
     try std.testing.expectEqual(dict1.len, meta.content_len);
 }
 
+test "dictionary trainer indexed candidate set matches scan reference" {
+    var storage: [8][192]u8 = undefined;
+    var samples: [storage.len][]const u8 = undefined;
+    for (&storage, &samples, 0..) |*sample, *view, sample_index| {
+        var state: u32 = 0x9e37_79b9 +% @as(u32, @intCast(sample_index * 65537));
+        for (sample, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = if (index % 23 < 17)
+                "dictionary-indexed-reference-corpus-"[(index + sample_index) % 36]
+            else
+                @truncate(state >> 24);
+        }
+        view.* = sample;
+    }
+    const options = [_]TrainOptions{
+        .{ .target_size = 96, .min_phrase_len = 4, .max_phrase_len = 16, .max_phrases = 64 },
+        .{ .target_size = 192, .min_phrase_len = 3, .max_phrase_len = 12, .max_phrases = 256 },
+        .{ .target_size = 384, .min_phrase_len = 6, .max_phrase_len = 24, .max_phrases = 1024 },
+    };
+    for (options) |train_options| {
+        const expected = try trainReferenceAlloc(std.testing.allocator, &samples, train_options);
+        defer std.testing.allocator.free(expected);
+        const actual = try trainAlloc(std.testing.allocator, &samples, train_options);
+        defer std.testing.allocator.free(actual);
+        try std.testing.expectEqualSlices(u8, expected, actual);
+    }
+}
+
+fn trainReferenceAlloc(allocator: std.mem.Allocator, samples: []const []const u8, options: TrainOptions) ![]u8 {
+    var phrases: std.ArrayList(Phrase) = .empty;
+    defer phrases.deinit(allocator);
+    for (samples) |sample| {
+        if (sample.len < options.min_phrase_len) continue;
+        var start: usize = 0;
+        while (start + options.min_phrase_len <= sample.len) : (start += 1) {
+            const max_len = @min(options.max_phrase_len, sample.len - start);
+            var len = options.min_phrase_len;
+            while (len <= max_len) : (len += 1) {
+                const phrase = sample[start..][0..len];
+                if (findPhrase(phrases.items, phrase)) |index|
+                    phrases.items[index].score += len
+                else if (phrases.items.len < options.max_phrases)
+                    try phrases.append(allocator, .{ .bytes = phrase, .score = len })
+                else
+                    _ = replaceWorstPhraseIfBetter(phrases.items, .{ .bytes = phrase, .score = len });
+            }
+        }
+    }
+    std.sort.heap(Phrase, phrases.items, {}, phraseBetter);
+    var dictionary: std.ArrayList(u8) = .empty;
+    errdefer dictionary.deinit(allocator);
+    for (phrases.items) |phrase| {
+        if (dictionary.items.len >= options.target_size) break;
+        if (containsSlice(dictionary.items, phrase.bytes)) continue;
+        const remaining = options.target_size - dictionary.items.len;
+        try dictionary.appendSlice(allocator, phrase.bytes[0..@min(remaining, phrase.bytes.len)]);
+    }
+    return dictionary.toOwnedSlice(allocator);
+}
+
+test "validated dictionary trainer preserves or improves held-out coverage" {
+    const training = [_][]const u8{
+        "service=vort region=west status=ok message=alpha alpha alpha",
+        "service=vort region=east status=ok message=beta beta beta",
+        "service=vort region=north status=warn message=gamma gamma",
+    };
+    const validation = [_][]const u8{
+        "service=vort region=south status=ok message=alpha beta",
+        "service=vort region=west status=warn message=gamma alpha",
+    };
+    const options: TrainOptions = .{ .target_size = 64 };
+    const baseline = try trainAlloc(std.testing.allocator, &training, options);
+    defer std.testing.allocator.free(baseline);
+    const selected = try trainValidatedAlloc(std.testing.allocator, &training, &validation, options);
+    defer std.testing.allocator.free(selected);
+    const again = try trainValidatedAlloc(std.testing.allocator, &training, &validation, options);
+    defer std.testing.allocator.free(again);
+
+    var baseline_covered: usize = 0;
+    var selected_covered: usize = 0;
+    for (validation) |sample| {
+        baseline_covered += (try summarizeMatchesAlloc(std.testing.allocator, baseline, sample, options.min_phrase_len)).covered_bytes;
+        selected_covered += (try summarizeMatchesAlloc(std.testing.allocator, selected, sample, options.min_phrase_len)).covered_bytes;
+    }
+    try std.testing.expect(selected_covered >= baseline_covered);
+    try std.testing.expectEqualSlices(u8, selected, again);
+}
+
 test "dictionary trainer handles empty target" {
     const samples = [_][]const u8{"sample"};
     const dict = try trainAlloc(std.testing.allocator, &samples, .{ .target_size = 0 });
@@ -693,8 +1053,15 @@ test "dictionary trainer replaces low-value phrase candidates" {
         .{ .bytes = "low", .score = 3 },
         .{ .bytes = "mid", .score = 5 },
     };
-    replaceWorstPhraseIfBetter(&phrases, .{ .bytes = "valuable", .score = 32 });
+    _ = replaceWorstPhraseIfBetter(&phrases, .{ .bytes = "valuable", .score = 32 });
     try std.testing.expect(std.mem.eql(u8, phrases[0].bytes, "valuable") or std.mem.eql(u8, phrases[1].bytes, "valuable"));
+}
+
+test "cross-sample phrase ranking prefers corpus-wide phrases" {
+    const local = Phrase{ .bytes = "local", .score = 100, .sample_count = 1 };
+    const shared = Phrase{ .bytes = "shared", .score = 40, .sample_count = 3 };
+    try std.testing.expect(phraseBetter({}, local, shared));
+    try std.testing.expect(phraseCrossSampleBetter({}, shared, local));
 }
 
 test "dictionary match scanner summarizes coverage" {

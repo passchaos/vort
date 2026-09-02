@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""Validate Vort/libzstd Zstandard encode evidence."""
+import argparse
+import csv
+from pathlib import Path
+
+COLUMNS = ["case", "reference_version", "level", "input_bytes", "vort_bytes", "reference_bytes", "size_over_reference", "iterations", "rounds", "vort_ns", "reference_ns", "vort_mib_s", "reference_mib_s", "vort_over_reference", "checksum"]
+CASES = {"text", "json", "binary"}
+LEVELS = {1, 3, 9}
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--csv", type=Path, required=True)
+    args = parser.parse_args()
+    with args.csv.open(newline="") as file:
+        reader = csv.DictReader(file)
+        assert reader.fieldnames == COLUMNS, reader.fieldnames
+        rows = list(reader)
+    assert {(row["case"], int(row["level"])) for row in rows} == {(case, level) for case in CASES for level in LEVELS}
+    assert len(rows) == len(CASES) * len(LEVELS)
+    assert len({row["reference_version"] for row in rows}) == 1
+    for row in rows:
+        for key in ("input_bytes", "vort_bytes", "reference_bytes", "iterations", "rounds", "vort_ns", "reference_ns", "checksum"):
+            assert int(row[key]) > 0, row
+        for key in ("size_over_reference", "vort_mib_s", "reference_mib_s", "vort_over_reference"):
+            assert float(row[key]) > 0, row
+        assert int(row["vort_bytes"]) < int(row["input_bytes"]), row
+        # Level support must be real rather than silently ignored: require at
+        # least two distinct reference sizes, while recording Vort's current
+        # size behavior explicitly for the next planner work.
+    # At least one corpus must expose a real reference level tradeoff. Some
+    # highly repetitive inputs legitimately converge to the same wire size.
+    assert any(
+        len({int(row["reference_bytes"]) for row in rows if row["case"] == case}) >= 2
+        for case in CASES
+    ), rows
+    # Keep wall-clock assertions to broad regression ceilings. Level 9 may now
+    # legitimately finish before level 3 because its primary/8 KiB screen can
+    # avoid the 4 KiB candidate; the dedicated stage gate validates the exact
+    # per-level search budgets without relying on noisy cross-level timing.
+    json_rows = {int(row["level"]): row for row in rows if row["case"] == "json"}
+    # Levels 1-3 are latency-oriented and must not accidentally re-enable the
+    # recursive mixed-family planner. This benchmark target is always compiled
+    # in ReleaseFast, so the generous ceilings still distinguish the old
+    # 11-15 second JSON cliff from normal same-machine variance.
+    assert int(json_rows[1]["vort_ns"]) <= 2_000_000_000, json_rows
+    # Level 3 still runs lazy and the legacy ratio candidates; leave enough
+    # headroom for shared-machine variance while keeping the former 15-second
+    # recursive-planner cliff impossible to reintroduce.
+    assert int(json_rows[3]["vort_ns"]) <= 8_000_000_000, json_rows
+    # The expanded planner must retain the measured JSON improvement over the
+    # old 32-sequence 16,893-byte baseline on every level.
+    assert int(json_rows[1]["vort_bytes"]) <= 13_688, json_rows
+    assert int(json_rows[3]["vort_bytes"]) <= 13_688, json_rows
+    assert int(json_rows[9]["vort_bytes"]) <= 13_506, json_rows
+    # Level 1 mirrors upstream's fast-strategy repeat-offset probing through a
+    # bounded two-state candidate and now reaches the same locked JSON result
+    # as the ratio-oriented Vort level.
+    assert int(json_rows[1]["vort_bytes"]) <= 640, json_rows
+    assert int(json_rows[3]["vort_bytes"]) <= 640, json_rows
+    # The level-9 repeat-aware beam closes the structured JSON gap to one byte
+    # over libzstd 1.5.5 on this locked corpus. Keep lower-level ceilings
+    # independent because they intentionally omit that ratio-oriented parser.
+    assert int(json_rows[9]["vort_bytes"]) <= 640, json_rows
+    text_rows = {int(row["level"]): row for row in rows if row["case"] == "text"}
+    # Selecting compressed Huffman weights for low-byte alphabets closes all
+    # but one byte of the repetitive-text gap to the locked libzstd row.
+    assert int(text_rows[9]["vort_bytes"]) <= 80, text_rows
+    binary_rows = {int(row["level"]): row for row in rows if row["case"] == "binary"}
+    assert int(binary_rows[1]["vort_bytes"]) <= 8_607, binary_rows
+    assert int(binary_rows[3]["vort_bytes"]) <= 8_607, binary_rows
+    assert int(binary_rows[9]["vort_bytes"]) <= 8_607, binary_rows
+    print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())

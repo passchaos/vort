@@ -255,8 +255,9 @@ High-byte literal writer note:
 
 Recommended next comparison steps:
 
-1. Add library-level decode throughput rows for zstd and Vort native/zlib/raw
-   modes rather than CLI smoke timings.
+1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
+   caller-owned decode rows against runtime libzstd. Optimize the locked raw-
+   literal/single-predefined-sequence shape before broadening levels/corpora.
 2. Add library-level range-latency rows for the public seekability tiers
    (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because even the
    ReleaseFast tier sweep still measures through the CLI bench surface.

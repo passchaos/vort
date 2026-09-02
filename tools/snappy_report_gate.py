@@ -25,6 +25,15 @@ EXPECTED_COLUMNS = [
 ]
 EXPECTED_MODES = {"raw_block", "framed", "raw_block_reusable", "framed_reusable"}
 EXPECTED_CASES = {"tiny", "text", "structured", "repetitive", "incompressible"}
+MIN_RELEASEFAST_DECODE_MIB_S = {
+    ("raw_block", "text"): 350.0,
+    ("raw_block", "structured"): 325.0,
+    ("raw_block", "repetitive"): 350.0,
+    ("framed", "text"): 350.0,
+    ("framed", "structured"): 325.0,
+    ("framed", "repetitive"): 350.0,
+    ("framed", "incompressible"): 350.0,
+}
 
 
 def positive_int(row: dict[str, str], key: str) -> int:
@@ -51,6 +60,11 @@ def positive_float(row: dict[str, str], key: str) -> float:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, default=Path("zig-out/vort-snappy-report.csv"))
+    parser.add_argument(
+        "--enforce-throughput",
+        action="store_true",
+        help="enforce ReleaseFast decode floors for representative rows",
+    )
     args = parser.parse_args()
 
     if not args.csv.exists():
@@ -97,6 +111,11 @@ def main() -> int:
             raise AssertionError(f"bad ratio for row={row}, expected {recomputed_ratio}")
         if encode_ns <= 0 or decode_ns <= 0 or encode_mib_s <= 0.0 or decode_mib_s <= 0.0:
             raise AssertionError(f"bad timing row={row}")
+        floor = MIN_RELEASEFAST_DECODE_MIB_S.get(identity) if args.enforce_throughput else None
+        if floor is not None and decode_mib_s < floor:
+            raise AssertionError(
+                f"decode throughput regression identity={identity} floor={floor} row={row}"
+            )
 
     missing = expected - seen
     if missing:

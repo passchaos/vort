@@ -1,0 +1,208 @@
+const std = @import("std");
+
+pub const Error = error{CorruptFrame};
+
+pub const Symbol = struct {
+    base: u32,
+    additional_bits: u8,
+    next_state: u16,
+    state_bits: u8,
+};
+
+pub const literal_symbols = [_]Symbol{
+    .{ .base = 0, .additional_bits = 0, .next_state = 0, .state_bits = 4 },
+    .{ .base = 0, .additional_bits = 0, .next_state = 16, .state_bits = 4 },
+    .{ .base = 1, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 3, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 4, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 6, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 7, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 9, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 10, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 12, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 14, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 16, .additional_bits = 1, .next_state = 0, .state_bits = 5 },
+    .{ .base = 20, .additional_bits = 1, .next_state = 0, .state_bits = 5 },
+    .{ .base = 22, .additional_bits = 1, .next_state = 0, .state_bits = 5 },
+    .{ .base = 28, .additional_bits = 2, .next_state = 0, .state_bits = 5 },
+    .{ .base = 32, .additional_bits = 3, .next_state = 0, .state_bits = 5 },
+    .{ .base = 48, .additional_bits = 4, .next_state = 0, .state_bits = 5 },
+    .{ .base = 64, .additional_bits = 6, .next_state = 32, .state_bits = 5 },
+    .{ .base = 128, .additional_bits = 7, .next_state = 0, .state_bits = 5 },
+    .{ .base = 256, .additional_bits = 8, .next_state = 0, .state_bits = 6 },
+    .{ .base = 1024, .additional_bits = 10, .next_state = 0, .state_bits = 6 },
+    .{ .base = 4096, .additional_bits = 12, .next_state = 0, .state_bits = 6 },
+    .{ .base = 0, .additional_bits = 0, .next_state = 32, .state_bits = 4 },
+    .{ .base = 1, .additional_bits = 0, .next_state = 0, .state_bits = 4 },
+    .{ .base = 2, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 4, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 5, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 7, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 8, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 10, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 11, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 13, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 16, .additional_bits = 1, .next_state = 32, .state_bits = 5 },
+    .{ .base = 18, .additional_bits = 1, .next_state = 0, .state_bits = 5 },
+    .{ .base = 22, .additional_bits = 1, .next_state = 32, .state_bits = 5 },
+    .{ .base = 24, .additional_bits = 2, .next_state = 0, .state_bits = 5 },
+    .{ .base = 32, .additional_bits = 3, .next_state = 32, .state_bits = 5 },
+    .{ .base = 40, .additional_bits = 3, .next_state = 0, .state_bits = 5 },
+    .{ .base = 64, .additional_bits = 6, .next_state = 0, .state_bits = 4 },
+    .{ .base = 64, .additional_bits = 6, .next_state = 16, .state_bits = 4 },
+    .{ .base = 128, .additional_bits = 7, .next_state = 32, .state_bits = 5 },
+    .{ .base = 512, .additional_bits = 9, .next_state = 0, .state_bits = 6 },
+    .{ .base = 2048, .additional_bits = 11, .next_state = 0, .state_bits = 6 },
+    .{ .base = 0, .additional_bits = 0, .next_state = 48, .state_bits = 4 },
+    .{ .base = 1, .additional_bits = 0, .next_state = 16, .state_bits = 4 },
+    .{ .base = 2, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 3, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 5, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 6, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 8, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 9, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 11, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 12, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 15, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 18, .additional_bits = 1, .next_state = 32, .state_bits = 5 },
+    .{ .base = 20, .additional_bits = 1, .next_state = 32, .state_bits = 5 },
+    .{ .base = 24, .additional_bits = 2, .next_state = 32, .state_bits = 5 },
+    .{ .base = 28, .additional_bits = 2, .next_state = 32, .state_bits = 5 },
+    .{ .base = 40, .additional_bits = 3, .next_state = 32, .state_bits = 5 },
+    .{ .base = 48, .additional_bits = 4, .next_state = 32, .state_bits = 5 },
+    .{ .base = 65536, .additional_bits = 16, .next_state = 0, .state_bits = 6 },
+    .{ .base = 32768, .additional_bits = 15, .next_state = 0, .state_bits = 6 },
+    .{ .base = 16384, .additional_bits = 14, .next_state = 0, .state_bits = 6 },
+    .{ .base = 8192, .additional_bits = 13, .next_state = 0, .state_bits = 6 },
+};
+
+pub const offset_symbols = [_]Symbol{
+    .{ .base = 0, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 61, .additional_bits = 6, .next_state = 0, .state_bits = 4 },
+    .{ .base = 509, .additional_bits = 9, .next_state = 0, .state_bits = 5 },
+    .{ .base = 32765, .additional_bits = 15, .next_state = 0, .state_bits = 5 },
+    .{ .base = 2097149, .additional_bits = 21, .next_state = 0, .state_bits = 5 },
+    .{ .base = 5, .additional_bits = 3, .next_state = 0, .state_bits = 5 },
+    .{ .base = 125, .additional_bits = 7, .next_state = 0, .state_bits = 4 },
+    .{ .base = 4093, .additional_bits = 12, .next_state = 0, .state_bits = 5 },
+    .{ .base = 262141, .additional_bits = 18, .next_state = 0, .state_bits = 5 },
+    .{ .base = 8388605, .additional_bits = 23, .next_state = 0, .state_bits = 5 },
+    .{ .base = 29, .additional_bits = 5, .next_state = 0, .state_bits = 5 },
+    .{ .base = 253, .additional_bits = 8, .next_state = 0, .state_bits = 4 },
+    .{ .base = 16381, .additional_bits = 14, .next_state = 0, .state_bits = 5 },
+    .{ .base = 1048573, .additional_bits = 20, .next_state = 0, .state_bits = 5 },
+    .{ .base = 1, .additional_bits = 2, .next_state = 0, .state_bits = 5 },
+    .{ .base = 125, .additional_bits = 7, .next_state = 16, .state_bits = 4 },
+    .{ .base = 2045, .additional_bits = 11, .next_state = 0, .state_bits = 5 },
+    .{ .base = 131069, .additional_bits = 17, .next_state = 0, .state_bits = 5 },
+    .{ .base = 4194301, .additional_bits = 22, .next_state = 0, .state_bits = 5 },
+    .{ .base = 13, .additional_bits = 4, .next_state = 0, .state_bits = 5 },
+    .{ .base = 253, .additional_bits = 8, .next_state = 16, .state_bits = 4 },
+    .{ .base = 8189, .additional_bits = 13, .next_state = 0, .state_bits = 5 },
+    .{ .base = 524285, .additional_bits = 19, .next_state = 0, .state_bits = 5 },
+    .{ .base = 1, .additional_bits = 1, .next_state = 0, .state_bits = 5 },
+    .{ .base = 61, .additional_bits = 6, .next_state = 16, .state_bits = 4 },
+    .{ .base = 1021, .additional_bits = 10, .next_state = 0, .state_bits = 5 },
+    .{ .base = 65533, .additional_bits = 16, .next_state = 0, .state_bits = 5 },
+    .{ .base = 268435453, .additional_bits = 28, .next_state = 0, .state_bits = 5 },
+    .{ .base = 134217725, .additional_bits = 27, .next_state = 0, .state_bits = 5 },
+    .{ .base = 67108861, .additional_bits = 26, .next_state = 0, .state_bits = 5 },
+    .{ .base = 33554429, .additional_bits = 25, .next_state = 0, .state_bits = 5 },
+    .{ .base = 16777213, .additional_bits = 24, .next_state = 0, .state_bits = 5 },
+};
+
+pub const match_symbols = [_]Symbol{
+    .{ .base = 3, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 4, .additional_bits = 0, .next_state = 0, .state_bits = 4 },
+    .{ .base = 5, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 6, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 8, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 9, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 11, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 13, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 16, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 19, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 22, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 25, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 28, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 31, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 34, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 37, .additional_bits = 1, .next_state = 0, .state_bits = 6 },
+    .{ .base = 41, .additional_bits = 1, .next_state = 0, .state_bits = 6 },
+    .{ .base = 47, .additional_bits = 2, .next_state = 0, .state_bits = 6 },
+    .{ .base = 59, .additional_bits = 3, .next_state = 0, .state_bits = 6 },
+    .{ .base = 83, .additional_bits = 4, .next_state = 0, .state_bits = 6 },
+    .{ .base = 131, .additional_bits = 7, .next_state = 0, .state_bits = 6 },
+    .{ .base = 515, .additional_bits = 9, .next_state = 0, .state_bits = 6 },
+    .{ .base = 4, .additional_bits = 0, .next_state = 16, .state_bits = 4 },
+    .{ .base = 5, .additional_bits = 0, .next_state = 0, .state_bits = 4 },
+    .{ .base = 6, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 7, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 9, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 10, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
+    .{ .base = 12, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 15, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 18, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 21, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 24, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 27, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 30, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 33, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 35, .additional_bits = 1, .next_state = 0, .state_bits = 6 },
+    .{ .base = 39, .additional_bits = 1, .next_state = 0, .state_bits = 6 },
+    .{ .base = 43, .additional_bits = 2, .next_state = 0, .state_bits = 6 },
+    .{ .base = 51, .additional_bits = 3, .next_state = 0, .state_bits = 6 },
+    .{ .base = 67, .additional_bits = 4, .next_state = 0, .state_bits = 6 },
+    .{ .base = 99, .additional_bits = 5, .next_state = 0, .state_bits = 6 },
+    .{ .base = 259, .additional_bits = 8, .next_state = 0, .state_bits = 6 },
+    .{ .base = 4, .additional_bits = 0, .next_state = 32, .state_bits = 4 },
+    .{ .base = 4, .additional_bits = 0, .next_state = 48, .state_bits = 4 },
+    .{ .base = 5, .additional_bits = 0, .next_state = 16, .state_bits = 4 },
+    .{ .base = 7, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 8, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 10, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 11, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
+    .{ .base = 14, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 17, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 20, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 23, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 26, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 29, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 32, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
+    .{ .base = 65539, .additional_bits = 16, .next_state = 0, .state_bits = 6 },
+    .{ .base = 32771, .additional_bits = 15, .next_state = 0, .state_bits = 6 },
+    .{ .base = 16387, .additional_bits = 14, .next_state = 0, .state_bits = 6 },
+    .{ .base = 8195, .additional_bits = 13, .next_state = 0, .state_bits = 6 },
+    .{ .base = 4099, .additional_bits = 12, .next_state = 0, .state_bits = 6 },
+    .{ .base = 2051, .additional_bits = 11, .next_state = 0, .state_bits = 6 },
+    .{ .base = 1027, .additional_bits = 10, .next_state = 0, .state_bits = 6 },
+};
+
+pub fn literal(state: usize) Error!Symbol {
+    if (state >= literal_symbols.len) return error.CorruptFrame;
+    return literal_symbols[state];
+}
+
+pub fn offset(state: usize) Error!Symbol {
+    if (state >= offset_symbols.len) return error.CorruptFrame;
+    return offset_symbols[state];
+}
+
+pub fn match(state: usize) Error!Symbol {
+    if (state >= match_symbols.len) return error.CorruptFrame;
+    return match_symbols[state];
+}
+
+/// Whether the sequence mode byte selects predefined LL/OF/ML tables and has
+/// the two reserved low bits clear. This cheap shape test is shared by inspect
+/// and decode paths so callers need not construct empty FSE-table objects just
+/// to learn that no table payload exists.
+pub inline fn isModeByte(mode: u8) bool {
+    return mode == 0;
+}
+
+test "Zstd predefined sequence tables reject invalid states" {
+    try std.testing.expectError(error.CorruptFrame, literal(literal_symbols.len));
+    try std.testing.expectError(error.CorruptFrame, offset(offset_symbols.len));
+    try std.testing.expectError(error.CorruptFrame, match(match_symbols.len));
+}

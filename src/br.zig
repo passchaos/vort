@@ -1,13 +1,870 @@
 const std = @import("std");
 const core = @import("core.zig");
+const lz77 = @import("lz77.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
+const match_copy = @import("br/match_copy.zig");
+const static_dictionary = @import("br/static_dictionary.zig");
+const command_lut = @import("br/command_lut.zig");
+const pattern = @import("br/pattern.zig");
+const command_plan = @import("br/encoder/command_plan.zig");
+const literal_context = @import("br/encoder/literal_context.zig");
+const long_distance = @import("br/encoder/long_distance.zig");
+const short_match_candidates = @import("br/encoder/short_match_candidates.zig");
+const encoder_distance = @import("br/encoder/distance.zig");
+const complex_prefix = @import("br/encoder/complex_prefix.zig");
+const code_length_rle = @import("br/encoder/code_length_rle.zig");
+const small_huffman = @import("br/encoder/small_huffman.zig");
+const encoder_stats = @import("br/encoder/stats.zig");
+const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
+const header_profile = @import("br/header_profile.zig");
+const incremental = @import("br/incremental/stream_decoder.zig");
+const incremental_tests = @import("br/incremental/tests.zig");
+const incremental_literal = @import("br/incremental/literal_decoder.zig");
+const incremental_literal_tests = @import("br/incremental/literal_tests.zig");
+const incremental_copy = @import("br/incremental/copy_decoder.zig");
+const incremental_copy_tests = @import("br/incremental/copy_tests.zig");
+const incremental_rle = @import("br/incremental/rle_decoder.zig");
+const incremental_rle_tests = @import("br/incremental/rle_tests.zig");
+const incremental_stored = @import("br/incremental/stored/decoder.zig");
+const incremental_stored_encoder = @import("br/incremental/stored/encoder.zig");
+const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
+const incremental_planned_encoder_tests = @import("br/incremental/planned_encoder_tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
+pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
+pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
+pub const PlannedEncodeOptions = struct { level: PlannedCompressionLevel = .fast };
+/// Search budget for the ratio-oriented planner. These knobs affect token
+/// selection only; the resulting stream still uses the same Brotli command
+/// and prefix-code writer as the stable `.balanced` level.
+pub const PlannedParserOptions = struct {
+    window_len: usize = lz77.default_window_len,
+    max_chain: usize = 64,
+    nice_len: usize = 64,
+    lazy_min_gain: usize = 1,
+};
+
+const IncrementalCodec = struct {
+    pub const Error = br.Error;
+    pub fn decodedSizeLimited(stream: []const u8, limit: usize) br.Error!usize {
+        return br.decodedStreamSizeLimited(stream, limit);
+    }
+    pub fn decodeInto(stream: []const u8, output: []u8) br.Error!usize {
+        return br.decodeStreamInto(stream, output);
+    }
+};
+
+const br = @This();
+pub const IncrementalStreamDecoder = incremental.Decoder(IncrementalCodec);
+pub const IncrementalLiteralStreamDecoder = incremental_literal.Decoder(IncrementalLiteralCodec);
+pub const IncrementalCopyStreamDecoder = incremental_copy.Decoder(IncrementalCopyCodec);
+pub const IncrementalRleStreamDecoder = incremental_rle.Decoder(IncrementalRleCodec);
+pub const IncrementalStoredStreamDecoder = incremental_stored.Decoder;
+
+const IncrementalLiteralCodec = struct {
+    pub const Error = br.Error;
+    pub const max_stream_header_bytes: usize = 4096;
+    pub const Header = struct {
+        decoded_len: usize,
+        literal_tree: PrefixCode(256),
+        final: bool,
+    };
+    pub const ParsedHeader = struct { header: Header, bits_read: usize };
+
+    /// Parse a compressed meta-block whose only command inserts MLEN literals.
+    /// Final blocks complete directly; non-final blocks are accepted when a
+    /// final-empty terminator follows. The complete compressed header is bounded
+    /// independently of the literal payload, so consumed input can be discarded.
+    pub fn parseHeader(prefix: []const u8) IncrementalLiteralCodec.Error!ParsedHeader {
+        var reader = bitstream.BitReader.init(prefix);
+        try readWindowBits(&reader);
+        const final = try reader.readBits(u1, 1) != 0;
+        if (final and try reader.readBits(u1, 1) != 0) return error.UnsupportedBrotliFeature;
+        const mnibbles_code = try reader.readBits(u2, 2);
+        const mnibbles: usize = 4 + @as(usize, mnibbles_code);
+        if (mnibbles > 6) return error.UnsupportedBrotliFeature;
+        const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
+        if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0)
+            return error.CorruptFrame;
+        const decoded_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
+        if (!final and try reader.readBits(u1, 1) != 0) return error.UnsupportedBrotliFeature;
+
+        var header = try readMinimalCompressedHeader(&reader);
+        if (header.literal_block.block_type_count != 1 or
+            header.command_block.block_type_count != 1 or
+            header.distance_block.block_type_count != 1) return error.UnsupportedBrotliFeature;
+        for (header.literal_context_map[0..64]) |tree_index|
+            if (tree_index != 0) return error.UnsupportedBrotliFeature;
+
+        const command_symbol = try readCommandSymbol(&header, &reader);
+        const lengths = try readInsertCopyLengths(command_symbol, &reader);
+        if (lengths.insert_len != decoded_len) return error.UnsupportedBrotliFeature;
+        return .{
+            .header = .{ .decoded_len = decoded_len, .literal_tree = header.literal_trees[0], .final = final },
+            .bits_read = reader.bitPosition(),
+        };
+    }
+
+    pub fn readLiteral(header: *const Header, reader: anytype) IncrementalLiteralCodec.Error!u8 {
+        const symbol = try header.literal_tree.decode(reader);
+        if (symbol > 0xff) return error.InvalidHuffmanCode;
+        return @intCast(symbol);
+    }
+};
+
+const IncrementalCopyCodec = struct {
+    pub const Error = br.Error;
+    pub const max_stream_header_bytes: usize = 16 * 1024;
+    pub const Header = struct {
+        decoded_len: usize,
+        compressed: MinimalCompressedHeader,
+        final: bool,
+    };
+    pub const ParsedHeader = struct { header: Header, bits_read: usize };
+    pub const Command = struct { insert_len: usize, copy_len: usize, implicit_last_distance: bool };
+    const BlockState = struct { current_type: u16, previous_type: u16, remaining: usize };
+    pub const LiteralState = BlockState;
+    pub const CommandState = BlockState;
+    pub const DistanceState = BlockState;
+
+    pub fn literalState(header: *const Header) LiteralState {
+        return blockState(header.compressed.literal_block);
+    }
+
+    pub fn restoreLiteralState(header: *Header, state: LiteralState) void {
+        restoreBlockState(&header.compressed.literal_block, state);
+    }
+
+    pub fn commandState(header: *const Header) CommandState {
+        return blockState(header.compressed.command_block);
+    }
+
+    pub fn restoreCommandState(header: *Header, state: CommandState) void {
+        restoreBlockState(&header.compressed.command_block, state);
+    }
+
+    pub fn distanceState(header: *const Header) DistanceState {
+        return blockState(header.compressed.distance_block);
+    }
+
+    pub fn restoreDistanceState(header: *Header, state: DistanceState) void {
+        restoreBlockState(&header.compressed.distance_block, state);
+    }
+
+    fn blockState(block: anytype) BlockState {
+        return .{ .current_type = block.current_type, .previous_type = block.previous_type, .remaining = block.remaining };
+    }
+
+    fn restoreBlockState(block: anytype, state: BlockState) void {
+        block.current_type = state.current_type;
+        block.previous_type = state.previous_type;
+        block.remaining = state.remaining;
+    }
+
+    pub fn parseMetaBlockHeader(prefix: []const u8, decoded_len: usize, final: bool) IncrementalCopyCodec.Error!ParsedHeader {
+        var reader = bitstream.BitReader.init(prefix);
+        const compressed = try readMinimalCompressedHeader(&reader);
+        return .{
+            .header = .{ .decoded_len = decoded_len, .compressed = compressed, .final = final },
+            .bits_read = reader.bitPosition(),
+        };
+    }
+
+    pub fn readLiteral(header: *Header, reader: anytype, previous: u8, second_previous: u8) IncrementalCopyCodec.Error!u8 {
+        try ensureLiteralBlockAny(&header.compressed, reader);
+        const block_type = header.compressed.literal_block.current_type;
+        if (block_type >= max_literal_block_types) return error.UnsupportedBrotliFeature;
+        const context = try literalContextFromMode(header.compressed.literal_context_modes[block_type], previous, second_previous);
+        const tree_index = header.compressed.literal_context_map[@as(usize, block_type) * 64 + context];
+        if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+        const symbol = try header.compressed.literal_trees[tree_index].decode(reader);
+        if (symbol > 0xff) return error.InvalidHuffmanCode;
+        if (header.compressed.literal_block.remaining != 0) header.compressed.literal_block.remaining -= 1;
+        return @intCast(symbol);
+    }
+
+    pub fn readCommand(header: *Header, reader: anytype) IncrementalCopyCodec.Error!Command {
+        const symbol = try readCommandSymbolAny(&header.compressed, reader);
+        if (symbol >= command_lut.entries.len) return error.InvalidHuffmanCode;
+        const entry = command_lut.entries[symbol];
+        const insert_extra = if (entry.insert_extra_bits == 0) 0 else try reader.readBits(usize, entry.insert_extra_bits);
+        const copy_extra = if (entry.copy_extra_bits == 0) 0 else try reader.readBits(usize, entry.copy_extra_bits);
+        return .{
+            .insert_len = entry.insert_base + insert_extra,
+            .copy_len = entry.copy_base + copy_extra,
+            .implicit_last_distance = entry.distance_code == 0,
+        };
+    }
+
+    pub fn readDistance(header: *Header, reader: anytype, copy_len: usize, last_distances: *const [4]usize) IncrementalCopyCodec.Error!struct { distance: usize, update_ring: bool } {
+        try ensureDistanceBlockAny(&header.compressed, reader);
+        const block_type = header.compressed.distance_block.current_type;
+        if (block_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
+        const tree_index = header.compressed.distance_context_map[@as(usize, block_type) * 4 + distanceContext(copy_len)];
+        if (tree_index >= max_distance_context_trees) return error.UnsupportedBrotliFeature;
+        const symbol = try header.compressed.distance_trees[tree_index].decode(reader);
+        if (header.compressed.distance_block.remaining != 0) header.compressed.distance_block.remaining -= 1;
+        if (symbol < 16) return .{
+            .distance = try resolveShortDistance(symbol, last_distances),
+            .update_ring = symbol != 0,
+        };
+        const direct_index = symbol - 16;
+        if (direct_index < header.compressed.ndirect) return .{ .distance = @as(usize, direct_index) + 1, .update_ring = true };
+        const xcode = @as(usize, symbol) - @as(usize, header.compressed.ndirect) - 16;
+        const npostfix: usize = header.compressed.npostfix;
+        const extra_bits_value = 1 + (xcode >> @intCast(npostfix + 1));
+        if (extra_bits_value > 24) return error.CorruptFrame;
+        const extra = try reader.readBits(usize, @intCast(extra_bits_value));
+        return .{
+            .distance = resolveRegularDistanceParts(header.compressed.npostfix, header.compressed.ndirect, xcode, extra_bits_value, extra),
+            .update_ring = true,
+        };
+    }
+
+    pub fn dictionaryWord(distance: usize, copy_len: usize, max_backward_distance: usize, scratch: *[64]u8) IncrementalCopyCodec.Error![]const u8 {
+        return minimalStaticDictionaryWord(distance, copy_len, max_backward_distance, scratch);
+    }
+
+    pub fn maxBackwardDistance(window_bits: u5, output_len: usize) usize {
+        return maxBackwardDistanceForWindow(window_bits, output_len);
+    }
+};
+
+fn ensureDistanceBlockAny(header: *MinimalCompressedHeader, reader: anytype) Error!void {
+    if (header.distance_block.block_type_count > 1 and header.distance_block.remaining == 0)
+        try switchBlockAny(max_distance_block_types, &header.distance_block, reader);
+}
+
+const IncrementalRleCodec = struct {
+    pub const Error = br.Error;
+    pub const max_stream_header_bytes: usize = 64;
+
+    pub const ParsedHeader = struct {
+        decoded_len: usize,
+        repeated_byte: u8,
+    };
+
+    /// Recognize the exact single-command compressed shape emitted by
+    /// `encodeRleStream*`. The progressive wrapper owns input splitting and
+    /// backpressure; this parser keeps wire-format knowledge next to the normal
+    /// Brotli reader and rejects broader compressed streams explicitly.
+    pub fn parseHeader(prefix: []const u8) IncrementalRleCodec.Error!struct { header: ParsedHeader, bits_read: usize } {
+        var reader = bitstream.BitReader.init(prefix);
+        try readWindowBits(&reader);
+        if (try reader.readBits(u1, 1) != 1 or try reader.readBits(u1, 1) != 0)
+            return error.UnsupportedBrotliFeature;
+        const mnibbles_code = try reader.readBits(u2, 2);
+        const mnibbles: usize = 4 + @as(usize, mnibbles_code);
+        if (mnibbles > 6) return error.UnsupportedBrotliFeature;
+        const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
+        if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0)
+            return error.CorruptFrame;
+        const decoded_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
+        if (decoded_len < 5) return error.UnsupportedBrotliFeature;
+
+        if (try readBlockTypeCount(&reader) != 1 or
+            try readBlockTypeCount(&reader) != 1 or
+            try readBlockTypeCount(&reader) != 1) return error.UnsupportedBrotliFeature;
+        if (try reader.readBits(u2, 2) != 0 or try reader.readBits(u4, 4) != 1)
+            return error.UnsupportedBrotliFeature;
+        if (try reader.readBits(u2, 2) != 0 or
+            try readBlockTypeCount(&reader) != 1 or
+            try readBlockTypeCount(&reader) != 1) return error.UnsupportedBrotliFeature;
+
+        const literal = try readSingleSymbolPrefixForIncremental(256, &reader);
+        const command_symbol = try readSingleSymbolPrefixForIncremental(704, &reader);
+        if (command_symbol >= command_lut.entries.len) return error.InvalidHuffmanCode;
+        const command = command_lut.entries[command_symbol];
+        if (command.insert_base != 1 or command.insert_extra_bits != 0 or command.distance_code != -1)
+            return error.UnsupportedBrotliFeature;
+        if (try readSingleSymbolPrefixForIncremental(65, &reader) != 16)
+            return error.UnsupportedBrotliFeature;
+        if (command.copy_base > decoded_len - 1) return error.CorruptFrame;
+        const copy_extra = if (command.copy_extra_bits == 0)
+            0
+        else
+            try reader.readBits(usize, command.copy_extra_bits);
+        if (command.copy_base + copy_extra != decoded_len - 1) return error.CorruptFrame;
+        return .{
+            .header = .{
+                .decoded_len = decoded_len,
+                .repeated_byte = @intCast(literal),
+            },
+            .bits_read = reader.bitPosition(),
+        };
+    }
+};
+
+fn readSingleSymbolPrefixForIncremental(comptime alphabet_size: usize, reader: *bitstream.BitReader) Error!u16 {
+    if (try reader.readBits(u2, 2) != 1) return error.UnsupportedBrotliFeature;
+    if (try reader.readBits(u2, 2) != 0) return error.UnsupportedBrotliFeature;
+    const symbol = try reader.readBits(u16, alphabetBits(alphabet_size));
+    if (symbol >= alphabet_size) return error.InvalidHuffmanCode;
+    return symbol;
+}
+
+const IncrementalStoredEncoderCodec = struct {
+    pub const Error = br.Error;
+    pub const StreamOptions = br.StoredStreamOptions;
+    pub const max_block_len = br.max_uncompressed_meta_block_len;
+    pub const default_block_len = 64 * 1024;
+    pub const State = struct { bit_index: u3 = 0 };
+
+    pub fn readyOutputLen(state: *const State, pending_len: usize, final_written: bool) usize {
+        // A non-byte-aligned tail is still mutable: the next meta-block header
+        // must continue in that byte. Publishing it early would both corrupt
+        // the caller's copy and leave the next BitWriter with no backing byte.
+        if (!final_written and state.bit_index != 0) {
+            std.debug.assert(pending_len != 0);
+            return pending_len - 1;
+        }
+        return pending_len;
+    }
+
+    pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeWindowBits(allocator, &writer, options.window_bits);
+        if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, options.metadata);
+        state.bit_index = writer.bit_index;
+    }
+    pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, block: []const u8) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeUncompressedMetaBlock(allocator, &writer, block);
+        state.bit_index = writer.bit_index;
+    }
+    pub fn writeMetadata(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, metadata: []const u8) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeMetadataMetaBlock(allocator, &writer, metadata);
+        state.bit_index = writer.bit_index;
+    }
+    pub fn writeFinal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 1, 1);
+        state.bit_index = writer.bit_index;
+    }
+};
+
+pub const IncrementalStoredStreamEncoder = incremental_stored_encoder.Encoder(IncrementalStoredEncoderCodec);
+
+const IncrementalPlannedEncoderCodec = struct {
+    pub const Error = br.Error;
+    pub const StreamOptions = br.StoredStreamOptions;
+    pub const max_block_len = planned_chunk_max_input_len;
+    pub const default_block_len = planned_chunk_max_input_len;
+    pub const State = struct {
+        bit_index: u3 = 0,
+        window_bits: u5 = default_window_bits,
+        tokens: std.ArrayList(lz77.Token) = .empty,
+        commands: std.ArrayList(command_plan.Command) = .empty,
+        history: std.ArrayList(u8) = .empty,
+        greedy_scratch: lz77.TinyGreedyScratch = .{},
+        dictionary_greedy_scratch: lz77.DictionaryGreedyScratch = .{},
+    };
+
+    pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
+        state.greedy_scratch.deinit(allocator);
+        state.dictionary_greedy_scratch.deinit(allocator);
+        state.tokens.deinit(allocator);
+        state.commands.deinit(allocator);
+        state.history.deinit(allocator);
+    }
+
+    pub fn resetState(state: *State) void {
+        state.bit_index = 0;
+        state.window_bits = default_window_bits;
+        state.tokens.clearRetainingCapacity();
+        state.commands.clearRetainingCapacity();
+        state.history.clearRetainingCapacity();
+        state.greedy_scratch.head_initialized = @splat(0);
+        state.greedy_scratch.prev.clearRetainingCapacity();
+    }
+
+    pub fn stateRetainedCapacity(state: *const State) usize {
+        return state.tokens.capacity * @sizeOf(lz77.Token) +
+            state.commands.capacity * @sizeOf(command_plan.Command) +
+            state.history.capacity +
+            state.greedy_scratch.retainedCapacity() +
+            state.dictionary_greedy_scratch.retainedCapacity();
+    }
+
+    pub fn readyOutputLen(state: *const State, pending_len: usize, final_written: bool) usize {
+        if (!final_written and state.bit_index != 0) {
+            std.debug.assert(pending_len != 0);
+            return pending_len - 1;
+        }
+        return pending_len;
+    }
+
+    pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeWindowBits(allocator, &writer, options.window_bits);
+        if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, options.metadata);
+        state.bit_index = writer.bit_index;
+        state.window_bits = options.window_bits;
+    }
+
+    pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, block: []const u8) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        const start_len = out.items.len;
+        const start_bit_index = writer.bit_index;
+        const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
+        const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+
+        const stats = if (state.history.items.len == 0)
+            try lz77.hashGreedyPlanAutoTinyScratchReuse(&state.tokens, &state.greedy_scratch, allocator, block, .{
+                .window_len = @min(block.len, max_backward_distance),
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 8,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            })
+        else blk: {
+            const history_stats = try lz77.hashGreedyPlanWithDictionaryReuse(&state.tokens, &state.dictionary_greedy_scratch, allocator, block, state.history.items, .{
+                .window_len = max_backward_distance,
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 8,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            });
+            break :blk history_stats;
+        };
+        var compressed_ok = stats.matches != 0;
+        if (compressed_ok) {
+            _ = if (state.history.items.len == 0)
+                try command_plan.buildTrustedReuse(&state.commands, allocator, block, state.tokens.items)
+            else
+                try command_plan.buildWithDictionaryReuse(&state.commands, allocator, block, state.history.items.len, state.tokens.items);
+            var encode_stats: encoder_stats.PlannedEncodeStats = .{};
+            encodeCommandPlanWithOptionsWrite(allocator, &writer, block, state.commands.items, null, &encode_stats, .{
+                .write_stream_prefix = false,
+                .final_meta_block = false,
+            }) catch |err| switch (err) {
+                error.InvalidBlockPlan => compressed_ok = false,
+                else => return err,
+            };
+        }
+        const stored_ceiling = try addStoredUncompressedMetaBlockBitsLen(startBitPosition(start_len, start_bit_index), block.len);
+        if (!compressed_ok or writer.bitPosition() > stored_ceiling) {
+            out.shrinkRetainingCapacity(start_len);
+            if (start_len != 0) out.items[start_len - 1] = start_byte;
+            writer.bit_index = start_bit_index;
+            try writeUncompressedMetaBlock(allocator, &writer, block);
+        }
+        state.bit_index = writer.bit_index;
+        try appendHistory(&state.history, allocator, block, max_backward_distance);
+    }
+
+    pub fn writeMetadata(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, metadata: []const u8) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeMetadataMetaBlock(allocator, &writer, metadata);
+        state.bit_index = writer.bit_index;
+    }
+
+    pub fn writeFinal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 1, 1);
+        state.bit_index = writer.bit_index;
+    }
+
+    fn startBitPosition(len: usize, bit_index: u3) usize {
+        return if (bit_index == 0) len * 8 else (len - 1) * 8 + bit_index;
+    }
+
+    fn appendHistory(history: *std.ArrayList(u8), allocator: std.mem.Allocator, block: []const u8, limit: usize) br.Error!void {
+        if (block.len >= limit) {
+            history.clearRetainingCapacity();
+            try history.appendSlice(allocator, block[block.len - limit ..]);
+            return;
+        }
+        const keep = @min(history.items.len, limit - block.len);
+        if (keep != history.items.len)
+            std.mem.copyForwards(u8, history.items[0..keep], history.items[history.items.len - keep ..]);
+        history.shrinkRetainingCapacity(keep);
+        try history.appendSlice(allocator, block);
+    }
+};
+
+pub const IncrementalPlannedStreamEncoder = incremental_stored_encoder.Encoder(IncrementalPlannedEncoderCodec);
+
+test {
+    _ = incremental_tests;
+    _ = incremental_literal_tests;
+    _ = incremental_copy_tests;
+    _ = incremental_rle_tests;
+    _ = incremental_stored_tests;
+    _ = incremental_planned_encoder_tests;
+    _ = pattern;
+    _ = command_plan;
+    _ = literal_context;
+    _ = long_distance;
+    _ = short_match_candidates;
+    _ = encoder_distance;
+    _ = complex_prefix;
+    _ = code_length_rle;
+    _ = small_huffman;
+    _ = encoder_stats;
+    _ = static_dictionary_matcher;
+    _ = header_profile;
+}
+
+pub const IncrementalTestSupport = struct {
+    pub fn encodeStored(allocator: std.mem.Allocator, payload: []const u8) Error![]u8 {
+        return encodeStoredStreamAlloc(allocator, payload);
+    }
+
+    /// Build the minimal compressed "hello" fixture through the same private
+    /// header writer used by the compressed-meta-block decoder tests. Keeping
+    /// fixture construction here lets incremental tests exercise compressed
+    /// input without exposing test-only bitstream helpers as production APIs.
+    pub fn encodeCompressedHello(allocator: std.mem.Allocator) Error![]u8 {
+        return encodeCompressedHelloWithFinal(allocator, true);
+    }
+
+    pub fn encodeCompressedHelloWithFinal(allocator: std.mem.Allocator, final: bool) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writer.writeBits(allocator, @intFromBool(final), 1); // ISLAST
+        if (final) try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 4, 16); // MLEN - 1
+        if (!final) try writer.writeBits(allocator, 0, 1); // ISUNCOMPRESSED = false
+        try writeMinimalCompressedHeaderForHello(allocator, &writer);
+        try writer.writeBits(allocator, 2, 2); // h
+        try writer.writeBits(allocator, 0, 2); // e
+        try writer.writeBits(allocator, 1, 2); // l
+        try writer.writeBits(allocator, 1, 2); // l
+        try writer.writeBits(allocator, 3, 2); // o
+        if (!final) {
+            try writer.writeBits(allocator, 1, 1); // final ISLAST
+            try writer.writeBits(allocator, 1, 1); // final ISLASTEMPTY
+        }
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeCompressedHelloThenStored(allocator: std.mem.Allocator, stored: []const u8) Error![]u8 {
+        return encodeCompressedHelloThenStoredBlocks(allocator, &.{stored});
+    }
+
+    pub fn encodeCompressedHelloThenStoredBlocks(allocator: std.mem.Allocator, stored_blocks: []const []const u8) Error![]u8 {
+        return encodeCompressedHelloThenMetadataAndStoredBlocks(allocator, "", stored_blocks);
+    }
+
+    pub fn encodeCompressedHelloThenMetadataAndStoredBlocks(allocator: std.mem.Allocator, metadata: []const u8, stored_blocks: []const []const u8) Error![]u8 {
+        if (stored_blocks.len == 0) return error.InvalidBlockPlan;
+        for (stored_blocks) |stored| if (stored.len == 0 or stored.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writer.writeBits(allocator, 0, 1); // non-final compressed block
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 4, 16); // MLEN - 1
+        try writer.writeBits(allocator, 0, 1); // ISUNCOMPRESSED = false
+        try writeMinimalCompressedHeaderForHello(allocator, &writer);
+        try writer.writeBits(allocator, 2, 2);
+        try writer.writeBits(allocator, 0, 2);
+        try writer.writeBits(allocator, 1, 2);
+        try writer.writeBits(allocator, 1, 2);
+        try writer.writeBits(allocator, 3, 2);
+        if (metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, metadata);
+        for (stored_blocks) |stored| try writeUncompressedMetaBlock(allocator, &writer, stored);
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 1, 1);
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeCompressedAlternatingThenMetadataAndStored(allocator: std.mem.Allocator, metadata: []const u8, stored: []const u8) Error![]u8 {
+        if (metadata.len == 0 or stored.len == 0) return error.InvalidBlockPlan;
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writer.writeBits(allocator, 0, 1);
+        try writer.writeBits(allocator, 0, 2);
+        try writer.writeBits(allocator, 252, 16); // 253-byte alternating block
+        try writer.writeBits(allocator, 0, 1);
+        const entry = commandEntryForLengths(2, 251) orelse return error.InvalidBlockPlan;
+        try writeMinimalCompressedHeaderForAlternatingPattern(allocator, &writer, 'x', 'y', entry.symbol);
+        try writeCommandLengthExtras(allocator, &writer, entry, 2, 251);
+        try writer.writeBits(allocator, 0, 1);
+        try writer.writeBits(allocator, 1, 1);
+        try writeMetadataMetaBlock(allocator, &writer, metadata);
+        try writeUncompressedMetaBlock(allocator, &writer, stored);
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 1, 1);
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeCompressedAlternatingWithFinalEmpty(allocator: std.mem.Allocator, first: u8, second: u8, len: usize) Error![]u8 {
+        return encodeCompressedAlternatingThenStored(allocator, first, second, len, "");
+    }
+
+    /// Build two compressed meta-blocks where the second block reuses the
+    /// recent-distance ring installed by the first. This pins both the bit-level
+    /// header transition and the RFC stream state that survives that boundary.
+    pub fn encodeCompressedCopiesAcrossMetaBlocks(allocator: std.mem.Allocator) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+
+        try writer.writeBits(allocator, 0, 1); // ISLAST = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 2, 16); // MLEN - 1
+        try writer.writeBits(allocator, 0, 1); // ISUNCOMPRESSED = false
+        try writeMinimalCompressedHeaderForShortDistance(allocator, &writer);
+        try writer.writeBits(allocator, 1, 1); // command 136: insert one, copy two
+        try writer.writeBits(allocator, 1, 1); // direct distance 1
+
+        try writer.writeBits(allocator, 1, 1); // ISLAST
+        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 1, 16); // MLEN - 1
+        try writeMinimalCompressedHeaderForShortDistance(allocator, &writer);
+        try writer.writeBits(allocator, 0, 1); // command 128: insert zero, copy two
+        try writer.writeBits(allocator, 0, 1); // short code 5: last distance + 1
+
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    /// Build two one-literal compressed blocks. The second block's context map
+    /// selects `b` only when the previous byte from the first block is `a`.
+    pub fn encodeCompressedLiteralContextAcrossMetaBlocks(allocator: std.mem.Allocator) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+
+        try writer.writeBits(allocator, 0, 1); // ISLAST = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 0, 16); // MLEN - 1
+        try writer.writeBits(allocator, 0, 1); // ISUNCOMPRESSED = false
+        try writeMinimalCompressedHeaderForSingleLiteral(allocator, &writer, 'a');
+
+        try writer.writeBits(allocator, 1, 1); // ISLAST
+        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 0, 16); // MLEN - 1
+        try writeMinimalCompressedHeaderForLiteralContextAfterStoredA(allocator, &writer);
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeStoredThenCompressedContext(allocator: std.mem.Allocator) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writeUncompressedMetaBlock(allocator, &writer, "a");
+
+        try writer.writeBits(allocator, 1, 1); // ISLAST
+        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 0, 16); // MLEN - 1
+        try writeMinimalCompressedHeaderForLiteralContextAfterStoredA(allocator, &writer);
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeMetadataThenCompressedHello(allocator: std.mem.Allocator, metadata: []const u8) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writeMetadataMetaBlock(allocator, &writer, metadata);
+        try writer.writeBits(allocator, 1, 1); // ISLAST
+        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 4, 16); // MLEN - 1
+        try writeMinimalCompressedHeaderForHello(allocator, &writer);
+        try writer.writeBits(allocator, 2, 2);
+        try writer.writeBits(allocator, 0, 2);
+        try writer.writeBits(allocator, 1, 2);
+        try writer.writeBits(allocator, 1, 2);
+        try writer.writeBits(allocator, 3, 2);
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeCompressedAlternatingThenStored(allocator: std.mem.Allocator, first: u8, second: u8, len: usize, stored: []const u8) Error![]u8 {
+        if (first == second or len < 5 or len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writer.writeBits(allocator, 0, 1); // non-final compressed block
+        const len_minus_one = len - 1;
+        const mnibbles: usize = if (len_minus_one <= 0xffff) 4 else if (len_minus_one <= 0xfffff) 5 else 6;
+        try writer.writeBits(allocator, @intCast(mnibbles - 4), 2);
+        try writer.writeBits(allocator, len_minus_one, @intCast(mnibbles * 4));
+        try writer.writeBits(allocator, 0, 1); // ISUNCOMPRESSED = false
+        const copy_len = len - 2;
+        const entry = commandEntryForLengths(2, copy_len) orelse return error.InvalidBlockPlan;
+        try writeMinimalCompressedHeaderForAlternatingPattern(allocator, &writer, first, second, entry.symbol);
+        if (entry.command.copy_extra_bits != 0)
+            try writer.writeBits(allocator, copy_len - entry.command.copy_base, entry.command.copy_extra_bits);
+        try writer.writeBits(allocator, 0, 1);
+        try writer.writeBits(allocator, 1, 1);
+        if (stored.len != 0) try writeUncompressedMetaBlock(allocator, &writer, stored);
+        try writer.writeBits(allocator, 1, 1); // final ISLAST
+        try writer.writeBits(allocator, 1, 1); // final ISLASTEMPTY
+        if (writer.bit_index != 0) writer.alignToByte();
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    /// Build a final compressed block whose sole command inserts every byte.
+    /// The four-symbol literal tree keeps this fixture compact while exercising
+    /// incremental Huffman decoding rather than the single-symbol RLE path.
+    pub fn encodeCompressedLiteralCycle(allocator: std.mem.Allocator, len: usize) Error![]u8 {
+        if (len == 0 or len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+        const command = commandEntryForLengths(len, 2) orelse return error.InvalidBlockPlan;
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writeLastCompressedMetaBlockHeader(allocator, &writer, len);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+        try writer.writeBits(allocator, 0, 4); // NDIRECT
+        try writer.writeBits(allocator, 0, 2); // LSB6 literal context
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeSimplePrefixRuntime(allocator, &writer, 256, "abcd", false);
+        try writeSimpleSingleSymbolPrefix(allocator, &writer, 704, command.symbol);
+        try writeSimpleSingleSymbolPrefix(allocator, &writer, 64, 0);
+        try writeCommandLengthExtras(allocator, &writer, command, len, 2);
+        const literal_codes = [_]u2{ 0, 2, 1, 3 };
+        var i: usize = 0;
+        while (i < len) : (i += 1) try writer.writeBits(allocator, literal_codes[i & 3], 2);
+        if (writer.bit_index != 0) writer.alignToByte();
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub const CompressedCopyFixture = enum {
+        implicit_last,
+        short,
+        regular,
+        literal_context,
+        distance_context,
+        command_switch,
+        command_switch_three,
+        literal_switch,
+        literal_switch_complex_length,
+        literal_switch_three,
+        distance_switch,
+        distance_switch_three,
+    };
+
+    /// Build the focused `aaaaa`/`ababa` fixtures used by the one-shot decoder
+    /// tests so incremental tests exercise the same short and regular distance
+    /// semantics without duplicating private wire writers.
+    pub fn encodeCompressedCopyFixture(allocator: std.mem.Allocator, kind: CompressedCopyFixture) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 0, 1);
+        try writer.writeBits(allocator, 0, 2);
+        const decoded_len: usize = switch (kind) {
+            .literal_context => 3,
+            .command_switch => 4,
+            .command_switch_three => 7,
+            .literal_switch, .literal_switch_complex_length => 2,
+            .literal_switch_three => 3,
+            .distance_switch => 7,
+            .distance_switch_three => 9,
+            else => 5,
+        };
+        try writer.writeBits(allocator, decoded_len - 1, 16);
+        switch (kind) {
+            .implicit_last => {
+                try writeMinimalCompressedHeaderForLastDistance(allocator, &writer);
+                try writer.writeBits(allocator, 1, 1); // explicit seed command 136
+                try writer.writeBits(allocator, 0, 1); // implicit rep0 command 0
+            },
+            .short => {
+                try writeMinimalCompressedHeaderForShortDistance(allocator, &writer);
+                try writer.writeBits(allocator, 1, 1); // command 136
+                try writer.writeBits(allocator, 1, 1); // distance tree selects direct 1
+                try writer.writeBits(allocator, 0, 1); // command 128
+                try writer.writeBits(allocator, 0, 1); // distance tree selects short code 5
+            },
+            .regular => {
+                try writeMinimalCompressedHeaderForRegularDistance(allocator, &writer);
+                try writer.writeBits(allocator, 0, 1); // a
+                try writer.writeBits(allocator, 1, 1); // b
+                try writer.writeBits(allocator, 0, 1); // regular-distance extra bit
+            },
+            .literal_context => try writeMinimalCompressedHeaderForLiteralContext(allocator, &writer),
+            .distance_context => {
+                try writeMinimalCompressedHeaderForDistanceContext(allocator, &writer);
+                try writer.writeBits(allocator, 0, 1); // a
+                try writer.writeBits(allocator, 1, 1); // b
+            },
+            // The command-switch fixture helper includes the two literal bits
+            // and the next-block length bits used by its one-shot oracle.
+            .command_switch => try writeMinimalCompressedHeaderForCommandSwitch(allocator, &writer),
+            .command_switch_three => {
+                try writeMinimalCompressedHeaderForCommandSwitchThreeTypes(allocator, &writer);
+                try writer.writeBits(allocator, 0, 1); // a
+                try writer.writeBits(allocator, 0, 2); // next command block count = 1
+                try writer.writeBits(allocator, 1, 2); // b
+                try writer.writeBits(allocator, 0, 2); // next command block count = 1
+                try writer.writeBits(allocator, 3, 2); // c
+            },
+            .literal_switch => try writeMinimalCompressedHeaderForLiteralBlockSwitch(allocator, &writer),
+            .literal_switch_complex_length => {
+                try writeMinimalCompressedHeaderForLiteralBlockSwitchComplexLength(allocator, &writer);
+                try writer.writeBits(allocator, 0, 1); // block length symbol 0
+                try writer.writeBits(allocator, 0, 2); // next literal block count = 1
+            },
+            .literal_switch_three => {
+                try writeMinimalCompressedHeaderForLiteralBlockSwitchThreeTypes(allocator, &writer);
+                try writer.writeBits(allocator, 0, 2);
+                try writer.writeBits(allocator, 0, 2);
+            },
+            .distance_switch => {
+                try writeMinimalCompressedHeaderForDistanceBlockSwitch(allocator, &writer);
+                try writer.writeBits(allocator, 1, 1); // command 152
+                try writer.writeBits(allocator, 0, 1); // a
+                try writer.writeBits(allocator, 1, 2); // b
+                try writer.writeBits(allocator, 3, 2); // c
+                try writer.writeBits(allocator, 0, 1); // command 128
+                try writer.writeBits(allocator, 0, 2); // next distance block count = 1
+            },
+            .distance_switch_three => {
+                try writeMinimalCompressedHeaderForDistanceBlockSwitchThreeTypes(allocator, &writer);
+                try writer.writeBits(allocator, 1, 1); // command 152
+                try writer.writeBits(allocator, 0, 1); // a
+                try writer.writeBits(allocator, 1, 2); // b
+                try writer.writeBits(allocator, 3, 2); // c
+                try writer.writeBits(allocator, 0, 1); // command 128
+                try writer.writeBits(allocator, 0, 2); // next distance block count = 1
+                try writer.writeBits(allocator, 0, 1); // command 128
+                try writer.writeBits(allocator, 0, 2); // next distance block count = 1
+            },
+        }
+        if (writer.bit_index != 0) writer.alignToByte();
+        return try encoded.toOwnedSlice(allocator);
+    }
+};
 
 pub const max_uncompressed_meta_block_len: usize = 1 << 24;
 
 pub const default_window_bits: u5 = 16;
+const planned_chunk_max_input_len: usize = 32 * 1024;
+
+// Above this size payload copying dominates the fixed bit-writer overhead, so
+// keep large streams on the shared implementation to avoid duplicating its
+// multi-block logic without a measured throughput benefit.
+const direct_stored_stream_max_input_len: usize = 16 * 1024;
 
 pub const StoredStreamOptions = struct {
     window_bits: u5 = default_window_bits,
@@ -74,6 +931,11 @@ pub const StreamSummary = struct {
     uses_static_dictionary: bool = false,
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    max_literal_block_types: usize = 0,
+    max_literal_context_trees: usize = 0,
+    max_command_block_types: usize = 0,
+    max_distance_block_types: usize = 0,
+    max_distance_context_trees: usize = 0,
     stored_only: bool = true,
 };
 
@@ -104,6 +966,11 @@ pub const StreamProbeResult = struct {
 const StreamSummaryMetaBlockStats = struct {
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    max_literal_block_types: usize = 0,
+    max_literal_context_trees: usize = 0,
+    max_command_block_types: usize = 0,
+    max_distance_block_types: usize = 0,
+    max_distance_context_trees: usize = 0,
 };
 
 const BitWriter = struct {
@@ -111,26 +978,67 @@ const BitWriter = struct {
     bit_index: u3 = 0,
     bounded: bool = false,
 
-    fn writeBits(self: *BitWriter, allocator: std.mem.Allocator, value: u64, count: u6) Error!void {
+    pub fn writeBits(self: *BitWriter, allocator: std.mem.Allocator, value: u64, count: u6) Error!void {
         if (count > 64) return error.CorruptFrame;
-        var remaining = count;
+        if (count == 0) return;
+        var remaining: usize = count;
         var cursor = value;
-        while (remaining > 0) : (remaining -= 1) {
-            if (self.bit_index == 0) {
-                if (self.bounded) {
-                    try self.out.appendBounded(0);
-                } else {
-                    try self.out.append(allocator, 0);
-                }
+        while (remaining != 0) {
+            if (self.bit_index == 0) try self.appendZeroByte(allocator);
+            const available: usize = 8 - @as(usize, self.bit_index);
+            const take = @min(remaining, available);
+            const mask = (@as(u64, 1) << @intCast(take)) - 1;
+            self.out.items[self.out.items.len - 1] |= @as(u8, @intCast(cursor & mask)) << self.bit_index;
+            cursor >>= @intCast(take);
+            remaining -= take;
+            const next = @as(usize, self.bit_index) + take;
+            self.bit_index = @intCast(next & 7);
+        }
+    }
+
+    /// Writes a validated, non-empty Brotli Huffman code. Huffman code widths
+    /// are capped at 15 bits, so the code can touch at most three bytes. The
+    /// payload encoder has already validated the tree and code width; spelling
+    /// out those writes avoids the general bit writer's per-byte loop in its
+    /// hottest call sites while preserving the same growth and bounded-output
+    /// behavior through `appendZeroByte`.
+    pub inline fn writeHuffmanBits(self: *BitWriter, allocator: std.mem.Allocator, value: u16, count: u4) Error!void {
+        std.debug.assert(count != 0);
+        std.debug.assert(value < (@as(u16, 1) << count));
+
+        if (self.bit_index == 0) try self.appendZeroByte(allocator);
+        const shifted = @as(u32, value) << self.bit_index;
+        self.out.items[self.out.items.len - 1] |= @truncate(shifted);
+
+        const total_bits = @as(u5, self.bit_index) + @as(u5, count);
+        if (total_bits > 8) {
+            try self.appendZeroByte(allocator);
+            self.out.items[self.out.items.len - 1] = @truncate(shifted >> 8);
+            if (total_bits > 16) {
+                try self.appendZeroByte(allocator);
+                self.out.items[self.out.items.len - 1] = @truncate(shifted >> 16);
             }
-            if ((cursor & 1) != 0) self.out.items[self.out.items.len - 1] |= @as(u8, 1) << self.bit_index;
-            cursor >>= 1;
-            self.bit_index +%= 1;
+        }
+        self.bit_index = @truncate(total_bits & 7);
+    }
+
+    inline fn appendZeroByte(self: *BitWriter, allocator: std.mem.Allocator) Error!void {
+        if (self.out.items.len < self.out.capacity) {
+            self.out.appendAssumeCapacity(0);
+        } else if (self.bounded) {
+            return error.OutOfMemory;
+        } else {
+            try self.out.append(allocator, 0);
         }
     }
 
     fn alignToByte(self: *BitWriter) void {
         self.bit_index = 0;
+    }
+
+    fn bitPosition(self: *const BitWriter) usize {
+        if (self.bit_index == 0) return self.out.items.len * 8;
+        return (self.out.items.len - 1) * 8 + self.bit_index;
     }
 
     fn writeAlignedBytes(self: *BitWriter, allocator: std.mem.Allocator, bytes: []const u8) Error!void {
@@ -143,6 +1051,59 @@ const BitWriter = struct {
     }
 };
 
+test "Brotli bit writer uses reserved and bounded capacity" {
+    var storage: [2]u8 = undefined;
+    var out: std.ArrayList(u8) = .{
+        .items = storage[0..0],
+        .capacity = storage.len,
+    };
+    var writer = BitWriter{ .out = &out, .bounded = true };
+    try writer.writeBits(std.testing.allocator, 0xabcd, 16);
+    try std.testing.expectEqualSlices(u8, &.{ 0xcd, 0xab }, out.items);
+    try std.testing.expectError(error.OutOfMemory, writer.writeBits(std.testing.allocator, 1, 1));
+}
+
+test "Brotli narrow Huffman bit writer matches the general writer" {
+    const values = [_]u16{ 0, 1, 0x5555, 0x7fff };
+    for (0..8) |initial_bits| {
+        for (1..huffman.max_code_bits + 1) |count| {
+            const mask = (@as(u16, 1) << @intCast(count)) - 1;
+            for (values) |unmasked| {
+                const value = unmasked & mask;
+                var general: std.ArrayList(u8) = .empty;
+                defer general.deinit(std.testing.allocator);
+                var narrow: std.ArrayList(u8) = .empty;
+                defer narrow.deinit(std.testing.allocator);
+
+                if (initial_bits != 0) {
+                    const initial_byte = @as(u8, 0xa5) & ((@as(u8, 1) << @intCast(initial_bits)) - 1);
+                    try general.append(std.testing.allocator, initial_byte);
+                    try narrow.append(std.testing.allocator, initial_byte);
+                }
+                var general_writer = BitWriter{ .out = &general, .bit_index = @intCast(initial_bits) };
+                var narrow_writer = BitWriter{ .out = &narrow, .bit_index = @intCast(initial_bits) };
+                try general_writer.writeBits(std.testing.allocator, value, @intCast(count));
+                try narrow_writer.writeHuffmanBits(std.testing.allocator, value, @intCast(count));
+
+                try std.testing.expectEqual(general_writer.bit_index, narrow_writer.bit_index);
+                try std.testing.expectEqualSlices(u8, general.items, narrow.items);
+            }
+        }
+    }
+}
+
+test "Brotli narrow Huffman bit writer preserves bounded overflow" {
+    var storage = [_]u8{0} ** 2;
+    var out: std.ArrayList(u8) = .{
+        .items = storage[0..1],
+        .capacity = storage.len,
+    };
+    out.items[0] = 0x7f;
+    var writer = BitWriter{ .out = &out, .bit_index = 7, .bounded = true };
+
+    try std.testing.expectError(error.OutOfMemory, writer.writeHuffmanBits(std.testing.allocator, 0x7fff, 15));
+}
+
 pub fn PrefixCode(comptime alphabet_size: usize) type {
     return struct {
         single_symbol: ?u16 = null,
@@ -150,9 +1111,23 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
 
         const Self = @This();
 
-        pub fn decode(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+        pub fn decode(self: *const Self, reader: anytype) Error!u16 {
             if (self.single_symbol) |symbol| return symbol;
             return try self.table.decodeValue(reader);
+        }
+
+        pub fn prepareTailLookup(self: *Self) bool {
+            if (self.single_symbol != null) return true;
+            return self.table.buildTailLookup8();
+        }
+
+        pub fn canPrepareTailLookup(self: *const Self) bool {
+            return self.single_symbol != null or self.table.canBuildTailLookup8();
+        }
+
+        pub fn decodeTailLookup(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+            if (self.single_symbol) |symbol| return symbol;
+            return self.table.decodeValueTailLookup8(reader);
         }
     };
 }
@@ -160,6 +1135,8 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
 const MinimalCompressedHeader = struct {
     npostfix: u2,
     ndirect: u16,
+    literal_tree_count: u16 = 1,
+    distance_tree_count: u16 = 1,
     literal_context_modes: [max_literal_block_types]u2,
     literal_block: BlockSwitchState(max_literal_block_types),
     literal_context_map: [max_literal_block_types * 64]u8,
@@ -171,14 +1148,30 @@ const MinimalCompressedHeader = struct {
     distance_trees: [max_distance_context_trees]PrefixCode(max_distance_alphabet_size),
 };
 
+pub const CompressedHeaderProfile = header_profile.Profile;
+pub const CompressedHeaderFamily = header_profile.Family;
+
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
+// Planned streams fix NPOSTFIX=0 and NDIRECT=15, so their distance alphabet is
+// exactly 79 symbols even though the decoder accepts the RFC-wide 520-symbol
+// maximum. Keep encoder scratch proportional to what its header advertises.
+const planned_distance_alphabet_size = 16 + 15 + 48;
 const max_context_map_alphabet_size = 256 + 16;
 const max_literal_block_types = 32;
-const max_literal_context_trees = 32;
+// Large upstream source streams can use more than 128 literal trees. Retain
+// the complete one-byte wire range; direct-to-header parsing initializes only
+// declared slots, so ordinary streams do not pay per-tree setup cost.
+const max_literal_context_trees = 256;
 const max_command_block_types = 32;
-const max_distance_block_types = 32;
-const max_distance_context_trees = 32;
+// RFC 7932 encodes block-type and context-tree counts with a bounded 8-bit
+// varlen code. Real mixed-source libbrotli streams can exceed the former
+// 64-entry implementation tier (68 distance types in the retained corpus), so
+// keep the complete wire range rather than rejecting otherwise valid input.
+const max_distance_block_types = 256;
+const max_distance_context_trees = 256;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
+const planner_max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
+const SummaryError = Error || error{SummaryHistoryExhausted};
 
 pub const CompressedSupportLimits = struct {
     max_literal_block_types: usize,
@@ -188,6 +1181,10 @@ pub const CompressedSupportLimits = struct {
     max_distance_context_trees: usize,
     max_distance_alphabet_size: usize,
 };
+
+fn maxBackwardDistanceForWindow(window_bits: u5, output_len: usize) usize {
+    return @min(output_len, (@as(usize, 1) << window_bits) - 16);
+}
 
 pub fn compressedSupportLimits() CompressedSupportLimits {
     return .{
@@ -218,21 +1215,32 @@ const InsertCopyLengths = struct {
 };
 
 const LiteralHistory = struct {
+    external: ?[]u8 = null,
     previous: [2]u8 = .{ 0, 0 },
     // Summary/size preflight does not materialize decoded output, so it keeps
     // enough recent bytes to replay copies that feed following literal-context
     // decisions. The actual decoder can look back through the full output
     // buffer; this bounded preflight history intentionally grows in audited
     // compatibility slices as we add coverage for farther Brotli distances.
-    tail: [1024]u8 = @splat(0),
+    // The production ratio planner can search the full advertised 16-bit
+    // Brotli window. Retaining that exact maximum lets decoded-size preflight
+    // preserve literal contexts even after its farthest legal match.
+    // `tail_len` gates every read, so clearing this relatively large buffer on
+    // each summary would only initialize bytes that cannot yet be observed.
+    tail: [planner_max_backward_distance]u8 = undefined,
     tail_len: usize = 0,
     tail_start: usize = 0,
-    known: bool = true,
+    // The implicit bytes before stream start are zero, so both context bytes
+    // begin known. A copy beyond this bounded summary history invalidates them;
+    // two subsequently decoded literals are required to restore both values.
+    known_suffix_len: u2 = 2,
 
-    fn context(self: *const LiteralHistory, header: *const MinimalCompressedHeader) Error!usize {
-        if (!self.known) return contextIndependentLiteralContext(header) orelse error.UnsupportedBrotliFeature;
+    fn context(self: *const LiteralHistory, header: *const MinimalCompressedHeader) SummaryError!usize {
+        const mode = header.literal_context_modes[header.literal_block.current_type];
+        const needed: u2 = if (mode <= 1) 1 else 2;
+        if (self.known_suffix_len < needed) return contextIndependentLiteralContext(header) orelse error.SummaryHistoryExhausted;
         return try literalContextFromMode(
-            header.literal_context_modes[header.literal_block.current_type],
+            mode,
             self.previous[1],
             self.previous[0],
         );
@@ -241,36 +1249,109 @@ const LiteralHistory = struct {
     fn push(self: *LiteralHistory, value: u8) void {
         self.previous[0] = self.previous[1];
         self.previous[1] = value;
-        if (self.tail_len < self.tail.len) {
-            self.tail[(self.tail_start + self.tail_len) % self.tail.len] = value;
+        const bytes = self.storage();
+        if (bytes.len == 0) {
+            self.known_suffix_len = @min(2, self.known_suffix_len + 1);
+            return;
+        }
+        if (self.tail_len < bytes.len) {
+            bytes[(self.tail_start + self.tail_len) % bytes.len] = value;
             self.tail_len += 1;
         } else {
-            self.tail[self.tail_start] = value;
-            self.tail_start = (self.tail_start + 1) % self.tail.len;
+            bytes[self.tail_start] = value;
+            self.tail_start = (self.tail_start + 1) % bytes.len;
         }
-        self.known = true;
+        self.known_suffix_len = @min(2, self.known_suffix_len + 1);
     }
 
-    fn pushSlice(self: *LiteralHistory, bytes: []const u8) void {
-        const keep = @min(bytes.len, self.tail.len);
-        for (bytes[bytes.len - keep ..]) |value| self.push(value);
+    fn pushSlice(self: *LiteralHistory, values: []const u8) void {
+        if (values.len == 0) return;
+
+        if (values.len == 1) {
+            self.previous[0] = self.previous[1];
+            self.previous[1] = values[0];
+            self.known_suffix_len = @min(2, self.known_suffix_len + 1);
+        } else {
+            self.previous = .{ values[values.len - 2], values[values.len - 1] };
+            self.known_suffix_len = 2;
+        }
+
+        const ring = self.storage();
+        if (ring.len == 0) return;
+        if (values.len >= ring.len) {
+            // The newest complete window is already contiguous in `values`;
+            // replacing the ring avoids one modulo operation per stored byte.
+            @memcpy(ring, values[values.len - ring.len ..]);
+            self.tail_len = ring.len;
+            self.tail_start = 0;
+            return;
+        }
+
+        if (self.tail_len < ring.len) {
+            // A partially filled ring has never wrapped (markUnknown resets it),
+            // so append the first span directly and wrap only any overflow.
+            std.debug.assert(self.tail_start == 0);
+            const append_len = @min(values.len, ring.len - self.tail_len);
+            @memcpy(ring[self.tail_len..][0..append_len], values[0..append_len]);
+            self.tail_len += append_len;
+            if (append_len == values.len) return;
+
+            const wrapped = values[append_len..];
+            @memcpy(ring[0..wrapped.len], wrapped);
+            self.tail_start = wrapped.len;
+            return;
+        }
+
+        const first_len = @min(values.len, ring.len - self.tail_start);
+        @memcpy(ring[self.tail_start..][0..first_len], values[0..first_len]);
+        @memcpy(ring[0 .. values.len - first_len], values[first_len..]);
+        self.tail_start = (self.tail_start + values.len) % ring.len;
     }
 
     fn copy(self: *LiteralHistory, distance: usize, len: usize) void {
-        if (!self.known or len == 0) return;
+        if (len == 0) return;
         if (distance == 0 or distance > self.tail_len) {
-            self.known = false;
+            self.markUnknown();
             return;
         }
-        var i: usize = 0;
-        while (i < len) : (i += 1) {
-            const source_index = (self.tail_start + self.tail_len - distance) % self.tail.len;
-            self.push(self.tail[source_index]);
+
+        // Copy through a small temporary so the ring needs only one modulo and
+        // at most two source spans per batch. Limiting the initial seed to the
+        // distance preserves Brotli's forward-overlap semantics; doubling that
+        // seed in scratch then expands short periodic matches in logarithmically
+        // many contiguous copies rather than one ring operation per output byte.
+        var scratch: [256]u8 = undefined;
+        var remaining = len;
+        while (remaining != 0) {
+            const batch_len = @min(remaining, scratch.len);
+            const seed_len = @min(distance, batch_len);
+            const ring = self.storage();
+            const source_index = (self.tail_start + self.tail_len - distance) % ring.len;
+            const first_len = @min(seed_len, ring.len - source_index);
+            @memcpy(scratch[0..first_len], ring[source_index..][0..first_len]);
+            @memcpy(scratch[first_len..seed_len], ring[0 .. seed_len - first_len]);
+
+            if (seed_len == 1) {
+                @memset(scratch[1..batch_len], scratch[0]);
+            } else {
+                var initialized = seed_len;
+                while (initialized < batch_len) {
+                    const take = @min(initialized, batch_len - initialized);
+                    @memcpy(scratch[initialized..][0..take], scratch[0..take]);
+                    initialized += take;
+                }
+            }
+            self.pushSlice(scratch[0..batch_len]);
+            remaining -= batch_len;
         }
     }
 
+    fn storage(self: *LiteralHistory) []u8 {
+        return self.external orelse self.tail[0..];
+    }
+
     fn markUnknown(self: *LiteralHistory) void {
-        self.known = false;
+        self.known_suffix_len = 0;
         self.tail_len = 0;
         self.tail_start = 0;
     }
@@ -287,15 +1368,98 @@ fn contextIndependentLiteralContext(header: *const MinimalCompressedHeader) ?usi
     return 0;
 }
 
+test "br summary context needs two literals after unknown history" {
+    var history = LiteralHistory{};
+    history.markUnknown();
+    try std.testing.expectEqual(@as(u2, 0), history.known_suffix_len);
+    history.push('a');
+    try std.testing.expectEqual(@as(u2, 1), history.known_suffix_len);
+    history.push('b');
+    try std.testing.expectEqual(@as(u2, 2), history.known_suffix_len);
+
+    history.markUnknown();
+    history.push('x');
+    history.copy(1, 2);
+    try std.testing.expectEqual(@as(u2, 2), history.known_suffix_len);
+    try std.testing.expectEqual([2]u8{ 'x', 'x' }, history.previous);
+}
+
+test "br summary history appends slices across ring boundaries" {
+    var storage: [5]u8 = undefined;
+    var history = LiteralHistory{ .external = &storage };
+
+    history.pushSlice("abc");
+    try std.testing.expectEqual(@as(usize, 3), history.tail_len);
+    try std.testing.expectEqual(@as(usize, 0), history.tail_start);
+    try std.testing.expectEqualSlices(u8, "abc", storage[0..3]);
+    try std.testing.expectEqual([2]u8{ 'b', 'c' }, history.previous);
+
+    history.pushSlice("defg");
+    try std.testing.expectEqual(@as(usize, 5), history.tail_len);
+    try std.testing.expectEqual(@as(usize, 2), history.tail_start);
+    try std.testing.expectEqualSlices(u8, "fgcde", &storage);
+    history.copy(5, 5);
+    try std.testing.expectEqual(@as(usize, 0), history.tail_start);
+    try std.testing.expectEqualSlices(u8, "cdefg", &storage);
+    try std.testing.expectEqual([2]u8{ 'f', 'g' }, history.previous);
+
+    history.pushSlice("123456");
+    try std.testing.expectEqual(@as(usize, 0), history.tail_start);
+    try std.testing.expectEqualSlices(u8, "23456", &storage);
+    try std.testing.expectEqual([2]u8{ '5', '6' }, history.previous);
+}
+
+test "br summary history copy matches forward overlap oracle" {
+    var storage: [31]u8 = undefined;
+    var history = LiteralHistory{ .external = &storage };
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+
+    var state: u32 = 0x75a3_b19d;
+    for (0..500) |_| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        if (expected.items.len == 0 or state & 3 == 0) {
+            var literals: [19]u8 = undefined;
+            const literal_len = 1 + (state % literals.len);
+            for (literals[0..literal_len]) |*value| {
+                state = state *% 1_664_525 +% 1_013_904_223;
+                value.* = @truncate(state >> 16);
+            }
+            history.pushSlice(literals[0..literal_len]);
+            try expected.appendSlice(std.testing.allocator, literals[0..literal_len]);
+        } else {
+            const available = @min(expected.items.len, storage.len);
+            const distance = 1 + (state % available);
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const copy_len = 1 + (state % 700);
+            for (0..copy_len) |_| {
+                try expected.append(std.testing.allocator, expected.items[expected.items.len - distance]);
+            }
+            history.copy(distance, copy_len);
+        }
+
+        const retained = @min(expected.items.len, storage.len);
+        for (0..retained) |i| {
+            const actual = storage[(history.tail_start + i) % storage.len];
+            try std.testing.expectEqual(expected.items[expected.items.len - retained + i], actual);
+        }
+        try std.testing.expectEqual(retained, history.tail_len);
+        try std.testing.expectEqual(expected.items[expected.items.len - 1], history.previous[1]);
+        if (expected.items.len >= 2)
+            try std.testing.expectEqual(expected.items[expected.items.len - 2], history.previous[0]);
+    }
+}
+
 pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return try encodeStoredStreamWithOptionsAlloc(allocator, input, .{});
 }
 
 pub fn encodeStoredStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: StoredStreamOptions) Error![]u8 {
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
-    try encodeStoredStreamWithOptionsAppend(allocator, &out, input, options);
-    return out.toOwnedSlice(allocator);
+    const output = try allocator.alloc(u8, try encodedStoredStreamBoundWithOptions(input.len, options));
+    errdefer allocator.free(output);
+    const written = try encodeStoredStreamWithOptionsInto(input, output, options);
+    if (written != output.len) return error.SizeMismatch;
+    return output;
 }
 
 pub fn encodeStoredStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) Error![]u8 {
@@ -303,10 +1467,11 @@ pub fn encodeStoredStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []con
 }
 
 pub fn encodeStoredStreamChunksWithOptionsAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: StoredStreamOptions) Error![]u8 {
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
-    try encodeStoredStreamChunksWithOptionsAppend(allocator, &out, chunks, options);
-    return out.toOwnedSlice(allocator);
+    const output = try allocator.alloc(u8, try encodedStoredStreamChunksBoundWithOptions(chunks, options));
+    errdefer allocator.free(output);
+    const written = try encodeStoredStreamChunksWithOptionsInto(chunks, output, options);
+    if (written != output.len) return error.SizeMismatch;
+    return output;
 }
 
 pub fn encodeStoredStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
@@ -327,6 +1492,1294 @@ pub fn encodeStoredStreamChunksWithOptionsAppend(allocator: std.mem.Allocator, o
     try encodeStoredStreamChunksWithOptionsWrite(allocator, &writer, chunks, options);
 }
 
+/// Encode a single-byte run as one compressed Brotli meta-block. This is a
+/// deliberately narrow first production compressed-encoder slice; non-runs or
+/// lengths below five are rejected rather than silently falling back to stored.
+pub fn encodeRleStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try encodeRleStreamAppend(allocator, &out, input);
+    return out.toOwnedSlice(allocator);
+}
+
+/// Encode the already externally-validated `ababa` compressed-distance shape.
+/// This intentionally exposes only the proven five-byte slice while the
+/// general command/literal encoder is still under construction.
+pub fn encodeAbabaStreamAlloc(allocator: std.mem.Allocator) Error![]u8 {
+    return encodeAbabaPatternStreamAlloc(allocator, 'a', 'b');
+}
+
+pub fn encodeAbabaPatternStreamAlloc(allocator: std.mem.Allocator, first: u8, second: u8) Error![]u8 {
+    return encodeAlternatingStreamAlloc(allocator, first, second, 5);
+}
+
+pub fn encodeAlternatingStreamAlloc(allocator: std.mem.Allocator, first: u8, second: u8, len: usize) Error![]u8 {
+    if (first == second or len < 5 or len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var writer = BitWriter{ .out = &out };
+    try writeWindowBits(allocator, &writer, default_window_bits);
+    try writeLastCompressedMetaBlockHeader(allocator, &writer, len);
+    const copy_len = len - 2;
+    const entry = commandEntryForLengths(2, copy_len) orelse return error.InvalidBlockPlan;
+    try writeMinimalCompressedHeaderForAlternatingPattern(allocator, &writer, first, second, entry.symbol);
+    if (entry.command.copy_extra_bits != 0)
+        try writer.writeBits(allocator, copy_len - entry.command.copy_base, entry.command.copy_extra_bits);
+    // Two-symbol simple trees assign code 0/1 by listed symbol order.
+    try writer.writeBits(allocator, 0, 1);
+    try writer.writeBits(allocator, 1, 1);
+    if (writer.bit_index != 0) writer.alignToByte();
+    return out.toOwnedSlice(allocator);
+}
+
+/// Encode a byte prefix followed by copies of that prefix. This is the first
+/// production multi-command Brotli slice: it emits one seed command and one
+/// copy command per repetition instead of relying on a
+/// single copy whose overlap happens to generate the rest of the payload.
+pub fn encodeRepeatedPrefixStreamAlloc(allocator: std.mem.Allocator, prefix: []const u8, repeat_count: usize) Error![]u8 {
+    if (prefix.len < 2 or prefix.len > 4 or repeat_count < 2) return error.InvalidBlockPlan;
+    const len = std.math.mul(usize, prefix.len, repeat_count) catch return error.IntegerOverflow;
+    if (len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    for (prefix, 0..) |byte, i|
+        for (prefix[0..i]) |previous|
+            if (byte == previous) return error.InvalidBlockPlan;
+
+    const seed = commandEntryForLengths(prefix.len, prefix.len) orelse return error.InvalidBlockPlan;
+    const copy = commandEntryForLengths(0, prefix.len) orelse return error.InvalidBlockPlan;
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var writer = BitWriter{ .out = &out };
+    try writeWindowBits(allocator, &writer, default_window_bits);
+    try writeLastCompressedMetaBlockHeader(allocator, &writer, len);
+    try writeRepeatedPrefixCompressedHeader(allocator, &writer, prefix, seed.symbol, copy.symbol);
+    try writer.writeBits(allocator, 1, 1); // seed command code
+    try writeCommandLengthExtras(allocator, &writer, seed, prefix.len, prefix.len);
+    var literal_lengths: [256]u4 = @splat(0);
+    for (prefix, 0..) |byte, i| literal_lengths[byte] = if (prefix.len == 3 and i == 0) 1 else @intCast(std.math.log2_int_ceil(usize, prefix.len));
+    const literal_encoder = try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
+    for (prefix) |byte| try writer.writeBits(allocator, literal_encoder.codes[byte], literal_encoder.bits[byte]);
+    for (1..repeat_count - 1) |_| {
+        try writer.writeBits(allocator, 0, 1); // copy-only command code
+        try writeCommandLengthExtras(allocator, &writer, copy, 0, prefix.len);
+    }
+    if (writer.bit_index != 0) writer.alignToByte();
+    return out.toOwnedSlice(allocator);
+}
+
+/// Build a general single-meta-block Brotli command stream from the shared LZ77
+/// matcher. Prefix alphabets use simple or complex trees automatically; inputs
+/// outside the current one-block/32 KiB matcher contract return a precise error
+/// so the convenience encoder can retain its stored fallback.
+pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    return encodePlannedStreamAllocWithStats(allocator, input, &stats);
+}
+
+pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
+    return switch (options.level) {
+        .fast => encodePlannedStreamOrStoredAlloc(allocator, input, .fast),
+        .balanced => encodePlannedStreamOrStoredAlloc(allocator, input, .balanced),
+        .ratio => encodePlannedStreamRatioAlloc(allocator, input),
+    };
+}
+
+/// Conservative bound for every stable planned level. Stable selection always
+/// falls back to the stored representation before returning a larger stream.
+pub fn encodedPlannedStreamBound(input_len: usize) Error!usize {
+    return encodedPlannedStreamBoundWithOptions(input_len, .{});
+}
+
+pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEncodeOptions) Error!usize {
+    _ = options;
+    return encodedStoredStreamBound(input_len);
+}
+
+/// Conservative bound for a fast planned stream with one independently
+/// planned meta-block per non-empty chunk. Oversized chunks are split into
+/// 32 KiB blocks so parser memory remains bounded.
+pub fn encodedPlannedStreamChunksBound(chunks: []const []const u8) Error!usize {
+    var bit_count: usize = 1; // Default WBITS=16 prefix.
+    for (chunks) |chunk| {
+        var offset: usize = 0;
+        while (offset < chunk.len) {
+            const block_len = @min(chunk.len - offset, planned_chunk_max_input_len);
+            bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, block_len);
+            offset += block_len;
+        }
+    }
+    bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow;
+    return bytesForBits(bit_count);
+}
+
+pub fn encodePlannedStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) Error![]u8 {
+    var encoder = PlannedStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeChunksAlloc(allocator, chunks);
+}
+
+pub fn encodePlannedStreamChunksInto(chunks: []const []const u8, output: []u8) Error!usize {
+    const needed = try encodedPlannedStreamChunksBound(chunks);
+    if (output.len < needed) return error.OutOfMemory;
+    var encoder = PlannedStreamEncoder.init(std.heap.smp_allocator);
+    defer encoder.deinit();
+    return encoder.encodeChunksInto(chunks, output);
+}
+
+pub fn encodePlannedStreamChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) Error!void {
+    var encoder = PlannedStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    try encoder.encodeChunksAppend(out, chunks);
+}
+
+pub fn encodePlannedStreamInto(input: []const u8, output: []u8) Error!usize {
+    return encodePlannedStreamWithOptionsInto(input, output, .{});
+}
+
+pub fn encodePlannedStreamWithOptionsInto(input: []const u8, output: []u8, options: PlannedEncodeOptions) Error!usize {
+    var encoder = PlannedStreamEncoder.init(std.heap.smp_allocator);
+    defer encoder.deinit();
+    return encoder.encodeIntoWithOptions(input, output, options);
+}
+
+fn encodePlannedStreamOrStoredAlloc(allocator: std.mem.Allocator, input: []const u8, level: PlannedCompressionLevel) Error![]u8 {
+    const compressed = switch (level) {
+        .fast => encodePlannedStreamAlloc(allocator, input),
+        .balanced => encodePlannedStreamLazyAlloc(allocator, input),
+        .ratio => unreachable,
+    };
+    const encoded = compressed catch |err| switch (err) {
+        error.InvalidBlockPlan => return encodeStoredStreamAlloc(allocator, input),
+        else => return err,
+    };
+    return chooseStoredIfSmaller(allocator, input, encoded);
+}
+
+/// Ratio-oriented planner variant using the shared lazy LZ77 parser. The wire
+/// format and Huffman construction are identical to the fast planner; only the
+/// token choice differs.
+pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return encodePlannedStreamLazyWithOptionsAlloc(allocator, input, .{});
+}
+
+/// Ratio-oriented level for callers willing to trade additional match-chain
+/// search for smaller Brotli streams. Keeping this distinct from `.balanced`
+/// makes the substantial encode-time cost explicit rather than silently
+/// slowing latency-sensitive users. Short inputs without a backward match use
+/// static-dictionary/stored arbitration so this stable level still accepts
+/// arbitrary payloads inside its documented one-meta-block size range.
+pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    if (input.len > max_uncompressed_meta_block_len) {
+        // A Brotli meta-block can describe at most 2^24 output bytes. Keep the
+        // stable ratio API total over larger slices by emitting one bounded
+        // stream of independently planned blocks rather than failing or
+        // returning concatenated Brotli streams (which the format forbids).
+        const chunks = [_][]const u8{input};
+        return encodePlannedStreamChunksAlloc(allocator, &chunks);
+    }
+    if (input.len < 5) return encodeStoredStreamAlloc(allocator, input);
+    const parser_options = PlannedParserOptions{
+        .window_len = (@as(usize, 1) << default_window_bits) - 16,
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+    };
+    const lz_plan = try lz77.lazyGreedyPlanAlloc(allocator, input, .{
+        .window_len = @min(input.len, parser_options.window_len),
+        .max_chain = parser_options.max_chain,
+        .nice_len = parser_options.nice_len,
+        .max_candidates = 1,
+        .lazy_min_gain = parser_options.lazy_min_gain,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    });
+    defer lz_plan.deinit(allocator);
+    if (lz_plan.stats.matches == 0) {
+        if (input.len <= ratio_static_dictionary_max_input_len) {
+            return encodeRatioStaticDictionaryOrStoredAlloc(allocator, input);
+        }
+        return encodeStoredStreamAlloc(allocator, input);
+    }
+    const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
+    defer plan.deinit(allocator);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    var baseline = try encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, .{ .try_recent_distances = true });
+    errdefer allocator.free(baseline);
+
+    // The shared optimal parser uses a bounded fixed-bit proxy rather than
+    // Brotli's final Huffman cost. Run it only for moderate ratio-mode blocks,
+    // then retain it solely when exact wire encoding beats the lazy baseline.
+    // This makes the new search monotonic in output size and keeps large-input
+    // memory/latency on the existing path.
+    if (input.len >= 4 * 1024 and input.len <= 64 * 1024)
+        try selectOptimalRatioCandidates(allocator, input, parser_options, &stats, &baseline);
+    if (input.len <= ratio_static_dictionary_max_input_len) return selectRatioStaticDictionaryAlloc(allocator, input, plan.commands, baseline);
+    if (input.len <= long_distance.min_distance) return chooseStoredIfSmaller(allocator, input, baseline);
+
+    const commands = try long_distance.augmentAlloc(allocator, input, plan.commands) orelse return chooseStoredIfSmaller(allocator, input, baseline);
+    defer allocator.free(commands);
+    const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &stats, .{
+        .use_recent_distances = true,
+        .use_utf8_text_contexts = true,
+        .window_bits = 17,
+    });
+    if (candidate.len < baseline.len) {
+        allocator.free(baseline);
+        return chooseStoredIfSmaller(allocator, input, candidate);
+    }
+    allocator.free(candidate);
+    return chooseStoredIfSmaller(allocator, input, baseline);
+}
+
+fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8, parser_options: PlannedParserOptions, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
+    // Four-byte matching avoids expensive one-off command/distance symbols on
+    // the retained source corpus. The fixed-bit DP is only a proposal stage:
+    // exact Brotli wire size decides whether the candidate survives.
+    const optimal_plan = try lz77.optimalPlanAlloc(allocator, input, .{
+        // `optimalPlanAlloc` currently has a precomputed 32 KiB distance-cost
+        // table. The existing lazy and long-distance paths cover farther hits.
+        .window_len = @min(input.len, lz77.default_window_len),
+        .max_chain = @min(parser_options.max_chain, 256),
+        .nice_len = parser_options.nice_len,
+        .max_candidates = 128,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    });
+    defer optimal_plan.deinit(allocator);
+    if (optimal_plan.stats.matches == 0) return;
+    const optimal_commands = try command_plan.buildAlloc(allocator, input, optimal_plan.tokens);
+    defer optimal_commands.deinit(allocator);
+    const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, optimal_commands.commands, null, stats, .{
+        .use_recent_distances = true,
+        .use_utf8_text_contexts = true,
+        .utf8_context_cutoff = 48,
+        .ndirect = 0,
+    });
+    if (candidate.len < baseline.*.len) {
+        allocator.free(baseline.*);
+        baseline.* = candidate;
+    } else allocator.free(candidate);
+}
+
+fn chooseStoredIfSmaller(allocator: std.mem.Allocator, input: []const u8, compressed: []u8) Error![]u8 {
+    errdefer allocator.free(compressed);
+    const stored_len = try encodedStoredStreamBound(input.len);
+    if (compressed.len <= stored_len) return compressed;
+    const stored = try encodeStoredStreamAlloc(allocator, input);
+    allocator.free(compressed);
+    return stored;
+}
+
+// The indexed static-dictionary planner is still substantially more expensive
+// than LZ77, so ratio mode only evaluates it for short payloads where RFC 7932
+// words can dominate the complete stream. Exact final-byte arbitration keeps
+// ordinary short JSON/source data from regressing in size.
+const ratio_static_dictionary_max_input_len: usize = 256;
+const ratio_static_dictionary_candidate_capacity: usize = encodedStoredStreamBound(ratio_static_dictionary_max_input_len) catch unreachable;
+
+fn encodeRatioStaticDictionaryOrStoredAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    const plan = try command_plan.buildStaticDictionaryAlloc(allocator, input);
+    defer plan.deinit(allocator);
+    if (plan.match_count == 0) return encodeStoredStreamAlloc(allocator, input);
+
+    const stored_len = try encodedStoredStreamBound(input.len);
+    var candidate_storage: [ratio_static_dictionary_candidate_capacity]u8 = undefined;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..stored_len], input, plan.commands, &stats, .{}) catch |err| switch (err) {
+        error.OutOfMemory => return encodeStoredStreamAlloc(allocator, input),
+        else => return err,
+    };
+    if (candidate_len >= stored_len) return encodeStoredStreamAlloc(allocator, input);
+    return allocator.dupe(u8, candidate_storage[0..candidate_len]);
+}
+
+fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, lz_commands: []const command_plan.Command, baseline: []u8) Error![]u8 {
+    errdefer allocator.free(baseline);
+    var best = baseline;
+    var cached_matches: [ratio_static_dictionary_max_input_len]static_dictionary.Match = undefined;
+    var cache_known: [ratio_static_dictionary_max_input_len]bool = undefined;
+    var match_cache = command_plan.StaticDictionaryMatchCache.init(cached_matches[0..input.len], cache_known[0..input.len]);
+    var candidate_storage: [ratio_static_dictionary_candidate_capacity]u8 = undefined;
+    // Anything reaching the stored ceiling cannot beat final arbitration, so
+    // the exact stored bound is also a complete candidate-search budget.
+    const candidate_limit = @min(best.len, try encodedStoredStreamBound(input.len));
+    // The mixed planner is useful only when a backward copy survives alongside
+    // dictionary copies. Otherwise its command stream is equivalent in shape
+    // to the dictionary-only candidate encoded below, so skip a redundant full
+    // wire encode.
+    const mixed_plan = try command_plan.mixStaticDictionaryWithCacheAlloc(allocator, input, lz_commands, &match_cache);
+    defer mixed_plan.deinit(allocator);
+    if (mixed_plan.match_count != 0 and !allCopiesAreDictionary(mixed_plan.commands)) {
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const mixed_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..candidate_limit], input, mixed_plan.commands, &stats, .{}) catch |err| switch (err) {
+            // A candidate that exhausts the current winner's byte budget cannot
+            // win the strict final-size comparison, so no retry is needed.
+            error.OutOfMemory => null,
+            else => return err,
+        };
+        if (mixed_len) |len| if (len < best.len) {
+            const mixed = try allocator.dupe(u8, candidate_storage[0..len]);
+            allocator.free(best);
+            best = mixed;
+        };
+    }
+    const dictionary_plan = try command_plan.buildStaticDictionaryWithCacheAlloc(allocator, input, &match_cache);
+    defer dictionary_plan.deinit(allocator);
+    if (dictionary_plan.match_count == 0) return chooseStoredIfSmaller(allocator, input, best);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..@min(candidate_limit, best.len)], input, dictionary_plan.commands, &stats, .{}) catch |err| switch (err) {
+        error.OutOfMemory => return chooseStoredIfSmaller(allocator, input, best),
+        else => return err,
+    };
+    if (candidate_len < best.len) {
+        const candidate = try allocator.dupe(u8, candidate_storage[0..candidate_len]);
+        allocator.free(best);
+        return chooseStoredIfSmaller(allocator, input, candidate);
+    }
+    return chooseStoredIfSmaller(allocator, input, best);
+}
+
+fn allCopiesAreDictionary(commands: []const command_plan.Command) bool {
+    var has_copy = false;
+    for (commands) |command| {
+        if (!command.has_copy) continue;
+        has_copy = true;
+        if (command.dictionary_output_len == 0) return false;
+    }
+    return has_copy;
+}
+
+/// Experimental entry point for measuring lazy-parser search budgets without
+/// duplicating the production Brotli wire path. Zero-sized budgets are rejected
+/// rather than silently changing the caller's requested search semantics.
+pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedParserOptions) Error![]u8 {
+    return encodePlannedStreamLazyWithWireOptionsAlloc(allocator, input, options, .{});
+}
+
+const CommandPlanEncodeOptions = struct {
+    use_recent_distances: bool = false,
+    use_utf8_text_contexts: bool = false,
+    utf8_context_cutoff: u6 = 56,
+    ndirect: u7 = 15,
+    window_bits: u5 = default_window_bits,
+    write_stream_prefix: bool = true,
+    final_meta_block: bool = true,
+};
+const min_recent_distance_candidate_count: usize = 64;
+const planned_command_symbol_cache_capacity: usize = 128;
+const LazyWireOptions = struct { try_recent_distances: bool = false };
+
+fn encodePlannedStreamLazyWithWireOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedParserOptions, wire_options: LazyWireOptions) Error![]u8 {
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    if (options.window_len == 0 or options.window_len > lz77.max_window_len or options.max_chain == 0 or options.nice_len == 0 or options.lazy_min_gain == 0) return error.InvalidBlockPlan;
+    const lz_plan = try lz77.lazyGreedyPlanAlloc(allocator, input, .{
+        .window_len = @min(input.len, options.window_len),
+        .max_chain = options.max_chain,
+        .nice_len = options.nice_len,
+        // The lazy parser chooses one best match per position; unlike the
+        // optimal parser, it has no separate candidate-count budget.
+        .max_candidates = 1,
+        .lazy_min_gain = options.lazy_min_gain,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    });
+    defer lz_plan.deinit(allocator);
+    if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
+    const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
+    defer plan.deinit(allocator);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    return encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, wire_options);
+}
+
+fn encodeLazyCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, wire_options: LazyWireOptions) Error![]u8 {
+    // A leading three-byte match followed by exactly one remaining command is
+    // often a net loss after its unique command/distance symbols are included.
+    // Evaluate the one exact alternative instead of relying on DEFLATE's local
+    // fixed-bit profitability model, which cannot see Brotli tree overhead.
+    if (commands.len == 2 and commands[0].has_copy and commands[0].dictionary_output_len == 0 and commands[0].copy_len == 3) {
+        const baseline = try encodePreferredCommandPlanAlloc(allocator, input, commands, null, stats, wire_options);
+        errdefer allocator.free(baseline);
+        var candidate_storage: [2]command_plan.Command = undefined;
+        const candidate_commands = try command_plan.withoutCopyInto(&candidate_storage, input.len, commands, 0);
+        const candidate = try encodePreferredCommandPlanAlloc(allocator, input, candidate_commands, null, stats, wire_options);
+        if (candidate.len < baseline.len) {
+            allocator.free(baseline);
+            return candidate;
+        }
+        allocator.free(candidate);
+        return baseline;
+    }
+    const short_match_alternatives = short_match_candidates.collect(commands);
+    if (short_match_alternatives.len != 0) {
+        var baseline = try encodePreferredCommandPlanAlloc(allocator, input, commands, null, stats, wire_options);
+        errdefer allocator.free(baseline);
+        var drop_storage: [4]usize = undefined;
+        var command_storage: [16]command_plan.Command = undefined;
+        for (short_match_alternatives.slice()) |drop_mask| {
+            var drop_count: usize = 0;
+            for (commands, 0..) |_, command_index| {
+                if (drop_mask & (@as(u16, 1) << @intCast(command_index)) == 0) continue;
+                drop_storage[drop_count] = command_index;
+                drop_count += 1;
+            }
+            const alternative = try command_plan.withoutCopiesInto(&command_storage, input.len, commands, drop_storage[0..drop_count]);
+            const candidate = try encodePreferredCommandPlanAlloc(allocator, input, alternative, null, stats, wire_options);
+            if (candidate.len < baseline.len) {
+                allocator.free(baseline);
+                baseline = candidate;
+            } else allocator.free(candidate);
+        }
+        return baseline;
+    }
+    return encodePreferredCommandPlanAlloc(allocator, input, commands, null, stats, wire_options);
+}
+
+/// Experimental planner-backed encoder for the built-in RFC 7932 static
+/// dictionary. It establishes complete command/wire support with an exhaustive
+/// reference matcher; stable compression levels remain on the faster LZ path.
+pub fn encodePlannedStreamStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return encodePlannedStreamStaticDictionaryWithCacheAlloc(allocator, input, null);
+}
+
+fn encodePlannedStreamStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []const u8, cache: ?*command_plan.StaticDictionaryMatchCache) Error![]u8 {
+    const max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
+    if (input.len < 5 or input.len > max_backward_distance) return error.InvalidBlockPlan;
+    const plan = try command_plan.buildStaticDictionaryWithCacheAlloc(allocator, input, cache);
+    defer plan.deinit(allocator);
+    if (plan.match_count == 0) return error.InvalidBlockPlan;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    return encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
+}
+
+pub fn plannedStaticDictionaryIndexBytes() usize {
+    return command_plan.staticDictionaryIndexBytes();
+}
+
+pub fn encodePlannedStreamAllocWithStats(allocator: std.mem.Allocator, input: []const u8, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
+    return encodePlannedStreamAllocWithStatsTimed(allocator, input, null, stats);
+}
+
+pub fn encodePlannedStreamAllocWithStatsTimed(allocator: std.mem.Allocator, input: []const u8, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    const lz_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
+    const lz_plan = try lz77.hashGreedyPlanAutoTinyAlloc(allocator, input, .{
+        .window_len = @min(input.len, 32 * 1024),
+        .max_chain = 64,
+        .nice_len = 64,
+        .max_candidates = 8,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    });
+    defer lz_plan.deinit(allocator);
+    if (io) |active| stats.lz77_ns = elapsedNs(lz_start.?, active);
+    if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
+    const command_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
+    const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
+    defer plan.deinit(allocator);
+    if (io) |active| stats.command_plan_ns = elapsedNs(command_start.?, active);
+    const wire_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
+    const encoded = try encodeCommandPlanAlloc(allocator, input, plan.commands, io, stats);
+    if (io) |active| stats.wire_ns = elapsedNs(wire_start.?, active);
+    stats.input_bytes = input.len;
+    stats.token_count = lz_plan.tokens.len;
+    stats.command_count = plan.commands.len;
+    stats.literal_bytes = lz_plan.stats.literals;
+    stats.matched_bytes = lz_plan.stats.matched_bytes;
+    stats.encoded_bytes = encoded.len;
+    return encoded;
+}
+
+fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
+    const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
+    return if (ns <= 0) 0 else @intCast(ns);
+}
+
+/// Same planner-backed encoder with a caller-owned scratch arena for all
+/// intermediate LZ77 tokens, command plans, wire commands, and prefix RLE. The
+/// returned stream is owned by `allocator`; `OutOfMemory` reports an undersized
+/// scratch buffer without silently allocating temporary state elsewhere.
+pub fn encodePlannedStreamWithScratchAlloc(allocator: std.mem.Allocator, scratch: []u8, input: []const u8) Error![]u8 {
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    var fixed = std.heap.FixedBufferAllocator.init(scratch);
+    const scratch_allocator = fixed.allocator();
+    const lz_plan = try lz77.hashGreedyPlanAutoTinyAlloc(scratch_allocator, input, .{
+        .window_len = @min(input.len, 32 * 1024),
+        .max_chain = 64,
+        .nice_len = 64,
+        .max_candidates = 8,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    });
+    defer lz_plan.deinit(scratch_allocator);
+    if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
+    const plan = try command_plan.buildAlloc(scratch_allocator, input, lz_plan.tokens);
+    defer plan.deinit(scratch_allocator);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const encoded = try encodeCommandPlanAlloc(scratch_allocator, input, plan.commands, null, &stats);
+    defer scratch_allocator.free(encoded);
+    return allocator.dupe(u8, encoded);
+}
+
+/// Reusable planner encoder retaining arena capacity across calls. The result is
+/// owned by the allocator passed to `encodeAlloc`; encoder state itself is not
+/// thread-safe and must outlive no returned borrow (results are independent).
+pub const PlannedStreamEncoder = struct {
+    allocator: std.mem.Allocator,
+    tokens: std.ArrayList(lz77.Token) = .empty,
+    commands: std.ArrayList(command_plan.Command) = .empty,
+    output: std.ArrayList(u8) = .empty,
+    greedy_scratch: lz77.TinyGreedyScratch = .{},
+
+    pub fn init(allocator: std.mem.Allocator) PlannedStreamEncoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *PlannedStreamEncoder) void {
+        self.greedy_scratch.deinit(self.allocator);
+        self.tokens.deinit(self.allocator);
+        self.commands.deinit(self.allocator);
+        self.output.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn encodeAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+        return self.encodeWithOptionsAlloc(allocator, input, .{});
+    }
+
+    pub fn encodeChunksAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, chunks: []const []const u8) Error![]u8 {
+        return allocator.dupe(u8, try self.encodeChunksScratch(chunks));
+    }
+
+    pub fn encodeChunksInto(self: *PlannedStreamEncoder, chunks: []const []const u8, output: []u8) Error!usize {
+        const needed = try encodedPlannedStreamChunksBound(chunks);
+        if (output.len < needed) return error.OutOfMemory;
+        const encoded = try self.encodeChunksScratch(chunks);
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
+
+    pub fn encodeChunksAppend(self: *PlannedStreamEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) Error!void {
+        try out.appendSlice(self.allocator, try self.encodeChunksScratch(chunks));
+    }
+
+    /// Encode through the stable level API while retaining token and command
+    /// capacity for the fast and balanced small-block planners. Ratio and large
+    /// inputs retain their one-shot paths because they need wider search state.
+    pub fn encodeWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
+        if (options.level == .fast and input.len <= 32 * 1024)
+            return allocator.dupe(u8, try self.encodeScratchWithOptions(input, options));
+        if (options.level == .ratio or input.len > 32 * 1024) {
+            return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+        }
+        if (input.len < 5) return encodeStoredStreamAlloc(allocator, input);
+        const stats = switch (options.level) {
+            .fast => try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
+                .window_len = input.len,
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 8,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            }),
+            .balanced => try lz77.lazyGreedyPlanTinyReuse(&self.tokens, self.allocator, input, .{
+                .window_len = input.len,
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 1,
+                .lazy_min_gain = 1,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            }),
+            .ratio => unreachable,
+        };
+        if (stats.matches == 0) return encodeStoredStreamAlloc(allocator, input);
+        _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
+        var stats_out: encoder_stats.PlannedEncodeStats = .{};
+        const compressed = if (options.level == .balanced)
+            try encodeLazyCommandPlanAlloc(allocator, input, self.commands.items, &stats_out, .{})
+        else
+            try encodeCommandPlanAlloc(allocator, input, self.commands.items, null, &stats_out);
+        return chooseStoredIfSmaller(allocator, input, compressed);
+    }
+
+    pub fn retainedCapacity(self: *const PlannedStreamEncoder) usize {
+        return self.tokens.capacity * @sizeOf(lz77.Token) +
+            self.commands.capacity * @sizeOf(command_plan.Command) +
+            self.output.capacity +
+            self.greedy_scratch.retainedCapacity();
+    }
+
+    /// Encode a fast-level stream into retained encoder-owned output. The
+    /// returned slice is invalidated by the next call or by `deinit`. This path
+    /// avoids allocating an owned result once input/output capacities stabilize.
+    pub fn encodeScratch(self: *PlannedStreamEncoder, input: []const u8) Error![]const u8 {
+        return self.encodeScratchWithOptions(input, .{});
+    }
+
+    /// Encode one Brotli stream containing multiple independently planned fast
+    /// meta-blocks. Empty chunks are ignored, and chunks above 32 KiB are split
+    /// to keep parser state bounded. The returned slice is invalidated by the
+    /// next call or by `deinit`.
+    pub fn encodeChunksScratch(self: *PlannedStreamEncoder, chunks: []const []const u8) Error![]const u8 {
+        self.output.clearRetainingCapacity();
+        var writer = BitWriter{ .out = &self.output };
+        try writeWindowBits(self.allocator, &writer, default_window_bits);
+        var stored_ceiling_bits: usize = 1;
+        for (chunks) |chunk| {
+            var offset: usize = 0;
+            while (offset < chunk.len) {
+                const block_len = @min(chunk.len - offset, planned_chunk_max_input_len);
+                stored_ceiling_bits = try addStoredUncompressedMetaBlockBitsLen(stored_ceiling_bits, block_len);
+                try self.encodeFastMetaBlock(&writer, chunk[offset..][0..block_len], stored_ceiling_bits);
+                offset += block_len;
+            }
+        }
+        try writer.writeBits(self.allocator, 1, 1); // ISLAST.
+        try writer.writeBits(self.allocator, 1, 1); // ISLASTEMPTY.
+        return self.output.items;
+    }
+
+    fn encodeFastMetaBlock(self: *PlannedStreamEncoder, writer: *BitWriter, input: []const u8, stored_ceiling_bits: usize) Error!void {
+        std.debug.assert(input.len != 0 and input.len <= planned_chunk_max_input_len);
+        const start_len = self.output.items.len;
+        const start_bit_index = writer.bit_index;
+        const start_byte = self.output.items[start_len - 1];
+        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
+            .window_len = input.len,
+            .max_chain = 64,
+            .nice_len = 64,
+            .max_candidates = 8,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        });
+        if (stats.matches == 0)
+            return self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte);
+        _ = command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items) catch |err| switch (err) {
+            error.InvalidBlockPlan => return self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte),
+            else => return err,
+        };
+        var stats_out: encoder_stats.PlannedEncodeStats = .{};
+        const compressed_ok = blk: {
+            encodeCommandPlanWithOptionsWrite(self.allocator, writer, input, self.commands.items, null, &stats_out, .{
+                .write_stream_prefix = false,
+                .final_meta_block = false,
+            }) catch |err| switch (err) {
+                error.InvalidBlockPlan => break :blk false,
+                else => return err,
+            };
+            break :blk true;
+        };
+        if (compressed_ok and writer.bitPosition() <= stored_ceiling_bits) return;
+        try self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte);
+    }
+
+    fn replacePlannedBlockWithStored(self: *PlannedStreamEncoder, writer: *BitWriter, input: []const u8, start_len: usize, start_bit_index: u3, start_byte: u8) Error!void {
+        self.output.shrinkRetainingCapacity(start_len);
+        self.output.items[start_len - 1] = start_byte;
+        writer.bit_index = start_bit_index;
+        try writeUncompressedMetaBlock(self.allocator, writer, input);
+    }
+
+    /// Encode into retained encoder-owned output. Fast and balanced reuse their
+    /// parser, command, and output capacity for small blocks; ratio keeps the
+    /// stable one-shot candidate selection and copies only its final winner.
+    /// The returned slice is invalidated by the next call or by `deinit`.
+    pub fn encodeScratchWithOptions(self: *PlannedStreamEncoder, input: []const u8, options: PlannedEncodeOptions) Error![]const u8 {
+        if (options.level == .ratio or input.len > 32 * 1024) {
+            const encoded = try encodePlannedStreamWithOptionsAlloc(self.allocator, input, options);
+            defer self.allocator.free(encoded);
+            self.output.clearRetainingCapacity();
+            try self.output.appendSlice(self.allocator, encoded);
+            return self.output.items;
+        }
+        self.output.clearRetainingCapacity();
+        if (input.len < 5) {
+            try encodeStoredStreamAppend(self.allocator, &self.output, input);
+            return self.output.items;
+        }
+        const stats = switch (options.level) {
+            .fast => try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
+                .window_len = input.len,
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 8,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            }),
+            .balanced => try lz77.lazyGreedyPlanTinyReuse(&self.tokens, self.allocator, input, .{
+                .window_len = input.len,
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 1,
+                .lazy_min_gain = 1,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            }),
+            .ratio => unreachable,
+        };
+        if (stats.matches == 0) {
+            try encodeStoredStreamAppend(self.allocator, &self.output, input);
+            return self.output.items;
+        }
+        _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
+        var stats_out: encoder_stats.PlannedEncodeStats = .{};
+        const balanced_alternatives = options.level == .balanced and
+            ((self.commands.items.len == 2 and self.commands.items[0].has_copy and self.commands.items[0].dictionary_output_len == 0 and self.commands.items[0].copy_len == 3) or
+                short_match_candidates.collect(self.commands.items).len != 0);
+        if (balanced_alternatives) {
+            const encoded = try encodeLazyCommandPlanAlloc(self.allocator, input, self.commands.items, &stats_out, .{});
+            defer self.allocator.free(encoded);
+            try self.output.appendSlice(self.allocator, encoded);
+        } else {
+            try encodeCommandPlanWithOptionsAppend(self.allocator, &self.output, input, self.commands.items, null, &stats_out, .{});
+        }
+        const stored_len = try encodedStoredStreamBound(input.len);
+        if (self.output.items.len > stored_len) {
+            self.output.clearRetainingCapacity();
+            try encodeStoredStreamAppend(self.allocator, &self.output, input);
+        }
+        return self.output.items;
+    }
+
+    /// Encode fast-level output directly into caller-owned storage. The bound
+    /// is the exact stored-stream size because stable fast encoding never
+    /// returns a larger compressed candidate.
+    pub fn encodeInto(self: *PlannedStreamEncoder, input: []const u8, output: []u8) Error!usize {
+        return self.encodeIntoWithOptions(input, output, .{});
+    }
+
+    pub fn encodeIntoWithOptions(self: *PlannedStreamEncoder, input: []const u8, output: []u8, options: PlannedEncodeOptions) Error!usize {
+        const needed = try encodedPlannedStreamBoundWithOptions(input.len, options);
+        if (output.len < needed) return error.OutOfMemory;
+        if (options.level != .fast) {
+            // Route balanced through this encoder's retained token/command
+            // buffers; ratio still delegates inside encodeWithOptionsAlloc.
+            const encoded = try self.encodeWithOptionsAlloc(self.allocator, input, options);
+            defer self.allocator.free(encoded);
+            @memcpy(output[0..encoded.len], encoded);
+            return encoded.len;
+        }
+        if (input.len > 32 * 1024) {
+            const encoded = try encodePlannedStreamWithOptionsAlloc(self.allocator, input, options);
+            defer self.allocator.free(encoded);
+            @memcpy(output[0..encoded.len], encoded);
+            return encoded.len;
+        }
+        if (input.len < 5) return encodeStoredStreamInto(input, output);
+        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
+            .window_len = input.len,
+            .max_chain = 64,
+            .nice_len = 64,
+            .max_candidates = 8,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        });
+        if (stats.matches == 0) return encodeStoredStreamInto(input, output);
+        _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
+        var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
+        var stats_out: encoder_stats.PlannedEncodeStats = .{};
+        // Bounded mode maps any unexpected underestimation to OutOfMemory
+        // rather than allowing the writer to allocate behind the caller's back.
+        // A compressed candidate may legitimately exceed the stored ceiling;
+        // in that case discard the partial candidate and emit stored instead.
+        var writer = BitWriter{ .out = &out, .bounded = true };
+        encodeCommandPlanWithOptionsWrite(self.allocator, &writer, input, self.commands.items, null, &stats_out, .{}) catch |err| switch (err) {
+            error.OutOfMemory => return encodeStoredStreamInto(input, output),
+            else => return err,
+        };
+        if (out.items.len > needed) return encodeStoredStreamInto(input, output);
+        return out.items.len;
+    }
+};
+
+pub fn encodeRleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
+    var writer = BitWriter{ .out = out };
+    try encodeRleStreamWrite(allocator, &writer, input);
+}
+
+pub fn encodedRleStreamBound(input_len: usize) Error!usize {
+    if (input_len < 5 or input_len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    // The narrow header and one command are bounded well below 64 bytes for
+    // every legal meta-block length; callers may use this stable conservative
+    // bound without running the encoder twice.
+    return 64;
+}
+
+pub fn encodeRleStreamInto(input: []const u8, output: []u8) Error!usize {
+    _ = try encodedRleStreamBound(input.len);
+    var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
+    var writer = BitWriter{ .out = &out, .bounded = true };
+    try encodeRleStreamWrite(std.heap.smp_allocator, &writer, input);
+    return out.items.len;
+}
+
+pub fn encodedSimpleStreamBound(input_len: usize) Error!usize {
+    return encodedStoredStreamBound(input_len);
+}
+
+/// Dependency-free Brotli encoder entry point that selects the compressed RLE
+/// slice for eligible runs and otherwise emits the fully general stored form.
+pub fn encodeSimpleStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try encodeSimpleStreamAppend(allocator, &out, input);
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn encodeSimpleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
+    if (isRleInput(input)) {
+        try encodeRleStreamAppend(allocator, out, input);
+    } else if (alternatingLength(input)) |len| {
+        const encoded = try encodeAlternatingStreamAlloc(allocator, input[0], input[1], len);
+        defer allocator.free(encoded);
+        try out.appendSlice(allocator, encoded);
+    } else if (pattern.repeatedDistinctPrefixLength(input)) |period| {
+        const encoded = try encodeRepeatedPrefixStreamAlloc(allocator, input[0..period], input.len / period);
+        defer allocator.free(encoded);
+        try out.appendSlice(allocator, encoded);
+    } else {
+        if (encodePlannedStreamAlloc(allocator, input)) |encoded| {
+            defer allocator.free(encoded);
+            try out.appendSlice(allocator, encoded);
+            return;
+        } else |err| switch (err) {
+            error.InvalidBlockPlan => {},
+            else => return err,
+        }
+        try encodeStoredStreamAppend(allocator, out, input);
+    }
+}
+
+pub fn encodeSimpleStreamInto(input: []const u8, output: []u8) Error!usize {
+    if (isRleInput(input)) return encodeRleStreamInto(input, output);
+    if (alternatingLength(input)) |len| {
+        const encoded = try encodeAlternatingStreamAlloc(std.heap.smp_allocator, input[0], input[1], len);
+        defer std.heap.smp_allocator.free(encoded);
+        if (output.len < encoded.len) return error.OutOfMemory;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
+    if (pattern.repeatedDistinctPrefixLength(input)) |period| {
+        const encoded = try encodeRepeatedPrefixStreamAlloc(std.heap.smp_allocator, input[0..period], input.len / period);
+        defer std.heap.smp_allocator.free(encoded);
+        if (output.len < encoded.len) return error.OutOfMemory;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
+    if (encodePlannedStreamAlloc(std.heap.smp_allocator, input)) |encoded| {
+        defer std.heap.smp_allocator.free(encoded);
+        if (output.len < encoded.len) return error.OutOfMemory;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    } else |err| switch (err) {
+        error.InvalidBlockPlan => {},
+        else => return err,
+    }
+    return encodeStoredStreamInto(input, output);
+}
+
+fn isRleInput(input: []const u8) bool {
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return false;
+    for (input[1..]) |byte| if (byte != input[0]) return false;
+    return true;
+}
+
+fn alternatingLength(input: []const u8) ?usize {
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len or input[0] == input[1]) return null;
+    for (input, 0..) |byte, i|
+        if (byte != input[i & 1]) return null;
+    return input.len;
+}
+
+const CommandEncoding = struct { symbol: u16, command: command_lut.Entry };
+
+const explicit_command_symbol_index = blk: {
+    @setEvalBranchQuota(100_000);
+    var index: [24][24]u16 = @splat(@splat(std.math.maxInt(u16)));
+    for (command_lut.entries, 0..) |entry, symbol| {
+        if (entry.distance_code != -1) continue;
+        const insert_code = lengthCodeForValue(entry.insert_base, true) orelse continue;
+        const copy_code = lengthCodeForValue(entry.copy_base, false) orelse continue;
+        if (index[insert_code][copy_code] == std.math.maxInt(u16)) index[insert_code][copy_code] = @intCast(symbol);
+    }
+    break :blk index;
+};
+const last_distance_command_symbol_index = blk: {
+    @setEvalBranchQuota(100_000);
+    var index: [24][24]u16 = @splat(@splat(std.math.maxInt(u16)));
+    for (command_lut.entries, 0..) |entry, symbol| {
+        if (entry.distance_code != 0) continue;
+        const insert_code = lengthCodeForValue(entry.insert_base, true) orelse continue;
+        const copy_code = lengthCodeForValue(entry.copy_base, false) orelse continue;
+        if (index[insert_code][copy_code] == std.math.maxInt(u16)) index[insert_code][copy_code] = @intCast(symbol);
+    }
+    break :blk index;
+};
+
+fn commandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
+    return commandEntryForLengthsAndDistance(insert_len, copy_len, false);
+}
+
+fn commandEntryForLengthsAndDistance(insert_len: usize, copy_len: usize, use_last_distance: bool) ?CommandEncoding {
+    const insert_code = lengthCodeForValue(insert_len, true) orelse return null;
+    const copy_code = lengthCodeForValue(copy_len, false) orelse return null;
+    const index = if (use_last_distance) &last_distance_command_symbol_index else &explicit_command_symbol_index;
+    const symbol = index[insert_code][copy_code];
+    if (symbol == std.math.maxInt(u16)) return null;
+    return .{ .symbol = symbol, .command = command_lut.entries[symbol] };
+}
+
+fn lengthCodeForValue(value: usize, comptime insert: bool) ?u5 {
+    if (comptime insert) return switch (value) {
+        0...5 => @intCast(value),
+        6...9 => @intCast(6 + ((value - 6) >> 1)),
+        10...17 => @intCast(8 + ((value - 10) >> 2)),
+        18...33 => @intCast(10 + ((value - 18) >> 3)),
+        34...65 => @intCast(12 + ((value - 34) >> 4)),
+        66...129 => @intCast(14 + ((value - 66) >> 5)),
+        130...193 => 16,
+        194...321 => 17,
+        322...577 => 18,
+        578...1089 => 19,
+        1090...2113 => 20,
+        2114...6209 => 21,
+        6210...22593 => 22,
+        22594...16_799_809 => 23,
+        else => null,
+    };
+    return switch (value) {
+        2...9 => @intCast(value - 2),
+        10...13 => @intCast(8 + ((value - 10) >> 1)),
+        14...21 => @intCast(10 + ((value - 14) >> 2)),
+        22...37 => @intCast(12 + ((value - 22) >> 3)),
+        38...69 => @intCast(14 + ((value - 38) >> 4)),
+        70...101 => 16,
+        102...133 => 17,
+        134...197 => 18,
+        198...325 => 19,
+        326...581 => 20,
+        582...1093 => 21,
+        1094...2117 => 22,
+        2118...16_779_333 => 23,
+        else => null,
+    };
+}
+
+fn writeCommandLengthExtras(allocator: std.mem.Allocator, writer: *BitWriter, command: CommandEncoding, insert_len: usize, copy_len: usize) Error!void {
+    if (command.command.insert_extra_bits != 0)
+        try writer.writeBits(allocator, insert_len - command.command.insert_base, command.command.insert_extra_bits);
+    if (command.command.copy_extra_bits != 0)
+        try writer.writeBits(allocator, copy_len - command.command.copy_base, command.command.copy_extra_bits);
+}
+
+fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
+    return encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, .{});
+}
+
+/// Try Brotli's recent-distance symbols as a complete stream alternative. Tree
+/// changes can occasionally outweigh saved distance bits, so ratio mode keeps
+/// the candidate only when the final byte length is smaller.
+fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions) Error![]u8 {
+    // A second full wire encode is worthwhile on ratio-sized plans with many
+    // reusable distances, but would dominate latency for small inputs.
+    if (!options.try_recent_distances or countReusableRecentDistances(commands) < min_recent_distance_candidate_count) return encodeCommandPlanAlloc(allocator, input, commands, io, stats);
+    const context_candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, .{
+        .use_recent_distances = true,
+        .use_utf8_text_contexts = true,
+    });
+    // A result below this conservative ratio already wins by far more than the
+    // few-byte regressions observed when switching command/literal alphabets.
+    // Avoid materializing the explicit baseline in that common ratio-mode case.
+    if (byteRatioAtMost(context_candidate.len, input.len, 80)) return context_candidate;
+    const baseline = try encodeCommandPlanAlloc(allocator, input, commands, io, stats);
+    errdefer allocator.free(baseline);
+    if (context_candidate.len < baseline.len) {
+        allocator.free(baseline);
+        return context_candidate;
+    }
+    allocator.free(context_candidate);
+    return baseline;
+}
+
+fn countReusableRecentDistances(commands: []const command_plan.Command) usize {
+    var last_distances = initial_last_distances;
+    var count: usize = 0;
+    for (commands) |command| {
+        if (!command.has_copy or command.dictionary_output_len != 0) continue;
+        const symbol = recentDistanceSymbol(command.distance, &last_distances);
+        if (symbol != null) count += 1;
+        // Code zero reuses the newest distance without changing ring order;
+        // every other short or regular distance becomes the new front.
+        if (symbol != 0) pushLastDistance(&last_distances, command.distance);
+    }
+    return count;
+}
+
+fn recentDistanceSymbol(distance: usize, last_distances: *const [4]usize) ?u4 {
+    const deltas = [_]i8{ -1, 1, -2, 2, -3, 3 };
+    if (distance == last_distances[3]) return 0;
+    if (distance == last_distances[2]) return 1;
+    if (distance == last_distances[1]) return 2;
+    if (distance == last_distances[0]) return 3;
+    for (deltas, 4..) |delta, symbol| {
+        if (distanceWithDelta(last_distances[3], delta) catch null == distance) return @intCast(symbol);
+    }
+    for (deltas, 10..) |delta, symbol| {
+        if (distanceWithDelta(last_distances[2], delta) catch null == distance) return @intCast(symbol);
+    }
+    return null;
+}
+
+fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error![]u8 {
+    var out = try std.ArrayList(u8).initCapacity(allocator, commandPlanInitialCapacity(input.len));
+    errdefer out.deinit(allocator);
+    try encodeCommandPlanWithOptionsAppend(allocator, &out, input, commands, io, stats, options);
+    return out.toOwnedSlice(allocator);
+}
+
+fn encodeCommandPlanWithOptionsInto(allocator: std.mem.Allocator, output: []u8, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!usize {
+    var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
+    var writer = BitWriter{ .out = &out, .bounded = true };
+    try encodeCommandPlanWithOptionsWrite(allocator, &writer, input, commands, null, stats, options);
+    return out.items.len;
+}
+
+fn encodeCommandPlanWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
+    var writer = BitWriter{ .out = out };
+    try encodeCommandPlanWithOptionsWrite(allocator, &writer, input, commands, io, stats, options);
+}
+
+fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_plan.PrefixAlphabetFor(256)) Error!huffman.HuffmanTable(256).Encoder {
+    if (alphabet.len <= 1) return .{};
+    if (alphabet.len <= 64) return huffman.HuffmanTable(256).Encoder.initSparseTrusted(lengths, alphabet.symbols[0..alphabet.len]);
+    return huffman.HuffmanTable(256).Encoder.init(lengths);
+}
+
+fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
+    if (commands.len == 0) return error.InvalidBlockPlan;
+    // This writer currently fixes NPOSTFIX=0, whose four-bit NDIRECT field
+    // directly represents values 0...15.
+    if (options.ndirect > 15) return error.InvalidBlockPlan;
+    var literal_frequencies: [256]u32 = undefined;
+    var literal_seen: [4]u64 = @splat(0);
+    var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+    literal_alphabet.len = 0;
+    var literal_context_frequencies: [2][256]u32 = undefined;
+    // Fast and balanced encoding use one literal tree. Avoid clearing two
+    // additional dense histograms unless a ratio candidate requests context
+    // trees; the ordinary ratio path benefits too when it keeps one tree.
+    if (options.use_utf8_text_contexts) @memset(&literal_context_frequencies, @splat(0));
+    var command_frequencies: [704]u32 = undefined;
+    var command_alphabet: command_plan.PrefixAlphabet = undefined;
+    command_alphabet.len = 0;
+    var distance_frequencies: [planned_distance_alphabet_size]u32 = @splat(0);
+    // Frequency collection already resolves every command symbol. Retain the
+    // common small-plan result so payload emission does not repeat both length
+    // classifications and the 24x24 command-table lookup. Large plans keep the
+    // prior recomputation path rather than scaling stack usage with input size.
+    var command_symbols: [planned_command_symbol_cache_capacity]u16 = undefined;
+    const cache_command_symbols = commands.len <= command_symbols.len;
+    const frequency_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
+    var last_distances = initial_last_distances;
+    for (commands, 0..) |command, command_index| {
+        const recent_symbol = if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
+        const use_last_distance = recent_symbol == 0;
+        const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
+            commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
+        if (cache_command_symbols) command_symbols[command_index] = encoding.symbol;
+        try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
+        for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
+            try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
+            if (options.use_utf8_text_contexts) {
+                const previous = if (position == 0) 0 else input[position - 1];
+                const second_previous = if (position < 2) 0 else input[position - 2];
+                const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
+                literal_context_frequencies[literal_context.utf8SuffixTree(context, options.utf8_context_cutoff)][literal] += 1;
+            }
+        }
+        if (!command.has_copy) continue;
+        if (encoding.command.distance_code == -1) {
+            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), options.ndirect) orelse return error.InvalidBlockPlan;
+            if (distance.symbol >= planned_distance_alphabet_size) return error.InvalidBlockPlan;
+            distance_frequencies[distance.symbol] += 1;
+        }
+        if (command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
+    }
+    // Brotli still carries a literal tree when dictionary commands cover the
+    // entire meta-block. A deterministic unused symbol keeps that tree legal
+    // without adding payload bits.
+    if (literal_alphabet.len == 0) try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, 0);
+    if (allZeroFrequencies(planned_distance_alphabet_size, &distance_frequencies)) distance_frequencies[0] = 1;
+    if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
+    const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
+    var literal_context_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
+    var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
+    try literal_alphabet.sortByFrequencies(&literal_frequencies);
+    if (options.use_utf8_text_contexts) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
+        if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
+        try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
+    };
+    try command_alphabet.sortByFrequencies(&command_frequencies);
+    try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
+    stats.literal_symbol_count = literal_alphabet.len;
+    stats.command_symbol_count = command_alphabet.len;
+    stats.distance_symbol_count = distance_alphabet.len;
+    if (io) |active| stats.alphabet_ns = elapsedNs(alphabet_start.?, active);
+
+    // Useful planner streams are usually a small fraction of input. Reserving
+    // a capped fraction removes ArrayList's early growth ladder without scaling
+    // scratch memory with multi-megabyte inputs.
+    if (!writer.bounded) try writer.out.ensureUnusedCapacity(allocator, commandPlanInitialCapacity(input.len));
+    if (options.write_stream_prefix) try writeWindowBits(allocator, writer, options.window_bits);
+    try writeCompressedMetaBlockHeader(allocator, writer, input.len, options.final_meta_block);
+    const distance_alphabet_size = 16 + @as(usize, options.ndirect) + 48;
+    const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
+    const literal_lengths = try literal_alphabet.codeLengths(&literal_frequencies);
+    const literal_context_lengths = if (options.use_utf8_text_contexts) blk: {
+        var lengths: [2][256]u4 = undefined;
+        for (&lengths, &literal_context_alphabets, &literal_context_frequencies) |*tree_lengths, *alphabet, *frequencies| tree_lengths.* = try alphabet.codeLengths(frequencies);
+        break :blk lengths;
+    } else undefined;
+    const command_lengths = if (command_alphabet.len <= 4) @as([704]u4, @splat(0)) else try command_alphabet.codeLengths(&command_frequencies);
+    const distance_lengths = if (distance_alphabet.len <= 4) @as([planned_distance_alphabet_size]u4, @splat(0)) else try distance_alphabet.codeLengths(&distance_frequencies);
+    if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
+    const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
+    if (options.use_utf8_text_contexts) {
+        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, options.utf8_context_cutoff, options.ndirect, &command_alphabet, &distance_alphabet, distance_alphabet_size, &command_lengths, &distance_lengths);
+    } else try writePlannedCompressedHeader(allocator, writer, &literal_alphabet, &command_alphabet, &distance_alphabet, options.ndirect, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
+    if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
+
+    const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
+    const literal_encoder = try initPlannedLiteralEncoder(&literal_lengths, &literal_alphabet);
+    const literal_context_encoders = if (options.use_utf8_text_contexts) [2]huffman.HuffmanTable(256).Encoder{
+        try initPlannedLiteralEncoder(&literal_context_lengths[0], &literal_context_alphabets[0]),
+        try initPlannedLiteralEncoder(&literal_context_lengths[1], &literal_context_alphabets[1]),
+    } else undefined;
+    const command_encoder = if (command_alphabet.len <= 4)
+        huffman.HuffmanTable(704).Encoder{}
+    else if (command_alphabet.len <= 64)
+        try huffman.HuffmanTable(704).Encoder.initSparseTrusted(&command_lengths, command_alphabet.symbols[0..command_alphabet.len])
+    else
+        try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
+    const distance_encoder = if (distance_alphabet.len <= 4)
+        huffman.HuffmanTable(planned_distance_alphabet_size).Encoder{}
+    else if (distance_alphabet.len <= 64)
+        try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.initSparseTrusted(&distance_lengths, distance_alphabet.symbols[0..distance_alphabet.len])
+    else
+        try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.init(&distance_lengths);
+    if (io) |active| stats.encoder_ns = elapsedNs(encoder_start.?, active);
+    const payload_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
+    last_distances = initial_last_distances;
+    for (commands, 0..) |command, command_index| {
+        const recent_symbol = if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
+        const use_last_distance = recent_symbol == 0;
+        const encoding = if (cache_command_symbols) blk: {
+            const symbol = command_symbols[command_index];
+            break :blk CommandEncoding{ .symbol = symbol, .command = command_lut.entries[symbol] };
+        } else commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
+            commandEntryForLengths(command.insert_len, command.copy_len) orelse unreachable;
+        if (command_alphabet.len > 1) {
+            if (command_alphabet.len <= 4) {
+                const code = command_alphabet.simpleCode(encoding.symbol).?;
+                try writer.writeHuffmanBits(allocator, code.code, code.bits);
+            } else try writer.writeHuffmanBits(allocator, command_encoder.codes[encoding.symbol], command_encoder.bits[encoding.symbol]);
+        }
+        try writeCommandLengthExtras(allocator, writer, encoding, command.insert_len, command.copy_len);
+        for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
+            if (options.use_utf8_text_contexts) {
+                const previous = if (position == 0) 0 else input[position - 1];
+                const second_previous = if (position < 2) 0 else input[position - 2];
+                const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
+                const encoder = &literal_context_encoders[literal_context.utf8SuffixTree(context, options.utf8_context_cutoff)];
+                if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
+            } else if (literal_alphabet.len > 1) try writer.writeHuffmanBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
+        }
+        if (command.has_copy and encoding.command.distance_code == -1) {
+            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), options.ndirect) orelse unreachable;
+            if (distance_alphabet.len > 1) {
+                if (distance_alphabet.len <= 4) {
+                    const code = distance_alphabet.simpleCode(distance.symbol).?;
+                    try writer.writeHuffmanBits(allocator, code.code, code.bits);
+                } else try writer.writeHuffmanBits(allocator, distance_encoder.codes[distance.symbol], distance_encoder.bits[distance.symbol]);
+            }
+            if (distance.extra_bits != 0)
+                try writer.writeBits(allocator, distance.extra, distance.extra_bits);
+        }
+        if (command.has_copy and command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
+    }
+    if (io) |active| stats.payload_ns = elapsedNs(payload_start.?, active);
+    if (options.final_meta_block and writer.bit_index != 0) writer.alignToByte();
+}
+
+fn commandPlanInitialCapacity(input_len: usize) usize {
+    return @min(@max(input_len / 8, 64), 4096);
+}
+
+fn byteRatioAtMost(numerator: usize, denominator: usize, percent: usize) bool {
+    const scaled_numerator = std.math.mul(usize, numerator, 100) catch return false;
+    const scaled_denominator = std.math.mul(usize, denominator, percent) catch return false;
+    return scaled_numerator <= scaled_denominator;
+}
+
+fn allZeroFrequencies(comptime len: usize, frequencies: *const [len]u32) bool {
+    for (frequencies) |frequency| if (frequency != 0) return false;
+    return true;
+}
+
+fn commandWireDistance(command: command_plan.Command) usize {
+    if (command.dictionary_output_len == 0) return command.distance;
+    // A dictionary copy is legal only when its distance exceeds the bytes
+    // already produced. This one-meta-block planner is capped below the 16-bit
+    // Brotli window, so the current output position is the active backward
+    // limit used by both Vort and conforming external decoders.
+    return command.insert_start + command.insert_len + 1 + command.dictionary_address;
+}
+
+fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8) Error!void {
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    for (input[1..]) |byte| if (byte != input[0]) return error.InvalidBlockPlan;
+    try writeWindowBits(allocator, writer, default_window_bits);
+    try writeLastCompressedMetaBlockHeader(allocator, writer, input.len);
+    try writeMinimalCompressedHeaderForRun(allocator, writer, input[0], input.len);
+}
+
+/// Emit the shared header used by the narrow one-meta-block compressed
+/// encoders. Choosing the shortest legal length field keeps small streams
+/// compact while still covering Brotli's full 24-bit meta-block limit.
+fn writeLastCompressedMetaBlockHeader(allocator: std.mem.Allocator, writer: *BitWriter, len: usize) Error!void {
+    try writeCompressedMetaBlockHeader(allocator, writer, len, true);
+}
+
+fn writeCompressedMetaBlockHeader(allocator: std.mem.Allocator, writer: *BitWriter, len: usize, final: bool) Error!void {
+    if (len == 0 or len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, @intFromBool(final), 1);
+    if (final) try writer.writeBits(allocator, 0, 1);
+    const len_minus_one = len - 1;
+    const mnibbles: usize = if (len_minus_one <= 0xffff) 4 else if (len_minus_one <= 0xfffff) 5 else 6;
+    try writer.writeBits(allocator, @intCast(mnibbles - 4), 2);
+    try writer.writeBits(allocator, len_minus_one, @intCast(mnibbles * 4));
+    if (!final) try writer.writeBits(allocator, 0, 1); // ISUNCOMPRESSED = false.
+}
+
+fn writeMinimalCompressedHeaderForRun(allocator: std.mem.Allocator, writer: *BitWriter, byte: u8, run_len: usize) Error!void {
+    const copy_len = run_len - 1;
+    const command = commandEntryForLengths(1, copy_len) orelse return error.InvalidBlockPlan;
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 1, 4); // NDIRECT = 1
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, byte);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, command.symbol);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 65, 16);
+    if (command.command.copy_extra_bits != 0)
+        try writer.writeBits(allocator, copy_len - command.command.copy_base, command.command.copy_extra_bits);
+    // RFC Brotli streams may end mid-byte, but the trailing unused bits must be
+    // zero. Materialize the final partial byte for external decoders.
+    if (writer.bit_index != 0) writer.alignToByte();
+}
+
 pub fn encodeStoredStreamInto(input: []const u8, output: []u8) Error!usize {
     return try encodeStoredStreamWithOptionsInto(input, output, .{});
 }
@@ -334,6 +2787,8 @@ pub fn encodeStoredStreamInto(input: []const u8, output: []u8) Error!usize {
 pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
     const needed = try encodedStoredStreamBoundWithOptions(input.len, options);
     if (output.len < needed) return error.OutOfMemory;
+    if (options.window_bits == default_window_bits and options.metadata.len == 0 and input.len <= direct_stored_stream_max_input_len)
+        return encodeDefaultStoredStreamInto(input, output[0..needed]);
     var out: std.ArrayList(u8) = .{
         .items = output[0..0],
         .capacity = output.len,
@@ -344,6 +2799,26 @@ pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, option
     return out.items.len;
 }
 
+/// Emit the common WBITS=16, metadata-free stored stream directly. The exact
+/// bound has already been checked by the caller. Its single uncompressed block
+/// is byte-aligned, so the fixed three-byte header, payload, and final marker
+/// can all be written directly.
+fn encodeDefaultStoredStreamInto(input: []const u8, output: []u8) usize {
+    if (input.len == 0) {
+        output[0] = 0b110; // WBITS=16, ISLAST, ISLASTEMPTY.
+        return 1;
+    }
+
+    // This path is intentionally capped below 64 KiB by its caller, so the
+    // shortest four-nibble MLEN form is always sufficient. With WBITS=16 its
+    // fields occupy exactly three bytes before byte-aligned payload data.
+    std.debug.assert(input.len <= direct_stored_stream_max_input_len);
+    std.debug.assert(output.len == input.len + 4);
+    const written = writeDefaultStoredBlockInto(input, output, true);
+    output[written] = 0b11; // ISLAST + ISLASTEMPTY.
+    return written + 1;
+}
+
 pub fn encodeStoredStreamChunksInto(chunks: []const []const u8, output: []u8) Error!usize {
     return try encodeStoredStreamChunksWithOptionsInto(chunks, output, .{});
 }
@@ -351,6 +2826,8 @@ pub fn encodeStoredStreamChunksInto(chunks: []const []const u8, output: []u8) Er
 pub fn encodeStoredStreamChunksWithOptionsInto(chunks: []const []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
     const needed = try encodedStoredStreamChunksBoundWithOptions(chunks, options);
     if (output.len < needed) return error.OutOfMemory;
+    if (options.window_bits == default_window_bits and options.metadata.len == 0 and storedChunksInputLenAtMost(chunks, direct_stored_stream_max_input_len))
+        return encodeDefaultStoredStreamChunksInto(chunks, output[0..needed]);
     var out: std.ArrayList(u8) = .{
         .items = output[0..0],
         .capacity = output.len,
@@ -359,6 +2836,45 @@ pub fn encodeStoredStreamChunksWithOptionsInto(chunks: []const []const u8, outpu
     try encodeStoredStreamChunksWithOptionsWrite(std.heap.smp_allocator, &writer, chunks, options);
     if (out.items.len != needed) return error.SizeMismatch;
     return out.items.len;
+}
+
+fn storedChunksInputLenAtMost(chunks: []const []const u8, limit: usize) bool {
+    var total: usize = 0;
+    for (chunks) |chunk| {
+        if (chunk.len > limit - total) return false;
+        total += chunk.len;
+    }
+    return true;
+}
+
+fn encodeDefaultStoredStreamChunksInto(chunks: []const []const u8, output: []u8) usize {
+    var output_offset: usize = 0;
+    var first_block = true;
+    for (chunks) |chunk| {
+        if (chunk.len == 0) continue;
+        std.debug.assert(chunk.len <= direct_stored_stream_max_input_len);
+        output_offset += writeDefaultStoredBlockInto(chunk, output[output_offset..], first_block);
+        first_block = false;
+    }
+    if (first_block) {
+        output[0] = 0b110;
+        return 1;
+    }
+    output[output_offset] = 0b11;
+    return output_offset + 1;
+}
+
+fn writeDefaultStoredBlockInto(block: []const u8, output: []u8, first_block: bool) usize {
+    std.debug.assert(block.len != 0 and block.len <= direct_stored_stream_max_input_len);
+    std.debug.assert(output.len >= block.len + 3);
+    const start_bit: u5 = if (first_block) 1 else 0;
+    const header = (@as(u24, @intCast(block.len - 1)) << @intCast(start_bit + 3)) |
+        (@as(u24, 1) << @intCast(start_bit + 19));
+    output[0] = @truncate(header);
+    output[1] = @truncate(header >> 8);
+    output[2] = @truncate(header >> 16);
+    @memcpy(output[3..][0..block.len], block);
+    return block.len + 3;
 }
 
 fn encodeStoredStreamWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, options: StoredStreamOptions) Error!void {
@@ -484,13 +3000,46 @@ pub fn decodeStreamAlloc(allocator: std.mem.Allocator, stream: []const u8) Error
 pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
-    _ = try decodeStreamAppendLimited(allocator, &out, stream, max_output_len);
-    return out.toOwnedSlice(allocator);
+
+    // Every non-metadata Brotli meta-block declares its exact decoded length
+    // before the payload. Grow the owned result at that boundary and decode it
+    // immediately, avoiding the former full summary pass plus second decode.
+    // Append APIs deliberately retain preflight because they promise not to
+    // change caller-owned output when validation fails.
+    var reader = bitstream.BitReader.init(stream);
+    const window_bits = try readWindowBitsValue(&reader);
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    while (true) {
+        switch (try readStreamMetaBlockHeader(&reader)) {
+            .end => {
+                try ensureZeroPaddingAndEnd(reader);
+                std.debug.assert(written == out.items.len);
+                return out.toOwnedSlice(allocator);
+            },
+            .metadata => try skipMetadataMetaBlock(&reader),
+            .compressed => |header| {
+                const meta_block_end = try checkedDecodedEnd(written, header.decoded_len, max_output_len);
+                try out.resize(allocator, meta_block_end);
+                try processMinimalCompressedMetaBlock(&reader, out.items, &written, header.decoded_len, &last_distances, window_bits);
+                if (written != meta_block_end) return error.SizeMismatch;
+                if (header.final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return out.toOwnedSlice(allocator);
+                }
+            },
+            .uncompressed => |meta_block_len| {
+                const meta_block_end = try checkedDecodedEnd(written, meta_block_len, max_output_len);
+                try out.resize(allocator, meta_block_end);
+                try consumeZeroPaddingToByte(&reader);
+                try reader.readAlignedBytes(out.items[written..meta_block_end]);
+                written = meta_block_end;
+            },
+        }
+    }
 }
 
 pub fn decodeStreamAllocExactSize(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize) Error![]u8 {
-    const decoded_len = try decodedStreamSize(stream);
-    if (decoded_len != expected_output_len) return error.SizeMismatch;
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = try decodeStreamIntoExactSize(stream, out, expected_output_len);
@@ -503,7 +3052,7 @@ pub fn decodeStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8),
 }
 
 pub fn decodeStreamAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize) Error!usize {
-    const decoded_len = try decodedStreamSizeLimited(stream, max_output_len);
+    const decoded_len = try decodedStreamSizeAllocLimited(allocator, stream, max_output_len);
     try out.ensureUnusedCapacity(allocator, decoded_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
@@ -519,8 +3068,6 @@ pub fn decodeStreamAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayLi
 }
 
 pub fn decodeStreamAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize) Error!usize {
-    const decoded_len = try decodedStreamSize(stream);
-    if (decoded_len != expected_output_len) return error.SizeMismatch;
     try out.ensureUnusedCapacity(allocator, expected_output_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
@@ -535,49 +3082,101 @@ pub fn decodeStreamAppendExactSize(allocator: std.mem.Allocator, out: *std.Array
     return written;
 }
 
+const StreamMetaBlockHeader = union(enum) {
+    end,
+    metadata,
+    compressed: struct {
+        decoded_len: usize,
+        final: bool,
+    },
+    uncompressed: usize,
+};
+
+fn readStreamMetaBlockHeader(reader: *bitstream.BitReader) Error!StreamMetaBlockHeader {
+    const final = try reader.readBits(u1, 1) == 1;
+    if (final and try reader.readBits(u1, 1) == 1) return .end;
+
+    const mnibbles_code = try reader.readBits(u2, 2);
+    const mnibbles: usize = switch (mnibbles_code) {
+        0b00 => 4,
+        0b01 => 5,
+        0b10 => 6,
+        0b11 => 0,
+    };
+    if (mnibbles == 0) return .metadata;
+
+    const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
+    if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
+    const decoded_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
+    if (final) return .{ .compressed = .{ .decoded_len = decoded_len, .final = true } };
+    if (try reader.readBits(u1, 1) == 1) return .{ .uncompressed = decoded_len };
+    return .{ .compressed = .{ .decoded_len = decoded_len, .final = false } };
+}
+
+fn checkedDecodedEnd(written: usize, decoded_len: usize, max_output_len: usize) Error!usize {
+    const end = std.math.add(usize, written, decoded_len) catch return error.IntegerOverflow;
+    if (end > max_output_len) return error.OutputLimitExceeded;
+    return end;
+}
+
 pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
+    if (stream.len >= large_stream_decode_threshold) return decodeLargeStreamInto(stream, output);
     var reader = bitstream.BitReader.init(stream);
-    try readWindowBits(&reader);
+    const window_bits = try readWindowBitsValue(&reader);
     var written: usize = 0;
     var last_distances = initial_last_distances;
     while (true) {
-        const is_last = try reader.readBits(u1, 1) == 1;
-        if (is_last) {
-            const is_last_empty = try reader.readBits(u1, 1) == 1;
-            if (is_last_empty) {
+        switch (try readStreamMetaBlockHeader(&reader)) {
+            .end => {
                 try ensureZeroPaddingAndEnd(reader);
                 return written;
-            }
+            },
+            .metadata => try skipMetadataMetaBlock(&reader),
+            .compressed => |header| {
+                try processMinimalCompressedMetaBlock(&reader, output, &written, header.decoded_len, &last_distances, window_bits);
+                if (header.final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return written;
+                }
+            },
+            .uncompressed => |meta_block_len| {
+                try consumeZeroPaddingToByte(&reader);
+                if (output.len - written < meta_block_len) return error.OutputTooSmall;
+                try reader.readAlignedBytes(output[written..][0..meta_block_len]);
+                written += meta_block_len;
+            },
         }
+    }
+}
 
-        const mnibbles_code = try reader.readBits(u2, 2);
-        const mnibbles: usize = switch (mnibbles_code) {
-            0b00 => 4,
-            0b01 => 5,
-            0b10 => 6,
-            0b11 => 0,
-        };
-        if (mnibbles == 0) {
-            try skipMetadataMetaBlock(&reader);
-            continue;
+const large_stream_decode_threshold: usize = 16 * 1024;
+
+noinline fn decodeLargeStreamInto(stream: []const u8, output: []u8) Error!usize {
+    var reader = bitstream.BitReader.init(stream);
+    const window_bits = try readWindowBitsValue(&reader);
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    while (true) {
+        switch (try readStreamMetaBlockHeader(&reader)) {
+            .end => {
+                try ensureZeroPaddingAndEnd(reader);
+                return written;
+            },
+            .metadata => try skipMetadataMetaBlock(&reader),
+            .compressed => |meta| {
+                try processLargeCompressedMetaBlock(&reader, output, &written, meta.decoded_len, &last_distances, window_bits);
+                if (meta.final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return written;
+                }
+            },
+            .uncompressed => |meta_block_len| {
+                try consumeZeroPaddingToByte(&reader);
+                if (output.len - written < meta_block_len) return error.OutputTooSmall;
+                try reader.readAlignedBytes(output[written..][0..meta_block_len]);
+                written += meta_block_len;
+            },
         }
-        const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
-        if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
-        const meta_block_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
-        if (is_last) {
-            try processMinimalCompressedMetaBlock(&reader, output, &written, meta_block_len, &last_distances);
-            try ensureZeroPaddingAndEnd(reader);
-            return written;
-        }
-        const is_uncompressed = try reader.readBits(u1, 1) == 1;
-        if (!is_uncompressed) {
-            try processMinimalCompressedMetaBlock(&reader, output, &written, meta_block_len, &last_distances);
-            continue;
-        }
-        try consumeZeroPaddingToByte(&reader);
-        if (output.len - written < meta_block_len) return error.OutputTooSmall;
-        try reader.readAlignedBytes(output[written..][0..meta_block_len]);
-        written += meta_block_len;
     }
 }
 
@@ -597,8 +3196,6 @@ pub fn decodeStreamIntoLimited(stream: []const u8, output: []u8, max_output_len:
 
 pub fn decodeStreamIntoExactSize(stream: []const u8, output: []u8, expected_output_len: usize) Error!usize {
     if (output.len < expected_output_len) return error.OutputTooSmall;
-    const decoded_len = try decodedStreamSize(stream);
-    if (decoded_len != expected_output_len) return error.SizeMismatch;
     const written = decodeStreamInto(stream, output[0..expected_output_len]) catch |err| switch (err) {
         error.OutputTooSmall => return error.SizeMismatch,
         else => return err,
@@ -629,6 +3226,82 @@ pub fn summarizeStreamWithDiagnostics(stream: []const u8, diagnostics: *StreamSu
 }
 
 pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, null) catch |err| switch (err) {
+        error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
+        else => |public_err| public_err,
+    };
+}
+
+/// Allocation-free summary with caller-owned Brotli history. The scratch need
+/// not span the declared window when the stream never references farther back;
+/// if a context-dependent literal does require discarded history, the public
+/// error remains `UnsupportedBrotliFeature` just like the fixed-scratch helper.
+pub fn summarizeStreamWithHistory(stream: []const u8, history: []u8) Error!StreamSummary {
+    return summarizeStreamLimitedWithHistory(stream, history, std.math.maxInt(usize));
+}
+
+pub fn summarizeStreamLimitedWithHistory(stream: []const u8, history: []u8, max_output_len: usize) Error!StreamSummary {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    return summarizeStreamLimitedWithHistoryAndDiagnostics(stream, history, max_output_len, &diagnostics);
+}
+
+pub fn summarizeStreamWithHistoryAndDiagnostics(stream: []const u8, history: []u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamLimitedWithHistoryAndDiagnostics(stream, history, std.math.maxInt(usize), diagnostics);
+}
+
+pub fn summarizeStreamLimitedWithHistoryAndDiagnostics(stream: []const u8, history: []u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, history) catch |err| switch (err) {
+        error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
+        else => |public_err| public_err,
+    };
+}
+
+/// Summarize a Brotli stream while allocating enough history for its declared
+/// RFC window when necessary. Streams covered by Vort's fixed 65,520-byte
+/// scratch do not allocate; larger history is allocated only after that fast
+/// path proves it cannot resolve a literal context.
+pub fn summarizeStreamAlloc(allocator: std.mem.Allocator, stream: []const u8) Error!StreamSummary {
+    return try summarizeStreamAllocLimited(allocator, stream, std.math.maxInt(usize));
+}
+
+pub fn summarizeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error!StreamSummary {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    return try summarizeStreamAllocLimitedWithDiagnostics(allocator, stream, max_output_len, &diagnostics);
+}
+
+pub fn summarizeStreamAllocWithDiagnostics(allocator: std.mem.Allocator, stream: []const u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return try summarizeStreamAllocLimitedWithDiagnostics(allocator, stream, std.math.maxInt(usize), diagnostics);
+}
+
+pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    // Most Brotli streams never reference history beyond the encoder's common
+    // 16-bit window. Avoid reserving as much as 16 MiB merely because the wire
+    // header advertises WBITS=24; retry with the declared window only when the
+    // fixed summary actually loses context needed to select a literal tree.
+    const fixed_summary = summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, null) catch |err| switch (err) {
+        error.SummaryHistoryExhausted => null,
+        else => |public_err| return public_err,
+    };
+    if (fixed_summary) |summary| return summary;
+
+    var reader = bitstream.BitReader.init(stream);
+    const window_bits = readWindowBitsValue(&reader) catch |err| {
+        diagnostics.* = .{ .phase = .window_bits };
+        return err;
+    };
+    const history_len = @min(max_output_len, (@as(usize, 1) << window_bits) - 16);
+    const history = try allocator.alloc(u8, history_len);
+    defer allocator.free(history);
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, history) catch |err| switch (err) {
+        // A full RFC window can replay every legal backward copy. Preserve the
+        // public error contract if a future decoder extension violates that
+        // invariant rather than leaking this private retry signal.
+        error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
+        else => |public_err| public_err,
+    };
+}
+
+fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8) SummaryError!StreamSummary {
     diagnostics.* = .{};
     var reader = bitstream.BitReader.init(stream);
     var summary = StreamSummary{
@@ -639,7 +3312,7 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
         .input_bytes = stream.len,
     };
     var last_distances = initial_last_distances;
-    var literal_history = LiteralHistory{};
+    var literal_history = LiteralHistory{ .external = history_storage };
     while (true) {
         const meta_block_index = summary.meta_block_count;
         const is_last_bit = reader.readBits(u1, 1) catch |err| {
@@ -707,7 +3380,7 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
-            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats) catch |err| {
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, summary.window_bits) catch |err| {
                 recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
                 return err;
             };
@@ -728,7 +3401,7 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
-            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats) catch |err| {
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, summary.window_bits) catch |err| {
                 recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
                 return err;
             };
@@ -748,6 +3421,10 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
         literal_history.pushSlice(stream[reader.byte_index..][0..meta_block_len]);
         reader.byte_index += meta_block_len;
     }
+}
+
+fn decodedStreamSizeAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error!usize {
+    return (try summarizeStreamAllocLimited(allocator, stream, max_output_len)).decoded_bytes;
 }
 
 pub fn decodeStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
@@ -829,6 +3506,27 @@ pub fn summarizeStreamChunksLimitedWithDiagnostics(chunks: []const []const u8, c
         return err;
     };
     return try summarizeStreamLimitedWithDiagnostics(joined, max_output_len, diagnostics);
+}
+
+pub fn summarizeStreamChunksWithHistory(chunks: []const []const u8, compressed_scratch: []u8, history: []u8) Error!StreamSummary {
+    return summarizeStreamChunksLimitedWithHistory(chunks, compressed_scratch, history, std.math.maxInt(usize));
+}
+
+pub fn summarizeStreamChunksLimitedWithHistory(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize) Error!StreamSummary {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    return summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks, compressed_scratch, history, max_output_len, &diagnostics);
+}
+
+pub fn summarizeStreamChunksWithHistoryAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks, compressed_scratch, history, std.math.maxInt(usize), diagnostics);
+}
+
+pub fn summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        diagnostics.* = .{};
+        return err;
+    };
+    return try summarizeStreamLimitedWithHistoryAndDiagnostics(joined, history, max_output_len, diagnostics);
 }
 
 pub fn probeStream(stream: []const u8) StreamProbeResult {
@@ -933,6 +3631,11 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
         summary.static_dictionary_copy_count = std.math.add(usize, summary.static_dictionary_copy_count, stats.static_dictionary_copy_count) catch return error.IntegerOverflow;
         summary.static_dictionary_bytes = std.math.add(usize, summary.static_dictionary_bytes, stats.static_dictionary_bytes) catch return error.IntegerOverflow;
     }
+    summary.max_literal_block_types = @max(summary.max_literal_block_types, stats.max_literal_block_types);
+    summary.max_literal_context_trees = @max(summary.max_literal_context_trees, stats.max_literal_context_trees);
+    summary.max_command_block_types = @max(summary.max_command_block_types, stats.max_command_block_types);
+    summary.max_distance_block_types = @max(summary.max_distance_block_types, stats.max_distance_block_types);
+    summary.max_distance_context_trees = @max(summary.max_distance_context_trees, stats.max_distance_context_trees);
 }
 
 pub const StoredStreamEncoder = struct {
@@ -953,10 +3656,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeWithOptionsAlloc(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions) Error![]u8 {
-        var out: std.ArrayList(u8) = .empty;
-        errdefer out.deinit(self.allocator);
-        try self.encodeWithOptionsAppend(&out, input, options);
-        return out.toOwnedSlice(self.allocator);
+        return encodeStoredStreamWithOptionsAlloc(self.allocator, input, options);
     }
 
     pub fn encodeChunksAlloc(self: *StoredStreamEncoder, chunks: []const []const u8) Error![]u8 {
@@ -964,10 +3664,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeChunksWithOptionsAlloc(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions) Error![]u8 {
-        var out: std.ArrayList(u8) = .empty;
-        errdefer out.deinit(self.allocator);
-        try self.encodeChunksWithOptionsAppend(&out, chunks, options);
-        return out.toOwnedSlice(self.allocator);
+        return encodeStoredStreamChunksWithOptionsAlloc(self.allocator, chunks, options);
     }
 
     pub fn encodeScratch(self: *StoredStreamEncoder, input: []const u8) Error![]const u8 {
@@ -976,7 +3673,10 @@ pub const StoredStreamEncoder = struct {
 
     pub fn encodeScratchWithOptions(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions) Error![]const u8 {
         self.scratch.clearRetainingCapacity();
-        try self.encodeWithOptionsAppend(&self.scratch, input, options);
+        const needed = try encodedStoredStreamBoundWithOptions(input.len, options);
+        try self.scratch.ensureTotalCapacity(self.allocator, needed);
+        const written = try encodeStoredStreamWithOptionsInto(input, self.scratch.allocatedSlice()[0..needed], options);
+        self.scratch.items.len = written;
         return self.scratch.items;
     }
 
@@ -986,7 +3686,10 @@ pub const StoredStreamEncoder = struct {
 
     pub fn encodeChunksScratchWithOptions(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions) Error![]const u8 {
         self.scratch.clearRetainingCapacity();
-        try self.encodeChunksWithOptionsAppend(&self.scratch, chunks, options);
+        const needed = try encodedStoredStreamChunksBoundWithOptions(chunks, options);
+        try self.scratch.ensureTotalCapacity(self.allocator, needed);
+        const written = try encodeStoredStreamChunksWithOptionsInto(chunks, self.scratch.allocatedSlice()[0..needed], options);
+        self.scratch.items.len = written;
         return self.scratch.items;
     }
 
@@ -1255,29 +3958,61 @@ fn readBlockTypeCount(reader: *bitstream.BitReader) Error!u16 {
 }
 
 fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompressedHeader {
+    var header: MinimalCompressedHeader = undefined;
+    try readMinimalCompressedHeaderInto(reader, &header);
+    return header;
+}
+
+fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *MinimalCompressedHeader) Error!void {
+    const shape = try readCompressedHeaderBlockSwitches(reader, header);
+    const tree_counts = try readCompressedHeaderContextMaps(reader, header, shape);
+    try readCompressedHeaderLiteralTrees(reader, header, tree_counts.literal);
+    try readCompressedHeaderCommandTrees(reader, header, shape.command_block_types);
+    try readCompressedHeaderDistanceTrees(reader, header, tree_counts.distance, shape.distance_alphabet_size);
+    finishCompressedHeader(header, shape, tree_counts);
+}
+
+const CompressedHeaderShape = struct {
+    literal_block_types: u16,
+    command_block_types: u16,
+    distance_block_types: u16,
+    distance_alphabet_size: usize,
+    npostfix: u2,
+    ndirect: u16,
+};
+
+const CompressedHeaderTreeCounts = struct {
+    literal: u16,
+    distance: u16,
+};
+
+const PrefixCodeProfile = header_profile.PrefixCodeProfile;
+const PrefixCodeFamily = header_profile.Family;
+
+inline fn readCompressedHeaderBlockSwitches(reader: *bitstream.BitReader, header: *MinimalCompressedHeader) Error!CompressedHeaderShape {
     const nbltypes_l = try readBlockTypeCount(reader);
     if (nbltypes_l > max_literal_block_types) return error.UnsupportedBrotliFeature;
-    var literal_block = BlockSwitchState(max_literal_block_types){ .block_type_count = nbltypes_l };
+    header.literal_block = .{ .block_type_count = nbltypes_l };
     if (nbltypes_l >= 2) {
-        literal_block.type_tree = try readPrefixCodeRuntime(max_literal_block_types + 2, @as(usize, nbltypes_l) + 2, reader);
-        literal_block.length_tree = try readPrefixCode(26, reader);
-        literal_block.remaining = try readBlockLength(&literal_block.length_tree, reader);
+        header.literal_block.type_tree = try readPrefixCodeRuntime(max_literal_block_types + 2, @as(usize, nbltypes_l) + 2, reader);
+        header.literal_block.length_tree = try readPrefixCode(26, reader);
+        header.literal_block.remaining = try readBlockLength(&header.literal_block.length_tree, reader);
     }
     const nbltypes_i = try readBlockTypeCount(reader);
     if (nbltypes_i > max_command_block_types) return error.UnsupportedBrotliFeature;
-    var command_block = BlockSwitchState(max_command_block_types){ .block_type_count = nbltypes_i };
+    header.command_block = .{ .block_type_count = nbltypes_i };
     if (nbltypes_i >= 2) {
-        command_block.type_tree = try readPrefixCodeRuntime(max_command_block_types + 2, @as(usize, nbltypes_i) + 2, reader);
-        command_block.length_tree = try readPrefixCode(26, reader);
-        command_block.remaining = try readBlockLength(&command_block.length_tree, reader);
+        header.command_block.type_tree = try readPrefixCodeRuntime(max_command_block_types + 2, @as(usize, nbltypes_i) + 2, reader);
+        header.command_block.length_tree = try readPrefixCode(26, reader);
+        header.command_block.remaining = try readBlockLength(&header.command_block.length_tree, reader);
     }
     const nbltypes_d = try readBlockTypeCount(reader);
     if (nbltypes_d > max_distance_block_types) return error.UnsupportedBrotliFeature;
-    var distance_block = BlockSwitchState(max_distance_block_types){ .block_type_count = nbltypes_d };
+    header.distance_block = .{ .block_type_count = nbltypes_d };
     if (nbltypes_d >= 2) {
-        distance_block.type_tree = try readPrefixCodeRuntime(max_distance_block_types + 2, @as(usize, nbltypes_d) + 2, reader);
-        distance_block.length_tree = try readPrefixCode(26, reader);
-        distance_block.remaining = try readBlockLength(&distance_block.length_tree, reader);
+        header.distance_block.type_tree = try readPrefixCodeRuntime(max_distance_block_types + 2, @as(usize, nbltypes_d) + 2, reader);
+        header.distance_block.length_tree = try readPrefixCode(26, reader);
+        header.distance_block.remaining = try readBlockLength(&header.distance_block.length_tree, reader);
     }
 
     const npostfix = try reader.readBits(u2, 2);
@@ -1286,57 +4021,227 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
     if (ndirect > 120) return error.CorruptFrame;
     const distance_alphabet_size: usize = 16 + @as(usize, ndirect) + (@as(usize, 48) << npostfix);
 
-    var literal_context_modes: [max_literal_block_types]u2 = @splat(0);
-    for (0..nbltypes_l) |i| {
-        literal_context_modes[i] = try reader.readBits(u2, 2);
-    }
-
-    const ntrees_l = try readBlockTypeCount(reader);
-    if (ntrees_l > max_literal_context_trees) return error.UnsupportedBrotliFeature;
-    var literal_context_map: [max_literal_block_types * 64]u8 = @splat(0);
-    try readContextMap(reader, literal_context_map[0..(@as(usize, nbltypes_l) * 64)], ntrees_l);
-    const ntrees_d = try readBlockTypeCount(reader);
-    if (ntrees_d > max_distance_context_trees) return error.UnsupportedBrotliFeature;
-    var distance_context_map: [max_distance_block_types * 4]u8 = @splat(0);
-    try readContextMap(reader, distance_context_map[0..(@as(usize, nbltypes_d) * 4)], ntrees_d);
-
-    var literal_trees: [max_literal_context_trees]PrefixCode(256) = @splat(.{});
-    literal_trees[0] = try readPrefixCode(256, reader);
-    var literal_tree_index: u16 = 1;
-    while (literal_tree_index < ntrees_l) : (literal_tree_index += 1) {
-        literal_trees[literal_tree_index] = try readPrefixCode(256, reader);
-    }
-
-    var insert_copy_trees: [max_command_block_types]PrefixCode(704) = @splat(.{});
-    insert_copy_trees[0] = try readPrefixCode(704, reader);
-    var command_tree_index: u16 = 1;
-    while (command_tree_index < nbltypes_i) : (command_tree_index += 1) {
-        insert_copy_trees[command_tree_index] = try readPrefixCode(704, reader);
-    }
-
-    var distance_trees: [max_distance_context_trees]PrefixCode(max_distance_alphabet_size) = @splat(.{});
-    distance_trees[0] = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
-    var distance_tree_index: u16 = 1;
-    while (distance_tree_index < ntrees_d) : (distance_tree_index += 1) {
-        distance_trees[distance_tree_index] = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
-    }
-
+    for (0..nbltypes_l) |i| header.literal_context_modes[i] = try reader.readBits(u2, 2);
     return .{
+        .literal_block_types = nbltypes_l,
+        .command_block_types = nbltypes_i,
+        .distance_block_types = nbltypes_d,
+        .distance_alphabet_size = distance_alphabet_size,
         .npostfix = npostfix,
         .ndirect = ndirect,
-        .literal_context_modes = literal_context_modes,
-        .literal_block = literal_block,
-        .literal_context_map = literal_context_map,
-        .literal_trees = literal_trees,
-        .command_block = command_block,
-        .insert_copy_trees = insert_copy_trees,
-        .distance_block = distance_block,
-        .distance_context_map = distance_context_map,
-        .distance_trees = distance_trees,
     };
 }
 
+inline fn readCompressedHeaderContextMaps(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, shape: CompressedHeaderShape) Error!CompressedHeaderTreeCounts {
+    const ntrees_l = try readBlockTypeCount(reader);
+    if (ntrees_l > max_literal_context_trees) return error.UnsupportedBrotliFeature;
+    try readContextMap(reader, header.literal_context_map[0..(@as(usize, shape.literal_block_types) * 64)], ntrees_l);
+    const ntrees_d = try readBlockTypeCount(reader);
+    if (ntrees_d > max_distance_context_trees) return error.UnsupportedBrotliFeature;
+    try readContextMap(reader, header.distance_context_map[0..(@as(usize, shape.distance_block_types) * 4)], ntrees_d);
+    return .{ .literal = ntrees_l, .distance = ntrees_d };
+}
+
+inline fn readCompressedHeaderLiteralTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
+    header.literal_trees[0] = try readPrefixCode(256, reader);
+    var literal_tree_index: u16 = 1;
+    while (literal_tree_index < tree_count) : (literal_tree_index += 1) {
+        header.literal_trees[literal_tree_index] = try readPrefixCode(256, reader);
+    }
+}
+
+inline fn readCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
+    header.insert_copy_trees[0] = try readPrefixCode(704, reader);
+    var command_tree_index: u16 = 1;
+    while (command_tree_index < tree_count) : (command_tree_index += 1) {
+        header.insert_copy_trees[command_tree_index] = try readPrefixCode(704, reader);
+    }
+}
+
+inline fn readCompressedHeaderDistanceTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, alphabet_size: usize) Error!void {
+    header.distance_trees[0] = try readPrefixCodeRuntime(max_distance_alphabet_size, alphabet_size, reader);
+    var distance_tree_index: u16 = 1;
+    while (distance_tree_index < tree_count) : (distance_tree_index += 1) {
+        header.distance_trees[distance_tree_index] = try readPrefixCodeRuntime(max_distance_alphabet_size, alphabet_size, reader);
+    }
+}
+
+inline fn finishCompressedHeader(header: *MinimalCompressedHeader, shape: CompressedHeaderShape, tree_counts: CompressedHeaderTreeCounts) void {
+    header.npostfix = shape.npostfix;
+    header.ndirect = shape.ndirect;
+    header.literal_tree_count = tree_counts.literal;
+    header.distance_tree_count = tree_counts.distance;
+}
+
+/// Attribute compressed-header parsing without adding clock reads to the
+/// production decoder. The discovery pass uses normal decoding to locate every
+/// header; timed iterations reconstruct only those headers from their bit
+/// offsets, so payload cost cannot hide parser and table-builder differences.
+pub fn profileCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stream: []const u8, iterations: usize) Error!CompressedHeaderProfile {
+    if (iterations == 0) return error.InvalidBlockPlan;
+
+    const starts = try collectCompressedHeaderStarts(allocator, stream);
+    defer allocator.free(starts);
+    if (starts.len == 0) return error.UnsupportedBrotliFeature;
+
+    var total: CompressedHeaderProfile = .{};
+    for (0..iterations) |_| {
+        for (starts) |start| {
+            var reader = bitstream.BitReader.init(stream);
+            reader.byte_index = start / 8;
+            reader.bit_index = @intCast(start % 8);
+            var header: MinimalCompressedHeader = undefined;
+            var literal_profile: PrefixCodeProfile = .{};
+            var command_profile: PrefixCodeProfile = .{};
+            var distance_profile: PrefixCodeProfile = .{};
+
+            var stage_start = std.Io.Clock.awake.now(io);
+            const shape = try readCompressedHeaderBlockSwitches(&reader, &header);
+            total.block_switch_ns +%= elapsedNs(stage_start, io);
+
+            stage_start = std.Io.Clock.awake.now(io);
+            const tree_counts = try readCompressedHeaderContextMaps(&reader, &header, shape);
+            total.context_map_ns +%= elapsedNs(stage_start, io);
+
+            stage_start = std.Io.Clock.awake.now(io);
+            try readCompressedHeaderLiteralTreesProfiled(io, &reader, &header, tree_counts.literal, &literal_profile);
+            total.literal_tree_ns +%= elapsedNs(stage_start, io);
+
+            stage_start = std.Io.Clock.awake.now(io);
+            try readCompressedHeaderCommandTreesProfiled(io, &reader, &header, shape.command_block_types, &command_profile);
+            total.command_tree_ns +%= elapsedNs(stage_start, io);
+
+            stage_start = std.Io.Clock.awake.now(io);
+            try readCompressedHeaderDistanceTreesProfiled(io, &reader, &header, tree_counts.distance, shape.distance_alphabet_size, &distance_profile);
+            total.distance_tree_ns +%= elapsedNs(stage_start, io);
+            finishCompressedHeader(&header, shape, tree_counts);
+
+            total.compressed_meta_block_count += 1;
+            total.input_bits +%= reader.bitPosition() - start;
+            total.literal_block_types +%= shape.literal_block_types;
+            total.command_block_types +%= shape.command_block_types;
+            total.distance_block_types +%= shape.distance_block_types;
+            total.literal_context_trees +%= tree_counts.literal;
+            total.command_trees +%= shape.command_block_types;
+            total.distance_context_trees +%= tree_counts.distance;
+            literal_profile.addTo(&total, PrefixCodeFamily.literal);
+            command_profile.addTo(&total, PrefixCodeFamily.command);
+            distance_profile.addTo(&total, PrefixCodeFamily.distance);
+            accumulateCompressedHeaderTableShape(&total, &header);
+            std.mem.doNotOptimizeAway(&header);
+        }
+    }
+    return total;
+}
+
+/// Run the same isolated header parse without nested stage clocks. Use this
+/// total when comparing implementation candidates; the detailed profile above
+/// is for attribution and necessarily includes timing-call overhead.
+pub fn benchmarkCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stream: []const u8, iterations: usize) Error!struct { elapsed_ns: u64, checksum: usize } {
+    if (iterations == 0) return error.InvalidBlockPlan;
+    const starts = try collectCompressedHeaderStarts(allocator, stream);
+    defer allocator.free(starts);
+    if (starts.len == 0) return error.UnsupportedBrotliFeature;
+
+    var checksum: usize = 0;
+    const start_time = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        for (starts) |start| {
+            var reader = bitstream.BitReader.init(stream);
+            reader.byte_index = start / 8;
+            reader.bit_index = @intCast(start % 8);
+            var header: MinimalCompressedHeader = undefined;
+            try readMinimalCompressedHeaderInto(&reader, &header);
+            checksum +%= reader.bitPosition() + header.literal_tree_count + header.command_block.block_type_count + header.distance_tree_count;
+            checksum +%= header.literal_trees[0].table.len + header.insert_copy_trees[0].table.len + header.distance_trees[0].table.len;
+            std.mem.doNotOptimizeAway(&header);
+        }
+    }
+    return .{ .elapsed_ns = elapsedNs(start_time, io), .checksum = checksum };
+}
+
+fn readCompressedHeaderLiteralTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, profile: *PrefixCodeProfile) Error!void {
+    header.literal_trees[0] = try readPrefixCodeRuntimeProfiled(256, 256, reader, io, profile);
+    var tree_index: u16 = 1;
+    while (tree_index < tree_count) : (tree_index += 1)
+        header.literal_trees[tree_index] = try readPrefixCodeRuntimeProfiled(256, 256, reader, io, profile);
+}
+
+fn readCompressedHeaderCommandTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, profile: *PrefixCodeProfile) Error!void {
+    header.insert_copy_trees[0] = try readPrefixCodeRuntimeProfiled(704, 704, reader, io, profile);
+    var tree_index: u16 = 1;
+    while (tree_index < tree_count) : (tree_index += 1)
+        header.insert_copy_trees[tree_index] = try readPrefixCodeRuntimeProfiled(704, 704, reader, io, profile);
+}
+
+fn readCompressedHeaderDistanceTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, alphabet_size: usize, profile: *PrefixCodeProfile) Error!void {
+    header.distance_trees[0] = try readPrefixCodeRuntimeProfiled(max_distance_alphabet_size, alphabet_size, reader, io, profile);
+    var tree_index: u16 = 1;
+    while (tree_index < tree_count) : (tree_index += 1)
+        header.distance_trees[tree_index] = try readPrefixCodeRuntimeProfiled(max_distance_alphabet_size, alphabet_size, reader, io, profile);
+}
+
+fn collectCompressedHeaderStarts(allocator: std.mem.Allocator, stream: []const u8) Error![]usize {
+    var starts: std.ArrayList(usize) = .empty;
+    errdefer starts.deinit(allocator);
+
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(allocator);
+    var reader = bitstream.BitReader.init(stream);
+    const window_bits = try readWindowBitsValue(&reader);
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    while (true) {
+        switch (try readStreamMetaBlockHeader(&reader)) {
+            .end => {
+                try ensureZeroPaddingAndEnd(reader);
+                return starts.toOwnedSlice(allocator);
+            },
+            .metadata => try skipMetadataMetaBlock(&reader),
+            .compressed => |meta| {
+                try starts.append(allocator, reader.bitPosition());
+                const end = std.math.add(usize, written, meta.decoded_len) catch return error.IntegerOverflow;
+                try output.resize(allocator, end);
+                try processMinimalCompressedMetaBlock(&reader, output.items, &written, meta.decoded_len, &last_distances, window_bits);
+                if (written != end) return error.SizeMismatch;
+                if (meta.final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return starts.toOwnedSlice(allocator);
+                }
+            },
+            .uncompressed => |len| {
+                const end = std.math.add(usize, written, len) catch return error.IntegerOverflow;
+                try output.resize(allocator, end);
+                try consumeZeroPaddingToByte(&reader);
+                try reader.readAlignedBytes(output.items[written..end]);
+                written = end;
+            },
+        }
+    }
+}
+
+fn accumulateCompressedHeaderTableShape(profile: *CompressedHeaderProfile, header: *const MinimalCompressedHeader) void {
+    accumulatePrefixTableShape(34, profile, &header.literal_block.type_tree);
+    accumulatePrefixTableShape(26, profile, &header.literal_block.length_tree);
+    accumulatePrefixTableShape(34, profile, &header.command_block.type_tree);
+    accumulatePrefixTableShape(26, profile, &header.command_block.length_tree);
+    accumulatePrefixTableShape(max_distance_block_types + 2, profile, &header.distance_block.type_tree);
+    accumulatePrefixTableShape(26, profile, &header.distance_block.length_tree);
+    for (header.literal_trees[0..header.literal_tree_count]) |*tree| accumulatePrefixTableShape(256, profile, tree);
+    for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree| accumulatePrefixTableShape(704, profile, tree);
+    for (header.distance_trees[0..header.distance_tree_count]) |*tree| accumulatePrefixTableShape(max_distance_alphabet_size, profile, tree);
+}
+
+fn accumulatePrefixTableShape(comptime alphabet_size: usize, profile: *CompressedHeaderProfile, tree: *const PrefixCode(alphabet_size)) void {
+    profile.tree_symbols +%= @intFromBool(tree.single_symbol != null);
+    profile.tree_entries +%= tree.table.len;
+}
+
 fn readBlockLength(prefix: *const PrefixCode(26), reader: *bitstream.BitReader) Error!usize {
+    return readBlockLengthAny(prefix, reader);
+}
+
+fn readBlockLengthAny(prefix: *const PrefixCode(26), reader: anytype) Error!usize {
     const symbol = try prefix.decode(reader);
     if (symbol >= block_length_specs.len) return error.InvalidHuffmanCode;
     const spec = block_length_specs[symbol];
@@ -1438,15 +4343,13 @@ fn applyInverseMoveToFront(context_map: []u8) void {
 
 fn readInsertCopyLengths(symbol: u16, reader: *bitstream.BitReader) Error!InsertCopyLengths {
     if (symbol >= 704) return error.InvalidHuffmanCode;
-    const ranges = insertCopyCodeRanges(symbol);
-    const insert_code = ranges.insert_base + ((symbol >> 3) & 0x7);
-    const copy_code = ranges.copy_base + (symbol & 0x7);
-    const insert = try readInsertLength(insert_code, reader);
-    const copy = try readCopyLength(copy_code, reader);
+    const entry = command_lut.entries[symbol];
+    const insert_extra = if (entry.insert_extra_bits == 0) 0 else try reader.readBits(u32, entry.insert_extra_bits);
+    const copy_extra = if (entry.copy_extra_bits == 0) 0 else try reader.readBits(u32, entry.copy_extra_bits);
     return .{
-        .insert_len = insert,
-        .copy_len = copy,
-        .distance_symbol_zero = symbol < 128,
+        .insert_len = entry.insert_base + insert_extra,
+        .copy_len = entry.copy_base + copy_extra,
+        .distance_symbol_zero = entry.distance_code == 0,
     };
 }
 
@@ -1456,10 +4359,13 @@ fn processMinimalCompressedMetaBlock(
     written: *usize,
     meta_block_len: usize,
     last_distances: *[4]usize,
+    window_bits: u5,
 ) Error!void {
     const meta_block_end = std.math.add(usize, written.*, meta_block_len) catch return error.IntegerOverflow;
     if (meta_block_end > output.len) return error.OutputTooSmall;
-    var header = try readMinimalCompressedHeader(reader);
+    var header: MinimalCompressedHeader = undefined;
+    try readMinimalCompressedHeaderInto(reader, &header);
+    var transformed_dictionary_word: [64]u8 = undefined;
     while (written.* < meta_block_end) {
         const command_symbol = try readCommandSymbol(&header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
@@ -1479,22 +4385,137 @@ fn processMinimalCompressedMetaBlock(
         if (written.* == meta_block_end) {
             return;
         }
-        const distance = try readMinimalDistance(&header, reader, lengths, last_distances);
+        const decoded_distance = try readMinimalDistance(&header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
-        if (distance > written.*) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written.*);
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
             if (word.len > meta_block_end - written.*) return error.CorruptFrame;
             @memcpy(output[written.*..][0..word.len], word);
             written.* += word.len;
             continue;
         }
-        pushLastDistance(last_distances, distance);
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
-        var copy_index: usize = 0;
-        while (copy_index < lengths.copy_len) : (copy_index += 1) {
-            output[written.*] = output[written.* - distance];
+        match_copy.append(output, written, distance, lengths.copy_len);
+    }
+}
+
+fn processLargeCompressedMetaBlock(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_len: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+) Error!void {
+    const meta_block_end = std.math.add(usize, written.*, meta_block_len) catch return error.IntegerOverflow;
+    if (meta_block_end > output.len) return error.OutputTooSmall;
+    var header: MinimalCompressedHeader = undefined;
+    try readMinimalCompressedHeaderInto(reader, &header);
+    if (header.literal_tree_count < clustered_literal_tree_threshold or !prepareLiteralTailLookups(&header))
+        return processDecodedCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, &header);
+    return processTailLookupCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, &header);
+}
+
+const clustered_literal_tree_threshold: u16 = 16;
+
+fn prepareLiteralTailLookups(header: *MinimalCompressedHeader) bool {
+    for (header.literal_trees[0..header.literal_tree_count]) |*tree|
+        if (!tree.canPrepareTailLookup()) return false;
+    for (header.literal_trees[0..header.literal_tree_count]) |*tree|
+        std.debug.assert(tree.prepareTailLookup());
+    return true;
+}
+
+noinline fn processDecodedCompressedPayload(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+) Error!void {
+    var transformed_dictionary_word: [64]u8 = undefined;
+    while (written.* < meta_block_end) {
+        const command_symbol = try readCommandSymbol(header, reader);
+        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
+        var i: usize = 0;
+        while (i < lengths.insert_len) : (i += 1) {
+            try ensureLiteralBlock(header, reader);
+            const context = try literalContext(header, output, written.*);
+            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
+            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+            const literal = try header.literal_trees[tree_index].decode(reader);
+            if (literal > 0xff) return error.InvalidHuffmanCode;
+            output[written.*] = @intCast(literal);
             written.* += 1;
+            if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
+        if (written.* == meta_block_end) return;
+        const decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
+        if (distance == 0) return error.InvalidMatch;
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            continue;
+        }
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
+        if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
+        match_copy.append(output, written, distance, lengths.copy_len);
+    }
+}
+
+noinline fn processTailLookupCompressedPayload(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+) Error!void {
+    var transformed_dictionary_word: [64]u8 = undefined;
+    while (written.* < meta_block_end) {
+        const command_symbol = try readCommandSymbol(header, reader);
+        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
+        var i: usize = 0;
+        while (i < lengths.insert_len) : (i += 1) {
+            try ensureLiteralBlock(header, reader);
+            const previous = if (written.* == 0) 0 else output[written.* - 1];
+            const second_previous = if (written.* < 2) 0 else output[written.* - 2];
+            const context = literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
+            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
+            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+            const literal = try header.literal_trees[tree_index].decodeTailLookup(reader);
+            if (literal > 0xff) return error.InvalidHuffmanCode;
+            output[written.*] = @intCast(literal);
+            written.* += 1;
+            if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
+        }
+        if (written.* == meta_block_end) return;
+        const decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
+        if (distance == 0) return error.InvalidMatch;
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            continue;
+        }
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
+        if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
+        match_copy.append(output, written, distance, lengths.copy_len);
     }
 }
 
@@ -1505,9 +4526,19 @@ fn skipMinimalCompressedMetaBlock(
     last_distances: *[4]usize,
     literal_history: *LiteralHistory,
     stats: ?*StreamSummaryMetaBlockStats,
-) Error!void {
+    window_bits: u5,
+) SummaryError!void {
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
-    var header = try readMinimalCompressedHeader(reader);
+    var header: MinimalCompressedHeader = undefined;
+    try readMinimalCompressedHeaderInto(reader, &header);
+    if (stats) |s| {
+        s.max_literal_block_types = header.literal_block.block_type_count;
+        s.max_literal_context_trees = header.literal_tree_count;
+        s.max_command_block_types = header.command_block.block_type_count;
+        s.max_distance_block_types = header.distance_block.block_type_count;
+        s.max_distance_context_trees = header.distance_tree_count;
+    }
+    var transformed_dictionary_word: [64]u8 = undefined;
     var written = start_written;
     while (written < meta_block_end) {
         const command_symbol = try readCommandSymbol(&header, reader);
@@ -1528,10 +4559,12 @@ fn skipMinimalCompressedMetaBlock(
         if (written == meta_block_end) {
             return;
         }
-        const distance = try readMinimalDistance(&header, reader, lengths, last_distances);
+        const decoded_distance = try readMinimalDistance(&header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
-        if (distance > written) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written);
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
             if (word.len > meta_block_end - written) return error.CorruptFrame;
             if (stats) |s| {
                 s.static_dictionary_copy_count = std.math.add(usize, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
@@ -1541,7 +4574,7 @@ fn skipMinimalCompressedMetaBlock(
             written += word.len;
             continue;
         }
-        pushLastDistance(last_distances, distance);
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - written) return error.CorruptFrame;
         literal_history.copy(distance, lengths.copy_len);
         written += lengths.copy_len;
@@ -4273,25 +7306,25 @@ pub fn minimalStaticDictionaryCoverage() []const StaticDictionaryEntry {
     return &minimal_static_dictionary_entries;
 }
 
-fn minimalStaticDictionaryWord(distance: usize, copy_len: usize, current_output_len: usize) Error![]const u8 {
+fn minimalStaticDictionaryWord(
+    distance: usize,
+    copy_len: usize,
+    max_backward_distance: usize,
+    transformed_scratch: *[64]u8,
+) Error![]const u8 {
     // Brotli static-dictionary addresses are relative to the current maximum
-    // LZ77 distance, not the raw distance code. In this minimal decoder slice
-    // we only enter here while `distance > current_output_len`, so the current
-    // output length is the same limit used by RFC 7932 for small streams. The
-    // table below intentionally keeps just the proven word/transform tuples;
-    // full dictionary bytes, full transform metadata, and late-window dictionary
-    // references remain follow-up work.
-    if (distance <= current_output_len) return error.InvalidMatch;
-    const address = distance - current_output_len - 1;
-    const size_bits = minimalStaticDictionarySizeBits(copy_len) orelse return error.UnsupportedBrotliFeature;
-    const mask = (@as(usize, 1) << @intCast(size_bits)) - 1;
-    const word_index = address & mask;
-    const transform_index = address >> @intCast(size_bits);
+    // LZ77 distance: min(decoded bytes, 2^WBITS - 16). This differs from total
+    // output after the stream has filled its window.
+    if (distance <= max_backward_distance) return error.InvalidMatch;
+    const address = distance - max_backward_distance - 1;
 
-    for (minimal_static_dictionary_entries) |entry| {
-        if (entry.transform == transform_index and entry.copy_len == copy_len and entry.word_index == word_index) return entry.word;
-    }
-    return error.UnsupportedBrotliFeature;
+    // `static_dictionary.transform` is the complete RFC 7932 implementation.
+    // The historical compatibility list is retained for introspection and
+    // regression metadata only; scanning its thousands of entries on every
+    // dictionary copy made dictionary-heavy decode accidentally quadratic in
+    // that coverage list. RFC copy lengths are bounded to 4...24 before this
+    // point, so no separate size-bit lookup is needed here.
+    return static_dictionary.transform(address, copy_len, transformed_scratch) orelse error.UnsupportedBrotliFeature;
 }
 
 pub fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
@@ -4307,9 +7340,16 @@ pub fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
     };
 }
 
+pub const transformStaticDictionaryWord = static_dictionary.transform;
+pub const fullStaticDictionarySizeBits = static_dictionary.sizeBits;
+
 fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!u16 {
+    return readCommandSymbolAny(header, reader);
+}
+
+fn readCommandSymbolAny(header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
     if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0) {
-        try switchCommandBlock(&header.command_block, reader);
+        try switchBlockAny(max_command_block_types, &header.command_block, reader);
     }
     if (header.command_block.current_type >= max_command_block_types) return error.UnsupportedBrotliFeature;
     const symbol = try header.insert_copy_trees[header.command_block.current_type].decode(reader);
@@ -4318,16 +7358,24 @@ fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitRea
 }
 
 fn ensureLiteralBlock(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!void {
+    return ensureLiteralBlockAny(header, reader);
+}
+
+fn ensureLiteralBlockAny(header: *MinimalCompressedHeader, reader: anytype) Error!void {
     if (header.literal_block.block_type_count > 1 and header.literal_block.remaining == 0) {
-        try switchBlock(max_literal_block_types, &header.literal_block, reader);
+        try switchBlockAny(max_literal_block_types, &header.literal_block, reader);
     }
 }
 
 fn switchCommandBlock(block: *BlockSwitchState(max_command_block_types), reader: *bitstream.BitReader) Error!void {
-    try switchBlock(max_command_block_types, block, reader);
+    try switchBlockAny(max_command_block_types, block, reader);
 }
 
 fn switchBlock(comptime max_block_types: usize, block: *BlockSwitchState(max_block_types), reader: *bitstream.BitReader) Error!void {
+    return switchBlockAny(max_block_types, block, reader);
+}
+
+fn switchBlockAny(comptime max_block_types: usize, block: *BlockSwitchState(max_block_types), reader: anytype) Error!void {
     if (block.block_type_count <= 1) return error.CorruptFrame;
     const symbol = try block.type_tree.decode(reader);
     var block_type: u16 = switch (symbol) {
@@ -4338,7 +7386,7 @@ fn switchBlock(comptime max_block_types: usize, block: *BlockSwitchState(max_blo
     if (block_type >= block.block_type_count) block_type -= block.block_type_count;
     block.previous_type = block.current_type;
     block.current_type = block_type;
-    block.remaining = try readBlockLength(&block.length_tree, reader);
+    block.remaining = try readBlockLengthAny(&block.length_tree, reader);
 }
 
 fn literalContext(header: *const MinimalCompressedHeader, output: []const u8, written: usize) Error!usize {
@@ -4348,63 +7396,7 @@ fn literalContext(header: *const MinimalCompressedHeader, output: []const u8, wr
 }
 
 fn literalContextFromMode(mode: u2, previous: u8, second_previous: u8) Error!usize {
-    return switch (mode) {
-        0 => previous & 0x3f,
-        1 => previous >> 2,
-        2 => utf8Context(previous, second_previous),
-        3 => (signedContextBucket(previous) << 3) | signedContextBucket(second_previous),
-    };
-}
-
-fn utf8Context(previous: u8, second_previous: u8) usize {
-    return utf8LastByteContext(previous) | utf8SecondLastByteContext(second_previous);
-}
-
-fn utf8LastByteContext(value: u8) usize {
-    if (value >= 192) return 2 + (value & 1);
-    if (value >= 128) return value & 1;
-    if ((value < 32 and value != 9 and value != 10 and value != 13) or value == 127) return 0;
-    return switch (value) {
-        9, 10, 13 => 4,
-        32 => 8,
-        '"', '\'' => 16,
-        '%' => 20,
-        '(', '<', '[', '{' => 24,
-        ')', '>', ']', '}' => 28,
-        ',', ';', ':' => 32,
-        '.' => 36,
-        '=' => 40,
-        '0'...'9' => 44,
-        'A', 'E', 'I', 'O', 'U' => 48,
-        'B'...'D', 'F'...'H', 'J'...'N', 'P'...'T', 'V'...'Z' => 52,
-        'a', 'e', 'i', 'o', 'u' => 56,
-        'b'...'d', 'f'...'h', 'j'...'n', 'p'...'t', 'v'...'z' => 60,
-        else => 12,
-    };
-}
-
-fn utf8SecondLastByteContext(value: u8) usize {
-    if (value >= 208) return 2;
-    if (value >= 128) return 0;
-    return switch (value) {
-        0...32, 127 => 0,
-        '0'...'9', 'A'...'Z' => 2,
-        'a'...'z' => 3,
-        else => 1,
-    };
-}
-
-fn signedContextBucket(value: u8) usize {
-    return switch (value) {
-        0 => 0,
-        1...15 => 1,
-        16...63 => 2,
-        64...127 => 3,
-        128...191 => 4,
-        192...239 => 5,
-        240...254 => 6,
-        255 => 7,
-    };
+    return literal_context.value(mode, previous, second_previous);
 }
 
 fn readMinimalDistance(
@@ -4412,7 +7404,7 @@ fn readMinimalDistance(
     reader: *bitstream.BitReader,
     lengths: InsertCopyLengths,
     last_distances: *[4]usize,
-) Error!usize {
+) Error!struct { distance: usize, update_ring: bool } {
     const symbol = if (lengths.distance_symbol_zero) 0 else blk: {
         try ensureDistanceBlock(header, reader);
         const context = distanceContext(lengths.copy_len);
@@ -4423,14 +7415,17 @@ fn readMinimalDistance(
         if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
         break :blk decoded;
     };
-    if (symbol < 16) {
-        return try resolveShortDistance(symbol, last_distances);
-    }
+    if (symbol < 16) return .{
+        .distance = try resolveShortDistance(symbol, last_distances),
+        // RFC 7932 code zero reuses the newest distance without advancing the
+        // ring; all other short codes are installed as a newly used distance.
+        .update_ring = symbol != 0,
+    };
     const direct_index = symbol - 16;
-    return if (direct_index < header.ndirect)
+    return .{ .distance = if (direct_index < header.ndirect)
         @as(usize, direct_index) + 1
     else
-        try readRegularDistance(header, reader, symbol);
+        try readRegularDistance(header, reader, symbol), .update_ring = true };
 }
 
 fn ensureDistanceBlock(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!void {
@@ -4451,7 +7446,7 @@ fn readRegularDistance(header: *const MinimalCompressedHeader, reader: *bitstrea
     if (ndistbits_value > 24) return error.CorruptFrame;
     const ndistbits: u5 = @intCast(ndistbits_value);
     const dextra = if (ndistbits == 0) 0 else try reader.readBits(u32, ndistbits);
-    return try resolveRegularDistance(header.npostfix, header.ndirect, symbol, dextra);
+    return resolveRegularDistanceParts(header.npostfix, header.ndirect, xcode, ndistbits_value, dextra);
 }
 
 fn resolveRegularDistance(npostfix: u2, ndirect: u16, symbol: u16, dextra: usize) Error!usize {
@@ -4461,15 +7456,19 @@ fn resolveRegularDistance(npostfix: u2, ndirect: u16, symbol: u16, dextra: usize
     const ndistbits = 1 + (xcode >> @intCast(npostfix_usize + 1));
     if (ndistbits > 24) return error.CorruptFrame;
 
-    const hcode = xcode >> @intCast(npostfix_usize);
-    const postfix_mask = (@as(usize, 1) << @intCast(npostfix_usize)) - 1;
-    const lcode = xcode & postfix_mask;
-    const offset = ((@as(usize, 2) + (hcode & 1)) << @intCast(ndistbits)) - 4;
-    const base_with_extra = std.math.add(usize, offset, dextra) catch return error.IntegerOverflow;
-    const shifted = base_with_extra << @intCast(npostfix_usize);
-    const with_postfix = std.math.add(usize, shifted, lcode) catch return error.IntegerOverflow;
-    const with_direct = std.math.add(usize, with_postfix, ndirect) catch return error.IntegerOverflow;
-    return std.math.add(usize, with_direct, 1) catch return error.IntegerOverflow;
+    // RFC limits (NPOSTFIX<=3, NDIRECT<=120, NDISTBITS<=24) bound this
+    // expression below 2^30. Compute in u32 after validating those fields
+    // rather than carrying four redundant usize overflow checks per distance.
+    if (dextra >= (@as(usize, 1) << @intCast(ndistbits))) return error.CorruptFrame;
+    return resolveRegularDistanceParts(npostfix, ndirect, xcode, ndistbits, dextra);
+}
+
+inline fn resolveRegularDistanceParts(npostfix: u2, ndirect: u16, xcode: usize, ndistbits: usize, dextra: usize) usize {
+    const hcode: u32 = @intCast(xcode >> @intCast(@as(usize, npostfix)));
+    const postfix_mask = (@as(u32, 1) << npostfix) - 1;
+    const lcode: u32 = @intCast(xcode & postfix_mask);
+    const offset = ((@as(u32, 2) + (hcode & 1)) << @intCast(ndistbits)) - 4;
+    return @as(usize, ((offset + @as(u32, @intCast(dextra))) << npostfix) + lcode + ndirect + 1);
 }
 
 fn resolveShortDistance(symbol: u16, last_distances: *const [4]usize) Error!usize {
@@ -4606,36 +7605,90 @@ fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize
         symbols[i] = symbol;
     }
 
-    var lengths: [max_alphabet_size]u4 = @splat(0);
+    var lengths: [max_alphabet_size]u4 = undefined;
     switch (nsym) {
         1 => return .{ .single_symbol = symbols[0] },
         2 => {
-            lengths[symbols[0]] = 1;
-            lengths[symbols[1]] = 1;
+            lengths[0] = 1;
+            lengths[1] = 1;
         },
         3 => {
-            lengths[symbols[0]] = 1;
-            lengths[symbols[1]] = 2;
-            lengths[symbols[2]] = 2;
+            lengths[0] = 1;
+            lengths[1] = 2;
+            lengths[2] = 2;
         },
         4 => {
             const tree_select = try reader.readBits(u1, 1);
             if (tree_select == 0) {
-                for (symbols) |symbol| lengths[symbol] = 2;
+                @memset(lengths[0..4], 2);
             } else {
-                lengths[symbols[0]] = 1;
-                lengths[symbols[1]] = 2;
-                lengths[symbols[2]] = 3;
-                lengths[symbols[3]] = 3;
+                lengths[0] = 1;
+                lengths[1] = 2;
+                lengths[2] = 3;
+                lengths[3] = 3;
             }
         },
         else => unreachable,
     }
 
-    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).init(&lengths) };
+    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..nsym], symbols[0..nsym]) };
+}
+
+fn readPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, io: std.Io, profile: *PrefixCodeProfile) Error!PrefixCode(max_alphabet_size) {
+    if (alphabet_size == 0 or alphabet_size > max_alphabet_size) return error.CorruptFrame;
+    const kind = try reader.readBits(u2, 2);
+    if (kind != 1) {
+        profile.complex_trees += 1;
+        return readComplexPrefixCodeRuntimeProfiled(max_alphabet_size, alphabet_size, reader, kind, io, profile);
+    }
+
+    const start = std.Io.Clock.awake.now(io);
+    const nsym = @as(usize, try reader.readBits(u2, 2)) + 1;
+    const alphabet_bits = alphabetBitsRuntime(alphabet_size);
+    var symbols: [4]u16 = undefined;
+    for (0..nsym) |i| {
+        const symbol = try reader.readBits(u16, alphabet_bits);
+        if (symbol >= alphabet_size) return error.InvalidHuffmanCode;
+        for (symbols[0..i]) |previous| {
+            if (previous == symbol) return error.InvalidHuffmanCode;
+        }
+        symbols[i] = symbol;
+    }
+
+    var lengths: [4]u4 = undefined;
+    const result: PrefixCode(max_alphabet_size) = switch (nsym) {
+        1 => .{ .single_symbol = symbols[0] },
+        2 => blk: {
+            lengths[0] = 1;
+            lengths[1] = 1;
+            break :blk .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..2], symbols[0..2]) };
+        },
+        3 => blk: {
+            lengths[0] = 1;
+            lengths[1] = 2;
+            lengths[2] = 2;
+            break :blk .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..3], symbols[0..3]) };
+        },
+        4 => blk: {
+            const tree_select = try reader.readBits(u1, 1);
+            if (tree_select == 0) {
+                @memset(&lengths, 2);
+            } else {
+                lengths = .{ 1, 2, 3, 3 };
+            }
+            break :blk .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(&lengths, &symbols) };
+        },
+        else => unreachable,
+    };
+    profile.simple_trees += 1;
+    profile.active_entries += nsym;
+    profile.tail_lookup_eligible_trees += @intFromBool(result.single_symbol != null or result.table.canBuildTailLookup8());
+    profile.simple_tree_ns +%= elapsedNs(start, io);
+    return result;
 }
 
 const code_length_alphabet_size = 18;
+const CodeLengthPrefixDecoder = huffman.FastDecoder(code_length_alphabet_size, 5);
 const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
 fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2) Error!PrefixCode(max_alphabet_size) {
@@ -4666,10 +7719,14 @@ fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size
         return error.InvalidHuffmanCode;
     }
 
-    const code_length_prefix = if (code_length_nonzero == 1)
-        singleSymbolPrefixCode(code_length_alphabet_size, &code_length_lengths)
+    const code_length_single_symbol = if (code_length_nonzero == 1)
+        singleSymbolPrefixCode(code_length_alphabet_size, &code_length_lengths).single_symbol
     else
-        PrefixCode(code_length_alphabet_size){ .table = try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths) };
+        null;
+    const code_length_decoder = if (code_length_single_symbol == null)
+        CodeLengthPrefixDecoder.init(try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths))
+    else
+        undefined;
 
     var lengths: [max_alphabet_size]u4 = @splat(0);
     var index: usize = 0;
@@ -4680,7 +7737,7 @@ fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size
     var pending_repeat_length: u4 = 0;
     var last_symbol: ?u16 = null;
     while (index < alphabet_size and space > 0) {
-        const symbol = try code_length_prefix.decode(reader);
+        const symbol = code_length_single_symbol orelse try code_length_decoder.decodeValue(reader);
         switch (symbol) {
             0 => {
                 try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
@@ -4731,12 +7788,143 @@ fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size
     if (space != 0) return error.InvalidHuffmanCode;
     if (last_symbol == null or last_symbol.? == 0 or last_symbol.? == 17) return error.InvalidHuffmanCode;
 
+    var active_symbols: [max_alphabet_size]u16 = undefined;
     var active: usize = 0;
-    for (lengths[0..alphabet_size]) |length| {
-        if (length != 0) active += 1;
+    for (lengths[0..alphabet_size], 0..) |length, symbol| {
+        if (length != 0) {
+            active_symbols[active] = @intCast(symbol);
+            active += 1;
+        }
     }
     if (active < 2) return error.InvalidHuffmanCode;
-    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).init(&lengths) };
+    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).initSparseTrusted(&lengths, active_symbols[0..active]) };
+}
+
+fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2, io: std.Io, profile: *PrefixCodeProfile) Error!PrefixCode(max_alphabet_size) {
+    if (hskip == 1) return error.CorruptFrame;
+
+    const header_start = std.Io.Clock.awake.now(io);
+    var code_length_lengths: [code_length_alphabet_size]u4 = @splat(0);
+    var code_length_space: i32 = 32;
+    var code_length_nonzero: usize = 0;
+    var code_length_index: usize = if (hskip == 0) 0 else hskip;
+    while (code_length_index < code_length_order.len) : (code_length_index += 1) {
+        const length = try readCodeLengthCodeLength(reader);
+        const symbol = code_length_order[code_length_index];
+        code_length_lengths[symbol] = length;
+        if (length != 0) {
+            code_length_nonzero += 1;
+            code_length_space -= @intCast(@as(u32, 32) >> length);
+            if (code_length_space < 0) return error.InvalidHuffmanCode;
+            if (code_length_space == 0) {
+                if (code_length_nonzero < 2) return error.InvalidHuffmanCode;
+                break;
+            }
+        }
+    }
+    if (code_length_nonzero == 0) return error.InvalidHuffmanCode;
+    if (code_length_space != 0 and code_length_index == code_length_order.len) {
+        if (code_length_nonzero != 1) return error.InvalidHuffmanCode;
+    } else if (code_length_space != 0) {
+        return error.InvalidHuffmanCode;
+    }
+
+    const code_length_single_symbol = if (code_length_nonzero == 1)
+        singleSymbolPrefixCode(code_length_alphabet_size, &code_length_lengths).single_symbol
+    else
+        null;
+    const code_length_decoder = if (code_length_single_symbol == null)
+        CodeLengthPrefixDecoder.init(try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths))
+    else
+        undefined;
+    profile.code_length_header_ns +%= elapsedNs(header_start, io);
+
+    const rle_start = std.Io.Clock.awake.now(io);
+    var lengths: [max_alphabet_size]u4 = @splat(0);
+    var index: usize = 0;
+    var space: i32 = 32768;
+    var last_nonzero_length: u4 = 8;
+    var previous_repeat_symbol: ?u16 = null;
+    var pending_repeat_count: usize = 0;
+    var pending_repeat_length: u4 = 0;
+    var last_symbol: ?u16 = null;
+    while (index < alphabet_size and space > 0) {
+        const symbol = code_length_single_symbol orelse try code_length_decoder.decodeValue(reader);
+        profile.code_length_symbols += 1;
+        switch (symbol) {
+            0 => {
+                try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                lengths[index] = 0;
+                index += 1;
+            },
+            1...15 => {
+                try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                const length: u4 = @intCast(symbol);
+                lengths[index] = length;
+                index += 1;
+                last_nonzero_length = length;
+                space -= @intCast(@as(u32, 32768) >> length);
+                if (space < 0) return error.InvalidHuffmanCode;
+            },
+            16 => {
+                const repeat = @as(usize, try reader.readBits(u2, 2)) + 3;
+                profile.repeat_symbols += 1;
+                if (previous_repeat_symbol == 16) {
+                    const previous_count = pending_repeat_count;
+                    pending_repeat_count = 4 * (pending_repeat_count - 2) + repeat;
+                    profile.repeated_lengths += pending_repeat_count - previous_count;
+                } else {
+                    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                    pending_repeat_count = repeat;
+                    pending_repeat_length = last_nonzero_length;
+                    profile.repeated_lengths += repeat;
+                }
+                previous_repeat_symbol = 16;
+                try validatePendingRepeat(alphabet_size, index, pending_repeat_length, pending_repeat_count, space);
+                if (pendingRepeatCompletesSpace(pending_repeat_length, pending_repeat_count, space))
+                    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+            },
+            17 => {
+                const repeat = @as(usize, try reader.readBits(u3, 3)) + 3;
+                profile.repeat_symbols += 1;
+                if (previous_repeat_symbol == 17) {
+                    const previous_count = pending_repeat_count;
+                    pending_repeat_count = 8 * (pending_repeat_count - 2) + repeat;
+                    profile.repeated_lengths += pending_repeat_count - previous_count;
+                } else {
+                    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                    pending_repeat_count = repeat;
+                    pending_repeat_length = 0;
+                    profile.repeated_lengths += repeat;
+                }
+                previous_repeat_symbol = 17;
+                try validatePendingRepeat(alphabet_size, index, pending_repeat_length, pending_repeat_count, space);
+            },
+            else => return error.InvalidHuffmanCode,
+        }
+        last_symbol = symbol;
+    }
+    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+    if (space != 0) return error.InvalidHuffmanCode;
+    if (last_symbol == null or last_symbol.? == 0 or last_symbol.? == 17) return error.InvalidHuffmanCode;
+
+    var active_symbols: [max_alphabet_size]u16 = undefined;
+    var active: usize = 0;
+    for (lengths[0..alphabet_size], 0..) |length, symbol| {
+        if (length != 0) {
+            active_symbols[active] = @intCast(symbol);
+            active += 1;
+        }
+    }
+    if (active < 2) return error.InvalidHuffmanCode;
+    profile.active_entries += active;
+    profile.code_length_rle_ns +%= elapsedNs(rle_start, io);
+
+    const build_start = std.Io.Clock.awake.now(io);
+    const result: PrefixCode(max_alphabet_size) = .{ .table = try huffman.HuffmanTable(max_alphabet_size).initSparseTrusted(&lengths, active_symbols[0..active]) };
+    profile.tail_lookup_eligible_trees += @intFromBool(result.table.canBuildTailLookup8());
+    profile.canonical_build_ns +%= elapsedNs(build_start, io);
+    return result;
 }
 
 fn readCodeLengthCodeLength(reader: *bitstream.BitReader) Error!u4 {
@@ -4859,7 +8047,8 @@ fn writeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits
 fn storedWindowBitsLen(window_bits: u5) Error!usize {
     return switch (window_bits) {
         16 => 1,
-        10...15, 17...24 => 7,
+        18...24 => 4,
+        10...15, 17 => 7,
         else => error.InvalidBlockPlan,
     };
 }
@@ -4935,6 +8124,154 @@ test "br stored stream round trips hello with known bytes" {
     try std.testing.expectError(error.OutputTooSmall, decodeStreamIntoLimited(encoded, out[0..4], 5));
 }
 
+test "br default stored caller output matches allocating wire at length boundaries" {
+    var input: [direct_stored_stream_max_input_len + 1]u8 = undefined;
+    var state: u32 = 0x36a7_f125;
+    for (&input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    const lengths = [_]usize{ 0, 1, 2, 7, 8, 255, 256, 257, 4095, 4096, 8191, 8192, direct_stored_stream_max_input_len - 1, direct_stored_stream_max_input_len, direct_stored_stream_max_input_len + 1 };
+    for (lengths) |len| {
+        const expected = try encodeStoredStreamAlloc(std.testing.allocator, input[0..len]);
+        defer std.testing.allocator.free(expected);
+        const output = try std.testing.allocator.alloc(u8, try encodedStoredStreamBound(len));
+        defer std.testing.allocator.free(output);
+        const written = try encodeStoredStreamInto(input[0..len], output);
+        try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+        if (output.len != 0)
+            try std.testing.expectError(error.OutOfMemory, encodeStoredStreamInto(input[0..len], output[0 .. output.len - 1]));
+    }
+}
+
+test "br stored caller output preserves general options path" {
+    const input = "stored payload";
+    inline for (.{ 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24 }) |window_bits| {
+        const options = StoredStreamOptions{ .window_bits = window_bits };
+        const expected = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, input, options);
+        defer std.testing.allocator.free(expected);
+        const output = try std.testing.allocator.alloc(u8, try encodedStoredStreamBoundWithOptions(input.len, options));
+        defer std.testing.allocator.free(output);
+        const written = try encodeStoredStreamWithOptionsInto(input, output, options);
+        try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+    }
+    const metadata_options = StoredStreamOptions{ .metadata = "vort-metadata" };
+    const expected = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, input, metadata_options);
+    defer std.testing.allocator.free(expected);
+    const output = try std.testing.allocator.alloc(u8, try encodedStoredStreamBoundWithOptions(input.len, metadata_options));
+    defer std.testing.allocator.free(output);
+    const written = try encodeStoredStreamWithOptionsInto(input, output, metadata_options);
+    try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+}
+
+test "br default stored chunked caller output matches append wire" {
+    var input: [direct_stored_stream_max_input_len + 1]u8 = undefined;
+    var state: u32 = 0xd943_72bf;
+    for (&input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    for ([_]usize{ 0, 1, 39, 512, 4096, direct_stored_stream_max_input_len }) |len| {
+        const split_a = len / 5;
+        const split_b = len * 3 / 5;
+        const chunks = [_][]const u8{
+            input[0..0],
+            input[0..split_a],
+            input[split_a..split_b],
+            input[split_b..len],
+            input[len..len],
+        };
+        var expected: std.ArrayList(u8) = .empty;
+        defer expected.deinit(std.testing.allocator);
+        try encodeStoredStreamChunksAppend(std.testing.allocator, &expected, &chunks);
+        const output = try std.testing.allocator.alloc(u8, try encodedStoredStreamChunksBound(&chunks));
+        defer std.testing.allocator.free(output);
+        const written = try encodeStoredStreamChunksInto(&chunks, output);
+        try std.testing.expectEqualSlices(u8, expected.items, output[0..written]);
+        try std.testing.expectError(error.OutOfMemory, encodeStoredStreamChunksInto(&chunks, output[0 .. output.len - 1]));
+    }
+
+    const over_limit = [_][]const u8{ input[0..direct_stored_stream_max_input_len], input[direct_stored_stream_max_input_len..] };
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try encodeStoredStreamChunksAppend(std.testing.allocator, &expected, &over_limit);
+    const output = try std.testing.allocator.alloc(u8, try encodedStoredStreamChunksBound(&over_limit));
+    defer std.testing.allocator.free(output);
+    const written = try encodeStoredStreamChunksInto(&over_limit, output);
+    try std.testing.expectEqualSlices(u8, expected.items, output[0..written]);
+}
+
+test "br stored allocating paths match independent append writers" {
+    const input = "stored payload with several chunk boundaries" ** 8;
+    const chunks = [_][]const u8{
+        input[0..0],
+        input[0..7],
+        input[7..41],
+        input[41..],
+        input[input.len..],
+    };
+    const options_cases = [_]StoredStreamOptions{
+        .{},
+        .{ .window_bits = 10 },
+        .{ .window_bits = 24 },
+        .{ .metadata = "allocation-oracle" },
+    };
+    for (options_cases) |options| {
+        var contiguous_oracle: std.ArrayList(u8) = .empty;
+        defer contiguous_oracle.deinit(std.testing.allocator);
+        try encodeStoredStreamWithOptionsAppend(std.testing.allocator, &contiguous_oracle, input, options);
+        const contiguous = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, input, options);
+        defer std.testing.allocator.free(contiguous);
+        try std.testing.expectEqualSlices(u8, contiguous_oracle.items, contiguous);
+
+        var chunked_oracle: std.ArrayList(u8) = .empty;
+        defer chunked_oracle.deinit(std.testing.allocator);
+        try encodeStoredStreamChunksWithOptionsAppend(std.testing.allocator, &chunked_oracle, &chunks, options);
+        const chunked = try encodeStoredStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, options);
+        defer std.testing.allocator.free(chunked);
+        try std.testing.expectEqualSlices(u8, chunked_oracle.items, chunked);
+    }
+
+    var contiguous_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, encodeStoredStreamAlloc(contiguous_failing.allocator(), input));
+    var chunked_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, encodeStoredStreamChunksAlloc(chunked_failing.allocator(), &chunks));
+}
+
+test "br reusable stored encoder uses exact owned and retained output" {
+    const first_input = "stored reusable first payload" ** 8;
+    const second_input = "second stored output" ** 7;
+    const chunks = [_][]const u8{ first_input[0..0], first_input[0..19], first_input[19..73], first_input[73..] };
+    var expected_chunks: std.ArrayList(u8) = .empty;
+    defer expected_chunks.deinit(std.testing.allocator);
+    try encodeStoredStreamChunksAppend(std.testing.allocator, &expected_chunks, &chunks);
+
+    var encoder = StoredStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const first = try encoder.encodeAlloc(first_input);
+    defer std.testing.allocator.free(first);
+    const second = try encoder.encodeAlloc(second_input);
+    defer std.testing.allocator.free(second);
+    const first_decoded = try decodeStreamAlloc(std.testing.allocator, first);
+    defer std.testing.allocator.free(first_decoded);
+    try std.testing.expectEqualSlices(u8, first_input, first_decoded);
+
+    const scratch = try encoder.encodeChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, expected_chunks.items, scratch);
+    const retained_capacity = encoder.scratch.capacity;
+    // Once sized, the borrowed-output path must not depend on another
+    // allocation. Restore the owning allocator before deinitialization.
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    encoder.allocator = failing.allocator();
+    const repeated = encoder.encodeChunksScratch(&chunks) catch |err| {
+        encoder.allocator = std.testing.allocator;
+        return err;
+    };
+    encoder.allocator = std.testing.allocator;
+    try std.testing.expectEqualSlices(u8, expected_chunks.items, repeated);
+    try std.testing.expectEqual(retained_capacity, encoder.scratch.capacity);
+}
+
 test "br stored stream supports all RFC window bits" {
     inline for (.{ 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24 }) |bits| {
         const encoded = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, "window", .{ .window_bits = bits });
@@ -4970,6 +8307,30 @@ test "br stored stream decodes multiple uncompressed meta-blocks" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br allocator decode enforces limits while decoding meta-blocks" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, 24);
+    try writeMetadataMetaBlock(std.testing.allocator, &writer, "ignored");
+    try writeUncompressedMetaBlock(std.testing.allocator, &writer, "first ");
+    try writeUncompressedMetaBlock(std.testing.allocator, &writer, "second");
+    try writer.writeBits(std.testing.allocator, 1, 1);
+    try writer.writeBits(std.testing.allocator, 1, 1);
+
+    const payload = "first second";
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, encoded.items, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeStreamAllocLimited(std.testing.allocator, encoded.items, payload.len - 1));
+
+    var trailing = try std.ArrayList(u8).initCapacity(std.testing.allocator, encoded.items.len + 1);
+    defer trailing.deinit(std.testing.allocator);
+    try trailing.appendSlice(std.testing.allocator, encoded.items);
+    try trailing.append(std.testing.allocator, 0);
+    try std.testing.expectError(error.TrailingData, decodeStreamAlloc(std.testing.allocator, trailing.items));
 }
 
 test "br minimal compressed stream decodes literal-only final metablock" {
@@ -5081,6 +8442,948 @@ test "br minimal compressed stream decodes direct-distance copy" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "aaaaa", decoded);
+}
+
+test "br RLE encoder emits compressed runs" {
+    const payload = "a" ** 4096;
+    const encoded = try encodeRleStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    const stored_bound = try encodedStoredStreamBound(payload.len);
+    try std.testing.expect(encoded.len < stored_bound / 16);
+    var into: [64]u8 = undefined;
+    const into_len = try encodeRleStreamInto(payload, &into);
+    try std.testing.expectEqualSlices(u8, encoded, into[0..into_len]);
+    try std.testing.expectEqual(@as(usize, 64), try encodedRleStreamBound(payload.len));
+    try std.testing.expectError(error.OutOfMemory, encodeRleStreamInto(payload, into[0 .. encoded.len - 1]));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRleStreamAlloc(std.testing.allocator, "abcde"));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRleStreamAlloc(std.testing.allocator, "aaaa"));
+}
+
+test "br proven ababa encoder slice round trips" {
+    const encoded = try encodeAbabaStreamAlloc(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "ababa", decoded);
+    const binary = try encodeAbabaPatternStreamAlloc(std.testing.allocator, 0x00, 0xff);
+    defer std.testing.allocator.free(binary);
+    const binary_decoded = try decodeStreamAlloc(std.testing.allocator, binary);
+    defer std.testing.allocator.free(binary_decoded);
+    try std.testing.expectEqualSlices(u8, &.{ 0, 0xff, 0, 0xff, 0 }, binary_decoded);
+    try std.testing.expectError(error.InvalidBlockPlan, encodeAbabaPatternStreamAlloc(std.testing.allocator, 'x', 'x'));
+    inline for (.{ 5, 6, 23, 71, 327, 1095, 1096, 2119, 2120, 2121, 65_535, 65_536, 65_537, 1_048_575, 1_048_576, 1_048_577, max_uncompressed_meta_block_len }) |len| {
+        const alternating = try encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', len);
+        defer std.testing.allocator.free(alternating);
+        const alternating_decoded = try decodeStreamAlloc(std.testing.allocator, alternating);
+        defer std.testing.allocator.free(alternating_decoded);
+        try std.testing.expectEqual(len, alternating_decoded.len);
+        for (alternating_decoded, 0..) |byte, i| try std.testing.expectEqual(if (i & 1 == 0) @as(u8, 'x') else 'y', byte);
+    }
+    try std.testing.expectError(error.InvalidBlockPlan, encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', 4));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', max_uncompressed_meta_block_len + 1));
+}
+
+test "br repeated prefix encoder emits multiple commands" {
+    inline for (.{ "xy", "xyz", "abcd" }) |prefix| {
+        inline for (.{ 2, 3, 7, 31 }) |repeat_count| {
+            const encoded = try encodeRepeatedPrefixStreamAlloc(std.testing.allocator, prefix, repeat_count);
+            defer std.testing.allocator.free(encoded);
+            const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+            defer std.testing.allocator.free(decoded);
+            try std.testing.expectEqual(repeat_count * prefix.len, decoded.len);
+            for (decoded, 0..) |byte, i| try std.testing.expectEqual(prefix[i % prefix.len], byte);
+        }
+    }
+    const binary_prefix = [_]u8{ 0, 0x80, 0xff };
+    const binary = try encodeRepeatedPrefixStreamAlloc(std.testing.allocator, &binary_prefix, 7);
+    defer std.testing.allocator.free(binary);
+    const binary_decoded = try decodeStreamAlloc(std.testing.allocator, binary);
+    defer std.testing.allocator.free(binary_decoded);
+    for (binary_decoded, 0..) |byte, i| try std.testing.expectEqual(binary_prefix[i % binary_prefix.len], byte);
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "a", 3));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "aba", 3));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", 1));
+    try std.testing.expectError(error.IntegerOverflow, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", std.math.maxInt(usize)));
+}
+
+test "br explicit command index matches exhaustive LUT search" {
+    for (command_lut.entries, 0..) |entry, symbol| {
+        if (entry.distance_code != -1) continue;
+        const insert_values = [_]usize{ entry.insert_base, entry.insert_base + ((@as(usize, 1) << entry.insert_extra_bits) - 1) };
+        const copy_values = [_]usize{ entry.copy_base, entry.copy_base + ((@as(usize, 1) << entry.copy_extra_bits) - 1) };
+        for (insert_values) |insert_len| for (copy_values) |copy_len| {
+            const indexed = commandEntryForLengths(insert_len, copy_len) orelse return error.TestUnexpectedResult;
+            const expected = exhaustiveCommandEntryForLengths(insert_len, copy_len) orelse return error.TestUnexpectedResult;
+            try std.testing.expectEqual(expected.symbol, indexed.symbol);
+            _ = symbol;
+        };
+    }
+}
+
+test "br command index exposes implicit last-distance forms when legal" {
+    const implicit = commandEntryForLengthsAndDistance(0, 3, true) orelse return error.TestUnexpectedResult;
+    const explicit = commandEntryForLengthsAndDistance(0, 3, false) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(i2, 0), implicit.command.distance_code);
+    try std.testing.expectEqual(@as(i2, -1), explicit.command.distance_code);
+    try std.testing.expect(implicit.symbol != explicit.symbol);
+    try std.testing.expect(commandEntryForLengthsAndDistance(66, 3, true) == null);
+}
+
+test "br recent-distance candidate tracks the RFC distance ring" {
+    const commands = [_]command_plan.Command{
+        .{ .insert_start = 0, .insert_len = 4, .copy_len = 3, .distance = 4, .has_copy = true },
+        .{ .insert_start = 7, .insert_len = 1, .copy_len = 4, .distance = 4, .has_copy = true },
+        .{ .insert_start = 12, .insert_len = 1, .copy_len = 5, .distance = 4, .has_copy = true },
+        .{ .insert_start = 18, .insert_len = 0, .copy_len = 2, .distance = 9, .has_copy = true },
+    };
+    try std.testing.expectEqual(@as(usize, 4), countReusableRecentDistances(&commands));
+    const initial = initial_last_distances;
+    try std.testing.expectEqual(@as(?u4, 0), recentDistanceSymbol(4, &initial));
+    try std.testing.expectEqual(@as(?u4, 1), recentDistanceSymbol(11, &initial));
+    try std.testing.expectEqual(@as(?u4, 4), recentDistanceSymbol(3, &initial));
+    try std.testing.expectEqual(@as(?u4, 15), recentDistanceSymbol(14, &initial));
+    try std.testing.expectEqual(@as(?u4, null), recentDistanceSymbol(32, &initial));
+}
+
+test "br ratio threshold comparison rejects integer overflow" {
+    try std.testing.expect(byteRatioAtMost(80, 100, 80));
+    try std.testing.expect(!byteRatioAtMost(81, 100, 80));
+    try std.testing.expect(!byteRatioAtMost(std.math.maxInt(usize), std.math.maxInt(usize), 80));
+}
+
+test "br direct length-code mapping matches reference scan" {
+    inline for (.{ true, false }) |insert| {
+        var code: u5 = 0;
+        while (code < 24) : (code += 1) {
+            const spec = if (insert) insertLengthSpec(code) else copyLengthSpec(code);
+            const last = spec.base + ((@as(usize, 1) << spec.extra_bits) - 1);
+            try std.testing.expectEqual(@as(?u5, code), lengthCodeForValue(spec.base, insert));
+            try std.testing.expectEqual(@as(?u5, code), lengthCodeForValue(last, insert));
+        }
+    }
+    try std.testing.expectEqual(@as(?u5, null), lengthCodeForValue(1, false));
+    try std.testing.expectEqual(@as(?u5, null), lengthCodeForValue(16_799_810, true));
+    try std.testing.expectEqual(@as(?u5, null), lengthCodeForValue(16_779_334, false));
+}
+
+fn exhaustiveCommandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
+    for (command_lut.entries, 0..) |entry, symbol| {
+        if (entry.distance_code != -1) continue;
+        const insert_span = @as(usize, 1) << entry.insert_extra_bits;
+        const copy_span = @as(usize, 1) << entry.copy_extra_bits;
+        if (insert_len >= entry.insert_base and insert_len - entry.insert_base < insert_span and
+            copy_len >= entry.copy_base and copy_len - entry.copy_base < copy_span)
+            return .{ .symbol = @intCast(symbol), .command = entry };
+    }
+    return null;
+}
+
+test "br planner-backed encoder emits mixed literal and match commands" {
+    const payload = "abcabcXabcabcXabcabcX";
+    const encoded = try encodePlannedStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamAlloc(std.testing.allocator, "all unique"));
+}
+
+test "br planned command symbol cache boundary preserves wire output" {
+    const payload = "abc" ** (planned_command_symbol_cache_capacity + 2);
+    var commands: [planned_command_symbol_cache_capacity + 1]command_plan.Command = undefined;
+    for (&commands, 0..) |*command, i| {
+        command.* = .{
+            .insert_start = if (i == 0) 0 else 3 + i * 3,
+            .insert_len = if (i == 0) 3 else 0,
+            .copy_len = 3,
+            .distance = 3,
+            .has_copy = true,
+        };
+    }
+
+    // The shorter plan uses the cache while the full slice crosses the stack
+    // cap and exercises the recomputation fallback. Both must remain valid.
+    inline for (.{ planned_command_symbol_cache_capacity, planned_command_symbol_cache_capacity + 1 }) |command_count| {
+        const input_len = 3 + command_count * 3;
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload[0..input_len], commands[0..command_count], null, &stats, .{});
+        defer std.testing.allocator.free(encoded);
+        const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload[0..input_len], decoded);
+    }
+}
+
+test "br planner compression levels select fast and balanced streams" {
+    const payload = "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 12;
+    const fast = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .fast });
+    defer std.testing.allocator.free(fast);
+    const balanced = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .balanced });
+    defer std.testing.allocator.free(balanced);
+    const fast_decoded = try decodeStreamAlloc(std.testing.allocator, fast);
+    defer std.testing.allocator.free(fast_decoded);
+    const balanced_decoded = try decodeStreamAlloc(std.testing.allocator, balanced);
+    defer std.testing.allocator.free(balanced_decoded);
+    try std.testing.expectEqualSlices(u8, payload, fast_decoded);
+    try std.testing.expectEqualSlices(u8, payload, balanced_decoded);
+    try std.testing.expect(balanced.len <= fast.len);
+}
+
+test "br stable planner levels accept incompressible inputs within stored size" {
+    var input: [4096]u8 = undefined;
+    var state: u32 = 0x89ab_cdef;
+    for (&input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        for ([_]usize{ 8, 64, 256, input.len }) |len| {
+            const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input[0..len], .{ .level = level });
+            defer std.testing.allocator.free(encoded);
+            try std.testing.expect(encoded.len <= try encodedStoredStreamBound(len));
+            const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+            defer std.testing.allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, input[0..len], decoded);
+        }
+    }
+}
+
+test "br stable planner levels accept tiny inputs" {
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        for ([_][]const u8{ "", "a", "abcd" }) |input| {
+            const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{ .level = level });
+            defer std.testing.allocator.free(encoded);
+            const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+            defer std.testing.allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, input, decoded);
+        }
+    }
+}
+
+test "br ratio planner spends more search budget without regressing size" {
+    const payload = @embedFile("br/encoder/command_plan.zig");
+    const balanced = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .balanced });
+    defer std.testing.allocator.free(balanced);
+    const ratio = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .ratio });
+    defer std.testing.allocator.free(ratio);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, ratio);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(ratio.len < balanced.len);
+}
+
+test "br ratio planner keeps an exact optimal candidate for source blocks" {
+    const payload = @embedFile("br.zig")[0 .. 32 * 1024];
+    const baseline = try encodePlannedStreamLazyWithWireOptionsAlloc(std.testing.allocator, payload, .{
+        .window_len = (@as(usize, 1) << default_window_bits) - 16,
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+    }, .{ .try_recent_distances = true });
+    defer std.testing.allocator.free(baseline);
+    const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(ratio);
+    try std.testing.expect(ratio.len < baseline.len);
+    try std.testing.expectEqual(@as(usize, 5526), ratio.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br ratio UTF8 context split round trips beyond summary history" {
+    const payload = @embedFile("br.zig");
+    const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br summary history covers the full encoder backward window" {
+    try std.testing.expectEqual(planner_max_backward_distance, @sizeOf(@TypeOf(@as(LiteralHistory, .{}).tail)));
+}
+
+test "br allocator summary avoids unused advertised window allocation" {
+    // WBITS describes the maximum legal copy distance, not memory that every
+    // stream necessarily needs. A stored stream with WBITS=24 must therefore
+    // remain usable with an allocator that rejects every allocation.
+    const payload = "small payload";
+    const encoded = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .window_bits = 24 });
+    defer std.testing.allocator.free(encoded);
+
+    const summary = try summarizeStreamAlloc(std.testing.failing_allocator, encoded);
+    try std.testing.expectEqual(@as(u5, 24), summary.window_bits);
+    try std.testing.expectEqual(@as(usize, payload.len), summary.decoded_bytes);
+    try std.testing.expectEqual(payload.len, (try summarizeStreamAllocLimited(std.testing.failing_allocator, encoded, payload.len)).decoded_bytes);
+
+    var diagnostics: StreamSummaryDiagnostics = undefined;
+    try std.testing.expectEqual(payload.len, (try summarizeStreamAllocWithDiagnostics(std.testing.failing_allocator, encoded, &diagnostics)).decoded_bytes);
+    try std.testing.expectEqual(StreamSummaryErrorPhase.stream, diagnostics.phase);
+    try std.testing.expectError(error.OutputLimitExceeded, summarizeStreamAllocLimitedWithDiagnostics(std.testing.failing_allocator, encoded, payload.len - 1, &diagnostics));
+    try std.testing.expectEqual(StreamSummaryErrorPhase.meta_block_header, diagnostics.phase);
+
+    // Pre-reserving append output isolates the preflight: no hidden history
+    // allocation is needed when the fixed summary can finish the stream.
+    var output = try std.ArrayList(u8).initCapacity(std.testing.allocator, payload.len);
+    defer output.deinit(std.testing.allocator);
+    try std.testing.expectEqual(payload.len, try decodeStreamAppendLimited(std.testing.failing_allocator, &output, encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, output.items);
+}
+
+test "br ratio planner uses the full 16-bit stream window" {
+    const gap = 48 * 1024;
+    const repeated_len = 12 * 1024;
+    const payload = try std.testing.allocator.alloc(u8, gap + repeated_len);
+    defer std.testing.allocator.free(payload);
+    var state: u32 = 0x1234_5678;
+    for (payload[0..gap]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[gap..], payload[0..repeated_len]);
+
+    const balanced = try encodePlannedStreamLazyAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(balanced);
+    const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(ratio);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(ratio.len + repeated_len / 2 < balanced.len);
+}
+
+test "br ratio planner adds matches beyond the 16-bit stream window" {
+    const gap = 80 * 1024;
+    const repeated_len = 12 * 1024;
+    const payload = try std.testing.allocator.alloc(u8, gap + repeated_len);
+    defer std.testing.allocator.free(payload);
+    var state: u32 = 0x1234_5678;
+    for (payload[0..gap]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[gap..], payload[0..repeated_len]);
+
+    const balanced = try encodePlannedStreamLazyAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(balanced);
+    const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(ratio);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(ratio.len + repeated_len / 2 < balanced.len);
+}
+
+test "br balanced planner prunes a dense tiny-copy prefix" {
+    const payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
+    const encoded = try encodePlannedStreamLazyAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectEqual(@as(usize, 84), encoded.len);
+}
+
+test "br lazy planner accepts bounded search options" {
+    const payload = "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 12;
+    const encoded = try encodePlannedStreamLazyWithOptionsAlloc(std.testing.allocator, payload, .{
+        .max_chain = 64,
+        .nice_len = 64,
+        .lazy_min_gain = 1,
+    });
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamLazyWithOptionsAlloc(std.testing.allocator, payload, .{ .max_chain = 0 }));
+}
+
+test "br planner emits built-in static dictionary commands" {
+    const payload = " information follows the information";
+    const encoded = try encodePlannedStreamStaticDictionaryAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
+}
+
+test "br ratio planner selects short static dictionary streams by final size" {
+    const dictionary_payload = "Information about compression performance and dictionary support.";
+    const dictionary = try encodePlannedStreamStaticDictionaryAlloc(std.testing.allocator, dictionary_payload);
+    defer std.testing.allocator.free(dictionary);
+    const selected = try encodePlannedStreamRatioAlloc(std.testing.allocator, dictionary_payload);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, dictionary, selected);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, selected);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, dictionary_payload, decoded);
+
+    const repeated_payload = "abcdefghabcdefghabcdefghabcdefgh";
+    const repeated_baseline = try encodePlannedStreamLazyWithWireOptionsAlloc(std.testing.allocator, repeated_payload, .{
+        .window_len = (@as(usize, 1) << default_window_bits) - 16,
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+    }, .{ .try_recent_distances = true });
+    defer std.testing.allocator.free(repeated_baseline);
+    const repeated_selected = try encodePlannedStreamRatioAlloc(std.testing.allocator, repeated_payload);
+    defer std.testing.allocator.free(repeated_selected);
+    try std.testing.expectEqualSlices(u8, repeated_baseline, repeated_selected);
+
+    const outside_gate_payload = dictionary_payload ** 5;
+    try std.testing.expect(outside_gate_payload.len > ratio_static_dictionary_max_input_len);
+    const outside_gate_baseline = try encodePlannedStreamLazyWithWireOptionsAlloc(std.testing.allocator, outside_gate_payload, .{
+        .window_len = (@as(usize, 1) << default_window_bits) - 16,
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+    }, .{ .try_recent_distances = true });
+    defer std.testing.allocator.free(outside_gate_baseline);
+    const outside_gate_selected = try encodePlannedStreamRatioAlloc(std.testing.allocator, outside_gate_payload);
+    defer std.testing.allocator.free(outside_gate_selected);
+    try std.testing.expectEqualSlices(u8, outside_gate_baseline, outside_gate_selected);
+}
+
+test "br ratio planner encodes a dictionary word without LZ77 matches" {
+    const payload = "information";
+    const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expect(summary.static_dictionary_copy_count > 0);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    const unmatched = "qzxwvbnm";
+    const unmatched_encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, unmatched);
+    defer std.testing.allocator.free(unmatched_encoded);
+    const unmatched_decoded = try decodeStreamAlloc(std.testing.allocator, unmatched_encoded);
+    defer std.testing.allocator.free(unmatched_decoded);
+    try std.testing.expectEqualSlices(u8, unmatched, unmatched_decoded);
+}
+
+test "br ratio planner never exceeds the stored stream" {
+    var incompressible: [4096]u8 = undefined;
+    var state: u32 = 0x1234_5678;
+    for (&incompressible) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    for ([_]usize{ 8, 64, 256, 4096 }) |len| {
+        const input = incompressible[0..len];
+        const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, input);
+        defer std.testing.allocator.free(ratio);
+        const stored = try encodeStoredStreamAlloc(std.testing.allocator, input);
+        defer std.testing.allocator.free(stored);
+        try std.testing.expect(ratio.len <= stored.len);
+        const decoded = try decodeStreamAlloc(std.testing.allocator, ratio);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+}
+
+test "br bounded command candidate reports overflow at a strict byte budget" {
+    const payload = "informationX";
+    const plan = try command_plan.buildStaticDictionaryAlloc(std.testing.allocator, payload);
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expect(plan.match_count > 0);
+
+    const encoded = try encodePlannedStreamStaticDictionaryAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    var output: [64]u8 = undefined;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    try std.testing.expectError(error.OutOfMemory, encodeCommandPlanWithOptionsInto(std.testing.allocator, output[0 .. encoded.len - 1], payload, plan.commands, &stats, .{}));
+    try std.testing.expectEqual(encoded.len, try encodeCommandPlanWithOptionsInto(std.testing.allocator, output[0..encoded.len], payload, plan.commands, &stats, .{}));
+    try std.testing.expectEqualSlices(u8, encoded, output[0..encoded.len]);
+}
+
+test "br ratio planner mixes LZ77 and static dictionary commands" {
+    const payload = "abcdefghabcdefgh information follows abcdefghabcdefgh";
+    const dictionary = try encodePlannedStreamStaticDictionaryAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(dictionary);
+    const selected = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expect(selected.len < dictionary.len);
+    const summary = try summarizeStream(selected);
+    try std.testing.expect(summary.static_dictionary_copy_count > 0);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, selected);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br static dictionary direct transformed comparison is exhaustive over transform shapes" {
+    try static_dictionary.testDirectTransformedComparison();
+}
+
+test "br retained static dictionary coverage matches the complete transformer" {
+    var scratch: [64]u8 = undefined;
+    for (minimal_static_dictionary_entries) |entry| {
+        const size_bits = minimalStaticDictionarySizeBits(entry.copy_len).?;
+        const address = (@as(usize, entry.transform) << size_bits) | entry.word_index;
+        const transformed = static_dictionary.transform(address, entry.copy_len, &scratch) orelse return error.UnsupportedBrotliFeature;
+        try std.testing.expectEqualSlices(u8, entry.word, transformed);
+    }
+}
+
+test "br planner-backed encoder emits regular distances" {
+    const prefix = "abcd" ** 10;
+    const payload = prefix ++ "aa" ++ prefix;
+    const encoded = try encodePlannedStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
+}
+
+test "br planner-backed encoder emits complex literal prefix" {
+    const payload = "abcdefabcdefXabcdefabcdefXabcdefabcdefX";
+    const encoded = try encodePlannedStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
+}
+
+test "br planner-backed encoder covers wider literal alphabet" {
+    const phrase = "abcdefghijklmnop";
+    const payload = phrase ** 8;
+    const encoded = try encodePlannedStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
+}
+
+test "br planner-backed encoder covers full byte literal alphabet" {
+    var payload: [768]u8 = undefined;
+    for (&payload, 0..) |*byte, i| byte.* = @intCast(i & 0xff);
+    const encoded = try encodePlannedStreamAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
+}
+
+test "br planner-backed encoder accepts caller scratch" {
+    const payload = "abcabcXabcabcXabcabcX";
+    var scratch: [16 * 1024]u8 = undefined;
+    const encoded = try encodePlannedStreamWithScratchAlloc(std.testing.allocator, &scratch, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    var tiny: [64]u8 = undefined;
+    try std.testing.expectError(error.OutOfMemory, encodePlannedStreamWithScratchAlloc(std.testing.allocator, &tiny, payload));
+}
+
+test "br planner-backed encoder retains reusable arena capacity" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const payload = "abcabcXabcabcXabcabcX";
+    const first = try encoder.encodeAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(first);
+    const capacity = encoder.retainedCapacity();
+    try std.testing.expect(capacity != 0);
+    const second = try encoder.encodeAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(second);
+    try std.testing.expectEqualSlices(u8, first, second);
+    try std.testing.expect(encoder.retainedCapacity() >= capacity);
+}
+
+test "br reusable fast allocations are independent of retained output" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const first_input = "abcabcXabcabcXabcabcX";
+    const second_input = "different-different-different";
+    const first = try encoder.encodeAlloc(std.testing.allocator, first_input);
+    defer std.testing.allocator.free(first);
+    const first_copy = try std.testing.allocator.dupe(u8, first);
+    defer std.testing.allocator.free(first_copy);
+    const second = try encoder.encodeAlloc(std.testing.allocator, second_input);
+    defer std.testing.allocator.free(second);
+
+    try std.testing.expectEqualSlices(u8, first_copy, first);
+    const first_decoded = try decodeStreamAlloc(std.testing.allocator, first);
+    defer std.testing.allocator.free(first_decoded);
+    try std.testing.expectEqualSlices(u8, first_input, first_decoded);
+    const second_decoded = try decodeStreamAlloc(std.testing.allocator, second);
+    defer std.testing.allocator.free(second_decoded);
+    try std.testing.expectEqualSlices(u8, second_input, second_decoded);
+
+    // The borrowed result has already replaced the retained output before the
+    // final caller-owned copy is made.  A failed copy must therefore leave the
+    // reusable encoder ready for the next call.
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, encoder.encodeAlloc(failing.allocator(), first_input));
+    const recovered = try encoder.encodeAlloc(std.testing.allocator, first_input);
+    defer std.testing.allocator.free(recovered);
+    try std.testing.expectEqualSlices(u8, first_copy, recovered);
+}
+
+test "br reusable planner retains encoded output scratch" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const payload = "abcabcXabcabcXabcabcX";
+    const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .fast });
+    defer std.testing.allocator.free(expected);
+    const first = try encoder.encodeScratch(payload);
+    try std.testing.expectEqualSlices(u8, expected, first);
+    const capacity = encoder.retainedCapacity();
+    const second = try encoder.encodeScratch(payload);
+    try std.testing.expectEqualSlices(u8, expected, second);
+    try std.testing.expectEqual(capacity, encoder.retainedCapacity());
+
+    const incompressible = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
+    const stored = try encoder.encodeScratch(incompressible);
+    try std.testing.expect(stored.len <= try encodedStoredStreamBound(incompressible.len));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, stored);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, incompressible, decoded);
+}
+
+test "br reusable planner exposes borrowed output for every level" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = level });
+        defer std.testing.allocator.free(expected);
+        const first = try encoder.encodeScratchWithOptions(payload, .{ .level = level });
+        try std.testing.expectEqualSlices(u8, expected, first);
+        const retained = encoder.retainedCapacity();
+        const second = try encoder.encodeScratchWithOptions(payload, .{ .level = level });
+        try std.testing.expectEqualSlices(u8, expected, second);
+        try std.testing.expectEqual(retained, encoder.retainedCapacity());
+    }
+}
+
+test "br reusable planner encodes fast streams into caller storage" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const payload = "abcabcXabcabcXabcabcX";
+    const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .fast });
+    defer std.testing.allocator.free(expected);
+    var output: [128]u8 = undefined;
+    const written = try encoder.encodeInto(payload, &output);
+    try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+    try std.testing.expectError(error.OutOfMemory, encoder.encodeInto(payload, output[0 .. expected.len - 1]));
+
+    const incompressible = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
+    const stored_written = try encoder.encodeInto(incompressible, &output);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, output[0..stored_written]);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, incompressible, decoded);
+
+    const expanding_match = [_]u8{ 0x99, 0x54, 0x73, 0x76, 0x99, 0x54, 0x73, 0x76 };
+    const bound = try encodedPlannedStreamBound(expanding_match.len);
+    var exact_output: [12]u8 = undefined;
+    try std.testing.expectEqual(exact_output.len, bound);
+    const exact_written = try encoder.encodeInto(&expanding_match, &exact_output);
+    try std.testing.expectEqual(bound, exact_written);
+    const exact_decoded = try decodeStreamAlloc(std.testing.allocator, exact_output[0..exact_written]);
+    defer std.testing.allocator.free(exact_decoded);
+    try std.testing.expectEqualSlices(u8, &expanding_match, exact_decoded);
+}
+
+test "br planned levels encode into caller storage" {
+    const inputs = [_][]const u8{
+        "",
+        "abcabcXabcabcXabcabcX",
+        "Information about compression performance and dictionary support.",
+        "qzxwvbnm1234567890QZXWVBNM!@#$%^&*",
+    };
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        for (inputs) |input| {
+            const options = PlannedEncodeOptions{ .level = level };
+            const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, options);
+            defer std.testing.allocator.free(expected);
+            const bound = try encodedPlannedStreamBoundWithOptions(input.len, options);
+            try std.testing.expectEqual(try encodedStoredStreamBound(input.len), bound);
+            const output = try std.testing.allocator.alloc(u8, bound);
+            defer std.testing.allocator.free(output);
+            const written = try encoder.encodeIntoWithOptions(input, output, options);
+            try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+            if (bound != 0) try std.testing.expectError(error.OutOfMemory, encoder.encodeIntoWithOptions(input, output[0 .. bound - 1], options));
+        }
+    }
+}
+
+test "br balanced caller storage retains reusable planner state" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
+    const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .balanced });
+    defer std.testing.allocator.free(expected);
+    const output = try std.testing.allocator.alloc(u8, try encodedPlannedStreamBoundWithOptions(payload.len, .{ .level = .balanced }));
+    defer std.testing.allocator.free(output);
+
+    const first_written = try encoder.encodeIntoWithOptions(payload, output, .{ .level = .balanced });
+    try std.testing.expectEqualSlices(u8, expected, output[0..first_written]);
+    const retained = encoder.retainedCapacity();
+    const second_written = try encoder.encodeIntoWithOptions(payload, output, .{ .level = .balanced });
+    try std.testing.expectEqualSlices(u8, expected, output[0..second_written]);
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+}
+
+test "br reusable planner exposes stable levels and stored fallback" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const repetitive = "abcabcXabcabcXabcabcX";
+    const incompressible = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, repetitive, .{ .level = level });
+        defer std.testing.allocator.free(expected);
+        const actual = try encoder.encodeWithOptionsAlloc(std.testing.allocator, repetitive, .{ .level = level });
+        defer std.testing.allocator.free(actual);
+        try std.testing.expectEqualSlices(u8, expected, actual);
+
+        const stored = try encoder.encodeWithOptionsAlloc(std.testing.allocator, incompressible, .{ .level = level });
+        defer std.testing.allocator.free(stored);
+        try std.testing.expect(stored.len <= try encodedStoredStreamBound(incompressible.len));
+        const decoded = try decodeStreamAlloc(std.testing.allocator, stored);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, incompressible, decoded);
+    }
+}
+
+test "br reusable planner retains balanced token and command capacity" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const inputs = [_][]const u8{
+        "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48,
+        "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40,
+        "2026-08-21T02:00:00Z level=info service=vort request=compress status=ok bytes=4096\n" ** 40,
+    };
+    var retained: usize = 0;
+    for (inputs, 0..) |input, index| {
+        const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{ .level = .balanced });
+        defer std.testing.allocator.free(expected);
+        const actual = try encoder.encodeWithOptionsAlloc(std.testing.allocator, input, .{ .level = .balanced });
+        defer std.testing.allocator.free(actual);
+        try std.testing.expectEqualSlices(u8, expected, actual);
+        if (index != 0) try std.testing.expect(encoder.retainedCapacity() >= retained);
+        retained = encoder.retainedCapacity();
+    }
+}
+
+test "br reusable planner matches stable API at size boundaries" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const large = "abcdefgh" ** 4097;
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        for ([_][]const u8{ "", "abcd", large }) |input| {
+            const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{ .level = level });
+            defer std.testing.allocator.free(expected);
+            const actual = try encoder.encodeWithOptionsAlloc(std.testing.allocator, input, .{ .level = level });
+            defer std.testing.allocator.free(actual);
+            try std.testing.expectEqualSlices(u8, expected, actual);
+        }
+    }
+}
+
+test "br planned chunked encoder emits one multi-meta-block stream" {
+    const first = "alpha beta gamma delta alpha beta gamma delta " ** 64;
+    const second = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
+    const third = "omega theta lambda omega theta lambda " ** 64;
+    const chunks = [_][]const u8{ "", first, second, "", third };
+    const expected = first ++ second ++ third;
+
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const encoded = try encoder.encodeChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(encoded);
+    const encoded_copy = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(encoded_copy);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 3), summary.compressed_meta_block_count + summary.uncompressed_meta_block_count);
+    try std.testing.expect(summary.compressed_meta_block_count >= 2);
+    try std.testing.expect(summary.uncompressed_meta_block_count >= 1);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+
+    const output = try std.testing.allocator.alloc(u8, try encodedPlannedStreamChunksBound(&chunks));
+    defer std.testing.allocator.free(output);
+    @memset(output, 0xa5);
+    const before = try std.testing.allocator.dupe(u8, output);
+    defer std.testing.allocator.free(before);
+    try std.testing.expectError(error.OutOfMemory, encoder.encodeChunksInto(&chunks, output[0 .. output.len - 1]));
+    try std.testing.expectEqualSlices(u8, before, output);
+    const written = try encoder.encodeChunksInto(&chunks, output);
+    try std.testing.expectEqualSlices(u8, encoded, output[0..written]);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try encoder.encodeChunksAppend(&appended, &chunks);
+    try std.testing.expectEqualSlices(u8, "prefix:", appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, encoded, appended.items["prefix:".len..]);
+    try std.testing.expectEqualSlices(u8, encoded_copy, encoded);
+
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, encoder.encodeChunksAlloc(failing.allocator(), &chunks));
+    var top_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, encodePlannedStreamChunksAlloc(top_failing.allocator(), &chunks));
+    const recovered = try encoder.encodeChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(recovered);
+    try std.testing.expectEqualSlices(u8, encoded_copy, recovered);
+
+    const scratch = try encoder.encodeChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, encoded_copy, scratch);
+    const retained = encoder.retainedCapacity();
+    const repeated = try encoder.encodeChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, encoded_copy, repeated);
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+    var failing_scratch = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    encoder.allocator = failing_scratch.allocator();
+    const allocation_free = encoder.encodeChunksScratch(&chunks) catch |err| {
+        encoder.allocator = std.testing.allocator;
+        return err;
+    };
+    encoder.allocator = std.testing.allocator;
+    try std.testing.expectEqualSlices(u8, encoded_copy, allocation_free);
+}
+
+test "br planned chunked encoder handles empty and generated mixed blocks" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+
+    const empty_chunks = [_][]const u8{ "", "" };
+    const empty = try encoder.encodeChunksScratch(&empty_chunks);
+    try std.testing.expectEqualSlices(u8, &.{0x06}, empty);
+    var empty_output: [1]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 1), try encodePlannedStreamChunksInto(&empty_chunks, &empty_output));
+    try std.testing.expectEqualSlices(u8, &.{0x06}, &empty_output);
+    try std.testing.expectError(error.OutOfMemory, encodePlannedStreamChunksInto(&empty_chunks, &.{}));
+
+    var input: [4096]u8 = undefined;
+    var state: u32 = 0xb174_2f83;
+    for (0..32) |case_index| {
+        const len = 128 + case_index * 117;
+        const alphabet_size = 2 + case_index * 7;
+        for (input[0..len], 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = if (index >= 43 and index % 29 < 13)
+                input[index - 41]
+            else
+                @intCast((state >> 16) % alphabet_size);
+        }
+        const split_a = len / 4;
+        const split_b = len * 3 / 4;
+        const chunks = [_][]const u8{ "", input[0..split_a], input[split_a..split_b], "", input[split_b..len] };
+        const encoded = try encoder.encodeChunksScratch(&chunks);
+        const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, len);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input[0..len], decoded);
+        try std.testing.expect(encoded.len <= try encodedPlannedStreamChunksBound(&chunks));
+    }
+}
+
+test "br planned chunked encoder splits large input and streams byte progressively" {
+    const unit = "abcdefghijklmnopqrstuvwxyz012345";
+    const payload = unit ** 2049;
+    const chunks = [_][]const u8{payload};
+    const encoded = try encodePlannedStreamChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 3), summary.compressed_meta_block_count + summary.uncompressed_meta_block_count);
+    try std.testing.expect(summary.compressed_meta_block_count >= 2);
+
+    var history: [planner_max_backward_distance]u8 = undefined;
+    var decoder = IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .max_output_len = payload.len,
+        .expected_output_len = payload.len,
+    });
+    var output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const output_end = @min(output.len, output_offset + 7);
+        const step = try decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]);
+        try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqualSlices(u8, payload, output[0..output_offset]);
+}
+
+test "br ratio encoder splits input beyond one meta-block" {
+    const input_len = max_uncompressed_meta_block_len + 17;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    for (input, 0..) |*byte, i| byte.* = "abcd0123"[i & 7];
+
+    const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStreamAlloc(std.testing.allocator, encoded);
+    try std.testing.expectEqual(input.len, summary.decoded_bytes);
+    try std.testing.expect(summary.compressed_meta_block_count >= 2);
+    try std.testing.expect(encoded.len < input.len / 100);
+
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, input.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "br simple encoder selects RLE or stored streams" {
+    const run = "z" ** 1024;
+    const simple_run = try encodeSimpleStreamAlloc(std.testing.allocator, run);
+    defer std.testing.allocator.free(simple_run);
+    const rle = try encodeRleStreamAlloc(std.testing.allocator, run);
+    defer std.testing.allocator.free(rle);
+    try std.testing.expectEqualSlices(u8, rle, simple_run);
+
+    const mixed = "simple Brotli mixed payload";
+    const simple_mixed = try encodeSimpleStreamAlloc(std.testing.allocator, mixed);
+    defer std.testing.allocator.free(simple_mixed);
+    const stored = try encodeStoredStreamAlloc(std.testing.allocator, mixed);
+    defer std.testing.allocator.free(stored);
+    try std.testing.expectEqualSlices(u8, stored, simple_mixed);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, simple_mixed);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, mixed, decoded);
+
+    const alternating = "xyxyxyxyx";
+    const simple_alternating = try encodeSimpleStreamAlloc(std.testing.allocator, alternating);
+    defer std.testing.allocator.free(simple_alternating);
+    const expected_alternating = try encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', alternating.len);
+    defer std.testing.allocator.free(expected_alternating);
+    try std.testing.expectEqualSlices(u8, expected_alternating, simple_alternating);
+
+    const long_len = 65_536;
+    const long_alternating = try std.testing.allocator.alloc(u8, long_len);
+    defer std.testing.allocator.free(long_alternating);
+    for (long_alternating, 0..) |*byte, i| byte.* = if (i & 1 == 0) 'x' else 'y';
+    const simple_long = try encodeSimpleStreamAlloc(std.testing.allocator, long_alternating);
+    defer std.testing.allocator.free(simple_long);
+    const expected_long = try encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', long_len);
+    defer std.testing.allocator.free(expected_long);
+    try std.testing.expectEqualSlices(u8, expected_long, simple_long);
+    try std.testing.expect(simple_long.len < 16);
+
+    const repeated_three = "xyzxyzxyzxyzxyz";
+    const simple_three = try encodeSimpleStreamAlloc(std.testing.allocator, repeated_three);
+    defer std.testing.allocator.free(simple_three);
+    const expected_three = try encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "xyz", 5);
+    defer std.testing.allocator.free(expected_three);
+    try std.testing.expectEqualSlices(u8, expected_three, simple_three);
+
+    const planned_payload = "abcabcXabcabcXabcabcX";
+    const simple_planned = try encodeSimpleStreamAlloc(std.testing.allocator, planned_payload);
+    defer std.testing.allocator.free(simple_planned);
+    const expected_planned = try encodePlannedStreamAlloc(std.testing.allocator, planned_payload);
+    defer std.testing.allocator.free(expected_planned);
+    try std.testing.expectEqualSlices(u8, expected_planned, simple_planned);
 }
 
 test "br minimal compressed stream reuses last distance" {
@@ -5633,6 +9936,16 @@ test "br minimal compressed stream keeps literal context after distance-five-thi
     const summary = try summarizeStream(encoded.items);
     try std.testing.expectEqual(@as(usize, expected.len), summary.decoded_bytes);
     try std.testing.expect(summary.uses_compressed_meta_blocks);
+    var exact_history: [513]u8 = undefined;
+    try std.testing.expectEqual(summary, try summarizeStreamWithHistory(encoded.items, &exact_history));
+    var short_history: [512]u8 = undefined;
+    var diagnostics: StreamSummaryDiagnostics = undefined;
+    try std.testing.expectError(error.UnsupportedBrotliFeature, summarizeStreamWithHistoryAndDiagnostics(encoded.items, &short_history, &diagnostics));
+    try std.testing.expectEqual(StreamSummaryErrorPhase.compressed_meta_block, diagnostics.phase);
+    const chunks = [_][]const u8{ encoded.items[0..1], encoded.items[1 .. encoded.items.len - 1], encoded.items[encoded.items.len - 1 ..] };
+    const compressed_scratch = try std.testing.allocator.alloc(u8, encoded.items.len);
+    defer std.testing.allocator.free(compressed_scratch);
+    try std.testing.expectEqual(summary, try summarizeStreamChunksWithHistory(&chunks, compressed_scratch, &exact_history));
     try std.testing.expectError(error.OutputLimitExceeded, decodedStreamSizeLimited(encoded.items, expected.len - 1));
     var into: [expected.len]u8 = undefined;
     try std.testing.expectEqual(@as(usize, expected.len), try decodeStreamInto(encoded.items, &into));
@@ -11706,6 +16019,17 @@ test "br context map reader applies inverse move-to-front maps" {
     try std.testing.expectEqualSlices(u8, &.{ 1, 0, 0, 2 }, &context_map);
 }
 
+test "br literal tail lookup preparation is atomic on dense groups" {
+    var header: MinimalCompressedHeader = undefined;
+    header.literal_tree_count = 2;
+    const sparse_lengths = [_]u4{7} ++ [_]u4{0} ** 255;
+    header.literal_trees[0] = .{ .table = try huffman.HuffmanTable(256).init(&sparse_lengths) };
+    header.literal_trees[1] = .{ .table = try huffman.HuffmanTable(256).init(&([_]u4{8} ** 256)) };
+    const before = header.literal_trees[0];
+    try std.testing.expect(!prepareLiteralTailLookups(&header));
+    try std.testing.expectEqualSlices(u8, std.mem.asBytes(&before), std.mem.asBytes(&header.literal_trees[0]));
+}
+
 test "br zero context map reader accepts plain and RLE all-zero maps" {
     var plain: std.ArrayList(u8) = .empty;
     defer plain.deinit(std.testing.allocator);
@@ -11730,6 +16054,35 @@ test "br zero context map reader accepts plain and RLE all-zero maps" {
     try writeSimpleSingleSymbolPrefix(std.testing.allocator, &nonzero_writer, 2, 1);
     var nonzero_reader = bitstream.BitReader.init(nonzero.items);
     try std.testing.expectError(error.UnsupportedBrotliFeature, readZeroContextMap(&nonzero_reader, 64, 2));
+}
+
+test "br UTF8 text context map uses compact zero-run coding" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeUtf8TextContextMap(std.testing.allocator, &writer);
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    var context_map: [64]u8 = undefined;
+    try readContextMap(&reader, &context_map, 2);
+    for (context_map, 0..) |tree, context|
+        try std.testing.expectEqual(literal_context.utf8TextTree(context), tree);
+    try std.testing.expect(encoded.items.len <= 4);
+}
+
+test "br UTF8 suffix context maps round trip candidate cutoffs" {
+    for ([_]u6{ 32, 40, 48, 52, 56, 60 }) |cutoff| {
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(std.testing.allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeUtf8SuffixContextMap(std.testing.allocator, &writer, cutoff);
+
+        var reader = bitstream.BitReader.init(encoded.items);
+        var context_map: [64]u8 = undefined;
+        try readContextMap(&reader, &context_map, 2);
+        for (context_map, 0..) |tree, context|
+            try std.testing.expectEqual(literal_context.utf8SuffixTree(context, cutoff), tree);
+    }
 }
 
 test "br distance context map reader preserves nonzero tree indexes" {
@@ -11831,6 +16184,35 @@ test "br regular distance resolver covers postfix and extra bits" {
     try std.testing.expectEqual(@as(usize, 3), try resolveRegularDistance(0, 1, 17, 1));
     try std.testing.expectEqual(@as(usize, 18), try resolveRegularDistance(2, 4, 25, 1));
     try std.testing.expectError(error.InvalidHuffmanCode, resolveRegularDistance(0, 4, 19, 0));
+}
+
+test "br regular distance resolver remains bounded at RFC maxima" {
+    const max_symbol: u16 = max_distance_alphabet_size - 1;
+    const xcode = @as(usize, max_symbol) - 120 - 16;
+    const extra_bits = 1 + (xcode >> 4);
+    const extra = (@as(usize, 1) << @intCast(extra_bits)) - 1;
+    const distance = try resolveRegularDistance(3, 120, max_symbol, extra);
+    try std.testing.expect(distance < (@as(usize, 1) << 30));
+    try std.testing.expectError(error.CorruptFrame, resolveRegularDistance(3, 120, max_symbol, extra + 1));
+}
+
+test "br static dictionary addresses use the active window distance" {
+    var scratch: [64]u8 = undefined;
+    const output_len = (@as(usize, 1) << 16) + 4096;
+    const window_distance = maxBackwardDistanceForWindow(16, output_len);
+    try std.testing.expectEqual(@as(usize, 65_520), window_distance);
+
+    const address: usize = 3;
+    const copy_len: usize = 5;
+    const expected = try minimalStaticDictionaryWord(window_distance + 1 + address, copy_len, window_distance, &scratch);
+    try std.testing.expectEqualSlices(u8, "world", expected);
+
+    // Using total output as the base after the window has filled would shift
+    // the same wire distance into an invalid/non-equivalent dictionary address.
+    try std.testing.expectError(
+        error.InvalidMatch,
+        minimalStaticDictionaryWord(window_distance + 1 + address, copy_len, output_len, &scratch),
+    );
 }
 
 test "br simple prefix code decodes three-symbol canonical tree" {
@@ -12115,6 +16497,20 @@ fn writeMinimalCompressedHeaderForHello(allocator: std.mem.Allocator, writer: *B
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForSingleLiteral(allocator: std.mem.Allocator, writer: *BitWriter, literal: u8) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // LSB6 literal context
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, literal);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 8);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
 fn writeMinimalCompressedHeaderForHelloWithContextMaps(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -12198,6 +16594,15 @@ fn writeMinimalCompressedHeaderForShortDistance(allocator: std.mem.Allocator, wr
 }
 
 fn writeMinimalCompressedHeaderForRegularDistance(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    return writeMinimalCompressedHeaderForRegularDistancePattern(allocator, writer, 'a', 'b');
+}
+
+fn writeMinimalCompressedHeaderForRegularDistancePattern(allocator: std.mem.Allocator, writer: *BitWriter, first: u8, second: u8) Error!void {
+    return writeMinimalCompressedHeaderForAlternatingPattern(allocator, writer, first, second, 145);
+}
+
+fn writeMinimalCompressedHeaderForAlternatingPattern(allocator: std.mem.Allocator, writer: *BitWriter, first: u8, second: u8, command_symbol: u16) Error!void {
+    if (first == second) return error.InvalidBlockPlan;
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
@@ -12209,14 +16614,119 @@ fn writeMinimalCompressedHeaderForRegularDistance(allocator: std.mem.Allocator, 
 
     try writer.writeBits(allocator, 1, 2); // simple literal prefix
     try writer.writeBits(allocator, 1, 2); // NSYM = 2
-    try writer.writeBits(allocator, 'a', alphabetBits(256));
-    try writer.writeBits(allocator, 'b', alphabetBits(256));
+    try writer.writeBits(allocator, first, alphabetBits(256));
+    try writer.writeBits(allocator, second, alphabetBits(256));
 
     try writer.writeBits(allocator, 1, 2); // simple insert-copy prefix
     try writer.writeBits(allocator, 0, 2); // NSYM = 1
-    try writer.writeBits(allocator, 145, alphabetBits(704));
+    try writer.writeBits(allocator, command_symbol, alphabetBits(704));
 
     try writeSimpleSingleSymbolPrefix(allocator, writer, 112, 17);
+}
+
+fn writeRepeatedPrefixCompressedHeader(allocator: std.mem.Allocator, writer: *BitWriter, prefix: []const u8, seed_symbol: u16, copy_symbol: u16) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, @intCast(prefix.len), 4); // direct distances 1...prefix.len
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESL
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+    try writeSimplePrefixRuntime(allocator, writer, 256, prefix, false);
+    try writer.writeBits(allocator, 1, 2); // simple command prefix
+    try writer.writeBits(allocator, 1, 2); // two symbols
+    // The two-symbol simple tree assigns one-bit codes in listed order.
+    try writer.writeBits(allocator, copy_symbol, alphabetBits(704));
+    try writer.writeBits(allocator, seed_symbol, alphabetBits(704));
+    try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, 16 + prefix.len + 48, 15 + prefix.len);
+}
+
+fn writePlannedCompressedHeader(
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    literal_alphabet: *const command_plan.PrefixAlphabetFor(256),
+    command_alphabet: *const command_plan.PrefixAlphabet,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
+    ndirect: u7,
+    distance_alphabet_size: usize,
+    literal_lengths: *const [256]u4,
+    command_lengths: *const [704]u4,
+    distance_lengths: *const [planned_distance_alphabet_size]u4,
+) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, ndirect, 4);
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writePrefixSymbolsWithLengths(allocator, writer, 256, literal_alphabet, literal_lengths);
+    try writePrefixSymbolsWithLengths(allocator, writer, 704, command_alphabet, command_lengths);
+    try writePrefixSymbolsWithLengths(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths);
+}
+
+fn writePlannedCompressedHeaderTwoLiteralContexts(
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    literal_alphabets: *const [2]command_plan.PrefixAlphabetFor(256),
+    literal_lengths: *const [2][256]u4,
+    context_cutoff: u6,
+    ndirect: u7,
+    command_alphabet: *const command_plan.PrefixAlphabet,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
+    distance_alphabet_size: usize,
+    command_lengths: *const [704]u4,
+    distance_lengths: *const [planned_distance_alphabet_size]u4,
+) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, ndirect, 4);
+    try writer.writeBits(allocator, literal_context.mode_utf8, 2);
+    try writeBlockTypeCount(allocator, writer, 2);
+    try writeUtf8SuffixContextMap(allocator, writer, context_cutoff);
+    try writeBlockTypeCount(allocator, writer, 1);
+    inline for (0..2) |tree| try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
+    try writePrefixSymbolsWithLengths(allocator, writer, 704, command_alphabet, command_lengths);
+    try writePrefixSymbolsWithLengths(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths);
+}
+
+fn writeUtf8TextContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    return writeUtf8SuffixContextMap(allocator, writer, 56);
+}
+
+fn writeUtf8SuffixContextMap(allocator: std.mem.Allocator, writer: *BitWriter, cutoff: u6) Error!void {
+    if (cutoff < 32 or cutoff > 63) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, 1, 1); // Use zero-run RLE.
+    try writer.writeBits(allocator, 5, 4); // RLEMAX = 6.
+    try writer.writeBits(allocator, 1, 2); // Simple prefix.
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2.
+    // Symbol 5 encodes a 32...63 zero run; symbol 7 selects literal tree 1.
+    try writer.writeBits(allocator, 5, alphabetBits(8));
+    try writer.writeBits(allocator, 7, alphabetBits(8));
+    try writer.writeBits(allocator, 0, 1); // Symbol 5.
+    try writer.writeBits(allocator, cutoff - 32, 5);
+    for (cutoff..64) |_| try writer.writeBits(allocator, 1, 1); // Symbol 7.
+    try writer.writeBits(allocator, 0, 1); // IMTF = false.
+}
+
+fn writePrefixSymbolsWithLengths(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: anytype, lengths: []const u4) Error!void {
+    if (alphabet.len == 0) return error.InvalidBlockPlan;
+    if (alphabet.len > 4) {
+        var highest: usize = 0;
+        for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
+        return complex_prefix.writeWithStopIndex(allocator, writer, alphabet_size, lengths, highest + 1);
+    }
+    try writer.writeBits(allocator, 1, 2);
+    try writer.writeBits(allocator, alphabet.len - 1, 2);
+    for (alphabet.symbols[0..alphabet.len]) |symbol| {
+        if (symbol >= alphabet_size) return error.InvalidHuffmanCode;
+        try writer.writeBits(allocator, symbol, alphabetBitsRuntime(alphabet_size));
+    }
+    if (alphabet.len == 4) try writer.writeBits(allocator, 0, 1); // balanced four-symbol tree
 }
 
 fn writeMinimalCompressedHeaderForDistanceContext(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
@@ -13729,6 +18239,24 @@ fn writeSimpleSingleSymbolPrefix(
     try writer.writeBits(allocator, 1, 2); // simple prefix code
     try writer.writeBits(allocator, 0, 2); // NSYM = 1
     try writer.writeBits(allocator, symbol, alphabetBits(alphabet_size));
+}
+
+fn writeSimpleSingleSymbolPrefixRuntime(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, symbol: usize) Error!void {
+    if (alphabet_size == 0 or symbol >= alphabet_size) return error.InvalidHuffmanCode;
+    try writer.writeBits(allocator, 1, 2);
+    try writer.writeBits(allocator, 0, 2);
+    try writer.writeBits(allocator, symbol, alphabetBitsRuntime(alphabet_size));
+}
+
+fn writeSimplePrefixRuntime(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, symbols: []const u8, tree_select: bool) Error!void {
+    if (symbols.len == 0 or symbols.len > 4) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, 1, 2);
+    try writer.writeBits(allocator, symbols.len - 1, 2);
+    for (symbols) |symbol| {
+        if (symbol >= alphabet_size) return error.InvalidHuffmanCode;
+        try writer.writeBits(allocator, symbol, alphabetBitsRuntime(alphabet_size));
+    }
+    if (symbols.len == 4) try writer.writeBits(allocator, @intFromBool(tree_select), 1);
 }
 
 fn writeCodeLengthSymbol(

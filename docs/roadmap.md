@@ -4,6 +4,39 @@ This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
 architecture blindly.
 
+### Current completion audit (2026-08-30)
+
+The long-term objective is **not complete**. Current evidence still leaves these
+major gaps before Vort can claim broad industry-best parity:
+
+- Brotli general-purpose compression is not implemented; production encoding
+  currently covers stored streams, single-byte RLE, and externally gated short
+  alternating patterns only.
+- True byte-progressive Brotli decoding now covers stored data, metadata,
+  insert-only Huffman literals, compressed RLE, copy commands, context maps,
+  entropy block switching, static dictionaries, and consecutive compressed
+  meta-blocks. Arbitrary upstream Brotli streams still need broader decoder
+  coverage; the general fallback facade buffers a bounded complete payload.
+- Incremental DEFLATE source and JSON throughput now reach or exceed the local
+  zlib-ng level-6 comparison on the locked 256 KiB fixtures, while broader
+  real-corpus, ratio, memory, and cross-platform parity still needs evidence.
+- Trained Zstd repcode selection, COVER/FastCover-class history selection, and
+  broader entropy-mode parity still require completion and competitor evidence.
+  Vort can now wrap caller-selected history in a dependency-free standard full
+  dictionary, train its complete 256-symbol literal Huffman table from sample
+  bytes, and train its OF/ML/LL FSE tables from dictionary-aware LZ77 sequence
+  codes. This stage retains baseline repcodes rather than claiming COVER/FastCover
+  equivalence. Standardized seek-table parsing/
+  iteration, one-shot encoding, checksum-aware range decode, and
+  dictionary-aware encoding/range decode are also in place.
+- Cross-platform optimized kernels and reproducible competitor measurements are
+  not yet comprehensive enough for a blanket performance-leadership claim.
+
+The next highest-value deliverable is broader byte-progressive decoding against
+upstream-produced multi-meta-block corpora, followed by the remaining general
+Brotli encoder features. Performance work should then resume on the profiled
+DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
+
 ## Milestone 0: repository and validation spine
 
 - [x] Zig 0.16 package scaffold.
@@ -1839,6 +1872,1468 @@ architecture blindly.
   validates Snappy tokens while reporting literal/copy token counts and bytes,
   with split-input and file/hex CLI probe coverage for encoded and known-copy
   blocks.
+
+- Removed the duplicate full-token/checksum decode from allocating, append,
+  and exact-size Snappy frame APIs. These paths now preflight only framing and
+  declared block lengths before their single validating decode; raw block
+  allocation similarly consumes the length prefix once and decodes tokens
+  once. Error-priority tests retain output-limit, exact-size, malformed-token,
+  and checksum behavior. The old 1,500-line facade now delegates block
+  parsing/validation and overlapping history copies to focused
+  `snappy/{block_decode,match_copy}.zig` modules with independent oracles.
+  A same-machine ReleaseFast 1,000-iteration comparison improved framed decode
+  by about `1.50x...1.53x` on text, structured, repetitive, and incompressible
+  rows (`1.513x` geomean); the gate now enforces conservative ReleaseFast
+  floors for those rows.
+
+- Removed the remaining duplicate raw-block token validation inside successful
+  Snappy framed decode. Compressed chunks now read their length prefix once and
+  run the shared out-of-line token decoder once; malformed tokens and short
+  output retain their established error priority. Framing, U24 fields, and
+  allocation preflight moved from the facade into `snappy/frame.zig`, reducing
+  `src/snappy.zig` from 1,540 to about 1,460 lines while keeping only three
+  cohesive files in the Snappy subdirectory. The frame checksum path now uses
+  Vort's selected CRC-32C backend rather than the byte-at-a-time scalar API.
+  Against commit `68684c6`, a same-machine ReleaseFast 1,000-iteration A/B
+  improves framed text/structured/repetitive/incompressible decode by about
+  `1.84/1.77/1.86/1.88x` and framed encode by about
+  `1.94/2.05/1.98/1.13x`; framed decode geomean across all report rows is
+  `1.677x`. ReleaseFast gate floors were raised to cover the new performance
+  envelope without relying on the A/B report alone.
+
+- Added an opt-in same-process Snappy decode comparison that dynamically loads
+  the installed `libsnappy` C ABI, so competitor evidence does not require
+  development headers or contaminate default CI. Both codecs consume identical
+  Vort-generated blocks into caller-owned output; the CSV also records literal
+  and copy-token distributions. Against Ubuntu `libsnappy` 1.1.10 on the local
+  i9-13900K, Vort leads tiny/text/structured/incompressible/RLE rows by roughly
+  `5.13/1.50/1.29/2.38/3.21x`. The 32-byte-period repetitive row is the only
+  measured gap at about `0.93x`; its exact shape is one literal plus 546 COPY_2
+  tokens. Direct/non-overlap copy specializations were tested and rejected when
+  repeat5 evidence failed to improve that row. The optional gate requires Vort
+  to retain clear wins on five rows and bounds the known repetitive weakness,
+  making the next token-loop optimization target explicit rather than claiming
+  blanket Snappy leadership.
+
+- Closed the locked Snappy 32-byte-period decode gap. Profiling showed the row
+  is exactly one 32-byte literal followed by 546 COPY_2 tokens, almost all
+  around length 60/distance 32. `snappy/match_copy.zig` now replays matches with
+  offset >=8 and length >=16 in eight-byte words; every source word precedes
+  its store, so overlapping Snappy semantics remain valid. The existing oracle
+  exhaustively covers offsets 1...96 and lengths 1...64. A same-process
+  libsnappy 1.1.10 comparison moved the 20,000-iteration repetitive row from
+  about `0.93x` to `1.13x`; repeat5 text/structured/repetitive rows are about
+  `1.86/1.39/1.12x`, while RLE and literal-only rows retain clear wins. The
+  optional reference gate now requires repetitive decode to remain above
+  `1.02x`, replacing the prior bounded-known-gap contract.
+
+- Added the matching opt-in caller-owned raw-block comparison for LZ4, with
+  runtime `liblz4` loading isolated under `tools/lz4/`. The common compressed
+  input is generated by the reference library because Vort's bootstrap raw
+  encoder does not yet enforce liblz4's terminal-literal constraints on highly
+  compressible payloads; recording that distinction avoids treating Vort-only
+  permissive blocks as interoperability evidence. Against Ubuntu `liblz4`
+  1.9.4 on the local i9-13900K, Vort decode leads tiny/text/structured/
+  repetitive/RLE by at least about `1.28/6.15/12.60/4.60/7.41x` in the initial
+  repeat5 run, while incompressible literal decode is effectively tied at
+  `1.00x`. A 20,000-iteration repetitive confirmation measured `4.89x`; the
+  retained gate rerun remains positive on every row. The optional gate validates version, token
+  accounting, common-input round trips, clear wins on five rows, and a bounded
+  incompressible row. No production decoder change was justified by this
+  matrix; the newly exposed work is encoder terminal-format compatibility.
+
+- Fixed that LZ4 raw-block encoder compatibility gap. Both independent and
+  linked hash-chain encoders now share `lz4/block_format.zig`, which codifies
+  the wire-format terminal requirements: the final match starts at least 12
+  bytes before the end and a final literal-only sequence retains at least five
+  bytes. Match search still uses the same candidates and back-extension, but
+  the selected match is clipped before emission rather than consuming the
+  mandatory tail. The runtime liblz4 comparison now differentially decodes
+  both liblz4- and Vort-generated blocks for all six cases and records both
+  token layouts/sizes. Vort output matches liblz4 size exactly on the locked
+  tiny/text/structured/repetitive/incompressible/RLE matrix, retains its
+  caller-owned decode lead on the compressed rows, and exposes at least five
+  Vort literal bytes on every match-capable case. The 113-case native LZ4
+  probe, 93-row native library gate, and 814 unit tests cover the broader
+  regression surface.
+
+- Added an opt-in same-process Zstd caller-owned decode comparison under
+  `tools/zstd/`, dynamically loading Ubuntu libzstd 1.5.5 and using level-1
+  reference frames as common input. Initial runs put Vort around `0.86/0.57/
+  0.20/0.22/0.89/0.60x` on tiny/text/structured/repetitive/incompressible/RLE
+  rows; the retained repeat5 gate currently records comparable gaps, while a
+  256 KiB raw multi-block row is around `0.8x`. The four compressed
+  cases all have raw literals, exactly one sequence, and predefined LL/OF/ML
+  tables, isolating the first optimization target to generic compressed-block
+  parse/sequence setup rather than Huffman or FSE table construction. A direct
+  RLE-match memset candidate was tested and reverted after end-to-end slowdown.
+  The evidence-first gate records reference version, block/literal/sequence
+  shape, exact per-case ratios, and conservative regression floors; it does not
+  misrepresent the current gaps as leadership.
+
+- Began structural work on that Zstd sequence target by moving the 178-line
+  predefined LL/OF/ML decode tables and checked state lookup into
+  `src/zstd/sequence/predefined.zig`. This reduces the already-large
+  `src/zstd.zig` facade by roughly 176 lines and gives future predefined fast
+  paths a cohesive module instead of adding more tables/logic to the 15K-line
+  file. A single-sequence shortcut and an RLE-match memset were both measured
+  and rejected after repeat5 end-to-end results were neutral-to-negative; only
+  the behavior-preserving extraction remains. The libzstd matrix stays at the
+  established baseline, and the new module has its own invalid-state tests.
+
+- Added a focused raw-frame fast path under `src/zstd/frame/raw.zig` rather
+  than expanding the Zstd facade. It accepts only checksum-free, dictionary-
+  free, single-segment frames containing raw blocks, validates the complete
+  frame and declared size before mutating output, and falls back without side
+  effects for every other shape. Payloads below 256 bytes stay on the general
+  decoder to avoid two-pass fixed overhead. In the libzstd repeat5 matrix, the
+  1 KiB raw row moves from roughly parity to over `30x` the reference call and
+  the 256 KiB/two-block row improves from about `0.8x` to `0.94x`; compressed
+  rows remain byte-identical and unchanged. The reference gate now requires a
+  clear 1 KiB raw win and at least `0.85x` on the large raw row.
+
+- Extended the same isolated Zstd frame module to mixed raw/RLE block streams.
+  The first pass distinguishes stored payload length (`len` for raw, one byte
+  for RLE), validates non-zero RLE regeneration sizes and the declared total,
+  then the decode pass uses `memcpy`/`memset` without reparsing the full general
+  codec. A handcrafted 256-byte RLE oracle covers byte changes and output.
+  libzstd level 1 normally represents the locked repeated-byte corpora as one
+  compressed sequence rather than an RLE block, so this is compatibility/hot-
+  path coverage for valid externally produced RLE frames, not a benchmark win
+  falsely attributed to the current reference matrix.
+
+- Extracted Zstd's shared Huffman/sequence reverse-bit reader into
+  `src/zstd/sequence/bit_reader.zig`, reducing the facade below 14,920 lines.
+  The module owns marker-bit parsing and a cross-byte reservoir reader, with a
+  per-bit reference oracle covering input lengths and widths 1...16. The first
+  reservoir implementation exposed a bit-order bug through that oracle before
+  integration; the corrected reader keeps the libzstd repeat5 matrix at the
+  established compressed/raw performance envelope. This is a structural hot-
+  path boundary for further reservoir work, not an unsupported speed claim.
+
+- Extended the opt-in Zstd comparison with separate header, first-block, and
+  sequence-inspection timings. Header/block inspection cost only about 13/27 ns
+  per call on the locked frames, while single-sequence inspection costs roughly
+  12 microseconds—essentially the whole decode. This localizes the dominant
+  setup cost to sequence parsing and its large inline FSE-table objects, not
+  frame headers. A narrow production early return now handles all-predefined
+  sequence modes without constructing or resolving unused FSE tables, improving
+  the locked compressed decode rows by roughly 5–10% in the short matrix. A
+  broader table-view extraction was separately tested and reverted after code-
+  layout regressions; future work should redesign ownership/view boundaries
+  inside `src/zstd/sequence/`, not copy those large tables between modules.
+
+- Reused the extracted predefined module for a zero-allocation sequence-shape
+  inspection fast path. `isModeByte` recognizes the all-predefined mode byte,
+  allowing `inspectNativeFrameBlockSequenceModes` to return its public summary
+  without constructing three empty 512-entry FSE tables. On the locked
+  libzstd rows, sequence inspection drops from roughly 12 microseconds to about
+  2.3 microseconds per call. The same shape predicate remains available to a
+  future production decoder fast path, while decode behavior and the generic
+  mixed/RLE/FSE/repeat-table fallback are unchanged.
+
+- Added that production fast path without growing the facade: the bitstream-
+  only decoder lives in `src/zstd/sequence/single_predefined.zig`, while the
+  parent retains repeat-offset mutation and output/history ownership. For an
+  exactly-one-sequence, all-predefined block, dispatch occurs before constructing
+  the three inline 512-entry FSE tables. In repeat5 libzstd comparisons,
+  text/structured/repetitive improve from about `0.52/0.19/0.21x` to
+  as high as `0.93/0.33/0.37x`, and the repeated-byte row can reach roughly
+  reference parity. Short gate runs are noisier (text has remained above about
+  `0.64x`), so conservative floors protect material improvement without encoding
+  the best observed sample as a guarantee. Raw rows remain on their isolated
+  fast path.
+
+- Removed the remaining terminal-block state materialization from Zstd sequence
+  decode. Frame loops now pass an explicit continuation context from each block
+  header; only blocks with a successor retain entropy tables and repeat offsets
+  for possible `Repeat_Mode` use. The policy lives in
+  `src/zstd/sequence/continuation.zig`, keeping lifecycle intent out of the
+  already-large facade, and both one-shot and direct incremental decode share
+  it. Multi-block repeat-table fixtures still exercise the retained-state path,
+  while a focused terminal/continuing state test covers the ownership boundary.
+  This avoids writing three unused 512-entry FSE tables on the dominant one-
+  block shape. In the local repeat5 libzstd 1.5.5 matrix, text/structured/
+  repetitive/repeated-byte improve from roughly `0.92/0.33/0.37/0.99x` to
+  `2.67/1.13/1.61/2.39x`; raw-frame paths remain separate and unchanged.
+
+- Extended the same-process libzstd comparison to measure Vort's allocator-
+  returning decode beside caller-owned decode. The first measurement exposed a
+  `6.0–7.2x` gap on the locked single-block compressed rows: the allocator path
+  performed a complete decoded-size preflight and then parsed/decoded the block
+  again. A new shape planner in `src/zstd/frame/known_size.zig` recognizes one
+  dictionary-free frame with declared content size and exactly one block, then
+  allocates the final slice once and delegates all actual validation and output
+  to the caller-owned decoder. Concatenated, skippable, dictionary, no-size, and
+  multi-block streams retain the general path. The allocator/caller-owned ratio
+  first fell to about `1.36–1.86x` on text/structured/repetitive/repeated-byte.
+  Reusing the public caller-owned facade from that final allocation also lets
+  raw/RLE shapes retain their specialized frame decoder; the locked compressed
+  rows now sit around `0.97–1.00x` and the 1 KiB raw row around `1.7x`, including
+  allocation/free overhead. The optional gate protects conservative `2.5x`
+  compressed and `3.0x` 1 KiB raw ceilings. Focused tests
+  cover checksum and declared-size corruption plus concatenated/multi-block
+  fallback without duplicating block decoding logic in the planner.
+
+- Expanded the libzstd decode matrix beyond the favorable one-sequence shape.
+  Deterministic numbered-JSON, 80 KiB patterned-symbol, and 64 KiB printable-
+  ASCII rows now lock multi-sequence/FSE, large FSE-sequence, and Huffman-
+  literal-only coverage respectively. The first measurements exposed much
+  larger general-path gaps (`0.077/0.014/0.012x` reference throughput), so the
+  gate records conservative floors instead of treating the earlier matrix as a
+  complete leadership claim. The dominant multi-sequence defect was structural:
+  three inline 512-entry FSE tables were copied by value for every decoded
+  sequence. Changing symbol lookup to borrow `SequenceDecodeState`/tables lifts
+  numbered JSON to about `0.12x` and the 5,161-sequence row to about `0.30x`
+  without changing table layout. A new `src/zstd/literals/huffman_lookup.zig`
+  module adds fixed-prefix literal lookup using peek/skip support in the shared
+  reverse reader; exact stream-boundary fallback retains malformed-input
+  behavior. Literal-only Huffman remains the largest gap and is now explicitly
+  visible rather than hidden by the original corpus.
+
+- Routed sequence-free Huffman literal blocks through the same fixed-prefix
+  table instead of leaving them on the canonical linear tree scan. The shared
+  reverse reader now exposes an oracle-tested small-width peek specialized for
+  Zstd's at-most-11-bit Huffman codes, touching at most three bytes without the
+  generic u72 gather loop. On the 64 KiB printable-ASCII row this raises Vort
+  from roughly `0.013x` to about `0.11x` libzstd throughput (over `8x` faster),
+  while the multi-sequence rows remain around `0.12/0.32x`. The gate floors now
+  protect those material gains; libzstd still leads the general Huffman/FSE
+  paths, so further table/state and match-loop work remains necessary.
+
+- Extracted Zstd's current-frame match replay into
+  `src/zstd/sequence/match_copy.zig`, keeping match mechanics beside sequence
+  decoding rather than growing the facade. Non-overlapping matches now take one
+  exact memcpy, while overlapping matches seed one period and double the
+  initialized prefix. Focused period/non-overlap tests lock LZ semantics. A
+  1,000-iteration huffman80k A/B improved from roughly `0.290x` to `0.302x`
+  libzstd throughput (about `4%` faster), and the expanded gate raises that
+  row's floor to preserve the gain without claiming parity.
+
+- Removed a redundant per-bit reconstruction loop from the shared Zstd reverse
+  reader. Its gathered `little` value already has the same integer order as the
+  prior loop; the existing per-bit oracle, plus explicit peek/skip alignment
+  tests, verifies the equivalence across widths and byte boundaries. On the
+  1,000-iteration huffman80k row this improves Vort from roughly `0.302x` to
+  `0.326x` libzstd throughput (about another `7–8%`), while the single-sequence
+  and literal-only Huffman rows remain within their established envelope. The
+  huffman80k gate floor rises to `0.29x`.
+
+- Replaced the reverse reader's dynamic byte-gather loop with bounded fixed-
+  width loads: direct one/two-byte reads, a padded u64 for three through eight
+  bytes, and a u64-plus-tail case for the maximum nine-byte request. The same
+  per-bit oracle covers every alignment and width before benchmark use. On the
+  1,000-iteration matrix huffman80k rises again from roughly `0.326x` to
+  `0.349x` libzstd throughput (about `7%` faster), numbered JSON improves to
+  about `0.125x`, and single-sequence/Huffman-literal-only rows stay within
+  their established envelopes. The huffman80k floor increases to `0.32x`.
+
+- Changed the Huffman literal hot path to borrow the 256-node canonical tree
+  instead of passing it by value through cursor lookup and fallback queries.
+  This mirrors the earlier FSE-state ownership fix and keeps the API boundary
+  explicit without changing tree layout. On the 1,000-iteration general matrix
+  numbered JSON rises from roughly `0.125x` to `0.133x` libzstd throughput,
+  huffman80k remains around `0.34x`, and the literal-only row remains in its
+  existing range. All Huffman, treeless, four-stream, and high-byte fixtures
+  continue to share the same decoder; the numbered-JSON floor rises to `0.11x`.
+
+- Added an opt-in same-process Brotli caller-owned decode comparison under
+  `tools/br/`, dynamically loading Ubuntu libbrotli 1.1.0. The locked quality-0
+  frames keep all rows inside Vort's supported subset and show the real split:
+  tiny/stored-random paths lead libbrotli by roughly `11x/3x`, while compressed
+  text/structured/repetitive initially reached only about `0.24/0.20/0.27x`.
+  Separate decoded-size timing shows the strict preflight itself is even more
+  expensive than output decode on those compressed rows, localizing future work
+  to shared prefix/header parsing rather than allocation. The optional gate
+  records version, exact round trips, throughput, and conservative row floors.
+
+- Extracted Brotli in-window match replay into `src/br/match_copy.zig`. The
+  decoder now copies one source period and doubles the initialized prefix, with
+  exact memcpy for non-overlap, instead of advancing one byte at a time. Focused
+  period and non-overlap tests lock LZ77 semantics. Same-machine A/B raises the
+  compressed libbrotli ratios from roughly `0.24/0.20/0.27x` to
+  `0.31/0.25/0.36x` for text/structured/repetitive (about `22–34%` faster),
+  while stored/random leadership remains intact.
+
+- Removed redundant decoded-size passes from Brotli exact-size decode APIs.
+  `decodeStreamIntoExactSize` now decodes once into the caller's exact window
+  and maps an early `OutputTooSmall` or final length mismatch to `SizeMismatch`;
+  allocator and append exact-size helpers reuse that contract instead of
+  parsing every prefix tree two or three times. Existing undersized/oversized
+  tests preserve public error behavior and append rollback. The libbrotli tool
+  now records exact-allocation timing and gates it to at most twice caller-owned
+  decode; on compressed rows allocation plus decode is roughly one decode pass
+  (`~61 ms` per 1,000 calls) instead of decode plus the `~87–95 ms` preflight.
+
+- Eliminated eager zero-initialization of all 96 bounded Brotli prefix-tree
+  slots in each compressed meta-block header. The retained capacities remain
+  unchanged (32 literal, command, and distance trees), but only the wire-
+  declared slots are now initialized before use; context/block indices already
+  validate every access. Layout diagnostics showed why this dominates: a
+  `PrefixCode(256)` is 1,624 bytes, `PrefixCode(704)` is 4,312 bytes, and the
+  full header is about 290 KiB. On the 1,000-call libbrotli matrix, text/
+  structured/repetitive improve from roughly `0.31/0.25/0.36x` to
+  `1.03/0.81/1.10x`, a `3.3–3.7x` Vort speedup without lowering feature limits.
+  The gate floors rise to protect most of those gains.
+
+- Changed production Brotli compressed-header parsing to construct the roughly
+  290 KiB `MinimalCompressedHeader` directly in its caller-provided slot. A
+  small value-returning wrapper remains for parser tests, but decode and strict
+  size-preflight no longer return/copy the giant header object through function
+  boundaries. Combined with lazy tree-slot initialization, the 1,000-call
+  libbrotli matrix now reaches roughly `1.55/1.25/1.64x` on text/structured/
+  repetitive, up from `1.03/0.81/1.10x`; exact-size allocation stays near one
+  decode pass. Feature limits and all 32-tree fixtures remain unchanged.
+
+- Expanded the Brotli reference matrix from quality 0 to supported quality-3
+  text, structured, and repetitive frames. Probe runs showed qualities 1–3 all
+  decode through the current native subset, while quality 4 introduces an
+  unsupported shape and remains explicit follow-up work. On quality 3, Vort
+  leads libbrotli 1.1.0 by roughly `1.85/1.49/2.20x`; the optional gate now
+  locks both quality-0 and quality-3 rows so the header-layout wins are not
+  limited to a single encoder setting.
+  The tool also accepts `--case` and `--quality` for narrow support diagnostics.
+  Quality-4 probing shows tiny/text/repetitive/random are already supported;
+  structured data reaches missing static-dictionary transform tuples
+  `(27, 9, 161)` and `(42, 9, 721)`. Experimental tuple additions advanced
+  past `UnsupportedBrotliFeature` but did not yet produce the exact payload, so
+  they were rejected rather than claiming incomplete dictionary compatibility.
+
+- Replaced that narrow Brotli quality-4 dictionary dead end with a complete,
+  dependency-free static dictionary module. `src/br/dictionary.bin` embeds the
+  RFC 7932 122,784-byte dictionary, while the 207-line
+  `src/br/static_dictionary.zig` owns length offsets, all 121 transforms, UTF-8
+  uppercase behavior, and transformed-word scratch ownership. The previous
+  proven tuple table remains the introspection/report surface and fast subset;
+  missing tuples now fall back to the complete module. A focused transform test
+  covers the quality-4 omit-last references, all 833 unit tests pass, and the
+  structured quality-4 reference row now decodes exactly at about `1.38x`
+  libbrotli throughput instead of returning `UnsupportedBrotliFeature`.
+
+- Probed the expanded Brotli decoder through libbrotli qualities 5...11 on the
+  locked text/structured/repetitive corpora. Every combination now round-trips
+  natively; quality-11 rows are retained in the gate as the strongest encoder
+  setting. Vort leads libbrotli 1.1.0 there by roughly `1.93/1.34/2.20x`, so the
+  optional matrix now protects quality 0, 3, 4, and 11 instead of extrapolating
+  from a fast encoder mode.
+
+- Added a deterministic full-dictionary transform differential to the optional
+  libbrotli gate. It samples five word indices at every RFC dictionary length
+  4...24 and all 121 transforms (`12,705` cases), comparing Vort's embedded
+  dictionary and UTF-8 transform implementation byte-for-byte with
+  `libbrotlicommon`. This validates the complete fallback beyond the single
+  quality-4 frame and catches offset, omit, affix, and uppercase drift without
+  making the production library depend on the system runtime.
+
+- Expanded the Zstd/libzstd gate with 512 KiB multi-block text, numbered JSON,
+  and mixed structured/binary corpora. The easy repeated-text shape already
+  reaches about `1.08x` libzstd, while realistic multi-sequence JSON and mixed
+  binary currently reach only about `0.21/0.26x`; allocator decode is another
+  `1.8–2.3x` slower because multi-block frames still use the strict preflight
+  path. These rows prevent the strong single-sequence and raw results from
+  hiding the remaining general FSE/Huffman and multi-block gaps.
+
+- Extended the isolated known-size Zstd frame planner from exactly one block to
+  one complete dictionary-free frame with any number of raw/RLE/compressed
+  blocks. It scans only block headers and stored payload lengths, leaving all
+  entropy/checksum/declared-size validation to the production decoder. This
+  lets allocator decode reserve the declared output once and skip the full
+  decoded-size preflight on common multi-block frames. The large text/JSON/
+  mixed-binary allocator ratios fall from roughly `2.31/1.94/1.79x` caller-
+  owned cost to about `0.96/1.00/0.99x`; concatenated, dictionary, and no-size
+  streams retain the general path, with focused single/multi-block planner tests.
+
+- Compacted Zstd sequence symbols from two machine-word fields to spec-bounded
+  `u32` bases and `u16` next states, halving each FSE table entry on 64-bit
+  targets without changing the public wire/API surface. Checked casts sit at
+  parser/planner construction boundaries; 834 tests cover predefined, RLE, FSE,
+  Repeat_Mode, malformed, and encoder use. On the 100-iteration general matrix,
+  numbered JSON rises to about `0.22x`, huffman80k to `0.39x`, 512 KiB JSON to
+  `0.24x`, and mixed binary to `0.32x` libzstd throughput. The corresponding
+  conservative floors increase, while single-sequence text remains above `3x`.
+
+- Compacted the temporary FSE table-construction baseline from `usize` to the
+  format-bounded `u16`, with checked casts at the two state-assignment sites.
+  This reduces the raw builder scratch footprint before symbols are converted
+  into the already-compact decode table. The 100-iteration matrix keeps
+  huffman80k near `0.39x`, lifts 512 KiB JSON to about `0.25x`, and mixed binary
+  to about `0.32x` libzstd throughput; all 834 sequence/parser/encoder tests and
+  the 124-case lib-generated probe pass. Multi-block floors rise accordingly.
+
+- Reused the bounded reverse-bit-reader prefix extraction for Zstd's narrow
+  initial and transition FSE states. These reads are at most 11 bits, so the
+  sequence loop now avoids the generic `u72` gather while retaining one shared
+  reader implementation and an independent per-bit oracle. Ten interleaved
+  ReleaseFast 100-iteration A/B rounds against the prior commit improve median
+  huffman80k, 512 KiB JSON, and mixed-binary decode time by about
+  `2.8%/2.7%/1.3%`; single-sequence text is neutral. The retained 13-row gate
+  reports about `0.45x/0.26x/0.32x` libzstd throughput for those FSE-heavy rows,
+  raises their conservative regression floors, and all 835 tests plus the
+  124-case lib-generated differential pass.
+
+- Moved Zstd FSE decode-table construction into the focused
+  `zstd/sequence/fse_builder.zig` module and replaced per-symbol spread-position
+  sorting with the standard linear state-order pass for 256/512-state tables.
+  The smaller tables retain the compact reference constructor; the linear path
+  is kept out of line so table setup does not inflate the sequence loop. Ten
+  alternating fixed-P-core ReleaseFast rounds improve huffman80k, 512 KiB JSON,
+  and mixed binary by about `10.2%/5.9%/4.8%`, while no-FSE rows are neutral.
+  The retained gate reaches about `0.46x/0.29x/0.34x` libzstd on those rows and
+  raises their floors. A byte-for-byte oracle compares the new constructor to
+  the sorted reference, all 837 tests pass, and the 124-case lib-generated
+  differential remains clean.
+
+- Removed three unconditional 4 KiB FSE-table clears from Zstd sequence-mode
+  parsing. Non-compressed modes observe only zero `len`/`accuracy_log`, while a
+  compressed mode overwrites every active entry before the mode-guarded decoder
+  can access it; the parser now initializes only that metadata instead of all
+  1,536 unused symbols per block. Ten alternating fixed-P-core ReleaseFast
+  rounds improve numbered JSON, mixed binary, huffman80k, and 512 KiB JSON by
+  about `17.8%/4.5%/2.0%/1.2%`; the retained gate reports roughly
+  `0.29x/0.35x/0.51x/0.29x` libzstd and raises conservative floors. All 837
+  tests and the 124-case lib-generated differential pass.
+
+- Inlined Zstd's repeat/direct offset resolver into the FSE sequence loop after
+  perf attributed about 6% of `readModeSequence` samples to the small helper's
+  call boundary. Ten interleaved fixed-CPU ReleaseFast rounds improve median
+  huffman80k, 512 KiB JSON, binary-mixed, and numbered-JSON caller-owned decode
+  time by about `4.0%/3.5%/0.5%/4.4%`, respectively. The retained conservative
+  libzstd floors rise to `0.44/0.27/0.32/0.24x`; the existing repeat-selector,
+  direct-offset, `rep0 - 1`, and invalid-match tests remain the expanded-path
+  behavior oracle.
+
+- Split large zero-sequence Zstd Huffman literal sections into a compact lookup
+  loop plus an out-of-line canonical stream-tail fallback. Perf showed
+  `HuffmanLiteralCursor.readSymbol` at about 71% of the 64 KiB ASCII decode and
+  revealed that the fallback's Zig std tree query takes the 1 KiB tree by value;
+  keeping that rare path inline gave every successful lookup a roughly 1.1 KiB
+  frame. The specialized path is limited to 16 KiB+ full literal sections so
+  sequence-interleaved and small sections retain their prior code shape. Ten
+  fixed-CPU interleaved rounds improve `ascii64k` median decode time by about
+  `4.9%`; the conservative libzstd floor rises from `0.07x` to `0.10x`, while
+  huffman80k, large JSON, mixed binary, and numbered JSON stay neutral or
+  improve in the same matrix.
+
+- Added a four-stream bulk Huffman loop for the same 16 KiB+ zero-sequence
+  literal sections. Zstd defines each regenerated stream segment as
+  `ceil(literals / 4)`, so the decoder now advances streams at known output
+  boundaries and keeps full-width lookup guarantees inside each segment. This
+  removes the per-symbol `min(available, max_bits)` and stream-tail decision
+  while retaining the canonical decoder for the few trailing bits in each
+  stream. Ten fixed-CPU 500-iteration A/B rounds reduce `ascii64k` median time
+  from about `218.9 ms` to `181.3 ms` (`17.2%`); the libzstd floor rises from
+  `0.10x` to `0.13x`. Existing four-stream, checksum, malformed-tail, and
+  lib-generated compatibility coverage exercise the stream-boundary behavior.
+
+- Specialized the four-stream bulk loop's reverse prefix gather. Once the loop
+  has established that a full Huffman width remains, the touched byte count is
+  determined entirely by `start & 7 + width`; the new reader chooses its
+  one-, two-, or three-byte reservoir directly instead of recomputing both end
+  byte indexes and their difference. An exhaustive alignment/width oracle
+  compares it with the checked generic prefix reader for widths 1...11. Seven
+  fixed-CPU 500-iteration A/B rounds reduce `ascii64k` median time from about
+  `219.2 ms` to `182.9 ms` (`16.5%`), raising its conservative libzstd floor
+  from `0.13x` to `0.14x`; other decode shapes do not call this bulk helper.
+
+- Removed the redundant checked skip after a successful four-stream bulk
+  Huffman lookup. The outer loop has already established that at least the full
+  table width remains, while every valid entry consumes no more than that
+  width, so the reader can update `remaining_bits` directly without another
+  comparison. Seven fixed-CPU 500-iteration A/B rounds reduce `ascii64k` median
+  time from about `182.48 ms` to `180.46 ms` (`1.1%`). A broader attempt to
+  fuse the table load and reader update regressed and was fully reverted.
+
+- Added a narrow Zstd sequence executor for large raw-literal blocks whose
+  literal-length and offset tables are FSE while match length is RLE. The path
+  is gated to 1,024+ sequences, eliminating three per-sequence mode switches
+  and the never-changing match-length state without perturbing mixed Huffman or
+  smaller blocks. Ten fixed-CPU 1,000-iteration A/B rounds reduce the 512 KiB
+  mixed-binary median from about `142.72 ms` to `137.09 ms` (`3.9%`), raising
+  its conservative libzstd floor from `0.32x` to `0.36x`. Broader raw-literal
+  and extra-bit fast paths regressed other FSE shapes and were fully reverted.
+
+- Added a matching executor for 1,024+ sequence blocks whose LL/OF/ML tables
+  are all FSE and whose literals are Huffman-compressed. It hoists the three
+  table-mode switches out of the sequence loop and keeps Huffman literal replay
+  beside the decoded match, while preserving the generic path for small and
+  mixed-mode blocks. Ten fixed-CPU 200-iteration A/B rounds reduce the 512 KiB
+  JSON median from about `46.997 ms` to `39.972 ms` (`14.9%`) and improve the
+  5,161-sequence raw-literal stress row by about `4.2%`. The conservative
+  `large_json` libzstd floor rises from `0.27x` to `0.32x`; smaller numbered
+  JSON stays on the generic path.
+
+- Expanded the LZ4/liblz4 caller-owned matrix with a deterministic 256 KiB
+  incompressible, literal-only block. This separates real bulk-copy throughput
+  from the existing 1 KiB row's fixed call overhead and locks the one-literal,
+  zero-match shape. Current ReleaseFast evidence is about `0.76x` liblz4, so the
+  gate records a conservative `0.70x` floor instead of hiding the remaining
+  large-literal gap behind Vort's strong compressed rows. Two production
+  fast-path attempts were rejected: a general literal-only precheck regressed
+  1 KiB input by about 9.8%, while a large-only precheck gained about 1.8% at
+  256 KiB but regressed tiny and 1 KiB rows sharply. Both were fully reverted.
+  A later parser-only optimization keeps the ordinary scalar length-extension
+  loop intact but scans genuinely long 0xff extension runs in 32-byte chunks.
+  Seven alternating fixed-CPU baseline/candidate rounds improved Vort elapsed
+  time by about 9.6% at the median (`0.83x -> 0.90x` liblz4), while targeted
+  ordinary compressed rows stayed within noise or improved. The gate now
+  requires `0.85x`; malformed unterminated extensions have a focused oracle.
+  Perf then attributed about 52% of the remaining literal-only time to Zig's
+  generic compiler-rt memcpy. The caller-owned decoder now sends only final
+  literals of at least 512 bytes through an out-of-line four-vector copy loop,
+  leaving ordinary literal/match decoding on the compact existing path. Five
+  interleaved fixed-CPU rounds move the 256 KiB row from roughly `0.91x` to
+  `0.99x` liblz4 median throughput, with text/structured/repetitive/RLE rows
+  within noise; the retained conservative floor rises to `0.88x`. Focused copy
+  tests cover the threshold, vector tail, and scalar tail boundaries.
+
+- Added a true system-libzstd compatibility probe under `tools/zstd/`, separate
+  from the native-writer probe. It dynamically loads libzstd only in the tool,
+  generates 160 frames across compression levels 1/3/9/19, four corpus shapes,
+  and sizes from empty through 512 KiB, then decodes every frame through Vort's
+  dependency-free public API and requires byte-exact output. All 160 currently
+  pass against libzstd 1.5.5. This closes a validation naming/coverage blind
+  spot without adding a runtime dependency to the production library.
+
+- Added a same-process Zstd encode comparison against libzstd 1.5.5 at levels
+  1/3/9. It validates both directions (libzstd decodes Vort output and Vort
+  decodes reference output) before timing, and records compressed size plus
+  interleaved fixed-process throughput for text, JSON, and mixed binary. The
+  first pinned evidence exposes the encoder gap directly: text is `1.16x` the
+  reference size, JSON is `18.5–25.0x`, and mixed binary is `3.71x`; encoding
+  throughput is below 1% of libzstd on every row. Vort output is currently
+  identical across levels 1/3/9 in this first matrix, confirming that output
+  strategy differentiation remains incomplete. Levels now at least map to
+  increasing bounded planner budgets (`16/64/512` for 1/3/9); the pinned JSON
+  row shows the expected search-cost progression, while its unchanged size
+  localizes the next ratio target to the 32-sequence bootstrap-plan ceiling
+  rather than another budget increase. The gate is intentionally evidence-first
+  and will anchor the next sequence-planner work.
+  Raising that bounded plan to 128 sequences reduces the locked 32 KiB JSON
+  stream from 16,893 to 13,688 bytes (`19.0%`) while leaving text and binary
+  unchanged. A 64-entry intermediate produced 15,740 bytes; 256 entries were
+  byte-identical to 128, so the larger footprint was rejected. Even after this
+  gain, JSON remains `15–20x` libzstd, showing that candidate quality and the
+  one-plan-per-block model—not only sequence capacity—remain major gaps.
+  The lookahead planner now considers a second duplicate candidate that begins
+  exactly at the current literal cursor, in addition to the prior globally
+  cheapest later match. This preserves already-emitted block history and gives
+  level 9 enough budget to avoid locally skipped bytes, reducing the same JSON
+  wire further from 13,688 to 13,506 bytes (`1.3%`) without changing level-1/3,
+  text, or binary sizes. Large-block cursor lookup uses the existing eight-byte
+  hash predicate rather than adding another unconditional bytewise quadratic
+  scan; focused lookahead/cache tests lock the new candidate choice.
+  One-shot level encoding now evaluates a level-specific smaller-block frame
+  beside the standard 128 KiB-block frame and returns only the shorter complete
+  interoperable stream. This preserves the 93-byte cross-block repeated-text
+  result that a forced 8 KiB split expanded to 437 bytes, while level-1 JSON
+  falls from 13,688 to 13,042 bytes and mixed binary from 31,953 to 30,690.
+  Focused tests require the selector never to expand repeated text and to pick
+  the split winner for structured data; the encode gate locks both improvements.
+  Expanding that selection from one split to a two-entry per-level ladder finds
+  much smaller entropy blocks without risking the repeated-text regression. For
+  levels 1/3/9 it evaluates `1/2`, `2/4`, and `4/8 KiB` respectively; JSON now
+  measures 11,208/9,983/9,728 bytes, while mixed binary reaches
+  29,073/29,735/30,690. The full-frame selector retains the original 93-byte
+  text frame at every level. This remains ratio-first and expensive because each
+  one-shot call builds three complete candidates; reusable planning and cheap
+  split scoring are explicit follow-up performance work.
+  The encoder now adds a full-block greedy hash-chain sequence candidate built
+  on the shared LZ77 planner. Unlike bounded recursive lookahead, it covers the
+  whole entropy block linearly and then reuses the existing RLE/predefined/FSE
+  wire cost selection. On the locked 32 KiB matrix this is the first order-of-
+  magnitude ratio improvement: JSON level 1/3/9 falls to 2,568/1,782/1,336
+  bytes and mixed binary to 11,809/10,176/9,384, while repeated text remains
+  93 bytes. Libzstd is still smaller (`838/912/677` JSON and `8,609` binary),
+  but the gap contracts from roughly `10–14x` to `1.1–3.1x`. Existing shape-
+  specific tests now assert semantic properties rather than a fixed sequence
+  count/table mode when the new strictly smaller candidate legitimately wins.
+  The same shared-parser candidate now compares a 128-chain greedy parse with a
+  lazy parse (`lazy_min_gain=1`) and keeps the shorter final Zstd block. This
+  trims JSON level 1/3/9 again to 2,484/1,697/1,312 bytes and mixed binary to
+  11,802/10,170/9,358, with no text regression. The remaining ratio gap is now
+  about `1.94–2.96x` on JSON and `1.09–1.37x` on binary; throughput remains far
+  behind because ratio-first one-shot mode evaluates multiple complete parser,
+  table, block-size, and frame candidates.
+  Adding the shared fixed-cost optimal parser to that same final-wire selection
+  trims JSON level 1/3/9 to 2,443/1,671/1,262 bytes and binary level 3/9 to
+  10,155/9,344, while text and binary level 1 remain unchanged. The optimal
+  parser is not trusted as universally better: it competes with greedy/lazy and
+  only its smaller actual Zstd block survives. JSON remains `1.83–2.92x`
+  libzstd, so future ratio work needs a Zstd-specific entropy-aware parser rather
+  than further tuning the shared deflate-style fixed-cost model.
+  One-shot multi-block encoding now uses the same caller-owned rolling-history
+  index as the incremental encoder. Completed blocks are indexed before the next
+  block is planned, letting adaptive splits retain legal cross-block matches
+  instead of treating every entropy block as an independent stream. JSON level
+  1/3/9 falls to 2,420/1,648/1,239 bytes; text and binary remain unchanged. The
+  history is bounded to the advertised Zstd window and allocator reservation
+  occurs before emitting each block, preserving deterministic failure semantics.
+  Expanding the bounded rolling-history plan from 8 to 32 matches lets one block
+  exploit many repeated regions from its predecessors instead of stopping after
+  the first few. JSON level 1/3 falls from 2,420/1,648 to 1,505/1,505 bytes and
+  mixed binary from 11,802/10,155 to 9,274/9,274; text and level-9 winners are
+  unchanged. Each lookup remains four-way set associative, so work is bounded
+  at 128 candidate comparisons per block rather than growing with stream size.
+  The Zstd encode comparison accepts `--case` and `--level` filters in addition
+  to iteration/round controls. Development experiments can now run one pinned
+  row (for example JSON level 9) before the complete 3x3 compatibility gate is
+  executed once at integration, avoiding repeated multi-minute matrices.
+  A final capacity sweep from 64 to 128 history matches unlocks the high-budget
+  level-9 winner: JSON falls from 1,239 to 1,058 bytes and mixed binary from
+  9,116 to 9,009, with all other rows unchanged. The fixed plan grows by about
+  1.5 KiB (`Match` plus four `usize` arrays), while lookup work stays bounded to
+  four candidates per emitted match. Level-9 binary is now `1.046x` libzstd and
+  JSON `1.563x`.
+  Raising only the history-plan output capacity from 32 to 64 (without changing
+  four-way hash associativity) gives the remaining structured blocks room to
+  retain more valid cross-block matches. JSON level 3 falls from 1,505 to 1,350
+  bytes and mixed binary level 3/9 from 9,274/9,344 to 9,116/9,116; other rows
+  are unchanged. The plan remains fixed-size and bounded to 256 candidate checks
+  per block.
+  Added a dependency-free standard Zstandard full-dictionary inspector. It
+  validates the `0xEC30A437` magic and non-zero Dictionary_ID, parses the
+  embedded Huffman plus OF/ML/LL FSE entropy headers through the production
+  readers, validates all three repcodes against the remaining history content,
+  and returns a borrowed `{id, content}` view. A locally trained libzstd 1.5.5
+  dictionary is accepted with the same ID reported in its header; malformed
+  magic, entropy payloads, zero IDs, truncated repcodes, and out-of-range
+  repcodes are rejected. Entropy seeding for Repeat_Mode remains the next full-
+  dictionary integration step rather than silently treating headers as content.
+  `StandardDictionaryView` now exposes the three validated repcodes and exact
+  raw-content offset, and `NativeDictionary.initFromStandardDictionary` creates
+  a borrowed preset-history dictionary with the standard Dictionary_ID while
+  returning the full view for future entropy-state seeding. This makes partial
+  support explicit: content matches interoperate today, but callers can see that
+  trained entropy tables/repcodes are parsed rather than falsely claimed active.
+  The libzstd runtime harness now exposes dictionary-aware encode/decode calls,
+  and a focused differential verifies that libzstd 1.5.5 decodes Vort output
+  produced from a standard full dictionary's borrowed content and ID. The
+  reverse direction now also passes: `NativeDictionary` retains an optional
+  borrowed full-dictionary byte view, and all one-shot size/decode paths seed
+  the frame's Huffman tree, OF/ML/LL FSE tables, and repcodes before the first
+  block. This closes libzstd full-dictionary first-block `Repeat_Mode` decoding
+  without changing raw-content dictionary behavior or introducing global state.
+  The incremental direct-output preflight and active sequence state now receive
+  the same parsed dictionary entropy seed, and the bidirectional differential
+  drains a libzstd full-dictionary frame through 3-byte input and 5-byte output
+  chunks before `finish()`. One-shot, size-preflight, buffered fallback, and
+  direct incremental decoding therefore share full-dictionary behavior.
+  The same externally generated frame now passes through a mixed raw/full
+  `DictionarySet`, two compressed input chunks, and dictionary-set incremental
+  direct output. Selection is strictly by frame Dictionary_ID, so a preceding
+  unrelated raw dictionary cannot shadow the full dictionary's entropy state.
+  `run-zstd-full-dictionary-diff` now creates a deterministic 40-file JSON
+  training corpus, invokes the installed zstd trainer with a fixed Dictionary_ID,
+  and runs the bidirectional one-shot/chunked/incremental Zig probe. Standard
+  dictionary compatibility is therefore reproducible from a clean checkout
+  instead of depending on a manually retained temporary dictionary.
+  Added `OwnedStandardDictionary.initCopy` for applications that load trained
+  dictionaries from temporary I/O buffers. It validates before allocation,
+  reparses the owned slice so the view/content/full-byte borrows share its
+  lifetime, exposes `asDictionary()` with entropy-capable standard bytes, and
+  has explicit allocator deinitialization. The external probe checks ownership
+  pointer relationships as well as ID/repcodes/content metadata.
+  Public dictionary values now report `DictionaryKind` (`raw_content` versus
+  `standard_full`) and standard dictionaries can return a revalidated optional
+  `standardView()`. The lightweight deterministic trainer explicitly produces
+  raw-content dictionaries, while imported full dictionaries retain entropy and
+  repcode metadata. This removes API ambiguity without falsely labeling the
+  phrase trainer as COVER/fastCover-compatible.
+  Public Zstd compression levels now declare and enforce the supported `0...22`
+  range across bound, alloc, append, into, dictionary, and dictionary-set
+  facades. Invalid negative or above-maximum levels fail with
+  `InvalidBlockPlan` instead of silently mapping to fastest or maximum search;
+  level 0 remains the explicit raw/RLE fastest mode.
+  `summarizeStandardDictionary` exposes validated entropy metadata without
+  leaking internal decode tables: LL/OF/ML entry counts and accuracy logs, the
+  content boundary, Dictionary_ID, and repcodes. The trained-dictionary probe
+  prints and cross-checks this summary, giving catalogs an auditable surface for
+  selecting compatible dictionaries before constructing codec state.
+  Added allocation-free `isStandardDictionary` and `standardDictionaryId`
+  probes for catalog discovery. They inspect only the bounded 8-byte magic/ID
+  prefix and intentionally do not imply entropy validity; callers use the strict
+  inspector before codec construction. Tests distinguish short input, zero IDs,
+  valid prefixes with truncated entropy, and strict full validation.
+  Added dictionary-set-aware native stream summaries. They resolve every
+  non-zero frame Dictionary_ID against the caller's catalog, fail early with
+  `NeedDictionary` when missing, and report resolved plus standard-full frame
+  counts alongside existing block/checksum/content-size metadata.
+  Single-dictionary convenience and dictionary/dictionary-set diagnostics
+  variants complete the summary API matrix, matching the decode surfaces while
+  retaining phase/offset context for missing catalog entries.
+  Added dependency-free standard Zstandard full-dictionary generation from
+  caller-selected history content. The bound, caller-buffer, and owned APIs
+  emit the standard magic, requested non-zero Dictionary_ID, complete portable
+  baseline Huffman/FSE tables, repcodes `1/4/8`, and the selected content. The
+  implementation validates before mutating short output buffers and reparses
+  owned output so all returned views share the owned lifetime. The external
+  full-dictionary differential now exercises both Vort-encode/libzstd-decode
+  and libzstd-encode/Vort-decode with the generated artifact. This is a valid
+  interoperability baseline, not corpus-specific COVER/FastCover entropy
+  training; the native trainer still selects raw history content.
+  ReleaseFast profiling of the native Zstd encoder found that recursive
+  mixed-family lookahead dominated levels 1-3 even though the hash planners
+  selected equally small output on the locked 32 KiB corpus. The encoder now
+  reserves that ratio-oriented search for level 4+ (or explicit budgets of at
+  least 96 states). A same-machine one-iteration smoke retained all nine wire
+  sizes while moving level-1 text/JSON/binary from roughly 2.36/11.08/0.48 s to
+  0.43/2.49/0.33 s and level-3 from 20.03/15.24/0.52 s to
+  1.27/2.99/0.35 s. These absolute times still trail libzstd by orders of
+  magnitude; the ReleaseFast gate now prevents the low-level planner cliff from
+  returning while broader parser consolidation remains open.
+  Candidate-family ablation then showed that the separate lazy hash pass does
+  not improve any locked level-1 wire. Level 1 now defers that duplicated search
+  while level 2+ retains it; this preserves all nine encode-gate sizes instead
+  of taking the observed two-byte level-3 regression from a broader cutoff.
+  Scheduler variance obscured a stable end-to-end multiplier, so this is
+  retained as a structural full-pass removal rather than a throughput claim.
+  The ReleaseFast encode gate pins the level-1/3 1505/1350-byte wires and
+  cross-decoder round trips; unit tests pin the level-to-budget boundary.
+  A second candidate-family ablation found the legacy multi-duplicate planner
+  was also redundant at level 1: greedy/optimal plans preserved all nine locked
+  sizes, while removing both single- and multi-duplicate paths broke the 93-byte
+  text wire. Level 1 therefore skips only multi-duplicate scanning and keeps the
+  single-match fallback. The same one-iteration smoke moved JSON from about
+  2.60 s to 0.88 s, text from 0.46 s to 0.26 s, and binary from 0.31 s to
+  0.17 s with byte-identical gate outputs; level 2+ retains ratio arbitration.
+  The required single-match fallback no longer uses an O(n²) byte-pair scan on
+  blocks up to 4 KiB. An exact 8-byte hash chain visits every possible >=8-byte
+  match in the same earliest-position order, with randomized plus adversarial
+  equivalence tests against the retained scan oracle. Repeat-3 level-1 smokes
+  kept 93/1505/9274-byte text/JSON/binary wires and measured roughly
+  0.18/0.85/0.14 s; JSON is now dominated elsewhere, while text and binary
+  benefit from removing the quadratic small-block matcher.
+  The bounded large-block duplicate hash path now tracks the valid length of
+  each eight-entry bucket, replacing a 1 MiB sentinel initialization with a
+  32 KiB count clear. A retained sentinel-table oracle test covers multiple
+  start offsets and long competing matches, proving identical candidate order
+  and selection.
+  Both exact and bounded large-block duplicate matchers now stop once the
+  remaining suffix is shorter than the current longest match: later positions
+  cannot win the existing length-first ordering. An explicit late equal-length
+  boundary test complements the scan-oracle comparison. A repeat-5 level-1
+  smoke kept the 93-byte text wire and measured about 0.097 s; binary remained
+  scheduler-variable at about 0.21 s, so the safe search-bound reduction is
+  retained without claiming an across-corpus multiplier.
+  Single-sequence candidates now skip generic mixed/compressed FSE table-plan
+  enumeration during both scoring and emission. RLE and predefined dedicated
+  paths already cover the useful one-sequence representations, and the focused
+  planner test proves the generic mixed plan is no smaller on the locked case.
+  Repeat-3 level-1 smokes retained 93/1505/9274-byte wires while measuring about
+  0.046/0.255/0.121 s for text/JSON/binary, substantially reducing repeated
+  full-payload pricing on the remaining single-match fallback.
+  Generic multi-sequence table planning now computes the literals-section size
+  once per sequence plan and reuses it across the LL/OF/ML alternative Cartesian
+  product. This removes repeated literal scans and Huffman length construction
+  without changing table enumeration or wire selection. Repeat-3 JSON smokes
+  retained 1505/1350-byte level-1/3 output at roughly 0.30/0.95 s; this is a
+  structural cost reduction because shared-machine timing remains variable.
+  LL/OF/ML generic table alternatives now also precompute their independent
+  table-payload and bit-count contribution once, instead of rebuilding the full
+  interleaved read-field stream for every Cartesian-product combination. Offset
+  alternatives retain their own repeated-offset simulation, so direct/repeat
+  selector validity and wire cost remain exact. Focused RLE/predefined and all
+  compressed-FSE emitter tests pass; repeat-3 JSON retained 1350/1058-byte
+  level-3/9 wires while measuring roughly 1.36/8.98 s.
+  Final sequence emission now materializes the selected plan's literals section
+  once and shares the encoded prefix across RLE, predefined, and generic table
+  candidates. Direct focused emitter APIs retain their self-contained wrappers,
+  while the production best-of-three path avoids two repeated literal/Huffman
+  builds. Focused compressed-FSE and mixed-table wires remain unchanged;
+  repeat-3 JSON level 3 measured about 0.92 s at the same 1350 bytes.
+  The winning generic table-plan candidate now also retains its already-built
+  interleaved read fields. Production emission consumes those fields directly
+  instead of repeating LL/OF/ML symbol lookup, FSE transition reconstruction,
+  and repeated-offset simulation after selection. Focused direct-emitter calls
+  keep the rebuilding fallback; repeat-3 JSON level 3 remained 1350 bytes at
+  roughly 0.88 s.
+  The best-of-three sequence emitter now reuses one candidate scratch buffer and
+  one retained-best buffer instead of keeping three independently allocated
+  complete blocks alive. Tie behavior remains first-candidate-wins, preserving
+  deterministic wires. Focused RLE/predefined/FSE tests remain byte-identical;
+  timing was mixed on the shared host, so this is retained for lower allocation
+  churn and peak temporary memory rather than a throughput claim.
+  The outer native match best-of-seven now applies the same scratch-plus-retained
+  winner design across mixed, greedy, lazy, optimal, repeated, multi-duplicate,
+  and single-duplicate candidates. Candidate order and strict-shorter tie rules
+  are unchanged; focused shortest-plan and non-greedy lookahead tests pass. A
+  repeat-3 smoke retained JSON level-3 at 1350 bytes around 0.87 s and text
+  level-1 at 93 bytes around 0.068 s.
+  Greedy hash parsing on <=32 KiB blocks now reuses a token ArrayList owned by
+  the outer match planner instead of allocating a fresh token slice per block.
+  Larger blocks keep the existing heap/ring parser. A focused A/B test proves
+  byte-identical output against the allocating greedy path and verifies retained
+  capacity across calls; repeat-3 JSON level 1 retained 1505 bytes around
+  0.27 s.
+  The small-block lazy hash parser now exposes the same reusable-token core and
+  Zstd owns a separate lazy token scratch for level 2+ candidates. Allocating
+  wrappers delegate to that shared state machine, and LZ77 plus Zstd focused
+  tests prove token/stat and wire identity while retained capacity remains
+  stable. Repeat-3 JSON level 3 retained 1350 bytes around 0.88 s.
+  The optimal parser now accepts an explicit reusable scratch that owns DP
+  costs, chosen steps, hash head/predecessor arrays, and output tokens. Its
+  allocating API delegates to the same core, while Zstd retains one scratch per
+  outer match decision. LZ77 and Zstd A/B tests prove token/stat/wire identity
+  and stable capacities; repeat-3 JSON level 3 remained 1350 bytes around
+  0.85 s.
+  Optimal hash-chain construction now protects its uninitialized reusable head
+  array with the existing 4 KiB initialization bitmap instead of clearing the
+  full 256 KiB head table on every block. The predecessor invariant remains
+  unchanged, and all optimal parser candidate-budget and token-bound tests pass.
+  Optimal's reusable hash storage is now a standalone `HashIndex` with explicit
+  build, ownership, and per-position best-match query contracts. Optimal parsing
+  consumes this index unchanged; focused tests pin deterministic position
+  matches, input-length validation, and the existing optimal token/budget wires.
+  This establishes the shared candidate-graph boundary needed to migrate greedy
+  and lazy parsing without coupling those strategies to optimal DP storage.
+  A direct greedy-on-prebuilt-index experiment round-tripped but did not preserve
+  streaming-greedy token distances because a completed index exposes different
+  head order/visibility than incremental insertion. It was rejected rather than
+  silently changing fast-parser wires; future sharing must preserve an explicit
+  per-position snapshot or candidate list, not reuse only final hash heads.
+  Optimal's fixed-distance bit costs are now a compile-time 32 KiB lookup rather
+  than a stack table rebuilt for every block. An exhaustive 1...32768 test pins
+  every entry to the scalar formula. Together with the extracted `HashIndex`,
+  this removes another fixed per-block pass without changing parser choices.
+  Optimal's three-byte hash chain now rejects fourth-byte mismatches before the
+  full word-at-a-time match-length loop whenever `min_match >= 4` (the Zstd
+  configuration). An exact-four-byte regression test protects the boundary.
+  Repeat-3 level-9 binary/JSON retained 9009/1058-byte wires at roughly
+  0.12/9.25 s; the binary hot shape benefits while JSON remains DP-heavy.
+  Optimal DP now builds one per-position prefix table mapping each reachable
+  maximum match length to the exact best `(fixed length cost + suffix cost)`
+  and longest equal-cost length. Hash-chain candidates then query that table in
+  O(1) instead of rescanning every shorter length for every distance. A randomized
+  exhaustive 4...258 oracle test preserves the old descending-scan tie rule;
+  repeat-3 level-9 JSON retained 1058 bytes at roughly 9.46 s on the noisy host.
+  The prefix table is now extended lazily only when a real hash candidate
+  reaches a new maximum match length, so positions without matches and shorter
+  later candidates avoid unnecessary suffix-cost work. The oracle exercises
+  staged 4...37...131...258 growth and retains the exact longest-on-tie rule; repeat-3
+  level-9 JSON/binary kept 1058/9009 bytes at roughly 8.37/0.13 s.
+  Profiling then exposed the recursive mixed planner, rather than optimal
+  LZ77, as the level-9 JSON bottleneck: Huffman scoring copied a roughly 3 KiB
+  plan by value and linearly searched its symbol list for every literal on
+  every explored branch. Huffman helpers now borrow that plan and finalized
+  plans carry a dense byte-to-bit-count lookup. The 32 KiB JSON wire remains
+  1058 bytes while repeat-3 encode time fell from roughly 8.25 s to 2.55 s on
+  the same host. Mixed lookahead now also accumulates its winner in place:
+  losing recursive branches no longer copy five fixed 128-entry plan arrays
+  on return and again while unwinding. An interleaved four-pair check retained
+  the 1058-byte wire and measured roughly 2.51 s versus the prior 2.52 s
+  median, a small improvement after the much larger Huffman lookup win. Each
+  finalized mixed candidate now also computes its literal-section size once
+  and shares it across RLE, predefined, and mixed table scoring; a six-pair
+  interleaved check retained 1058 bytes and moved the median from roughly
+  2.50 s to 2.41 s. Generic table arbitration now defers construction of the
+  768-entry read-field schedule until after choosing the cheapest LL/OF/ML
+  combination instead of rebuilding it for interim winners. A further six-pair
+  interleaved check retained 1058 bytes and moved the median from roughly
+  2.55 s to 2.17 s. The scoring result itself is now compact as well: it no
+  longer returns the 768-entry read-field array through recursive lookahead;
+  that schedule is built only when the winning table plan is actually emitted.
+  A final six-pair check retained 1058 bytes and moved the median from roughly
+  2.11 s to 1.63 s. Predefined-table DP now stores next-state choices as `u8`
+  and relies on the existing per-row write invariant instead of clearing an
+  8 KiB `usize` matrix on every attempt. Another six-pair check retained 1058
+  bytes and moved the median from roughly 1.94 s to 1.71 s. Duplicate matching
+  now verifies its (possibly colliding) eight-byte hash anchor and extends true
+  matches with unaligned word loads plus `ctz` rather than a byte loop. The
+  existing exact/sentinel matcher oracles and the 328-case external probe
+  retain candidate, tie, and wire behavior; a six-pair check kept 1058 bytes
+  and moved the level-9 JSON median from roughly 1.56 s to 0.96 s. Predefined
+  sequence planning now represents each viable-state row as a `u64`; range
+  masking plus `ctz` replaces per-transition scans while preserving the lowest
+  viable-state tie rule. The independent `usize`-matrix oracle covers all
+  three predefined tables through 128-value plans; a six-pair check retained
+  1058 bytes and moved the median from roughly 0.93 s to 0.86 s. The duplicate
+  extension loop now compares two words per iteration after the verified hash
+  anchor, preserving the exact `ctz` mismatch offset while reducing loop
+  overhead on long structured matches. A six-pair check retained 1058 bytes
+  and moved the median from roughly 0.87 s to 0.83 s. Canonical LL/ML/OF
+  value-to-code conversion now uses their monotone range structure rather than
+  scanning all table entries, with an exhaustive oracle over the supported
+  value ranges; a six-pair check retained 1058 bytes and moved the median from
+  roughly 0.82 s to 0.79 s. Predefined FSE planning now also uses compile-time
+  code-to-state masks, iterating only states that can encode the current value
+  instead of rechecking every state; the independent matrix oracle still
+  matches through 128-value plans. A six-pair check retained 1058 bytes and
+  moved the median from roughly 0.79 s to 0.64 s. Mixed lookahead now maintains
+  a backtracked histogram of the logical literal stream, removing each match's
+  covered interval on descent and restoring it on unwind. Exact payload scoring
+  builds Huffman weights from that histogram instead of rescanning all literal
+  runs; a direct full-scan oracle covers a non-zero first match and three-level
+  path. A six-pair check retained 1058 bytes and moved the median from roughly
+  0.65 s to 0.63 s. Huffman length generation now uses a 64-symbol compact
+  alphabet whenever the plan's highest byte permits it, avoiding full 256-way
+  package-merge state for JSON/text candidates. A full-width length oracle
+  preserves every active symbol length; a six-pair check retained 1058 bytes
+  and moved the median from roughly 0.76 s to 0.64 s. Single-stream Huffman
+  sizing now sums bit lengths directly rather than routing every byte through
+  the four-stream boundary tracker. A fragmented-run oracle preserves the
+  exact serialized length; a six-pair check retained 1058 bytes and moved the
+  median from roughly 0.66 s to 0.63 s. Mixed-candidate memoization now uses a
+  fixed open-addressed index instead of linearly scanning up to 512 cached
+  positions on every recursive lookup. Collision and repeat-hit oracles preserve
+  candidate snapshots; a fixed-CPU eight-pair check retained 1058 bytes and
+  moved the median from roughly 0.82 s to 0.69 s. Public allocating level encode
+  now evaluates the two adaptive split candidates on worker threads while the
+  caller thread evaluates the primary frame through a mutex-wrapped caller
+  allocator, then applies the original strict primary...4 KiB...8 KiB
+  shortest-frame order. A serial-selection oracle preserves the exact wire;
+  fixed-CPU-8..10 eight-pair JSON checks retained 1058 bytes and moved the
+  median from roughly 0.63 s to 0.31 s. Compressed sequence-plan scratch now
+  stores FSE states and transition values as `u8`, matching the 64-state table
+  bound and shrinking the large union copied during LL/OF/ML arbitration. A
+  state-bound oracle covers the compact fields; fixed-CPU-8..10 eight-pair
+  checks retained 1058 bytes and moved the median from roughly 0.312 s to
+  0.298 s. Mixed-prefix scoring now uses a payload-only table selector that
+  never materializes or returns the large LL/OF/ML plan union; the emitter keeps
+  the full-plan path and an oracle checks both selectors choose the same byte
+  length. Fixed-CPU-8..10 eight-pair checks retained 1058 bytes and moved the
+  median from roughly 0.327 s to 0.318 s. A search-budget sweep showed that
+  4/8 KiB candidates retain 1350/1058 bytes from 96 through 512 states, while
+  the one-block candidate reaches its 13506-byte plateau at 192. Levels 6+ now
+  cap mixed search at 192 states; fixed-CPU-8..10 eight-pair level-9 checks
+  retained 1058 bytes and moved the median from roughly 0.317 s to 0.207 s.
+  An end-to-end fixed-core comparison against the start of this optimization
+  series (`36518f8`) measures 8.283 s versus 207.425 ms, a 39.93x cumulative
+  speedup with the same 1058-byte frame. Fresh profiling then put 42% of sampled
+  self time in the bounded duplicate matcher. Its eight-entry newest-first hash
+  buckets now use a packed length/insertion-index ring instead of shifting up to
+  seven entries for every source byte, while preserving traversal and eviction
+  order. The sentinel reference oracle explicitly covers wraparound; fixed-CPU-
+  8..10 eight-pair checks retained 1058 bytes and reduced the median from
+  207.480 ms to 166.766 ms (1.244x). Long duplicate extensions now compare
+  32-byte vectors and use the first unequal-lane bit instead of issuing two
+  scalar word comparisons per loop. An explicit anchor/vector/word/byte boundary
+  oracle preserves exact match lengths; another fixed-core eight-pair run kept
+  1058 bytes and reduced the median from 166.959 ms to 160.659 ms (1.039x).
+  Huffman stream sizing now proves its worst-case aggregate bit count once from
+  `(regenerated length * maximum code width)`, then uses unchecked additions in
+  the per-literal loop. Existing single-stream and mixed-histogram full-scan
+  oracles preserve the byte count; two fixed-core eight-pair runs retained 1058
+  bytes and consistently improved the median by about 1.7% (160.265 ms to
+  157.527 ms in the first run).
+  Sequence-table bit-cost scoring now dispatches once per RLE/predefined/
+  compressed alternative and walks that representation directly. This avoids
+  copying and reopening the large tagged plan for every sequence symbol while
+  retaining identical offset-history validation. A generic-symbol reference
+  oracle covers every available mode across LL/OF/ML; two fixed-core interleaved
+  runs kept 1058 bytes and improved the median by roughly 7.7-7.8% (157.287 ms
+  to 146.031 ms in the first run).
+  The exact matcher for <=4 KiB candidates now clears a 512-byte occupancy
+  bitmap instead of initializing two 16 KiB head/tail arrays. Head and tail are
+  initialized lazily on first use, preserving the append-only earliest-first
+  collision chains; a constructed same-bucket/non-equal-anchor oracle matches
+  the quadratic reference. Fixed-core eight-pair level-9 JSON checks retained
+  1058 bytes and reduced the median from 145.951 ms to 143.013 ms (1.021x).
+  Huffman stream sizing now accumulates eight symbol widths per iteration when
+  the group cannot cross a one- or four-stream boundary, exposing independent
+  lookup/add chains while leaving short boundary tails on the scalar path. A
+  scalar four-stream oracle covers irregular literal runs and a non-divisible
+  regenerated length; fixed-core eight-pair checks retained 1058 bytes and
+  reduced the median from 143.089 ms to 139.158 ms (1.028x). The helper now
+  advances one maximal run bounded by the next Huffman stream edge, unrolling
+  eight-byte groups and handling each boundary tail before recomputing its
+  stream. This removes division and pointer write-back from the scalar tail
+  loop; another fixed-core eight-pair run retained 1058 bytes and reduced the
+  median from 139.424 ms to 123.109 ms (1.133x).
+  Mixed lookahead now builds each large block's newest-eight hash predecessors
+  once and reuses them across different `start_min` queries, instead of rebuilding
+  the 1 MiB ring table at every uncached search position. Multi-offset random and
+  heavily wrapped repeated-input oracles match the old rebuilt search exactly; a
+  fixed-core eight-pair check retained 1058 bytes and reduced the median from
+  122.779 ms to 119.927 ms (1.024x).
+  The same reusable index now stores a compact full predecessor link for each
+  position, letting the exact-cursor alternative visit only equal-hash history
+  instead of rehashing every earlier byte. Its explicit longest/closest tie
+  rule makes newest-first traversal equivalent; indexed-vs-scan oracles cover
+  random long matches and buckets wrapped hundreds of times. Fixed-core
+  eight-pair checks retained 1058 bytes and reduced the median from 119.842 ms
+  to 118.753 ms (1.009x).
+  Native match arbitration now owns one large-block predecessor index and shares
+  it across mixed lookahead, multi-duplicate, and single-duplicate candidates.
+  This removes two complete ring-table rebuilds after lookahead while preserving
+  each candidate's original scan and tie order; focused lookahead, parallel-wire,
+  and index oracles pass. Fixed-core eight-pair checks retained 1058 bytes and
+  reduced the median from 118.418 ms to 114.985 ms (1.030x).
+  The exact <=4 KiB matcher now uses the same 15-bit hash width as the bounded
+  large matcher instead of truncating it to 12 bits. Since equal eight-byte
+  anchors necessarily share all 15 bits, this only removes false collisions and
+  leaves every real candidate and earliest-first tie intact. Existing scan and
+  constructed-collision oracles pass; fixed-core eight-pair checks retained 1058
+  bytes and reduced the median from 115.602 ms to 114.111 ms (1.013x).
+  The exact matcher also stops reloading its already-compared eight-byte anchor
+  when extending a surviving bucket candidate; the bounded large matcher keeps
+  the validating entry point because its hash can collide. Existing scan,
+  collision, and SIMD-boundary oracles preserve exact lengths and selection;
+  fixed-core eight-pair checks retained 1058 bytes and reduced the median from
+  113.817 ms to 111.870 ms (1.017x).
+  Exact <=4 KiB matching now indexes full eight-byte anchors in an 8192-slot
+  open-addressed table and links positions with compact `u16` indices. This
+  shrinks head/tail metadata, removes false-collision anchor checks, and keeps
+  every real match in earliest-first order. A constructed full-anchor collision
+  oracle plus the exhaustive scan comparison preserve selection; fixed-core
+  eight-pair checks retained 1058 bytes and reduced the median from 110.861 ms
+  to 109.672 ms (1.011x).
+  Duplicate match finders now return the exact single-sequence payload score
+  they already computed while selecting their winner. Mixed-candidate material-
+  ization reuses that score rather than rebuilding the literal histogram and
+  Huffman plan for the same match. A focused oracle recomputes the score from
+  the selected match; fixed-core eight-pair checks retained 1058 bytes and
+  reduced the median from 109.760 ms to 107.025 ms (1.026x).
+  Small-Huffman symbol ordering now passes the 256-entry code-length table to
+  the sort comparator by const pointer instead of by value. The ordering remains
+  exactly `(code length descending, symbol ascending)` under the compact/full
+  length oracles; fixed-core eight-pair checks retained 1058 bytes and reduced
+  the median from 107.982 ms to 107.126 ms (1.008x).
+  Small-Huffman finalization no longer clears its dense bit-count and weight
+  arrays a second time: every caller supplies a fresh zero-initialized plan, and
+  finalization overwrites the complete active weight prefix while leaving absent
+  symbols at zero. Existing compact/full length and dense-lookup oracles pass;
+  fixed-core eight-pair checks retained 1058 bytes and reduced the median from
+  106.613 ms to 106.166 ms (1.004x).
+  A final fixed-CPU-8..10 six-pair comparison from the pre-Huffman-hotspot
+  baseline (`36518f8`) through the completed batch measured 8.316 s versus
+  107.454 ms, a 77.39x cumulative speedup while retaining the 1058-byte JSON
+  level-9 frame. This remains far behind libzstd's roughly 0.14-0.19 ms result
+  on the same harness, so the evidence is a milestone rather than parity.
+  A dedicated ReleaseFast native encode stage benchmark is now available via
+  `run-zstd-native-encode-stage-bench{-gate}`. It derives the primary/4 KiB/
+  8 KiB candidate ladder from the production level policy, warms reusable
+  scratch, reports median time across configurable rounds, and separates the
+  shared large-block duplicate-index setup from mixed, greedy, lazy, optimal,
+  repeated, multi-duplicate, and single-duplicate candidate emission. The first
+  fixed-CPU-8..10 nine-round level-9 JSON baseline measured aggregate family
+  times of about 20.35/0.12/8.58/2.44/0.13/7.16/0.47 ms for the primary block,
+  59.31/0.30/0.38/2.57/0.60/13.27/1.86 ms across 4 KiB blocks, and
+  26.41/0.21/0.31/2.54/0.83/3.28/0.33 ms across 8 KiB blocks, respectively.
+  This localizes the next work to mixed search first and multi-duplicate second,
+  rather than continuing low-signal whole-frame micro-tuning. The CSV coverage
+  gate requires all 81 case/candidate/stage rows and pins the current level-9
+  split policy so future reports cannot silently compare different pipelines.
+  The stage tool additionally accepts `--candidate` and `--stage`, allowing perf
+  and interleaved A/B runs to execute only one isolated row rather than spending
+  most samples in unrelated families. An isolated 4 KiB mixed profile puts
+  `findBestDuplicateMatchIn` at about 29.0% self time. Reusing the already loaded
+  eight-byte anchor for its hash preserves the exact open-addressed lookup and
+  avoids a redundant load; twelve fixed-CPU-8..10 interleaved pairs retained the
+  9823-byte aggregate candidate output and moved the median from 60.394 ms to
+  60.031 ms (1.006x). Two broader structural trials—borrowing the large duplicate
+  index in the candidate cache and pruning generic FSE planning with a proven
+  lower bound—were neutral or slower and were fully reverted.
+  Predefined sequence plans no longer duplicate their caller-owned LL/OF/ML
+  values into three fixed 128-`usize` arrays. They now retain only the selected
+  FSE states, while scoring and emission explicitly borrow the original values;
+  this shrinks every alternative and combined-plan copy without changing state
+  selection or wire output. Fixed-CPU-8..10 interleaved stage checks improved
+  primary/4 KiB/8 KiB JSON mixed medians by about 1.8%/8.0%/7.8%; the focused
+  4 KiB twelve-pair run moved from 59.640 ms to 55.221 ms (1.080x), retaining
+  the 9823-byte aggregate candidate output.
+  The remaining predefined state paths are bounded to 64 states, so their plan
+  arrays now use `u8` rather than `usize`. The independent usize-matrix oracle
+  still proves every chosen state across LL/OF/ML. Eight fixed-CPU-8..10 pairs
+  retained the same candidate bytes while improving primary/4 KiB/8 KiB JSON
+  mixed medians by about 4.8%/4.4%/5.4%; a twelve-pair 4 KiB run measured
+  55.255 ms to 53.080 ms (1.041x).
+  Compressed-FSE transition planning now builds compact per-symbol state chains
+  once and walks only states matching the current code, rather than rescanning
+  all 32 table entries for every sequence. Reverse construction preserves the
+  former lowest-state tie order, and a randomized scan-reference oracle matches
+  initial states, baselines, state widths, transition values, and transition
+  widths for plans of 12 through 128 sequences. Ten fixed-CPU-8..10 pairs kept
+  all mixed candidate bytes while improving primary/4 KiB/8 KiB JSON medians
+  by about 5.4%/5.3%/6.8%; the 4 KiB median moved from 55.287 ms to 52.514 ms.
+  The earlier budget sweep also showed both level-9 adaptive split candidates
+  had already reached their locked wire plateau at 96 mixed states. Adaptive
+  4/8 KiB candidates now cap only their own search at 96 while the primary
+  candidate retains the level's full 192-state fallback. The policy is shared by
+  serial selection, parallel selection, and stage diagnostics, whose CSV now
+  records and gates each candidate's effective budget. Ten fixed-CPU-8..10
+  end-to-end pairs retained 93/1058/9009-byte text/JSON/binary frames; median
+  text and JSON times improved from 77.619/99.391 ms to 66.943/84.028 ms
+  (1.159x/1.183x), while binary remained within noise at 0.996x.
+  A follow-up 64-state cutoff disables mixed recursion in only the adaptive
+  candidates while retaining the 192-state primary safety net. The full nine-row
+  encode gate still preserves every locked wire. Ten fixed-CPU-8..10 pairs
+  against the 96-state version retain 93/1058/9009-byte text/JSON/binary frames
+  and improve their level-9 medians from 66.839/83.803/26.387 ms to
+  55.565/53.433/21.164 ms (1.203x/1.568x/1.247x). The stage CSV/gate now records
+  the effective 192/64/64 budgets explicitly.
+  Broader primary-candidate ablation found a generated 32 KiB repeated corpus
+  where budgets below 96 expand the selected frame from 51 to 94 bytes, while
+  96 and 128 preserve all 20 generated/source cases against 192. Levels 6+ now
+  stop at that measured 96-state floor for their primary candidate as well. Ten
+  fixed-CPU-8..10 pairs against the 192-state version retained 93/1058/9009-byte
+  text/JSON/binary frames and improved medians from 56.485/49.946/21.154 ms to
+  33.881/44.209/21.196 ms (1.643x/1.213x/1.001x).
+  Multi-duplicate planning now returns its first global-best match to the final
+  single-duplicate candidate, whose first lookup was identical. Reusing that
+  match removes one full matcher/score pass per block whenever multi planning
+  runs, while a focused oracle proves the direct and reused single-candidate
+  wires are byte-identical. Ten fixed-CPU-8..10 end-to-end pairs retained the
+  93/1058/9009-byte level-9 outputs; JSON improved from 44.241 to 42.474 ms
+  (1.042x), binary from 21.141 to 19.964 ms (1.059x), and text regressed about
+  1.1%, so the change is retained for its net structured/binary gain.
+  Native stage diagnostics now expose the aggregate sequence count produced by
+  greedy, lazy, and optimal hash parsers even when the 128-sequence encoder
+  ceiling rejects their block. On the locked 32 KiB JSON input, primary optimal
+  currently produces 471 matches while every 4/8 KiB block stays within the
+  limit (476/473 total across all blocks). Primary greedy, lazy, and optimal all
+  report 471 matches on this corpus. This explains why raising the fixed
+  ceiling to 256 still did not admit the primary hash plan. The native sequence
+  representation now has a separate 512-entry capacity while recursive mixed,
+  multi-duplicate, and repeated planners retain their measured 128-entry bound.
+  This admits the complete 471-match optimal block without expanding recursive
+  search state: locked level-9 JSON improves from 1058 to 831 bytes (the
+  libzstd 1.5.5 row is 677), and binary from 9009 to 8850 bytes (reference
+  8609), while text remains 93 bytes. Ten fixed-CPU-8..10 pairs measured about
+  2.6%/3.5% encode-time regressions for JSON/binary and 1.3% for text, accepted
+  for the substantial ratio improvement. A focused round-trip test covers a
+  real block whose optimal plan exceeds the 128-entry bootstrap capacity.
+  Re-evaluating whole-frame selection after the 512-sequence change showed that
+  adaptive splitting remains essential: across 73 generated/source prefixes,
+  28 frames were smaller at 4/8 KiB, including source-sized reductions of tens
+  of KiB when a primary block still exceeded the sequence ceiling. Removing the
+  split ladder was therefore rejected. For level 6+ inputs above 24 KiB, the
+  encoder now races the primary and 8 KiB candidates first and evaluates the
+  costlier 4 KiB frame only when 8 KiB can tie or beat primary. The same corpus
+  retained every serial three-candidate winner, while twelve fixed-CPU-8..10
+  interleaved level-9 pairs retained 93/831/8850-byte text/JSON/binary frames
+  and reduced median encode time by about 3.4%/1.3%/19.1%, respectively.
+  The lazy LZ77 dispatch sketch now routes inputs with more than 64 distinct
+  first-KiB trigram buckets to the hash-chain parser instead of waiting for 96.
+  This catches the numbered-JSON shape (83 buckets) while keeping the repeated
+  text benchmark (61) on its faster backward scan, and does not change either
+  parser's match semantics. Twelve fixed-CPU-8..10 interleaved level-9 pairs
+  retained 93/831/8850-byte outputs and reduced JSON median time by 23.4%; text
+  and binary remained within about 0.7%/0.3% noise. An attempted lazy candidate
+  depth reduction from eight to four produced no stable end-to-end gain and was
+  reverted.
+  The encode CSV gate no longer requires single-sample wall time to increase
+  monotonically from level 1 through 9. Two-stage candidate scheduling can
+  legitimately make level 9 faster than level 3, while shared-machine noise
+  made the old ordering assertion flaky. Broad latency ceilings remain, and the
+  dedicated 81-row stage gate continues to pin each level/candidate search
+  budget directly.
+  The optimal LZ77 dynamic program now indexes a compile-time 259-entry fixed
+  match-length cost table instead of re-running the length-code branch ladder
+  for every candidate length. An exhaustive scalar oracle covers every legal
+  length. Twenty fixed-CPU-8..10 primary-optimal pairs retained the 824-byte
+  JSON block and reduced the stage median by about 15.1%; twelve end-to-end
+  pairs retained 93/831/8850-byte frames, improving text by 28.2% and JSON by
+  1.1% while binary stayed within 0.3% noise.
+  At budgets that enable ratio-oriented mixed lookahead, block arbitration now
+  evaluates mixed on a worker while the caller handles greedy/lazy/optimal,
+  repeated, and duplicate families. The worker uses Zig's thread-safe SMP
+  allocator for its isolated temporary block, so advanced callers can still
+  supply a single-threaded allocator; it owns an independent duplicate index
+  and falls back to the unchanged serial selector if thread
+  creation fails; mixed retains its historical equal-length tie priority. A
+  direct serial-wire oracle covers both repetitive shapes. Twelve fixed-CPU-
+  8..10 level-9 pairs retained 93/831/8850-byte frames and improved text/JSON
+  medians by about 14.8%/12.1%, with binary improving 1.7%.
+  FSE count normalization now follows upstream zstd's low-probability handling,
+  fixed-point rounding thresholds, largest-symbol correction, and secondary
+  fallback instead of assigning every present symbol a floored positive count.
+  Randomized table-log-5...8 distributions verify exact probability mass, and
+  a focused non-uniform distribution proves the new result differs from the old
+  approximation. The improved level-9 sequence tables reduce JSON from 831 to
+  821 bytes and binary from 8850 to 8846 bytes while text remains 93 bytes.
+  Twelve fixed-CPU-8..10 pairs kept text/binary within 0.5% and measured JSON
+  about 1.2% slower, accepted for the deterministic ratio improvement.
+  Sequence streams with at least 256 symbols now use one upstream-style
+  source-size-selected 128-state FSE table instead of always forcing 32 states.
+  This avoids the much slower four-table-log exhaustive experiment while still
+  reducing the locked JSON frame from 821 to 816 bytes; binary stays at 8846
+  and text at 93. Twelve fixed-CPU-8..10 pairs against the 64-state version
+  measured only 0.5–0.6% differences across all three cases. A focused oracle
+  pins the large-plan tableLog and the compact u8 state bound; 256 states were
+  rejected because one measured distribution could not construct a valid state
+  chain with the current compact planner.
+  Native encode stage diagnostics now split each available candidate's encoded
+  bytes into block header, literals section, and sequence section. The 81-row
+  CSV gate enforces exact accounting for every case/candidate/family. On the
+  current level-9 primary JSON optimal block this records 809 bytes as a 3-byte
+  block header, 318 literal bytes, and 488 sequence bytes, making the remaining
+  libzstd ratio gap directly attributable and regression-testable.
+  Level 9+ now adds a two-state recent-offset beam parser over the best hash
+  match at each position. It keeps a backpointer/token per state, charges repeat-distance
+  matches cheaply, and leaves levels 1–8 plus advanced callers on the prior
+  parser set. The locked JSON frame falls from 816 to 678 bytes (libzstd 677),
+  and binary from 8846 to 8611 (libzstd 8609), while text remains 93 bytes. A
+  wider eight-state/eight-match beam can reach 677 bytes but costs materially
+  more; a broader two-state/four-match search did not improve JSON and emitted
+  binary at 8619 bytes. The retained single-match shape is the measured speed/
+  ratio compromise. The
+  beam hot path bypasses the generic accept-match calculation after its indexed
+  candidates have already satisfied the minimum/window invariants and reads the
+  precomputed length-cost table directly, reducing focused JSON/binary stage
+  medians from roughly 2.46/2.55 ms to 2.26/2.28 ms without wire changes.
+  Beam storage now keeps one byte of valid-slot counts per source position
+  instead of clearing every full state object before parsing. Focused JSON and
+  binary medians move further to about 2.22/2.26 ms with identical output.
+  Beam path costs are bounded well below 32 bits for the supported <=64 KiB
+  block, so storing them as `u32` shrinks each state and improves the focused
+  JSON/binary medians again to about 2.12/2.20 ms without changing tokens.
+  The fixed two-slot beam insertion is specialized to direct duplicate/update/
+  replacement comparisons instead of a generic loop; focused medians reach
+  about 2.09/2.17 ms for JSON/binary with identical 671/8612-byte blocks.
+  The parser's 64 KiB input cap proves every accumulated fixed-bit path cost is
+  below `u32`, so hot literal/match transitions now use direct additions rather
+  than checked generic arithmetic. Twenty fixed-CPU-8..10 stage pairs preserve
+  671/8604-byte JSON/binary blocks and improve medians by about 3.2%/1.8%.
+  The beam's complete-position match index now uses a 4096-entry hash head,
+  matching the established tiny parsers instead of reserving 32768 buckets.
+  Sixteen fixed-CPU-8..10 stage pairs preserve the same block bytes and improve
+  JSON/binary medians by about 19.1%/10.6%.
+  Reducing the per-position hash alternatives from four to one preserves the
+  678-byte JSON frame, improves binary from 8619 to 8611 bytes, and cuts the
+  focused JSON beam stage to about 1.28 ms. Twelve fixed-CPU-8..10 end-to-end
+  pairs against the four-match beam improved JSON/binary medians by roughly
+  1.6%/1.2%, with text unchanged.
+  The end-to-end encode gate now locks the achieved level-9 ratio floors at
+  678 bytes for numbered JSON and 8611 bytes for mixed binary, replacing the
+  obsolete pre-beam 1058/9009-byte ceilings. Levels 1 and 3 retain their
+  independent latency-oriented bounds.
+  Match arbitration now evaluates the beam before the ordinary optimal parser
+  and skips that redundant DP when the beam block is at most 1/32 of source
+  size. An explicit structured oracle proves the beam beats the ordinary
+  families at this threshold, while the expanded generated/source corpus stays
+  byte-identical. Twelve fixed-CPU-8..10 pairs improve level-9 text/JSON by
+  about 21.2%/9.6%, with binary within 0.8% noise.
+  Decisive beam blocks now run only the first global duplicate query needed by
+  the single-duplicate fallback and skip multi-duplicate's iterative follow-up
+  searches. This preserves the 93-byte repetitive-text winner without paying
+  for a complete multi plan after the beam has already compressed the source
+  below 1/32. A focused indexed-path oracle proves that this direct query equals
+  multi's first match and emits the same single-candidate wire. The 76-case
+  generated/source comparison remained byte-identical; twelve fixed-CPU-8..10
+  pairs retained the 93/678/8611-byte text/JSON/binary frames and reduced their
+  medians by about 3.4%/5.8%/1.5%, respectively.
+  Profile-guided mixed-planner work now builds candidate literal histograms in
+  four independent frequency lanes, then merges the 256 counters before the
+  unchanged Huffman construction. This removes the loop-carried dependency on
+  frequent JSON symbols while preserving the exact scalar plan. The shared
+  large-block duplicate index also links positions with non-empty predecessor
+  buckets, allowing each suffix query to skip positions that cannot contain a
+  match; Huffman stream sizing uses an unchecked internal accumulator only after
+  its freshly built histogram has proved that every referenced symbol is
+  present. Focused oracles cover the striped histogram, duplicate-index suffix
+  search, and Huffman stream boundaries. Two twelve-pair fixed-CPU-8 stage runs
+  retained candidate bytes and improved mixed JSON by about 13–14%, repetitive
+  text by about 5–6%, and binary by about 11%; twelve fixed-CPU-8..10 end-to-end
+  pairs retained 93/678/8611-byte frames and improved JSON/binary medians by
+  about 13.9%/3.6%, with text improving about 1.2%.
+  Indexed cursor-match search now stops at the first match that reaches the end
+  of the block. The hash chain is newest-first, so this match has both the
+  maximum possible length and the smallest offset among every remaining
+  equal-length candidate. A focused scan-reference oracle pins that tie rule,
+  and the 76-case generated/source comparison remains byte-identical. Twelve
+  fixed-CPU-8 stage pairs retain candidate bytes while reducing repetitive-text
+  mixed time by about 56.6%; two end-to-end runs improve the 93-byte level-9
+  text case by about 39–45%, while JSON and binary remain within roughly 1%.
+  The decisive-beam test now also accepts a relative margin: when the emitted
+  beam block is at least 1/32 smaller than every preceding linear candidate,
+  arbitration skips the ordinary optimal DP even if the compressed block is
+  not itself below 1/32 of the source. A focused mixed-binary oracle pins both
+  the new threshold and the beam win, while the 76-case generated/source corpus
+  remains byte-identical. Twelve fixed-CPU-8..10 end-to-end pairs keep the
+  81/644/8611-byte text/JSON/binary frames and improve binary by about 10.2%; a
+  24-pair binary rerun measures about 10.6%, with text/JSON within about 3%.
+  Level-9 block selection now probes the first 1 KiB for a prefix duplicate
+  that reaches the block end before launching the full candidate race. When its
+  normal single-match encoding is already at most 1/32 of the source, the same
+  decisive threshold returns it immediately instead of running beam, optimal,
+  mixed, repeated, and duplicate searches. A focused oracle compares the fast
+  path with full serial arbitration. The 76-case generated/source comparison
+  has no regressions and shrinks four strongly periodic cases by four bytes; a
+  24-pair fixed-CPU-8..10 run retains the 81-byte text frame and improves its
+  median by about 5.2%, with JSON unchanged within 0.1%.
+  The large-block duplicate index now also records the whole block's high-byte
+  count and maximum byte frequency. If a single match cannot remove every byte
+  above the native direct-Huffman alphabet and no symbol can fill the retained
+  literal stream, its literal section is provably raw; indexed scoring skips
+  both Huffman passes in that case. A focused non-zero-suffix oracle compares
+  the shortcut with the complete scorer, and the 76-case generated/source set
+  remains byte-identical. Twelve fixed-CPU-8 stage pairs reduce binary mixed
+  time by about 24.8%; two end-to-end binary runs retain the 8611-byte frame and
+  improve medians by about 3.8–10.1%, while text/JSON remain scheduler-noisy.
+  Repeated-pattern discovery now checks the three-byte minimum-match anchor
+  before entering its dependent extension loop for each candidate period. This
+  is an exact rejection because every emitted Zstd match requires at least three
+  bytes. A randomized scan-reference oracle covers multiple suffix starts, and
+  the 76-case generated/source comparison stays byte-identical. Twelve
+  fixed-CPU-8 stage pairs reduce JSON repeated/mixed measurement by about 5.9%;
+  a 24-pair end-to-end JSON rerun retains 678 bytes and improves the median by
+  about 0.7%, with the smaller cases within measurement noise.
+  Huffman tree emission now compares the legacy direct-weight header with the
+  existing FSE-compressed weight writer even when the alphabet fits the direct
+  format, retaining the shorter valid representation. A focused low-byte
+  alphabet oracle proves FSE wins and is selected; the expanded 76-case corpus
+  improves 40 frames with no regressions, including source prefixes by up to
+  631 bytes. Level-9 repetitive text drops from 93 to 81 bytes (libzstd 80),
+  numbered JSON from 678 to 644 bytes (libzstd 677), and binary remains 8611
+  bytes (libzstd 8609). Twenty-four fixed-CPU-8..10 A/B pairs improve text/JSON
+  medians by about 9.1%/2.4% while preserving external decoder compatibility.
+  Finalized literal Huffman plans now cache each symbol's canonical code beside
+  its already-dense bit count. Emission copies those tables directly instead of
+  rebuilding every code through repeated sorted-symbol scans for each candidate
+  block. A focused oracle compares every cached code with the prior derivation,
+  and the 76-case generated/source corpus remains byte-identical. Two fixed-CPU
+  end-to-end binary runs retain 8611 bytes and improve medians by about 22%,
+  while text/JSON remain within roughly 2% noise.
+  The repeat-aware beam's configurable cost model now charges four extra proxy
+  bits when introducing a new distance, while generic LZ77 callers retain a
+  zero default. Sequence comparison against libzstd exposed a late switch from
+  the dominant distance 256 to distance 7424 for only two extra matched bytes;
+  preserving the repeat run reduces the locked binary frame from 8611 to 8607
+  bytes (two bytes below libzstd 1.5.5) and JSON from 644 to 641 bytes. A focused
+  token oracle pins all 508 binary matches to distance 256. Across the original
+  76 cases and a new 128-case generated corpus, no frame grows; the latter has
+  five improved cases totaling 147 bytes. Strict same-source A/B keeps stage
+  and end-to-end throughput within about 1%, while longer noisy runs show no
+  systematic regression.
+  Huffman weight compression now evaluates both tableLog 5 and 6 and retains
+  the shorter serialized FSE stream, rather than forcing one global table size.
+  A focused low-byte tree oracle proves tableLog 5 wins and is selected for the
+  repetitive text alphabet. The original 76-case corpus improves 39 frames by
+  308 bytes total with no regressions; the broader 128-case generated corpus
+  exposed three one-byte losses from globally forcing tableLog 5, which the
+  per-tree arbitration avoids. Level-9 text now matches libzstd at 80 bytes,
+  JSON improves from 641 to 640 bytes, and binary remains 8607 bytes.
+  Before spawning adaptive frame candidates, level 9 now probes the same bounded
+  prefix-tail shape as block arbitration. If the complete single-block frame is
+  below 1/256 of the source, it returns immediately instead of waiting for split
+  encoders whose additional block headers cannot be competitive on the measured
+  shape. A focused primary-wire oracle covers the cutoff. The 76-case corpus has
+  no regressions and 13 improvements, while the independent 128-case generated
+  corpus is byte-identical. Twelve fixed-CPU-8..10 pairs retain 80-byte text and
+  reduce its level-9 median from about 7.54 ms to 0.56 ms (13.4x); JSON/binary
+  remain within 1%.
+  The same structural shortcut now covers latency-oriented levels 1-3 with a
+  deliberately strict 1/256 admission threshold. Their primary block encoder
+  and top-level adaptive selector both return the single prefix-to-tail match
+  before running optimal, repeated, and duplicate-family searches. Across 512
+  independently generated inputs at both levels, no frame grew and fourteen
+  inputs improved by 47 bytes per level. Twenty-four alternating fixed-CPU-8..10
+  pairs retained the locked 80-byte text frame while reducing level-1/3 median
+  encode time to about 2.3%/2.2% of baseline; JSON and binary controls remained
+  within roughly 2.6% noise.
+  Shared LZ77 match extension now compares 32-byte vectors before its existing
+  eight-byte and scalar tails. An exhaustive oracle covers every mismatch and
+  maximum length through 321 bytes at an unaligned second offset. Sixteen
+  fixed-CPU-8 stage pairs retained every candidate byte while improving primary/
+  4 KiB/8 KiB optimal JSON medians by about 15.5%/14.3%/16.1%; primary binary
+  improved about 8.6%. Twenty fixed-CPU-8..10 end-to-end pairs retained every
+  locked frame, improved level-1 JSON/binary by about 2.4%/2.3%, and kept
+  levels 3/9 within roughly 1.2% noise.
+  Level 1 now applies the high-level scheduler's existing deferred-smallest
+  policy above 24 KiB: it races the primary and 2 KiB frames first and only
+  evaluates the 1 KiB split when the larger split can tie or beat primary. A
+  512-input generated matrix proved this implication for the level-1 policy,
+  and a separate 512-input end-to-end comparison was byte-identical. Twenty-four
+  alternating fixed-CPU-8..10 pairs retained the locked frames while improving
+  level-1 JSON by about 16.0% and binary by about 30.1%; the decisive text
+  control stayed within 0.3% noise. Level 3 deliberately keeps the full ladder:
+  the same matrix contains twelve cases where 2 KiB uniquely beats both primary
+  and a losing 4 KiB screen.
+  Level 1 now also returns a completed primary frame immediately when it is at
+  most 1/32 of the source, regardless of whether the repetition starts at byte
+  zero. The same 128-input block-size matrix had no split winner beyond this
+  threshold, and the 512-input end-to-end comparison remained byte-identical.
+  Twenty-four alternating fixed-CPU-8..10 pairs improved the locked JSON row by
+  about 66.2% versus the already deferred-split baseline; binary remained within
+  1.6% noise and the prefix-tail text case was already handled by its stricter
+  structural shortcut. Level 3 again keeps full arbitration because the matrix
+  contains highly compressible counterexamples where a split still wins.
+  Level-1 block arbitration now evaluates its required single-duplicate fallback
+  before the optimal/repeated passes on blocks above 4 KiB. If that complete
+  one-sequence block is at most 1/256 of the source, it returns immediately;
+  otherwise the encoded candidate is retained until its original final
+  arbitration position, preserving tie order without recomputation. A 512-input
+  candidate matrix found seventeen decisive cases and no optimal/repeated winner
+  among them, while an end-to-end 512-case comparison remained byte-identical.
+  Twenty fixed-CPU-8..10 pairs on a non-prefix 32 KiB run fixture retained the
+  30-byte frame and reduced median level-1 encode time to about 33.0% of
+  baseline. The locked JSON row improved about 10.6%; text and binary controls
+  stayed within roughly 0.9% noise.
+  The shared optimal LZ77 parser now applies an exact prefix-cost lower bound
+  after validating a four-byte anchor. When a candidate fails before extending
+  the already-built length range and even that range's cached minimum plus the
+  candidate distance cannot improve the current path, it skips full match
+  extension while preserving the candidate budget and tie order. A 32-shape
+  generic-vs-bounded token oracle and a 512-input Zstd frame corpus are
+  byte-identical. Twenty-four fixed-CPU-8 stage pairs improved primary/4 KiB/
+  8 KiB optimal JSON by about 28.9%/24.4%/25.7% and primary binary by about
+  20.7%. Thirty-two fixed-CPU-8 end-to-end pairs retained every locked frame
+  while improving level-1/3/9 JSON by about 13.3%/4.7%/3.0% and binary by about
+  4.9%/2.6%/2.6%; the very short text rows remained within roughly 2% noise.
+  Exact-cache profiling of the remaining level-9 JSON mixed search found 95
+  scored prefixes at depths 2...96, with 95 distinct full score keys, literal
+  histograms, and LL/OF/ML vectors, so no speculative memoization was retained.
+  Instead, large level-9 primary frames now join the existing adaptive worker
+  set rather than running on the coordinator while split candidates occupy the
+  worker pool. Deterministic shortest-frame arbitration and the low-level
+  scheduling path stay unchanged. Twelve interleaved fixed-CPU-8..10 JSON pairs
+  retained the 640-byte frame and reduced the median from about 53.78 ms to
+  39.37 ms (1.37x); an additional eight-pair run measured 1.44x, while binary
+  remained at 8607 bytes and showed about 1.06x in the corresponding sample.
+  Mixed Huffman sizing now caches cumulative physical-input bit costs keyed by
+  the exact 256-entry code-width table. Adjacent JSON prefixes changed their
+  literal histogram every time but reused the same code widths on 86 of 95
+  scoring calls; those calls now price each retained literal run with two
+  prefix lookups while preserving the four logical stream boundaries. A
+  focused scalar oracle covers offset slices, every mismatch boundary, and the
+  cache reuse path. Twelve fixed-CPU-8 pairs retained the 14619-byte stage
+  candidate and improved its median by about 4.3%; both 76- and 128-case frame
+  probes remained byte-identical, including the locked 80/640/8607-byte frames.
+  Parallel primary-block arbitration now cooperatively cancels its recursive
+  mixed worker when the repeat-aware beam is the retained non-mixed winner and
+  beats both primitive repeated/single candidates by at least 24x. Cancellation
+  is sampled only at bounded search nodes and a cancelled partial plan is never
+  published, preserving deterministic output. A 24-case structured oracle
+  compares the parallel result with full serial arbitration. Eight alternating
+  CPU-8 JSON level-9 pairs retained the 640-byte frame and checksum while moving
+  median encode time from about 20.9 ms to 14.3 ms (about 1.46x); libzstd 1.5.5
+  remains far faster despite emitting 677 bytes, so throughput is still the
+  dominant Zstd gap.
+  The enclosing block selector now evaluates ratio-mode matching before its
+  standalone Huffman candidate when no dictionary/history candidate exists. A
+  complete non-RLE match block at or below one eighth of the source is provably
+  smaller than any literal-only prefix code, whose symbols require at least one
+  bit each, so this path returns without building a redundant literal tree and
+  stream. A focused wire oracle covers the bound. Eight more alternating CPU-8
+  JSON level-9 pairs retained 640 bytes and reduced median time from about 14.41
+  to 12.20 ms (about 1.18x on top of worker cancellation, 1.71x combined).
+  Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
+  parsers remain the ratio fallback, while only the primary level-9 block pays
+  the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the
+  pre-beam encoder retained the improved 678/8619-byte JSON/binary wires; text
+  and JSON timing stayed within 0.2%, while binary paid about 8.0% for its
+  227-byte ratio gain.
+  Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
+  The first mixed lookup still performs the exact existing extension and tie
+  logic, while later mixed branches plus multi/single duplicate passes reuse the
+  result for the same `(second, predecessor-age)` pair. The cache adds 1 MiB to
+  the temporary index but needs no full clear: build marks only populated slots
+  with the reserved `0xffff` sentinel. Ten fixed-CPU-8..10 stage pairs retained
+  primary JSON candidate bytes while improving mixed from 19.033 to 17.497 ms
+  (1.083x) and multi-duplicate from 6.983 to 5.492 ms (1.271x); index setup rose
+  from 0.113 to 0.151 ms. Twelve end-to-end pairs kept the 1058-byte frame and
+  moved the median from 53.596 to 49.964 ms (1.073x).
+  Sequence-literal RLE detection now skips empty/already-disproved runs and uses
+  the standard library's vectorized `allEqual` scan for each remaining run
+  instead of branching once per byte. A focused reference oracle covers empty,
+  single-byte, equal, mismatching, and cross-run cases; fixed-core eight-pair
+  checks retained 1058 bytes and reduced the median from 111.996 ms to
+  110.518 ms (1.013x).
+  Top-level per-block arbitration now also reuses one candidate scratch and one
+  retained winner across dictionary, frame-history, Huffman, and native-match
+  blocks. The historical Huffman-wins-equal tie and transactional tree-state
+  commit are preserved; focused shortest-match plus multi-block treeless reuse
+  tests pass. Repeat-3 JSON level 3 remained 1350 bytes around 0.87 s.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
@@ -4620,3 +6115,2433 @@ architecture blindly.
   strict and no-Adler by about 1%; a global 12-bit semantic literal table only
   gained about `1.004x/1.002x` on `kodim17` while risking broader cache cost;
   and 16-byte speculative non-overlap match copies were neutral.
+- Added a caller-owned incremental Snappy framed-stream decoder. Chunk headers
+  and payloads can split at arbitrary input boundaries; compressed and
+  uncompressed chunks are checksum-validated into bounded per-chunk scratch and
+  drained through arbitrarily small output buffers. The state machine supports
+  skippable chunks, explicit finish/truncation semantics, reset/reuse, compressed
+  chunk and total-output limits, snapshots, and shared streaming diagnostics.
+  The implementation lives under `src/snappy/incremental/` behind a narrow codec
+  interface instead of expanding the already-large Snappy facade.
+- Added the matching incremental Snappy framed encoder under
+  `src/snappy/incremental/frame_encoder.zig`. It accepts arbitrary input
+  fragments, emits the stream identifier once, accumulates at most one 64 KiB
+  format chunk, reuses the existing greedy block encoder and compressed-vs-raw
+  selection, and drains encoded chunks through arbitrarily small caller output.
+  Explicit finish, input limits, reset/reuse, snapshots, and multi-chunk round
+  trips are covered beside the incremental decoder tests.
+- Added `initExactSize` to the incremental Snappy encoder. Although framed
+  Snappy has no content-size header field, applications can pledge total input
+  size and receive `SizeMismatch` on underflow or overflow while retaining the
+  same split-input, chunking, and tiny-output behavior.
+- Added `expected_output_len` to the incremental Snappy decoder. Declared data
+  chunks cannot exceed the remaining pledged output, and `finish` rejects a
+  shorter stream with `SizeMismatch`, giving framed Snappy symmetric exact-size
+  contracts for incremental encode and decode.
+- Incremental Snappy framed encoders/decoders can reuse retained buffers across
+  independent streams through `nextStream`; the encoder also accepts a new
+  pledged input size. Every stream emits/requires its own identifier and keeps
+  checksum/chunk state independent, while snapshots expose cumulative bytes and
+  completed stream count/index. Two-stream exact-size round trips and root API
+  coverage protect the continuation contract.
+- Incremental Snappy encoders can insert borrowed skippable chunks with any
+  valid `0x80...0xfe` type after accepted content. The encoder flushes the data
+  boundary, drains the event through tiny output, then resumes content; duplicate,
+  invalid-type, oversized, or post-finish requests fail deterministically. Frame
+  summary and decode tests verify payload accounting and transparent skipping.
+  Incremental decoders can optionally capture bounded skippable payload bytes
+  and caller-owned `(type,length)` events. Snapshots distinguish total versus
+  captured bytes/events and truncation, preserving transparent decode without
+  hidden allocations.
+- Added a no-content-size incremental native LZ4 frame encoder under
+  `src/lz4/incremental/`. It preserves linked or independent block policy, one
+  bounded frame block, 64 KiB linked history, block/content XXH32 checksums, and
+  reusable match-finder state while accepting split input and draining through
+  tiny caller output. Explicit finish emits the end mark/footer; content-size
+  and Dictionary_ID modes are rejected because their headers require metadata
+  before streaming input begins.
+- Extended the incremental LZ4 encoder with `initExactSize`. Callers that know
+  the total input length can emit the content-size header while retaining split
+  input and tiny-output behavior; underflow or overflow against the pledged
+  length returns `SizeMismatch`.
+- Added preset-dictionary constructors for the incremental LZ4 encoder, with
+  optional pledged size. Dictionary_ID is emitted before streaming begins and
+  dictionary bytes seed the first block's match history; later linked blocks
+  continue from the rolling 64 KiB frame history. Zero or mismatched IDs are
+  rejected before output.
+- Added dictionary-set constructors for the incremental LZ4 encoder, including
+  pledged-size mode. The encoder resolves Dictionary_ID once at construction,
+  borrows the selected history bytes, and returns `NeedDictionary` before any
+  frame output when the catalog has no matching entry.
+- The incremental LZ4 encoder can reuse its block encoder and buffers for new
+  frames through `nextFrame` variants. Each frame may change block/checksum
+  policy, content-size pledge, and preset dictionary; history/hash/content
+  checksum state resets independently while snapshots retain cumulative bytes
+  and completed frame count/index. A mixed independent/no-dictionary plus
+  linked/dictionary concatenation round-trips through dictionary-set decode.
+  After a drained data frame, `writeSkippable` can queue a standard LZ4
+  skippable frame and drain it through tiny output before `nextFrame` starts the
+  next data frame. Stream summary and concatenated decode tests cover the
+  data-skippable-data layout without illegally embedding it inside a data frame.
+  The native incremental decoder can capture bounded skippable payload bytes and
+  caller-owned `(id,length)` events while continuing concatenated data frames.
+  Snapshots report total/captured/truncated metadata without allocating.
+- Added a no-content-size incremental native Zstd raw/RLE frame encoder under
+  `src/zstd/incremental/`. It retains one bounded block, delays the Zstd final
+  block bit until explicit finish, maintains the optional XXH64 content checksum
+  incrementally, and drains through tiny caller output. The streaming header
+  advertises a legal 128 KiB window without requiring total content size;
+  this initial slice left content-size, Dictionary_ID, and entropy-coded
+  selection on complete-input APIs before the extensions below.
+- Extended the incremental Zstd encoder with `initExactSize`, using the normal
+  shortest single-segment content-size header when the caller pledges total
+  input length. Split input and tiny-output behavior remain unchanged; pledged
+  length underflow or overflow returns `SizeMismatch`.
+- Added Dictionary_ID constructors for the incremental Zstd raw/RLE encoder,
+  including pledged-size mode. Because raw/RLE blocks never reference preset
+  history, these constructors carry and validate dictionary metadata without
+  borrowing dictionary bytes; matching dictionary-aware decode APIs enforce the
+  ID before returning the payload.
+- Added dictionary-set constructors for the incremental Zstd raw/RLE encoder,
+  including pledged-size mode. Dictionary_ID is resolved once at construction;
+  missing catalog entries return `NeedDictionary` before any frame output.
+- Extended the incremental Zstd encoder to use the native Huffman/sequence block
+  planner for `literal_only` and `auto`, while retaining raw/RLE compatibility
+  mode. Preset-dictionary constructors borrow history bytes for the encoder
+  lifetime, emit real dictionary-referencing sequences, and share a narrow
+  incremental block-emitter module instead of adding codec policy to the generic
+  streaming state machine. Dictionary-set constructors now resolve and retain
+  the selected history rather than carrying Dictionary_ID metadata alone.
+- Added a bounded rolling frame-history buffer and a separate cross-block match
+  finder for the incremental Zstd entropy encoder. Completed blocks retain only
+  the newest advertised-window bytes; later blocks can emit real sequences that
+  reference earlier input while split input, tiny output, checksum, and reset
+  behavior continue through the same streaming state machine.
+- Replaced the initial per-block linear prefix lookup with a persistent
+  four-way hash index over absolute stream positions. The matcher now finds up
+  to eight non-prefix history regions per block and emits them as one bounded
+  multi-sequence plan, while stale positions are rejected against the sliding
+  window without rebuilding the index.
+- Added resumable `flush()` to the incremental Zstd encoder. A flush emits the
+  accepted partial block as non-final, drains through arbitrary caller output,
+  acknowledges completion with `need_input`, preserves rolling history for
+  subsequent writes, and treats repeated empty flushes as idempotent. Encoder
+  instances can now reuse retained history/index/block buffers for independent
+  frames through `nextFrame` variants. Each frame may change raw/entropy
+  selection, checksum/content-size pledge, and preset dictionary; frame-local
+  entropy/history/checksum state resets while snapshots retain cumulative bytes
+  and frame count/index. Mixed entropy plus dictionary-backed concatenation is
+  decoded through a dictionary set and covered by the root facade.
+  At a drained frame boundary, `writeSkippable` can queue and tiny-output drain
+  a standard Zstd skippable frame before `nextFrame` starts the next data frame.
+  Stream summary and concatenated decode cover data-skippable-data ordering.
+  The native incremental decoder can capture bounded skippable payload bytes and
+  caller-owned `(id,length)` events before discarding metadata frames; snapshots
+  expose total/captured/truncated state across concatenated data frames.
+  state and helpers now live under `src/zstd/incremental/encoder/` instead of
+  expanding the incremental directory as a flat list.
+- Extended the same resumable, idempotent flush contract to the LZ4 and framed
+  Snappy incremental encoders. LZ4 linked mode retains its 64 KiB history and
+  checksums across flushed blocks; Snappy publishes a complete checksummed data
+  chunk. Both drain through tiny output, resume input after `need_input`, and
+  remain finish/reset compatible.
+- Extended resumable flush to the Brotli stored encoder, preserving its
+  bit-writer state across flushed uncompressed meta-blocks. Input limits are now
+  validated before pending prefix output is drained, so deterministic limit
+  errors no longer depend on whether the caller supplied an empty output slice.
+  Incremental output now retains a partially filled header byte until a later
+  meta-block or final marker makes it immutable, allowing runtime metadata and
+  subsequent payload blocks to share the Brotli bitstream safely under tiny
+  output buffers. Continued-stream snapshots also distinguish cumulative byte
+  totals from the current stream's counters.
+- Added pledged compressed length to the general Brotli incremental decoder. A
+  framed transport can now trigger validation and stored/compressed meta-block
+  decode automatically at the known payload boundary, consume the boundary
+  call's tiny output immediately, and receive deterministic short/long
+  `SizeMismatch` errors without a separate finish call.
+- The general Brotli incremental decoder can reuse its retained compressed and
+  decoded allocations across independently framed payloads through `nextFrame`
+  and `nextFrameExactCompressedSize`. Per-frame limits/pledges reset while
+  snapshots retain cumulative compressed/output bytes plus completed frame
+  count/index. Tests continue from a stored frame to a compressed meta-block
+  frame and exercise the root public facade.
+- Added a modular raw-DEFLATE incremental stored-block encoder under
+  `src/deflate/incremental/`. It accepts split input, drains through tiny output,
+  emits resumable non-final flush blocks, supports pledged and maximum input
+  sizes, and writes the sole BFINAL block only at finish.
+- Added a fixed-Huffman raw-DEFLATE incremental encoder beside the stored core.
+  It keeps bit packing continuous, plans each block against a rolling 32 KiB
+  history, supports tiny output and pledged input, and emits an empty stored
+  block for byte-aligned zlib-compatible sync flush without ending the stream.
+- Wrapped the fixed stream core with `ZlibIncrementalFixedEncoder`, adding a
+  streamed CMF/FLG header, optional preset-dictionary DICTID/history, incremental
+  Adler-32 footer, exact input sizes, tiny-output draining, and the same sync
+  flush continuation semantics.
+- Added `GzipIncrementalFixedEncoder` over the same raw core, including standard
+  or metadata-rich RFC 1952 headers, optional FHCRC, incremental CRC-32, ISIZE,
+  exact input sizing, tiny-output draining, and resumable sync flush.
+- Added `RawDeflateIncrementalBestEncoder`, reusing the fixed stream state
+  machine while selecting stored, fixed, or dynamic Huffman representation per
+  block. It retains rolling history, pledged-size handling, tiny output, BFINAL,
+  and sync-flush semantics across all three wire choices.
+- Added zlib/gzip best incremental wrappers over the same raw selector plus
+  public level-to-options helpers. Wrapper checksum, dictionary/metadata, flush,
+  exact sizing, and tiny-output behavior now automatically cover stored, fixed,
+  and dynamic block choices.
+- Gzip fixed and best incremental encoders can now continue with
+  `nextMember(header)` after a completed member has been fully drained. Each
+  RFC 1952 member gets independent DEFLATE history, CRC-32, ISIZE, and metadata
+  while allocations are retained; stream-level input/output and completed
+  member counts remain cumulative in the new encoder snapshot. Transitions
+  before completion are rejected, and tests round-trip two differently headed
+  members through the concatenation-aware incremental decoder using tiny output.
+  `nextMemberExactSize` additionally changes the pledged uncompressed size for
+  each member, with strict too-short/too-long validation rather than carrying
+  the first member's size contract into later members.
+  `nextMemberWithOptions` and `nextMemberExactSizeWithOptions` also switch raw
+  compression/block settings as well as metadata, enabling dynamic, fixed, or
+  stored members with different levels in one stream. Mixed dynamic-text and
+  stored-random members are wire-inspected and concatenated-decoder tested. The
+  encoder snapshot exposes pending output and the active/last member index so
+  tiny-output schedulers can distinguish a drained boundary from an in-flight
+  member before calling `nextMember`. Both fixed and best encoders share this
+  surface; fixed-member concatenation and the root public export have dedicated
+  coverage rather than relying only on generic instantiation.
+- Zlib fixed/best incremental wrappers now have symmetric `nextStream` and
+  `nextStreamExactSize` continuation for the library's established
+  concatenated-zlib convention. Each stream can switch raw compression options,
+  preset dictionary/DICTID, and pledged size while retaining allocations; a
+  mixed level/no-dictionary + dictionary stream round-trips through the public
+  concatenated decoder with exact-size enforcement. Zlib snapshots mirror the
+  gzip member diagnostics with cumulative/current byte counts, pending output,
+  stream count, and active/last index. Wrapper continuation tests now live in a
+  focused submodule instead of further expanding the main incremental test file.
+  Concatenated decode can resolve a different preset dictionary for each stream
+  through borrowed `ZlibDictionarySet` entries keyed by DICTID; the focused API
+  covers caller-provided output and exact-size allocation, reports
+  `NeedDictionary` when a later ID is absent, and is exported from the root.
+  The byte-progressive `ZlibIncrementalDecoder` accepts the same borrowed set,
+  waits for a split four-byte DICTID, selects/seeds the matching history before
+  raw decoding, and retains its existing retry-oriented `NeedDictionary`
+  diagnostic when no entry matches.
+  It also supports opt-in concatenated streams with cumulative output limits
+  and exact-size validation, independent raw history/Adler state, per-stream
+  dictionary reselection, boundary/count/index snapshots, and later-stream error
+  offsets. Byte-at-a-time two-dictionary input and a corrupt second stream are
+  covered alongside the one-shot concatenated APIs.
+  Regression coverage pins cumulative `max_output_len`, short/long exact sizes,
+  EOF validation, and reset after an error so wrapper limits cannot silently
+  degrade into per-stream limits. Exhaustion of an exact cumulative output
+  pledge is reported as `SizeMismatch`, while a lower explicit safety cap
+  remains `OutputLimitExceeded`. The concatenated-gzip test adapter now
+  declares EOF with `finish()` after the last complete member instead of
+  repeatedly polling the intentionally resumable `between_members` state with
+  empty input; progress guards prevent future zero-progress regressions from
+  becoming unbounded test hangs.
+- Added bounded adaptive block sizing to the incremental best core. Full input
+  windows use the existing stored/fixed/dynamic cost scorer and split policy to
+  choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,
+  zlib, and gzip wrappers share the option through their common raw core.
+- Added bounded cross-call lookahead to incremental DEFLATE block planning. The
+  encoder retains a configurable suffix beyond the normal target, plans it with
+  the next input prefix, and moves the cut to a complete LZ77 token boundary so
+  matches spanning a caller/block boundary are not truncated. Flush and finish
+  still publish all accepted bytes immediately.
+- Added a persistent rolling hash-chain match finder for incremental DEFLATE
+  hash-parser levels under `src/deflate/incremental/encoder/match_finder/`. Fixed,
+  best, zlib, and gzip wrappers now share epoch-tagged 32 Ki-entry hash heads and
+  a bounded predecessor ring across blocks instead of allocating and rebuilding
+  dictionary tables per block. Preset dictionaries and cross-block hash anchors
+  seed the same state; reset is O(1), retains table allocation, and reproduces
+  deterministic output. Other parser modes retain their existing planner paths.
+- Extended that persistent matcher to the lazy parser used by default and
+  middle compression levels. The shared state now performs the existing
+  one-byte lazy probe with safe hash/lazy/anchor mode transitions, while sparse
+  tail insertion avoids indexing every byte of long matches. The dedicated
+  `bench-deflate-incremental-encode` comparison and its non-regression gate
+  require persistent lazy encoding to be both no slower and no larger than the
+  per-block rebuilt reference; the initial local ReleaseFast smoke measured
+  about `402.76` versus `225.61` MiB/s (`1.785x`) and `2371` versus `4489` bytes
+  (`0.528x`) on a 256 KiB structured-log stream.
+- Expanded that benchmark from one favorable stream to five deterministic
+  256 KiB corpora: JSON logs, source, repetitive bytes, mixed binary, and exact
+  32 KiB cross-window repetition. It now invokes zlib 1.3 level 6 directly via
+  its in-memory raw-DEFLATE API, and `-Dzlib-ng-root=...` links a local zlib-ng
+  compat build (locally 2.3.90) through the same API without process/file timing
+  noise. The gate requires the full case/mode matrix, limits persistent ratio
+  drift versus per-block rebuild to 1%, bounds compressible output against the
+  competitor, and protects aggregate non-binary throughput. Multi-corpus evidence
+  also exposed two hot paths now fixed in production: word-at-a-time history
+  match comparison and stored fast-path selection guarded by sparse history
+  probes so unrelated random blocks skip search while repeated binary windows
+  remain compressible. A 32 KiB-block local zlib-ng smoke showed Vort around
+  `2.1x` faster on JSON and `2.3x` on source than its per-block rebuild baseline,
+  while zlib-ng remained roughly `2.1-2.5x` faster than Vort on those rows and
+  materially smaller on repetitive input; those measured gaps remain active
+  optimization targets.
+- Dynamic DEFLATE encoder tables now build canonical code arrays directly from
+  code lengths instead of first materializing the decoder-oriented bucketed
+  `HuffmanTable` and rescanning its entries. The focused Huffman build benchmark
+  gained equivalent `encoder` and legacy `encoder-reference` rows for literal,
+  long-tail, distance, and code-length alphabets; its gate requires the direct
+  path to win every shape while matching canonical codes in unit tests. The
+  latest local ReleaseFast smoke improved the 286-symbol mixed/long-tail encoder
+  rows by about `1.24x`/`1.23x`; smaller distance/code-length tables improve more
+  modestly, and the multi-corpus zlib-ng DEFLATE gate remains green.
+- Sparse package-merge code-length planning now compacts active symbols into
+  32- or 64-symbol workspaces before running the same optimal algorithm, then
+  maps lengths back to the full DEFLATE alphabet. This avoids moving 286-symbol
+  multiplicity vectors through every depth for sparse literal trees while
+  preserving the full-width path for dense alphabets. Full-width reference
+  equivalence tests cover deterministic sparse layouts, and the new focused
+  `run-huffman-length-bench-gate` compares both paths directly. Initial local
+  ReleaseFast evidence improved 18- and 48-active-symbol literal trees by about
+  `3.36x` and `3.39x` respectively with identical output checksums.
+- Dense 286-symbol package-merge now stores only weight plus compact child
+  back-references per package and accumulates code lengths from the selected
+  DAG, instead of carrying a 144-byte packed multiplicity vector through every
+  list merge. Stable creation-order tie-breaking may assign equal-frequency
+  symbols different but interchangeable optimal lengths; randomized tests and
+  the gate therefore require identical weighted cost, valid Kraft space, and
+  deterministic output rather than symbol-by-symbol identity. Current local
+  ReleaseFast evidence improves the dense literal alphabet by about `4.18x`
+  while retaining the full-width implementation as the reference.
+- Dynamic-header code-length RLE is now isolated under
+  `src/deflate/dynamic/code_length_rle.zig` and walks HLIT/HDIST as one logical
+  sequence without materializing their 316-entry concatenation. It emits ops,
+  accumulates the 19-symbol frequency histogram, and totals repeat extra bits
+  in the same pass, removing two subsequent op scans from dynamic block
+  planning while preserving cross-boundary zero runs. A fused-vs-legacy-shape
+  benchmark/gate covers sparse, mixed, boundary, and dense code-length patterns;
+  initial local ReleaseFast evidence improves the geometric mean by about
+  `1.18x`, with exact plan/frequency/extra-bit checksums on every row; individual
+  sparse or dense shapes can remain setup/layout-bound, so the gate protects the
+  aggregate workload rather than claiming a universal per-shape win.
+- Incremental best encoding now offers `low_entropy_block_len`, an explicit
+  bounded buffering cap that expands a block only when its first normal-sized
+  prefix contains at most four distinct bytes. This keeps ordinary text/source
+  latency at `block_len` while amortizing repeated dynamic-tree headers for runs
+  and tiny alphabets. On the 256 KiB single-byte corpus, a 32 KiB normal block
+  with a 256 KiB low-entropy cap falls from `373` to `271` raw bytes, matching
+  the one-shot Vort stream and narrowly beating the local zlib-ng level-6 raw
+  result (`272` bytes). Tests pin the exact one-shot size, bounded option
+  validation, round-trip behavior, and the zlib-ng gate now requires this row
+  to match or beat the competitor rather than merely remain within a loose ratio.
+- Split rolling-match hashing into `match_finder/hash.zig` and specialized the
+  overwhelmingly common block-local path to hash contiguous 3/4-byte anchors
+  directly; only the two history/block boundary anchors use joined access. A
+  same-machine ReleaseFast before/after comparison on 256 KiB rows improved
+  persistent JSON from about `988` to `1270` MiB/s, source from `1151` to `1425`
+  MiB/s, and exact 32 KiB cross-window repetition from `352` to `441` MiB/s,
+  without changing compressed sizes or CRC mixes. Hash-layout equivalence tests
+  cover contiguous and boundary inputs, and the zlib-ng multi-corpus gate remains
+  green; zlib-ng still leads the JSON/source rows by roughly `2x`. The gate uses
+  32 iterations because 8-iteration sub-millisecond rows proved scheduler-noise
+  sensitive despite identical bytes/mixes; the strict `>=1.0` geometric threshold
+  remains unchanged.
+- Incremental raw fixed/best state now owns a reusable token buffer alongside
+  the persistent matcher. Rolling plans borrow that buffer instead of allocating
+  a token list, converting it to an owned slice, and freeing it for every block;
+  reset clears the length while retaining capacity. Encoder snapshots expose the
+  retained capacity and tests pin its reuse plus byte-identical reset output. In
+  the latest local 32-run zlib-ng comparison, source reached about `2268` MiB/s
+  versus zlib-ng `2702` (remaining gap ~`1.19x`), repetitive `2300` versus `3058`,
+  and cross-window `487` versus `67`, with unchanged sizes and CRC mixes.
+- Rolling token emission now mirrors the one-shot parser's proven ArrayList
+  shape: an inline capacity check writes with `appendAssumeCapacity` in the hot
+  path, and only a true growth boundary calls allocator-backed `append`. This
+  compounds the reusable token-buffer change without changing ownership or wire
+  output. The latest 32-run local evidence reports about `2069` MiB/s JSON,
+  `2211` source, `2277` repetitive, and `483` exact-window history; compressed
+  sizes and CRC mixes are unchanged and the strict zlib-ng gate remains green.
+- Rolling match planning now accumulates dynamic literal/length and distance
+  frequencies plus length/distance extra-bit totals while it emits tokens. The
+  incremental best writer consumes those cached statistics to construct its
+  `DynamicCodingPlan`, eliminating the full token rescan before Huffman tree
+  construction; non-rolling planners retain the original path. Formula tests
+  cover every DEFLATE length `3...258` and distance `1...32768`, and wire sizes/
+  CRC mixes remain unchanged. Latest 32-run evidence reports about `2079` MiB/s
+  JSON versus local zlib-ng `2294` (remaining gap ~`1.10x`) and `2134` source
+  versus `2637` (~`1.24x`); multi-corpus gate geomean reaches `1.933x` over the
+  per-block rebuild baseline.
+- Incremental dynamic statistics now retain active literal/length and distance
+  symbol counts. `DynamicCodingPlan` uses those counts to decide single-symbol
+  completion and whether a distance tree exists, avoiding the 286+30 frequency
+  presence scans on every rolling block while leaving non-rolling planners on
+  the reference path. Synthetic-symbol/wire tests and CRC/size evidence remain
+  unchanged. The latest 32-run local comparison reports about `2224` MiB/s JSON
+  (ahead of that run's zlib-ng `1878`), `2233` source versus `2768`, `2351`
+  repetitive versus `3063`, and `487` cross-window versus `67`.
+- Incremental match profitability now uses fixed-code lower/upper bounds before
+  inspecting replaced literal bytes: if all 8-bit literals already pay the
+  match it accepts immediately, and if even all 9-bit literals cannot pay it
+  rejects immediately. Only the narrow ambiguous interval scans bytes. The
+  proof is isolated in `match_finder/profitability.zig` with exhaustive
+  representative byte/length/distance/savings comparison against the full scan.
+  A same-machine 32-iteration before/after run improved persistent JSON from
+  about `1394` to `1652` MiB/s, source from `1459` to `2087` MiB/s, and repetitive
+  input from `1443` to `2225` MiB/s without changing compressed sizes or CRC
+  mixes. The remaining local zlib-ng lead on JSON/source is now about `1.26x`/
+  `1.28x`, down substantially from the earlier roughly `2x` gap.
+- Candidate-chain traversal now prefetches the next source only when the hash
+  head begins in the retained history window. An unconditional prefetch trial
+  improved cross-window input but regressed JSON/source and was rejected; the
+  history-only guard leaves their block-local chains untouched. Against the
+  no-prefetch bounded-profitability baseline, the latest same-machine 32-run
+  evidence moved JSON from about `1652` to `1669` MiB/s, source `2087→2155`,
+  repetitive `2225→2270`, and exact-window repetition `376→479`, with identical
+  sizes and CRC mixes. The multi-corpus zlib-ng gate remains strict and green.
+- The incremental DEFLATE benchmark now reports staged `matcher-lazy` and
+  `tree-emit` rows for the JSON/source corpora, using the same persistent
+  matcher, retained 32 KiB history, token buffer, cached dynamic statistics,
+  and bit writer as production. Token-count checksums keep staged work
+  observable, while the emitted byte count must match the full encoder. In a
+  local 32-iteration ReleaseFast run, matcher-only throughput was about `2874`
+  MiB/s for JSON and `3908` MiB/s for source, tree planning plus emission was
+  about `7081`/`8286` MiB/s, and the corresponding full paths were `1602`/
+  `1646` MiB/s. This shows the remaining source gap is not a single Huffman
+  emission hotspot: matcher and tree/emission together account for most but not
+  all full-path time, so future optimization should measure stream buffering,
+  history retention, and pending-output copying rather than blindly changing
+  the match search.
+- Expanded those staged rows with `history-retain`, `staged-pipeline`, and
+  `stage-reset`, fixed the build target to forward caller iteration arguments,
+  and made the gate require every staged row, equal token checksums, and staged
+  output sizes matching production. The persistent benchmark now also reuses
+  its scratch/output buffers between iterations so allocation noise is not
+  misattributed to the encoder. A local 64-iteration sample measured source at
+  about `2296` MiB/s end-to-end versus `2534` for the staged pipeline, `3983`
+  for matcher-only, `8733` for tree/emission, and `38097` for history retention.
+  This bounds the remaining stream-state/buffering overhead to roughly 9% of
+  the staged pipeline on that run. Full-window buffer swapping and direct
+  caller-input planning trials did not improve aggregate throughput (and the
+  latter defeated low-entropy block coalescing), so both were rejected rather
+  than adding complexity without reproducible benefit.
+- Revisited direct caller-input planning with an explicit low-entropy guard and
+  byte-identical buffered-path tests. Alternating 128/256-iteration A/B runs
+  showed repeatable gains of roughly `4.5-4.9%` on JSON/source, about `0.4-1.0%`
+  on binary and exact-window repetition, while low-entropy input deliberately
+  stays on the coalescing path and retains its `271`-byte result. The direct
+  path now avoids the `plain` copy only for contiguous non-final blocks with no
+  adaptive split or lookahead; history remains caller-independent before
+  `step` returns.
+- The incremental DEFLATE benchmark accepts an optional corpus name after the
+  iteration count, allowing long source-only or JSON-only matcher experiments
+  without paying for unrelated competitor rows. A source-only `perf` profile
+  confirmed rolling `findBest`/match-length as the largest Vort matcher hotspot
+  and dynamic tree construction as the next major stage. Two plausible local
+  changes—pointer-indexed match comparison and contiguous first-window seeding—
+  were both rejected after 2048/4096-iteration A/B runs failed to show stable
+  gains. The filter is retained as reproducible tooling; neither speculative
+  matcher change remains in production.
+- Added an optional Linux CPU index after the corpus filter for pinned
+  incremental-DEFLATE measurements. This machine mixes 5.8 GHz performance
+  cores with 4.3 GHz efficiency cores; unpinned 4096-iteration source runs had
+  swung by more than 30% and obscured small A/B effects. Five consecutive
+  2048-iteration source runs pinned to one selected logical CPU held full-stream
+  throughput far tighter than unpinned runs, making subsequent matcher/tree experiments
+  substantially more trustworthy without changing the default gate behavior.
+  Profiling also ruled out two more speculative tree changes: adjacent dynamic
+  stats were almost never identical (JSON 1/7, source 0/7), both corpora already
+  fit the existing 64-symbol compact package-merge path, and neither a 96-symbol
+  specialization nor an unconstrained-Huffman fast path produced a pinned
+  source win; none remains in production.
+- The same benchmark now accepts `persistent-only` after its optional CPU
+  index, keeping Linux `perf` captures limited to the production incremental
+  encoder instead of also timing the rebuild, zlib-compatible competitor, and
+  staged reference paths. An 8192-iteration CPU-8 source capture attributes
+  roughly 56.6% of samples to the rolling matcher (`plan`, `findBest`, and
+  cross-slice match length), 14.4% to dynamic-plan construction, 10.8% to
+  block emission, and 7.4% to memory copying. The ordinary default invocation
+  and CSV schema remain unchanged, and the five-corpus zlib-ng gate still
+  passes.
+- Rolling matcher search bounds derived solely from compression options are
+  now normalized once per block and passed to both the current-position and
+  one-byte lazy probes. This removes nested min/max recomputation from nearly
+  every source-like token without changing token selection. Sixteen alternating
+  fixed-CPU-8 source pairs at 4096 iterations improved the paired median by
+  about 1.3% (15/16 wins; one scheduler outlier), while twelve equivalent JSON
+  pairs improved about 1.8% (12/12 wins); encoded sizes and checksum mixes were
+  identical, and the five-corpus zlib-ng gate remains green.
+- Incremental dynamic histograms now live in reusable matcher state and the
+  completed plan borrows them until the next `plan` or `reset`, instead of
+  copying 316 counters through the matcher, codec adapter, and block writer. A
+  lifecycle test pins address reuse and reset semantics. Twelve alternating
+  fixed-CPU-8, 4096-iteration pairs improve source and JSON medians by about
+  1.8% and 1.6%, respectively (9/12 and 11/12 wins), with identical encoded
+  sizes/checksum mixes; the
+  five-corpus zlib-ng gate remains green.
+- Reusable incremental histograms now remember exactly which literal/length
+  and distance symbols became active, so the next block clears only those
+  counters instead of memset-zeroing all 316 entries. Twelve alternating
+  fixed-CPU-8, 4096-iteration pairs improve source and JSON medians by about
+  1.1% and 1.7% (12/12 and 11/12 wins), respectively; encoded sizes and mixes
+  remain exact and the five-corpus zlib-ng gate stays green.
+- Incremental fixed-Huffman cost calculation now walks those active-symbol
+  lists as well, rather than rescanning all 286 literal/length and 30 distance
+  counters after matching. An oracle compares cached and token-scanned fixed/
+  dynamic plans, including exact code lengths. Twelve alternating fixed-CPU-8,
+  4096-iteration pairs improve source and JSON medians by about 2.2% and 2.4%
+  (10/12 and 12/12 wins); output sizes and checksum mixes are unchanged and the
+  five-corpus zlib-ng gate remains green.
+- Sparse package-merge now also accepts a trusted active-symbol list. The
+  incremental dynamic planner reuses the matcher's list, sorts at most 64
+  symbols to preserve canonical tie order, and avoids rescanning the 286/30
+  frequency arrays before compacting them. An exhaustive 2...64 active-count
+  oracle matches the scanned builder exactly. Twelve alternating fixed-CPU-8,
+  4096-iteration pairs improve source and JSON medians by about 1.7% and 2.3%
+  (11/12 wins each); encoded sizes/mixes are exact and the zlib-ng gate passes.
+  The at-most-64-symbol canonical tie-order step now uses a stable insertion
+  sort instead of generic introsort setup. The list arrives in near-source
+  order and remains small by construction; the same active-count oracle pins
+  exact lengths. Twelve alternating CPU-8 pairs improve source by about 1.3%
+  (10/12 wins) and JSON by about 0.5% (9/12 wins), with unchanged output and a
+  green five-corpus zlib-ng gate.
+  Active-symbol arrays are now kept in ascending order at first activation, so
+  the planner can consume canonical order directly without another per-block
+  sort. The insertion cost is paid only for a new symbol and the lists remain
+  bounded to 64 on this path. Twelve alternating CPU-8 pairs improve source and
+  JSON medians by about 0.9% and 1.2% (8/12 and 11/12 wins); exact-output oracles
+  and the five-corpus zlib-ng gate remain green.
+  The rolling matcher's `findBest` search is now inlined into its per-block
+  planner, allowing block-invariant limits and hash-chain state to stay in the
+  surrounding loop instead of crossing up to two call boundaries per token.
+  Twelve alternating fixed-CPU-8, 4096-iteration pairs improve source and JSON
+  medians by about 4.1% and 4.0% (11/12 and 12/12 wins); encoded sizes and mixes
+  remain exact, and the five-corpus zlib-ng gate stays green.
+  A post-series 16-run CPU-8 comparison measures current persistent source and
+  JSON medians at about 2902 and 3042 MiB/s, respectively; the same benchmark's
+  local zlib-ng 2.3.90 level-6 rows cluster near 2822 and 2880 MiB/s. This is a
+  narrow lead on the two locked 256 KiB fixtures, not broad DEFLATE parity;
+  repetitive, binary, cross-window, ratio, memory, and wider real corpora remain
+  part of the required claim surface.
+- Rolling DEFLATE history/block match extension now compares 32-byte vectors
+  before its existing 8-byte and scalar tails. The first differing-lane mask
+  preserves exact byte offsets and removes three dependent word comparisons on
+  long source-like matches. A focused oracle covers every mismatch position
+  and every maximum length through 321 bytes with different slice offsets. In
+  nine fixed-CPU-8, 4096-iteration A/B pairs, matcher-only medians improved by
+  about 16% on JSON logs and 18% on source; stable end-to-end samples improved
+  by roughly 10%, repetitive input by about 4%, and compressed bytes/checksum
+  mixes remained identical. A whole-run source profile measured 2779.93 MiB/s
+  versus local zlib-ng 2.3.90 at 2812.29 MiB/s, narrowing the remaining gap to
+  about 1.2%.
+- Incremental fixed/best block publication now exchanges the bit writer's
+  completed-byte allocation with the pending-output queue instead of copying
+  every encoded block through a second `ArrayList`. The partial bit remains in
+  writer state, and the final alignment byte uses the existing append fallback
+  because it follows final-block publication in the same step. Seven
+  alternating CPU-8, 512-iteration binary A/B pairs kept identical 262184-byte
+  output and CRC mixes while improving median throughput from about 156.64 to
+  157.25 MiB/s (about 0.4%); structured text is effectively neutral because its
+  encoded blocks are only a few hundred bytes. Incremental raw-DEFLATE tests
+  cover tiny output, sync flush, final alignment, reset, direct/buffered input,
+  stored selection, and retained history with the exchanged ownership.
+- Added a byte-progressive raw-DEFLATE stored-block decoder under
+  `src/deflate/incremental/decoder/`. It preserves split header state, streams
+  payload directly caller-to-caller through tiny output, enforces exact/maximum
+  output bounds before copying, and reports reserved type, LEN/NLEN, truncation,
+  trailing input, and recoverability diagnostics without buffering a frame.
+- Added a byte-progressive fixed-Huffman decoder with a persistent bit
+  reservoir and partial canonical-code state. It handles arbitrary byte splits
+  and tiny output without frame buffering, decodes split length/distance extra
+  fields and overlapping copies through a caller-owned 32 KiB history ring, and
+  enforces output limits/exact size before match execution.
+- Unified stored and fixed block execution in that byte-progressive decoder.
+  Stored LEN/NLEN and aligned payload state now share the same bit reservoir and
+  caller-owned history ring, enabling mixed block streams without handing
+  prefetched bytes between separate decoder objects.
+- Began byte-progressive dynamic-Huffman parsing in the same state machine.
+  HLIT/HDIST/HCLEN and the permuted code-length alphabet survive arbitrary input
+  splits and validate RFC bounds/Kraft oversubscription. Code-length Huffman
+  symbols and repeat codes 16/17/18 now build the complete literal/distance
+  length arrays with persistent extra-bit state and validate EOB/table shapes.
+  Dynamic literal/length and distance canonical codes now execute through the
+  same split extra-bit and caller-owned history-ring match phases as fixed blocks.
+- Added a byte-progressive zlib decoder wrapper over the unified raw core. CMF/FLG
+  parsing, output Adler-32, split big-endian footer validation, exact/max output,
+  trailing input, truncation, and FDICT diagnostics preserve caller-owned history
+  and prevent raw bit prefetch from consuming wrapper footer bytes.
+- Added preset-dictionary support to that wrapper. A split four-byte DICTID is
+  checked against the supplied bytes before raw decode, the dictionary tail seeds
+  the caller-owned 32 KiB history ring, and missing/wrong dictionaries report
+  `NeedDictionary` with retry diagnostics.
+- Added a byte-progressive single-member gzip decoder. It composes the unified
+  raw decoder one byte at a time, validates streaming CRC-32 and ISIZE from a
+  split footer, and incrementally parses/skips bounded FEXTRA, FNAME, FCOMMENT,
+  and FHCRC fields with header CRC validation and truncation diagnostics.
+- Extended the byte-progressive gzip decoder with opt-in concatenated-member
+  traversal. Member headers, DEFLATE history, CRC-32, and ISIZE reset at each
+  boundary while stream input/output accounting, exact-size and output limits
+  remain cumulative; snapshots expose validated member counts and later-member
+  corruption/truncation retains the completed-member context.
+- Extended those snapshots with the active or last validated member index, its
+  compressed-stream offset and local input progress. Failure snapshots retain
+  the failing member index/offset, phase, and cumulative detection offset across
+  split headers, payloads, and footers, and reset clears all error context.
+- Added a bounded split-input Brotli incremental facade under
+  `src/br/incremental/`. It accumulates compressed fragments under an explicit
+  limit, performs complete supported-stream preflight and decode at `finish`,
+  enforces optional exact/maximum output lengths, then drains through arbitrary
+  caller-owned output slices with shared progress, reset, snapshot, and
+  diagnostics semantics. The narrow codec interface leaves the 13k-line Brotli
+  facade unchanged except for a small adapter and keeps the state machine ready
+  for a future byte-progressive compressed meta-block core.
+- Added a true byte-progressive Brotli decoder for the stored/uncompressed
+  subset under `src/br/incremental/stored/`. It preserves bit-level window and
+  meta-block header state across arbitrary one-byte input splits, skips metadata
+  without retaining it, and copies aligned payload bytes directly from caller
+  input to arbitrarily small caller output. Output limits, compressed-block
+  rejection, padding validation, explicit finish/truncation, reset, snapshots,
+  and diagnostics are covered in the colocated module tests.
+  After a finished stream it can continue another independently framed stored
+  stream with new limits through `nextStream`; cumulative compressed/output
+  byte counts and stream count/index remain visible without allocating. Tests
+  switch window bits and metadata across frames and exercise the root facade.
+  Callers may now provide bounded metadata scratch to the byte-progressive
+  stored decoder. Metadata remains excluded from content output, but snapshots
+  expose captured and total metadata bytes plus truncation; split metadata can
+  therefore be inspected without hidden allocation or unbounded retention. A
+  second caller-owned slice captures per-meta-block lengths and independently
+  reports boundary truncation, so multiple metadata events remain distinguishable.
+- Added the matching incremental stored Brotli encoder under
+  `src/br/incremental/stored/encoder.zig`. It preserves bit-writer state across
+  metadata and multiple configurable meta-blocks, buffers only one block of
+  caller input, drains encoded bytes through tiny caller output, and supports
+  input limits, explicit finish, reset/reuse, and snapshots. Split-input,
+  multi-block, metadata, and window-bit round trips use the production decoder.
+  It can now start independent streams with new window/metadata/block options
+  through `nextStream`, retaining allocations and cumulative byte/count/index
+  diagnostics. Tests decode both differently configured outputs and cover the
+  root public facade.
+  `writeMetadata` can insert additional metadata meta-blocks after previously
+  accepted content, drain them through tiny output, and resume content in the
+  same bitstream. Caller metadata remains borrowed only until `need_input`; a
+  payload-metadata-payload round trip validates captured event bytes/boundary.
+  Snapshots expose pending metadata length and flush state, while duplicate or
+  post-finish requests fail deterministically.
+- Added the first production compressed Brotli encoder slice for single-byte
+  runs. `encodeRleStream{Alloc,Append,Into}` emits a real compressed meta-block
+  with one seed literal plus a direct-distance-one copy, rejects non-runs rather
+  than pretending to be a general encoder, and provides a conservative bound.
+  A 4096-byte run encodes to 12 bytes, round-trips through Vort, and decodes
+  successfully with Node v26's Brotli implementation. The reproducible
+  `run-br-rle-node-diff` gate now generates production API output, decodes it
+  with Node, checks all 4096 bytes, and protects a minimum 16x ratio win. The
+  same gate now covers the first externally proven distance-copy production
+  slice, `encodeAbabaStreamAlloc`, derived from the existing Node/Vort fixture
+  and yielding an 11-byte interoperable compressed stream. The parameterized
+  `encodeAbabaPatternStreamAlloc(first,second)` supports any distinct byte pair;
+  both ASCII and binary `00 ff 00 ff 00` patterns pass Vort and Node decoding.
+  The same externally gated command shape now covers alternating lengths
+  `5...16777216` through `encodeAlternatingStreamAlloc`; copy-length extra bits and
+  command symbols are selected from the upstream-verified LUT, and every odd
+  and even length uses the matching two-byte seed/copy pattern. Representative
+  command and meta-block-length boundaries are Node-gated. `encodeSimpleStream` selects
+  these patterns automatically and otherwise retains its stored fallback.
+  `encodeSimpleStream` provides a safe general entry point over this initial
+  slice: eligible runs use compressed RLE, while all other inputs deterministically
+  fall back to the mature stored encoder. Alloc/append/into/bound and root APIs
+  therefore improve useful ratios without narrowing accepted input.
+- Replaced the compressed Brotli decoder's hand-simplified command-range logic
+  with a generated 704-entry table from upstream `dec/prefix_inc.h`, including
+  exact insert/copy bases, extra-bit widths, distance-code mode, and context.
+  All unit tests, the production RLE/alternating Node gate, and the 225-case
+  Vort/Node literal differential suite remain green, establishing a trustworthy
+  oracle for the next general command encoder slice.
+  A focused interleaved benchmark compares the generated table with the exact
+  upstream construction formula across all 704 symbols. The first local
+  ReleaseFast run measured about `11.6 ms` versus `310.7 ms` for 16384 sweeps
+  (`~26.8x`), so production retains the verified table rather than recomputing.
+- Added the first production multi-command Brotli encoder slice.
+  `encodeRepeatedPrefixStreamAlloc` encodes distinct two-, three-, or four-byte
+  seeds and subsequent non-overlapping copies as separate command symbols up to
+  the 16 MiB meta-block limit, using the verified command LUT and direct seed
+  distance. Representative 2/3/7/31-repeat streams, including binary seeds,
+  round-trip through Vort and the Node interoperability gate. The simple
+  encoder now detects exact three- and four-byte repetitions through the focused
+  `src/br/pattern.zig` helper (two-byte repetitions retain the smaller alternating
+  stream); this establishes command-tree emission and repeated command sequencing
+  needed by a future general match planner.
+- Added the first planner-backed Brotli command encoder under
+  `src/br/encoder/command_plan.zig`. The shared LZ77 hash matcher now feeds a
+  validated insert/copy command plan; production encoding emits simple literal,
+  command, and direct-distance trees whenever each alphabet contains at most
+  four symbols and distances fit the initial direct range. A mixed literal/copy
+  payload (`abcabcX...`) compresses from 21 to 16 bytes and passes both Vort and
+  Node decoding. `encodeSimpleStream` selects this planned path when supported
+  and retains the stored fallback for plans that need broader Huffman trees or
+  broader Huffman trees. The planner now uses the normal 32 KiB LZ77 window;
+  `src/br/encoder/distance.zig` inverts Brotli's regular-distance formula and
+  emits the matching extra bits beyond the 15 direct distances. A gated
+  distance-42 payload compresses from 82 to 18 bytes and round-trips through
+  both Vort and Node.
+  Planner prefix alphabets now expand from four to the full 256-byte literal
+  literal alphabet and all 704 command symbols through the focused
+  `src/br/encoder/complex_prefix.zig` writer. It emits valid Brotli
+  complex prefix trees and `src/br/encoder/code_length_rle.zig` chains symbol-17
+  zero runs across sparse literal/command/distance alphabets and symbol 16
+  chains repeated non-zero lengths. The code-length tree is frequency-built
+  rather than fixed. The seven-literal fixture is 20 bytes for 39 source bytes,
+  the 16-literal fixture is 23 for 128, and a full 0...255 alphabet repeated
+  three times is 276 for 768; all pass Node. Broader command/distance alphabet
+  stress now includes real-shape JSON, Zig source, and log corpora through
+  `run-br-planned-corpus` plus the independent `run-br-planned-node-diff` gate.
+  Their first results are respectively 92/2640, 131/3600, and 125/3320 encoded
+  versus source bytes. Command alphabets up to 704 entries are now representable;
+  further prefix-cost optimization and heterogeneous corpus expansion remain
+  follow-up work.
+  Complex-prefix code-length RLE now writes into a fixed 704-token stack buffer,
+  whose size is the trivial worst-case bound (one output token per input length),
+  eliminating three temporary heap allocations per planner stream. The bounded
+  encoder is byte-for-byte tested against the allocating reference. Header time
+  fell from roughly 12–19 µs to 4.7–9.6 µs on JSON/source/log; short A/B reached
+  87/100/101 MiB/s with unchanged 92/130/122-byte output.
+  Complex-prefix RLE stack storage is now specialized to the actual alphabet
+  class (256 literal, 520 distance, 704 command) instead of reserving 704 tokens
+  for every tree. This reduces stack/cache pressure without changing tokens or
+  wire. A clean 100-iteration run measured 158/182/188 MiB/s for JSON/source/log
+  versus libbrotli q3 at 352/328/435 MiB/s.
+  A ReleaseFast interleaved encoder A/B against runtime libbrotli 1.1.0 quality
+  3 is available through `run-br-planned-encode-bench{-gate}`. The persisted
+  100-iteration gate sample measured Vort/reference ratios of `0.101x`, `0.159x`,
+  and `0.127x` throughput, with size ratios `1.484x`, `1.523x`, and `1.437x` for
+  JSON/source/log.
+  This is explicit evidence that planner-backed encoding is now functional on
+  these shapes but still trails the industry reference in both speed and ratio.
+  Switching sub-32-KiB inputs from heap-backed hash tables to the existing
+  stack-table LZ77 planner preserves byte-identical output and raises the
+  persisted 100-iteration throughput ratios to `0.186x`, `0.236x`, and `0.214x`
+  (38.0/47.7/52.9 MiB/s). A focused max-chain 8 experiment did not improve the
+  interleaved result and was rejected, so the production search budget remains
+  unchanged.
+  A caller-owned scratch API (`encodePlannedStreamWithScratchAlloc`) now bounds
+  all planner intermediate allocations and returns only final bytes through the
+  caller allocator. It is intended for allocation control/reuse; an A/B trial
+  found it slower than the ordinary allocator path on the current small corpus,
+  so production convenience encoding and throughput benchmarks retain the faster
+  default path.
+  `PlannedStreamEncoder` now owns typed reusable LZ77-token and Brotli-command
+  buffers; retained capacity is observable and outputs remain independently
+  owned. It replaces the initial arena prototype and is benchmarked after a
+  warmup call. The persisted 100-iteration run measured 37.4/43.4/56.7 MiB/s
+  for JSON/source/log; this is roughly neutral/noisy versus the default path,
+  so reuse is exposed primarily to bound allocation churn rather than claimed
+  as a throughput win.
+  Planner alphabet collection now accumulates fixed literal/command/distance
+  frequency arrays and compacts them once, replacing the former per-symbol
+  linear search through up to 704 entries. The persisted 100-iteration sample
+  improved source/log throughput from 47.7/52.9 to 61.8/56.6 MiB/s while JSON
+  measured 42.4 MiB/s; output remains byte-identical.
+  The shared Brotli bit writer now packs up to the remaining byte width per loop
+  instead of iterating once per bit. Known-byte stored fixtures and all planner
+  wires remain identical. Short interleaved samples rose to 114.5/123.1/128.8
+  MiB/s; the longer 100-iteration run remained scheduler-sensitive (104.0/56.5/
+  50.3 MiB/s), so the change is retained for its deterministic reduction from
+  O(bits) to O(bytes) writer work rather than a single claimed multiplier.
+  Planner output now reserves a capped `max(input/8,64)` bytes (up to 4 KiB)
+  before header emission, avoiding the early ArrayList growth ladder. The latest
+  100-iteration sample measured 44.2/90.8/93.7 MiB/s for JSON/source/log with
+  unchanged 92/131/125-byte streams; JSON remains scheduler-variable while the
+  source/log improvement is consistent with fewer output reallocations.
+  Wire-stage subprofiling splits frequency collection, alphabet compaction,
+  package-merge lengths, complex header, canonical encoder setup, and payload.
+  On JSON/source/log the dominant pieces are lengths (10.6–15.9 µs) and header
+  (12.1–18.6 µs), while payload emission is only 1.8–2.6 µs. PrefixAlphabet
+  therefore runs package-merge directly on 32/64/256-sized compact frequency
+  arrays and scatters once, avoiding full 704/520 sparse compaction. Besides
+  lowering length-build time, this improved source/log wire sizes from 131/125
+  to 130/122 bytes; Node and corpus gates accept the new deterministic wire.
+  For the currently dominant <=64-symbol alphabets, a focused heap-based Huffman
+  builder now computes unconstrained optimal depths in O(active²) over compact
+  nodes and falls back to package-merge only if depth exceeds Brotli's 15-bit
+  limit. Length time dropped to roughly 6.7–8.3 µs, with wires unchanged. Short
+  A/B reached 108/123/119 MiB/s; the persisted 100-iteration sample measured
+  99/70/120 MiB/s for JSON/source/log under the noisy mixed-core environment.
+  The small-tree builder now maintains its active nodes in a binary min-heap
+  keyed by the same `(weight,serial)` order, reducing construction from O(n²)
+  scans to O(n log n) without changing depths or wire. Focused length time fell
+  further to about 4.0–6.1 µs; a clean 100-iteration run measured stable
+  102/118/118 MiB/s versus libbrotli q3's 315/289/376 MiB/s.
+  Command selection no longer scans all 704 upstream LUT entries for every
+  planned match. A compile-time 24×24 insert/copy-code index retains the first
+  exact upstream symbol for O(1) lookup; an exhaustive equivalence test covers
+  both ends of every LUT range. The latest 100-iteration sample measured
+  49.1/42.8/73.8 MiB/s for JSON/source/log with byte-identical output; variance
+  remains high enough that this is recorded as a structural hot-path reduction,
+  not an across-the-board speed claim.
+  Insert/copy length-code selection is now a direct RFC range mapping rather
+  than a 24-entry scan per query. Boundary tests cover both ends of all 48
+  insert/copy ranges plus out-of-range rejection; command/LUT and corpus output
+  remain byte-identical. The attempted token-cursor removal of the command plan
+  regressed the stable A/B and was fully reverted, preserving the faster typed
+  command representation.
+  `run-br-planned-stage-profile` now records token/command/alphabet shape plus
+  optional in-process LZ77/command/wire timing. Initial profiles put wire and
+  Huffman construction at 61–71% after optimization (previously 66–78%), versus
+  20–30% LZ77 and 7–15% command planning. Passing precomputed code lengths from
+  payload encoder construction into complex-prefix header writing removes three
+  duplicate package-merge builds. The persisted 100-iteration sample improved
+  to 79.3/87.8/89.2 MiB/s for JSON/source/log with identical sizes.
+  The transient `PlannedWireCommand[]` materialization is removed: frequency
+  collection and final emission now derive indexed command/distance metadata
+  directly from the typed command plan in two passes. This eliminates one
+  allocation and one command-sized copy while preserving byte-identical wire;
+  short A/B samples improved, but the 100-iteration run remained scheduler-noisy
+  and is therefore recorded as a structural allocation reduction only.
+  Symbol-16/17 repeat-chain inversion now derives the unique extra value from
+  `(current-3) & (radix-1)` and computes the predecessor directly, replacing an
+  inner 4/8-way modulo search at every RLE chain level. An exhaustive run test
+  covers both radices through 703 symbols; all planner wires remain unchanged.
+  Complex-prefix validation and trailing-zero discovery now share one forward
+  pass (`validatedStopIndex`) instead of validating the full alphabet and then
+  scanning backward. Focused header time is 3.5–5.8 µs for source/log and about
+  13 µs for JSON; 20-iteration A/B reached 102/116/116 MiB/s, with unchanged
+  planner streams and successful Node decoding.
+  `PrefixAlphabet` is an approximately 11 KiB full-command-space value. Its
+  code-length and header helpers now take const pointers rather than copying
+  three alphabets by value. Focused JSON alphabet time fell from roughly
+  19–21 µs to about 10 µs with unchanged wire; short A/B reached 92/103/122
+  MiB/s for JSON/source/log.
+  Planner payload setup now bypasses full 704/520 length arrays and canonical
+  encoders for simple command/distance alphabets (<=4 symbols), deriving the
+  exact canonical reversed codes directly from the already ordered alphabet.
+  Direct/generic code equivalence is tested for 2–4 symbols. A clean 100-run
+  sample measured 139/155/166 MiB/s versus libbrotli q3 at 231/234/283 MiB/s,
+  with unchanged 92/130/122-byte streams.
+  A ratio-oriented `encodePlannedStreamLazyAlloc` now shares the same wire path
+  with the lazy LZ77 parser. Adjacent copy tokens with zero intervening
+  literals and the same distance are now coalesced into one Brotli command;
+  this is exact even for overlapping matches and removes the artificial
+  258-byte limit inherited from the shared DEFLATE-oriented LZ77 tokens. On
+  JSON/source/log it now emits 62/91/83 bytes versus
+  the fast planner's 92/130/122 and libbrotli q3's 62/86/87. The persisted
+  size gate locks these results: JSON matches libbrotli, log is four bytes
+  smaller, and source is within six percent. A focused command-plan test covers
+  both allocating and reusable builders; both modes remain Node-gated. Ten
+  interleaved 1000-iteration runs also improved balanced JSON/source/log
+  throughput by about 5.5%/6.4%/3.8%, because fewer commands shrink both
+  planning and wire-emission work.
+  The balanced planner additionally evaluates replacing each isolated
+  three-byte copy with literals. This exact, bounded local search captures tree
+  overhead that the fixed-bit LZ77 profitability model cannot see; it reduces
+  the locked log stream once more from 83 to 82 bytes while JSON/source stay at
+  62/91. The size gate now pins 62/91/82, respectively.
+  For small plans with up to four three-byte matches, balanced mode now also
+  enumerates every non-empty subset to literalize and keeps only a strictly
+  smaller complete stream. This catches interactions between command, distance,
+  and literal trees that no per-match estimate can prove: removing the first
+  two isolated source matches reduces 91 to 88 bytes. A second bounded candidate
+  now literalizes one dense leading run of at least three copies no longer than
+  five bytes; removing the source plan's first four copies reaches 84 bytes, two
+  bytes below libbrotli q3. This stronger structural candidate supersedes the
+  three-byte subset enumeration for matching plans, so source needs only one
+  alternative full-stream encode instead of four. The transformation uses
+  original command indexes, preserves later absolute insert positions/distances,
+  and has focused candidate-selection and multi-removal tests.
+  Stable public planner options now expose `.fast` and `.balanced` compression
+  levels through `encodePlannedStreamWithOptionsAlloc`; `.balanced` maps to the
+  proven lazy parser and is tested to round-trip with size no worse than fast.
+  The same API now exposes an explicit `.ratio` level (and direct
+  `encodePlannedStreamRatioAlloc` helper) with a 512-chain, 258-byte nice-match
+  budget. On twelve 128 KiB Silesia prefixes it improves the aggregate balanced
+  size from 560,528 to 555,446 bytes before command coding. Ratio mode also
+  evaluates a second complete stream that maps recent copy distances to Brotli's
+  16 short codes, including the implicit last-distance command form, when at
+  least 64 commands qualify, keeping it only when smaller. The threshold avoids doubling tiny-input wire
+  work while retaining every measured material win. On
+  the same corpus this reduces aggregate output again to 551,235 bytes, 6.95%
+  below libbrotli quality 3; representative `mozilla`/`nci`/`xml` rows fall from
+  22,472/10,699/9,909 to 21,478/10,065/9,545 bytes. `mozilla` remains the only
+  measured loss at 0.97%, while every other row is protected by exact
+  full-stream arbitration and every selected stream passes libbrotli decoding.
+  Ratio mode additionally evaluates one UTF-8 literal-context split that maps
+  contexts 56...63 (lowercase-letter history) to a second Huffman tree. Its
+  compact contiguous map and complete-stream arbitration reduce the same
+  Silesia aggregate again to 549,017 bytes, 7.33% below libbrotli q3, and turn
+  `mozilla` into a nine-byte win (21,262 versus 21,271 bytes). This is a single
+  bounded entropy candidate rather than an input-specific multi-threshold scan.
+  The fixed 56-zero/eight-one context map now uses Brotli zero-run RLE instead
+  of emitting 64 raw map bits, reducing the aggregate another 53 bytes to
+  548,964 bytes and the `mozilla` row to 21,256 bytes.
+  It also subsumes the weaker recent-distance-only candidate on the measured
+  corpus, so ratio mode now encodes only the explicit baseline and the combined
+  recent-distance/context alternative rather than materializing three streams.
+  When that combined candidate is already at most 80% of input, ratio mode
+  returns it directly: its margin exceeds every measured tree-interaction loss,
+  avoiding the baseline wire pass on the compressible Silesia rows. Fixed-CPU
+  A/B improved `mozilla`/`nci`/`xml` by about 14.7%/10.3%/11.7% with identical
+  output.
+  This level is intentionally separate because four
+  representative fixed-CPU samples traded roughly 1.6–2.4x encode time for the
+  additional 0.8–4.2% size reduction.
+  `run-br-planned-encode-bench` now accepts repeatable `--path` inputs with a
+  bounded `--limit`, validates every Vort level through libbrotli before timing,
+  and has a checked-in file-path gate. This makes wider real-corpus ratio and
+  throughput experiments reproducible without embedding large corpora.
+  Ratio mode now also uses the full distance range allowed by its 16-bit Brotli
+  stream window (65,520 bytes), rather than inheriting DEFLATE's 32 KiB search
+  ceiling. The shared LZ77 token distance remains `u16`, so DEFLATE's ABI and
+  default window are unchanged. A deterministic 60 KiB long-distance fixture
+  with a 48 KiB offset shrinks from 61,502 balanced bytes to 49,213 ratio bytes
+  and round-trips through the exact-size decoder.
+  A Brotli-specific second pass now searches the literal runs left by that
+  shared parser for 65,521...131,056-byte distances, allowing ratio mode to use
+  a 17-bit stream window without doubling the six-byte shared LZ77 token used by
+  DEFLATE and Zstd. A deterministic 92 KiB fixture with a repeated 12 KiB prefix
+  at distance 80 KiB shrinks from 94,282 balanced bytes to 82,192 bytes and is
+  externally decodable with Node/libbrotli. The augmented command plan is still
+  compared against the original complete stream before selection.
+  Across twelve 128 KiB Silesia prefixes, that post-pass lowers ratio mode from
+  548,964 to 544,150 bytes overall (8.15% below libbrotli q3). Ten files improve;
+  the two regressions are discarded by the same complete-stream arbitration.
+  The long-distance path now reuses the original lazy token and command plan
+  instead of parsing/building it twice. A fixed-CPU 10-pair A/B on 128 KiB
+  `mozilla`/`nci`/`xml` prefixes reduced ratio encode time to roughly
+  58.4%/53.8%/55.2% of the duplicated-plan implementation with byte-identical
+  output.
+  Its hash chain now delays insertion until a position enters the eligible
+  65,521...131,056-byte distance band. This halves predecessor scratch to
+  256 KiB and prevents recent same-hash positions from consuming the 512-entry
+  search budget. Twelve fixed-CPU A/B pairs improved representative 128 KiB
+  `dickens`/`mozilla`/`nci`/`xml` rows by about 0.7%/1.5%/0.8%/1.3% with
+  byte-identical output.
+  The lazy planner also exposes an explicit search-budget options API and a
+  reproducible `run-br-lazy-sweep` target. All 24 combinations across chain
+  budgets 64–512, nice lengths 64–258, and lazy gains 1–2 retained the same
+  77/116/106-byte corpus streams. A pinned, interleaved 1000-iteration A/B
+  therefore reduced the balanced default from chain/nice 256/128 to 64/64:
+  JSON improved by about 8%, while source/log stayed within 0.3% noise.
+  The planner wire path now also supports RFC 7932 built-in static-dictionary
+  commands, including transformed-output length versus base copy length and
+  distance addressing. An experimental exhaustive reference planner compresses
+  dictionary-heavy input without depending on libbrotli and is externally
+  decoded by Node; stable levels await an indexed matcher before enabling it.
+  A caller-owned 15-bit base-word index now reduces lookup to 13,504 entries
+  and verifies all 121 transforms through the independent transform routine.
+  Differential tests match the exhaustive reference and the 146,560-byte
+  memory budget is enforced by the Node compatibility gate.
+  PrefixAlphabet's small-active insertion sort now caches the candidate pair and
+  shifts predecessors instead of swapping both parallel arrays at every step.
+  It preserves the exact `(frequency desc,symbol asc)` order and wire while
+  reducing typical alphabet time to roughly 6–7 µs. A clean 100-iteration sample
+  measured 104/166/143 MiB/s for JSON/source/log.
+  Alphabet compaction now fills caller-owned PrefixAlphabet objects through an
+  out-parameter instead of returning/copying ~11 KiB values. Focused alphabet
+  time is about 7–8 µs; short A/B reached 117/133/134 MiB/s while source/log
+  100-iteration samples reached 123/169 MiB/s (JSON remained scheduler-noisy).
+  The indexed matcher now rejects RFC transforms whose complete-word omission
+  produces fewer than four output bytes; those non-advancing candidates could
+  previously trap the dictionary planner on ordinary JSON punctuation. Ratio
+  mode now evaluates the static-dictionary stream for inputs up to 256 bytes
+  and keeps it only when the complete frame is strictly smaller. A focused
+  short-payload matrix reduced representative 36/57/59/65/83-byte English,
+  JSON, and source inputs by 4–33 bytes; the dictionary pass cost roughly
+  12–40x the LZ path below 154 bytes and becomes sharply less attractive above
+  256 bytes, which is why the production gate remains deliberately narrow.
+  The selected ratio stream is decoded through Node in the external gate.
+  The immutable 146,560-byte base-word index is now initialized once with the
+  thread-safe allocator and reused across independent encodes. Fixed-CPU
+  1000-iteration samples reduced short ratio encode time by roughly 30% for
+  dictionary-heavy English/JSON/source inputs and by about 78% when the static
+  candidate finds no match, with byte-identical output.
+  Static-dictionary matching now groups the 121 RFC transforms by their 0/1/2/5
+  byte prefix length at compile time. Each indexed bucket candidate evaluates
+  only the group compatible with the already-selected input prefix. Fixed-CPU
+  1000-iteration A/B reduced representative 65-byte English, 57-byte JSON, and
+  59-byte source ratio encodes by about 32%, 40%, and 52%, respectively; the
+  no-dictionary-match case improved by roughly 10%, with unchanged wire output.
+  Whole-word transforms are now rejected from their immutable suffix metadata
+  when the remaining input is too short or the first suffix byte differs,
+  before materializing a candidate in scratch. A fixed-CPU follow-up reduced
+  those same short ratio rows by a further roughly 38%, 44%, and 39%, and the
+  no-match row by about 31%; exhaustive transform metadata tests cover all 121
+  transforms across every dictionary word length.
+  Those immutable prefix/suffix properties are now stored in one compile-time
+  `TransformMetadata` table and shared by the matcher helpers, replacing repeated
+  NUL-terminated prefix/suffix scans in the candidate loop. Fixed-CPU 1000-run
+  A/B reduced the same short ratio rows by another roughly 19–24% and the
+  no-match case by about 17%, with unchanged output and metadata-oracle results.
+  Transform metadata now packs each complete suffix (up to eight bytes) into a
+  little-endian `u64`, allowing the matcher to validate the whole suffix before
+  materializing a candidate instead of checking only its first byte. Fixed-CPU
+  1000-run A/B improved the 65-byte English, 57-byte JSON, and 59-byte source
+  rows by a further roughly 8%, 6%, and 7%; the already-cheap no-match row was
+  neutral to about 2% faster.
+  Ratio mode now also builds a mixed command plan for short inputs by replacing
+  only literal runs in the existing LZ77 plan with verified static-dictionary
+  commands. Existing backward copies keep their exact positions and distances,
+  and full-stream arbitration still rejects any size loss. A 53-byte mixed
+  repetition/dictionary fixture falls from 33 to 29 bytes versus dictionary-only
+  encoding and from the previous ratio path's 33 to 29 bytes; Node decodes the
+  selected stream. The extra candidate costs roughly 42% on that fixture and is
+  currently limited to the existing <=256-byte ratio dictionary gate.
+  Indexed matching now resolves each bucket's base-word slice once and passes
+  it directly to a shared `transformWord` helper, instead of decoding the same
+  address and recomputing the dictionary offset for every compatible transform.
+  An exhaustive sampled-word oracle covers all word lengths and 121 transforms.
+  Fixed-CPU 1000-run A/B improved mixed/English/JSON/source short-ratio rows by
+  roughly 2%/3%/5%/3%, with the no-match row about 2.5% faster.
+  The compile-time transform prefix groups now carry an explicit active length,
+  so the matcher iterates a bounded slice rather than testing a sentinel on
+  every transform. Fixed-CPU 1000-run A/B improved mixed/English/JSON/source
+  short-ratio rows by roughly 4%/10%/8%/6%, with the no-match row about 3%
+  faster and identical output. A per-position shared match-cache prototype was
+  also tested and rejected because eager full-input scanning made representative
+  rows 4–56% slower despite eliminating some duplicate lookups.
+  Ratio mode now falls through to its RFC static-dictionary encoder when the
+  LZ77 parser finds no backward match, instead of rejecting dictionary-only
+  short inputs before dictionary planning. The standalone 11-byte word
+  `information` now produces a 9-byte Brotli stream and is decoded through Node.
+  The same branch now compares dictionary output against a stored stream and
+  falls back to stored when the dictionary expands or finds no match, so ratio
+  mode also handles arbitrary 5–256-byte incompressible inputs instead of
+  exposing the planner's internal `InvalidBlockPlan` limitation.
+  The stored ceiling now applies to every ratio path across the complete
+  one-meta-block input range, including LZ77 and 17-bit long-distance plans. The
+  exact stored bound avoids materializing the fallback unless the selected
+  compressed stream is larger; deterministic random inputs at 8/64/256/4096
+  bytes round-trip with ratio size no greater than stored, and a 34-byte
+  incompressible fixture is externally decoded by Node from its 38-byte stream.
+  The stable `encodePlannedStreamWithOptionsAlloc` facade now applies the same
+  stored fallback and exact size ceiling to `.fast` and `.balanced`. All three
+  public levels therefore accept arbitrary 5-byte-to-one-meta-block inputs and
+  never return a frame larger than stored, while direct experimental planner
+  entry points retain their precise `InvalidBlockPlan` behavior. Deterministic
+  random inputs at 8/64/256/4096 bytes cover all levels, and Node decodes the
+  fast/balanced incompressible fixtures.
+  `PlannedStreamEncoder` now exposes matching `encodeWithOptionsAlloc`. Its fast
+  level retains reusable token/command capacity while applying the same stored
+  fallback and ceiling; balanced/ratio delegate to their stable one-shot paths
+  until their larger parser state is reusable. Tests require byte parity with
+  the one-shot API for all levels, capacity retention for fast, and successful
+  incompressible round trips bounded by stored size.
+  Stable levels now also cover empty through four-byte inputs with stored
+  streams. The reusable fast encoder delegates inputs above its 32 KiB retained-
+  scratch range to the stable one-shot fast path instead of rejecting them, so
+  it remains byte-identical at both tiny and large boundaries; Node decodes the
+  new four-byte fixtures for all three levels.
+  The command-plan wire encoder now has an append core, and
+  `PlannedStreamEncoder.encodeScratch` writes fast-level output directly into
+  retained encoder-owned storage. After warmup, repeated similarly sized calls
+  reuse token, command, and output capacities and avoid an owned output
+  allocation; returned bytes remain valid until the next call or `deinit`. A
+  fixed-CPU 10,000-run JSON sample improved from roughly 15.4 µs per allocating
+  reusable encode to 14.4 µs, with byte-identical output.
+  The reusable facade also exposes `encodeInto` for fast-level streams. Its
+  caller buffer is sized by the exact stored-stream bound, the command writer
+  runs in bounded mode without output allocation, and a compressed result that
+  crosses the ceiling is overwritten by the stored representation. Tests lock
+  byte parity with stable fast output, undersized-buffer `OutOfMemory`, and an
+  incompressible caller-buffer round trip. Bounded fast encoding now also treats
+  command-writer `OutOfMemory` as a compressed-candidate overflow and rewrites
+  the exact-size caller buffer with stored output. An eight-byte payload with a
+  four-byte repeated suffix reproduces this boundary: its compressed attempt
+  exceeds the 12-byte stored bound, while `encodeInto` now succeeds at exactly
+  12 bytes; a deterministic 100,000-case search finds no remaining false OOM.
+  Static-dictionary lookup now recovers ASCII uppercase-first and uppercase-all
+  transforms without adding a second dictionary index: it lowercases the four-
+  byte hash prefix, probes the existing base-word buckets, and visits only the
+  matching case transform group. The sampled 121-transform coverage matrix
+  improves from 6,751/9,836 to 8,656/9,836 full-length matches while retaining
+  the 146,560-byte index. `INFORMATION` now compresses as an 11-byte dictionary
+  stream instead of falling back, and fixed-CPU 1000-run short-ratio A/B improves
+  representative mixed/English/JSON/source rows by roughly 10%/15%/16%/14%.
+  Shared-index lookup now uses an acquire/release ready flag, so only first
+  initialization takes the mutex and steady-state short encodes avoid locking.
+  A fixed-CPU 1000-run A/B improved mixed/English/JSON/source rows by roughly
+  3%/4%/4%/2% and the no-match row by about 2%; an eight-thread test covers
+  concurrent first access and matching after publication.
+  Public `encodedPlannedStreamBound*` and `encodePlannedStream*Into` helpers now
+  expose that stored ceiling to one-shot callers. The reusable encoder's
+  `encodeIntoWithOptions` supports all stable levels: fast writes directly in
+  bounded mode, while balanced/ratio retain exact one-shot selection before
+  copying into caller storage. Tests cover empty, repetitive, dictionary-heavy,
+  and incompressible inputs, all levels, exact parity, and undersized buffers.
+  The <=64-symbol Brotli Huffman builder now uses a stable two-queue merge over
+  the already frequency-ordered `PrefixAlphabet`, replacing binary heap pop/push
+  operations with linear construction while preserving `(weight, serial)` tie
+  behavior. A 1,024-shape oracle requires exact length-vector equality with the
+  retained heap reference. Fixed-CPU 10,000-run fast-encoder A/B improved JSON,
+  source, and log by roughly 2%/3%/2%, respectively, with identical wire sizes.
+  Leaf depths in that two-queue tree are now recovered by one reverse node pass.
+  Parent nodes are always appended after their children, so parent depths are
+  available before child assignment and repeated leaf-to-root walks disappear.
+  The builder's descending-frequency precondition is now explicit and asserted
+  in debug builds; its package-merge weighted-cost oracle sorts generated inputs
+  into the same `PrefixAlphabet` order instead of accidentally exercising an
+  unsupported unsorted queue.
+  The same exact heap oracle passes; fixed-CPU 10,000-run A/B adds roughly
+  0.8%/0.9%/1.9% on JSON/source/log with unchanged streams.
+  Static-dictionary candidate verification now compares RFC prefix, transformed
+  base-word bytes, and suffix directly against the input instead of materializing
+  every candidate into a 64-byte scratch buffer before comparison. An exhaustive
+  oracle checks all 13,504 base words through all 121 transforms against the
+  existing materializing implementation. Seven alternating fixed-CPU-8,
+  2,000-iteration A/B pairs improved the 65-byte dictionary and 53-byte mixed
+  ratio cases by median 4.8% and 2.3%, respectively; uppercase was neutral and
+  selected stream sizes remained byte-for-byte unchanged.
+  Short ratio arbitration now shares an on-demand per-position dictionary-match
+  cache between its mixed and dictionary-only planners. Unlike the rejected
+  eager cache, it scans only positions reached by a planner and performs a
+  bounded re-probe when the cached full-input match crosses an LZ literal-run
+  boundary. Seven alternating fixed-CPU-8, 2,000-iteration A/B pairs improved
+  the affected mixed case by median 7.8%; dictionary-only, uppercase, and
+  no-match controls were not meaningfully affected, and all output metrics were
+  equal.
+  Short ratio dictionary candidates are now encoded into a stack-backed buffer
+  bounded by the exact stored-stream size. Candidate overflow proves it cannot
+  win the strict size comparison; only the selected compressed result is copied
+  to caller-owned allocation. This covers both dictionary-only and mixed/LZ
+  arbitration without changing public ownership. Seven alternating fixed-CPU-8,
+  2,000-iteration A/B pairs improved dictionary, mixed, uppercase, and
+  incompressible short cases by median 1.9%, 1.5%, 1.9%, and 9.7%, respectively,
+  with unchanged sizes and dictionary-use metrics.
+  Zstd mixed-lookahead candidate caches now borrow the duplicate index already
+  prepared by the enclosing selector instead of copying its multi-megabyte
+  predecessor and lazy match-length tables into the recursive search frame. An
+  explicit initializer also leaves the owned fallback index untouched until a
+  standalone search actually needs it. Eleven alternating fixed-CPU-8 stage A/B
+  pairs improved level-9 primary mixed search by median 4.4% on text, 3.7% on
+  JSON, and 33% on the no-mixed-candidate binary control; complete level-9
+  encoding improved by 0.3%/1.7%/2.8%, with byte-identical output sizes.
+  A review of local upstream zstd (`v1.4.7-3025-g5233c58e`) confirmed that its
+  fastest strategy checks recent offsets in the main hash-match loop. Vort
+  level 1 now enables its bounded two-state repeat-offset beam as the equivalent
+  independent candidate, with exact block/frame arbitration retaining the old
+  winner whenever repcodes do not help. On the locked 32 KiB benchmark, level-1
+  JSON falls from 781 to 640 bytes and binary from 8,846 to 8,607 bytes while
+  text stays at 80 bytes. Eleven alternating fixed-CPU-8 runs improved complete
+  encode medians by roughly 23.8% for JSON, 3.1% for binary, and 1.1% for text;
+  decisive beam results also bypass the slower generic optimal pass.
+  The same upstream review showed that double-fast and greedy strategies keep
+  repcode checks active rather than reserving them for high-ratio modes. Vort
+  therefore extends its already bounded repeat-offset candidate through level 3
+  (level 2 follows the same policy between the public benchmark points). On the
+  locked matrix, level-3 JSON drops from 781 to 640 bytes and binary from 8,846
+  to 8,607 while text remains 80 bytes. Nine alternating fixed-CPU-8 runs
+  improved complete level-3 JSON and binary medians by about 11.1% and 1.9%;
+  text was within 0.6% noise. Final-wire arbitration remains authoritative.
+  A dedicated diagnostic `double_fast` stage now mirrors the important shape
+  of upstream `zstd_double_fast.c`: independent 4-byte and 8-byte hash tables,
+  the one-byte-ahead rep0 probe, immediate zero-literal rep1 continuation,
+  complementary insertion around consumed matches, and exact Zstd repcode
+  history updates. It remains outside production selection until it closes the
+  remaining structured-data ratio gap. On the locked 32 KiB stage corpus it
+  produces 210/695/8,600-byte text/JSON/binary blocks versus the repeat beam's
+  210/633/8,600, while fixed-CPU-8 medians are about 13.4x, 3.6x, and 3.6x
+  faster on the corresponding primary blocks. Adaptive 1/2 KiB output is at
+  most seven bytes larger per complete corpus. The stage benchmark and coverage
+  gate expose the parser explicitly so later policy work can require measured
+  parity instead of replacing the beam on an unverified speed result.
+  The two-state repeat beam now keeps a different recent-offset history when
+  its fixed-cost estimate is at most two bits above the current replacement
+  boundary. That small tolerance reflects the offset FSE savings that the
+  parser's fixed-bit proxy cannot see. It preserves all locked primary and
+  binary stage sizes while reducing the 8 KiB adaptive JSON candidate from
+  2,157 to 2,156 bytes. An explicit state-insertion test and per-stage size
+  ceilings make both the intended beam diversity and the wire result stable.
+  The diagnostic double-fast parser now probes rep1/rep2 only when its selected
+  hash match would otherwise introduce a direct distance, accepting no more
+  than a one-byte match-length deficit. This narrow upstream-style safeguard
+  reduces the locked primary JSON block from 695 to 687 bytes while preserving
+  all text/binary and adaptive candidate sizes. Eleven-round fixed-CPU-8 A/B
+  measured unchanged primary throughput within noise (about 0.995x elapsed),
+  and a focused structured-input test pins the selected 687-byte wire size.
+  Double-fast complementary insertion now also records the match-start `+2`
+  position in the long hash table, matching upstream's `curr + 2` anchor while
+  leaving the short table untouched. All nine locked stage sizes remain
+  identical. Eleven alternating fixed-CPU-8 A/B pairs improved median primary
+  text/JSON/binary stage time by about 0.9%/1.7%/1.6%, respectively.
+  Double-fast's short/long hash tables are now sized at 10/12 bits instead of
+  14/15. The smaller stack footprint and cheaper initialization outweigh the
+  additional collisions on the locked corpus: all primary and binary sizes are
+  unchanged, while JSON adaptive 4/8 KiB output improves from 3,678/2,164 to
+  3,673/2,158 bytes. Eleven alternating fixed-CPU-8 A/B pairs improved median
+  primary text/JSON/binary stage time by about 20.9%/5.8%/1.7%, and adaptive
+  rows by roughly 14.5% to 44.0%.
+  The repeat-offset beam parser now exposes caller-owned reusable scratch for
+  its states, per-position occupancy, 4 KiB match index, and reconstructed token
+  stream. The stage benchmark exercises that reuse across repetitions rather
+  than paying four allocator lifecycles per block. Eleven alternating
+  fixed-CPU-8 A/B pairs preserved every locked wire size while improving
+  primary text/JSON/binary beam time by about 22.0%/25.4%/21.6%; adaptive rows
+  improved by roughly 10.7%–25.4%. The allocating API remains as a convenience
+  wrapper and an exact token/capacity test protects scratch reuse behavior.
+  Repeat-beam's dedicated 4 KiB index now stores predecessor positions as
+  `u16` rather than machine-width signed integers. Its input is already bounded
+  to 65,535 bytes, so the compact sentinel representation is exact and reduces
+  predecessor storage from eight bytes to two bytes per input position. Eleven
+  alternating fixed-CPU-8 A/B pairs preserved every stage size while improving
+  primary text/JSON/binary beam time by about 22.8%/26.0%/25.6%; adaptive rows
+  improved by about 14.5%–25.3%. A focused oracle compares compact and generic
+  index matches at positions up to the u16 input boundary.
+  The beam hot loop now trusts the per-position active-slot count maintained by
+  `insertRepBeamState` instead of rechecking every yielded state against the
+  unreachable max-cost sentinel; final-state selection uses the same invariant.
+  Eleven alternating fixed-CPU-8 A/B pairs preserved every wire size and
+  improved median primary text/JSON/binary beam time by about 6.2%/2.9%/1.8%;
+  most adaptive rows also improved, while the smallest binary row was neutral.
+  The beam transition helpers are now explicitly inline and return `void`: both
+  mutate only bounded caller-owned arrays and have no error path, so the former
+  error-union calls added avoidable control-flow overhead on every literal and
+  match edge. Eleven alternating fixed-CPU-8 A/B pairs preserved every wire
+  size while improving median primary text/JSON/binary beam time by about
+  6.1%/2.6%/5.7%; adaptive text/JSON improved by roughly 1.6%–3.7%, with binary
+  adaptive rows neutral.
+  When repeat-beam's sole indexed match already uses a state's current rep0,
+  the explicit rep0 probe now reuses that work instead of repeating the same
+  vectorized match-length scan and identical state insertion. Eleven alternating
+  fixed-CPU-8 A/B pairs preserve all wire sizes; repetitive text improves by
+  roughly 16.6%/6.0%/9.3% for primary/4 KiB/8 KiB, while other rows stay near
+  neutral. A focused replay test covers consecutive matches at one distance.
+  The beam loop now computes whether a minimum-length match can fit once per
+  position and skips both hash-index and recent-offset probes for the final
+  literal-only tail. Eleven alternating fixed-CPU-8 A/B pairs preserved every
+  wire size while improving primary text/JSON/binary beam time by about
+  0.8%/4.3%/2.8%; the two larger adaptive JSON/binary rows improved by roughly
+  0.9%–2.7%. A focused replay test covers a three-byte tail.
+  A second hash-width sweep reduced the same tables further to 8/11 bits. The
+  complete locked size matrix remains unchanged. Eleven alternating fixed-CPU-8
+  A/B pairs against the 10/12-bit version improved median primary text/JSON/
+  binary stage time by about 4.2%/1.0%/3.2%, with adaptive rows another
+  1.1%–7.0% faster and the parser's stack tables reduced from 20 KiB to 9 KiB.
+  Repeat-beam's compact predecessor index now hashes the parser's actual
+  four-byte minimum-match prefix instead of the generic three-byte anchor. This
+  avoids walking false-collision chains that can never pass the fourth-byte
+  guard. Eleven alternating fixed-CPU-8 A/B pairs preserved every wire size and
+  improved median primary text/JSON/binary beam time by about 3.7%/5.1%/13.8%;
+  adaptive rows improved by roughly 2.9%–7.3%.
+  Double-fast's zero-literal rep2 transition now snapshots old rep0/rep1 before
+  replacing the queue. Zig aggregate assignment observes earlier element writes,
+  so the previous expression could collapse `{rep0, rep1, rep2}` into three
+  copies of rep2 even though the resulting token distances still formed a valid
+  stream. A focused state test now pins the required `{rep2, rep0, rep1}`
+  rotation; all locked stage sizes remain unchanged.
+  Equal-length double-fast candidates now prefer shorter direct distances after
+  retaining repcode priority. This lowers offset extra-bit cost and produces a
+  more useful future rep0 without changing any locked candidate size. Eleven
+  alternating fixed-CPU-8 A/B pairs improved median primary text/JSON/binary
+  stage time by about 3.1%/6.9%/2.0%; adaptive text and 8 KiB JSON improved by
+  roughly 6.4%–7.1%, while the remaining adaptive rows were neutral.
+  Brotli complex-prefix emission now receives the highest active symbol from
+  the already-built sparse alphabet instead of rescanning the complete dense
+  256/704-entry code-length array to rediscover its stop index. Eleven
+  alternating fixed-CPU-8 A/B pairs preserved every fast/balanced/ratio wire
+  size and improved median full encode time for JSON/source/log by about
+  0.6%/2.0%/0.8%, respectively. The public generic writer keeps its validating
+  scan, while the new precomputed-stop entry point validates the supplied
+  boundary before encoding.
+  Canonical Huffman encoder construction now has a trusted sparse path for
+  planners that already own at most 64 active symbols. Brotli uses it for
+  literal, command, distance, and UTF-8 context trees, avoiding repeated dense
+  scans and zero-fills across 256- and 704-entry encoder tables while retaining
+  the generic constructor for larger alphabets. Randomized sparse-versus-dense
+  oracle tests pin identical canonical codes. Eleven alternating fixed-CPU-8
+  A/B pairs preserve all fast/balanced/ratio wire sizes and improve fast JSON/
+  source/log throughput by about 4.8%/8.0%/3.4%; balanced improves about
+  3.1%/8.0%/1.0%, and ratio improves about 3.6%/9.2%/0.3%.
+  Brotli's compact `PrefixAlphabet` now stores frequencies as `u32`, matching
+  the wire planner's source counters and the 2^24-byte meta-block bound instead
+  of widening every entry to `usize`. This reduces each temporary alphabet
+  from about 7.0 KiB to 4.2 KiB on 64-bit targets and removes conversion before
+  package-merge fallback. Eleven alternating fixed-CPU-8 A/B pairs preserve all
+  fast/balanced/ratio wire sizes and improve full JSON/source/log fast encoding
+  by about 10.8%/9.4%/10.5%; balanced improves about 9.1%/11.6%/12.2%, and ratio
+  improves about 7.9%/3.4%/12.6%. The 2^24-byte meta-block bound also proves
+  that every frequency increment fits the compact representation.
+  `PrefixAlphabet` is now capacity-parameterized instead of always reserving
+  the 704-symbol command maximum. Literal and UTF-8-context trees use 256-entry
+  instances, while command and distance trees retain their exact wire bounds;
+  a layout test pins the resulting 1,544-byte literal scratch versus 4,232
+  bytes for the full command alphabet. Eleven alternating fixed-CPU-8 A/B pairs
+  preserve all locked output sizes and improve fast JSON/source/log encoding by
+  about 5.2%/3.9%/4.7%; balanced improves about 8.9%/8.4%/6.9%, and ratio about
+  8.1%/12.7%/6.6%.
+  The compact Brotli alphabet now stores only its active symbol ordering and
+  borrows the wire planner's existing dense `u32` frequency tables for sorting
+  and code-length construction. This removes the second frequency copy entirely:
+  a 256-symbol alphabet is now 520 bytes and the full 704-symbol form is 1,416
+  bytes. Eleven alternating fixed-CPU-8 A/B pairs preserve all locked streams
+  and improve fast JSON/source/log encoding by about 7.0%/5.7%/7.1%; balanced
+  improves about 6.6%/8.2%/8.4%, and ratio about 6.0%/7.2%/8.9%.
+  Dense-frequency collection and sparse-alphabet ordering now happen in one
+  pass: each non-zero symbol is inserted directly into frequency order while
+  the dense table is scanned. Because symbol IDs arrive in ascending order,
+  equal-frequency stability is preserved without a separate active-array sort.
+  Eleven alternating fixed-CPU-8 A/B pairs preserve every locked wire size and
+  improve the main fast/balanced/ratio corpus paths by roughly 0.5%–1.6%, with
+  the clearest gains on source and log data.
+  The reusable Brotli fast encoder now owns a tiny-greedy hash scratch whose
+  4K head array and predecessor storage survive across calls. A per-plan 512-byte
+  initialization bitmap replaces clearing the 32 KiB head table, while the
+  one-shot and Zstd callers keep their existing paths. A multi-input oracle
+  verifies exact tokens and statistics after scratch reuse, and retained-capacity
+  reporting includes the predecessor buffer. Eleven alternating fixed-CPU-8
+  full-encoder A/B pairs preserve every fast output size while improving JSON/
+  source/log by about 62%/48%/56%; short dictionary/mixed inputs improve by
+  about 1.8x/2.0x and no-match inputs by about 4.4x.
+  The same reusable tiny-greedy scratch now stores positions as `i16`. A 32 KiB
+  input can only insert positions through 32,765 because a complete three-byte
+  hash anchor is required, so all live positions plus the `-1` sentinel fit
+  exactly. This halves the retained head and predecessor storage again; an exact
+  32 KiB boundary oracle matches the allocating parser token-for-token. Eleven
+  alternating fixed-CPU-8 full-encoder A/B pairs preserve all fast wire sizes
+  and improve JSON/source/log by about 1.9%/2.4%/1.3%, with short dictionary/
+  mixed inputs improving about 1.1%/1.6%.
+  The reusable tiny-greedy scratch now stores its 32 KiB-bounded head and
+  predecessor positions as `i32` rather than machine-width `isize`. This halves
+  both retained index buffers without changing the generic one-shot parser.
+  Eleven alternating fixed-CPU-8 full-encoder A/B pairs preserve every fast
+  stream and improve JSON/source/log by about 3.9%/2.9%/4.7%; dictionary and
+  mixed inputs improve by roughly 5.3%/4.4%, and the no-match control by about
+  36%. A focused multi-input oracle pins exact tokens, statistics, and the
+  16 KiB head-table footprint.
+  The one-shot three-byte tiny-greedy parser now uses the same bounded `i16`
+  position representation and lazy head initialization as the reusable Brotli
+  path. The four-byte Zstd specialization deliberately retains its former
+  tables because fixed-core measurements found its primary rows neutral to
+  slightly slower with bitmap checks. Eleven alternating CPU-8 A/B pairs keep
+  every Brotli byte identical while making the standalone parser about 3.3x–
+  3.6x faster and complete JSON/source/log encoding about 63%/48%/55% faster.
+  A 32 KiB boundary oracle and the Zstd stage gate protect both specializations.
+  Added the first true byte-progressive compressed Brotli decode slice for the
+  single-command RLE streams emitted by `encodeRleStream*`. The decoder retains
+  at most a 64-byte encoded header, validates the exact command/literal/distance
+  shape and copy-extra length, and expands directly into caller output under
+  backpressure rather than buffering either the complete compressed frame or
+  decoded run. One- and two-byte input splits cover copy-length boundaries up
+  through 65,536 bytes; limit, exact-size, truncation, trailing-data, and
+  unsupported-shape tests pin the new API, while the existing Node differential
+  gate continues to validate its production encoder wire format.
+  Extended true byte-progressive compressed decoding to final insert-only
+  meta-blocks. A bounded header parse retains the decoded literal Huffman tree,
+  then a fixed 64-bit reservoir consumes split payload bytes and emits literals
+  directly into caller output. Atomic symbol rollback preserves progress when a
+  Huffman code crosses an input boundary. Tests cover one-byte input, three-byte
+  output backpressure, insert/meta-block length boundaries through 65,536 bytes,
+  output limits, exact sizes, truncation, trailing data, and copy-command
+  rejection. Copy-command streams outside the single-block-type subset below
+  remain on the existing bounded whole-frame facade.
+  Added the first byte-progressive Brotli copy-command decoder. It accepts final
+  compressed streams with one literal/command/distance block type, retaining
+  only a bounded entropy header plus a caller-owned history ring, and resumes
+  overlapping match copies across tiny output buffers. A shared fixed-size
+  reservoir bit reader now gives literal and copy decoders atomic rollback at
+  input boundaries. Tests cover alternating runs up
+  to 65,536 bytes, multi-command repeated prefixes, history-ring wrap, missing or
+  undersized history, output limits, truncation, and trailing input.
+  Extended the progressive copy state machine to decode distance symbols after
+  each command's inserted literals, matching Brotli wire order. Dynamic distance
+  Huffman trees, direct and regular distances, short codes, implicit rep0, and
+  the four-entry recent-distance ring are now supported. One-byte input tests
+  cover the existing last-distance, short-distance, and regular-distance
+  fixtures plus representative fast-planner streams with simple and complex
+  literal/command alphabets.
+  The progressive copy decoder now retains all parsed literal and distance
+  context trees instead of requiring all context-map entries to select tree
+  zero. It derives literal context from the last two streamed history bytes and
+  selects the distance tree from the current copy length, with state snapshots
+  restored alongside bit-reader rollback. One-byte input/output tests cover the
+  established LSB6 literal-context and distance-context fixtures, while a ratio
+  planner fixture exercises its two-tree UTF-8 context map.
+  Generalized the existing block-length, command-symbol, and block-switch
+  helpers over the progressive bit reader and retained the complete mutable
+  entropy header in the copy decoder. Literal, command, and distance block
+  switches now advance atomically with the bitstream and roll back together on
+  split input. One-byte input/output tests cover two- and three-type switches as
+  well as a complex block-length tree.
+  Added progressive static-dictionary copies to the same decoder. Distances
+  beyond produced history are resolved through the shared complete Brotli
+  dictionary/transform implementation into a fixed 64-byte scratch, then
+  drained through caller output and the caller-owned history ring under
+  backpressure. Dictionary copies deliberately do not update recent-distance
+  state. One-byte input/output tests cover identity, capitalization, multiple
+  dictionary commands, and mixed LZ77/dictionary planner output.
+  Final and non-final compressed headers now share the progressive literal/copy
+  parser. Non-final compressed blocks may be terminated by a following final-
+  empty meta-block without whole-frame buffering; the two-bit terminator and
+  trailing zero padding are consumed incrementally. One-byte split tests cover
+  successful termination and truncated streams at the final input-byte
+  boundary.
+  Extended non-final progressive compressed streams to accept one or more
+  following stored meta-blocks before the final-empty terminator. The decoder
+  parses each stored header incrementally, enforces cumulative output limits,
+  validates byte-alignment padding, and copies stored payload bytes directly
+  from caller input to caller output. Literal and copy decoder tests cover
+  one-byte input, tiny output buffers, multiple stored blocks, exact-size
+  completion, output-limit rejection, and truncated boundaries.
+  The copy decoder now also crosses consecutive non-empty compressed
+  meta-blocks without buffering the complete stream. It repacks prefetched
+  boundary bits into its bounded header buffer, parses the next entropy header,
+  and preserves output history, literal context, and the recent-distance ring.
+  Byte-at-a-time tests cover cross-block short-distance reuse, context-tree
+  selection, tiny output backpressure, and a truncated second block; both
+  synthetic streams are additionally accepted by Node's Brotli decoder.
+  A separate runtime differential now drives libbrotli 1.1's streaming encoder
+  with a completed flush between chunks, verifies the resulting summaries
+  contain the expected non-empty compressed-block count, then feeds each real
+  multi-block stream to Vort one byte at a time. The matrix now covers 94
+  flushed/metadata streams across generic, text, and font modes; window bits
+  10/16/18/20/22/24; qualities 0/1/3/4/5/6/9/11; enabled and disabled literal
+  contexts; explicit postfix/direct distances; short dense flushes; Unicode;
+  compressed-to-stored-to-compressed transitions; and history that crosses the
+  64 KiB boundary. Actual block-type counts are checked rather than inferred
+  from requested operations, and real metadata payload bytes plus split block
+  lengths are verified through the incremental decoder. The original binary
+  corpus exposed an RFC UTF-8 context-table transcription bug: second-last
+  bytes D0..DF were incorrectly classified like E0..FF. Correcting that range
+  restores one-shot and incremental parity with libbrotli's quality 5+ output.
+  The same copy decoder now starts from a progressive window parser and the
+  shared meta-block state machine, so upstream streams may begin with stored or
+  metadata blocks before reaching compressed data. Focused byte-split tests pin
+  stored-to-context-compressed and metadata-to-compressed transitions.
+  A larger real-source case exposed that static-dictionary addresses must be
+  based on `min(total_output, 2^WBITS - 16)`, not total output after the ring
+  window fills. One-shot decode, summary/preflight, and the byte-progressive
+  copy decoder now retain the parsed window and use that RFC maximum for both
+  dictionary classification and recent-distance updates. The upstream matrix
+  initially reached 90 cases with a 1.26 MiB source stream at window 20, and a
+  focused boundary test pins the post-window dictionary-address calculation.
+  Quality-11 source streams at window bits 18/20/22/24 add 1.26 MiB real-world
+  decode coverage. Their caller-buffer and byte-progressive output is exact; the
+  allocation-free summary deliberately reports `UnsupportedBrotliFeature` for
+  four cases whose literal context depends on history beyond its fixed 65,520-
+  byte scratch. New allocator-backed summary variants size history from the
+  stream's declared window, and allocator-returning decode uses that path, so
+  all four large-window cases also pass ordinary `decodeStreamAlloc`. Summary
+  history now tracks zero, one, or two known suffix bytes
+  after such a copy, preventing one newly decoded literal from incorrectly
+  making a two-byte context look valid and turning the limitation into a later
+  misleading `CorruptFrame`.
+  Added caller-owned-history summary APIs for contiguous and chunked Brotli
+  input, including output limits and diagnostics. They preserve the fixed
+  allocation-free helper's `UnsupportedBrotliFeature` result when supplied
+  history is genuinely too short, but let integrations provide the declared
+  window without hidden allocation. The upstream multi-meta-block differential
+  now exercises this path for all eight large-window cases that require more
+  than the inline 65,520-byte ring and reports zero unsupported summaries across
+  its 99-case matrix.
+  Added byte-progressive metadata handling after compressed blocks. Metadata
+  headers and payloads can span arbitrary input chunks, payload bytes are
+  skipped without affecting decoded-size accounting, and callers may provide
+  bounded metadata and per-block-length buffers matching the stored decoder's
+  observability model. Tests cover truncated capture, exact block-length
+  reporting, and metadata followed by stored data and a final-empty terminator.
+  Fixed decoded-size preflight for ratio-mode Brotli streams whose matches reach
+  beyond 32 KiB. `LiteralHistory` now retains the encoder's full advertised
+  16-bit-window maximum (`2^16 - 16` bytes), so copied history remains known for
+  subsequent UTF-8 literal-context decisions. The previously failing embedded
+  `br.zig` ratio round trip and explicit 48/80 KiB distance tests now pass; a
+  layout assertion pins the history capacity to the encoder limit.
+  Allocator-backed Brotli summaries now try that fixed 65,520-byte history
+  before reserving the stream's full declared window. This keeps ordinary
+  WBITS=24 streams from allocating almost 16 MiB merely because their header
+  permits far copies, while preserving an exact retry for the quality-11 source
+  cases that genuinely need older context. A failing-allocator test pins the
+  allocation-free fast path across all four public allocator-summary variants
+  and pre-reserved append decode.
+  Brotli summary history no longer zero-fills its 65,520-byte inline ring before
+  decoding, because `tail_len` makes unwritten bytes unobservable. Stored and
+  dictionary slices are now appended with at most two contiguous copies instead
+  of a modulo operation per byte, while match copies retain their overlap-aware
+  byte loop. A focused wrap/replacement oracle pins logical ring ordering. Seven
+  alternating ReleaseFast CPU-8 A/B pairs on the structured quality-11 stream
+  reduce median decoded-size summary time by about 8.9%, while exact-size decode
+  remains effectively neutral and decoded bytes stay identical.
+  Brotli summary match copies now seed a bounded scratch from at most two ring
+  spans, expand overlapping repetitions by doubling, and append each batch with
+  the contiguous history path. This replaces a modulo-heavy operation per output
+  byte while preserving RFC forward-copy overlap. A deterministic 500-operation
+  oracle compares retained ring contents against materialized output across
+  random literals, distances, lengths up to 700 bytes, and repeated wraps. Seven
+  alternating ReleaseFast CPU-8 A/B pairs on the structured quality-11 stream
+  reduce median decoded-size summary time from about 44.34 ms to 6.65 ms for 500
+  iterations (6.67x); exact-size decode improves about 2.2%, while direct decode
+  remains effectively neutral.
+  Brotli clustered decoding now covers the remaining observed bounded-tree
+  gaps: literal context trees retain the full 256-entry wire range, distance
+  block types/context trees use a 64-entry tier, and the progressive copy
+  decoder retains up to 16 KiB of compressed header bytes. Stream summaries
+  report the observed literal and distance maxima. Deterministic 1 MiB corpora
+  exercise 169 literal trees and a real `src/deflate.zig` quality-8 stream
+  exercises 35 distance block types/context trees; both pass allocator summary,
+  one-shot decode, and byte-progressive decode. The libbrotli differential
+  matrix grows again from 95 to 98 cases. Ten long fixed-CPU-8 A/B pairs keep
+  ordinary compressed decode within roughly 2% of the previous build on most
+  rows (structured quality 4 improves about 4%); summary overhead rises about
+  1--2% on most rows in exchange for the broader bounded state.
+  Ordinary allocator-returning Brotli decode now consumes each declared
+  meta-block length, grows its owned output under the caller's limit, and
+  decodes that block immediately. This removes the full summary/preflight pass
+  from `decodeStreamAlloc*`; caller-owned append APIs retain preflight so a
+  failed validation cannot change their logical output length. Shared meta-block
+  header parsing keeps the one-shot paths behaviorally aligned, and the
+  libbrotli reference benchmark now measures ordinary allocation separately.
+  Seven alternating ReleaseFast CPU-8 A/B pairs on structured quality-11 reduce
+  median ordinary alloc decode time from about 12.86 ms to 5.78 ms for 500
+  iterations (2.23x), with direct caller-buffer decode neutral. The expanded
+  12-case reference performance gate and 94-case multi-block differential pass.
+  Zstd's parallel mixed-search worker now observes cooperative cancellation
+  inside the indexed duplicate suffix scan, rather than only between recursive
+  lookahead nodes. Once the caller proves a non-mixed repeat-beam result is
+  decisively better, the worker stops at its next candidate position and never
+  publishes the partial plan. A pre-cancelled scan/cache oracle and the existing
+  24-case full-serial winner comparison pin that behavior. Twelve alternating
+  ReleaseFast CPU-8 A/B pairs retain the 640-byte level-9 JSON frame and reduce
+  median end-to-end time from about 11.57 ms to 10.55 ms (about 8.8%); repetitive
+  text is neutral and the mixed-binary control remains within about 1.2% noise.
+  Additional cancellation polls now bracket exact candidate scoring, cursor-
+  match discovery, and repeated-pattern discovery. They affect only a mixed
+  worker whose result has already become ineligible for publication. Twelve
+  fixed-CPU-8 pairs against the preceding commit keep the 80/640/8607-byte
+  text/JSON/binary frames while improving their medians by about 1.0%/0.6%/0.3%,
+  respectively. Together with cancellable indexed scans, the JSON improvement
+  over the pre-cancellation baseline is about 9.4%; the 9-row encode gate,
+  90-row stage gate, and 328-case system-zstd compatibility probe all pass.
+  One-shot native Zstd encoding now allocates and populates cross-block history
+  only for non-final blocks. A single-block frame cannot have a later block that
+  references its output, and the last block of a multi-block frame likewise
+  never needs to enter the rolling index. A fixed-buffer test proves a 4 KiB
+  single-block literal-only frame no longer requires the roughly 1 MiB history
+  index, while existing multi-block Huffman/history coverage preserves cross-
+  block behavior. Twenty alternating ReleaseFast CPU-8 A/B pairs retain the
+  80/640/8607-byte level-9 text/JSON/binary frames and improve their median times
+  by about 80.0%/5.8%/3.4%, respectively. The 9-row encode gate, 90-row stage
+  gate, 328-case CLI compatibility probe, and 237-case frame probe all pass.
+  Native Zstd automatic block selection now materializes the entropy/match frame
+  before its raw/RLE competitor. When the input has no qualifying RLE run, the
+  existing encoded-frame bound is the exact raw-frame size; a strictly smaller
+  entropy result can therefore win without copying the complete input and
+  computing its checksum a second time. Equal-size cases still materialize and
+  select raw, preserving the established tie rule and byte output. Tests cover
+  both the incompressible raw winner and the structured compressed winner.
+  Sixteen alternating ReleaseFast CPU-8 A/B pairs retain the 80/640/8607-byte
+  level-9 text/JSON/binary frames while improving median encode time by about
+  8.5%/2.2%/1.3%, respectively; the 9-row encode gate, 90-row stage gate,
+  328-case CLI probe, and 237-case frame probe all pass.
+  The delayed raw/RLE comparison now uses an exact zero-copy shape pass for all
+  supported inputs, including short whole-block RLE and runs split out of raw
+  blocks. If entropy loses or ties, an all-raw result is emitted directly
+  without repeating RLE discovery; mixed raw/RLE winners retain the existing
+  writer. Sixteen fixed-CPU-8 A/B pairs against the initial delayed-materialize
+  implementation preserve the 80/640/8607-byte level-9 frames and improve text,
+  JSON, and binary medians by about 1.7%, 2.0%, and 1.1%. Focused tests pin the
+  exact raw and short-RLE sizes, and all Zstd encode/stage/compatibility gates
+  continue to pass.
+  Zstd duplicate arbitration now builds the reusable predecessor index for
+  1--4 KiB blocks as well as larger blocks. Small-block queries retain exact
+  behavior by walking the complete predecessor chain in oldest-first order;
+  mixed, multi-duplicate, and single-duplicate candidates share that one build
+  instead of rebuilding an open-addressed exact table for every suffix. The
+  level-3 JSON stage profile drops 2/4 KiB multi-duplicate work from about
+  5.78/13.50 ms to 2.29/2.13 ms. Sixteen alternating ReleaseFast CPU-8 A/B
+  pairs retain the 80/640/8607-byte frames and improve level-3 JSON/binary
+  medians by about 41.1%/8.6%; level-9 remains effectively neutral. The exact
+  small matcher, reusable-index oracle, 9-row encode gate, 90-row stage gate,
+  328-case CLI probe, and 237-case frame probe all pass.
+  Level-3 adaptive blocks now omit the legacy multi-duplicate candidate at and
+  below 4 KiB. The greedy, lazy, optimal, repeat-beam, repeated-pattern, and
+  single-duplicate families still participate; the removed path repeatedly
+  rebuilt an exact hash table for each suffix and did not win any final frame in
+  a 512-case deterministic mix of structured, periodic, copied, and noisy 32 KiB
+  inputs. Baseline and candidate runs produced the same aggregate frame hash.
+  Twenty fixed-CPU-8 A/B pairs retain the 80/640/8607-byte benchmark frames and
+  improve level-3 JSON from about 81.69 ms to 37.82 ms for two encodes (2.16x),
+  and binary from about 62.23 ms to 51.63 ms (1.21x); level 1 is unaffected and
+  level 9 remains within roughly 1.5% noise. All encode, stage, CLI-compatibility,
+  and native-frame gates continue to pass.
+  Levels 2--5 now use the existing deferred-smallest adaptive policy above
+  24 KiB, with a conservative 256-byte screen margin: the smaller split still
+  runs whenever the larger split is within that margin of the current best. A
+  1,024-case, 16-shape level-3 audit found 23 smaller-split winners; one required
+  the new margin because the 4 KiB screen trailed primary by 129 bytes, and none
+  fell outside 256 bytes. A separate 512-case end-to-end audit remains byte-
+  identical. Twenty-four alternating ReleaseFast CPU-8 pairs retain the locked
+  80/640/8607-byte frames and reduce two-encode level-3 JSON time from about
+  38.56 ms to 20.50 ms (46.8%) and binary from about 53.93 ms to 26.07 ms
+  (51.7%); levels 1 and 9 retain their prior screening and remain effectively
+  neutral on the long-running controls.
+  Repaired the legacy bounded duplicate-matcher reference oracle so it records
+  the selected candidate's computed payload length, matching the production
+  matcher and the newer exact/indexed references. The stronger full-struct
+  equality test had exposed the stale zero-valued field; a focused assertion
+  now independently recomputes and pins the returned score before this oracle
+  is used to validate future matcher performance changes.
+  The bounded duplicate index now retains four recent predecessors per hash
+  instead of eight, halving both its predecessor and lazy match-length tables.
+  The repaired sentinel oracle, exact/indexed comparisons, a 512-case frame
+  hash audit, and a separate 1,024-case split-policy audit all preserve their
+  prior results. Twenty-four alternating ReleaseFast CPU-8 pairs retain the
+  80/640/8607-byte benchmark frames while improving JSON levels 1/3/9 by about
+  2.6%/2.0%/4.1% and binary levels 1/3/9 by about 1.7%/3.1%/4.6%. Isolated
+  index construction improves roughly 8--12%; duplicate search itself ranges
+  from neutral to a small gain once the shared setup cost is excluded.
+  After the <=4 KiB multi-duplicate candidate was removed, those blocks no
+  longer had a second production consumer for the shared predecessor index.
+  They now use the standalone full-key exact matcher for the remaining single-
+  duplicate candidate, avoiding a roughly 0.7--1.1 ms index build per complete
+  32 KiB benchmark input. The exact/indexed oracle and 512-/1,024-case frame
+  audits preserve their hashes. Twenty-four alternating ReleaseFast CPU-8 pairs
+  retain the 80/640/8607-byte frames while improving level-3 JSON by about
+  9.9% and binary by about 3.9%; level 1 and level 9 remain within roughly 1.5%
+  noise.
+  Brotli compressed decoding now retains up to 128 literal context trees per
+  meta-block, up from 32, and reports the observed maximum in stream summaries.
+  The header parser writes block-switch state, context maps, and prefix trees
+  directly into the caller-provided header object; this removes the large
+  temporary aggregates and final copy that otherwise made the wider bound
+  expensive. A deterministic 1 MiB dictionary-derived corpus makes libbrotli
+  quality 5 emit 65 literal context trees and now passes allocator-backed
+  summary, one-shot decode, and byte-progressive decode. The upstream
+  differential matrix grows from 94 to 95 cases. Sixteen alternating
+  ReleaseFast CPU-8 pairs on the existing 12-case reference benchmark show the
+  direct-header implementation improving compressed caller-owned decode by
+  roughly 49--66% and summary by about 37--48%, while the random/stored control
+  remains effectively neutral.
+  Brotli's remaining clustered-tree ceiling is now removed for literal trees:
+  the decoder retains the complete 256-entry wire range, while distance block
+  types and distance context trees move from 32 to a bounded 64-entry tier. The
+  general copy decoder also raises its bounded compressed-header prefix from
+  4 KiB to 16 KiB. A second deterministic 1 MiB corpus forces libbrotli quality
+  5 to emit 169 literal trees, and quality 8 coverage crosses the old distance
+  limits; allocator summaries now report observed literal/distance maxima so
+  the 99-case upstream differential proves those shapes rather than merely
+  decoding them. An optional local-upstream source row additionally reaches
+  247 literal trees and 43 distance types/trees when that checkout is present.
+  Direct-to-header parsing keeps ordinary 12-case decode medians
+  mostly within about 2% of the prior build (with structured quality 4 about 4%
+  faster); summary medians trade roughly 1--2% on most compressed rows for the
+  broader bounded state.
+  ReleaseFast profiling of the planned Brotli encoder found dense scratch
+  clearing responsible for about 15.7% of balanced source samples, ahead of
+  compressed-header construction at about 7.8%. Literal-context histograms are
+  now initialized only when the selected wire candidate actually emits two
+  context trees; fast, balanced, and ordinary ratio candidates no longer clear
+  the unused 2 KiB array. Ten alternating fixed-CPU-8 A/B pairs preserve every
+  fast/balanced/ratio stream size and improve JSON by roughly 3.6%/3.0%/2.9%,
+  source by 3.5%/5.2%/3.6%, and log by 3.2%/3.6%/3.1%, respectively.
+  Brotli complex-prefix construction now tries the existing linear small-
+  alphabet Huffman builder for its at-most-18-symbol code-length alphabet,
+  falling back to five-bit package merge only when the unbounded tree is too
+  deep. A 1,024-shape deterministic oracle proves the same optimal weighted
+  cost, a legal complete tree, and no larger code-length declaration. Ten
+  alternating ReleaseFast CPU-8 A/B pairs preserve benchmark stream sizes and
+  improve fast JSON/source/log by about 3.2%/2.5%/2.8%; balanced improves by
+  0.6%/1.4%/1.4%, and ratio by 0.7%/0.5%/1.9%.
+  Planned Brotli distance scratch now follows the encoder's fixed NPOSTFIX=0,
+  NDIRECT=15 header: frequency, alphabet, length, and canonical-code arrays use
+  79 entries instead of the decoder's RFC-wide 520-symbol maximum. A boundary
+  test proves the highest 24-bit meta-block distance still maps inside that
+  alphabet and round trips through the distance formula. Ten alternating
+  ReleaseFast CPU-8 pairs preserve all benchmark stream sizes; median paired
+  speedups are about 13.1%/8.7%/10.9% for fast JSON/source/log, 2.2%/7.2%/6.6%
+  for balanced, and 0.9%/1.4%/6.0% for ratio.
+  Planner prefix alphabets now use undefined backing arrays because
+  `alphabetFromFrequenciesInto` always initializes `len` and every symbol below
+  it; unused tail entries are never observable. A focused test starts from
+  undefined storage and pins the complete active ordering. Ten alternating
+  ReleaseFast CPU-8 pairs preserve every fast/balanced/ratio benchmark size and
+  improve paired medians by about 3.6%/2.5%/2.8% for JSON, 1.7%/1.0%/0.5% for
+  source, and 3.7%/2.7%/2.9% for log, respectively.
+  Command-frequency collection now tracks its small active symbol set while
+  commands are scanned, initializing only touched counters and sorting those
+  symbols directly instead of clearing and rescanning all 704 command codes. A
+  dense-reference oracle pins identical frequencies and deterministic alphabet
+  ordering from undefined scratch. Ten alternating ReleaseFast CPU-8 pairs
+  preserve every benchmark stream size and improve paired fast/balanced/ratio
+  medians by about 11.5%/4.8%/4.4% for JSON, 7.5%/8.6%/5.9% for source, and
+  9.9%/6.1%/7.3% for log.
+  The all-FSE/Huffman Zstd sequence decoder now keeps its full-width literal
+  lookup directly inside each literal-run loop, falling back to the existing
+  cold canonical decoder only at stream tails or invalid lookup prefixes. This
+  removes a helper boundary and repeated width dispatch from the dominant
+  libzstd-produced large-frame path without weakening four-stream validation.
+  Ten alternating ReleaseFast CPU-8 pairs preserve decoded checksums while
+  improving both 512 KiB `large_json` and `binary_mixed` caller-buffer decode
+  by about 2.0%.
+  The two high-volume sequence decode specializations now read their bounded
+  offset, match-length, and literal-length fields from one 64-bit reservoir
+  whenever eight source bytes remain, falling back to the exact-width reverse
+  reader at the physical stream boundary. An exhaustive alignment/width oracle
+  covers both paths. Twelve alternating ReleaseFast CPU-8 pairs at 200 decodes
+  per sample preserve checksums and improve the 512 KiB `large_json` all-FSE/
+  Huffman path by a paired median 10.8%, while the `binary_mixed` FSE/FSE/RLE
+  path improves 2.3%; both candidates won all twelve pairs.
+  Repeat-offset selection now inlines its bounded three-entry queue update into
+  sequence decoding. The optimized profile had attributed about 2.4% of large-
+  JSON cycles to the remaining call boundary, while the raw-literal mixed-
+  binary path uses repeat selectors more heavily. Ten alternating fixed-CPU-8
+  pairs at 500 decodes per sample improve `binary_mixed` by a paired median
+  7.8% (10/10 wins) and keep `large_json` modestly positive at 0.7% (7/10).
+  An independent eight-pair sweep over all 13 reference rows retains matching
+  checksums, measures `binary_mixed` at 7.9%, and finds no material regression
+  elsewhere (the lowest median is -0.4%, within run noise).
+  Added `run-zstd-decode-profile` plus a five-row CSV gate for pure caller-owned
+  Vort decode; the profile is a separate executable so adding instrumentation
+  cannot perturb the existing reference benchmark binary. It isolates
+  `numbered_json`, raw-literal/all-FSE `huffman80k`, sequence-free Huffman
+  `ascii64k`, multi-block `large_json`, and `binary_mixed` without timing
+  libzstd, allocator wrappers, or inspection
+  passes. Its gate pins block and compressed-block counts for both large rows,
+  preventing a libzstd or corpus change from silently replacing the intended
+  multi-block workloads. Fixed-CPU perf now attributes `huffman80k`
+  primarily to generic sequence decoding, `large_json` to the all-FSE/Huffman
+  loop and copy work, and `binary_mixed` to generic sequence/copy work. Several
+  measured candidates were rejected: an all-FSE/raw loop improved its target by
+  about 27% but regressed `binary_mixed`; fused state/extra-field reads and a
+  cached reverse reader were neutral or negative across the full matrix.
+  Added a separate `run-lz4-decode-profile` executable and four-row gate for
+  caller-owned block decode. It pins three match-heavy shapes plus the exact
+  256 KiB single-literal incompressible shape, keeping profiler instrumentation
+  out of the liblz4 reference binary. The first pure profile attributes almost
+  all Vort cost on that raw row to the existing explicit vector copy. A direct
+  compiler-rt `memcpy` replacement regressed it by roughly 8--11%; x86
+  `rep movsb` improves the 256 KiB target while losing on 1 KiB literals, so
+  the production helper selects it only from 192 KiB on x86_64 and keeps the
+  existing explicit-vector path below that threshold. Thirty-two alternating
+  ReleaseFast CPU-8 profile pairs measure the isolated raw row at about `1.28x`
+  paired median (30/32 wins); all three match-heavy profile rows stay within
+  about 0.4% of baseline. A direct compiler-rt `memcpy` replacement and lower
+  `rep movsb` thresholds were rejected because they regressed ordinary rows.
+  A post-commit eight-run CPU-8 comparison at 20,000 decodes per run measures
+  the locked 256 KiB raw row at a `1.0474x` paired median versus liblz4 1.9.4,
+  with Vort winning all eight runs (median about 50,728 versus 48,422 MiB/s).
+  A 30,000-decode `perf` capture attributes 98.26% of the isolated decoder's
+  samples to `copyBulk`, confirming that the remaining cost is the unavoidable
+  payload copy rather than token parsing. This establishes a narrow lead for
+  this exact caller-owned single-literal shape, not a general LZ4 superiority
+  claim.
+  Sequence-interleaved Huffman literal runs now use the same unchecked bulk
+  prefix peek/consume primitives as whole-section decoding after proving that a
+  full-width prefix remains. Stream tails retain the checked canonical fallback.
+  Ten alternating fixed-CPU-8 pairs at 500 decodes improve `large_json` by a
+  paired median 1.8%; an independent eight-pair 13-row sweep measures 2.1%
+  (8/8 wins), keeps the FSE-heavy `huffman80k` row slightly positive, and finds
+  no material regression while preserving every decoded checksum.
+  Large four-stream, sequence-free literal sections now reuse one reverse-bit
+  reservoir load for two consecutive Huffman lookups whenever both full-width
+  prefixes remain. A width-1...11/alignment oracle pins the paired peek against
+  checked reads, while stream tails keep the canonical fallback. Eight
+  alternating fixed-CPU-8 runs improve the 64 KiB high-entropy ASCII row by a
+  paired median 16.2% (8/8 wins); `huffman80k`, `large_json`, and `binary_mixed`
+  stay within about 0.4% at the median with matching checksums.
+  Sequence-driven Huffman literal helpers now borrow their parsed section
+  instead of copying the structure (including its roughly 1 KiB canonical
+  tree) for each literal run. Sixteen alternating fixed-CPU-8 pairs improve
+  `large_json` by a paired median 5.2% (15/16 wins); longer confirmation keeps
+  `huffman80k` and `binary_mixed` effectively neutral at roughly +0.1% and
+  -0.4%, respectively, with matching checksums.
+  The two large compressed-FSE sequence loops now index their validated decode
+  tables without repeating three state-range branches per sequence. Initial
+  states are bounded by the table logs and every transition is produced by the
+  validated FSE entry; generic paths retain checked lookup for hostile states.
+  Twelve alternating fixed-CPU-8 pairs at 500 decodes improve `large_json` by
+  a paired median 0.9% (10/12 wins), with `binary_mixed` neutral and
+  `huffman80k` slightly positive. An independent eight-pair 13-row sweep
+  measures `large_json` at 1.7% (8/8) with matching checksums and no material
+  control-row regression.
+  Single-tree literal-frequency collection now uses a 256-bit first-seen map,
+  initializing only active byte counters while retaining O(1) updates. The
+  ratio-only two-context candidate keeps dense histograms because both trees
+  are populated together. A sparse-vs-dense oracle pins frequencies and final
+  ordering. Ten alternating ReleaseFast CPU-8 pairs preserve every benchmark
+  stream size and improve paired fast/balanced/ratio medians by about
+  4.5%/4.1%/2.7% for JSON, 2.4%/4.2%/2.4% for source, and 3.2%/1.8%/2.4% for
+  log.
+  `PlannedStreamEncoder` now retains token and command capacity for balanced
+  small-block encoding instead of delegating every call to the allocating
+  one-shot lazy planner. The reusable entry preserves the production scan/hash
+  selection and the balanced short-match wire arbitration; caller-buffer
+  encoding shares the same retained path. Cross-input parser and encoder tests
+  pin token statistics, exact wire bytes, and stable retained capacity. Ten
+  alternating ReleaseFast CPU-8 pairs improve reusable balanced JSON/source/log
+  encoding by about 14.9%/13.1%/7.0%, respectively, with identical sizes.
+  The reusable Brotli encoder now exposes `encodeScratchWithOptions`, extending
+  borrowed encoder-owned output from fast mode to balanced and ratio modes.
+  Small balanced blocks reuse parser, command, and output capacity; plans that
+  need exact short-match alternatives and one-shot ratio/large inputs copy only
+  the selected final stream into retained output. Level-wide wire/capacity tests
+  pin the borrowed-slice lifecycle. Ten alternating ReleaseFast CPU-8 pairs
+  improve balanced JSON/source/log over allocator-returning reuse by about
+  1.6%/1.7%/0.9%, respectively, with identical output sizes.
+  The Brotli bit writer now appends a new zero byte directly whenever its
+  output capacity is already available, retaining explicit bounded-output
+  failure and allocator growth only at true capacity boundaries. A bounded
+  two-byte test pins both the byte order and overflow contract. Sixteen
+  alternating fixed-CPU-8 stage pairs improve full planned JSON/source/log
+  encoding by about 0.5%/1.8%/1.7%, respectively, with every pair positive and
+  the seven-row libbrotli encode gate green.
+  Planner payload Huffman codes now use a dedicated non-empty, at-most-15-bit
+  writer that expands the bounded one-to-three-byte operation directly instead
+  of entering the general arbitrary-width loop. Headers and command/distance
+  extra bits retain the general writer, while a start-alignment, width, and
+  representative-value oracle pins identical bytes and final bit positions; bounded
+  overflow remains explicit. Sixteen alternating ReleaseFast CPU-8 stage pairs
+  at 20,000 encodes preserve output checksums and improve full planned JSON,
+  source, and log medians by about 2.2%, 1.3%, and 2.0%, respectively
+  (14/16, 16/16, and 15/16 wins). The seven-row libbrotli encode gate and
+  99-case upstream differential remain green.
+  The at-most-64-symbol Huffman builder now stores weights, parent indexes, and
+  depths in compact parallel arrays instead of a padded node struct, relying on
+  the proven creation-order serial invariant for stable equal-weight choices.
+  A 1,024-case oracle retains exact lengths against the heap reference. A first
+  sixteen-pair ReleaseFast CPU-8 stage run at 20,000 encodes improved full
+  planned JSON/source/log medians by about 1.8%/2.9%/1.0% (15/16, 16/16, and
+  14/16 wins). A further eight pairs after removing unnecessary parent/depth
+  initialization confirmed about 2.5%/3.0%/2.1% medians, with matching output
+  checksums, a green seven-row libbrotli encode gate, and the 99-case upstream
+  differential still green.
+  Complex-prefix RLE generation now accumulates its 18-symbol code-length
+  histogram as tokens are emitted instead of scanning the completed token
+  array again. A 512-pattern oracle pins both exact tokens and all frequencies
+  against the independent scan. Sixteen alternating ReleaseFast CPU-8 stage
+  pairs at 20,000 encodes improve full planned JSON/source/log medians by about
+  0.6%/1.2%/0.3% (16/16, 16/16, and 10/16 wins), with matching checksums; the
+  seven-row libbrotli encode gate and 99-case upstream differential remain
+  green.
+  Complex-prefix code-length tokens now use the same validated narrow Huffman
+  writer as command/literal/distance payload symbols. Their code widths are at
+  most five bits, while repeat extras and tree declarations remain on the
+  general writer. Sixteen alternating ReleaseFast CPU-8 stage pairs at 20,000
+  encodes preserve checksums and improve full planned JSON/source/log medians
+  by about 3.5%/3.7%/3.5%, with all 16 pairs positive for every corpus. The
+  seven-row libbrotli encode gate and 99-case upstream differential remain
+  green.
+  The complex-prefix production RLE path now writes directly into its proven
+  stop-index-sized token buffer while collecting frequencies, instead of
+  repeating an `ArrayList.appendBounded` capacity branch for every token. The
+  independent bounded encoder remains the oracle and public internal safety
+  path. Sixteen alternating ReleaseFast CPU-8 stage pairs at 20,000 encodes
+  preserve checksums and improve full planned JSON/source/log medians by about
+  3.1%/3.5%/3.6% (14/16 wins for each); the seven-row libbrotli encode gate and
+  99-case upstream differential remain green.
+  The shared one-shot tiny hash parser now sizes its lazy-head initialization
+  bitmap to the actual 4K bucket table instead of zeroing the generic 32K-table
+  bitmap. Reusable scratch uses the same exact 64-word shape, reducing the
+  per-plan clear from 4096 bytes to 512 bytes without changing head or
+  predecessor indexing. Sixteen alternating ReleaseFast CPU-8 stage pairs at
+  20,000 encodes preserve checksums and improve isolated parser medians by
+  about 1.71x/1.55x/1.59x for JSON/source/log; full planned encoding improves
+  about 14.8%/7.1%/11.8% (16/16, 15/16, and 15/16 wins). Tiny-parser token/stat
+  oracles, the DEFLATE incremental gate, the 90-row native Zstd stage gate, the
+  nine-row libzstd encode gate, the seven-row libbrotli encode gate, and the
+  99-case Brotli differential remain green.
+  The shared hash parser's accept-all preflight now proves its fixed-cost
+  condition from the shortest permitted match instead of scanning every length
+  through 258. The literal-minus-length-code margin is monotonic between the
+  fixed-code boundaries and only improves at length 258; an exhaustive matrix
+  across windows, normalized min/max lengths, and savings thresholds matches
+  the former loop exactly. Sixteen alternating ReleaseFast CPU-8 stage pairs at
+  20,000 encodes improve isolated Brotli parser medians by about
+  1.78x/1.55x/1.57x for JSON/source/log and full planned encoding by about
+  10.9%/6.7%/8.3% (16/16, 16/16, and 15/16 wins). The DEFLATE incremental,
+  90-row native Zstd stage, nine-row libzstd encode, seven-row libbrotli encode,
+  and 99-case Brotli differential gates remain green.
+  Planner wire encoding now caches the command symbol resolved during its
+  mandatory frequency pass for plans of at most 128 commands, avoiding a second
+  pair of insert/copy length classifications and command-table lookup during
+  payload emission. Larger plans keep the previous recomputation path instead
+  of growing stack use with input size; a 128/129-command boundary test covers
+  both paths. Sixteen alternating ReleaseFast CPU-8 stage pairs at 20,000
+  encodes preserve checksums and improve full planned JSON/source/log medians
+  by about 3.8%/5.7%/2.6%, with every pair positive. The bounded-output tests,
+  seven-row libbrotli encode gate, and 99-case upstream differential remain
+  green.
+  Code-length RLE now scans zero gaps eight bytes at a time before its scalar
+  tail, preserving the exact token stream while avoiding one branch per zero
+  in sparse literal/command alphabets. A boundary oracle checks every start/end
+  pair around aligned and unaligned non-zero lengths. Sixteen alternating
+  ReleaseFast CPU-8 stage pairs at 20,000 encodes preserve checksums and improve
+  full planned JSON/source/log medians by about 1.15%/1.05%/1.14% (16/16,
+  15/16, and 16/16 wins); the seven-row libbrotli encode gate and 99-case
+  upstream differential remain green.
+  The small Huffman builder now writes only the active prefix of the caller's
+  length buffer instead of clearing all 64 slots first. Every caller consumes
+  exactly that prefix before scattering into its already-zero dense table; a
+  poison-tail test pins the narrower write contract alongside the existing
+  exact heap-reference oracle. Sixteen alternating ReleaseFast CPU-8 stage
+  pairs at 20,000 encodes keep JSON neutral-positive and improve source/log by
+  about 0.7%/0.66% (10/16, 16/16, and 16/16 wins). Brotli encode/differential,
+  DEFLATE incremental, and Zstd native/reference encode gates remain green.
+  Brotli complex-prefix decoding now records the ascending active-symbol list
+  during its mandatory validation pass and hands it to a trusted sparse
+  canonical decoder builder. This avoids rescanning all 256/520/704 code-length
+  slots while preserving the same grouped decode entries and validation. A
+  focused dense-versus-sparse table oracle pins every active entry and bit-width
+  index. Sixteen alternating ReleaseFast CPU-8 pairs preserve checksums across
+  the 12-case libbrotli matrix: compressed rows improve by about 0.8--10.0%,
+  while tiny and random/stored controls remain within 0.2% noise.
+  Brotli simple-prefix decoding now builds its two-to-four canonical entries
+  directly from the wire symbol/length pairs, rather than clearing and scanning
+  a 256-, 520-, or 704-slot temporary length array. Focused tests compare both
+  legal four-symbol tree shapes with the dense constructor and retain malformed
+  list rejection. Sixteen alternating ReleaseFast CPU-8 pairs against the
+  preceding sparse-complex change improve all compressed rows: roughly
+  1.0--2.8% at quality 0, 5.5--6.7% at quality 3, 11.1% for structured quality
+  4, and 7.2--14.0% at quality 11. Tiny and random/stored controls remain
+  within about 0.5% noise, with matching checksums.
+  Complex-prefix code-length symbols now decode through a complete five-bit
+  lookup table instead of reading one bit and scanning the 18-symbol table at
+  every code width. Single-symbol code-length trees retain their zero-bit fast
+  path, and malformed/truncated streams keep the checked table fallback rules.
+  Sixteen alternating ReleaseFast CPU-8 pairs against the preceding commit
+  preserve all checksums and improve every compressed row: about 15.2--18.5%
+  at quality 0, 6.5--9.0% at quality 3, 6.7% for structured quality 4, and
+  5.6--14.8% at quality 11. Tiny remains within 0.3% noise.
+  Added `run-br-compressed-header-profile` and its CSV gate to isolate Brotli
+  compressed-header parsing from payload decode. The q0/q3/q4/q11 cases report
+  block-switch setup, context maps, and literal/command/distance tree stages; a
+  deterministic 1 MiB clustered q8 case holds 52 literal trees, three command
+  trees, and 17 distance trees so high-tree-count costs remain visible. Nested
+  counters further split prefix construction into code-length-header parsing,
+  RLE expansion, canonical table construction, and simple trees. Initial
+  ReleaseFast CPU-8 evidence attributes about 60% of the clustered header to
+  literal trees; within all tree construction, code-length RLE is the largest
+  measured substage and canonical construction is second. A no-memset tail
+  experiment and a bulk repeat-fill experiment were both rejected after the
+  12-case libbrotli decode matrix showed mixed or negative results, so this
+  commit intentionally adds measurement infrastructure without changing the
+  production prefix-code algorithm.
+  The compressed-header profile now attributes those prefix-code substages to
+  literal, command, and distance tree families independently, including active
+  entries and code-length/repeat work. The clustered q8 fixture currently
+  reports 43/3/17 complex literal/command/distance trees with 1767/415/653
+  active entries and 528/96/80 repeat symbols, respectively. This confirms that
+  literal-tree RLE is the dominant high-tree workload while ordinary q3/q4/q11
+  command and distance trees are mostly simple. Several measured candidates
+  were rejected rather than broadening production code: whole-header and
+  literal-only buffered readers regressed the 12-case decode matrix by roughly
+  2--6% despite improving the isolated clustered header; context-map preamble
+  fusion, zero-repeat write elision, compact active-length construction, small
+  MTF specialization, and repeat-extra-bit fusion were also neutral or mixed.
+  The libbrotli reference decode gate now includes the same deterministic
+  `clustered_q8` payload with a reduced iteration count and validates its
+  observed 52 literal trees, three command block types, and 17 distance trees.
+  This closes a benchmark blind spot: the previous 12 rows exercised at most a
+  few trees, so changes aimed at clustered headers could pass or fail only from
+  code-layout effects. The first ReleaseFast CPU-8 result is deliberately
+  recorded as a gap rather than a claim: Vort is about 219 MiB/s versus
+  libbrotli's 1961 MiB/s (`0.112x`) on this 1 MiB high-tree-count decode.
+  Profiling that new end-to-end row corrected the earlier header-only
+  hypothesis: roughly 60% of cycles were in `minimalStaticDictionaryWord`,
+  which linearly scanned the historical compatibility-coverage list before
+  calling the already-complete RFC dictionary transformer. Removing that
+  redundant scan keeps the public coverage metadata intact and has an
+  exhaustive test showing every retained tuple produces the same transformed
+  bytes through the complete implementation. Sixteen alternating ReleaseFast
+  CPU-8 pairs improve `clustered_q8` decode by about `2.66x`; structured q4 and
+  q11 improve about `1.72x` and `1.74x`, while the remaining compressed rows
+  improve roughly 2--4% or remain effectively neutral.
+  The reference CSV now records `static_dictionary_copies` and
+  `static_dictionary_bytes`; the gate requires the clustered row to retain more
+  than 1000 dictionary copies and 4 KiB of transformed output. This prevents a
+  future encoder or corpus change from silently removing the workload that
+  exposed the linear-scan bottleneck while leaving a misleading green timing
+  row. Post-fix profiling moves the dominant cost to compact literal, command,
+  and distance Huffman decode. No-extra-memory canonical-range and in-table
+  lookup prototypes improved clustered decode by about 6--79%, but regressed
+  common q0/q3/q11 rows by up to roughly 37%; both were rejected.
+  Added an explicit, opt-in `HuffmanTable` tail-lookup primitive for the next
+  clustered-decoder design. It stores a packed 8-bit lookup inside otherwise
+  unused canonical-entry capacity, proves the table size is unchanged, refuses
+  dense tables without enough slack, and is bit-for-bit checked against compact
+  decoding. No production codec calls it yet: the first global-dispatch
+  prototype accelerated `clustered_q8` by about `1.79x`, but regressed common
+  text/structured rows substantially, so only the isolated reusable primitive
+  was retained for a future dedicated clustered state machine.
+  Wired that tail lookup into an isolated large-stream decoder selected before
+  entering the existing small-stream function. Only meta-blocks with at least
+  16 literal context trees build the in-table lookups, and only their literal
+  loop uses them; command/distance trees and every ordinary stream retain the
+  existing compact decoder. Sixteen alternating ReleaseFast CPU-8 pairs against
+  `e90d1e7` improve `clustered_q8` by about `1.19x`, while the twelve established
+  rows remain neutral-to-positive at the median. The lookup still falls back to
+  compact decoding for long codes and refuses trees without enough unused entry
+  capacity, preserving the 290 KiB header footprint.
+  Literal lookup preparation now preflights the whole tree group before writing
+  any in-table lookup bytes. A mixed sparse/dense regression test proves that a
+  later ineligible tree leaves earlier compact trees untouched, so fallback is
+  transactional instead of depending on every future corpus sharing the current
+  all-eligible clustered shape.
+  Header profiling now reports eight-bit tail-lookup eligibility globally and
+  per tree family. All 52 literal, three command, and 17 distance trees in the
+  current clustered q8 fixture have enough unused canonical-entry capacity,
+  proving that the optimization can cover that workload without increasing the
+  header footprint. A follow-up that enabled command/distance lookups in the
+  same large-stream function improved the clustered row by about 21%, but was
+  rejected because unrelated small rows moved backward by roughly 1--4% from
+  code-layout effects; future expansion must live in a more isolated module.
+  `run-br-reference-bench` now accepts `--vort-only`, skipping dictionary
+  differentials, libbrotli timing, summary, and allocation variants so `perf`
+  profiles contain only caller-owned Vort decode. The first post-lookup
+  clustered profile attributes about 24% to command Huffman decode, 31% to
+  distance decode/extra bits, 10% to literal decode, and 7% to UTF-8 context
+  selection, providing a clean next-hotspot baseline.
+  High-tree literal decoding now uses two compile-time 256-byte tables for the
+  RFC UTF-8 previous-byte classes while ordinary Brotli paths retain the
+  branch classifier. An exhaustive four-mode, 256x256 byte-pair oracle proves
+  the specialized context values are identical. Sixteen alternating
+  ReleaseFast CPU-8 pairs against `8333cd5` improve `clustered_q8` by about 7.0%
+  at the median; the established small-stream rows remain within about 1.2%
+  noise except structured q4, which improves about 2.6%.
+  Brotli regular-distance reconstruction now uses validated `u32` arithmetic
+  after checking the symbol and extra-bit width. RFC bounds keep the complete
+  expression below 2^30, so the former chain of four generic `usize` overflow
+  checks was redundant. A maximum NPOSTFIX/NDIRECT/symbol/extra test pins that
+  bound and rejects an out-of-range extra value. Twenty-four alternating
+  ReleaseFast CPU-8 pairs improve `clustered_q8` by about 0.9% at the median;
+  the other twelve rows remain within roughly 1.2% noise.
+  Regular-distance parsing now also passes its already-computed `xcode` and
+  extra-bit width directly into the arithmetic helper instead of deriving both
+  a second time. Sixteen alternating ReleaseFast CPU-8 pairs against `0daaacc`
+  improve `clustered_q8` by about 2.3% at the median; the remaining rows stay
+  within roughly 2.4%, with their small mixed movement treated as noise rather
+  than a broad throughput claim.
+  Added the first standardized Zstd seekable-format reader slice.
+  `inspectNativeSeekTable` locates the terminal skippable frame from EOF,
+  validates its dedicated magic, descriptor reserved bits, payload length,
+  entry width, and cumulative compressed extent, and exposes a zero-allocation
+  iterator with compressed/decompressed offsets, sizes, and optional XXH64-low
+  checksums. Offset lookup and indexed entry access are public. Tests cover
+  checksum/no-checksum tables, boundary lookup, malformed/truncated tables, and
+  byte-for-byte output generated by the local upstream zstd seekable
+  compressor. The writer now serializes checksum/no-checksum seek tables through
+  allocating, append, and caller-buffer APIs, and the one-shot seekable encoder
+  splits input into independent native frames before appending that table. Vort
+  round trips its own output, and the local upstream zstd seekable decoder reads
+  an interior byte range from it exactly. Caller-buffer and allocating range
+  APIs now decode only intersecting independent frames, preflight exact scratch
+  requirements, and verify optional per-entry XXH64-low checksums. Cross-frame,
+  zero-length, short-scratch, out-of-range, and corrupt-checksum tests cover the
+  new path. Dictionary-set range variants resolve each independently encoded
+  frame by its own Dictionary_ID; a two-dictionary cross-frame test also pins
+  the missing-dictionary error path. Seekable encoding now also applies one
+  preset dictionary to every independent frame, with direct and dictionary-set
+  selection APIs; tests pin per-frame Dictionary_ID metadata and range round
+  trips. Repeated range reads can now build a caller-owned cumulative
+  `NativeSeekIndex` once: entry access is O(1), decompressed-offset lookup is
+  O(log n), and indexed decode avoids reparsing the terminal table or scanning
+  from frame zero. The direct/caller-buffer and allocating paths both support
+  dictionary sets and checksum verification; tests cover undersized index
+  storage, empty frames, cross-frame reads, index reuse, and corrupt checksums.
+  Indexed decode now also fuses range validation, first-frame lookup, and
+  scratch sizing so one request performs only one binary search; the allocating
+  wrapper reuses that prepared range instead of repeating preflight. A focused
+  16-pair ReleaseFast CPU-8 microbenchmark over 16,384 one-byte frames and
+  65,536 random indexed reads measured a 1.24x median speedup, with 10/16
+  paired wins; the intentionally tiny payload makes this an index-overhead
+  result rather than a general decompression-throughput claim.
+  Level-9 match arbitration now stages low-alphabet primary blocks serially:
+  it runs the bounded non-mixed families first and entirely avoids recursive
+  mixed search when the existing 24x dominance proof succeeds. Four distributed
+  256-byte windows and a 40-symbol limit keep wide binary blocks on the parallel
+  path and avoid serializing their expensive searches; adaptive 4/8 KiB blocks
+  also retain the existing parallel behavior. Two fixed-CPU-8 samples totaling
+  40 alternating pairs preserve the locked 80/640/8607-byte level-9 frames and
+  improve JSON median encode time by about 1.6--2.4% (12/16 and 14/16 wins);
+  binary remains within 1% noise. Text is sub-millisecond and noisy, ranging
+  from +0.5% to -4.8%, so no text throughput claim is made. Narrow/wide
+  classifier tests, a 200-case generated 16--64 KiB corpus with matching
+  aggregate frame hashes, and serial-wire comparisons cover both scheduling
+  branches.
+  Level 1 now also returns an already-computed primary frame immediately for
+  wide-alphabet, single-block input instead of launching its 1/2 KiB adaptive
+  split ladder. A 144-case audit spanning 9--128 KiB, 41--256 symbols, and
+  plain plus copied-tail shapes found zero adaptive winners and identical
+  aggregate frame hashes. Twenty alternating ReleaseFast CPU-8 pairs preserve
+  the locked 80/640/8607-byte level-1 frames and improve the binary median by
+  5.28x with 20/20 wins; text and JSON remain within about 0.6% noise. The
+  low-alphabet JSON path continues to evaluate adaptive candidates because it
+  has a known split winner.
+  Level-1 primary block arbitration now also reuses that early single-duplicate
+  query when its repeat beam is decisive. Previously the decisive branch ran
+  the same full-block indexed match search a second time to fill a local value
+  that the later `early_single` branch could never consume. A focused policy
+  test pins when the query is required, and the existing single-candidate wire
+  oracle protects the reused result. Twenty-four alternating ReleaseFast CPU-8
+  pairs preserve the 80/640/8607-byte level-1 frames while improving JSON by
+  about 14.9% (23/24 wins), binary by about 11.8% (22/24 wins), and text by
+  about 1.3% (17/24 wins). A speculative double-fast replacement was rejected:
+  it was much quicker, but a 144-case size audit found up to 33.3% expansion
+  versus the exact existing winner.
+  Added caller-owned `LevelFrameEncoder` scratch/alloc/into/append APIs for
+  repeated one-shot-style encoding. They preserve the public compression-level
+  and adaptive-selection policy, but reuse the primary native encoder and return
+  its borrowed result directly whenever no split arbitration is needed. Tests
+  compare levels 0/1/9 and checksum/content-size options byte-for-byte with the
+  one-shot facade, cover caller buffers and prefixed append output, verify
+  retained repeat-beam capacity, recover after an invalid level, and round trip
+  every result. A fixed-CPU-8 median-of-nine benchmark over sixteen repeated
+  32 KiB level-1 binary encodes measured 1.14x versus the allocating one-shot
+  facade, with identical wire bytes.
+  `PlannedStreamEncoder.encodeWithOptionsAlloc` now builds fast streams up to
+  32 KiB in the encoder-owned output scratch and allocates only the final
+  caller-owned copy. Returned slices remain independent of later calls, and a
+  failed final allocation leaves the reusable encoder ready to recover. Sixteen
+  alternating ReleaseFast CPU-8 pairs at 20,000 encodes preserve output
+  checksums and improve JSON/source/log medians by about 2.7%/2.9%/2.9%
+  (16/16, 15/16, and 16/16 wins). The seven-row planned and 13-row libbrotli
+  reference gates, root Brotli smoke, and 99-case upstream differential remain
+  green.
+  Default-window, metadata-free Brotli stored encoding now writes caller-owned
+  outputs up to 16 KiB directly: the fixed three-byte uncompressed-block header,
+  payload, and final marker bypass the generic bounded bit writer. A generated
+  boundary oracle compares exact bytes against the allocating writer through
+  16,385 bytes, including the optimized cutoff, and nine representative frames
+  decode identically in Node. Twenty alternating ReleaseFast CPU-8 pairs at
+  20,000 calls preserve observed output checksums and improve 0/3/39/512-byte
+  inputs by about 1.73x/2.54x/2.46x/1.73x; 4/8/16 KiB improve about
+  4.7%/3.0%/1.9%. The generic path remains selected above 16 KiB, where the
+  fixed writer overhead is no longer material. Brotli stored/root tests, the
+  seven-row planned encode gate, 13-row libbrotli reference gate, and 99-case
+  upstream differential remain green. Stored-size preflight now also counts
+  the four-bit WBITS encodings for windows 18--24 correctly; caller-buffer
+  tests cover every legal window size and metadata fallback without the former
+  spurious `SizeMismatch`.
+  Brotli stored allocating APIs now use their exact encoded-size preflight to
+  allocate once and then call the caller-buffer core, rather than growing an
+  `ArrayList` and potentially remapping it during `toOwnedSlice`. Contiguous
+  and three-chunk output are checked byte-for-byte against the independent
+  append writer for default, alternate-window, and metadata configurations;
+  first-allocation failure is also covered. Twenty alternating ReleaseFast
+  CPU-8 pairs at 20,000 calls preserve observed output checksums. Contiguous
+  0/39/512-byte inputs improve about 2.05x/2.73x/2.41x, with 4/16 KiB improving
+  about 1.43x/1.16x; the corresponding chunked cases improve about
+  1.76x/1.36x/1.60x/1.33x/1.26x, with at least 19/20 wins in every row. The
+  stored and root Brotli suites, seven-row planned encode gate, 13-row
+  libbrotli reference gate, and 99-case upstream differential remain green.
+  The same direct stored-block writer now covers default-window chunked
+  caller-buffer streams whose combined payload is at most 16 KiB, while
+  preserving one meta-block per non-empty caller chunk and ignoring empty
+  chunks exactly as before. A boundary oracle compares the complete wire with
+  the independent append implementation, including empty interleaves and the
+  16 KiB cutoff; four generated frames also decode byte-for-byte through Node.
+  Twenty alternating ReleaseFast CPU-8 pairs at 20,000 calls improve one-chunk,
+  three-chunk, empty-interleaved, and 32-by-16-byte inputs by about
+  1.68x/1.93x/1.64x/2.36x; a three-chunk 16 KiB stream improves about 8.9%,
+  with 17--20 wins out of 20 and unchanged output checksums.
+  Reusable `StoredStreamEncoder` owned and borrowed outputs now delegate to the
+  exact-size and direct caller-buffer cores instead of rebuilding through the
+  append API. Owned results remain independent, while warmed scratch output is
+  allocation-free for contiguous and chunked input. Twenty alternating
+  ReleaseFast CPU-8 pairs at 20,000 calls preserve all observed checksums and
+  win 20/20 in all sixteen measured rows: 39/512-byte contiguous owned and
+  scratch paths improve about 2.8--3.6x, chunked variants improve about
+  2.1--2.9x, and 16 KiB variants improve about 1.07--1.34x. Brotli stored/root
+  tests and the planned, libbrotli-reference, and 99-case upstream gates remain
+  green.
+  Added production fast-level Brotli chunked encoding as one RFC stream rather
+  than concatenated independent streams. Each non-empty caller chunk is planned
+  independently and chunks above 32 KiB are split, bounding parser memory; each
+  block keeps compressed output only when its exact bit position does not exceed
+  the stored alternative. The reusable encoder exposes borrowed, owned,
+  caller-buffer, and append variants, while top-level bound/alloc/into/append
+  helpers are exported from `root.zig`. Tests cover empty chunks, generated
+  mixed data, compressed/stored/compressed transitions, automatic large-chunk
+  splitting, output bounds, ownership, failure recovery, and one-byte-input /
+  seven-byte-output incremental decoding. Node accepts both the mixed three-
+  block stream (126 bytes for 5,410 decoded bytes) and the automatically split
+  65,568-byte stream (201 bytes). A 16-run fixed-CPU-8 comparison against three
+  separately encoded frames is throughput-neutral (`1.001x`, 9/16 wins) while
+  reducing framing from 127 to 126 bytes; this is an API/streaming capability
+  gain rather than a broad speed claim.
+  The upstream multi-meta-block differential now repeats every libbrotli
+  `tiny-flushes` and metadata stream across an 8x7 input/output chunk matrix
+  (1--255 compressed bytes per call and 1--256 output bytes per call). Across
+  four qualities in each family this adds 448 byte-progressive boundary runs
+  while retaining the existing 99-case format matrix. A bounded cross-meta-
+  block LZ77-history encoder prototype was also measured and rejected: despite
+  shrinking a duplicated 8 KiB fixture from 8,200 to 4,113 bytes, it made the
+  established unrelated mixed-chunk workload about five times slower. No part
+  of that regressing encoder path was retained.
+  The same differential now also feeds seven non-flushed, one-shot libbrotli
+  streams through the 8x7 progressive boundary matrix. The cases span quality
+  0/1/4/5/6/9/11, generic/text/font modes, windows 10/16/18/20/22/24, Unicode,
+  binary, repetitive, and clustered data. Together with the flushed and
+  metadata families, the gate now reports 15 matrix streams and 840 distinct
+  input/output chunk combinations in addition to its 99 primary cases.
+  The byte-progressive copy decoder now computes the ring source once per
+  resumed copy span and advances it with a conditional wrap, instead of
+  performing an integer remainder for every copied byte. A dedicated 64 KiB
+  overlapping-copy benchmark and schema gate keep the hot path observable. In
+  twenty alternating ReleaseFast CPU-8 pairs at 500 decodes, the median moved
+  from 431.5 ms to 325.2 ms (`1.33x`), with 20/20 candidate wins and identical
+  output checksums. A broader dual-cursor design was rejected after regressing
+  the same benchmark by about 2.8%.
+  Expanded the byte-progressive Brotli decoder's distance block-type and
+  context-tree storage from a 64-entry implementation tier to the complete
+  256-entry RFC count range. A repository-owned heterogeneous 15 MiB source
+  corpus makes libbrotli 1.1 quality 8 emit 68 distance types/trees, and the
+  upstream differential now decodes that real stream through 17-byte input and
+  31-byte output chunks. This closes the first incompatibility found by a
+  broader local-source audit while keeping the entropy header bounded and
+  caller-owned history explicit.
+  Ratio-mode Brotli encoding now evaluates bounded dynamic-programming LZ77
+  plans with both three- and four-byte minimum matches for 4--64 KiB inputs.
+  Each proposal is fully encoded and retained only when its exact Brotli wire
+  beats the existing lazy plan, so output size remains monotonic and large
+  inputs retain the prior memory/latency path. On the first 32 KiB of
+  `src/br.zig`, the selected stream falls from 5,699 to 5,534 bytes: smaller
+  than libbrotli quality 5 (5,565 bytes) and within 1.3% of quality 8 (5,467
+  bytes), though encoding is intentionally much slower. The planned-encode
+  gate now retains this real-source ratio row in addition to its tiny synthetic
+  cases. The retained optimal search uses a 256-chain/128-candidate cap and
+  only the profitable four-byte minimum-match proposal; sixteen interleaved
+  ReleaseFast CPU-8 pairs against the earlier 512-chain/two-proposal version
+  preserve source/JSON/log/mixed bytes while improving median ratio-encode
+  time by 1.85--1.96x with 16/16 wins in every row.
+  Ratio-mode entropy arbitration now tests six compact two-tree UTF-8 context
+  suffix maps on the selected optimal command plan. Each map is fully encoded
+  and must beat the current exact wire; the source corpus selects context 48
+  instead of the previous lowercase-only context 56 split, trimming another
+  four bytes (5,534 to 5,530) while remaining within 1.2% of libbrotli quality
+  8. Context-map round-trip tests cover every retained cutoff, and the q8
+  source gate pins the new 5,530-byte ceiling.
+  The same exact-wire search now enumerates NPOSTFIX=0 direct-distance counts
+  `0/3/7/15` rather than hard-coding 15. The source plan selects NDIRECT=0,
+  reducing its stream by another four bytes to 5,526 (1.08% above libbrotli
+  quality 8); every alternative remains guarded by complete final-wire size.
+  Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
+  meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
+  slices through the bounded 32 KiB planner and emits one legal multi-meta-
+  block stream with per-block compressed/stored fallback. A 2^24+17-byte
+  boundary test checks multi-block compression and exact round-trip, and the
+  Node differential independently decodes the same oversized stream.
+  Added `BrotliIncrementalPlannedStreamEncoder`, a caller-to-caller encoder
+  that buffers at most one configurable block, plans each block with the fast
+  LZ77/Huffman path, and falls back to stored wire when compression would
+  expand. It reuses the stored encoder's backpressure, flush, metadata, limit,
+  reset, and continued-stream state machine. Focused tests cover tiny input/
+  output slices, mixed compressed/stored blocks, and metadata between flushed
+  compressed blocks. Its codec-owned token, command, and hash-index storage is
+  retained across blocks and `nextStream` calls; a public retained-capacity
+  metric and repeated-stream test pin that warmed reuse contract.
+  Incremental planned blocks now retain up to the advertised window of decoded
+  source bytes and seed the next block's hash matcher from that history. The
+  history remains codec-owned, bounded, and is cleared by `nextStream`; a
+  duplicated 4 KiB random block falls from 8,199 independent-block bytes to
+  4,113 bytes, while tiny-output Vort and Node decoders reproduce the original
+  8 KiB payload. The incremental planner benchmark now retains this as a
+  separate `cross_block` row, checks the compression delta and decoded wire,
+  and reports the bounded retained state (about 71 KiB on this fixture).
+  Cross-block command construction now has direct malformed-token coverage for
+  distances beyond combined history and matches beyond block output. A WBITS=10
+  incremental regression also verifies that retained history is truncated to
+  the advertised 1,008-byte backward limit instead of leaking a block-sized
+  reference into the wire.
+  The dictionary-seeded cross-block LZ77 path now owns reusable head and
+  predecessor arrays instead of allocating and clearing fresh buffers for every
+  block. Sixteen interleaved ReleaseFast CPU-8 pairs at 200 streams preserve
+  the 4,113-byte cross-block wire and improve median encode time by 1.86x with
+  16/16 wins. The reusable combined-history hash positions now use bounded
+  32-bit indexes rather than machine-width integers: another sixteen-pair
+  CPU-8 run preserves the wire, cuts retained capacity from about 550 KiB to
+  310 KiB, and improves median cross-block encode time by 1.23x with 15/16 wins.
+  Dictionary-seeded hash heads now use a 4 KiB initialized bitmap instead of
+  clearing all 32K buckets on every block. Twenty interleaved CPU-8 pairs retain
+  the same 4,113-byte wire and improve cross-block median time by another 9.3%
+  with 14/20 wins; a repeated-call oracle changes both dictionary and input to
+  prove stale head entries cannot leak between plans.
+  Added a focused incremental planned-encoder benchmark/gate comparing warmed
+  codec-owned state with rebuilding the one-shot fast encoder. On fixed CPU 8
+  at 200 iterations both paths emit 120-byte streams for the 4,992-byte
+  payload, while retained state is about 25 KiB and improves elapsed time by
+  1.35x. The gate requires at least 1.10x and independently decodes both wires.
+  The copy loop now also keeps a local destination cursor while draining each
+  output span, removing the remaining per-byte history-write remainder without
+  changing literal, stored, or dictionary emission. Twenty alternating
+  ReleaseFast CPU-8 pairs at 500 decodes improve the focused 64 KiB overlap
+  median by another 5.6%, with 18/20 wins and identical checksums.
+  Copy-span accounting now stays local until the current caller output slice is
+  full or the copy completes: output/total/pending counts and the two-byte
+  literal context are committed once per span rather than once per byte. Twenty
+  alternating ReleaseFast CPU-8 pairs at 500 decodes improve the same focused
+  benchmark by a further `1.43x` median, with 20/20 wins and identical
+  checksums.
+  Copy spans of at least 16 bytes now seed one distance period from the history
+  ring, expand overlap by doubling in caller output, and commit the finished
+  span back to history in at most two contiguous copies. Smaller spans and
+  spans larger than the caller's history retain the scalar path. Focused tests
+  cover overlap, non-overlap, source wrap, destination wrap, and repeated
+  backpressure. Twenty alternating ReleaseFast CPU-8 pairs at 500 decodes show
+  a further 2.7% median improvement with 15/20 wins and identical checksums.
+  Output spans longer than the caller history now reuse that same bulk kernel
+  in history-sized segments while temporarily advancing the logical output
+  position between segments. A single-call 64 KiB copy over a 32 KiB history
+  is pinned by tests. A fresh twenty-pair ReleaseFast CPU-8 run at 500 decodes
+  improves the focused median by another 19.1% (paired median `1.18x`, 19/20
+  wins), again with identical output checksums.
+  Long copy spans now expand the complete caller-output recurrence first and
+  write only the newest history-sized suffix back to the ring, replacing the
+  repeated full-ring round trips from the initial long-span implementation. A
+  twenty-pair ReleaseFast CPU-8 run at 500 decodes records a further 3.4%
+  median improvement (paired median `1.029x`, 14/20 wins) with identical
+  checksums.
+  Added a dedicated progressive Brotli command/distance benchmark covering
+  structured q4, alternating q5, and a deterministic distance-heavy q8 stream,
+  with schema, throughput, and workload-shape gates. Incremental rollback now
+  snapshots only the mutable literal, command, or distance block-switch state
+  for the active operation instead of copying the complete roughly 290 KiB
+  compressed header before every symbol attempt. On structured q4, sixteen
+  alternating ReleaseFast CPU-8 pairs at 500 decodes improve the median by
+  `22.6x`, with 16/16 wins and identical checksums; the gain removes accidental
+  state-copy overhead rather than changing Huffman semantics.
+  Rollback checkpoints are now narrowed again to the three mutable block-switch
+  scalars (`current_type`, `previous_type`, and `remaining`), leaving the type
+  and length prefix trees in place. Sixteen alternating ReleaseFast CPU-8 pairs
+  keep structured/alternating controls neutral and improve the deterministic
+  distance-heavy q8 median by about 6.6% (paired median `1.07x`, 15/16 wins),
+  with matching checksums.
+  Added `zstdTrainStandardDictionaryAlloc`, the first dependency-free corpus-
+  trained literal-entropy stage for RFC 8878 full dictionaries. It uses the
+  existing
+  deterministic history trainer, builds a complete 256-symbol literal Huffman
+  model from raw sample-byte frequencies with a non-zero prior, and combines
+  it initially with the validated baseline OF/ML/LL FSE suffix and repcodes
+  `1/4/8`. A
+  flat-distribution fallback mirrors upstream zstd's slightly perturbed model
+  so noisy corpora still produce a legal table. The dictionary entropy summary
+  now reports Huffman symbol count and maximum bit width. The libzstd 1.5.5
+  differential validates Vort-to-libzstd and libzstd-to-Vort operation with the
+  trained dictionary; on its deterministic skewed-literal control, libzstd
+  level 1 output fell from 1,019 baseline bytes to 508 trained bytes. This was
+  intentionally not full COVER/FastCover; the following sequence-table stage
+  closes the remaining entropy-statistics gap while repcode selection stays
+  open.
+  Standard full-dictionary training now derives OF/ML/LL normalized-count FSE
+  tables from dictionary-aware greedy LZ77 parses of every sample. Each symbol
+  begins with a one-count prior so the first Repeat_Mode block can represent
+  arbitrary legal codes, while observed literal lengths, match lengths, and
+  repeat/absolute offset codes reshape the distribution. Training reuses the
+  existing dictionary-aware scratch and the same sequence-code mapping used by
+  the native encoder. Entropy summaries now expose the separate serialized
+  Huffman and sequence-table lengths; unit tests prove distinct match corpora
+  produce distinct sequence entropy. The libzstd 1.5.5 control remains fully
+  bidirectional and improves from 1,019 baseline bytes to 502 bytes, with a
+  94-byte trained sequence entropy section. Repcode discovery and a stronger
+  COVER/FastCover-class history selector remain open.
+  Expanded the full-dictionary gate from one skewed-text control to three
+  independently held-out corpus families, always comparing the trained tables
+  with baseline tables wrapped around the exact same selected history. On
+  libzstd 1.5.5 level 1, text improves `1019 -> 502` bytes, structured JSON
+  improves `100 -> 72`, and skewed binary improves `942 -> 579`; aggregate
+  size improves `2061 -> 1153`. The gate requires an aggregate win and no
+  per-family regression while running both Vort-to-libzstd and
+  libzstd-to-Vort decoding for every trained dictionary.
+  Added validation-guided history selection as an explicit opt-in API,
+  `zstdTrainValidatedStandardDictionaryAlloc`. The shared dictionary trainer
+  evaluates four bounded phrase-length/candidate-cap configurations against
+  caller-provided held-out samples, maximizing covered bytes and then
+  minimizing match operations; strict ties preserve the original deterministic
+  candidate. The selected history is then paired with entropy tables trained
+  from the complete training corpus. A focused selector corpus changes the
+  chosen 64-byte history, improves libzstd 1.5.5 level-1 output from 95 to 78
+  bytes, and round-trips through Vort. This adds an overfitting guard and a
+  useful step toward COVER/FastCover-quality selection without claiming parity.
+  An attempted upstream-style residual-literal-only Huffman histogram was also
+  rejected by the three-family gate: text regressed `502 -> 517`, structured
+  `72 -> 80`, and binary stayed at 579 bytes, so raw-byte Huffman statistics
+  remain the measured winner. Upstream zstd's dormant repcode ranking is still
+  disabled behind `#if 0`; Vort likewise keeps repcodes `1/4/8` until both its
+  encoder state and multi-corpus evidence can validate a change.
+  Added `run-zstd-dictionary-trainer-compare`, a same-corpus held-out comparison
+  against the installed `zstd --train`. It generates deterministic text, JSON,
+  and binary sample families, gives Vort 32 training plus 4 selector samples,
+  reserves 4 independent payloads, and checks levels 1/3/9. Both dictionaries
+  are decoded by Vort, while Vort output is also decoded by libzstd. Current
+  aggregate compressed sizes (`Vort/zstd`) are text `364/344`, `346/293`,
+  `311/273`; JSON `224/196`, `226/184`, `208/185`; and binary `796/795`,
+  `816/796`, `803/810`. This exposes a roughly 0–23% remaining per-row quality
+  gap instead of hiding it behind baseline-only wins. The gate caps any row at
+  1.50x and each corpus's mean ratio at 1.20x until selection improves further.
+  Replaced the deterministic phrase trainer's linear retained-phrase lookup
+  and full worst-candidate scan with a content hash map plus an index-stable
+  min-heap. A linear path remains below 128 retained phrases to avoid hash-table
+  overhead on small jobs, and heap ordering includes the phrase index to keep
+  the previous first-equal tie behavior byte-exact. The new
+  `run-dictionary-train-bench-gate` covers 24×320-byte text, JSON, and binary
+  corpora with 1,024 retained candidates. Against the pre-change implementation
+  on fixed CPU 8, the representative runs improved from roughly 0.47/0.40/0.037
+  MB/s to 2.79–2.91/2.51–2.71/0.398–0.404 MB/s while preserving identical
+  dictionary checksums. The ReleaseFast gate requires at least 0.30 MB/s on
+  every row, including the adversarial high-uniqueness binary workload.
+  Validation-guided history selection now also considers a reverse-segment
+  layout that places the highest-ranked selected phrase nearest the end of the
+  Zstd history, where first-block offsets are cheaper. Coverage and match count
+  remain the primary selectors; estimated offset bit width breaks exact ties,
+  and the original ranked layout remains first on complete ties. The same
+  trainer-parity corpus keeps text unchanged, improves JSON level 1/3/9 from
+  `224/226/208` to `223/216/198` bytes, and changes binary to
+  `800/810/803` versus zstd's `795/796/810`; all rows remain inside the parity
+  gate and the aggregate JSON gap narrows without weakening the existing
+  full-dictionary controls.
+  The validated selector now evaluates a bounded history-size ladder at 100%,
+  75%, 62.5%, and 50% of the caller's target. Its codec-independent estimate
+  charges both stored dictionary bytes and unmatched literals, then adds match
+  and offset-width costs. For the 352-byte trainer-parity target this selects
+  264 bytes for text and 176 bytes for JSON/binary. Held-out output becomes
+  text `354/352/311`, JSON `205/213/199`, and binary `792/814/796` at levels
+  1/3/9 respectively, versus the preceding `364/346/311`, `223/216/198`, and
+  `800/810/803`. Aggregate size improves from 4,071 to 4,036 bytes; JSON level
+  9 and binary level 3 regress by only 1 and 4 bytes and remain guarded by the
+  existing per-corpus parity ceiling.
+  Added a cross-sample phrase-ranking candidate that counts how many distinct
+  training samples contain each retained phrase before considering total
+  frequency, length, and lexical ties. The legacy total-frequency ordering is
+  still evaluated first and remains the public non-validated trainer's exact
+  output. On the held-out parity corpus, this changes the selected text history
+  back to the full 352-byte budget and improves levels 1/3/9 from
+  `354/352/311` to `333/301/271`; it now beats zstd at levels 1 and 9 and is
+  within 2.8% at level 3 (`301/293`). JSON and binary remain unchanged. The
+  gate now pins text to no worse than parity at levels 1/9 and within 5% at
+  level 3.
+  Added a raw corpus-tail history candidate so the validated selector can keep
+  naturally adjacent record bytes instead of always concatenating ranked
+  phrases. The same held-out comparison now selects 176-byte histories for
+  text and JSON: text reaches `334/290/265` against zstd `344/293/273`, while
+  JSON reaches `201/187/187` against `196/184/185` at levels 1/3/9. Binary
+  remains `792/814/796` against `795/796/810`. Across all nine rows Vort now
+  totals 3,866 bytes versus zstd's 3,876, closing the aggregate trainer-quality
+  gap on this deterministic corpus without claiming general COVER/FastCover
+  parity. The gate requires aggregate parity, text's existing strict bounds,
+  and no JSON row worse than 1.03x. The focused selector control also improves
+  from 78 to 76 bytes.
+  After validation chooses history parameters, the standard-dictionary trainer
+  now uses both the training and selector partitions to estimate final Huffman
+  and OF/ML/LL entropy tables; held-out payloads remain untouched. This matches
+  the reference trainer's 36-sample entropy corpus rather than discarding four
+  representative samples after selection. The baseline-control gate improves
+  text `502 -> 486`, structured `72 -> 71`, binary `579 -> 560`, and the focused
+  selector `76 -> 70` bytes. On the four-family parity suite, Vort totals
+  `9304/9352` bytes against zstd and wins all source-code rows
+  (`1842/1808/1788` versus `1857/1819/1800`); text level 3 is within two bytes
+  (`291/293`), while binary level 3 remains the largest open row (`814/796`).
+  Extended trainer parity to a deterministic 40-chunk held-out corpus sampled
+  across `src/zstd.zig`, `src/dictionary.zig`, `src/root.zig`, and the roadmap.
+  At levels 1/3/9 Vort records `1883/1841/1826` bytes versus zstd's
+  `1885/1870/1847`, winning all three rows. Together with the three synthetic
+  families, the suite totals `9416/9478` bytes, so the expanded gate requires
+  aggregate parity while retaining the stricter per-family bounds. A
+  320–416-byte target scan did not produce a universal replacement; the public
+  352-byte target remains and validation chooses the best bounded size/layout
+  for each corpus.
+  Sequence entropy training now merges dictionary-aware greedy and lazy LZ77
+  parses before normalizing OF/ML/LL counts, covering the different match
+  decisions used by speed- and ratio-oriented compressors. The baseline-control
+  sequence header shrinks from 86 to 76 bytes; structured JSON improves
+  `201/187/187 -> 199/185/184`, binary level 1 improves `791 -> 790`, and
+  the retained source snapshot also improves. The synthetic nine-row subtotal
+  is `3862/3876`, about 0.36% smaller than zstd overall. JSON level 3 is within
+  one byte and level 9 wins; binary level 3 (`814/796`) remains the clearest
+  unresolved row. The source files are sampled dynamically, so their exact
+  sizes remain reported by the gate rather than pinned in this roadmap.
+  Extended the bounded history-size ladder with a 25%-of-budget candidate. A
+  352-byte parity run selects 88-byte histories for text, JSON, and binary,
+  reaching
+  text `318/283/270` and JSON `192/184/184` at levels 1/3/9, versus zstd's
+  `344/293/273` and `196/184/185`. Binary remained close at `797/802/800`
+  versus `795/796/810`. Vort therefore wins or ties every synthetic row,
+  including the former binary level-3 gap. The smaller candidate is evaluated
+  automatically by the same held-out cost model rather than requiring callers
+  to guess it; the gate now requires binary parity at every level.

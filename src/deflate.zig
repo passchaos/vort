@@ -10,6 +10,19 @@ const png_windowed_history =
 const png_non_overlap = @import("deflate/png/non_overlap.zig");
 const semantic_rle1 = @import("deflate/semantic/rle1.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
+const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
+const zlib_dictionary_set = @import("deflate/zlib/dictionary_set.zig");
+const incremental_stored_encoder = @import("deflate/incremental/encoder/stored.zig");
+const incremental_fixed_encoder = @import("deflate/incremental/encoder/fixed.zig");
+const incremental_rolling_hash = @import("deflate/incremental/encoder/match_finder/rolling_hash.zig");
+const incremental_dynamic_stats = @import("deflate/incremental/encoder/match_finder/dynamic_stats.zig");
+const incremental_zlib_fixed_encoder = @import("deflate/incremental/encoder/zlib_fixed.zig");
+const incremental_gzip_fixed_encoder = @import("deflate/incremental/encoder/gzip_fixed.zig");
+const incremental_stored_decoder = @import("deflate/incremental/decoder/stored.zig");
+const incremental_fixed_literal_decoder = @import("deflate/incremental/decoder/fixed_literals.zig");
+const incremental_zlib_decoder = @import("deflate/incremental/decoder/zlib.zig");
+const incremental_gzip_decoder = @import("deflate/incremental/decoder/gzip.zig");
+const incremental_tests = @import("deflate/incremental/tests.zig");
 
 const png = @import("png.zig");
 const png_up_dominant = @import("png/up_dominant.zig");
@@ -34,11 +47,261 @@ const pngImageOutputLen = png.pngImageOutputLen;
 const pngScanlinePayloadLen = png.pngScanlinePayloadLen;
 
 pub const Error = core.Error;
+pub const ZlibDictionaryEntry = zlib_dictionary_set.Entry;
+pub const ZlibDictionarySet = zlib_dictionary_set.Set;
 pub const max_stored_block_len: usize = std.math.maxInt(u16);
 pub const png_windowed_history_scratch_len =
     png_windowed_history.general_scratch_len;
 pub const png_windowed_rle258_history_scratch_len =
     png_windowed_history.scratch_len;
+
+const IncrementalStoredEncoderCodec = struct {
+    pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const max_block_len = deflate.max_stored_block_len;
+
+    pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, final: bool) IncrementalStoredEncoderCodec.Error!void {
+        if (block.len > max_block_len) return error.InvalidBlockPlan;
+        var header: [5]u8 = undefined;
+        writeStoredHeader(final, @intCast(block.len), &header);
+        try out.appendSlice(allocator, &header);
+        try out.appendSlice(allocator, block);
+    }
+};
+
+const deflate = @This();
+pub const RawDeflateIncrementalStoredEncoder = incremental_stored_encoder.Encoder(IncrementalStoredEncoderCodec);
+
+const IncrementalFixedEncoderCodec = struct {
+    pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const CompressionOptions = deflate.CompressionOptions;
+    pub const Token = lz77.Token;
+    pub const history_len = lz77.default_window_len;
+    pub const State = bitstream.BitWriter;
+
+    pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
+        state.deinit(allocator);
+    }
+    pub fn resetState(state: *State) void {
+        state.bytes.clearRetainingCapacity();
+        state.scratch = 0;
+        state.bit_index = 0;
+    }
+    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, plan_tokens: *std.ArrayList(lz77.Token), block: []const u8, history: []const u8, final: bool, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!void {
+        if (rollingParser(options)) |parser| {
+            const plan = try matcher.plan(allocator, plan_tokens, block, history, normalizeOptionsForStrategy(options).lz77_options, parser == .lazy);
+            try writeFixedTokens(allocator, state, plan.tokens, final);
+        } else {
+            const plan = if (history.len == 0)
+                try planTokensAlloc(allocator, block, options)
+            else
+                try planTokensWithDictionaryAlloc(allocator, block, history, options);
+            defer plan.deinit(allocator);
+            try writeFixedTokens(allocator, state, plan.tokens, final);
+            try matcher.observeUnindexedBlock(block.len, history.len);
+        }
+        try publishIncrementalWriterBytes(allocator, pending, state);
+    }
+    pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalFixedEncoderCodec.Error!void {
+        try writeStoredBlock(allocator, state, "", false);
+        try publishIncrementalWriterBytes(allocator, pending, state);
+    }
+    pub fn finishState(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalFixedEncoderCodec.Error!void {
+        try state.alignToByte(allocator);
+        try publishIncrementalWriterBytes(allocator, pending, state);
+    }
+    pub fn chooseBlockLen(allocator: std.mem.Allocator, input: []const u8, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!usize {
+        _ = allocator;
+        _ = options;
+        return input.len;
+    }
+    pub fn chooseLookaheadLen(allocator: std.mem.Allocator, input: []const u8, history: []const u8, target: usize, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!usize {
+        return try chooseTokenBoundaryWithLookahead(allocator, input, history, target, options);
+    }
+};
+
+pub const RawDeflateIncrementalFixedEncoder = incremental_fixed_encoder.Encoder(IncrementalFixedEncoderCodec);
+
+const IncrementalBestEncoderCodec = struct {
+    pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const CompressionOptions = deflate.CompressionOptions;
+    pub const Token = lz77.Token;
+    pub const history_len = lz77.default_window_len;
+    pub const State = bitstream.BitWriter;
+
+    pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
+        state.deinit(allocator);
+    }
+    pub fn resetState(state: *State) void {
+        IncrementalFixedEncoderCodec.resetState(state);
+    }
+    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, plan_tokens: *std.ArrayList(lz77.Token), block: []const u8, history: []const u8, final: bool, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!void {
+        if (usesStoredFastPath(block, options) and !sampledHistoryMatch(block, history)) {
+            // Incompressible blocks should not pay for a match plan that the
+            // stored/fixed/dynamic selector will immediately discard. A sparse
+            // history probe preserves repeated binary/window blocks without
+            // forcing a full chain search for unrelated random data.
+            try matcher.observeUnindexedBlock(block.len, history.len);
+            try writeStoredBlock(allocator, state, block, final);
+            try publishIncrementalWriterBytes(allocator, pending, state);
+            return;
+        }
+        if (rollingParser(options)) |parser| {
+            const plan = try matcher.plan(allocator, plan_tokens, block, history, normalizeOptionsForStrategy(options).lz77_options, parser == .lazy);
+            try writeBestTokensBlockWithStats(allocator, state, block, plan.tokens, final, options, plan.dynamic);
+        } else {
+            const plan = if (history.len == 0)
+                try planTokensAlloc(allocator, block, options)
+            else
+                try planTokensWithDictionaryAlloc(allocator, block, history, options);
+            defer plan.deinit(allocator);
+            try writeBestTokensBlock(allocator, state, block, plan.tokens, final, options);
+            try matcher.observeUnindexedBlock(block.len, history.len);
+        }
+        try publishIncrementalWriterBytes(allocator, pending, state);
+    }
+    pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {
+        return IncrementalFixedEncoderCodec.writeSyncFlush(allocator, pending, state);
+    }
+    pub fn finishState(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {
+        return IncrementalFixedEncoderCodec.finishState(allocator, pending, state);
+    }
+    pub fn chooseBlockLen(allocator: std.mem.Allocator, input: []const u8, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!usize {
+        return try chooseNonRegressiveIncrementalBlockLen(allocator, input, options);
+    }
+    pub fn chooseLookaheadLen(allocator: std.mem.Allocator, input: []const u8, history: []const u8, target: usize, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!usize {
+        return try chooseTokenBoundaryWithLookahead(allocator, input, history, target, options);
+    }
+};
+
+fn publishIncrementalWriterBytes(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *bitstream.BitWriter) std.mem.Allocator.Error!void {
+    // The stream state keeps its partial byte in scratch/bit_index; only
+    // complete bytes move to the pending-output queue. Swap the two owned
+    // buffers so normal block publication is O(1), while the previously
+    // drained pending allocation becomes the writer's buffer for the next
+    // block. Final-byte alignment follows final-block emission in the same
+    // step, so that one-byte tail must instead append to the pending block.
+    if (pending.items.len == 0) {
+        std.mem.swap(std.ArrayList(u8), pending, &state.bytes);
+    } else {
+        try pending.appendSlice(allocator, state.bytes.items);
+        state.bytes.clearRetainingCapacity();
+    }
+}
+
+pub const RawDeflateIncrementalBestEncoder = incremental_fixed_encoder.Encoder(IncrementalBestEncoderCodec);
+/// Internal instrumentation surface used by the staged DEFLATE benchmark.
+/// It is not re-exported from the package root; external callers should prefer
+/// `RawDeflateIncrementalBestEncoder`.
+pub const IncrementalDeflateMatcher = incremental_rolling_hash.Matcher;
+
+/// Internal staged-benchmark companion for `IncrementalDeflateMatcher`.
+pub fn writeIncrementalBestPlannedBlock(
+    allocator: std.mem.Allocator,
+    writer: *bitstream.BitWriter,
+    plain: []const u8,
+    tokens: []const lz77.Token,
+    final: bool,
+    options: CompressionOptions,
+    stats: *const incremental_dynamic_stats.Stats,
+) !void {
+    return writeBestTokensBlockWithStats(allocator, writer, plain, tokens, final, options, stats);
+}
+
+const IncrementalZlibFixedEncoderCodec = struct {
+    pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const RawEncoder = deflate.RawDeflateIncrementalFixedEncoder;
+    pub const RawOptions = RawEncoder.Options;
+    pub const Adler32 = checksum.Adler32;
+
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary: []const u8) IncrementalZlibFixedEncoderCodec.Error!void {
+        const header_len: usize = if (dictionary.len == 0) 2 else 6;
+        const header = try out.addManyAsSlice(allocator, header_len);
+        writeZlibHeader(header, if (dictionary.len == 0) null else dictionary);
+    }
+    pub fn writeFooter(allocator: std.mem.Allocator, out: *std.ArrayList(u8), digest: u32) IncrementalZlibFixedEncoderCodec.Error!void {
+        var bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &bytes, digest, .big);
+        try out.appendSlice(allocator, &bytes);
+    }
+};
+
+pub const ZlibIncrementalFixedEncoder = incremental_zlib_fixed_encoder.Encoder(IncrementalZlibFixedEncoderCodec);
+
+const IncrementalZlibBestEncoderCodec = struct {
+    pub const Error = IncrementalZlibFixedEncoderCodec.Error;
+    pub const RawEncoder = deflate.RawDeflateIncrementalBestEncoder;
+    pub const RawOptions = RawEncoder.Options;
+    pub const Adler32 = checksum.Adler32;
+    pub const writeHeader = IncrementalZlibFixedEncoderCodec.writeHeader;
+    pub const writeFooter = IncrementalZlibFixedEncoderCodec.writeFooter;
+};
+
+pub const ZlibIncrementalBestEncoder = incremental_zlib_fixed_encoder.Encoder(IncrementalZlibBestEncoderCodec);
+
+const IncrementalGzipFixedEncoderCodec = struct {
+    pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const RawEncoder = deflate.RawDeflateIncrementalFixedEncoder;
+    pub const RawOptions = RawEncoder.Options;
+    pub const HeaderOptions = deflate.GzipHeaderOptions;
+    pub const Crc32 = checksum.Crc32Slice32;
+
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: HeaderOptions) IncrementalGzipFixedEncoderCodec.Error!void {
+        const header_len = try gzipHeaderEncodedSize(options);
+        const header = try out.addManyAsSlice(allocator, header_len);
+        _ = try writeGzipHeader(header, options);
+    }
+    pub fn writeFooter(allocator: std.mem.Allocator, out: *std.ArrayList(u8), digest: u32, total_input: usize) IncrementalGzipFixedEncoderCodec.Error!void {
+        var bytes: [8]u8 = undefined;
+        std.mem.writeInt(u32, bytes[0..4], digest, .little);
+        std.mem.writeInt(u32, bytes[4..8], @truncate(total_input), .little);
+        try out.appendSlice(allocator, &bytes);
+    }
+};
+
+pub const GzipIncrementalFixedEncoder = incremental_gzip_fixed_encoder.Encoder(IncrementalGzipFixedEncoderCodec);
+
+const IncrementalGzipBestEncoderCodec = struct {
+    pub const Error = IncrementalGzipFixedEncoderCodec.Error;
+    pub const RawEncoder = deflate.RawDeflateIncrementalBestEncoder;
+    pub const RawOptions = RawEncoder.Options;
+    pub const HeaderOptions = deflate.GzipHeaderOptions;
+    pub const Crc32 = checksum.Crc32Slice32;
+    pub const writeHeader = IncrementalGzipFixedEncoderCodec.writeHeader;
+    pub const writeFooter = IncrementalGzipFixedEncoderCodec.writeFooter;
+};
+
+pub const GzipIncrementalBestEncoder = incremental_gzip_fixed_encoder.Encoder(IncrementalGzipBestEncoderCodec);
+pub const RawDeflateIncrementalStoredDecoder = incremental_stored_decoder.Decoder;
+pub const RawDeflateIncrementalFixedLiteralDecoder = incremental_fixed_literal_decoder.Decoder;
+
+const IncrementalZlibDecoderCodec = struct {
+    pub const Error = deflate.Error;
+    pub const RawDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
+    pub const Adler32 = checksum.Adler32;
+    pub const DictionarySet = deflate.ZlibDictionarySet;
+};
+
+pub const ZlibIncrementalDecoder = incremental_zlib_decoder.Decoder(IncrementalZlibDecoderCodec);
+
+const IncrementalGzipDecoderCodec = struct {
+    pub const Error = deflate.Error;
+    pub const RawDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
+    pub const Crc32 = checksum.Crc32Slice32;
+};
+
+pub const GzipIncrementalDecoder = incremental_gzip_decoder.Decoder(IncrementalGzipDecoderCodec);
+
+pub fn zlibIncrementalBestOptionsForLevel(level: u4) Error!ZlibIncrementalBestEncoder.Options {
+    return .{ .raw = .{ .compression = try optionsForZlibLevel(level) } };
+}
+
+pub fn gzipIncrementalBestOptionsForLevel(level: u4, header: GzipHeaderOptions) Error!GzipIncrementalBestEncoder.Options {
+    return .{ .raw = .{ .compression = try optionsForZlibLevel(level) }, .header = header };
+}
+
+test {
+    _ = incremental_tests;
+}
 
 pub const RawDeflateProbeResult = struct {
     ok: bool,
@@ -498,6 +761,17 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
     };
 }
 
+fn rollingParser(options: CompressionOptions) ?ParserMode {
+    const normalized = normalizeOptionsForStrategy(options);
+    if (normalized.strategy != .default or
+        (normalized.parser != .hash and normalized.parser != .lazy) or
+        normalized.lz77_options.window_len == 0 or
+        normalized.lz77_options.window_len > lz77.default_window_len or
+        normalized.lz77_options.min_match < 3 or
+        normalized.lz77_options.min_match > 4) return null;
+    return normalized.parser;
+}
+
 fn useSmallInputScanPlan(input: []const u8, options: CompressionOptions) bool {
     // The greedy scan is fastest for truly tiny inputs because it avoids even a
     // small hash-table clear. It still sees the entire bounded search space at
@@ -591,6 +865,16 @@ fn looksIncompressible(input: []const u8) bool {
         }
     }
     return true;
+}
+
+fn sampledHistoryMatch(input: []const u8, history: []const u8) bool {
+    if (input.len < 8 or history.len < 8) return false;
+    const last = input.len - 8;
+    const positions = [_]usize{ 0, last / 7, last * 2 / 7, last * 3 / 7, last * 4 / 7, last * 5 / 7, last * 6 / 7, last };
+    for (positions) |pos| {
+        if (std.mem.indexOf(u8, history, input[pos..][0..8]) != null) return true;
+    }
+    return false;
 }
 
 pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
@@ -884,6 +1168,58 @@ fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8,
     return best_len;
 }
 
+fn chooseNonRegressiveIncrementalBlockLen(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !usize {
+    const split = options.split_options;
+    const candidate = try chooseCostedAdaptiveBlockLen(
+        allocator,
+        input,
+        @min(split.min_block_len, input.len),
+        @min(split.max_block_len, input.len),
+        split.sample_len,
+        split.search_step,
+        options,
+    );
+    if (candidate == input.len) return candidate;
+
+    // A prefix's local score omits the second block header/tree overhead. Only
+    // accept the split when the two independently scored halves beat the full
+    // window after charging a conservative byte for the extra BFINAL/BTYPE
+    // boundary. This prevents adaptive mode from regressing ratio merely because
+    // one prefix looks locally cheap.
+    const full_score = try scoreSplitCandidate(allocator, input, input.len, options);
+    const first_score = try scoreSplitCandidate(allocator, input, candidate, options);
+    const tail_score = try scoreSplitCandidate(allocator, input[candidate..], input.len - candidate, options);
+    const split_score = std.math.add(usize, first_score, tail_score) catch return error.IntegerOverflow;
+    const charged_split = std.math.add(usize, split_score, 1) catch return error.IntegerOverflow;
+    return if (charged_split < full_score) candidate else input.len;
+}
+
+fn chooseTokenBoundaryWithLookahead(allocator: std.mem.Allocator, input: []const u8, history: []const u8, target: usize, options: CompressionOptions) !usize {
+    if (target == 0 or target >= input.len) return target;
+    const plan = if (history.len == 0)
+        try planTokensAlloc(allocator, input, options)
+    else
+        try planTokensWithDictionaryAlloc(allocator, input, history, options);
+    defer plan.deinit(allocator);
+
+    var consumed: usize = 0;
+    var previous: usize = 0;
+    for (plan.tokens) |token| {
+        previous = consumed;
+        consumed += switch (token) {
+            .literal => 1,
+            .match => |match| match.length,
+        };
+        if (consumed >= target) {
+            // Never cut through a token discovered with lookahead. Prefer the
+            // post-token boundary when it stays inside the offered window; this
+            // preserves the cross-boundary match in the emitted block.
+            return if (consumed <= input.len) consumed else previous;
+        }
+    }
+    return target;
+}
+
 fn scoreSplitCandidate(allocator: std.mem.Allocator, input: []const u8, candidate_len: usize, options: CompressionOptions) !usize {
     const len = @min(candidate_len, input.len);
     const plan = try planTokensAlloc(allocator, input[0..len], options);
@@ -917,6 +1253,14 @@ fn uniqueByteCount(input: []const u8) usize {
 }
 
 fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions) !void {
+    return writeBestTokensBlockMaybeStats(allocator, writer, plain, tokens, final, options, null);
+}
+
+fn writeBestTokensBlockWithStats(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions, stats: *const incremental_dynamic_stats.Stats) !void {
+    return writeBestTokensBlockMaybeStats(allocator, writer, plain, tokens, final, options, stats);
+}
+
+fn writeBestTokensBlockMaybeStats(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions, stats: ?*const incremental_dynamic_stats.Stats) !void {
     const stored_len = storedBlocksEncodedSizeFromState(writer.*, plain.len);
 
     if (options.block_selection == .stored_fixed) {
@@ -928,7 +1272,10 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
         return writeFixedTokens(allocator, writer, tokens, final);
     }
 
-    const dynamic_plan = try DynamicCodingPlan.init(tokens);
+    const dynamic_plan = if (stats) |cached|
+        try DynamicCodingPlan.initFromIncrementalStats(cached)
+    else
+        try DynamicCodingPlan.init(tokens);
     const fixed_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.fixed_bits);
     const dynamic_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.bitCost());
     if (stored_len <= fixed_len and stored_len <= dynamic_len) {
@@ -1042,39 +1389,11 @@ pub fn encodeRawDynamicWithDictionaryAlloc(allocator: std.mem.Allocator, input: 
     return encodeRawDynamicTokensAlloc(allocator, plan.tokens);
 }
 
-const CodeLengthOp = struct {
-    symbol: u8,
-    extra_bits: u6 = 0,
-    extra_value: u8 = 0,
-};
-
-const max_dynamic_code_length_ops = 286 + 30;
-
-const CodeLengthOpBuffer = struct {
-    items: [max_dynamic_code_length_ops]CodeLengthOp = undefined,
-    len: usize = 0,
-
-    fn append(self: *CodeLengthOpBuffer, op: CodeLengthOp) !void {
-        // Dynamic DEFLATE headers describe at most HLIT + HDIST code lengths
-        // (286 + 30). The repeat opcodes 16/17/18 always replace multiple raw
-        // lengths with a single op, so RLE can never need more ops than the
-        // uncompressed length sequence. Keep the check as a defensive guard
-        // against future changes to the header encoder.
-        if (self.len >= self.items.len) return error.InvalidBlockPlan;
-        self.items[self.len] = op;
-        self.len += 1;
-    }
-
-    fn slice(self: *const CodeLengthOpBuffer) []const CodeLengthOp {
-        return self.items[0..self.len];
-    }
-};
-
 const DynamicCodingPlan = struct {
     lit_lengths_full: [286]u4,
     dist_lengths_full: [30]u4,
     code_len_lengths: [19]u4,
-    code_len_ops: CodeLengthOpBuffer,
+    code_len_ops: dynamic_code_length_rle.Plan,
     fixed_bits: usize,
     dynamic_bits: usize,
     hlit: usize,
@@ -1102,7 +1421,114 @@ const DynamicCodingPlan = struct {
             }
         }
         lit_freqs[256] = 1;
+        return initFromStats(lit_freqs, dist_freqs, length_extra_bits, distance_extra_bits);
+    }
 
+    fn initFromIncrementalStats(stats: *const incremental_dynamic_stats.Stats) !DynamicCodingPlan {
+        var lit_freqs = stats.literal_frequencies;
+        lit_freqs[256] = 1;
+        var fixed_bits: usize = 3 + stats.length_extra_bits + stats.distance_extra_bits;
+        for (stats.literalSymbols()) |symbol|
+            fixed_bits += @as(usize, stats.literal_frequencies[symbol]) * huffman.fixed_literal_encoder.bits[symbol];
+        if (stats.literal_frequencies[256] == 0) fixed_bits += huffman.fixed_literal_encoder.bits[256];
+        for (stats.distanceSymbols()) |symbol|
+            fixed_bits += @as(usize, stats.distance_frequencies[symbol]) * huffman.fixed_distance_encoder.bits[symbol];
+        for (280..285) |symbol| fixed_bits -= stats.literal_frequencies[symbol];
+        return initFromStatsKnownActive(
+            lit_freqs,
+            stats.distance_frequencies,
+            stats.length_extra_bits,
+            stats.distance_extra_bits,
+            stats.literalActiveCount() + @intFromBool(stats.literal_frequencies[256] == 0),
+            stats.distanceActiveCount(),
+            fixed_bits,
+            stats.literalSymbols(),
+            stats.distanceSymbols(),
+        );
+    }
+
+    fn initFromStatsKnownActive(
+        lit_freqs: [286]u32,
+        dist_freqs: [30]u32,
+        length_extra_bits: usize,
+        distance_extra_bits: usize,
+        literal_active: usize,
+        distance_active: usize,
+        fixed_bits: usize,
+        literal_symbols: []const u16,
+        distance_symbols: []const u16,
+    ) !DynamicCodingPlan {
+        var literal_symbols_with_eob: [286]u16 = undefined;
+        // The matcher records input literals and match length symbols only;
+        // EOB is injected here and therefore cannot already be in this list.
+        // Keep the known-active contract sorted: match-length symbols are above
+        // 256, so appending EOB would corrupt sparse Huffman construction for
+        // mixed literal/match blocks.
+        std.debug.assert(lit_freqs[256] != 0 and literal_symbols.len < literal_symbols_with_eob.len);
+        var literal_symbol_count: usize = 0;
+        var inserted_eob = false;
+        for (literal_symbols) |symbol| {
+            if (!inserted_eob and 256 < symbol) {
+                literal_symbols_with_eob[literal_symbol_count] = 256;
+                literal_symbol_count += 1;
+                inserted_eob = true;
+            }
+            literal_symbols_with_eob[literal_symbol_count] = symbol;
+            literal_symbol_count += 1;
+        }
+        if (!inserted_eob) {
+            literal_symbols_with_eob[literal_symbol_count] = 256;
+            literal_symbol_count += 1;
+        }
+        return initFromStatsCoreKnownActive(
+            lit_freqs,
+            dist_freqs,
+            length_extra_bits,
+            distance_extra_bits,
+            fixed_bits,
+            literal_active,
+            distance_active,
+            literal_symbols_with_eob[0..literal_symbol_count],
+            distance_symbols,
+        );
+    }
+
+    fn initFromStatsCoreKnownActive(
+        lit_freqs: [286]u32,
+        dist_freqs: [30]u32,
+        length_extra_bits: usize,
+        distance_extra_bits: usize,
+        fixed_bits: usize,
+        literal_active: usize,
+        distance_active: usize,
+        literal_symbols: []const u16,
+        distance_symbols: []const u16,
+    ) !DynamicCodingPlan {
+        var lit_tree_freqs = lit_freqs;
+        var dist_tree_freqs = dist_freqs;
+        completeFrequencySetKnownActive(286, &lit_tree_freqs, literal_active);
+        if (distance_active != 0) completeFrequencySetKnownActive(30, &dist_tree_freqs, distance_active);
+
+        // Completion adds a synthetic symbol to zero/one-symbol alphabets, so
+        // use the ordinary builder for those rare shapes. Otherwise the active
+        // lists exactly describe the non-zero frequencies.
+        const lit_lengths_full = if (literal_active < 2)
+            huffman.treeCodeLengths(286, &lit_tree_freqs, 15)
+        else
+            huffman.treeCodeLengthsKnownActive(286, &lit_tree_freqs, 15, literal_symbols);
+        const dist_lengths_full = if (distance_active < 2)
+            huffman.treeCodeLengths(30, &dist_tree_freqs, 15)
+        else
+            huffman.treeCodeLengthsKnownActive(30, &dist_tree_freqs, 15, distance_symbols);
+        return finishFromLengths(lit_freqs, dist_freqs, length_extra_bits, distance_extra_bits, fixed_bits, lit_lengths_full, dist_lengths_full);
+    }
+
+    fn initFromStats(
+        lit_freqs: [286]u32,
+        dist_freqs: [30]u32,
+        length_extra_bits: usize,
+        distance_extra_bits: usize,
+    ) !DynamicCodingPlan {
         var fixed_bits: usize = 3 + length_extra_bits + distance_extra_bits;
         for (lit_freqs, huffman.fixed_literal_encoder.bits[0..lit_freqs.len]) |frequency, code_bits| {
             fixed_bits += @as(usize, frequency) * code_bits;
@@ -1116,33 +1542,66 @@ const DynamicCodingPlan = struct {
         // block selection and is deliberately left to a separate size/ratio
         // change; this optimization only removes redundant token scans.
         for (280..285) |symbol| fixed_bits -= lit_freqs[symbol];
+        var literal_active: usize = 0;
+        for (lit_freqs) |frequency| literal_active += @intFromBool(frequency != 0);
+        var distance_active: usize = 0;
+        for (dist_freqs) |frequency| distance_active += @intFromBool(frequency != 0);
+        return initFromStatsCore(
+            lit_freqs,
+            dist_freqs,
+            length_extra_bits,
+            distance_extra_bits,
+            fixed_bits,
+            literal_active,
+            distance_active,
+        );
+    }
+
+    fn initFromStatsCore(
+        lit_freqs: [286]u32,
+        dist_freqs: [30]u32,
+        length_extra_bits: usize,
+        distance_extra_bits: usize,
+        fixed_bits: usize,
+        literal_active: usize,
+        distance_active: usize,
+    ) !DynamicCodingPlan {
 
         // Single-symbol alphabets need synthetic frequencies to produce a
         // complete tree, but those synthetic symbols are never emitted. Keep
         // the actual histograms intact for exact payload cost accounting.
         var lit_tree_freqs = lit_freqs;
         var dist_tree_freqs = dist_freqs;
-        completeLiteralFrequencySet(&lit_tree_freqs);
-        if (hasDistanceSymbols(&dist_tree_freqs)) {
-            completeDistanceFrequencySet(&dist_tree_freqs);
-        }
+        completeFrequencySetKnownActive(286, &lit_tree_freqs, literal_active);
+        if (distance_active != 0) completeFrequencySetKnownActive(30, &dist_tree_freqs, distance_active);
 
-        var lit_lengths_full = huffman.treeCodeLengths(286, &lit_tree_freqs, 15);
-        var dist_lengths_full = huffman.treeCodeLengths(30, &dist_tree_freqs, 15);
+        const lit_lengths_full = huffman.treeCodeLengths(286, &lit_tree_freqs, 15);
+        const dist_lengths_full = huffman.treeCodeLengths(30, &dist_tree_freqs, 15);
+        return finishFromLengths(lit_freqs, dist_freqs, length_extra_bits, distance_extra_bits, fixed_bits, lit_lengths_full, dist_lengths_full);
+    }
+
+    fn finishFromLengths(
+        lit_freqs: [286]u32,
+        dist_freqs: [30]u32,
+        length_extra_bits: usize,
+        distance_extra_bits: usize,
+        fixed_bits: usize,
+        lit_lengths_full: [286]u4,
+        dist_lengths_full: [30]u4,
+    ) !DynamicCodingPlan {
         const hlit = trimmedLiteralCodeCount(&lit_lengths_full);
         const hdist = trimmedDistanceCodeCount(&dist_lengths_full);
 
-        const code_len_ops = try buildCodeLengthOps(lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
-        var code_len_freqs: [19]u32 = @splat(0);
-        for (code_len_ops.slice()) |op| code_len_freqs[op.symbol] += 1;
+        const code_len_ops = try dynamic_code_length_rle.build(lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
+        var code_len_freqs = code_len_ops.frequencies;
         completeCodeLengthFrequencySet(&code_len_freqs);
         const code_len_lengths = huffman.treeCodeLengths(19, &code_len_freqs, 7);
         const hclen = trimmedCodeLengthAlphabetCount(&code_len_lengths);
 
         var dynamic_bits: usize = 3 + 5 + 5 + 4 + hclen * 3;
-        for (code_len_ops.slice()) |op| {
-            dynamic_bits += code_len_lengths[op.symbol] + op.extra_bits;
-        }
+        for (code_len_freqs, code_len_lengths) |frequency, code_bits|
+            dynamic_bits += @as(usize, frequency) * code_bits;
+        dynamic_bits += code_len_ops.extra_bit_count;
         for (lit_freqs, lit_lengths_full) |frequency, code_bits| {
             dynamic_bits += @as(usize, frequency) * code_bits;
         }
@@ -1412,45 +1871,8 @@ fn writeDynamicMatchReference(
     }
 }
 
-fn buildCodeLengthOps(lit_lengths: []const u4, dist_lengths: []const u4) !CodeLengthOpBuffer {
-    var lengths: [286 + 30]u4 = undefined;
-    @memcpy(lengths[0..lit_lengths.len], lit_lengths);
-    @memcpy(lengths[lit_lengths.len..][0..dist_lengths.len], dist_lengths);
-    var ops = CodeLengthOpBuffer{};
-    try appendCodeLengthOps(&ops, lengths[0 .. lit_lengths.len + dist_lengths.len]);
-    return ops;
-}
-
-fn appendCodeLengthOps(ops: *CodeLengthOpBuffer, lengths: []const u4) !void {
-    var i: usize = 0;
-    while (i < lengths.len) {
-        const value = lengths[i];
-        var run: usize = 1;
-        while (i + run < lengths.len and lengths[i + run] == value) run += 1;
-        if (value == 0) {
-            var remaining = run;
-            while (remaining >= 11) {
-                const count = @min(remaining, 138);
-                try ops.append(.{ .symbol = 18, .extra_bits = 7, .extra_value = @intCast(count - 11) });
-                remaining -= count;
-            }
-            if (remaining >= 3) {
-                try ops.append(.{ .symbol = 17, .extra_bits = 3, .extra_value = @intCast(remaining - 3) });
-                remaining = 0;
-            }
-            while (remaining > 0) : (remaining -= 1) try ops.append(.{ .symbol = 0 });
-        } else {
-            try ops.append(.{ .symbol = value });
-            var remaining = run - 1;
-            while (remaining >= 3) {
-                const count = @min(remaining, 6);
-                try ops.append(.{ .symbol = 16, .extra_bits = 2, .extra_value = @intCast(count - 3) });
-                remaining -= count;
-            }
-            while (remaining > 0) : (remaining -= 1) try ops.append(.{ .symbol = value });
-        }
-        i += run;
-    }
+fn buildCodeLengthOps(lit_lengths: []const u4, dist_lengths: []const u4) !dynamic_code_length_rle.Plan {
+    return dynamic_code_length_rle.build(lit_lengths, dist_lengths);
 }
 
 pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
@@ -1526,15 +1948,15 @@ fn trimmedCodeLengthAlphabetCount(lengths: *const [19]u4) usize {
     return hclen;
 }
 
-fn trimmedLiteralCodeCount(lengths: *[286]u4) usize {
+fn trimmedLiteralCodeCount(lengths: *const [286]u4) usize {
     return trimCodeLengthCount(286, 257, lengths);
 }
 
-fn trimmedDistanceCodeCount(lengths: *[30]u4) usize {
+fn trimmedDistanceCodeCount(lengths: *const [30]u4) usize {
     return trimCodeLengthCount(30, 1, lengths);
 }
 
-fn trimCodeLengthCount(comptime n: usize, minimum: usize, lengths: *[n]u4) usize {
+fn trimCodeLengthCount(comptime n: usize, minimum: usize, lengths: *const [n]u4) usize {
     var count = n;
     while (count > minimum and lengths[count - 1] == 0) count -= 1;
     return count;
@@ -1554,6 +1976,19 @@ fn completeLiteralFrequencySet(freqs: *[286]u32) void {
                 active += 1;
                 if (active >= 2) break;
             }
+        }
+    }
+}
+
+fn completeFrequencySetKnownActive(comptime n: usize, freqs: *[n]u32, active_count: usize) void {
+    if (active_count >= 2) return;
+    var active = active_count;
+    for (freqs, 0..) |*frequency, symbol| {
+        _ = symbol;
+        if (frequency.* == 0) {
+            frequency.* = 1;
+            active += 1;
+            if (active == 2) return;
         }
     }
 }
@@ -14358,6 +14793,40 @@ fn decodeZlibConcatenatedWithOptionalDictionaryAndOptions(input: []const u8, out
     return out_offset;
 }
 
+pub fn decodeZlibConcatenatedWithDictionarySet(input: []const u8, output: []u8, dictionaries: ZlibDictionarySet) Error!usize {
+    return decodeZlibConcatenatedWithDictionarySetAndOptions(input, output, dictionaries, .{});
+}
+
+pub fn decodeZlibConcatenatedWithDictionarySetAndOptions(input: []const u8, output: []u8, dictionaries: ZlibDictionarySet, options: ZlibDecodeOptions) Error!usize {
+    if (input.len == 0) return error.TruncatedFrame;
+    var offset: usize = 0;
+    var out_offset: usize = 0;
+    while (offset < input.len) {
+        const info = parseZlibHeaderInfo(input[offset..]) catch |err| {
+            if (options.allow_trailing_data and offset != 0) break;
+            return err;
+        };
+        const dictionary = if (info.dictionary_id) |id| dictionaries.find(id) orelse return error.NeedDictionary else "";
+        const raw_offset = offset + info.data_offset;
+        const before_stream = out_offset;
+        const raw = try decodeRawAutoWithDictionary(input[raw_offset..], dictionary, output[out_offset..]);
+        out_offset += raw.output_written;
+        const footer_offset = raw_offset + raw.input_read;
+        const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(output[before_stream..out_offset]);
+        try validateZlibFooterPartialWithOptions(input, footer_offset, actual_adler, options);
+        offset = footer_offset + 4;
+    }
+    return out_offset;
+}
+
+pub fn decodeZlibConcatenatedAllocWithDictionarySetExactSize(allocator: std.mem.Allocator, input: []const u8, dictionaries: ZlibDictionarySet, expected_output_len: usize) ![]u8 {
+    const output = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(output);
+    const written = try decodeZlibConcatenatedWithDictionarySet(input, output, dictionaries);
+    if (written != expected_output_len) return error.SizeMismatch;
+    return output;
+}
+
 pub fn decodeZlibConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return decodeZlibConcatenatedAllocLimitedInternal(allocator, input, null, .{}, null);
 }
@@ -21615,6 +22084,17 @@ test "cached Deflate block costs match token-scan references" {
         const plan = try DynamicCodingPlan.init(tokens);
         try std.testing.expectEqual(lz77.fixedBitCost(tokens), plan.fixed_bits);
         try std.testing.expectEqual(plan.bitCostReference(tokens), plan.bitCost());
+
+        var cached: incremental_dynamic_stats.Stats = .{};
+        for (tokens) |token| switch (token) {
+            .literal => |byte| cached.recordLiteral(byte),
+            .match => |match| cached.recordMatch(match),
+        };
+        const cached_plan = try DynamicCodingPlan.initFromIncrementalStats(&cached);
+        try std.testing.expectEqual(plan.fixed_bits, cached_plan.fixed_bits);
+        try std.testing.expectEqual(plan.dynamic_bits, cached_plan.dynamic_bits);
+        try std.testing.expectEqual(plan.lit_lengths_full, cached_plan.lit_lengths_full);
+        try std.testing.expectEqual(plan.dist_lengths_full, cached_plan.dist_lengths_full);
     }
 
     // Exercise every literal, length range, and distance range in a larger

@@ -1,0 +1,256 @@
+const std = @import("std");
+const core = @import("../../core.zig");
+
+/// Build a no-content-size incremental LZ4 frame encoder. At most one frame
+/// block plus the 64 KiB linked-history window are retained. Encoded blocks and
+/// footer bytes drain through arbitrary caller output.
+pub fn Encoder(comptime Codec: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        options: Codec.Options,
+        block_encoder: Codec.EncoderState,
+        block: std.ArrayList(u8) = .empty,
+        history: std.ArrayList(u8) = .empty,
+        pending: std.ArrayList(u8) = .empty,
+        pending_offset: usize = 0,
+        hasher: std.hash.XxHash32 = std.hash.XxHash32.init(0),
+        header_written: bool = false,
+        flush_requested: bool = false,
+        finishing: bool = false,
+        footer_written: bool = false,
+        done: bool = false,
+        total_input: usize = 0,
+        total_output: usize = 0,
+        expected_input_len: ?usize = null,
+        dictionary_id: ?u32 = null,
+        dictionary: []const u8 = &.{},
+        skippable_only: bool = false,
+        stream_input: usize = 0,
+        stream_output: usize = 0,
+        frame_count: usize = 0,
+
+        const Self = @This();
+        pub const Error = Codec.Error;
+        pub const Snapshot = struct {
+            input_read: usize,
+            output_written: usize,
+            frame_input: usize,
+            frame_output: usize,
+            buffered_input: usize,
+            pending_output: usize,
+            frame_count: usize,
+            frame_index: usize,
+            finishing: bool,
+            done: bool,
+        };
+
+        pub fn init(allocator: std.mem.Allocator, options: Codec.Options) Error!Self {
+            try Codec.validate(options, null, null);
+            return .{ .allocator = allocator, .options = options, .block_encoder = try Codec.EncoderState.init(allocator) };
+        }
+        pub fn initExactSize(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize) Error!Self {
+            try Codec.validate(options, expected_input_len, null);
+            return .{ .allocator = allocator, .options = options, .block_encoder = try Codec.EncoderState.init(allocator), .expected_input_len = expected_input_len };
+        }
+        pub fn initWithDictionary(allocator: std.mem.Allocator, options: Codec.Options, dictionary_id: u32, dictionary: []const u8) Error!Self {
+            if (dictionary_id == 0) return error.NeedDictionary;
+            try Codec.validate(options, null, dictionary_id);
+            return .{ .allocator = allocator, .options = options, .block_encoder = try Codec.EncoderState.init(allocator), .dictionary_id = dictionary_id, .dictionary = dictionary };
+        }
+        pub fn initExactSizeWithDictionary(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary_id: u32, dictionary: []const u8) Error!Self {
+            if (dictionary_id == 0) return error.NeedDictionary;
+            try Codec.validate(options, expected_input_len, dictionary_id);
+            return .{ .allocator = allocator, .options = options, .block_encoder = try Codec.EncoderState.init(allocator), .expected_input_len = expected_input_len, .dictionary_id = dictionary_id, .dictionary = dictionary };
+        }
+        pub fn initWithDictionarySet(allocator: std.mem.Allocator, options: Codec.Options, dictionary_set: anytype, dictionary_id: u32) Error!Self {
+            const dictionary = dictionary_set.find(dictionary_id) orelse return error.NeedDictionary;
+            return initWithDictionary(allocator, options, dictionary.id, dictionary.content);
+        }
+        pub fn initExactSizeWithDictionarySet(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary_set: anytype, dictionary_id: u32) Error!Self {
+            const dictionary = dictionary_set.find(dictionary_id) orelse return error.NeedDictionary;
+            return initExactSizeWithDictionary(allocator, options, expected_input_len, dictionary.id, dictionary.content);
+        }
+        pub fn deinit(self: *Self) void {
+            self.block_encoder.deinit();
+            self.block.deinit(self.allocator);
+            self.history.deinit(self.allocator);
+            self.pending.deinit(self.allocator);
+            self.* = undefined;
+        }
+        pub fn reset(self: *Self) void {
+            const expected_input_len = self.expected_input_len;
+            self.stream_input = 0;
+            self.stream_output = 0;
+            self.frame_count = 0;
+            self.resetFrame(self.options, expected_input_len, self.dictionary_id, self.dictionary);
+        }
+        fn resetFrame(self: *Self, options: Codec.Options, expected_input_len: ?usize, dictionary_id: ?u32, dictionary: []const u8) void {
+            self.options = options;
+            self.block.clearRetainingCapacity();
+            self.history.clearRetainingCapacity();
+            self.pending.clearRetainingCapacity();
+            self.pending_offset = 0;
+            self.hasher = std.hash.XxHash32.init(0);
+            self.header_written = false;
+            self.flush_requested = false;
+            self.finishing = false;
+            self.footer_written = false;
+            self.done = false;
+            self.total_input = 0;
+            self.total_output = 0;
+            self.expected_input_len = expected_input_len;
+            self.dictionary_id = dictionary_id;
+            self.dictionary = dictionary;
+            self.skippable_only = false;
+        }
+        pub fn nextFrame(self: *Self, options: Codec.Options) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            try Codec.validate(options, null, null);
+            self.resetFrame(options, null, null, "");
+        }
+        pub fn nextFrameExactSize(self: *Self, options: Codec.Options, expected_input_len: usize) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            try Codec.validate(options, expected_input_len, null);
+            self.resetFrame(options, expected_input_len, null, "");
+        }
+        pub fn nextFrameExactSizeWithDictionary(self: *Self, options: Codec.Options, expected_input_len: usize, dictionary_id: u32, dictionary: []const u8) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            if (dictionary_id == 0) return error.NeedDictionary;
+            try Codec.validate(options, expected_input_len, dictionary_id);
+            self.resetFrame(options, expected_input_len, dictionary_id, dictionary);
+        }
+        pub fn snapshot(self: *const Self) Snapshot {
+            return .{
+                .input_read = self.stream_input,
+                .output_written = self.stream_output,
+                .frame_input = self.total_input,
+                .frame_output = self.total_output,
+                .buffered_input = self.block.items.len,
+                .pending_output = self.pending.items.len - self.pending_offset,
+                .frame_count = self.frame_count,
+                .frame_index = if (self.done and self.frame_count != 0) self.frame_count - 1 else self.frame_count,
+                .finishing = self.finishing,
+                .done = self.done,
+            };
+        }
+        pub fn finish(self: *Self) void {
+            self.finishing = true;
+            self.flush_requested = false;
+        }
+        /// Publish accepted input as a non-final LZ4 block, then resume the same
+        /// frame once `step` acknowledges the drained flush with `need_input`.
+        pub fn flush(self: *Self) void {
+            if (!self.finishing and !self.done) self.flush_requested = true;
+        }
+        /// Queue a complete LZ4 skippable frame after a drained data frame.
+        /// Skippable frames cannot appear inside an LZ4 data frame; callers may
+        /// start the next data frame with `nextFrame` after this one drains.
+        pub fn writeSkippable(self: *Self, skippable_id: u4, payload: []const u8) Error!void {
+            if (payload.len > std.math.maxInt(u32)) return error.IntegerOverflow;
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            try Codec.writeSkippable(self.allocator, &self.pending, skippable_id, payload);
+            self.done = false;
+            self.skippable_only = true;
+        }
+        pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            if (self.done) {
+                if (input.len != 0) return error.TrailingData;
+                return .{ .status = .done };
+            }
+            if ((self.finishing or self.flush_requested) and input.len != 0) return error.TrailingData;
+            var input_read: usize = 0;
+            var output_written: usize = 0;
+            while (true) {
+                if (self.pending_offset != self.pending.items.len) {
+                    const remaining = self.pending.items[self.pending_offset..];
+                    const n = @min(output.len - output_written, remaining.len);
+                    @memcpy(output[output_written..][0..n], remaining[0..n]);
+                    self.pending_offset += n;
+                    output_written += n;
+                    self.total_output += n;
+                    self.stream_output += n;
+                    if (self.pending_offset != self.pending.items.len) return result(input_read, output_written, .need_output);
+                    self.pending.clearRetainingCapacity();
+                    self.pending_offset = 0;
+                    if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
+                }
+                if (self.skippable_only) {
+                    self.skippable_only = false;
+                    self.done = true;
+                    return result(input_read, output_written, .done);
+                }
+                if (!self.header_written) {
+                    try Codec.writeHeader(self.allocator, &self.pending, self.options, self.expected_input_len, self.dictionary_id);
+                    self.header_written = true;
+                    continue;
+                }
+                const room = Codec.maxBlockLen(self.options) - self.block.items.len;
+                const n = @min(room, input.len - input_read);
+                if (n != 0) {
+                    const bytes = input[input_read..][0..n];
+                    try self.block.appendSlice(self.allocator, bytes);
+                    if (self.options.content_checksum) self.hasher.update(bytes);
+                    input_read += n;
+                    self.total_input += n;
+                    self.stream_input += n;
+                    if (self.expected_input_len) |expected| {
+                        if (self.total_input > expected) return error.SizeMismatch;
+                    }
+                }
+                if (self.block.items.len == Codec.maxBlockLen(self.options) or
+                    ((self.finishing or self.flush_requested) and self.block.items.len != 0))
+                {
+                    try self.writeNonFinalBlock();
+                    continue;
+                }
+                if (self.flush_requested) {
+                    self.flush_requested = false;
+                    return result(input_read, output_written, .need_input);
+                }
+                if (self.finishing and !self.footer_written) {
+                    if (self.expected_input_len) |expected| {
+                        if (self.total_input != expected) return error.SizeMismatch;
+                    }
+                    try Codec.writeFooter(self.allocator, &self.pending, self.options, &self.hasher);
+                    self.footer_written = true;
+                    continue;
+                }
+                if (self.finishing) {
+                    self.frame_count += 1;
+                    self.done = true;
+                    return result(input_read, output_written, .done);
+                }
+                return result(input_read, output_written, .need_input);
+            }
+        }
+        fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
+            return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
+        }
+        fn writeNonFinalBlock(self: *Self) Error!void {
+            std.debug.assert(self.block.items.len != 0);
+            const prefix = if (self.history.items.len != 0) self.history.items else if (self.dictionary.len != 0) self.dictionary else &.{};
+            if (self.options.block_mode == .linked) try self.history.ensureTotalCapacity(self.allocator, 64 * 1024);
+            try Codec.writeBlock(&self.block_encoder, &self.pending, self.block.items, prefix, self.options);
+            if (self.options.block_mode == .linked) {
+                // Partial flush blocks must extend, rather than replace, linked
+                // history. Normal full 64 KiB+ blocks naturally replace the
+                // window, while repeated small flushes retain earlier bytes.
+                if (self.history.items.len == 0 and self.dictionary.len != 0) {
+                    const dictionary_keep = @min(self.dictionary.len, 64 * 1024);
+                    self.history.appendSliceAssumeCapacity(self.dictionary[self.dictionary.len - dictionary_keep ..]);
+                }
+                if (self.block.items.len >= 64 * 1024) {
+                    self.history.clearRetainingCapacity();
+                    self.history.appendSliceAssumeCapacity(self.block.items[self.block.items.len - 64 * 1024 ..]);
+                } else {
+                    const history_keep = @min(self.history.items.len, 64 * 1024 - self.block.items.len);
+                    const history_start = self.history.items.len - history_keep;
+                    std.mem.copyForwards(u8, self.history.items[0..history_keep], self.history.items[history_start..]);
+                    self.history.items.len = history_keep;
+                    self.history.appendSliceAssumeCapacity(self.block.items);
+                }
+            }
+            self.block.clearRetainingCapacity();
+        }
+    };
+}
