@@ -23,6 +23,8 @@ const Compress2Fn = *const fn (?*anyopaque, [*]u8, usize, [*]const u8, usize) ca
 const InBuffer = extern struct { src: ?*const anyopaque, size: usize, pos: usize };
 const OutBuffer = extern struct { dst: ?*anyopaque, size: usize, pos: usize };
 const CompressStream2Fn = *const fn (?*anyopaque, *OutBuffer, *InBuffer, c_int) callconv(.c) usize;
+pub const Sequence = extern struct { offset: u32, literal_length: u32, match_length: u32, rep: u32 = 0 };
+const CompressSequencesFn = *const fn (?*anyopaque, [*]u8, usize, [*]const Sequence, usize, [*]const u8, usize) callconv(.c) usize;
 const CompressUsingDictFn = *const fn (?*anyopaque, [*]u8, usize, [*]const u8, usize, [*]const u8, usize, c_int) callconv(.c) usize;
 const CreateDCtxFn = *const fn () callconv(.c) ?*anyopaque;
 const FreeDCtxFn = *const fn (?*anyopaque) callconv(.c) usize;
@@ -40,6 +42,7 @@ pub const Runtime = struct {
     cctx_set_parameter: CCtxSetParameterFn,
     compress2: Compress2Fn,
     compress_stream2: CompressStream2Fn,
+    compress_sequences: CompressSequencesFn,
     compress_using_dict: CompressUsingDictFn,
     create_dctx: CreateDCtxFn,
     free_dctx: FreeDCtxFn,
@@ -109,6 +112,10 @@ pub const Runtime = struct {
                 library.close();
                 continue;
             };
+            const compress_sequences = library.lookup(CompressSequencesFn, "ZSTD_compressSequences") orelse {
+                library.close();
+                continue;
+            };
             const compress_using_dict = library.lookup(CompressUsingDictFn, "ZSTD_compress_usingDict") orelse {
                 library.close();
                 continue;
@@ -137,6 +144,7 @@ pub const Runtime = struct {
                 .cctx_set_parameter = cctx_set_parameter,
                 .compress2 = compress2,
                 .compress_stream2 = compress_stream2,
+                .compress_sequences = compress_sequences,
                 .compress_using_dict = compress_using_dict,
                 .create_dctx = create_dctx,
                 .free_dctx = free_dctx,
@@ -206,6 +214,8 @@ pub const Runtime = struct {
         content_size: bool = true,
         checksum: bool = false,
         window_log: ?c_int = null,
+        min_match: ?c_int = null,
+        target_length: ?c_int = null,
         strategy: ?c_int = null,
         long_distance_matching: bool = false,
     };
@@ -217,6 +227,8 @@ pub const Runtime = struct {
         try self.setParameter(context, 200, @intFromBool(options.content_size)); // ZSTD_c_contentSizeFlag
         try self.setParameter(context, 201, @intFromBool(options.checksum)); // ZSTD_c_checksumFlag
         if (options.window_log) |value| try self.setParameter(context, 101, value); // ZSTD_c_windowLog
+        if (options.min_match) |value| try self.setParameter(context, 105, value); // ZSTD_c_minMatch
+        if (options.target_length) |value| try self.setParameter(context, 106, value); // ZSTD_c_targetLength
         if (options.strategy) |value| try self.setParameter(context, 107, value); // ZSTD_c_strategy
         if (options.long_distance_matching) try self.setParameter(context, 160, 1); // ZSTD_c_enableLongDistanceMatching
 
@@ -240,6 +252,8 @@ pub const Runtime = struct {
         try self.setParameter(context, 200, @intFromBool(options.content_size));
         try self.setParameter(context, 201, @intFromBool(options.checksum));
         if (options.window_log) |value| try self.setParameter(context, 101, value);
+        if (options.min_match) |value| try self.setParameter(context, 105, value);
+        if (options.target_length) |value| try self.setParameter(context, 106, value);
         if (options.strategy) |value| try self.setParameter(context, 107, value);
         if (options.long_distance_matching) try self.setParameter(context, 160, 1);
 
@@ -269,6 +283,21 @@ pub const Runtime = struct {
         if (self.is_error(remaining) != 0) return error.ReferenceEncodeFailed;
         output.items.len += out_buffer.pos;
         return remaining;
+    }
+
+    pub fn encodeSequencesAlloc(self: Runtime, allocator: std.mem.Allocator, input: []const u8, sequences: []const Sequence, level: c_int) ![]u8 {
+        if (sequences.len == 0) return error.ReferenceEncodeFailed;
+        const context = self.create_cctx() orelse return error.ReferenceUnavailable;
+        defer _ = self.free_cctx(context);
+        try self.setParameter(context, 100, level);
+        try self.setParameter(context, 105, 3); // ZSTD_c_minMatch
+        try self.setParameter(context, 1009, 1); // ZSTD_c_validateSequences
+
+        const output = try allocator.alloc(u8, self.compress_bound(input.len));
+        errdefer allocator.free(output);
+        const written = self.compress_sequences(context, output.ptr, output.len, sequences.ptr, sequences.len, input.ptr, input.len);
+        if (self.is_error(written) != 0) return error.ReferenceEncodeFailed;
+        return allocator.realloc(output, written);
     }
 
     pub fn decodeUsingDict(self: Runtime, encoded: []const u8, output: []u8, dictionary: []const u8) !void {

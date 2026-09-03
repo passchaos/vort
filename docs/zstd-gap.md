@@ -265,6 +265,13 @@ Recommended next comparison steps:
   make clean checkouts depend on those repositories. The current local run
   covers 246 cases with zero unsupported frames against libzstd 1.5.5; this is
   stronger compatibility evidence, but not proof of arbitrary-frame parity.
+  Follow-up explicit-sequence cases use the exported libzstd sequence API to
+  emit 32,511, 32,512, and the practical 128 KiB-block maximum of 43,690
+  three-byte matches, plus deterministic varied literal/match/offset streams at
+  127/128/129/1,024/8,192 sequences. This raises the local matrix to 255 cases,
+  pins all one-/two-/three-byte sequence-count encodings
+  (`sequence_count_tiers=0x7`), and expands the observed LL/OF/ML mode tuples to
+  25 without relying on match-finder heuristics.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

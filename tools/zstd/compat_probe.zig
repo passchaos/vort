@@ -7,6 +7,12 @@ const sizes = [_]usize{ 0, 1, 15, 64, 255, 1024, 8192, 65536, 131073, 524288 };
 const optional_golden_root = "../../Work/zstd/tests/golden-decompression";
 
 const Shape = enum { text, structured, binary, random };
+const Coverage = struct {
+    max_sequence_count: usize = 0,
+    max_block_count: usize = 0,
+    sequence_count_tiers: u3 = 0,
+    sequence_mode_combinations: u64 = 0,
+};
 
 pub fn main(init: std.process.Init) !void {
     var runtime = try libzstd.Runtime.open();
@@ -17,7 +23,9 @@ pub fn main(init: std.process.Init) !void {
     var golden_cases: usize = 0;
     var golden_error_cases: usize = 0;
     var advanced_cases: usize = 0;
+    var explicit_sequence_cases: usize = 0;
     var streaming_cases: usize = 0;
+    var coverage = Coverage{};
     for (std.meta.tags(Shape)) |shape| {
         for (sizes) |size| {
             const payload = try init.gpa.alloc(u8, size);
@@ -26,6 +34,7 @@ pub fn main(init: std.process.Init) !void {
             for (levels) |level| {
                 const encoded = try runtime.encodeAlloc(init.gpa, payload, level);
                 defer init.gpa.free(encoded);
+                try observeFrame(encoded, &coverage);
                 const decoded = vort.zstdDecodeFrameAlloc(init.gpa, encoded) catch |err| {
                     unsupported += 1;
                     std.debug.print(
@@ -63,6 +72,7 @@ pub fn main(init: std.process.Init) !void {
     for (advanced_options) |options| {
         const encoded = try runtime.encodeAdvancedAlloc(init.gpa, advanced_payload, options);
         defer init.gpa.free(encoded);
+        try observeFrame(encoded, &coverage);
         const decoded = vort.zstdDecodeFrameAlloc(init.gpa, encoded) catch |err| {
             std.debug.print("zstd_compat_unsupported advanced level={d} content_size={} checksum={} window_log={any} strategy={any} ldm={} encoded={d} error={s}\n", .{ options.level, options.content_size, options.checksum, options.window_log, options.strategy, options.long_distance_matching, encoded.len, @errorName(err) });
             return err;
@@ -71,6 +81,78 @@ pub fn main(init: std.process.Init) !void {
         if (!std.mem.eql(u8, advanced_payload, decoded)) return error.SizeMismatch;
         checked += 1;
         advanced_cases += 1;
+    }
+    const random_sequence_counts = [_]usize{ 127, 128, 129, 1024, 8192 };
+    for (random_sequence_counts, 0..) |sequence_count, case_index| {
+        var payload: std.ArrayList(u8) = .empty;
+        defer payload.deinit(init.gpa);
+        try payload.ensureTotalCapacity(init.gpa, sequence_count * 40);
+        const sequences = try init.gpa.alloc(libzstd.Sequence, sequence_count);
+        defer init.gpa.free(sequences);
+        var state: u32 = 0x9e37_79b9 ^ @as(u32, @intCast(case_index * 0x1021));
+        for (sequences, 0..) |*sequence, sequence_index| {
+            const literal_len: usize = if (sequence_index == 0) 32 else state & 3;
+            for (0..literal_len) |_| {
+                state = state *% 1_664_525 +% 1_013_904_223;
+                try payload.append(init.gpa, @truncate(state >> 16));
+            }
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const offset = 1 + @as(usize, state) % @min(payload.items.len, 2048);
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const match_len = 3 + @as(usize, state) % 30;
+            sequence.* = .{ .offset = @intCast(offset), .literal_length = @intCast(literal_len), .match_length = @intCast(match_len) };
+            for (0..match_len) |_| try payload.append(init.gpa, payload.items[payload.items.len - offset]);
+        }
+        const frame = try runtime.encodeSequencesAlloc(init.gpa, payload.items, sequences, @intCast(1 + case_index * 4));
+        defer init.gpa.free(frame);
+        try observeFrame(frame, &coverage);
+        const decoded = vort.zstdDecodeFrameAlloc(init.gpa, frame) catch |err| {
+            std.debug.print("zstd_compat_unsupported random_explicit_sequences={d} input={d} encoded={d} error={s}\n", .{ sequence_count, payload.items.len, frame.len, @errorName(err) });
+            return err;
+        };
+        defer init.gpa.free(decoded);
+        if (!std.mem.eql(u8, payload.items, decoded)) return error.SizeMismatch;
+        checked += 1;
+        explicit_sequence_cases += 1;
+    }
+    const sequence_boundary_alphabet = 181;
+    var sequence_boundary_payload: [sequence_boundary_alphabet * (sequence_boundary_alphabet + 1) * 3]u8 = undefined;
+    fillSequenceBoundary(&sequence_boundary_payload, sequence_boundary_alphabet);
+    const sequence_boundary_frame = try runtime.encodeAdvancedAlloc(init.gpa, &sequence_boundary_payload, .{
+        .level = 1,
+        .min_match = 3,
+        .target_length = 1,
+        .strategy = 1,
+    });
+    defer init.gpa.free(sequence_boundary_frame);
+    try observeFrame(sequence_boundary_frame, &coverage);
+    const sequence_boundary_decoded = try vort.zstdDecodeFrameAlloc(init.gpa, sequence_boundary_frame);
+    defer init.gpa.free(sequence_boundary_decoded);
+    if (!std.mem.eql(u8, &sequence_boundary_payload, sequence_boundary_decoded)) return error.SizeMismatch;
+    checked += 1;
+    advanced_cases += 1;
+    // 43,690 is the largest count possible in a 128 KiB block when every
+    // sequence has the minimum three-byte match and only the first has a
+    // literal. Keep both wire-tier boundaries and the practical block maximum.
+    inline for (.{ 0x7eff, 0x7f00, 43_690 }) |sequence_count| {
+        const explicit_payload = try init.gpa.alloc(u8, 1 + sequence_count * 3);
+        defer init.gpa.free(explicit_payload);
+        @memset(explicit_payload, 'a');
+        const explicit_sequences = try init.gpa.alloc(libzstd.Sequence, sequence_count);
+        defer init.gpa.free(explicit_sequences);
+        @memset(explicit_sequences, .{ .offset = 1, .literal_length = 0, .match_length = 3 });
+        explicit_sequences[0].literal_length = 1;
+        const frame = try runtime.encodeSequencesAlloc(init.gpa, explicit_payload, explicit_sequences, 19);
+        defer init.gpa.free(frame);
+        try observeFrame(frame, &coverage);
+        const decoded = vort.zstdDecodeFrameAlloc(init.gpa, frame) catch |err| {
+            std.debug.print("zstd_compat_unsupported explicit_sequences={d} input={d} encoded={d} error={s}\n", .{ sequence_count, explicit_payload.len, frame.len, @errorName(err) });
+            return err;
+        };
+        defer init.gpa.free(decoded);
+        if (!std.mem.eql(u8, explicit_payload, decoded)) return error.SizeMismatch;
+        checked += 1;
+        explicit_sequence_cases += 1;
     }
     const streaming_options = [_]struct {
         options: libzstd.Runtime.AdvancedOptions,
@@ -85,6 +167,7 @@ pub fn main(init: std.process.Init) !void {
     for (streaming_options) |case| {
         const encoded = try runtime.encodeStreamingAlloc(init.gpa, advanced_payload, case.options, case.chunk_len, case.flush_each_chunk);
         defer init.gpa.free(encoded);
+        try observeFrame(encoded, &coverage);
         const decoded = vort.zstdDecodeFrameAlloc(init.gpa, encoded) catch |err| {
             std.debug.print("zstd_compat_unsupported streaming level={d} checksum={} strategy={any} chunk={d} flush={} encoded={d} error={s}\n", .{ case.options.level, case.options.checksum, case.options.strategy, case.chunk_len, case.flush_each_chunk, encoded.len, @errorName(err) });
             return err;
@@ -109,6 +192,7 @@ pub fn main(init: std.process.Init) !void {
         for (levels) |level| {
             const encoded = try runtime.encodeAlloc(init.gpa, payload, level);
             defer init.gpa.free(encoded);
+            try observeFrame(encoded, &coverage);
             const decoded = vort.zstdDecodeFrameAlloc(init.gpa, encoded) catch |err| {
                 std.debug.print("zstd_compat_unsupported path={s} size={d} level={d} encoded={d} error={s}\n", .{ path, payload.len, level, encoded.len, @errorName(err) });
                 return err;
@@ -134,6 +218,7 @@ pub fn main(init: std.process.Init) !void {
             else => return err,
         };
         defer init.gpa.free(encoded);
+        try observeFrame(encoded, &coverage);
         const expected_size = try vort.zstdDecodedFrameSize(encoded);
         const decoded = vort.zstdDecodeFrameAlloc(init.gpa, encoded) catch |err| {
             std.debug.print("zstd_compat_unsupported golden={s} decoded={d} encoded={d} error={s}\n", .{ path, expected_size, encoded.len, @errorName(err) });
@@ -175,10 +260,28 @@ pub fn main(init: std.process.Init) !void {
         golden_error_cases += 1;
     }
     if (unsupported != 0) return error.UnsupportedZstdFeature;
+    if (coverage.max_sequence_count < 43_690 or coverage.sequence_count_tiers != 0b111)
+        return error.ReferenceEncodeFailed;
     std.debug.print(
-        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} streaming_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} version={s}\n",
-        .{ checked, unsupported, advanced_cases, streaming_cases, corpus_cases, golden_cases, golden_error_cases, runtime.version() },
+        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} version={s}\n",
+        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, corpus_cases, golden_cases, golden_error_cases, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), runtime.version() },
     );
+}
+
+fn observeFrame(frame: []const u8, coverage: *Coverage) !void {
+    var iterator = try vort.zstdIterateNativeFrameBlocks(frame);
+    var block_count: usize = 0;
+    while (try iterator.next()) |block| {
+        block_count += 1;
+        if (block.block_type != .compressed) continue;
+        const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(frame, block);
+        coverage.max_sequence_count = @max(coverage.max_sequence_count, modes.sequence_count);
+        const tier: u2 = if (modes.sequence_count < 128) 0 else if (modes.sequence_count < 0x7f00) 1 else 2;
+        coverage.sequence_count_tiers |= @as(u3, 1) << tier;
+        const combination: u6 = @intCast(@as(usize, @intFromEnum(modes.literal_length_mode)) * 16 + @as(usize, @intFromEnum(modes.offset_mode)) * 4 + @intFromEnum(modes.match_length_mode));
+        coverage.sequence_mode_combinations |= @as(u64, 1) << combination;
+    }
+    coverage.max_block_count = @max(coverage.max_block_count, block_count);
 }
 
 fn fillAdvanced(payload: []u8) void {
@@ -194,6 +297,40 @@ fn fillAdvanced(payload: []u8) void {
     // opportunity to emit offsets across ordinary block boundaries.
     @memcpy(payload[1024 * 1024 ..][0 .. 256 * 1024], payload[0 .. 256 * 1024]);
     @memcpy(payload[1536 * 1024 ..][0 .. 256 * 1024], payload[384 * 1024 ..][0 .. 256 * 1024]);
+}
+
+fn fillSequenceBoundary(output: []u8, comptime alphabet_size: usize) void {
+    std.debug.assert(output.len == alphabet_size * (alphabet_size + 1) * 3);
+    var written: usize = 0;
+    for (0..alphabet_size) |symbol| writeBoundaryToken(output, &written, @intCast(symbol));
+
+    const Generator = struct {
+        fn run(t: usize, period: usize, state: *[3]u8, out: []u8, cursor: *usize) void {
+            if (t > 2) {
+                if (2 % period == 0) {
+                    for (state[1 .. period + 1]) |symbol| {
+                        writeBoundaryToken(out, cursor, symbol);
+                    }
+                }
+                return;
+            }
+            state[t] = state[t - period];
+            run(t + 1, period, state, out, cursor);
+            var symbol = state[t - period] + 1;
+            while (symbol < alphabet_size) : (symbol += 1) {
+                state[t] = symbol;
+                run(t + 1, t, state, out, cursor);
+            }
+        }
+    };
+    var state: [3]u8 = @splat(0);
+    Generator.run(1, 1, &state, output, &written);
+    std.debug.assert(written == output.len);
+}
+
+fn writeBoundaryToken(output: []u8, written: *usize, symbol: u8) void {
+    output[written.*..][0..3].* = .{ symbol, symbol ^ 0xa5, symbol ^ 0x5a };
+    written.* += 3;
 }
 
 fn allBytesEqual(bytes: []const u8, expected: u8) bool {
