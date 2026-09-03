@@ -2946,7 +2946,10 @@ pub const NativeIncrementalFrameDecoder = struct {
                                     .status = .need_output,
                                 };
                             }
-                            try self.fallbackDirectOutputToScratch();
+                            self.transitionDirectCompressedBlockToStream() catch |err| {
+                                self.recordError(.direct_output, err);
+                                return err;
+                            };
                             continue;
                         }
                         const source = self.frame_scratch.items[self.direct_payload_offset..][0..self.direct_payload_len];
@@ -3699,21 +3702,28 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.phase = .frame;
     }
 
-    fn fallbackDirectOutputToScratch(self: *NativeIncrementalFrameDecoder) Error!void {
-        const frame_len = self.direct_frame_len;
-        const already_emitted = self.direct_decoded_read;
-        self.decodeCompleteFrame(self.frame_scratch.items[0..frame_len]) catch |err| {
-            self.recordError(.direct_output, err);
-            return err;
-        };
-        if (already_emitted > self.decoded_scratch.items.len) {
-            self.recordError(.direct_output, error.SizeMismatch);
-            return error.SizeMismatch;
-        }
-        self.decoded_offset = already_emitted;
-        self.resetDirectOutput();
-        self.discardFrameScratchPrefix(frame_len);
-        self.phase = .output;
+    fn transitionDirectCompressedBlockToStream(self: *NativeIncrementalFrameDecoder) Error!void {
+        if (!self.direct_block_compressed or self.direct_payload_read != 0) return error.CorruptFrame;
+        const block_input_offset = self.direct_payload_offset;
+        const block_len = self.direct_payload_len;
+        const block_last = !self.direct_sequence_continuation.retainsState();
+        const block_size_max = self.direct_block_size_max;
+        const frame_expected_len = self.direct_decoded_len;
+        const frame_decoded_len = self.direct_decoded_read;
+        const content_checksum = self.direct_content_checksum;
+        const content_hasher = self.direct_content_hasher;
+
+        self.resetBlockStream();
+        self.block_stream_input_offset = block_input_offset;
+        self.block_stream_stage = .compressed_payload;
+        self.block_stream_block_remaining = block_len;
+        self.block_stream_block_last = block_last;
+        self.block_stream_block_size_max = block_size_max;
+        self.block_stream_frame_expected_len = frame_expected_len;
+        self.block_stream_frame_decoded_len = frame_decoded_len;
+        self.block_stream_content_checksum = content_checksum;
+        self.block_stream_content_hasher = content_hasher;
+        self.phase = .block_stream;
     }
 
     fn rememberDirectOutput(self: *NativeIncrementalFrameDecoder, bytes: []const u8) Error!void {
@@ -19978,6 +19988,28 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     try std.testing.expectEqual(frame.items.len, incremental_input);
     try std.testing.expectEqualSlices(u8, payload.items, incremental_output);
     try std.testing.expectEqual(@as(usize, 1), incremental.streamedSequenceBlockCount());
+
+    var direct_incremental = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.items.len,
+        .max_decoded_buffer_len = payload.items.len,
+    });
+    defer direct_incremental.deinit();
+    @memset(incremental_output, 0);
+    const direct_initial = try direct_incremental.step(frame.items, incremental_output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, direct_initial.status);
+    try std.testing.expectEqualSlices(u8, "direct_output", direct_incremental.diagnostics().phase_name);
+    incremental_written = 0;
+    while (direct_incremental.snapshot().phase != .done) {
+        const output_end = @min(payload.items.len, incremental_written + 1);
+        const result = try direct_incremental.step("", incremental_output[incremental_written..output_end]);
+        incremental_written += result.progress.output_written;
+        try std.testing.expectEqual(@as(usize, 0), direct_incremental.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), direct_incremental.decodedBufferCapacity());
+        if (result.status == .need_output) try std.testing.expect(incremental_written < payload.items.len);
+    }
+    try direct_incremental.finish();
+    try std.testing.expectEqualSlices(u8, payload.items, incremental_output);
+    try std.testing.expectEqual(@as(usize, 1), direct_incremental.streamedSequenceBlockCount());
 }
 
 test "zstd compressed sequence state scratch fits one byte" {
@@ -21520,7 +21552,22 @@ test "zstd native incremental decoder streams single compressed block without de
     defer bad.deinit();
     const bad_initial = try bad.step(corrupt, output[0..0]);
     try std.testing.expectEqual(core.StepResult.Status.need_output, bad_initial.status);
-    try std.testing.expectError(error.ChecksumMismatch, bad.step("", &output));
+    var bad_written: usize = 0;
+    while (bad_written < output.len) {
+        const end = @min(output.len, bad_written + 1);
+        const result = bad.step("", output[bad_written..end]) catch |err| {
+            try std.testing.expectEqual(error.ChecksumMismatch, err);
+            break;
+        };
+        bad_written += result.progress.output_written;
+        try std.testing.expectEqual(@as(usize, 0), bad.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), bad.decodedBufferCapacity());
+        if (result.status == .done) return error.CorruptFrame;
+    }
+    // The final caller byte is produced before the footer comparison returns
+    // an error, so error-union semantics cannot report that call's progress.
+    try std.testing.expectEqual(payload.len - 1, bad_written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
     try std.testing.expectEqualSlices(u8, "ChecksumMismatch", bad.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "direct_output", bad.diagnostics().last_error_phase_name);
 }
@@ -21567,7 +21614,7 @@ test "zstd native incremental decoder streams no-size compressed frame directly"
     try std.testing.expectEqualSlices(u8, "direct_output", bad.diagnostics().last_error_phase_name);
 }
 
-test "zstd native incremental compressed block falls back for small output" {
+test "zstd native incremental compressed block switches to sequence streaming for small output" {
     const payload = ("fedcba9876543210" ** 8) ** 64;
     const encoded = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .selection = .literal_only,
@@ -21590,21 +21637,18 @@ test "zstd native incremental compressed block falls back for small output" {
 
     var written: usize = 0;
     while (true) {
-        const end = @min(output.len, written + 113);
+        const end = @min(output.len, written + 1);
         const result = try decoder.step("", output[written..end]);
         written += result.progress.output_written;
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
         if (result.status == .done) break;
         try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
-        if (decoder.decoded_scratch.items.len != 0) {
-            // A compressed block cannot be partially decoded directly without a
-            // resumable block decoder, so small caller buffers intentionally
-            // fall back to the mature whole-frame scratch path.
-            try std.testing.expectEqual(payload.len, decoder.decoded_scratch.items.len);
-        }
     }
     try std.testing.expectEqual(payload.len, written);
     try std.testing.expectEqualSlices(u8, payload, &output);
     try std.testing.expectEqual(payload.len, decoder.diagnostics().output_written);
+    try std.testing.expectEqual(@as(usize, 1), decoder.streamedSequenceBlockCount());
 }
 
 test "zstd native incremental compressed checksum validates directly" {
@@ -21900,18 +21944,21 @@ test "zstd native incremental multi compressed keeps direct history across outpu
     try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
 
     var written: usize = 0;
+    var chunk_len: usize = 132;
     while (true) {
-        const end = @min(output.len, written + 150);
+        const end = @min(output.len, written + chunk_len);
         const result = try decoder.step("", output[written..end]);
         written += result.progress.output_written;
         try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
         try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
         if (result.status == .done) break;
         try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
+        chunk_len = 1;
     }
     try std.testing.expectEqual(payload.len, written);
     try std.testing.expectEqualSlices(u8, payload, &output);
     try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+    try std.testing.expectEqual(@as(usize, 1), decoder.streamedSequenceBlockCount());
 }
 
 test "zstd native incremental decoder drains concatenated streams and skippable frames" {
@@ -22108,11 +22155,18 @@ test "zstd native incremental decoder streams dictionary compressed blocks direc
     const initial = try decoder.step(encoded.frame, output[0..0]);
     try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
     try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
-    const decoded = try decoder.step("", &output);
-    try std.testing.expectEqual(core.StepResult.Status.done, decoded.status);
-    try std.testing.expectEqual(payload.len, decoded.progress.output_written);
+    var written: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const end = @min(output.len, written + 1);
+        const decoded = try decoder.step("", output[written..end]);
+        written += decoded.progress.output_written;
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
+        if (decoded.status == .need_output) try std.testing.expect(written < output.len);
+    }
+    try std.testing.expectEqual(payload.len, written);
     try std.testing.expectEqualSlices(u8, payload, &output);
-    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+    try std.testing.expectEqual(@as(usize, 1), decoder.streamedSequenceBlockCount());
 
     var corrupt = try std.testing.allocator.dupe(u8, encoded.frame);
     defer std.testing.allocator.free(corrupt);

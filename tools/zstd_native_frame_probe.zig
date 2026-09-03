@@ -2982,6 +2982,8 @@ fn checkIncrementalFrameLibraryApis(allocator: std.mem.Allocator, payload: []con
         input_offset += result.progress.input_read;
         output_offset += result.progress.output_written;
         status = result.status;
+        if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0)
+            return error.ZstdNativeFrameProbeMismatch;
 
         switch (status) {
             .need_input => {

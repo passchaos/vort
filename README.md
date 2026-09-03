@@ -51,9 +51,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   native frames (including dictionary, dictionary-set, no-content-size,
   bounded-history multi-block paths, per-block compressed-input retention when
   a frame exceeds the configured buffer limit, and resumable zero-scratch
-  block-stream output for raw/RLE/Huffman literals and sequence execution across
-  arbitrary caller output boundaries, plus header-only incremental discard/capture
-  of arbitrarily large skippable-frame payloads), zero-allocation native stream/block iterators, and
+  output for raw/RLE/Huffman literals and sequence execution across arbitrary
+  caller output boundaries (including complete frames prevalidated by the direct
+  path), plus header-only incremental discard/capture of arbitrarily large
+  skippable-frame payloads), zero-allocation native stream/block iterators, and
   dependency-free standard full-dictionary generation from caller-selected
   history content using portable baseline entropy tables, plus first-stage
   corpus training of a complete literal Huffman alphabet and OF/ML/LL sequence
@@ -690,9 +691,10 @@ defer zstd_bounded_incremental.deinit();
 // block at a time. isBlockStreaming() exposes that path and
 // compressedBufferedBytes()/compressedBufferCapacity() report logical and
 // allocated encoded-input storage; both stay within a finite configured cap.
-// On that block-stream path, sequence-bearing blocks retain their FSE/Huffman
-// cursors and pending literal/match progress across calls without allocating
-// decoded-block scratch; streamedSequenceBlockCount() reports path coverage.
+// Sequence-bearing blocks retain their FSE/Huffman cursors and pending
+// literal/match progress across calls without allocating decoded-block scratch,
+// including when a prevalidated direct frame meets a tiny output slice;
+// streamedSequenceBlockCount() reports path coverage.
 // Skippable frames retain only their 8-byte header; metadata payloads are
 // discarded or copied into caller-owned skippable_output storage incrementally.
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
@@ -1141,13 +1143,13 @@ zig build run-native-library-bench-releasefast-path-gate
 The bench command accepts repeated `--path` arguments plus `--limit` for focused project-file payloads. The Debug and ReleaseFast gates currently require the LZ4 chain-depth, Zstd match-budget, high-byte
 FSE Huffman, LZ4/Zstd lib/native lib-decode rows, Zstd sequence-Huffman literal, LZ4/Zstd lib-generated compatibility-frame/no-size/checksum/no-size+checksum/independent/full-independent, dictionary, trained-dictionary,
 dictionary-set, chunked dictionary-set, chunked append, chunked append exact-size, reusable decoder,
-reusable append exact-size, direct-output, and small-output fallback rows to
+reusable append exact-size, direct-output, and small-output rows to
 round-trip and to preserve the expected size relationships. In addition to the
 CSV rows, the bench executable now runs cheap pre-row smoke checks for
 no-content-size multi-compressed Zstd frames (including checksum mismatch and
 truncated-checksum limit precedence), LZ4 skippable streams followed by
 malformed/truncated/checksum/trailing frames, and LZ4/Zstd dictionary-set
-skippable streams in both direct-output and small-output fallback modes. These checks intentionally
+skippable streams in direct-output plus codec-specific small-output modes. These checks intentionally
 do not add CSV rows, keeping the Debug gate bounded. The heavier limited
 compressed-FSE sequence-table path is covered by
 `run-zstd-native-dictionary-probe` for public inspect/decode of LL/OF/ML=FSE

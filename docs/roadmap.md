@@ -8709,7 +8709,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   read from the bounded rolling history and bytes emitted earlier in the same
   call. One-byte-output tests cover Repeat_Mode across blocks, all three tables
   in compressed FSE mode, and preset-dictionary matches. The upstream 5,400-frame
-  gate executes 61,951 sequence-bearing blocks on this path and now rejects any
-  non-zero decoded-scratch length or capacity during block streaming. The
-  complete-frame direct path still retains its small-output scratch fallback;
-  sharing this cursor there is the next memory-model cleanup.
+  gate executes 76,578 sequence-bearing blocks on this path and now rejects any
+  non-zero decoded-scratch length or capacity during block streaming. Complete
+  frames prevalidated for direct output now switch in place to the same cursor
+  when a compressed block exceeds the current caller-output slice, preserving
+  prior history, entropy tables, checksum progress, and frame boundaries. This
+  removes the last decoded-block scratch fallback from supported incremental
+  Zstd compressed output while retaining the existing full-block fast path.
+  With direct-path switches included, the same corpus now exercises this state
+  on 2,699 frames and sequence-free cursor output on 197 blocks.

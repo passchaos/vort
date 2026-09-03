@@ -5393,7 +5393,7 @@ test "root native incremental finish reports direct-output not drained" {
     try std.testing.expectEqual(@as(usize, 5), zstd_partial.progress.output_written);
     try std.testing.expectError(error.OutputTooSmall, zstd_partial_decoder.finish());
     try std.testing.expectEqualSlices(u8, "OutputTooSmall", zstd_partial_decoder.diagnostics().last_error_name);
-    try std.testing.expectEqualSlices(u8, "output", zstd_partial_decoder.diagnostics().last_error_phase_name);
+    try std.testing.expectEqualSlices(u8, "direct_output", zstd_partial_decoder.diagnostics().last_error_phase_name);
 }
 
 test "root native incremental direct-output waits across split block boundaries" {
@@ -6275,7 +6275,7 @@ test "root lz4 linked direct-output falls back for small output" {
     try std.testing.expectEqualSlices(u8, &lz4_payload, &output);
 }
 
-test "root zstd multi-block direct-output falls back for small output" {
+test "root zstd multi-block direct-output switches for small output" {
     const payload = "a" ** 264;
     const encoded = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .selection = .literal_only,
@@ -6303,13 +6303,14 @@ test "root zstd multi-block direct-output falls back for small output" {
     try std.testing.expectEqual(StepResult.Status.need_output, partial.status);
     try std.testing.expectEqual(@as(usize, 17), partial.progress.output_written);
     try std.testing.expectEqual(payload.len, decoder.snapshot().decoded_len.?);
-    try std.testing.expectEqual(payload.len, decoder.decoded_scratch.items.len);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+    try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
     const done = try decoder.step("", output[17..]);
     try std.testing.expectEqual(StepResult.Status.done, done.status);
     try std.testing.expectEqualSlices(u8, payload, &output);
 }
 
-test "root native dictionary direct-output falls back for small output" {
+test "root native dictionary direct-output handles small output" {
     const lz4_dict = Lz4NativeDictionary.init(0x5351, "abcdefghijklmnop");
     const lz4_payload = "abcdefghijklmnop-small-output-tail";
     const lz4_frame = try lz4EncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, lz4_payload, .{
@@ -6361,13 +6362,14 @@ test "root native dictionary direct-output falls back for small output" {
     try std.testing.expectEqual(StepResult.Status.need_output, zstd_partial.status);
     try std.testing.expectEqual(@as(usize, 5), zstd_partial.progress.output_written);
     try std.testing.expectEqual(zstd_payload.len, zstd_decoder.snapshot().decoded_len.?);
-    try std.testing.expectEqual(zstd_payload.len, zstd_decoder.decoded_scratch.items.len);
+    try std.testing.expectEqual(@as(usize, 0), zstd_decoder.decodedBufferedBytes());
+    try std.testing.expectEqual(@as(usize, 0), zstd_decoder.decodedBufferCapacity());
     const zstd_done = try zstd_decoder.step("", zstd_output[5..]);
     try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
     try std.testing.expectEqualSlices(u8, zstd_payload, &zstd_output);
 }
 
-test "root native dictionary-set direct-output falls back for small output" {
+test "root native dictionary-set direct-output handles small output" {
     const lz4_dict = Lz4NativeDictionary.init(0x5451, "abcdefghijklmnop");
     const lz4_other_dict = Lz4NativeDictionary.init(0x5452, "QRSTUVWXYZabcdef");
     const lz4_dictionary_set = Lz4NativeDictionarySet.init(&.{ lz4_dict, lz4_other_dict });
@@ -6423,7 +6425,8 @@ test "root native dictionary-set direct-output falls back for small output" {
     try std.testing.expectEqual(StepResult.Status.need_output, zstd_partial.status);
     try std.testing.expectEqual(@as(usize, 5), zstd_partial.progress.output_written);
     try std.testing.expectEqual(zstd_payload.len, zstd_decoder.snapshot().decoded_len.?);
-    try std.testing.expectEqual(zstd_payload.len, zstd_decoder.decoded_scratch.items.len);
+    try std.testing.expectEqual(@as(usize, 0), zstd_decoder.decodedBufferedBytes());
+    try std.testing.expectEqual(@as(usize, 0), zstd_decoder.decodedBufferCapacity());
     const zstd_done = try zstd_decoder.step("", zstd_output[5..]);
     try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
     try std.testing.expectEqualSlices(u8, zstd_payload, &zstd_output);

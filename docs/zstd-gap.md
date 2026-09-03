@@ -188,17 +188,16 @@ Current interpretation:
   Frames without an embedded content size can use the same direct path when
   callers provide `expected_output_len` or `max_decoded_buffer_len` as a safe
   preflight cap. The direct path keeps a bounded history window, so multi-block
-  sequence matches can continue across caller output chunks without falling back
-  solely because earlier frame bytes are no longer in the current output slice.
-  When caller output is too small for the next compressed block, the direct path
-  intentionally falls back to the whole-frame scratch facade only if it cannot
-  first return existing progress as `need_output`; root tests and dictionary
+  sequence matches can continue across caller output chunks. When caller output
+  is too small for the next compressed block, the prevalidated direct path first
+  returns existing progress as `need_output`, then switches that block to the
+  same resumable sequence cursor without decoded scratch; root tests and dictionary
   probes now cover dictionary, dictionary-set, no-content-size, and multi-block
-  fallback shapes, while the native library bench can add focused `--path` payloads with `--limit` and the gates now keep Debug and ReleaseFast CSV rows for
+  small-output switches, while the native library bench can add focused `--path` payloads with `--limit` and the gates now keep Debug and ReleaseFast CSV rows for
   LZ4/Zstd lib/native lib-decode rows plus LZ4/Zstd lib-generated compatibility-frame/no-size/checksum/no-size+checksum/independent/full-independent and trained-dictionary library encode/decode plus cheap smoke
   coverage for no-content-size multi-compressed frames, checksum mismatch,
-  truncated-checksum limit precedence, and dictionary-set skippable direct-output
-  plus fallback without adding CSV rows. Dictionary probes also pin
+  truncated-checksum limit precedence, and dictionary-set skippable direct output
+  plus scratch-free switching without adding CSV rows. Dictionary probes also pin
   `Dictionary_ID` error precedence for hostile Zstd frames: missing or
   mismatched dictionaries are reported as `NeedDictionary` before checksum,
   content-size, malformed raw/RLE block, or malformed compressed
@@ -233,7 +232,7 @@ Current interpretation:
   `run-zstd-native-dictionary-probe` exercise the public dictionary APIs,
   top-level and reusable chunked append/exact-size append decode helpers,
   public sequence-mode inspection for LL/OF/ML=FSE and repeated-table blocks, and
-  direct-output fallback paths directly, while the generated-corpus probe
+  direct-output small-buffer switching paths directly, while the generated-corpus probe
   accepts repeated `--path` arguments or bounded recursive `--dir` discovery
   with an optional `--limit`
   for focused file payloads when investigating real corpus failures.
@@ -299,19 +298,27 @@ Recommended next comparison steps:
   orchestration, summary parsing, failure propagation, and cleanup without
   requiring the optional upstream checkout. Every generated frame is now also
   decoded incrementally with a 128 KiB-plus-header compressed-input limit; all
-  5,400 pass, and 714 frames exceed that limit and exercise block streaming.
+  All 5,400 pass; 714 frames enter block streaming because they exceed that
+  limit, and 2,699 frames exercise the state after including direct-path
+  small-output switches.
   Sequence-free raw/RLE/Huffman literal sections inside compressed blocks now
   retain a persistent literal/Huffman cursor and write directly into tiny caller
-  buffers without `decoded_scratch`; the same suite exercises 132 such blocks.
+  buffers without `decoded_scratch`; the same suite exercises 197 such blocks
+  after including complete-frame direct-path switches.
   On the bounded block-stream path, sequence-bearing compressed blocks now also
   retain their reverse-bitstream/FSE cursor, repeated offsets, Huffman cursor,
   and pending literal/match lengths across `step()` calls. Matches read from the
   bounded rolling history plus the current caller slice, so even one-byte output
-  slices need no decoded-block scratch. The 5,400-frame suite exercises 61,951
-  of these blocks across all 64
-  LL/OF/ML mode tuples, dictionaries up to 1 MiB, and blocks with up to 43,690
-  sequences; its block-stream decoded-scratch length and capacity peaks are both
+  slices need no decoded-block scratch. The 5,400-frame suite exercises 76,578
+  of these blocks across all 64 LL/OF/ML mode tuples, dictionaries up to 1 MiB,
+  and blocks with up to 43,690
+  sequences; its streamed decoded-scratch length and capacity peaks are both
   zero.
+  Complete frames that were prevalidated for direct output now switch in place
+  to the same cursor when caller output cannot hold the next compressed block.
+  The switch preserves earlier block history, sequence tables, checksum state,
+  and the already-known frame boundary, removing the old full-frame decoded
+  scratch fallback without slowing the large-output direct path.
   Skippable-frame payloads now follow a separate incremental state after their
   eight-byte header. They are discarded or copied into caller-owned capture
   storage directly from input, so metadata size no longer counts against

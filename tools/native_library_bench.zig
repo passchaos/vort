@@ -437,12 +437,17 @@ fn zstdIncrementalDirectRow(io: std.Io, allocator: std.mem.Allocator, case: Case
 }
 
 fn zstdIncrementalFallbackRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
+    // Keep the historical CSV mode name: this row now measures the resumable
+    // small-output path and asserts that Zstd does not allocate decoded scratch.
     const options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only, .content_checksum = false };
     const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, case.payload, options);
     defer allocator.free(encoded.frame);
     const decoded = try allocator.alloc(u8, case.payload.len);
     defer allocator.free(decoded);
-    try decodeZstdIncrementalFallback(allocator, encoded.frame, decoded, case.payload);
+    decodeZstdIncrementalFallback(allocator, encoded.frame, decoded, case.payload) catch |err| {
+        std.debug.print("zstd incremental small-output case failed: {s}: {s}\n", .{ case.name, @errorName(err) });
+        return err;
+    };
 
     const decode_result = try timeDecodeZstdIncrementalFallback(io, allocator, encoded.frame, decoded, case.payload, iterations);
     const encode_result = try timeEncodeZstd(io, allocator, case.payload, options, iterations);
@@ -2265,7 +2270,7 @@ fn smokeZstdDictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
     const first_len = @max(@as(usize, 1), output.len / 32);
     const first_step = try decoder.step("", output[0..first_len]);
     if (first_step.status != .need_output or first_step.progress.output_written != first_len) return error.SizeMismatch;
-    if (decoder.decoded_scratch.items.len == 0) return error.SizeMismatch;
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
 
     var written = first_step.progress.output_written;
     while (true) {
@@ -2297,7 +2302,7 @@ fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
     if (!std.mem.eql(u8, decoder.diagnostics().phase_name, "direct_output")) return error.SizeMismatch;
     const partial = try decoder.step("", decoded[0..17]);
     if (partial.status != .need_output or partial.progress.output_written != 17) return error.SizeMismatch;
-    if (decoder.decoded_scratch.items.len != payload.len) return error.SizeMismatch;
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
     const done = try decoder.step("", decoded[17..]);
     if (done.status != .done) return error.SizeMismatch;
     if (!std.mem.eql(u8, payload, &decoded)) return error.SizeMismatch;
@@ -2929,7 +2934,8 @@ fn decodeZstdIncrementalFallback(allocator: std.mem.Allocator, encoded: []const 
         .max_decoded_buffer_len = decoded.len,
     });
     defer decoder.deinit();
-    try drainIncrementalFallback(&decoder, encoded, decoded, expected, true);
+    try drainIncrementalFallback(&decoder, encoded, decoded, expected, false);
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
 }
 
 fn decodeLz4DictionarySetDirect(
@@ -3013,7 +3019,8 @@ fn decodeZstdDictionarySetFallback(
             .max_decoded_buffer_len = decoded.len,
         });
     defer decoder.deinit();
-    try drainIncrementalFallback(&decoder, encoded, decoded, zstd_dictionary_set_payload, use_dictionary_set);
+    try drainIncrementalFallback(&decoder, encoded, decoded, zstd_dictionary_set_payload, false);
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
 }
 
 fn drainIncrementalFallback(decoder: anytype, encoded: []const u8, decoded: []u8, expected: []const u8, require_scratch_fallback: bool) !void {
@@ -3025,10 +3032,8 @@ fn drainIncrementalFallback(decoder: anytype, encoded: []const u8, decoded: []u8
     const first = try decoder.step("", decoded[0..first_len]);
     written += first.progress.output_written;
     if (first.status != .need_output or written != first_len) return error.SizeMismatch;
-    // For a single frame the scratch buffer usually contains the whole frame
-    // payload. For concatenated streams it may contain only the current frame,
-    // which is still the fallback behavior this benchmark row is meant to
-    // exercise. The final equality check below verifies full stream output.
+    // LZ4 still exercises its decoded-scratch fallback here. Zstd passes false
+    // and independently asserts its resumable small-output path stays scratch-free.
     if (require_scratch_fallback and decoder.decoded_scratch.items.len == 0) return error.SizeMismatch;
 
     while (true) {
