@@ -90,7 +90,7 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type) type {
         }
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
-                .input_read = self.total_input,
+                .input_read = self.stream_input,
                 .output_written = self.stream_output,
                 .current_input = self.total_input,
                 .current_output = self.total_output,

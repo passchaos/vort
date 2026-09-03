@@ -185,7 +185,10 @@ pub fn Decoder(comptime Codec: type) type {
                         self.completeStream();
                         return result(input_read, output_written, .done);
                     }
-                    if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
+                    // Continue parsing after an exact output fill. Remaining
+                    // skippable chunks require no output and must still be
+                    // consumed; a following data chunk will naturally return
+                    // need_output once it reaches this phase with no space.
                 }
                 if (self.phase == .header) {
                     const n = @min(4 - self.header_len, input.len - input_read);

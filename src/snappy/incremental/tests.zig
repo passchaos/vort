@@ -215,6 +215,7 @@ test "incremental Snappy encoder and decoder continue streams" {
     defer std.testing.allocator.free(second_frame);
     try std.testing.expectEqual(@as(usize, 2), encoder.snapshot().stream_count);
     try std.testing.expectEqual(first.len + second.len, encoder.snapshot().input_read);
+    try std.testing.expectEqual(second.len, encoder.snapshot().current_input);
 
     var decoder = snappy.IncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{ .expected_output_len = first.len });
     defer decoder.deinit();
@@ -308,7 +309,9 @@ test "incremental Snappy decoder captures skippable events" {
     });
     defer decoder.deinit();
     var output: [7]u8 = undefined;
-    _ = try decoder.step(frame.items, &output);
+    const result = try decoder.step(frame.items, &output);
+    try std.testing.expectEqual(frame.items.len, result.progress.input_read);
+    try std.testing.expectEqual(output.len, result.progress.output_written);
     try decoder.finish();
     const snapshot = decoder.snapshot();
     try std.testing.expectEqualSlices(u8, payload[0..captured.len], &captured);
@@ -318,6 +321,33 @@ test "incremental Snappy decoder captures skippable events" {
     try std.testing.expectEqual(@as(usize, 1), snapshot.skippable_event_count);
     try std.testing.expectEqual(@as(u8, 0x82), events[0].chunk_type);
     try std.testing.expectEqual(payload.len, events[0].payload_len);
+}
+
+test "incremental Snappy decoder preserves backpressure after exact output fill" {
+    const first = try snappy.encodeFrameAlloc(std.testing.allocator, "first");
+    defer std.testing.allocator.free(first);
+    const second = try snappy.encodeFrameAlloc(std.testing.allocator, "second");
+    defer std.testing.allocator.free(second);
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, first);
+    try stream.appendSlice(std.testing.allocator, second);
+
+    var decoder = snappy.IncrementalFrameDecoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    var first_output: ["first".len]u8 = undefined;
+    const boundary = try decoder.step(stream.items, &first_output);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, boundary.status);
+    try std.testing.expectEqualSlices(u8, "first", &first_output);
+    try std.testing.expectEqual(stream.items.len, boundary.progress.input_read);
+    try std.testing.expectEqual("second".len, decoder.snapshot().payload_remaining);
+
+    var second_output: ["second".len]u8 = undefined;
+    const drained = try decoder.step("", &second_output);
+    try std.testing.expectEqual(@as(usize, 0), drained.progress.input_read);
+    try std.testing.expectEqual(second_output.len, drained.progress.output_written);
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, "second", &second_output);
 }
 
 fn encodeIncrementalFrameTest(encoder: *snappy.IncrementalFrameEncoder, payload: []const u8) ![]u8 {

@@ -6153,6 +6153,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   and caller-owned `(type,length)` events. Snapshots distinguish total versus
   captured bytes/events and truncation, preserving transparent decode without
   hidden allocations.
+- Fixed two incremental Snappy continuation boundaries exposed by the full root
+  suite. Encoder snapshots now report cumulative `input_read` across
+  `nextStream` while retaining `current_input` for the active stream. Decoder
+  output that exactly fills the caller slice no longer prevents following
+  identifier/skippable chunks from being consumed and captured; a following
+  data chunk remains buffered with `need_output`, preserving backpressure.
 - Added a no-content-size incremental native LZ4 frame encoder under
   `src/lz4/incremental/`. It preserves linked or independent block policy, one
   bounded frame block, 64 KiB linked history, block/content XXH32 checksums, and
