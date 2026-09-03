@@ -34,7 +34,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("mode,case,samples,sample_bytes,target_size,max_phrases,iterations,rounds,best_ns,bytes_per_second,checksum\n");
+    try csv.writer.writeAll("mode,case,samples,sample_bytes,target_size,max_phrases,iterations,rounds,best_ns,bytes_per_second,checksum,allocations,deallocations,resizes,allocated_bytes,freed_bytes\n");
     for (cases) |case| {
         try benchmarkCase(init, &csv.writer, case, .basic, options);
         try benchmarkCase(init, &csv.writer, case, .validated, options);
@@ -56,51 +56,17 @@ fn benchmarkCase(init: std.process.Init, writer: *std.Io.Writer, case: Case, mod
     const basic = mode == .basic;
     const training = if (!basic) case.samples[0 .. case.samples.len - 4] else case.samples;
     const validation = if (!basic) case.samples[case.samples.len - 4 ..] else &.{};
+    var allocation_probe = std.testing.FailingAllocator.init(init.gpa, .{});
+    const allocation_dictionary = try trainMode(allocation_probe.allocator(), training, validation, mode);
+    allocation_probe.allocator().free(allocation_dictionary);
+    if (allocation_probe.allocated_bytes != allocation_probe.freed_bytes) return error.MemoryLeak;
     var best_ns: u64 = std.math.maxInt(u64);
     var best_checksum: usize = 0;
     for (0..options.rounds) |_| {
         var checksum: usize = 0;
         const start = std.Io.Clock.awake.now(init.io);
         for (0..options.iterations) |_| {
-            const dictionary = switch (mode) {
-                .basic => try vort.trainDictionaryAlloc(init.gpa, training, .{ .target_size = 512, .max_phrases = 1024 }),
-                .validated => try vort.dictionary.trainValidatedAlloc(init.gpa, training, validation, .{ .target_size = 512, .max_phrases = 1024 }),
-                .validated_separate => blk: {
-                    var combined: std.ArrayList(u8) = .empty;
-                    errdefer combined.deinit(init.gpa);
-                    for (validated_targets) |target_size| {
-                        const trained = try vort.dictionary.trainValidatedAlloc(init.gpa, training, validation, .{ .target_size = target_size, .max_phrases = 1024 });
-                        defer init.gpa.free(trained);
-                        try combined.appendSlice(init.gpa, trained);
-                    }
-                    break :blk try combined.toOwnedSlice(init.gpa);
-                },
-                .validated_targets => blk: {
-                    const trained = try vort.dictionary.trainValidatedTargetsAlloc(
-                        init.gpa,
-                        training,
-                        validation,
-                        &validated_targets,
-                        .{ .target_size = 512, .max_phrases = 1024 },
-                    );
-                    defer trained.deinit(init.gpa);
-                    var combined: std.ArrayList(u8) = .empty;
-                    errdefer combined.deinit(init.gpa);
-                    for (trained.dictionaries) |candidate| try combined.appendSlice(init.gpa, candidate.?);
-                    break :blk try combined.toOwnedSlice(init.gpa);
-                },
-                .zstd_validated => blk: {
-                    const trained = try vort.zstdTrainValidatedStandardDictionaryAlloc(
-                        init.gpa,
-                        training,
-                        validation,
-                        .{ .target_size = 512, .max_phrases = 1024 },
-                        0x564f_5254,
-                    );
-                    defer trained.deinit(init.gpa);
-                    break :blk try init.gpa.dupe(u8, trained.bytes);
-                },
-            };
+            const dictionary = try trainMode(init.gpa, training, validation, mode);
             checksum +%= dictionary.len;
             for (dictionary) |byte| checksum +%= byte;
             init.gpa.free(dictionary);
@@ -113,9 +79,52 @@ fn benchmarkCase(init: std.process.Init, writer: *std.Io.Writer, case: Case, mod
     }
     const input_bytes = case.samples.len * case.samples[0].len;
     const bytes_per_second = if (best_ns == 0) 0 else @as(u64, @intFromFloat(@as(f64, @floatFromInt(input_bytes * options.iterations)) * 1_000_000_000.0 / @as(f64, @floatFromInt(best_ns))));
-    try writer.print("{s},{s},{d},{d},512,1024,{d},{d},{d},{d},{d}\n", .{
-        @tagName(mode), case.name, case.samples.len, input_bytes, options.iterations, options.rounds, best_ns, bytes_per_second, best_checksum,
+    try writer.print("{s},{s},{d},{d},512,1024,{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
+        @tagName(mode),               case.name,                      case.samples.len,              input_bytes,                      options.iterations,           options.rounds, best_ns, bytes_per_second, best_checksum,
+        allocation_probe.allocations, allocation_probe.deallocations, allocation_probe.resize_index, allocation_probe.allocated_bytes, allocation_probe.freed_bytes,
     });
+}
+
+fn trainMode(allocator: std.mem.Allocator, training: []const []const u8, validation: []const []const u8, mode: Mode) ![]u8 {
+    return switch (mode) {
+        .basic => try vort.trainDictionaryAlloc(allocator, training, .{ .target_size = 512, .max_phrases = 1024 }),
+        .validated => try vort.dictionary.trainValidatedAlloc(allocator, training, validation, .{ .target_size = 512, .max_phrases = 1024 }),
+        .validated_separate => blk: {
+            var combined: std.ArrayList(u8) = .empty;
+            errdefer combined.deinit(allocator);
+            for (validated_targets) |target_size| {
+                const trained = try vort.dictionary.trainValidatedAlloc(allocator, training, validation, .{ .target_size = target_size, .max_phrases = 1024 });
+                defer allocator.free(trained);
+                try combined.appendSlice(allocator, trained);
+            }
+            break :blk try combined.toOwnedSlice(allocator);
+        },
+        .validated_targets => blk: {
+            const trained = try vort.dictionary.trainValidatedTargetsAlloc(
+                allocator,
+                training,
+                validation,
+                &validated_targets,
+                .{ .target_size = 512, .max_phrases = 1024 },
+            );
+            defer trained.deinit(allocator);
+            var combined: std.ArrayList(u8) = .empty;
+            errdefer combined.deinit(allocator);
+            for (trained.dictionaries) |candidate| try combined.appendSlice(allocator, candidate.?);
+            break :blk try combined.toOwnedSlice(allocator);
+        },
+        .zstd_validated => blk: {
+            const trained = try vort.zstdTrainValidatedStandardDictionaryAlloc(
+                allocator,
+                training,
+                validation,
+                .{ .target_size = 512, .max_phrases = 1024 },
+                0x564f_5254,
+            );
+            defer trained.deinit(allocator);
+            break :blk try allocator.dupe(u8, trained.bytes);
+        },
+    };
 }
 
 const CorpusKind = enum { text, json, binary };

@@ -482,7 +482,7 @@ fn retainValidatedCandidate(
     var matches: usize = 0;
     var distance_bits: usize = 0;
     for (validation_samples) |sample| {
-        const summary = try summarizeMatchesAlloc(allocator, candidate, sample, min_match_len);
+        const summary = try summarizeMatches(candidate, sample, min_match_len);
         covered = std.math.add(usize, covered, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
         matches = std.math.add(usize, matches, summary.matches) catch return error.InvalidDictionaryTraining;
         distance_bits = std.math.add(usize, distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
@@ -661,9 +661,19 @@ pub fn validationScoreAlloc(
     samples: []const []const u8,
     min_match_len: usize,
 ) !ValidationScore {
+    _ = allocator;
+    return validationScore(dict, samples, min_match_len);
+}
+
+/// Estimate dictionary-coded wire cost without temporary allocations.
+pub fn validationScore(
+    dict: []const u8,
+    samples: []const []const u8,
+    min_match_len: usize,
+) !ValidationScore {
     var score: ValidationScore = .{ .estimated_bits = std.math.mul(usize, dict.len, 8) catch return error.InvalidDictionaryTraining };
     for (samples) |sample| {
-        const summary = try summarizeMatchesAlloc(allocator, dict, sample, min_match_len);
+        const summary = try summarizeMatches(dict, sample, min_match_len);
         score.covered_bytes = std.math.add(usize, score.covered_bytes, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
         score.matches = std.math.add(usize, score.matches, summary.matches) catch return error.InvalidDictionaryTraining;
         score.distance_bits = std.math.add(usize, score.distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
@@ -700,16 +710,29 @@ pub fn findMatchesAlloc(allocator: std.mem.Allocator, dict: []const u8, sample: 
 }
 
 pub fn summarizeMatchesAlloc(allocator: std.mem.Allocator, dict: []const u8, sample: []const u8, min_match_len: usize) !MatchSummary {
-    const matches = try findMatchesAlloc(allocator, dict, sample, min_match_len);
-    defer allocator.free(matches);
+    _ = allocator;
+    return summarizeMatches(dict, sample, min_match_len);
+}
+
+/// Summarize the same greedy dictionary matches as `findMatchesAlloc` without
+/// materializing an intermediate match list.
+pub fn summarizeMatches(dict: []const u8, sample: []const u8, min_match_len: usize) !MatchSummary {
+    if (min_match_len == 0) return error.InvalidDictionaryTraining;
     var summary = MatchSummary{};
-    summary.matches = matches.len;
-    for (matches) |match| {
-        summary.covered_bytes += match.length;
-        summary.longest = @max(summary.longest, match.length);
-        const logical_position = std.math.add(usize, dict.len, match.sample_offset) catch return error.InvalidDictionaryTraining;
-        const distance = logical_position - match.dictionary_offset;
+    var sample_offset: usize = 0;
+    while (sample_offset + min_match_len <= sample.len) {
+        const best = findBestDictionaryMatch(dict, sample[sample_offset..], min_match_len);
+        if (best.length < min_match_len) {
+            sample_offset += 1;
+            continue;
+        }
+        summary.matches += 1;
+        summary.covered_bytes += best.length;
+        summary.longest = @max(summary.longest, best.length);
+        const logical_position = std.math.add(usize, dict.len, sample_offset) catch return error.InvalidDictionaryTraining;
+        const distance = logical_position - best.offset;
         summary.distance_bits += std.math.log2_int(usize, distance) + 1;
+        sample_offset += best.length;
     }
     return summary;
 }
@@ -1160,7 +1183,7 @@ fn trainValidatedReferenceAlloc(
                 var matches: usize = 0;
                 var distance_bits: usize = 0;
                 for (validation_samples) |sample| {
-                    const summary = try summarizeMatchesAlloc(allocator, trained, sample, options.min_phrase_len);
+                    const summary = try summarizeMatches(trained, sample, options.min_phrase_len);
                     covered += summary.covered_bytes;
                     matches += summary.matches;
                     distance_bits += summary.distance_bits;
@@ -1185,7 +1208,7 @@ fn trainValidatedReferenceAlloc(
     var tail_matches: usize = 0;
     var tail_distance_bits: usize = 0;
     for (validation_samples) |sample| {
-        const summary = try summarizeMatchesAlloc(allocator, tail, sample, options.min_phrase_len);
+        const summary = try summarizeMatches(tail, sample, options.min_phrase_len);
         tail_covered += summary.covered_bytes;
         tail_matches += summary.matches;
         tail_distance_bits += summary.distance_bits;
@@ -1221,8 +1244,8 @@ test "validated dictionary trainer preserves or improves held-out coverage" {
     var baseline_covered: usize = 0;
     var selected_covered: usize = 0;
     for (validation) |sample| {
-        baseline_covered += (try summarizeMatchesAlloc(std.testing.allocator, baseline, sample, options.min_phrase_len)).covered_bytes;
-        selected_covered += (try summarizeMatchesAlloc(std.testing.allocator, selected, sample, options.min_phrase_len)).covered_bytes;
+        baseline_covered += (try summarizeMatches(baseline, sample, options.min_phrase_len)).covered_bytes;
+        selected_covered += (try summarizeMatches(selected, sample, options.min_phrase_len)).covered_bytes;
     }
     try std.testing.expect(selected_covered >= baseline_covered);
     try std.testing.expectEqualSlices(u8, selected, again);
@@ -1373,10 +1396,43 @@ test "dictionary match scanner summarizes coverage" {
     try std.testing.expectEqual(@as(usize, 3), matches[0].sample_offset);
     try std.testing.expect(matches[0].length >= "alpha beta".len);
 
-    const summary = try summarizeMatchesAlloc(std.testing.allocator, dict, sample, 5);
+    const summary = try summarizeMatches(dict, sample, 5);
     try std.testing.expectEqual(matches.len, summary.matches);
     try std.testing.expect(summary.covered_bytes >= "alpha beta".len + "gamma".len);
     try std.testing.expect(summary.coverageRatio(sample.len) > 0.0);
+    try std.testing.expectEqual(summary, try summarizeMatchesAlloc(std.testing.failing_allocator, dict, sample, 5));
+    const samples = [_][]const u8{sample};
+    try std.testing.expectEqual(
+        try validationScore(dict, &samples, 5),
+        try validationScoreAlloc(std.testing.failing_allocator, dict, &samples, 5),
+    );
+}
+
+test "streaming dictionary match summary equals materialized oracle" {
+    var dictionary: [96]u8 = undefined;
+    var sample: [257]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&dictionary) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    for (&sample, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 37 < 23) dictionary[(index * 7) % (dictionary.len - 24)] else @truncate(state >> 24);
+    }
+    for ([_]usize{ 1, 3, 4, 8, 16, 97, 300 }) |min_match_len| {
+        const matches = try findMatchesAlloc(std.testing.allocator, &dictionary, &sample, min_match_len);
+        defer std.testing.allocator.free(matches);
+        var expected: MatchSummary = .{ .matches = matches.len };
+        for (matches) |match| {
+            expected.covered_bytes += match.length;
+            expected.longest = @max(expected.longest, match.length);
+            const distance = dictionary.len + match.sample_offset - match.dictionary_offset;
+            expected.distance_bits += std.math.log2_int(usize, distance) + 1;
+        }
+        try std.testing.expectEqual(expected, try summarizeMatches(&dictionary, &sample, min_match_len));
+    }
+    try std.testing.expectError(error.InvalidDictionaryTraining, summarizeMatches(&dictionary, &sample, 0));
 }
 
 test "dictionary patch codec round trips matched and literal bytes" {

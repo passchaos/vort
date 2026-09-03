@@ -2078,6 +2078,7 @@ pub const decodeDictionaryMetadataCatalogPrefixInto = dictionary.decodeMetadataC
 pub const trainDictionaryAlloc = dictionary.trainAlloc;
 pub const findDictionaryMatchesAlloc = dictionary.findMatchesAlloc;
 pub const summarizeDictionaryMatchesAlloc = dictionary.summarizeMatchesAlloc;
+pub const summarizeDictionaryMatches = dictionary.summarizeMatches;
 pub const encodeDictionaryPatchAlloc = dictionary.encodePatchAlloc;
 pub const decodedDictionaryPatchSize = dictionary.decodedPatchSize;
 pub const maxDictionaryPatchSizeForDecodedLen = dictionary.maxPatchSizeForDecodedLen;
@@ -2131,6 +2132,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = trainDictionaryAlloc;
     _ = findDictionaryMatchesAlloc;
     _ = summarizeDictionaryMatchesAlloc;
+    _ = summarizeDictionaryMatches;
     _ = encodeDictionaryPatchAlloc;
     _ = decodedDictionaryPatchSize;
     _ = maxDictionaryPatchSizeForDecodedLen;

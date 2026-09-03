@@ -398,7 +398,7 @@ pub fn trainValidatedStandardDictionaryAlloc(
         if (candidate.len < 8) {
             continue;
         }
-        const score = try dictionary_mod.validationScoreAlloc(allocator, candidate, validation_samples, options.min_phrase_len);
+        const score = try dictionary_mod.validationScore(candidate, validation_samples, options.min_phrase_len);
         if (best_index == null or score.estimated_bits < best_estimated_bits) {
             best_index = index;
             best_estimated_bits = score.estimated_bits;
@@ -508,7 +508,7 @@ fn trainValidatedStandardDictionarySeparateAlloc(
             allocator.free(candidate);
             continue;
         }
-        const score = try dictionary_mod.validationScoreAlloc(allocator, candidate, validation_samples, options.min_phrase_len);
+        const score = try dictionary_mod.validationScore(candidate, validation_samples, options.min_phrase_len);
         if (best_content == null or score.estimated_bits < best_estimated_bits) {
             if (best_content) |bytes| allocator.free(bytes);
             best_content = candidate;

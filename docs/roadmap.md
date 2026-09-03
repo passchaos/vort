@@ -8573,3 +8573,18 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   that regressed libzstd held-out levels, while selecting by Vort's actual frame
   bytes could not distinguish the retained small payloads and regressed libzstd
   source rows. Neither experimental API remains in the public surface.
+  Dictionary match summaries and validation costs now stream over the greedy
+  match walk instead of materializing and immediately freeing a match array for
+  every candidate/sample pair. `summarizeMatches` and `validationScore` expose
+  the allocation-free forms; the old `*Alloc` names remain compatible wrappers
+  and succeed with `failing_allocator`. A materialized-match oracle covers
+  minimum lengths 1/3/4/8/16 plus overlong limits and pins match count, covered
+  bytes, longest match, and distance bits. On the complete fixed text Zstd
+  trainer workload, successful allocation calls fall from `1341` to `489`
+  (`-63.5%`), resize/remap events from `295` to `35` (`-88.1%`), and cumulative
+  requested bytes from `7,967,477` to `7,706,621`, with unchanged peak live
+  memory and checksum. Sixteen alternating ReleaseFast timing pairs were noisy
+  but neutral-positive (`1.011x`, 9/16 wins), so this is retained as an allocator
+  pressure improvement rather than a throughput claim. The 15-row training gate
+  now requires balanced allocation bytes/counts on every row and caps complete
+  Zstd validation at 500 allocations, 60 resize events, and 8 MiB requested.

@@ -39,8 +39,23 @@ def main() -> int:
     }
     for row in rows:
         expected_checksum = expected_checksums[(row["mode"], row["case"])]
-        if int(row["checksum"]) != expected_checksum or int(row["best_ns"]) <= 0:
+        allocations = int(row["allocations"])
+        deallocations = int(row["deallocations"])
+        resize_events = int(row["resizes"])
+        allocated_bytes = int(row["allocated_bytes"])
+        freed_bytes = int(row["freed_bytes"])
+        if (
+            int(row["checksum"]) != expected_checksum
+            or int(row["best_ns"]) <= 0
+            or allocations != deallocations
+            or allocated_bytes != freed_bytes
+            or min(allocations, resize_events, allocated_bytes) < 0
+        ):
             raise SystemExit(f"invalid benchmark row: {row!r}")
+        if row["mode"] == "zstd_validated" and (
+            allocations > 500 or resize_events > 60 or allocated_bytes > 8 * 1024 * 1024
+        ):
+            raise SystemExit(f"validated Zstd training allocation budget regressed: {row!r}")
         minimum_throughput = {
             "basic": 300_000,
             "validated": 100_000,
