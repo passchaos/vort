@@ -5591,7 +5591,6 @@ fn decodeRawOrRleZstandardFrameInto(
                 offset.* += block_len;
             },
             1 => {
-                if (block_len == 0) return error.CorruptFrame;
                 if (frame.len - offset.* < 1) return error.TruncatedFrame;
                 const byte = frame[offset.*];
                 offset.* += 1;
@@ -5656,7 +5655,6 @@ fn decodeRawOrRleZstandardFrameIntoBuffer(
                 offset.* += block_len;
             },
             1 => {
-                if (block_len == 0) return error.CorruptFrame;
                 if (frame.len - offset.* < 1) return error.TruncatedFrame;
                 if (output.len - written.* < block_len) return error.OutputTooSmall;
                 const byte = frame[offset.*];
@@ -7472,7 +7470,6 @@ fn rawOrRleDecodedSizeLimitedWithDictionary(
                         total = try checkedAddWithinLimit(total, block_len, max_output_len);
                     },
                     1 => {
-                        if (block_len == 0) return error.CorruptFrame;
                         if (frame.len - offset < 1) return error.TruncatedFrame;
                         offset += 1;
                         total = try checkedAddWithinLimit(total, block_len, max_output_len);
@@ -15706,6 +15703,58 @@ test "zstd raw/RLE native decoder accepts no-size raw frames" {
     const written = try decodeRawOrRleFrameInto(frame.items, &into_buffer);
     try std.testing.expectEqual(@as(usize, 3), written);
     try std.testing.expectEqualSlices(u8, "abc", into_buffer[0..written]);
+}
+
+test "zstd native decoder accepts zero-length RLE blocks" {
+    // zstd upstream decodecorpus seed 17, case zero. The ninth block has
+    // regenerated size zero but still carries the required one-byte RLE payload.
+    const frame = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd, 0x04, 0x5e, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0xd6, 0xd6, 0x5a, 0x00,
+        0x00, 0x18, 0x08, 0x00, 0x00, 0xfb, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x02, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0xd1,
+        0x5d, 0xbd, 0xbe,
+    };
+    const expected = [_]u8{ 0xd6, 0xd6, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0xfb };
+
+    const header = try inspectNativeFrameHeader(&frame);
+    try std.testing.expectEqual(@as(?u64, null), header.content_size);
+    try std.testing.expect(header.has_checksum);
+    var iterator = try iterateNativeFrameBlocks(&frame);
+    var block_count: usize = 0;
+    var zero_rle_count: usize = 0;
+    while (try iterator.next()) |block| {
+        block_count += 1;
+        if (block.block_type == .rle and block.payload_len == 0) zero_rle_count += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 12), block_count);
+    try std.testing.expectEqual(@as(usize, 1), zero_rle_count);
+    try std.testing.expectEqual(expected.len, try decodedNativeFrameSize(&frame));
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, &frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &expected, decoded);
+    var into: [expected.len]u8 = undefined;
+    try std.testing.expectEqual(expected.len, try decodeNativeFrameInto(&frame, &into));
+    try std.testing.expectEqualSlices(u8, &expected, &into);
+
+    var incremental = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = expected.len,
+        .max_decoded_buffer_len = expected.len,
+    });
+    defer incremental.deinit();
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (incremental.snapshot().phase != .done) {
+        const input_end = @min(frame.len, input_offset + 3);
+        const output_end = @min(expected.len, output_offset + 2);
+        const step = try incremental.step(frame[input_offset..input_end], into[output_offset..output_end]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+        if (step.status == .need_input) try std.testing.expect(input_offset < frame.len);
+        if (step.status == .need_output) try std.testing.expect(output_offset < expected.len);
+    }
+    try incremental.finish();
+    try std.testing.expectEqualSlices(u8, &expected, &into);
 }
 
 test "zstd native decoder accepts descriptor unused bit" {

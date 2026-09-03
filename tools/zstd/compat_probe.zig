@@ -15,6 +15,31 @@ const Coverage = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
+    defer args.deinit();
+    _ = args.next();
+    var decodecorpus_frames: ?[]const u8 = null;
+    var decodecorpus_plain: ?[]const u8 = null;
+    var decodecorpus_count: usize = 0;
+    var decodecorpus_dictionary_path: ?[]const u8 = null;
+    var prior_mode_mask: u64 = 0;
+    var require_complete_mode_mask = false;
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--decodecorpus")) {
+            decodecorpus_frames = args.next() orelse return error.MissingCorpusPath;
+            decodecorpus_plain = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--decodecorpus-count")) {
+            decodecorpus_count = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10);
+        } else if (std.mem.eql(u8, arg, "--decodecorpus-dictionary")) {
+            decodecorpus_dictionary_path = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--prior-mode-mask")) {
+            prior_mode_mask = try std.fmt.parseInt(u64, args.next() orelse return error.MissingLimit, 0);
+        } else if (std.mem.eql(u8, arg, "--require-complete-mode-mask")) {
+            require_complete_mode_mask = true;
+        } else return error.UnknownArgument;
+    }
+    if ((decodecorpus_frames == null) != (decodecorpus_plain == null)) return error.MissingCorpusPath;
+
     var runtime = try libzstd.Runtime.open();
     defer runtime.deinit();
     var checked: usize = 0;
@@ -26,6 +51,7 @@ pub fn main(init: std.process.Init) !void {
     var explicit_sequence_cases: usize = 0;
     var streaming_cases: usize = 0;
     var trained_dictionary_cases: usize = 0;
+    var decodecorpus_cases: usize = 0;
     var coverage = Coverage{};
     for (std.meta.tags(Shape)) |shape| {
         for (sizes) |size| {
@@ -327,22 +353,74 @@ pub fn main(init: std.process.Init) !void {
         checked += 1;
         golden_error_cases += 1;
     }
+    if (decodecorpus_frames) |frames_dir| {
+        const plain_dir = decodecorpus_plain.?;
+        const decodecorpus_dictionary_bytes = if (decodecorpus_dictionary_path) |path|
+            try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(16 * 1024 * 1024))
+        else
+            null;
+        defer if (decodecorpus_dictionary_bytes) |bytes| init.gpa.free(bytes);
+        const decodecorpus_dictionary = if (decodecorpus_dictionary_bytes) |bytes|
+            (try vort.ZstdDictionary.initFromStandardDictionary(bytes)).dictionary
+        else
+            null;
+        const case_count = if (decodecorpus_count == 0) 1 else decodecorpus_count;
+        for (0..case_count) |index| {
+            var frame_path_buffer: [512]u8 = undefined;
+            const frame_path = try std.fmt.bufPrint(&frame_path_buffer, "{s}/z{d:0>6}.zst", .{ frames_dir, index });
+            var plain_path_buffer: [512]u8 = undefined;
+            const plain_path = try std.fmt.bufPrint(&plain_path_buffer, "{s}/z{d:0>6}", .{ plain_dir, index });
+            const encoded = try std.Io.Dir.cwd().readFileAlloc(init.io, frame_path, init.gpa, .limited(2 * 1024 * 1024));
+            defer init.gpa.free(encoded);
+            const expected = try std.Io.Dir.cwd().readFileAlloc(init.io, plain_path, init.gpa, .limited(2 * 1024 * 1024));
+            defer init.gpa.free(expected);
+            observeFrameWithDictionary(encoded, decodecorpus_dictionary, &coverage) catch |err| {
+                std.debug.print("zstd_decodecorpus_inspect_fail case={d} input={d} encoded={d} error={s}\n", .{ index, expected.len, encoded.len, @errorName(err) });
+                return err;
+            };
+            const decoded = if (decodecorpus_dictionary) |dictionary|
+                vort.zstdDecodeFrameAllocWithDictionary(init.gpa, encoded, dictionary)
+            else
+                vort.zstdDecodeFrameAlloc(init.gpa, encoded);
+            const resolved = decoded catch |err| {
+                std.debug.print("zstd_decodecorpus_decode_fail case={d} input={d} encoded={d} error={s}\n", .{ index, expected.len, encoded.len, @errorName(err) });
+                return err;
+            };
+            defer init.gpa.free(resolved);
+            if (!std.mem.eql(u8, expected, resolved)) {
+                std.debug.print("zstd_decodecorpus_mismatch case={d} input={d} encoded={d} decoded={d}\n", .{ index, expected.len, encoded.len, resolved.len });
+                return error.SizeMismatch;
+            }
+            checked += 1;
+            decodecorpus_cases += 1;
+        }
+    }
     if (unsupported != 0) return error.UnsupportedZstdFeature;
     if (coverage.max_sequence_count < 43_690 or coverage.sequence_count_tiers != 0b111)
         return error.ReferenceEncodeFailed;
+    const combined_mode_mask = coverage.sequence_mode_combinations | prior_mode_mask;
+    if (require_complete_mode_mask and combined_mode_mask != std.math.maxInt(u64))
+        return error.ReferenceEncodeFailed;
     std.debug.print(
-        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} version={s}\n",
-        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), runtime.version() },
+        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} sequence_mode_mask=0x{x} combined_mode_combinations={d} combined_mode_mask=0x{x} version={s}\n",
+        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), coverage.sequence_mode_combinations, @popCount(combined_mode_mask), combined_mode_mask, runtime.version() },
     );
 }
 
 fn observeFrame(frame: []const u8, coverage: *Coverage) !void {
+    return observeFrameWithDictionary(frame, null, coverage);
+}
+
+fn observeFrameWithDictionary(frame: []const u8, dictionary: ?vort.ZstdDictionary, coverage: *Coverage) !void {
     var iterator = try vort.zstdIterateNativeFrameBlocks(frame);
     var block_count: usize = 0;
     while (try iterator.next()) |block| {
         block_count += 1;
         if (block.block_type != .compressed) continue;
-        const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(frame, block);
+        const modes = if (dictionary) |dict|
+            try vort.zstdInspectNativeFrameBlockSequenceModesWithDictionary(frame, block, dict)
+        else
+            try vort.zstdInspectNativeFrameBlockSequenceModes(frame, block);
         coverage.max_sequence_count = @max(coverage.max_sequence_count, modes.sequence_count);
         const tier: u2 = if (modes.sequence_count < 128) 0 else if (modes.sequence_count < 0x7f00) 1 else 2;
         coverage.sequence_count_tiers |= @as(u3, 1) << tier;

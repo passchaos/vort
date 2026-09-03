@@ -366,6 +366,10 @@ zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate  # optional run
 zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate  # optional runtime liblz4 comparison
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate  # optional runtime libzstd comparison
 zig build run-zstd-compat-probe  # optional system-libzstd decode matrix
+# Optional deep zstd upstream decodecorpus differential (paired z*.zst / z* files):
+zig build -Doptimize=ReleaseFast run-zstd-compat-probe -- \
+  --decodecorpus /tmp/zstd-frames /tmp/zstd-plain --decodecorpus-count 1000
+# Add --decodecorpus-dictionary /tmp/zstd-frames/dictionary for dictionary corpora.
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build bench-deflate-incremental-encode -Doptimize=ReleaseFast -- 8
 zig build run-deflate-incremental-encode-gate

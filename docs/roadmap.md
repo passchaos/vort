@@ -8654,3 +8654,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   restores exact estimator/wire agreement for mixed and all-FSE table plans and
   prevents match planning from rejecting candidates based on overstated literal
   tree cost.
+  Extended the same Zstd compatibility work with upstream `decodecorpus`
+  ingestion. Six deterministic campaigns now cover 5,400 byte-exact frames:
+  200 and 1,000 dictionary-free frames at seeds 17 and 919, plus 200, 1,000,
+  1,000, and 2,000 dictionary-backed frames at seeds 2,027, 4,242, 31,337,
+  and 65,521 with 64 KiB, 1 MiB, 64 KiB, and 256 KiB dictionaries. Their
+  cumulative sequence-mode mask is `0xffffffffffffffff`, exercising all 64
+  possible LL/OF/ML table-mode tuples. Seed 17's first frame exposed a valid
+  zero-length RLE block that the native allocator, caller-buffer, and
+  size-preflight paths had rejected; all three now consume its mandatory
+  one-byte payload while producing zero bytes.

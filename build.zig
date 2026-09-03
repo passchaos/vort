@@ -3078,6 +3078,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_zstd_compat_probe = b.addRunArtifact(zstd_compat_probe_exe);
+    if (b.args) |args| run_zstd_compat_probe.addArgs(args);
     const zstd_compat_probe_step = b.step(
         "run-zstd-compat-probe",
         "Decode a broad system-libzstd frame matrix through Vort",

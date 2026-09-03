@@ -282,6 +282,15 @@ Recommended next comparison steps:
   1/9/19 single- and multi-block payloads through size, allocating, caller-owned,
   single-dictionary, and dictionary-set paths, bringing the local matrix to 273
   cases.
+  The same probe optionally consumes paired directories emitted by upstream
+  zstd's `tests/decodecorpus`. Seeds 17 and 919 covered 200 and 1,000
+  dictionary-free random frames; seeds 2,027, 4,242, 31,337, and 65,521 covered
+  200, 1,000, 1,000, and 2,000 random dictionary-backed frames with 64 KiB,
+  1 MiB, 64 KiB, and 256 KiB dictionaries. All 5,400 decoded byte-exactly.
+  Their cumulative observed sequence-mode mask is `0xffffffffffffffff`,
+  covering all 64 LL/OF/ML mode tuples; seed 17's first frame also exposed and
+  now pins legal zero-length RLE blocks, including their required one-byte
+  payload.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

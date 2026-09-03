@@ -4064,17 +4064,17 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectNativeStreamOnlyError(allocator, &reserved_block_type, error.CorruptFrame);
     checked += 1;
 
-    const zero_rle_block = [_]u8{
+    const truncated_zero_rle_block = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
         0x20, // single-segment, no checksum, one-byte content size.
         0x08,
-        0x03, 0x00, 0x00, // last RLE block with decoded size 0 is invalid.
+        0x03, 0x00, 0x00, // Last zero-length RLE block; its required payload byte is missing.
     };
-    try expectError(error.TruncatedFrame, vort.zstdInspectNativeFrameFirstBlock(&zero_rle_block));
-    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&zero_rle_block));
+    try expectError(error.TruncatedFrame, vort.zstdInspectNativeFrameFirstBlock(&truncated_zero_rle_block));
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(&truncated_zero_rle_block));
     var zero_rle_output: [8]u8 = undefined;
-    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&zero_rle_block, &zero_rle_output));
-    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_rle_block));
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(&truncated_zero_rle_block, &zero_rle_output));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &truncated_zero_rle_block));
     checked += 1;
 
     const extended_zero_sequence_count = [_]u8{

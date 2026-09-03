@@ -243,7 +243,7 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     try expectEqualSlices("SizeMismatch", size_mismatch_decoder.diagnostics().last_error_name);
     try expectEqualSlices("frame", size_mismatch_decoder.diagnostics().last_error_phase_name);
 
-    const corrupt_block = [_]u8{
+    const zero_rle_size_mismatch = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
         0x22, // 2-byte Dictionary_ID, single-segment, one-byte content size.
         0x34, 0x12, // Dictionary_ID == 0x1234.
@@ -251,33 +251,33 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
         0x03, 0x00, 0x00, // Last RLE block with zero regenerated size.
         'x',
     };
-    const corrupt_header = try vort.zstdInspectNativeFrameHeader(&corrupt_block);
-    try expect(corrupt_header.dictionary_id == dict.id);
-    var corrupt_priority_output: [4]u8 = undefined;
-    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSize(&corrupt_block));
-    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSizeWithDictionary(&corrupt_block, wrong));
-    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameInto(&corrupt_block, &corrupt_priority_output));
-    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameIntoWithDictionary(&corrupt_block, &corrupt_priority_output, wrong));
-    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAlloc(allocator, &corrupt_block));
-    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &corrupt_block, wrong));
-    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSizeWithDictionary(&corrupt_block, dict));
-    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameIntoWithDictionary(&corrupt_block, &corrupt_priority_output, dict));
-    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &corrupt_block, dict));
+    const zero_rle_header = try vort.zstdInspectNativeFrameHeader(&zero_rle_size_mismatch);
+    try expect(zero_rle_header.dictionary_id == dict.id);
+    var zero_rle_priority_output: [4]u8 = undefined;
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSize(&zero_rle_size_mismatch));
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSizeWithDictionary(&zero_rle_size_mismatch, wrong));
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameInto(&zero_rle_size_mismatch, &zero_rle_priority_output));
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameIntoWithDictionary(&zero_rle_size_mismatch, &zero_rle_priority_output, wrong));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_rle_size_mismatch));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &zero_rle_size_mismatch, wrong));
+    try expectError(error.SizeMismatch, vort.zstdDecodedNativeFrameSizeWithDictionary(&zero_rle_size_mismatch, dict));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoWithDictionary(&zero_rle_size_mismatch, &zero_rle_priority_output, dict));
+    try expectAllocError(allocator, error.SizeMismatch, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &zero_rle_size_mismatch, dict));
     var missing_corrupt_decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
-        .expected_output_len = corrupt_priority_output.len,
-        .max_decoded_buffer_len = corrupt_priority_output.len,
+        .expected_output_len = zero_rle_priority_output.len,
+        .max_decoded_buffer_len = zero_rle_priority_output.len,
     });
     defer missing_corrupt_decoder.deinit();
-    try expectError(error.NeedDictionary, missing_corrupt_decoder.step(&corrupt_block, corrupt_priority_output[0..0]));
+    try expectError(error.NeedDictionary, missing_corrupt_decoder.step(&zero_rle_size_mismatch, zero_rle_priority_output[0..0]));
     try expectEqualSlices("NeedDictionary", missing_corrupt_decoder.diagnostics().last_error_name);
     try expectEqualSlices("frame", missing_corrupt_decoder.diagnostics().last_error_phase_name);
     var corrupt_decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
-        .expected_output_len = corrupt_priority_output.len,
-        .max_decoded_buffer_len = corrupt_priority_output.len,
+        .expected_output_len = zero_rle_priority_output.len,
+        .max_decoded_buffer_len = zero_rle_priority_output.len,
     });
     defer corrupt_decoder.deinit();
-    try expectError(error.CorruptFrame, corrupt_decoder.step(&corrupt_block, corrupt_priority_output[0..0]));
-    try expectEqualSlices("CorruptFrame", corrupt_decoder.diagnostics().last_error_name);
+    try expectError(error.SizeMismatch, corrupt_decoder.step(&zero_rle_size_mismatch, zero_rle_priority_output[0..0]));
+    try expectEqualSlices("SizeMismatch", corrupt_decoder.diagnostics().last_error_name);
     try expectEqualSlices("frame", corrupt_decoder.diagnostics().last_error_phase_name);
 
     const compressed_malformed_hex =
