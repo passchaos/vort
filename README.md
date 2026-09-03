@@ -49,7 +49,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   decoded-size preflight, bounded allocation, explicit Dictionary_ID/preset
   history decode APIs, direct-output incremental decode for raw/RLE/compressed
   native frames (including dictionary, dictionary-set, no-content-size,
-  bounded-history multi-block paths, and small-output scratch fallback), zero-allocation native stream/block iterators, and
+  bounded-history multi-block paths, per-block compressed-input retention when
+  a frame exceeds the configured buffer limit, and small-output scratch
+  fallback), zero-allocation native stream/block iterators, and
   dependency-free standard full-dictionary generation from caller-selected
   history content using portable baseline entropy tables, plus first-stage
   corpus training of a complete literal Huffman alphabet and OF/ML/LL sequence
@@ -682,6 +684,10 @@ var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOp
     .expected_output_len = "payload payload".len,
 });
 defer zstd_bounded_incremental.deinit();
+// If a data frame exceeds max_compressed_buffer_len, Vort releases input one
+// block at a time. isBlockStreaming() exposes that path and
+// compressedBufferedBytes()/compressedBufferCapacity() report logical and
+// allocated encoded-input storage; both stay within a finite configured cap.
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
 // Brotli's general incremental decoder can instead pledge expected_compressed_len
 // (or use initExactCompressedSize) to auto-validate/decode stored or compressed

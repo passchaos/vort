@@ -52,6 +52,10 @@ pub fn main(init: std.process.Init) !void {
     var streaming_cases: usize = 0;
     var trained_dictionary_cases: usize = 0;
     var decodecorpus_cases: usize = 0;
+    var decodecorpus_incremental_cases: usize = 0;
+    var decodecorpus_block_stream_cases: usize = 0;
+    var decodecorpus_max_compressed_buffered: usize = 0;
+    var decodecorpus_max_compressed_capacity: usize = 0;
     var coverage = Coverage{};
     for (std.meta.tags(Shape)) |shape| {
         for (sizes) |size| {
@@ -391,6 +395,19 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("zstd_decodecorpus_mismatch case={d} input={d} encoded={d} decoded={d}\n", .{ index, expected.len, encoded.len, resolved.len });
                 return error.SizeMismatch;
             }
+            const incremental = incrementalDecodeCorpusCase(
+                init.gpa,
+                encoded,
+                expected,
+                decodecorpus_dictionary,
+            ) catch |err| {
+                std.debug.print("zstd_decodecorpus_incremental_fail case={d} input={d} encoded={d} error={s}\n", .{ index, expected.len, encoded.len, @errorName(err) });
+                return err;
+            };
+            decodecorpus_incremental_cases += 1;
+            decodecorpus_block_stream_cases += @intFromBool(incremental.used_block_stream);
+            decodecorpus_max_compressed_buffered = @max(decodecorpus_max_compressed_buffered, incremental.max_compressed_buffered);
+            decodecorpus_max_compressed_capacity = @max(decodecorpus_max_compressed_capacity, incremental.max_compressed_capacity);
             checked += 1;
             decodecorpus_cases += 1;
         }
@@ -402,9 +419,61 @@ pub fn main(init: std.process.Init) !void {
     if (require_complete_mode_mask and combined_mode_mask != std.math.maxInt(u64))
         return error.ReferenceEncodeFailed;
     std.debug.print(
-        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} sequence_mode_mask=0x{x} combined_mode_combinations={d} combined_mode_mask=0x{x} version={s}\n",
-        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), coverage.sequence_mode_combinations, @popCount(combined_mode_mask), combined_mode_mask, runtime.version() },
+        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_block_stream_cases={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} sequence_mode_mask=0x{x} combined_mode_combinations={d} combined_mode_mask=0x{x} version={s}\n",
+        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_block_stream_cases, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), coverage.sequence_mode_combinations, @popCount(combined_mode_mask), combined_mode_mask, runtime.version() },
     );
+}
+
+const IncrementalCorpusResult = struct {
+    used_block_stream: bool,
+    max_compressed_buffered: usize,
+    max_compressed_capacity: usize,
+};
+
+fn incrementalDecodeCorpusCase(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, dictionary: ?vort.ZstdDictionary) !IncrementalCorpusResult {
+    const compressed_limit = std.compress.zstd.block_size_max + 32;
+    var decoder = if (dictionary) |dict|
+        vort.ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+            .expected_output_len = expected.len,
+            .max_compressed_buffer_len = compressed_limit,
+            .max_decoded_buffer_len = expected.len,
+        })
+    else
+        vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+            .expected_output_len = expected.len,
+            .max_compressed_buffer_len = compressed_limit,
+            .max_decoded_buffer_len = expected.len,
+        });
+    defer decoder.deinit();
+    const output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    var used_block_stream = false;
+    var max_compressed_buffered: usize = 0;
+    var max_compressed_capacity: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 4093);
+        const output_end = @min(expected.len, output_offset + 2039);
+        const result = try decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        used_block_stream = used_block_stream or decoder.isBlockStreaming();
+        max_compressed_buffered = @max(max_compressed_buffered, decoder.compressedBufferedBytes());
+        max_compressed_capacity = @max(max_compressed_capacity, decoder.compressedBufferCapacity());
+        if (max_compressed_buffered > compressed_limit) return error.OutputLimitExceeded;
+        if (max_compressed_capacity > compressed_limit) return error.OutputLimitExceeded;
+        if (result.status == .need_input and input_offset == encoded.len) return error.TruncatedFrame;
+        if (result.status == .need_output and output_offset == expected.len) return error.OutputTooSmall;
+    }
+    try decoder.finish();
+    if (input_offset != encoded.len or output_offset != expected.len or !std.mem.eql(u8, expected, output))
+        return error.SizeMismatch;
+    return .{
+        .used_block_stream = used_block_stream,
+        .max_compressed_buffered = max_compressed_buffered,
+        .max_compressed_capacity = max_compressed_capacity,
+    };
 }
 
 fn observeFrame(frame: []const u8, coverage: *Coverage) !void {

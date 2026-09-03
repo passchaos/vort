@@ -159,9 +159,11 @@ Current interpretation:
   concatenated native streams while skipping skippable metadata frames,
   including dictionary-set streams whose frames carry different Dictionary_ID
   values. Those facades also expose caller-configured compressed-frame and
-  decoded-frame buffer limits so the current whole-frame validation path can
-  fail safely with `OutputLimitExceeded` instead of retaining unbounded hostile
-  input. Exact-size allocation variants and incremental `expected_output_len`
+  decoded-frame buffer limits. Zstd data frames larger than the compressed-input
+  limit now switch to a block-streaming path: raw bytes are released while
+  copied, RLE blocks retain only their symbol, and compressed blocks retain at
+  most one block while carrying dictionary/history, Huffman/FSE tables, and
+  repeat offsets forward. Exact-size allocation variants and incremental `expected_output_len`
   plus `finish()` provide strict SizeMismatch semantics when callers know the
   expected output length. LZ4 native incremental decoding has started moving
   beyond the whole-frame facade with a direct-output path for raw linked or
@@ -295,7 +297,9 @@ Recommended next comparison steps:
   runs, requires the final 64/64 mask, and deletes each temporary corpus before
   moving to the next one. Its self-contained smoke step validates argument
   orchestration, summary parsing, failure propagation, and cleanup without
-  requiring the optional upstream checkout.
+  requiring the optional upstream checkout. Every generated frame is now also
+  decoded incrementally with a 128 KiB-plus-header compressed-input limit; all
+  5,400 pass, and 714 frames exceed that limit and exercise block streaming.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

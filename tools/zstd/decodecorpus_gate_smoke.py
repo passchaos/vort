@@ -46,6 +46,9 @@ mode = 0xa if '--decodecorpus-dictionary' in sys.argv else 0x5
 combined = prior | mode
 print(
     f'zstd_compat_probe checked={count} unsupported=0 decodecorpus_cases={count} '
+    f'decodecorpus_incremental_cases={count} decodecorpus_block_stream_cases={count // 2} '
+    f'decodecorpus_max_compressed_buffered=131104 '
+    f'decodecorpus_max_compressed_capacity=131104 '
     f'sequence_mode_mask={mode:#x} combined_mode_mask={combined:#x}',
     file=sys.stderr,
 )
@@ -80,6 +83,20 @@ class DecodeCorpusGateTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "63/64"):
             gate.validate_final_coverage(gate.CAMPAIGNS, gate.COMPLETE_MODE_MASK ^ 1)
 
+    def test_gate_rejects_missing_block_stream_coverage(self) -> None:
+        fields = {
+            "decodecorpus_cases": "200",
+            "decodecorpus_incremental_cases": "200",
+            "decodecorpus_block_stream_cases": "0",
+            "decodecorpus_max_compressed_buffered": "64",
+            "decodecorpus_max_compressed_capacity": "64",
+            "unsupported": "0",
+            "sequence_mode_mask": "0x5",
+            "combined_mode_mask": "0x5",
+        }
+        with self.assertRaisesRegex(RuntimeError, "did not exercise bounded block streaming"):
+            gate.validate_campaign_summary(fields, gate.CAMPAIGNS[0], 0)
+
     def test_driver_runs_and_cleans_success_and_failure_corpora(self) -> None:
         with tempfile.TemporaryDirectory(prefix="vort-zstd-gate-smoke-") as temp:
             root = Path(temp)
@@ -108,6 +125,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
             success = subprocess.run(command, text=True, capture_output=True, env=environment, check=False)
             self.assertEqual(success.returncode, 0, success.stdout + success.stderr)
             self.assertIn("zstd_decodecorpus_gate=ok campaigns=2 cases=400", success.stdout)
+            self.assertIn("block_stream_cases=200", success.stdout)
+            self.assertIn("max_compressed_buffered=131104", success.stdout)
             self.assertIn("sequence_mode_mask=0x000000000000000f", success.stdout)
             self.assertEqual(list(scratch.iterdir()), [])
 

@@ -8667,4 +8667,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `run-zstd-decodecorpus-gate` now regenerates this complete fixed-seed suite
   from a local upstream checkout, validates the cumulative 64/64 mask, and
   cleans each corpus automatically; a self-contained fake-tool smoke keeps the
-  orchestration and failure/cleanup behavior covered in ordinary CI.
+  orchestration and failure/cleanup behavior covered in ordinary CI. The same
+  suite now re-decodes every frame through the incremental API with a
+  128 KiB-plus-header input-retention limit. All 5,400 pass and 714 large frames
+  enter the new block-streaming state, which releases raw input progressively,
+  retains one byte for RLE, and buffers at most one compressed block while
+  preserving cross-block entropy/repeat/history state.

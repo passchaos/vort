@@ -15,6 +15,7 @@ from pathlib import Path
 
 SUMMARY_PREFIX = "zstd_compat_probe "
 COMPLETE_MODE_MASK = (1 << 64) - 1
+BLOCK_STREAM_COMPRESSED_LIMIT = 128 * 1024 + 32
 
 
 @dataclass(frozen=True)
@@ -138,7 +139,55 @@ def validate_generated_files(root: Path, campaign: Campaign) -> None:
         raise RuntimeError(f"{campaign.name} did not generate its dictionary")
 
 
-def run_campaign(probe: Path, decodecorpus: Path, campaign: Campaign, prior_mask: int) -> int:
+def validate_campaign_summary(
+    fields: dict[str, str], campaign: Campaign, prior_mask: int
+) -> tuple[int, int, int]:
+    try:
+        decoded_cases = int(fields["decodecorpus_cases"], 0)
+        incremental_cases = int(fields["decodecorpus_incremental_cases"], 0)
+        block_stream_cases = int(fields["decodecorpus_block_stream_cases"], 0)
+        max_compressed_buffered = int(fields["decodecorpus_max_compressed_buffered"], 0)
+        max_compressed_capacity = int(fields["decodecorpus_max_compressed_capacity"], 0)
+        unsupported = int(fields["unsupported"], 0)
+        mode_mask = int(fields["sequence_mode_mask"], 0)
+        combined_mask = int(fields["combined_mode_mask"], 0)
+    except (KeyError, ValueError) as error:
+        raise RuntimeError(f"malformed compat summary for {campaign.name}: {fields}") from error
+    if decoded_cases != campaign.count:
+        raise RuntimeError(
+            f"{campaign.name} decoded {decoded_cases} generated cases; expected {campaign.count}"
+        )
+    if incremental_cases != campaign.count:
+        raise RuntimeError(
+            f"{campaign.name} incrementally decoded {incremental_cases} generated cases; "
+            f"expected {campaign.count}"
+        )
+    if block_stream_cases == 0:
+        raise RuntimeError(f"{campaign.name} did not exercise bounded block streaming")
+    if not 0 < max_compressed_buffered <= BLOCK_STREAM_COMPRESSED_LIMIT:
+        raise RuntimeError(
+            f"{campaign.name} retained {max_compressed_buffered} compressed bytes; "
+            f"limit is {BLOCK_STREAM_COMPRESSED_LIMIT}"
+        )
+    if not 0 < max_compressed_capacity <= BLOCK_STREAM_COMPRESSED_LIMIT:
+        raise RuntimeError(
+            f"{campaign.name} allocated {max_compressed_capacity} compressed-buffer bytes; "
+            f"limit is {BLOCK_STREAM_COMPRESSED_LIMIT}"
+        )
+    if unsupported != 0:
+        raise RuntimeError(f"{campaign.name} reported {unsupported} unsupported frames")
+    expected_combined = prior_mask | mode_mask
+    if combined_mask != expected_combined:
+        raise RuntimeError(
+            f"{campaign.name} combined mask {combined_mask:#018x} does not match "
+            f"{expected_combined:#018x}"
+        )
+    return combined_mask, block_stream_cases, max_compressed_buffered
+
+
+def run_campaign(
+    probe: Path, decodecorpus: Path, campaign: Campaign, prior_mask: int
+) -> tuple[int, int, int]:
     with tempfile.TemporaryDirectory(prefix=f"vort-zstd-{campaign.name}-") as temp:
         root = Path(temp)
         generator_command = [
@@ -167,32 +216,18 @@ def run_campaign(probe: Path, decodecorpus: Path, campaign: Campaign, prior_mask
             probe_command.extend(("--decodecorpus-dictionary", str(root / "dictionary")))
         output = run_command(probe_command, f"Vort compat probe for {campaign.name}")
         fields = parse_summary(output)
-        try:
-            decoded_cases = int(fields["decodecorpus_cases"], 0)
-            unsupported = int(fields["unsupported"], 0)
-            mode_mask = int(fields["sequence_mode_mask"], 0)
-            combined_mask = int(fields["combined_mode_mask"], 0)
-        except (KeyError, ValueError) as error:
-            raise RuntimeError(f"malformed compat summary for {campaign.name}: {fields}") from error
-        if decoded_cases != campaign.count:
-            raise RuntimeError(
-                f"{campaign.name} decoded {decoded_cases} generated cases; expected {campaign.count}"
-            )
-        if unsupported != 0:
-            raise RuntimeError(f"{campaign.name} reported {unsupported} unsupported frames")
-        expected_combined = prior_mask | mode_mask
-        if combined_mask != expected_combined:
-            raise RuntimeError(
-                f"{campaign.name} combined mask {combined_mask:#018x} does not match "
-                f"{expected_combined:#018x}"
-            )
+        combined_mask, block_stream_cases, max_compressed_buffered = validate_campaign_summary(
+            fields, campaign, prior_mask
+        )
+        mode_mask = int(fields["sequence_mode_mask"], 0)
         print(
             f"zstd_decodecorpus_campaign=ok name={campaign.name} seed={campaign.seed} "
             f"cases={campaign.count} dictionary_bytes={campaign.dictionary_size or 0} "
+            f"block_stream_cases={block_stream_cases} max_compressed_buffered={max_compressed_buffered} "
             f"mode_mask={mode_mask:#018x} combined_mode_mask={combined_mask:#018x}",
             flush=True,
         )
-        return combined_mask
+        return combined_mask, block_stream_cases, max_compressed_buffered
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -218,15 +253,23 @@ def main(argv: list[str] | None = None) -> int:
         campaigns = select_campaigns(args.campaign)
         combined_mask = 0
         total_cases = 0
+        total_block_stream_cases = 0
+        max_compressed_buffered = 0
         for campaign in campaigns:
-            combined_mask = run_campaign(probe, decodecorpus, campaign, combined_mask)
+            combined_mask, block_stream_cases, campaign_max_buffered = run_campaign(
+                probe, decodecorpus, campaign, combined_mask
+            )
             total_cases += campaign.count
+            total_block_stream_cases += block_stream_cases
+            max_compressed_buffered = max(max_compressed_buffered, campaign_max_buffered)
         validate_final_coverage(campaigns, combined_mask)
     except (FileNotFoundError, RuntimeError, ValueError) as error:
         raise SystemExit(f"zstd decodecorpus gate failed: {error}") from error
 
     print(
         f"zstd_decodecorpus_gate=ok campaigns={len(campaigns)} cases={total_cases} "
+        f"block_stream_cases={total_block_stream_cases} "
+        f"max_compressed_buffered={max_compressed_buffered} "
         f"sequence_mode_combinations={combined_mask.bit_count()} "
         f"sequence_mode_mask={combined_mask:#018x} generator={decodecorpus} "
         f"generator_version={generator_version(decodecorpus)}"
