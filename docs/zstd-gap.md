@@ -178,7 +178,9 @@ Current interpretation:
   output chunks that split frame history can continue without the whole-frame
   scratch fallback; if a caller buffer is too small for an atomic compressed
   block, the decoder falls back to the bounded scratch facade after returning
-  any available progress.
+  any available progress. LZ4 skippable metadata is now independent of that data
+  frame limitation: only its eight-byte header is retained, and the payload is
+  discarded or captured incrementally under the same bounded-input API.
   Zstd native incremental decoding now
   has matching direct-output slices for raw/RLE blocks and compressed native
   blocks, including multi-block frames whose later compressed blocks reuse

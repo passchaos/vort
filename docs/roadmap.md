@@ -8718,3 +8718,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Zstd compressed output while retaining the existing full-block fast path.
   With direct-path switches included, the same corpus now exercises this state
   on 2,699 frames and sequence-free cursor output on 197 blocks.
+  LZ4 incremental skippable frames now use the same header-bounded design as
+  Zstd: only the eight-byte magic/length header is retained, while arbitrary-size
+  metadata is discarded or copied into caller storage as input arrives. Event
+  totals remain atomic until payload completion; truncation stays in the public
+  `frame` phase; eight bytes is sufficient and seven reports
+  `OutputLimitExceeded`. A 4 KiB metadata fixture followed by a normal data
+  frame, plus public liblz4 probe coverage, pins the behavior.

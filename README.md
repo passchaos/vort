@@ -21,7 +21,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   native frame/block/skippable headers plus plain, standard-dictionary-aware, and dictionary-set-aware Zstd sequence-mode summaries, zero-allocation native stream/block
   iterators, reusable raw-block decoder, and
   caller-owned encode/decode-into/append, incremental frame encode with optional pledged content size and preset dictionary, plus reusable
-  scratch encoder/decoder APIs,
+  scratch encoder/decoder APIs; incremental skippable frames retain only their
+  8-byte header while discarding or capturing arbitrary-size metadata directly
+  from caller input,
   pure Zig native Zstandard frame encode/bounded/caller-owned decode with header
   options and decoded-size preflight, a
   dependency-free raw/RLE, literal-only compressed-block, single-/four-stream
@@ -518,6 +520,9 @@ var lz4_bounded_incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOpti
     .expected_output_len = "payload payload".len,
 });
 defer lz4_bounded_incremental.deinit();
+// Skippable frames retain only their 8-byte header; their metadata payload can
+// exceed max_compressed_buffer_len and is discarded or copied into caller-owned
+// skippable_output incrementally. Data frames still use the configured frame cap.
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
 const lz4_dict = vort.Lz4NativeDictionary.init(0x1234, "previous lz4 history");
 const lz4_dict_options: vort.Lz4NativeFrameOptions = .{ .content_checksum = false };

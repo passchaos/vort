@@ -1361,6 +1361,38 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
     try expectError(error.SizeMismatch, incremental_too_large.finish());
     if (!std.mem.eql(u8, "SizeMismatch", incremental_too_large.diagnostics().last_error_name)) return error.Lz4ProbeMismatch;
     if (!std.mem.eql(u8, "output", incremental_too_large.diagnostics().last_error_phase_name)) return error.Lz4ProbeMismatch;
+
+    var large_metadata: [4096]u8 = undefined;
+    for (&large_metadata, 0..) |*byte, index| byte.* = @truncate(index * 31 + 5);
+    const large_skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 10, &large_metadata);
+    defer allocator.free(large_skip);
+    var captured: [31]u8 = undefined;
+    var events: [1]vort.Lz4NativeIncrementalFrameDecoder.SkippableEvent = undefined;
+    const capture_dictionary = vort.Lz4NativeDictionary.init(0x4c5a_3401, "lz4-skippable-capture");
+    var incremental_bounded = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, capture_dictionary, .{
+        .expected_output_len = 0,
+        .max_compressed_buffer_len = 8,
+        .max_decoded_buffer_len = 0,
+        .skippable_output = &captured,
+        .skippable_events = &events,
+    });
+    defer incremental_bounded.deinit();
+    var offset: usize = 0;
+    while (incremental_bounded.snapshot().phase != .done) {
+        const end = @min(large_skip.len, offset + 13);
+        const result = try incremental_bounded.step(large_skip[offset..end], chunked_into[0..0]);
+        offset += result.progress.input_read;
+        if (incremental_bounded.compressedBufferedBytes() > 8 or incremental_bounded.compressedBufferCapacity() > 8)
+            return error.Lz4ProbeSizeMismatch;
+        if (result.status == .need_input and offset >= large_skip.len) return error.Lz4ProbeMismatch;
+    }
+    try incremental_bounded.finish();
+    if (offset != large_skip.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, large_metadata[0..captured.len], &captured)) return error.Lz4ProbeMismatch;
+    const bounded_snapshot = incremental_bounded.snapshot();
+    if (bounded_snapshot.skippable_total != large_metadata.len or bounded_snapshot.skippable_event_count != 1)
+        return error.Lz4ProbeSizeMismatch;
+    if (events[0].id != 10 or events[0].payload_len != large_metadata.len) return error.Lz4ProbeMismatch;
 }
 
 fn expectLz4ConcatenatedPayloadApis(allocator: std.mem.Allocator, stream: []const u8, payload: []const u8) !void {

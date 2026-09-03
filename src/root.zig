@@ -5056,19 +5056,20 @@ test "root native incremental decoders enforce compressed limits on skippable fr
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = 0,
         .max_decoded_buffer_len = 0,
-        .max_compressed_buffer_len = lz4_skip.len - 1,
+        .max_compressed_buffer_len = 8,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [1]u8 = undefined;
 
-    // Skippable metadata still occupies the caller-bounded compressed scratch
-    // buffer until the full frame can be discarded. A frame that would exceed
-    // that limit must fail in the same public frame phase as data frames.
-    try std.testing.expectError(error.OutputLimitExceeded, lz4_decoder.step(lz4_skip, lz4_output[0..0]));
-    try std.testing.expectEqual(lz4_skip.len - 1, lz4_decoder.snapshot().input_received);
-    try std.testing.expectEqual(@as(usize, 0), lz4_decoder.diagnostics().output_written);
-    try std.testing.expectEqualSlices(u8, "OutputLimitExceeded", lz4_decoder.diagnostics().last_error_name);
-    try std.testing.expectEqualSlices(u8, "frame", lz4_decoder.diagnostics().last_error_phase_name);
+    // Both native formats now consume skippable payloads incrementally after
+    // retaining only the eight-byte header.
+    const lz4_skipped = try lz4_decoder.step(lz4_skip, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_skipped.status);
+    try std.testing.expectEqual(lz4_skip.len, lz4_skipped.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_skipped.progress.output_written);
+    try std.testing.expectEqual(@as(usize, lz4_skip.len - 8), lz4_decoder.snapshot().skippable_total);
+    try std.testing.expectEqualSlices(u8, "", lz4_decoder.diagnostics().last_error_name);
+    try lz4_decoder.finish();
     const lz4_small_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 10, "");
     defer std.testing.allocator.free(lz4_small_skip);
     lz4_decoder.reset();
@@ -5078,6 +5079,16 @@ test "root native incremental decoders enforce compressed limits on skippable fr
     try std.testing.expectEqual(lz4_small_skip.len, lz4_recovered.progress.input_read);
     try std.testing.expectEqual(@as(usize, 0), lz4_recovered.progress.output_written);
     try lz4_decoder.finish();
+
+    var lz4_header_limited = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+        .max_compressed_buffer_len = 7,
+    });
+    defer lz4_header_limited.deinit();
+    try std.testing.expectError(error.OutputLimitExceeded, lz4_header_limited.step(lz4_skip, lz4_output[0..0]));
+    try std.testing.expectEqual(@as(usize, 7), lz4_header_limited.snapshot().input_received);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_header_limited.diagnostics().last_error_phase_name);
 
     const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 11, "root-zstd-limit-skippable");
     defer std.testing.allocator.free(zstd_skip);
