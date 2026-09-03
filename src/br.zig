@@ -537,6 +537,31 @@ pub const IncrementalTestSupport = struct {
         return try encoded.toOwnedSlice(allocator);
     }
 
+    /// Build a valid final compressed stream that declares all 256 RFC command
+    /// block types and advances through the final type. Types beyond the first
+    /// 32 exercise the compact stored-tree representation in the decoder.
+    pub fn encodeMaximumCommandBlockTypes(allocator: std.mem.Allocator) Error![]u8 {
+        const repeated_command = commandEntryForLengths(1, 2) orelse return error.InvalidBlockPlan;
+        const final_command = commandEntryForLengths(2, 2) orelse return error.InvalidBlockPlan;
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writer.writeBits(allocator, 1, 1); // ISLAST
+        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 255 * 3 + 1, 16); // MLEN - 1
+        try writeMinimalCompressedHeaderForCommandSwitchTypes(allocator, &writer, 256, repeated_command.symbol, final_command.symbol);
+        for (0..255) |_| {
+            try writer.writeBits(allocator, 0, 1); // literal a
+            try writer.writeBits(allocator, 0, 2); // next command block length = 1
+        }
+        try writer.writeBits(allocator, 1, 1); // final command selects the second symbol
+        try writer.writeBits(allocator, 1, 1); // final literals bb; its copy is ignored
+        try writer.writeBits(allocator, 1, 1);
+        return try encoded.toOwnedSlice(allocator);
+    }
+
     /// Build the minimal compressed "hello" fixture through the same private
     /// header writer used by the compressed-meta-block decoder tests. Keeping
     /// fixture construction here lets incremental tests exercise compressed
@@ -1152,6 +1177,44 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
     };
 }
 
+const inline_command_tree_count = 32;
+const packed_command_length_bytes = (command_lut.entries.len + 1) / 2;
+const PackedCommandPrefixCode = struct {
+    single_symbol_plus_one: u16 = 0,
+    active_entries: u16 = 0,
+    lengths: [packed_command_length_bytes]u8 = @splat(0),
+
+    fn init(tree: *const PrefixCode(command_lut.entries.len)) PackedCommandPrefixCode {
+        var compact: PackedCommandPrefixCode = .{};
+        if (tree.single_symbol) |symbol| {
+            compact.single_symbol_plus_one = symbol + 1;
+            return compact;
+        }
+        compact.active_entries = @intCast(tree.table.len);
+        for (tree.table.entries[0..tree.table.len]) |entry| {
+            const byte_index = entry.symbol / 2;
+            const shift: u3 = @intCast((entry.symbol & 1) * 4);
+            compact.lengths[byte_index] |= @as(u8, entry.bits) << shift;
+        }
+        return compact;
+    }
+
+    fn expand(self: *const PackedCommandPrefixCode) Error!PrefixCode(command_lut.entries.len) {
+        if (self.single_symbol_plus_one != 0)
+            return .{ .single_symbol = self.single_symbol_plus_one - 1 };
+        var lengths: [command_lut.entries.len]u4 = undefined;
+        for (&lengths, 0..) |*length, symbol| {
+            const shift: u3 = @intCast((symbol & 1) * 4);
+            length.* = @truncate(self.lengths[symbol / 2] >> shift);
+        }
+        const tree: PrefixCode(command_lut.entries.len) = .{
+            .table = try huffman.HuffmanTable(command_lut.entries.len).init(&lengths),
+        };
+        if (tree.table.len != self.active_entries) return error.InvalidHuffmanCode;
+        return tree;
+    }
+};
+
 const MinimalCompressedHeader = struct {
     npostfix: u2,
     ndirect: u16,
@@ -1162,7 +1225,10 @@ const MinimalCompressedHeader = struct {
     literal_context_map: [max_literal_block_types * 64]u8,
     literal_trees: [max_literal_context_trees]PrefixCode(256),
     command_block: BlockSwitchState(max_command_block_types),
-    insert_copy_trees: [max_command_block_types]PrefixCode(704),
+    insert_copy_trees: [inline_command_tree_count]PrefixCode(704),
+    packed_insert_copy_trees: [max_command_block_types - inline_command_tree_count]PackedCommandPrefixCode = @splat(.{}),
+    active_packed_insert_copy_tree: PrefixCode(704) = .{},
+    active_packed_insert_copy_tree_index: u16 = std.math.maxInt(u16),
     distance_block: BlockSwitchState(max_distance_block_types),
     distance_context_map: [max_distance_block_types * 4]u8,
     distance_trees: [max_distance_context_trees]PrefixCode(max_distance_alphabet_size),
@@ -1187,7 +1253,11 @@ const max_literal_block_types = 256;
 // the complete one-byte wire range; direct-to-header parsing initializes only
 // declared slots, so ordinary streams do not pay per-tree setup cost.
 const max_literal_context_trees = 256;
-const max_command_block_types = 32;
+// Keep the common first 32 command trees in their ready-to-decode form. The
+// remaining RFC range is retained as packed 4-bit code lengths and expanded
+// into one cache only when a stream switches there, avoiding roughly 1 MiB of
+// fixed decoder state.
+const max_command_block_types = 256;
 // RFC 7932 encodes block-type and context-tree counts with a bounded 8-bit
 // varlen code. Real mixed-source libbrotli streams can exceed the former
 // 64-entry implementation tier (68 distance types in the retained corpus), so
@@ -4076,11 +4146,16 @@ inline fn readCompressedHeaderLiteralTrees(reader: *bitstream.BitReader, header:
 }
 
 inline fn readCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
-    header.insert_copy_trees[0] = try readPrefixCode(704, reader);
-    var command_tree_index: u16 = 1;
+    var command_tree_index: u16 = 0;
     while (command_tree_index < tree_count) : (command_tree_index += 1) {
-        header.insert_copy_trees[command_tree_index] = try readPrefixCode(704, reader);
+        const tree = try readPrefixCode(704, reader);
+        if (command_tree_index < inline_command_tree_count) {
+            header.insert_copy_trees[command_tree_index] = tree;
+        } else {
+            header.packed_insert_copy_trees[command_tree_index - inline_command_tree_count] = PackedCommandPrefixCode.init(&tree);
+        }
     }
+    header.active_packed_insert_copy_tree_index = std.math.maxInt(u16);
 }
 
 inline fn readCompressedHeaderDistanceTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, alphabet_size: usize) Error!void {
@@ -4193,10 +4268,16 @@ fn readCompressedHeaderLiteralTreesProfiled(io: std.Io, reader: *bitstream.BitRe
 }
 
 fn readCompressedHeaderCommandTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, profile: *PrefixCodeProfile) Error!void {
-    header.insert_copy_trees[0] = try readPrefixCodeRuntimeProfiled(704, 704, reader, io, profile);
-    var tree_index: u16 = 1;
-    while (tree_index < tree_count) : (tree_index += 1)
-        header.insert_copy_trees[tree_index] = try readPrefixCodeRuntimeProfiled(704, 704, reader, io, profile);
+    var tree_index: u16 = 0;
+    while (tree_index < tree_count) : (tree_index += 1) {
+        const tree = try readPrefixCodeRuntimeProfiled(704, 704, reader, io, profile);
+        if (tree_index < inline_command_tree_count) {
+            header.insert_copy_trees[tree_index] = tree;
+        } else {
+            header.packed_insert_copy_trees[tree_index - inline_command_tree_count] = PackedCommandPrefixCode.init(&tree);
+        }
+    }
+    header.active_packed_insert_copy_tree_index = std.math.maxInt(u16);
 }
 
 fn readCompressedHeaderDistanceTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, alphabet_size: usize, profile: *PrefixCodeProfile) Error!void {
@@ -4253,7 +4334,15 @@ fn accumulateCompressedHeaderTableShape(profile: *CompressedHeaderProfile, heade
     accumulatePrefixTableShape(max_distance_block_types + 2, profile, &header.distance_block.type_tree);
     accumulatePrefixTableShape(26, profile, &header.distance_block.length_tree);
     for (header.literal_trees[0..header.literal_tree_count]) |*tree| accumulatePrefixTableShape(256, profile, tree);
-    for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree| accumulatePrefixTableShape(704, profile, tree);
+    const inline_count = @min(@as(usize, header.command_block.block_type_count), inline_command_tree_count);
+    for (header.insert_copy_trees[0..inline_count]) |*tree| accumulatePrefixTableShape(704, profile, tree);
+    if (header.command_block.block_type_count > inline_command_tree_count) {
+        const packed_count = @as(usize, header.command_block.block_type_count) - inline_command_tree_count;
+        for (header.packed_insert_copy_trees[0..packed_count]) |*tree| {
+            profile.tree_symbols +%= @intFromBool(tree.single_symbol_plus_one != 0);
+            profile.tree_entries +%= tree.active_entries;
+        }
+    }
     for (header.distance_trees[0..header.distance_tree_count]) |*tree| accumulatePrefixTableShape(max_distance_alphabet_size, profile, tree);
 }
 
@@ -7377,9 +7466,20 @@ fn readCommandSymbolAny(header: *MinimalCompressedHeader, reader: anytype) Error
         try switchBlockAny(max_command_block_types, &header.command_block, reader);
     }
     if (header.command_block.current_type >= max_command_block_types) return error.UnsupportedBrotliFeature;
-    const symbol = try header.insert_copy_trees[header.command_block.current_type].decode(reader);
+    const tree = try commandPrefixForDecode(header);
+    const symbol = try tree.decode(reader);
     if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
     return symbol;
+}
+
+fn commandPrefixForDecode(header: *MinimalCompressedHeader) Error!*const PrefixCode(704) {
+    const index = header.command_block.current_type;
+    if (index < inline_command_tree_count) return &header.insert_copy_trees[index];
+    if (header.active_packed_insert_copy_tree_index != index) {
+        header.active_packed_insert_copy_tree = try header.packed_insert_copy_trees[index - inline_command_tree_count].expand();
+        header.active_packed_insert_copy_tree_index = index;
+    }
+    return &header.active_packed_insert_copy_tree;
 }
 
 fn ensureLiteralBlock(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!void {
@@ -15654,6 +15754,58 @@ test "br minimal compressed stream switches seventeenth command block tree" {
     try std.testing.expectEqualSlices(u8, ("a" ** 48) ++ "b", decoded);
 }
 
+test "br minimal compressed stream switches final RFC command block type" {
+    try std.testing.expectEqual(@as(usize, 256), compressedSupportLimits().max_command_block_types);
+    try std.testing.expect(@sizeOf(IncrementalCopyStreamDecoder) <= 1536 * 1024);
+    const encoded = try IncrementalTestSupport.encodeMaximumCommandBlockTypes(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+    const expected = ("aaa" ** 255) ++ "bb";
+
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 256), summary.max_command_block_types);
+    try std.testing.expectEqual(expected.len, summary.decoded_bytes);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+
+    var history: [planner_max_backward_distance]u8 = undefined;
+    var decoder = IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .max_output_len = expected.len,
+        .expected_output_len = expected.len,
+    });
+    var progressive: [expected.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const output_end = @min(progressive.len, output_offset + 3);
+        const step = try decoder.step(encoded[input_offset..input_end], progressive[output_offset..output_end]);
+        try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqualSlices(u8, expected, progressive[0..output_offset]);
+}
+
+test "br packed command prefix preserves complex trees" {
+    var lengths: [command_lut.entries.len]u4 = @splat(0);
+    lengths[8] = 1;
+    lengths[136] = 1;
+    const original: PrefixCode(command_lut.entries.len) = .{
+        .table = try huffman.HuffmanTable(command_lut.entries.len).init(&lengths),
+    };
+    const compact = PackedCommandPrefixCode.init(&original);
+    const expanded = try compact.expand();
+    try std.testing.expectEqual(original.table.len, expanded.table.len);
+    try std.testing.expectEqualSlices(
+        huffman.HuffmanTable(command_lut.entries.len).Entry,
+        original.table.entries[0..original.table.len],
+        expanded.table.entries[0..expanded.table.len],
+    );
+}
+
 test "br minimal compressed stream switches literal block tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -17549,6 +17701,38 @@ fn writeMinimalCompressedHeaderForCommandSwitchSeventeenTypes(allocator: std.mem
         try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 136);
     }
     try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 8);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 65, 16);
+}
+
+fn writeMinimalCompressedHeaderForCommandSwitchTypes(
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    comptime block_type_count: u16,
+    repeated_symbol: u16,
+    final_symbol: u16,
+) Error!void {
+    if (block_type_count < 2 or block_type_count > 256) return error.InvalidBlockPlan;
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, block_type_count); // NBLTYPESI
+    try writeSimpleSingleSymbolPrefix(allocator, writer, @as(usize, block_type_count) + 2, 1); // next command block type
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 26, 0); // block count code
+    try writer.writeBits(allocator, 0, 2); // first command block count = 1
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 1, 4); // NDIRECT = 1
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESL
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 'a', alphabetBits(256));
+    try writer.writeBits(allocator, 'b', alphabetBits(256));
+    for (0..block_type_count - 1) |_|
+        try writeSimpleSingleSymbolPrefix(allocator, writer, 704, repeated_symbol);
+    if (repeated_symbol >= 256 or final_symbol >= 256 or repeated_symbol >= final_symbol)
+        return error.InvalidBlockPlan;
+    try writeSimplePrefixRuntime(allocator, writer, 704, &.{ @intCast(repeated_symbol), @intCast(final_symbol) }, false);
     try writeSimpleSingleSymbolPrefix(allocator, writer, 65, 16);
 }
 

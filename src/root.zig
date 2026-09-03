@@ -3449,7 +3449,7 @@ test "root brotli compressed support limits expose current bounded capacities" {
     const limits: BrotliCompressedSupportLimits = brCompressedSupportLimits();
     try std.testing.expectEqual(@as(usize, 256), limits.max_literal_block_types);
     try std.testing.expectEqual(@as(usize, 256), limits.max_literal_context_trees);
-    try std.testing.expectEqual(@as(usize, 32), limits.max_command_block_types);
+    try std.testing.expectEqual(@as(usize, 256), limits.max_command_block_types);
     try std.testing.expectEqual(@as(usize, 256), limits.max_distance_block_types);
     try std.testing.expectEqual(@as(usize, 256), limits.max_distance_context_trees);
     try std.testing.expect(limits.max_distance_alphabet_size >= 16 + 120 + (48 << 3));

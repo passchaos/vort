@@ -212,6 +212,7 @@ pub fn main(init: std.process.Init) !void {
     var progress_matrix_streams: usize = 0;
     var wide_literal_type_cases: usize = 0;
     var maximum_literal_type_cases: usize = 0;
+    var maximum_command_type_cases: usize = 0;
     for (cases) |case| {
         for (case.qualities) |quality| {
             for (case.modes) |mode| {
@@ -387,6 +388,20 @@ pub fn main(init: std.process.Init) !void {
     progress_matrix_streams += 1;
     maximum_literal_type_cases += 1;
 
+    const maximum_command_types = try vort.br.IncrementalTestSupport.encodeMaximumCommandBlockTypes(init.gpa);
+    defer init.gpa.free(maximum_command_types);
+    const maximum_command_expected = ("aaa" ** 255) ++ "bb";
+    const maximum_command_reference_output = try init.gpa.alloc(u8, maximum_command_expected.len);
+    defer init.gpa.free(maximum_command_reference_output);
+    try reference.decode(maximum_command_types, maximum_command_reference_output);
+    if (!std.mem.eql(u8, maximum_command_expected, maximum_command_reference_output)) return error.ReferenceDecodeFailed;
+    const maximum_command_summary = try vort.brSummarizeStream(maximum_command_types);
+    if (maximum_command_summary.max_command_block_types != 256) return error.ReferenceDecodeFailed;
+    try decodeProgressChunkMatrix(init.gpa, maximum_command_types, maximum_command_expected, 16);
+    progress_matrix_runs += progressChunkMatrixCaseCount();
+    progress_matrix_streams += 1;
+    maximum_command_type_cases += 1;
+
     const metadata = "vort/libbrotli metadata boundary";
     const metadata_operations = [_]libbrotli.Runtime.StreamingOperation{
         .{ .flush = text },
@@ -414,8 +429,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} reference_version={x}\n",
-        .{ cases_run, one_shot_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, wide_literal_type_cases, maximum_literal_type_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} reference_version={x}\n",
+        .{ cases_run, one_shot_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, reference.version() },
     );
     try stdout.interface.flush();
 }

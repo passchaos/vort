@@ -8619,14 +8619,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   31-byte output chunks when the optional checkout is present, growing the
   local matrix to 100 cases. A dependency-free 33-type hand-built stream pins
   summary, one-shot, and 1-byte-input/3-byte-output progressive decode, while
-  64/65 truncated headers pin supported-vs-unsupported error classification.
-  The public progressive decoder grows from 1,397,856 to 1,400,128 bytes
-  (`+2,272`, about 0.16%); a full 256-entry literal tier was rejected because it
-  grew state by 15,904 bytes and regressed ordinary fixed-CPU rows more. Twenty
+  64/65 truncated headers originally pinned the measured tier boundary. The
+  public progressive decoder grew from 1,397,856 to 1,400,128 bytes (`+2,272`,
+  about 0.16%); an initial full 256-entry experiment was rejected because its
+  ordinary fixed-CPU evidence regressed. Twenty
   alternating CPU-8 comparisons for the retained 64 tier show structured q4
   and text q11 around `0.986x` paired throughput and clustered q8 at `1.002x`,
-  all with identical checksums. This is an explicit small compatibility cost;
-  command block types remain at 32 until a real wider stream is found. The
+  all with identical checksums. This was retained as an explicit small
+  compatibility cost; the later maximum-range work below supersedes the 64/65
+  limit without changing the independently bounded literal-tree count. The
   self-referential 32 KiB `src/br.zig` ratio fixture moved from 5,526 to 5,814
   bytes as this test code changed; the preceding HEAD and the widened decoder
   both produced 5,814 bytes with checksum 740,269 from the same input. The
@@ -8748,6 +8749,20 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   through system libbrotli and all 56 progressive chunk combinations, preventing
   a self-generated/self-decoded fixture from serving as the only evidence. The
   256-count truncated header remains `TruncatedFrame`, and the test writer rejects
-  the unrepresentable 257 boundary. Command block types remain at the measured
-  32-entry implementation tier pending a compact tree-storage design or real
-  wider upstream wire.
+  the unrepresentable 257 boundary.
+  Completed the matching 256-entry RFC command block-type count range without storing
+  256 expanded 704-symbol Huffman tables. The common first 32 trees retain their
+  direct representation; the remaining 224 store two 4-bit code lengths per
+  byte and rebuild only the active overflow tree when block switching reaches
+  it. This keeps `BrotliIncrementalCopyStreamDecoder` at 1,499,168 bytes, below
+  the existing 1.5 MiB budget instead of adding roughly 1 MiB. A maximum-width
+  fixture advances through command type 255 and round-trips through summary,
+  one-shot, and one-byte-input / three-byte-output decoding; system libbrotli
+  independently accepts the wire, and the upstream matrix exercises it across
+  all 56 chunk combinations. A focused complex-tree pack/expand oracle verifies
+  canonical entries, while the common-tree ReleaseFast gate protects the hot
+  path. The progressive decoder's separate 16 KiB compressed-header cap remains
+  explicit: pathological maximum-count complex-tree headers can exceed it even
+  though ordinary and maximum-count simple-tree streams are supported; removing
+  that cap requires a resumable header parser rather than another large fixed
+  buffer.
