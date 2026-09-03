@@ -8545,3 +8545,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   including the former binary level-3 gap. The smaller candidate is evaluated
   automatically by the same held-out cost model rather than requiring callers
   to guess it; the gate now requires binary parity at every level.
+  Validation-guided phrase training now collects each parameter set once, then
+  reuses that bounded phrase array across total-frequency/cross-sample rankings
+  and ranked/reverse layouts. Previously all four combinations rescanned the
+  complete training corpus. A retained reference selector proves byte-identical
+  output across both small and indexed candidate sets. The dictionary training
+  benchmark now covers basic and validation-guided text, JSON, and binary rows;
+  it also fixes the old JSON fixture's out-of-bounds `% 67` indexing by using
+  the real 59-byte pattern length and pins all six legal-input checksums. Nine
+  alternating same-source ReleaseFast A/B pairs against the prior selector show
+  median validated throughput improving from `0.235/0.237/0.034` MB/s to
+  `0.814/0.830/0.109` MB/s (`3.47x/3.51x/3.19x`) for text/JSON/binary with
+  identical dictionary checksums.
