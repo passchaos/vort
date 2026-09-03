@@ -29,6 +29,9 @@ const CompressUsingDictFn = *const fn (?*anyopaque, [*]u8, usize, [*]const u8, u
 const CreateDCtxFn = *const fn () callconv(.c) ?*anyopaque;
 const FreeDCtxFn = *const fn (?*anyopaque) callconv(.c) usize;
 const DecompressUsingDictFn = *const fn (?*anyopaque, [*]u8, usize, [*]const u8, usize, [*]const u8, usize) callconv(.c) usize;
+const TrainDictionaryFn = *const fn ([*]u8, usize, [*]const u8, [*]const usize, c_uint) callconv(.c) usize;
+const DictionaryIsErrorFn = *const fn (usize) callconv(.c) c_uint;
+const DictionaryIdFn = *const fn ([*]const u8, usize) callconv(.c) c_uint;
 
 pub const Runtime = struct {
     library: std.DynLib,
@@ -47,6 +50,9 @@ pub const Runtime = struct {
     create_dctx: CreateDCtxFn,
     free_dctx: FreeDCtxFn,
     decompress_using_dict: DecompressUsingDictFn,
+    train_dictionary: TrainDictionaryFn,
+    dictionary_is_error: DictionaryIsErrorFn,
+    dictionary_id: DictionaryIdFn,
 
     pub fn open() !Runtime {
         const names = [_][:0]const u8{
@@ -132,6 +138,18 @@ pub const Runtime = struct {
                 library.close();
                 continue;
             };
+            const train_dictionary = library.lookup(TrainDictionaryFn, "ZDICT_trainFromBuffer") orelse {
+                library.close();
+                continue;
+            };
+            const dictionary_is_error = library.lookup(DictionaryIsErrorFn, "ZDICT_isError") orelse {
+                library.close();
+                continue;
+            };
+            const dictionary_id = library.lookup(DictionaryIdFn, "ZDICT_getDictID") orelse {
+                library.close();
+                continue;
+            };
             return .{
                 .library = library,
                 .compress_bound = compress_bound,
@@ -149,6 +167,9 @@ pub const Runtime = struct {
                 .create_dctx = create_dctx,
                 .free_dctx = free_dctx,
                 .decompress_using_dict = decompress_using_dict,
+                .train_dictionary = train_dictionary,
+                .dictionary_is_error = dictionary_is_error,
+                .dictionary_id = dictionary_id,
             };
         }
         return error.ReferenceUnavailable;
@@ -306,5 +327,27 @@ pub const Runtime = struct {
         const written = self.decompress_using_dict(context, output.ptr, output.len, encoded.ptr, encoded.len, dictionary.ptr, dictionary.len);
         if (self.is_error(written) != 0) return error.ReferenceDecodeFailed;
         if (written != output.len) return error.SizeMismatch;
+    }
+
+    pub fn trainDictionaryAlloc(self: Runtime, allocator: std.mem.Allocator, samples: []const []const u8, capacity: usize) ![]u8 {
+        if (samples.len == 0 or capacity < 256) return error.ReferenceEncodeFailed;
+        var joined: std.ArrayList(u8) = .empty;
+        defer joined.deinit(allocator);
+        var sizes = try allocator.alloc(usize, samples.len);
+        defer allocator.free(sizes);
+        for (samples, 0..) |sample, index| {
+            sizes[index] = sample.len;
+            try joined.appendSlice(allocator, sample);
+        }
+        const dictionary = try allocator.alloc(u8, capacity);
+        errdefer allocator.free(dictionary);
+        const written = self.train_dictionary(dictionary.ptr, dictionary.len, joined.items.ptr, sizes.ptr, @intCast(sizes.len));
+        if (self.dictionary_is_error(written) != 0 or written == 0) return error.ReferenceEncodeFailed;
+        return allocator.realloc(dictionary, written);
+    }
+
+    pub fn dictionaryId(self: Runtime, dictionary: []const u8) ?u32 {
+        const id = self.dictionary_id(dictionary.ptr, dictionary.len);
+        return if (id == 0) null else id;
     }
 };

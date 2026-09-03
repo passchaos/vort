@@ -5515,11 +5515,13 @@ fn validateNativeDictionary(header: NativeFrameHeader, dictionary: ?NativeDictio
 fn initialSequenceFrameState(dictionary: ?NativeDictionary) Error!SequenceFrameState {
     const dict = dictionary orelse return .{};
     const bytes = dict.standard_bytes orelse return .{};
-    return try parseStandardDictionaryState(bytes);
+    return try parseStandardDictionaryState(dict, bytes);
 }
 
-fn parseStandardDictionaryState(bytes: []const u8) Error!SequenceFrameState {
+fn parseStandardDictionaryState(dict: NativeDictionary, bytes: []const u8) Error!SequenceFrameState {
     const view = try inspectStandardDictionary(bytes);
+    if (view.id != dict.id or view.content.ptr != dict.content.ptr or view.content.len != dict.content.len)
+        return error.InvalidDictionaryMetadata;
     var offset: usize = 8;
     var reader: std.Io.Reader = .fixed(bytes[offset..]);
     var remaining: std.Io.Limit = .limited(bytes.len - offset);
@@ -7625,14 +7627,74 @@ pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!NativeFrameBlockHea
 pub fn inspectNativeFrameBlockSequenceModes(frame: []const u8, block: NativeFrameBlockHeader) Error!NativeSequenceModeSummary {
     try validateNativeFrameBlockPayloadAvailable(frame, block);
     if (block.block_type != .compressed) return nativeSequenceModeSummaryForLiteralBlock(block);
-    var frame_state = try replayNativeFrameBlockInspectState(frame, block.header_offset);
+    var frame_state = try replayNativeFrameBlockInspectState(frame, block.header_offset, .{});
     return try inspectNativeFrameBlockSequenceModesWithState(frame, block, &frame_state);
 }
 
-fn replayNativeFrameBlockInspectState(frame: []const u8, target_header_offset: usize) Error!SequenceFrameState {
+pub fn inspectNativeFrameBlockSequenceModesWithDictionary(frame: []const u8, block: NativeFrameBlockHeader, dictionary: NativeDictionary) Error!NativeSequenceModeSummary {
+    const active_dictionary = try dictionaryForInspectedFrame(frame, dictionary);
+    var frame_state = try replayNativeFrameBlockInspectState(frame, block.header_offset, try initialSequenceFrameState(active_dictionary));
+    return try inspectNativeFrameBlockSequenceModesWithState(frame, block, &frame_state);
+}
+
+pub fn inspectNativeFrameBlockSequenceModesWithDictionarySet(frame: []const u8, block: NativeFrameBlockHeader, dictionary_set: NativeDictionarySet) Error!NativeSequenceModeSummary {
+    try dictionary_set.validate();
+    const active_dictionary = try dictionaryForNativeFrame(frame, dictionary_set);
+    var frame_state = try replayNativeFrameBlockInspectState(frame, block.header_offset, try initialSequenceFrameState(active_dictionary));
+    return try inspectNativeFrameBlockSequenceModesWithState(frame, block, &frame_state);
+}
+
+test "zstd dictionary-aware sequence inspector seeds trained repeat tables" {
+    const dictionary_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.dict.hex"), " \r\n\t");
+    const frame_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.frame.hex"), " \r\n\t");
+    const dictionary_bytes = try std.testing.allocator.alloc(u8, dictionary_hex.len / 2);
+    defer std.testing.allocator.free(dictionary_bytes);
+    _ = try std.fmt.hexToBytes(dictionary_bytes, dictionary_hex);
+    const frame = try std.testing.allocator.alloc(u8, frame_hex.len / 2);
+    defer std.testing.allocator.free(frame);
+    _ = try std.fmt.hexToBytes(frame, frame_hex);
+
+    const standard = try NativeDictionary.initFromStandardDictionary(dictionary_bytes);
+    try std.testing.expectEqual(@as(u32, 0x7c06_9d4d), standard.dictionary.id);
+    const block = try inspectNativeFrameFirstBlock(frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, block.block_type);
+    try std.testing.expectError(error.CorruptFrame, inspectNativeFrameBlockSequenceModes(frame, block));
+
+    const modes = try inspectNativeFrameBlockSequenceModesWithDictionary(frame, block, standard.dictionary);
+    try std.testing.expectEqual(@as(usize, 57), modes.sequence_count);
+    try std.testing.expectEqual(NativeLiteralsKind.raw, modes.literals_kind);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, modes.match_length_mode);
+
+    const set = NativeDictionarySet.init(&.{standard.dictionary});
+    try std.testing.expectEqual(modes, try inspectNativeFrameBlockSequenceModesWithDictionarySet(frame, block, set));
+    try std.testing.expectError(error.NeedDictionary, inspectNativeFrameBlockSequenceModesWithDictionary(frame, block, NativeDictionary.init(standard.dictionary.id + 1, standard.dictionary.content)));
+    try std.testing.expectError(error.NeedDictionary, inspectNativeFrameBlockSequenceModesWithDictionarySet(frame, block, NativeDictionarySet.init(&.{})));
+    try std.testing.expectError(error.CorruptFrame, inspectNativeFrameBlockSequenceModesWithDictionary(frame, block, NativeDictionary.init(standard.dictionary.id, standard.dictionary.content)));
+    var inconsistent = standard.dictionary;
+    inconsistent.content = inconsistent.content[1..];
+    try std.testing.expectError(error.InvalidDictionaryMetadata, inspectNativeFrameBlockSequenceModesWithDictionary(frame, block, inconsistent));
+    try std.testing.expectError(error.InvalidDictionaryMetadata, decodedNativeFrameSizeWithDictionary(frame, inconsistent));
+    try std.testing.expectError(error.InvalidDictionaryMetadata, decodeNativeFrameAllocWithDictionary(std.testing.allocator, frame, inconsistent));
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, frame, standard.dictionary);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqual(@as(usize, 2304), decoded.len);
+    try std.testing.expectEqual(@as(u32, 1_658_167_111), checksum_mod.crc32(decoded));
+}
+
+fn dictionaryForInspectedFrame(frame: []const u8, dictionary: NativeDictionary) Error!?NativeDictionary {
+    const header = try inspectNativeFrameHeader(frame);
+    if (header.dictionary_id == 0) return null;
+    if (dictionary.id != header.dictionary_id) return error.NeedDictionary;
+    return dictionary;
+}
+
+fn replayNativeFrameBlockInspectState(frame: []const u8, target_header_offset: usize, initial_state: SequenceFrameState) Error!SequenceFrameState {
     const header = try inspectNativeFrameHeader(frame);
     if (target_header_offset < header.payload_offset) return error.CorruptFrame;
-    var frame_state: SequenceFrameState = .{};
+    var frame_state = initial_state;
     var offset = header.payload_offset;
     while (offset < target_header_offset) {
         const previous_block = try inspectNativeFrameBlockAt(frame, offset);
@@ -11018,7 +11080,7 @@ fn sequenceLiteralsPayloadSectionLenFromHistogram(
 ) Error!usize {
     const raw_payload_len = if (histogram.unique_count == 1) 1 else histogram.regenerated_len;
     var best = std.math.add(usize, try literalsHeaderLen(histogram.regenerated_len), raw_payload_len) catch return error.IntegerOverflow;
-    if (histogram.unique_count < 2 or histogram.regenerated_len < 64 or histogram.max_symbol > native_max_direct_huffman_symbol) return best;
+    if (histogram.unique_count < 2 or histogram.regenerated_len < 64) return best;
 
     var plan: SmallHuffmanLiteralPlan = .{};
     plan.frequencies = histogram.frequencies;
@@ -11029,7 +11091,7 @@ fn sequenceLiteralsPayloadSectionLenFromHistogram(
         plan.len += 1;
     }
     finalizeSmallHuffmanLiteralPlan(&plan) orelse return best;
-    const tree_len = 1 + ((@as(usize, plan.max_symbol) + 1) / 2);
+    const tree_len = try smallHuffmanTreeSerializedLen(&plan) orelse return best;
     try huffman_bit_prefix.prepare(block, &plan);
     const streams_len = try smallHuffmanLiteralStreamsSerializedLenFromPrefix(block, literal_lens, literal_ends, tail_start, histogram.regenerated_len, huffman_bit_prefix) orelse return best;
     const compressed_size = std.math.add(usize, tree_len, streams_len) catch return error.IntegerOverflow;
@@ -11051,8 +11113,7 @@ fn sequenceHuffmanLiteralsSectionLen(
 ) Error!?usize {
     if (info.rle_byte != null or info.regenerated_len < 64) return null;
     const plan = smallHuffmanLiteralPlanFromSequence(block, literal_lens, literal_ends, tail_start, info.regenerated_len) orelse return null;
-    if (plan.max_symbol > native_max_direct_huffman_symbol) return null;
-    const tree_len = 1 + ((@as(usize, plan.max_symbol) + 1) / 2);
+    const tree_len = try smallHuffmanTreeSerializedLen(&plan) orelse return null;
     const streams_len = try smallHuffmanLiteralStreamsSerializedLenFromSequence(
         block,
         literal_lens,
@@ -12674,6 +12735,50 @@ fn emitSmallHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), p
     return true;
 }
 
+fn smallHuffmanTreeSerializedLen(plan: *const SmallHuffmanLiteralPlan) Error!?usize {
+    const direct_len: ?usize = if (plan.max_symbol <= native_max_direct_huffman_symbol)
+        1 + ((@as(usize, plan.max_symbol) + 1) / 2)
+    else
+        null;
+    const fse_len = try fseHuffmanTreeSerializedLen(plan);
+    if (direct_len) |len| {
+        if (fse_len) |candidate| return @min(len, candidate);
+        return len;
+    }
+    return fse_len;
+}
+
+test "zstd Huffman tree size estimator matches selected wire" {
+    const payloads = [_][]const u8{
+        "ABCD" ** 64,
+        "The quick brown fox jumps over the lazy dog.\n" ** 64,
+        @embedFile("zstd.zig")[0..8192],
+    };
+    for (payloads) |payload| {
+        const plan = smallHuffmanLiteralPlan(payload) orelse return error.CorruptFrame;
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(std.testing.allocator);
+        try std.testing.expect(try emitSmallHuffmanTree(std.testing.allocator, &encoded, &plan));
+        try std.testing.expectEqual(encoded.items.len, (try smallHuffmanTreeSerializedLen(&plan)) orelse return error.CorruptFrame);
+    }
+}
+
+fn fseHuffmanTreeSerializedLen(plan: *const SmallHuffmanLiteralPlan) Error!?usize {
+    var weights: [255]u8 = undefined;
+    const weight_count: usize = plan.max_symbol;
+    for (weights[0..weight_count], 0..) |*weight, symbol|
+        weight.* = smallHuffmanExplicitWeight(plan, @intCast(symbol));
+
+    var best: ?usize = null;
+    for (huffman_weight_fse_table_logs) |table_log| {
+        const len = try fseCompressedHuffmanWeightsSerializedLen(weights[0..weight_count], table_log) orelse continue;
+        if (best == null or len < best.?) best = len;
+    }
+    const compressed_len = best orelse return null;
+    if (compressed_len > 127) return null;
+    return 1 + compressed_len;
+}
+
 fn emitDirectHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: *const SmallHuffmanLiteralPlan) Error!void {
     if (plan.max_symbol > native_max_direct_huffman_symbol) return error.CorruptFrame;
     try out.append(allocator, 127 + plan.max_symbol);
@@ -12867,6 +12972,87 @@ fn emitFseCompressedHuffmanWeightsWithTableLog(allocator: std.mem.Allocator, out
     const bitstream_start = out.items.len;
     try emitFseCompressedSymbols(allocator, out, weights, table);
     return out.items.len > bitstream_start;
+}
+
+fn fseCompressedHuffmanWeightsSerializedLen(weights: []const u8, table_log: u8) Error!?usize {
+    if (weights.len <= 2) return null;
+
+    var counts: [huffman_weight_symbol_max + 1]u32 = .{0} ** (huffman_weight_symbol_max + 1);
+    var max_symbol: u8 = 0;
+    for (weights) |weight| {
+        if (weight > huffman_weight_symbol_max) return error.CorruptFrame;
+        counts[weight] += 1;
+        max_symbol = @max(max_symbol, weight);
+    }
+    var max_count: u32 = 0;
+    for (counts[0 .. @as(usize, max_symbol) + 1]) |count| max_count = @max(max_count, count);
+    if (max_count == weights.len or max_count == 1) return null;
+
+    var normalized: [huffman_weight_symbol_max + 1]i16 = .{0} ** (huffman_weight_symbol_max + 1);
+    normalizeFseCounts(
+        counts[0 .. @as(usize, max_symbol) + 1],
+        weights.len,
+        table_log,
+        normalized[0 .. @as(usize, max_symbol) + 1],
+    ) orelse return null;
+    var header: [128]u8 = undefined;
+    var header_len: usize = 0;
+    try emitFseNormalizedCountFixed(&header, &header_len, normalized[0 .. @as(usize, max_symbol) + 1], max_symbol, table_log);
+    const table = try buildFseCompressionTable(normalized[0 .. @as(usize, max_symbol) + 1], max_symbol, table_log);
+    return std.math.add(usize, header_len, try fseCompressedSymbolsSerializedLen(weights, table)) catch return error.IntegerOverflow;
+}
+
+fn fseCompressedSymbolsSerializedLen(symbols: []const u8, table: FseCompressionTable) Error!usize {
+    if (symbols.len <= 2) return error.CorruptFrame;
+    var index = symbols.len;
+    var state_1: usize = undefined;
+    var state_2: usize = undefined;
+    var bit_count: usize = 1; // Reverse bitstream end marker.
+
+    if ((symbols.len & 1) != 0) {
+        index -= 1;
+        state_1 = try fseInitialState(table, symbols[index]);
+        index -= 1;
+        state_2 = try fseInitialState(table, symbols[index]);
+        index -= 1;
+        bit_count += try fseEncodedSymbolBitCount(table, &state_1, symbols[index]);
+    } else {
+        index -= 1;
+        state_2 = try fseInitialState(table, symbols[index]);
+        index -= 1;
+        state_1 = try fseInitialState(table, symbols[index]);
+    }
+
+    var remaining = symbols.len - 2;
+    if ((symbols.len & 1) != 0) remaining -= 1;
+    if ((remaining & 2) != 0) {
+        index -= 1;
+        bit_count += try fseEncodedSymbolBitCount(table, &state_2, symbols[index]);
+        index -= 1;
+        bit_count += try fseEncodedSymbolBitCount(table, &state_1, symbols[index]);
+    }
+    while (index > 0) {
+        index -= 1;
+        bit_count += try fseEncodedSymbolBitCount(table, &state_2, symbols[index]);
+        index -= 1;
+        bit_count += try fseEncodedSymbolBitCount(table, &state_1, symbols[index]);
+        if (index > 0) {
+            index -= 1;
+            bit_count += try fseEncodedSymbolBitCount(table, &state_2, symbols[index]);
+            index -= 1;
+            bit_count += try fseEncodedSymbolBitCount(table, &state_1, symbols[index]);
+        }
+    }
+    bit_count += @as(usize, table.table_log) * 2;
+    return (bit_count + 7) / 8;
+}
+
+fn fseEncodedSymbolBitCount(table: FseCompressionTable, state: *usize, symbol: u8) Error!usize {
+    if (symbol > table.max_symbol) return error.CorruptFrame;
+    const transform = table.transforms[symbol];
+    const bits: usize = @intCast((@as(i32, @intCast(state.*)) + transform.delta_nb_bits) >> 16);
+    state.* = try fseNextState(table, state.* >> @intCast(bits), 0, transform.delta_find_state);
+    return bits;
 }
 
 fn normalizeFseCounts(counts: []const u32, total: usize, table_log: u8, normalized: []i16) ?void {
@@ -19247,12 +19433,33 @@ test "zstd literal-only writer emits predefined multi duplicate matches" {
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
     try std.testing.expectEqual(@as(u8, 0x00), block[section.sequence_payload_offset]); // LL/OF/ML all use Predefined_Mode.
-    const estimated_payload_len = try multiSequencePayloadLen(
+    var match_index: DuplicateMatchIndex = undefined;
+    match_index.build(payload);
+    var actual_matches: [max_bootstrap_sequence_count]DuplicateMatch = undefined;
+    var actual_literal_lens: [max_bootstrap_sequence_count]usize = undefined;
+    var actual_offsets: [max_bootstrap_sequence_count]usize = undefined;
+    var actual_match_lens: [max_bootstrap_sequence_count]usize = undefined;
+    var actual_literal_ends: [max_bootstrap_sequence_count]usize = undefined;
+    var actual_count: usize = 0;
+    var actual_literal_start: usize = 0;
+    while (actual_count < actual_matches.len and actual_literal_start < payload.len) {
+        const match = try findBestDuplicateMatchIndexed(payload, actual_literal_start, &match_index) orelse break;
+        actual_matches[actual_count] = match;
+        actual_literal_lens[actual_count] = match.second_start - actual_literal_start;
+        actual_offsets[actual_count] = match.second_start - match.first_start;
+        actual_match_lens[actual_count] = match.len;
+        actual_literal_ends[actual_count] = match.second_start + match.len;
+        actual_literal_start = actual_literal_ends[actual_count];
+        actual_count += 1;
+    }
+    try std.testing.expectEqual(section.sequence_count, actual_count);
+    const estimated_payload_len = try multiSequencePayloadLenWithLiteralEnds(
         payload,
-        &.{ large_len, small_len },
-        &.{ large_len, small_len },
-        &.{ large_len, small_len },
-        payload.len - tail.len,
+        actual_literal_lens[0..actual_count],
+        actual_offsets[0..actual_count],
+        actual_match_lens[0..actual_count],
+        actual_literal_ends[0..actual_count],
+        actual_literal_start,
     );
     try std.testing.expectEqual(block_len, estimated_payload_len);
 

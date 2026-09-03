@@ -973,6 +973,8 @@ pub const zstdInspectNativeFrameHeader = zstd.inspectNativeFrameHeader;
 pub const zstdInspectNativeFrameFirstBlock = zstd.inspectNativeFrameFirstBlock;
 pub const zstdInspectNativeFrameBlockAt = zstd.inspectNativeFrameBlockAt;
 pub const zstdInspectNativeFrameBlockSequenceModes = zstd.inspectNativeFrameBlockSequenceModes;
+pub const zstdInspectNativeFrameBlockSequenceModesWithDictionary = zstd.inspectNativeFrameBlockSequenceModesWithDictionary;
+pub const zstdInspectNativeFrameBlockSequenceModesWithDictionarySet = zstd.inspectNativeFrameBlockSequenceModesWithDictionarySet;
 pub const zstdSummarizeNativeFrameBlocks = zstd.summarizeNativeFrameBlocks;
 pub const zstdSummarizeNativeStream = zstd.summarizeNativeStream;
 pub const zstdSummarizeNativeStreamWithDiagnostics = zstd.summarizeNativeStreamWithDiagnostics;
@@ -2879,6 +2881,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdInspectNativeFrameFirstBlock;
     _ = zstdInspectNativeFrameBlockAt;
     _ = zstdInspectNativeFrameBlockSequenceModes;
+    _ = zstdInspectNativeFrameBlockSequenceModesWithDictionary;
+    _ = zstdInspectNativeFrameBlockSequenceModesWithDictionarySet;
     _ = zstdSummarizeNativeFrameBlocks;
     _ = zstdSummarizeNativeStream;
     _ = zstdSummarizeNativeStreamWithDiagnostics;

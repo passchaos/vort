@@ -272,6 +272,16 @@ Recommended next comparison steps:
   pins all one-/two-/three-byte sequence-count encodings
   (`sequence_count_tiers=0x7`), and expands the observed LL/OF/ML mode tuples to
   25 without relying on match-finder heuristics.
+  Dictionary-aware block inspection now has single-dictionary and dictionary-set
+  entry points. They seed Huffman/FSE/repcodes from standard full dictionaries
+  before replaying preceding blocks, so a first-block Repeat_Mode frame can be
+  inspected rather than being misclassified as corrupt. A fixed 256-byte
+  libzstd-trained dictionary plus 702-byte frame pins a 57-sequence all-Repeat
+  block, correct/wrong/missing dictionary behavior, and decoded CRC. The runtime
+  matrix additionally trains 256/1,024/4,096-byte dictionaries and decodes level
+  1/9/19 single- and multi-block payloads through size, allocating, caller-owned,
+  single-dictionary, and dictionary-set paths, bringing the local matrix to 273
+  cases.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

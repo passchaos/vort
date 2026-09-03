@@ -25,6 +25,7 @@ pub fn main(init: std.process.Init) !void {
     var advanced_cases: usize = 0;
     var explicit_sequence_cases: usize = 0;
     var streaming_cases: usize = 0;
+    var trained_dictionary_cases: usize = 0;
     var coverage = Coverage{};
     for (std.meta.tags(Shape)) |shape| {
         for (sizes) |size| {
@@ -177,6 +178,73 @@ pub fn main(init: std.process.Init) !void {
         checked += 1;
         streaming_cases += 1;
     }
+    var dictionary_storage: [64][768]u8 = undefined;
+    var dictionary_samples: [dictionary_storage.len][]const u8 = undefined;
+    const dictionary_unit = "trained-zstd-service-event-field-value-payload-dictionary-history/";
+    for (&dictionary_storage, &dictionary_samples, 0..) |*storage, *sample, sample_index| {
+        var state: u32 = 0x5eed_1234 ^ @as(u32, @intCast(sample_index * 0x9e37));
+        for (storage, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = if (index % 96 < 72)
+                dictionary_unit[(index + sample_index * 7) % dictionary_unit.len]
+            else
+                @truncate(state >> 16);
+        }
+        sample.* = storage;
+    }
+    var dictionary_payload: [3 * 768]u8 = undefined;
+    @memcpy(dictionary_payload[0..768], &dictionary_storage[7]);
+    @memcpy(dictionary_payload[768..1536], &dictionary_storage[19]);
+    @memcpy(dictionary_payload[1536..], &dictionary_storage[42]);
+    const large_dictionary_payload = try init.gpa.alloc(u8, dictionary_payload.len * 224);
+    defer init.gpa.free(large_dictionary_payload);
+    for (0..224) |index| @memcpy(large_dictionary_payload[index * dictionary_payload.len ..][0..dictionary_payload.len], &dictionary_payload);
+    const dictionary_payloads = [_][]const u8{ &dictionary_payload, large_dictionary_payload };
+    inline for (.{ 256, 1024, 4096 }) |dictionary_capacity| {
+        const trained_dictionary = try runtime.trainDictionaryAlloc(init.gpa, &dictionary_samples, dictionary_capacity);
+        defer init.gpa.free(trained_dictionary);
+        const standard = vort.ZstdDictionary.initFromStandardDictionary(trained_dictionary) catch |err| {
+            std.debug.print("zstd_compat_unsupported trained_dictionary_parse capacity={d} dict={d} id={any} error={s}\n", .{ dictionary_capacity, trained_dictionary.len, runtime.dictionaryId(trained_dictionary), @errorName(err) });
+            return err;
+        };
+        const dictionary_summary = try vort.zstdSummarizeStandardDictionary(trained_dictionary);
+        if (runtime.dictionaryId(trained_dictionary) != standard.dictionary.id or dictionary_summary.id != standard.dictionary.id)
+            return error.InvalidDictionaryMetadata;
+        for (dictionary_payloads) |payload| {
+            inline for (.{ 1, 9, 19 }) |level| {
+                const frame = try runtime.encodeUsingDictAlloc(init.gpa, payload, trained_dictionary, level);
+                defer init.gpa.free(frame);
+                const frame_header = try vort.zstdInspectNativeFrameHeader(frame);
+                if (frame_header.dictionary_id != standard.dictionary.id) return error.NeedDictionary;
+                var block_iterator = try vort.zstdIterateNativeFrameBlocks(frame);
+                const set = try vort.ZstdDictionarySet.initChecked(&.{standard.dictionary});
+                while (try block_iterator.next()) |block| {
+                    if (block.block_type != .compressed) continue;
+                    const modes = try vort.zstdInspectNativeFrameBlockSequenceModesWithDictionary(frame, block, standard.dictionary);
+                    const set_modes = try vort.zstdInspectNativeFrameBlockSequenceModesWithDictionarySet(frame, block, set);
+                    if (!std.meta.eql(modes, set_modes)) return error.CorruptFrame;
+                    coverage.max_sequence_count = @max(coverage.max_sequence_count, modes.sequence_count);
+                }
+                const decoded_size = vort.zstdDecodedFrameSizeWithDictionary(frame, standard.dictionary) catch |err| {
+                    std.debug.print("zstd_compat_unsupported trained_dictionary_size level={d} dict={d} input={d} encoded={d} error={s}\n", .{ level, trained_dictionary.len, payload.len, frame.len, @errorName(err) });
+                    return err;
+                };
+                if (decoded_size != payload.len) return error.SizeMismatch;
+                const decoded = vort.zstdDecodeFrameAllocWithDictionary(init.gpa, frame, standard.dictionary) catch |err| {
+                    std.debug.print("zstd_compat_unsupported trained_dictionary level={d} dict={d} input={d} encoded={d} error={s}\n", .{ level, trained_dictionary.len, payload.len, frame.len, @errorName(err) });
+                    return err;
+                };
+                defer init.gpa.free(decoded);
+                if (!std.mem.eql(u8, payload, decoded)) return error.SizeMismatch;
+                const into = try init.gpa.alloc(u8, payload.len);
+                defer init.gpa.free(into);
+                const written = try vort.zstdDecodeFrameIntoWithDictionary(frame, into, standard.dictionary);
+                if (written != payload.len or !std.mem.eql(u8, payload, into[0..written])) return error.SizeMismatch;
+                checked += 1;
+                trained_dictionary_cases += 1;
+            }
+        }
+    }
     const corpus_paths = [_][]const u8{
         "README.md",
         "docs/roadmap.md",
@@ -263,8 +331,8 @@ pub fn main(init: std.process.Init) !void {
     if (coverage.max_sequence_count < 43_690 or coverage.sequence_count_tiers != 0b111)
         return error.ReferenceEncodeFailed;
     std.debug.print(
-        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} version={s}\n",
-        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, corpus_cases, golden_cases, golden_error_cases, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), runtime.version() },
+        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} version={s}\n",
+        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), runtime.version() },
     );
 }
 

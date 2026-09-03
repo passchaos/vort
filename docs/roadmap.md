@@ -8635,3 +8635,22 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   hanging Debug run completes all 419 Brotli tests; the libbrotli 100-case,
   840-run progressive differential and all Brotli benchmark/profile gates
   remain green.
+  Extended Zstd compatibility validation through the runtime libzstd API. The
+  matrix now reaches level 22, all nine compression strategies, content-size
+  and checksum combinations, window logs 10/21, long-distance matching,
+  unknown-size streaming frames with explicit flushes, four upstream golden
+  streams, and three upstream malformed golden streams. Explicit validated
+  sequences pin one-, two-, and three-byte sequence counts through the practical
+  128 KiB block maximum of 43,690 entries, plus varied literal/match/offset
+  state transitions. The local run covers 273 cases, up to 2,048 blocks per
+  frame and 25 observed LL/OF/ML mode combinations. Runtime-trained standard
+  dictionaries at 256/1,024/4,096 bytes are decoded at levels 1/9/19 for both
+  2.3 KiB and 504 KiB payloads. New dictionary-aware sequence inspectors seed
+  Huffman/FSE tables and repcodes from the standard dictionary before replaying
+  preceding blocks; a fixed libzstd 1.5.5 all-Repeat fixture pins the public
+  single-dictionary and dictionary-set APIs plus missing, wrong, and internally
+  inconsistent dictionary errors. Finally, sequence literal-size planning now
+  uses the same direct-vs-FSE Huffman weight-tree choice as emission. This
+  restores exact estimator/wire agreement for mixed and all-FSE table plans and
+  prevents match planning from rejecting candidates based on overstated literal
+  tree cost.
