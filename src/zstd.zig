@@ -3134,6 +3134,12 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 return error.CorruptFrame;
                             };
                             if (self.block_stream_literal_offset == section.regenerated_size) {
+                                if (self.block_stream_huffman_state) |*huffman_state| {
+                                    huffman_state.cursor.expectEnd() catch |err| {
+                                        self.recordError(.block_stream, err);
+                                        return err;
+                                    };
+                                }
                                 self.block_stream_literal_section = null;
                                 self.block_stream_huffman_state = null;
                                 self.block_stream_literal_offset = 0;
