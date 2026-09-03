@@ -1157,7 +1157,7 @@ const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 // maximum. Keep encoder scratch proportional to what its header advertises.
 const planned_distance_alphabet_size = 16 + 15 + 48;
 const max_context_map_alphabet_size = 256 + 16;
-const max_literal_block_types = 32;
+const max_literal_block_types = 64;
 // Large upstream source streams can use more than 128 literal trees. Retain
 // the complete one-byte wire range; direct-to-header parsing initializes only
 // declared slots, so ordinary streams do not pay per-tree setup cost.
@@ -4221,9 +4221,9 @@ fn collectCompressedHeaderStarts(allocator: std.mem.Allocator, stream: []const u
 }
 
 fn accumulateCompressedHeaderTableShape(profile: *CompressedHeaderProfile, header: *const MinimalCompressedHeader) void {
-    accumulatePrefixTableShape(34, profile, &header.literal_block.type_tree);
+    accumulatePrefixTableShape(max_literal_block_types + 2, profile, &header.literal_block.type_tree);
     accumulatePrefixTableShape(26, profile, &header.literal_block.length_tree);
-    accumulatePrefixTableShape(34, profile, &header.command_block.type_tree);
+    accumulatePrefixTableShape(max_command_block_types + 2, profile, &header.command_block.type_tree);
     accumulatePrefixTableShape(26, profile, &header.command_block.length_tree);
     accumulatePrefixTableShape(max_distance_block_types + 2, profile, &header.distance_block.type_tree);
     accumulatePrefixTableShape(26, profile, &header.distance_block.length_tree);
@@ -8687,7 +8687,7 @@ test "br ratio planner keeps an exact optimal candidate for source blocks" {
     const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(ratio);
     try std.testing.expect(ratio.len < baseline.len);
-    try std.testing.expectEqual(@as(usize, 5526), ratio.len);
+    try std.testing.expectEqual(@as(usize, 5814), ratio.len);
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
@@ -15748,6 +15748,77 @@ test "br minimal compressed stream switches seventeenth literal block tree" {
     try std.testing.expectEqualSlices(u8, ("a" ** 16) ++ "q", decoded);
 }
 
+test "br minimal compressed stream switches thirty-third literal block type" {
+    try std.testing.expectEqual(@as(usize, 64), compressedSupportLimits().max_literal_block_types);
+    try std.testing.expect(@sizeOf(IncrementalCopyStreamDecoder) <= 1536 * 1024);
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 32, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForLiteralBlockSwitchThirtyThreeTypes(std.testing.allocator, &writer);
+    try writer.writeBits(std.testing.allocator, 7, 3); // command 280 insert extra: 26 + 7 = 33
+    for (0..32) |_| try writer.writeBits(std.testing.allocator, 0, 2); // next block length = 1
+
+    const expected = ("a" ** 32) ++ "q";
+    const summary = try summarizeStream(encoded.items);
+    try std.testing.expectEqual(@as(usize, expected.len), summary.decoded_bytes);
+    try std.testing.expectEqual(@as(usize, 33), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 2), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+
+    var history: [planner_max_backward_distance]u8 = undefined;
+    var decoder = IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .max_output_len = expected.len,
+        .expected_output_len = expected.len,
+    });
+    var progressive: [expected.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.items.len, input_offset + 1);
+        const output_end = @min(progressive.len, output_offset + 3);
+        const step = try decoder.step(encoded.items[input_offset..input_end], progressive[output_offset..output_end]);
+        try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(encoded.items.len, input_offset);
+    try std.testing.expectEqualSlices(u8, expected, progressive[0..output_offset]);
+}
+
+test "br literal block-type tier boundary classifies truncation and unsupported counts" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 0, 16); // MLEN - 1
+    try writeBlockTypeCount(std.testing.allocator, &writer, 64); // NBLTYPESL
+    // Truncate before the required literal block-type prefix code. The full RFC
+    // count is supported, so this must be classified as incomplete input rather
+    // than an implementation-tier rejection.
+    try std.testing.expectError(error.TruncatedFrame, decodedStreamSize(encoded.items));
+
+    encoded.clearRetainingCapacity();
+    writer = .{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1);
+    try writer.writeBits(std.testing.allocator, 0, 1);
+    try writer.writeBits(std.testing.allocator, 0, 2);
+    try writer.writeBits(std.testing.allocator, 0, 16);
+    try writeBlockTypeCount(std.testing.allocator, &writer, 65);
+    try std.testing.expectError(error.UnsupportedBrotliFeature, decodedStreamSize(encoded.items));
+}
+
 test "br minimal compressed stream switches distance block tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -17578,6 +17649,26 @@ fn writeMinimalCompressedHeaderForLiteralBlockSwitchSeventeenTypes(allocator: st
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForLiteralBlockSwitchThirtyThreeTypes(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 33); // NBLTYPESL
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 35, 1); // next literal block type
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 26, 0); // block count code
+    try writer.writeBits(allocator, 0, 2); // first literal block count = 1
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    for (0..33) |_| try writer.writeBits(allocator, 0, 2); // literal context modes
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESL
+    try writeLiteralBlockSwitchThirtyThreeTypesContextMap(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'a');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'q');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 280);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
 fn writeMinimalCompressedHeaderForDistanceBlockSwitch(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -18142,6 +18233,16 @@ fn writeLiteralBlockSwitchSeventeenTypesContextMap(allocator: std.mem.Allocator,
     while (i < 17 * 64) : (i += 1) {
         try writer.writeBits(allocator, if (i >= 16 * 64) 1 else 0, 1);
     }
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeLiteralBlockSwitchThirtyThreeTypesContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 0, alphabetBits(2));
+    try writer.writeBits(allocator, 1, alphabetBits(2));
+    for (0..33 * 64) |i| try writer.writeBits(allocator, @intFromBool(i >= 32 * 64), 1);
     try writer.writeBits(allocator, 0, 1); // IMTF = false
 }
 

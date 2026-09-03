@@ -151,6 +151,16 @@ pub fn main(init: std.process.Init) !void {
         else => return err,
     };
     defer if (external_cluster_source) |source| init.gpa.free(source);
+    // This real Graphviz DOT fixture makes libbrotli quality 11 exceed the old
+    // 32-entry literal block-type tier (37 types in the first 1.5 MiB). Keep
+    // it optional like the neighboring Godot corpus so ordinary checkouts do
+    // not depend on unrelated repositories.
+    const external_literal_types_path = "../../Work/graphviz/tests/2475_1.dot";
+    const external_literal_types_file = std.Io.Dir.cwd().readFileAlloc(init.io, external_literal_types_path, init.gpa, .limited(16 * 1024 * 1024)) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => return err,
+    };
+    defer if (external_literal_types_file) |source| init.gpa.free(source);
     const tiny_prefix = "alpha alpha alpha alpha" ++
         "{\"kind\":\"tiny\",\"value\":1}\n" ++
         "beta beta beta beta";
@@ -200,6 +210,7 @@ pub fn main(init: std.process.Init) !void {
     var caller_history_summaries: usize = 0;
     var progress_matrix_runs: usize = 0;
     var progress_matrix_streams: usize = 0;
+    var wide_literal_type_cases: usize = 0;
     for (cases) |case| {
         for (case.qualities) |quality| {
             for (case.modes) |mode| {
@@ -343,6 +354,23 @@ pub fn main(init: std.process.Init) !void {
         cases_run += 1;
     }
 
+    if (external_literal_types_file) |complete_source| {
+        if (complete_source.len < 1536 * 1024) return error.ReferenceEncodeFailed;
+        const source = complete_source[0 .. 1536 * 1024];
+        const encoded = try reference.encodeWithOptionsAlloc(init.gpa, source, .{
+            .quality = 11,
+            .mode = 0,
+            .lgwin = 22,
+        });
+        defer init.gpa.free(encoded);
+        const summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
+        if (summary.max_literal_block_types <= 32 or summary.max_command_block_types > 32)
+            return error.ReferenceEncodeFailed;
+        try decodeProgressChunks(init.gpa, encoded, source, 22, 17, 31);
+        wide_literal_type_cases += 1;
+        cases_run += 1;
+    }
+
     const metadata = "vort/libbrotli metadata boundary";
     const metadata_operations = [_]libbrotli.Runtime.StreamingOperation{
         .{ .flush = text },
@@ -370,8 +398,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} reference_version={x}\n",
-        .{ cases_run, one_shot_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} wide_literal_type_cases={d} reference_version={x}\n",
+        .{ cases_run, one_shot_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, wide_literal_type_cases, reference.version() },
     );
     try stdout.interface.flush();
 }

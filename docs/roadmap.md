@@ -8601,3 +8601,24 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   6.1 KiB cumulative scratch to these 512-byte-target workloads; the allocation
   gate permits that single bounded scratch while retaining the preceding
   balance, resize, and 8 MiB limits.
+  Expanded Brotli literal block-type storage from 32 to a measured 64-entry
+  tier. The first 1.5 MiB of local Graphviz `tests/2475_1.dot` makes libbrotli
+  1.1 quality 11 emit 37 literal block types (the 4 MiB prefix reaches 51),
+  which the previous decoder rejected as `UnsupportedBrotliFeature`; the
+  upstream differential now decodes that real frame through 17-byte input and
+  31-byte output chunks when the optional checkout is present, growing the
+  local matrix to 100 cases. A dependency-free 33-type hand-built stream pins
+  summary, one-shot, and 1-byte-input/3-byte-output progressive decode, while
+  64/65 truncated headers pin supported-vs-unsupported error classification.
+  The public progressive decoder grows from 1,397,856 to 1,400,128 bytes
+  (`+2,272`, about 0.16%); a full 256-entry literal tier was rejected because it
+  grew state by 15,904 bytes and regressed ordinary fixed-CPU rows more. Twenty
+  alternating CPU-8 comparisons for the retained 64 tier show structured q4
+  and text q11 around `0.986x` paired throughput and clustered q8 at `1.002x`,
+  all with identical checksums. This is an explicit small compatibility cost;
+  command block types remain at 32 until a real wider stream is found. The
+  self-referential 32 KiB `src/br.zig` ratio fixture moved from 5,526 to 5,814
+  bytes as this test code changed; the preceding HEAD and the widened decoder
+  both produce 5,814 bytes with checksum 740,269 from the same current input,
+  so the matching planner gate update records fixture drift rather than an
+  encoder regression.

@@ -146,6 +146,12 @@ Open items include:
 - Platform/performance matrix: architecture-specific acceleration, memory-use
   dashboards, and ReleaseFast library-level benchmark evidence remain incomplete.
 
+The Brotli progressive decoder currently retains 64 literal block types, 32
+command block types, and the complete 256-entry distance type/tree and literal
+tree ranges. The literal tier is backed by a real libbrotli quality-11 Graphviz
+stream that uses more than 32 types; it is not yet the complete 256-type RFC
+range.
+
 ## Next recommended work
 
 1. Add more public Zstd sequence fixtures for broader mixed-table transitions
