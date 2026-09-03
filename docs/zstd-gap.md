@@ -303,6 +303,15 @@ Recommended next comparison steps:
   Sequence-free raw/RLE/Huffman literal sections inside compressed blocks now
   retain a persistent literal/Huffman cursor and write directly into tiny caller
   buffers without `decoded_scratch`; the same suite exercises 132 such blocks.
+  On the bounded block-stream path, sequence-bearing compressed blocks now also
+  retain their reverse-bitstream/FSE cursor, repeated offsets, Huffman cursor,
+  and pending literal/match lengths across `step()` calls. Matches read from the
+  bounded rolling history plus the current caller slice, so even one-byte output
+  slices need no decoded-block scratch. The 5,400-frame suite exercises 61,951
+  of these blocks across all 64
+  LL/OF/ML mode tuples, dictionaries up to 1 MiB, and blocks with up to 43,690
+  sequences; its block-stream decoded-scratch length and capacity peaks are both
+  zero.
   Skippable-frame payloads now follow a separate incremental state after their
   eight-byte header. They are discarded or copied into caller-owned capture
   storage directly from input, so metadata size no longer counts against

@@ -141,7 +141,7 @@ def validate_generated_files(root: Path, campaign: Campaign) -> None:
 
 def validate_campaign_summary(
     fields: dict[str, str], campaign: Campaign, prior_mask: int
-) -> tuple[int, int, int, int]:
+) -> tuple[int, int, int, int, int]:
     try:
         decoded_cases = int(fields["decodecorpus_cases"], 0)
         incremental_cases = int(fields["decodecorpus_incremental_cases"], 0)
@@ -149,6 +149,9 @@ def validate_campaign_summary(
         max_compressed_buffered = int(fields["decodecorpus_max_compressed_buffered"], 0)
         max_compressed_capacity = int(fields["decodecorpus_max_compressed_capacity"], 0)
         streamed_literal_blocks = int(fields["decodecorpus_streamed_literal_blocks"], 0)
+        streamed_sequence_blocks = int(fields["decodecorpus_streamed_sequence_blocks"], 0)
+        max_block_stream_decoded_buffered = int(fields["decodecorpus_max_block_stream_decoded_buffered"], 0)
+        max_block_stream_decoded_capacity = int(fields["decodecorpus_max_block_stream_decoded_capacity"], 0)
         unsupported = int(fields["unsupported"], 0)
         mode_mask = int(fields["sequence_mode_mask"], 0)
         combined_mask = int(fields["combined_mode_mask"], 0)
@@ -177,18 +180,23 @@ def validate_campaign_summary(
         )
     if unsupported != 0:
         raise RuntimeError(f"{campaign.name} reported {unsupported} unsupported frames")
+    if max_block_stream_decoded_buffered != 0 or max_block_stream_decoded_capacity != 0:
+        raise RuntimeError(
+            f"{campaign.name} retained decoded block scratch while block streaming: "
+            f"bytes={max_block_stream_decoded_buffered} capacity={max_block_stream_decoded_capacity}"
+        )
     expected_combined = prior_mask | mode_mask
     if combined_mask != expected_combined:
         raise RuntimeError(
             f"{campaign.name} combined mask {combined_mask:#018x} does not match "
             f"{expected_combined:#018x}"
         )
-    return combined_mask, block_stream_cases, max_compressed_buffered, streamed_literal_blocks
+    return combined_mask, block_stream_cases, max_compressed_buffered, streamed_literal_blocks, streamed_sequence_blocks
 
 
 def run_campaign(
     probe: Path, decodecorpus: Path, campaign: Campaign, prior_mask: int
-) -> tuple[int, int, int, int]:
+) -> tuple[int, int, int, int, int]:
     with tempfile.TemporaryDirectory(prefix=f"vort-zstd-{campaign.name}-") as temp:
         root = Path(temp)
         generator_command = [
@@ -217,19 +225,24 @@ def run_campaign(
             probe_command.extend(("--decodecorpus-dictionary", str(root / "dictionary")))
         output = run_command(probe_command, f"Vort compat probe for {campaign.name}")
         fields = parse_summary(output)
-        combined_mask, block_stream_cases, max_compressed_buffered, streamed_literal_blocks = validate_campaign_summary(
+        combined_mask, block_stream_cases, max_compressed_buffered, streamed_literal_blocks, streamed_sequence_blocks = validate_campaign_summary(
             fields, campaign, prior_mask
         )
+        max_decoded_buffered = int(fields["decodecorpus_max_block_stream_decoded_buffered"], 0)
+        max_decoded_capacity = int(fields["decodecorpus_max_block_stream_decoded_capacity"], 0)
         mode_mask = int(fields["sequence_mode_mask"], 0)
         print(
             f"zstd_decodecorpus_campaign=ok name={campaign.name} seed={campaign.seed} "
             f"cases={campaign.count} dictionary_bytes={campaign.dictionary_size or 0} "
             f"block_stream_cases={block_stream_cases} max_compressed_buffered={max_compressed_buffered} "
             f"streamed_literal_blocks={streamed_literal_blocks} "
+            f"streamed_sequence_blocks={streamed_sequence_blocks} "
+            f"max_block_stream_decoded_buffered={max_decoded_buffered} "
+            f"max_block_stream_decoded_capacity={max_decoded_capacity} "
             f"mode_mask={mode_mask:#018x} combined_mode_mask={combined_mask:#018x}",
             flush=True,
         )
-        return combined_mask, block_stream_cases, max_compressed_buffered, streamed_literal_blocks
+        return combined_mask, block_stream_cases, max_compressed_buffered, streamed_literal_blocks, streamed_sequence_blocks
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -258,17 +271,21 @@ def main(argv: list[str] | None = None) -> int:
         total_block_stream_cases = 0
         max_compressed_buffered = 0
         total_streamed_literal_blocks = 0
+        total_streamed_sequence_blocks = 0
         for campaign in campaigns:
-            combined_mask, block_stream_cases, campaign_max_buffered, streamed_literal_blocks = run_campaign(
+            combined_mask, block_stream_cases, campaign_max_buffered, streamed_literal_blocks, streamed_sequence_blocks = run_campaign(
                 probe, decodecorpus, campaign, combined_mask
             )
             total_cases += campaign.count
             total_block_stream_cases += block_stream_cases
             max_compressed_buffered = max(max_compressed_buffered, campaign_max_buffered)
             total_streamed_literal_blocks += streamed_literal_blocks
+            total_streamed_sequence_blocks += streamed_sequence_blocks
         validate_final_coverage(campaigns, combined_mask)
         if len(campaigns) == len(CAMPAIGNS) and total_streamed_literal_blocks == 0:
             raise RuntimeError("full campaign suite did not stream a sequence-free compressed block")
+        if len(campaigns) == len(CAMPAIGNS) and total_streamed_sequence_blocks == 0:
+            raise RuntimeError("full campaign suite did not stream a sequence-bearing compressed block")
     except (FileNotFoundError, RuntimeError, ValueError) as error:
         raise SystemExit(f"zstd decodecorpus gate failed: {error}") from error
 
@@ -277,6 +294,9 @@ def main(argv: list[str] | None = None) -> int:
         f"block_stream_cases={total_block_stream_cases} "
         f"max_compressed_buffered={max_compressed_buffered} "
         f"streamed_literal_blocks={total_streamed_literal_blocks} "
+        f"streamed_sequence_blocks={total_streamed_sequence_blocks} "
+        f"max_block_stream_decoded_buffered=0 "
+        f"max_block_stream_decoded_capacity=0 "
         f"sequence_mode_combinations={combined_mask.bit_count()} "
         f"sequence_mode_mask={combined_mask:#018x} generator={decodecorpus} "
         f"generator_version={generator_version(decodecorpus)}"

@@ -2545,7 +2545,12 @@ pub const NativeIncrementalFrameDecoder = struct {
     block_stream_literal_section: ?LiteralOnlySection = null,
     block_stream_huffman_state: ?HuffmanLiteralDecodeState = null,
     block_stream_literal_offset: usize = 0,
+    block_stream_sequence_state: ?StreamingSequenceDecodeState = null,
+    block_stream_sequence_literal_remaining: usize = 0,
+    block_stream_sequence_match_remaining: usize = 0,
+    block_stream_sequence_match_offset: usize = 0,
     streamed_literal_block_count: usize = 0,
+    streamed_sequence_block_count: usize = 0,
     skippable_stream_id: u4 = 0,
     skippable_stream_payload_len: usize = 0,
     skippable_stream_remaining: usize = 0,
@@ -2563,7 +2568,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     pub const Phase = enum { frame, output, direct_output, done };
 
     const InternalPhase = enum { frame, output, direct_output, block_stream, skippable_stream, done };
-    const BlockStreamStage = enum { block_header, raw_payload, rle_payload, rle_output, compressed_payload, compressed_literals, compressed_output, checksum, finished };
+    const BlockStreamStage = enum { block_header, raw_payload, rle_payload, rle_output, compressed_payload, compressed_literals, compressed_sequences, checksum, finished };
 
     pub const Options = struct {
         /// Maximum compressed bytes retained while waiting for validation.
@@ -2647,6 +2652,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.skippable_total = 0;
         self.skippable_event_count = 0;
         self.streamed_literal_block_count = 0;
+        self.streamed_sequence_block_count = 0;
         self.resetSkippableStream();
     }
 
@@ -2698,10 +2704,28 @@ pub const NativeIncrementalFrameDecoder = struct {
         return self.frame_scratch.capacity;
     }
 
+    /// Number of decoded bytes currently retained for a fallback drain. Direct
+    /// and block-streaming paths keep this at zero.
+    pub fn decodedBufferedBytes(self: *const NativeIncrementalFrameDecoder) usize {
+        return self.decoded_scratch.items.len - self.decoded_offset;
+    }
+
+    /// Allocated capacity backing decoded fallback output. A fresh decoder that
+    /// stays on direct/block streaming paths does not grow this buffer.
+    pub fn decodedBufferCapacity(self: *const NativeIncrementalFrameDecoder) usize {
+        return self.decoded_scratch.capacity;
+    }
+
     /// Number of sequence-free compressed blocks emitted directly without a
     /// decoded-block scratch buffer in this logical stream.
     pub fn streamedLiteralBlockCount(self: *const NativeIncrementalFrameDecoder) usize {
         return self.streamed_literal_block_count;
+    }
+
+    /// Number of sequence-bearing compressed blocks executed incrementally
+    /// without materializing their decoded output in the block scratch buffer.
+    pub fn streamedSequenceBlockCount(self: *const NativeIncrementalFrameDecoder) usize {
+        return self.streamed_sequence_block_count;
     }
 
     pub fn diagnostics(self: *const NativeIncrementalFrameDecoder) core.StreamingDiagnostics {
@@ -2727,7 +2751,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                 (self.block_stream_stage == .rle_output and self.block_stream_block_remaining != 0) or
                 (self.block_stream_stage == .compressed_literals and self.block_stream_literal_section != null and
                     self.block_stream_literal_offset != self.block_stream_literal_section.?.regenerated_size) or
-                (self.block_stream_stage == .compressed_output and self.decoded_offset != self.decoded_scratch.items.len))
+                self.block_stream_stage == .compressed_sequences)
                 error.OutputTooSmall
             else
                 error.TruncatedFrame;
@@ -2782,6 +2806,7 @@ pub const NativeIncrementalFrameDecoder = struct {
 
         var input_read: usize = 0;
         var output_written_step: usize = 0;
+        var sequence_output_start: ?usize = null;
         while (true) {
             switch (self.phase) {
                 .frame => {
@@ -3125,29 +3150,45 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 return err;
                             };
                             try self.ensureBlockStreamOutputFits(decoded_len);
-                            self.decoded_scratch.clearRetainingCapacity();
-                            try self.decoded_scratch.resize(self.allocator, decoded_len);
-                            var written: usize = 0;
-                            decodeLiteralOnlyCompressedBlockIntoBuffer(
-                                block,
-                                self.decoded_scratch.items,
-                                &written,
-                                self.block_stream_block_size_max,
-                                0,
-                                self.direct_history.items,
-                                &self.direct_sequence_state,
-                                sequence_continuation.forLastBlock(self.block_stream_block_last),
+                            self.direct_sequence_state = literal_state;
+                            var sequence_offset = literal_section.sequence_payload_offset;
+                            const parsed_spec = parseSequenceModeSpec(block, &sequence_offset, literal_section.sequence_count) catch |err| {
+                                self.recordError(.block_stream, err);
+                                return err;
+                            };
+                            const spec = resolveSequenceModeSpec(parsed_spec, self.direct_sequence_state.previous_tables) catch |err| {
+                                self.recordError(.block_stream, err);
+                                return err;
+                            };
+                            expectConsumedBlock(sequence_offset, block.len) catch |err| {
+                                self.recordError(.block_stream, err);
+                                return err;
+                            };
+                            const bit_reader = ReverseBitReader.init(block[spec.bitstream_offset..]) catch |err| {
+                                self.recordError(.block_stream, err);
+                                return err;
+                            };
+                            self.block_stream_sequence_state = initStreamingSequenceDecodeState(
+                                spec,
+                                literal_section.sequence_count,
+                                bit_reader,
+                                self.direct_sequence_state.repeated_offsets,
                             ) catch |err| {
                                 self.recordError(.block_stream, err);
                                 return err;
                             };
-                            if (written != decoded_len) {
-                                self.recordError(.block_stream, error.SizeMismatch);
-                                return error.SizeMismatch;
-                            }
-                            self.decoded_offset = 0;
-                            self.consumeBlockStreamInput(self.block_stream_block_remaining);
-                            self.block_stream_stage = .compressed_output;
+                            self.direct_sequence_state.previous_tables = spec.tables();
+                            self.block_stream_literal_section = literal_section;
+                            self.block_stream_huffman_state = initHuffmanLiteralDecodeState(block, literal_section) catch |err| {
+                                self.recordError(.block_stream, err);
+                                return err;
+                            };
+                            self.block_stream_literal_offset = 0;
+                            self.block_stream_sequence_literal_remaining = 0;
+                            self.block_stream_sequence_match_remaining = 0;
+                            self.block_stream_sequence_match_offset = 0;
+                            self.streamed_sequence_block_count += 1;
+                            self.block_stream_stage = .compressed_sequences;
                         },
                         .compressed_literals => {
                             const section = self.block_stream_literal_section orelse {
@@ -3206,28 +3247,125 @@ pub const NativeIncrementalFrameDecoder = struct {
                             output_written_step += n;
                             self.output_written += n;
                         },
-                        .compressed_output => {
-                            if (self.decoded_offset == self.decoded_scratch.items.len) {
-                                self.block_stream_block_remaining = 0;
-                                self.decoded_scratch.clearRetainingCapacity();
-                                self.decoded_offset = 0;
-                                try self.finishBlockStreamBlock();
+                        .compressed_sequences => {
+                            if (sequence_output_start == null) sequence_output_start = output_written_step;
+                            const section = self.block_stream_literal_section orelse {
+                                self.recordError(.block_stream, error.CorruptFrame);
+                                return error.CorruptFrame;
+                            };
+                            const sequence_state = &(self.block_stream_sequence_state orelse {
+                                self.recordError(.block_stream, error.CorruptFrame);
+                                return error.CorruptFrame;
+                            });
+                            if (self.block_stream_sequence_literal_remaining != 0) {
+                                if (output_written_step == output.len) {
+                                    try self.rememberDirectOutput(output[sequence_output_start.?..output_written_step]);
+                                    return .{
+                                        .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                        .status = .need_output,
+                                    };
+                                }
+                                const n = @min(self.block_stream_sequence_literal_remaining, output.len - output_written_step);
+                                try self.ensureBlockStreamOutputFits(n);
+                                const dest = output[output_written_step..][0..n];
+                                const block = self.blockStreamInput()[0..self.block_stream_block_remaining];
+                                if (self.block_stream_huffman_state) |*huffman_state| {
+                                    copyLiteralsFromHuffmanState(huffman_state, &section, self.block_stream_literal_offset, dest) catch |err| {
+                                        self.recordError(.block_stream, err);
+                                        return err;
+                                    };
+                                } else switch (section.kind) {
+                                    .raw => @memcpy(dest, block[section.literal_payload_offset + self.block_stream_literal_offset ..][0..n]),
+                                    .rle => @memset(dest, block[section.literal_payload_offset]),
+                                    .compressed, .treeless => unreachable,
+                                }
+                                if (self.block_stream_content_checksum) self.block_stream_content_hasher.update(dest);
+                                self.block_stream_literal_offset += n;
+                                self.block_stream_sequence_literal_remaining -= n;
+                                self.block_stream_frame_decoded_len += n;
+                                output_written_step += n;
+                                self.output_written += n;
                                 continue;
                             }
-                            if (output_written_step == output.len) {
-                                return .{
-                                    .progress = .{ .input_read = input_read, .output_written = output_written_step },
-                                    .status = .need_output,
+                            if (self.block_stream_sequence_match_remaining != 0) {
+                                if (output_written_step == output.len) {
+                                    try self.rememberDirectOutput(output[sequence_output_start.?..output_written_step]);
+                                    return .{
+                                        .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                        .status = .need_output,
+                                    };
+                                }
+                                const n = @min(self.block_stream_sequence_match_remaining, output.len - output_written_step);
+                                try self.ensureBlockStreamOutputFits(n);
+                                const match_start = output_written_step;
+                                var match_end = match_start;
+                                copyMatchFromHistory(
+                                    output,
+                                    &match_end,
+                                    sequence_output_start.?,
+                                    self.direct_history.items,
+                                    self.block_stream_sequence_match_offset,
+                                    n,
+                                ) catch |err| {
+                                    self.recordError(.block_stream, err);
+                                    return err;
+                                };
+                                if (match_end != match_start + n) {
+                                    self.recordError(.block_stream, error.SizeMismatch);
+                                    return error.SizeMismatch;
+                                }
+                                const dest = output[match_start..match_end];
+                                if (self.block_stream_content_checksum) self.block_stream_content_hasher.update(dest);
+                                self.block_stream_sequence_match_remaining -= n;
+                                self.block_stream_frame_decoded_len += n;
+                                output_written_step = match_end;
+                                self.output_written += n;
+                                continue;
+                            }
+                            if (sequence_state.remaining != 0) {
+                                const tables = if (self.direct_sequence_state.previous_tables) |*tables| tables else {
+                                    self.recordError(.block_stream, error.CorruptFrame);
+                                    return error.CorruptFrame;
+                                };
+                                const sequence = readStreamingModeSequence(tables, sequence_state) catch |err| {
+                                    self.recordError(.block_stream, err);
+                                    return err;
+                                };
+                                if (self.block_stream_literal_offset > section.regenerated_size or
+                                    section.regenerated_size - self.block_stream_literal_offset < sequence.literal_len)
+                                {
+                                    self.recordError(.block_stream, error.CorruptFrame);
+                                    return error.CorruptFrame;
+                                }
+                                self.block_stream_sequence_literal_remaining = sequence.literal_len;
+                                self.block_stream_sequence_match_remaining = sequence.match_len;
+                                self.block_stream_sequence_match_offset = sequence.match_offset;
+                                continue;
+                            }
+                            if (self.block_stream_literal_offset < section.regenerated_size) {
+                                self.block_stream_sequence_literal_remaining = section.regenerated_size - self.block_stream_literal_offset;
+                                continue;
+                            }
+                            if (self.block_stream_huffman_state) |*huffman_state| {
+                                huffman_state.cursor.expectEnd() catch |err| {
+                                    self.recordError(.block_stream, err);
+                                    return err;
                                 };
                             }
-                            const n = @min(self.decoded_scratch.items.len - self.decoded_offset, output.len - output_written_step);
-                            @memcpy(output[output_written_step..][0..n], self.decoded_scratch.items[self.decoded_offset..][0..n]);
-                            if (self.block_stream_content_checksum) self.block_stream_content_hasher.update(output[output_written_step..][0..n]);
-                            try self.rememberDirectOutput(output[output_written_step..][0..n]);
-                            self.decoded_offset += n;
-                            self.block_stream_frame_decoded_len += n;
-                            output_written_step += n;
-                            self.output_written += n;
+                            if (!self.block_stream_block_last) {
+                                self.direct_sequence_state.repeated_offsets = sequence_state.repeated_offsets;
+                            }
+                            self.block_stream_literal_section = null;
+                            self.block_stream_huffman_state = null;
+                            self.block_stream_sequence_state = null;
+                            self.block_stream_literal_offset = 0;
+                            self.block_stream_sequence_match_offset = 0;
+                            try self.rememberDirectOutput(output[sequence_output_start.?..output_written_step]);
+                            sequence_output_start = null;
+                            self.consumeBlockStreamInput(self.block_stream_block_remaining);
+                            self.block_stream_block_remaining = 0;
+                            try self.finishBlockStreamBlock();
+                            continue;
                         },
                         .checksum => {
                             while (self.block_stream_checksum_read < self.block_stream_checksum.len) {
@@ -3371,6 +3509,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.block_stream_literal_section = null;
         self.block_stream_huffman_state = null;
         self.block_stream_literal_offset = 0;
+        self.block_stream_sequence_state = null;
+        self.block_stream_sequence_literal_remaining = 0;
+        self.block_stream_sequence_match_remaining = 0;
+        self.block_stream_sequence_match_offset = 0;
     }
 
     fn resetSkippableStream(self: *NativeIncrementalFrameDecoder) void {
@@ -7839,6 +7981,77 @@ const SequenceDecodeState = struct {
     repeated_offsets: [3]usize = initial_repeated_offsets,
     remaining: usize,
 };
+
+/// Resumable sequence cursor used by the incremental block-stream path. The
+/// resolved tables live in `SequenceFrameState`, avoiding another copy of the
+/// three bounded FSE tables in every decoder instance.
+const StreamingSequenceDecodeState = struct {
+    reader: ReverseBitReader,
+    ll_state: usize = 0,
+    of_state: usize = 0,
+    ml_state: usize = 0,
+    repeated_offsets: [3]usize = initial_repeated_offsets,
+    remaining: usize,
+};
+
+fn initStreamingSequenceDecodeState(
+    spec: SequenceModeSpec,
+    sequence_count: usize,
+    reader: ReverseBitReader,
+    repeated_offsets: [3]usize,
+) Error!StreamingSequenceDecodeState {
+    var initialized_reader = reader;
+    const ll_state = try readInitialSequenceState(&initialized_reader, spec.ll_mode, spec.literal_fse.accuracy_log, 6);
+    const of_state = try readInitialSequenceState(&initialized_reader, spec.of_mode, spec.offset_fse.accuracy_log, 5);
+    const ml_state = try readInitialSequenceState(&initialized_reader, spec.ml_mode, spec.match_fse.accuracy_log, 6);
+    return .{
+        .reader = initialized_reader,
+        .ll_state = ll_state,
+        .of_state = of_state,
+        .ml_state = ml_state,
+        .repeated_offsets = repeated_offsets,
+        .remaining = sequence_count,
+    };
+}
+
+fn readStreamingModeSequence(tables: *const SequenceTables, state: *StreamingSequenceDecodeState) Error!DecodedSequence {
+    if (state.remaining == 0) return error.CorruptFrame;
+    const ll_symbol = try currentStreamingSymbol(tables.ll_mode, tables.literal_rle, &tables.literal_fse, state.ll_state, .literal);
+    const of_symbol = try currentStreamingSymbol(tables.of_mode, tables.offset_rle, &tables.offset_fse, state.of_state, .offset);
+    const ml_symbol = try currentStreamingSymbol(tables.ml_mode, tables.match_rle, &tables.match_fse, state.ml_state, .match);
+    const offset_extra = try state.reader.read(of_symbol.additional_bits);
+    const match_len = std.math.add(usize, ml_symbol.base, try state.reader.read(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
+    const literal_len = std.math.add(usize, ll_symbol.base, try state.reader.read(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+    const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
+    state.remaining -= 1;
+    if (state.remaining != 0) {
+        if (tables.ll_mode == .predefined or tables.ll_mode == .compressed) state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
+        if (tables.ml_mode == .predefined or tables.ml_mode == .compressed) state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
+        if (tables.of_mode == .predefined or tables.of_mode == .compressed) state.of_state = try nextSequenceState(&state.reader, of_symbol);
+    } else {
+        try state.reader.expectEnd();
+    }
+    return .{ .literal_len = literal_len, .match_len = match_len, .match_offset = match_offset };
+}
+
+fn currentStreamingSymbol(
+    mode: SymbolMode,
+    rle: ?SequenceSymbol,
+    fse: *const SequenceFseTable,
+    state: usize,
+    selector: enum { literal, offset, match },
+) Error!SequenceSymbol {
+    return switch (mode) {
+        .predefined => switch (selector) {
+            .literal => try defaultLiteralLengthSymbol(state),
+            .offset => try defaultOffsetSymbol(state),
+            .match => try defaultMatchLengthSymbol(state),
+        },
+        .rle => rle orelse error.CorruptFrame,
+        .compressed => try fse.symbol(state),
+        .repeat => unreachable,
+    };
+}
 
 fn initSequenceDecodeState(
     spec: SequenceModeSpec,
@@ -18770,7 +18983,8 @@ test "zstd literal-only writer reuses Huffman tree across blocks" {
         incremental_input += step_result.progress.input_read;
         incremental_written += step_result.progress.output_written;
         saw_block_stream = saw_block_stream or incremental.isBlockStreaming();
-        try std.testing.expectEqual(@as(usize, 0), incremental.decoded_scratch.items.len);
+        try std.testing.expectEqual(@as(usize, 0), incremental.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), incremental.decodedBufferCapacity());
         try std.testing.expect(incremental.compressedBufferCapacity() <= compressed_limit);
         if (step_result.status == .need_input) try std.testing.expect(incremental_input < encoded.len);
         if (step_result.status == .need_output) try std.testing.expect(incremental_written < payload.len);
@@ -19724,6 +19938,7 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(literal_lens.len, section.sequence_count);
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
     try std.testing.expectEqual(@as(u8, 0xa8), block[section.sequence_payload_offset]); // LL/OF/ML all use FSE.
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
@@ -19733,6 +19948,36 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(std_decoded);
     try std.testing.expectEqualSlices(u8, payload.items, std_decoded);
+
+    var incremental = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.items.len,
+        .max_compressed_buffer_len = first_block.payload_len,
+        .max_decoded_buffer_len = payload.items.len,
+    });
+    defer incremental.deinit();
+    const incremental_output = try std.testing.allocator.alloc(u8, payload.items.len);
+    defer std.testing.allocator.free(incremental_output);
+    var incremental_input: usize = 0;
+    var incremental_written: usize = 0;
+    var saw_block_stream = false;
+    while (incremental.snapshot().phase != .done) {
+        const input_end = @min(frame.items.len, incremental_input + 7);
+        const output_end = @min(payload.items.len, incremental_written + 1);
+        const result = try incremental.step(frame.items[incremental_input..input_end], incremental_output[incremental_written..output_end]);
+        incremental_input += result.progress.input_read;
+        incremental_written += result.progress.output_written;
+        saw_block_stream = saw_block_stream or incremental.isBlockStreaming();
+        try std.testing.expectEqual(@as(usize, 0), incremental.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), incremental.decodedBufferCapacity());
+        try std.testing.expect(incremental.compressedBufferCapacity() <= first_block.payload_len);
+        if (result.status == .need_input) try std.testing.expect(incremental_input < frame.items.len);
+        if (result.status == .need_output) try std.testing.expect(incremental_written < payload.items.len);
+    }
+    try incremental.finish();
+    try std.testing.expect(saw_block_stream);
+    try std.testing.expectEqual(frame.items.len, incremental_input);
+    try std.testing.expectEqualSlices(u8, payload.items, incremental_output);
+    try std.testing.expectEqual(@as(usize, 1), incremental.streamedSequenceBlockCount());
 }
 
 test "zstd compressed sequence state scratch fits one byte" {
@@ -21502,11 +21747,13 @@ test "zstd native incremental decoder releases compressed blocks before frame en
     var saw_block_stream = false;
     while (decoder.snapshot().phase != .done) {
         const input_end = @min(frame.items.len, input_offset + 5);
-        const output_end = @min(output.len, output_offset + 137);
+        const output_end = @min(output.len, output_offset + 1);
         const result = try decoder.step(frame.items[input_offset..input_end], output[output_offset..output_end]);
         input_offset += result.progress.input_read;
         output_offset += result.progress.output_written;
         saw_block_stream = saw_block_stream or decoder.isBlockStreaming();
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
         try std.testing.expect(decoder.compressedBufferedBytes() <= 12);
         try std.testing.expect(decoder.compressedBufferCapacity() <= 12);
         if (result.status == .need_input) try std.testing.expect(input_offset < frame.items.len);
@@ -21518,6 +21765,21 @@ test "zstd native incremental decoder releases compressed blocks before frame en
     try std.testing.expectEqual(payload.len, output_offset);
     try std.testing.expectEqualSlices(u8, payload, &output);
     try std.testing.expectEqual(@as(usize, 0), decoder.frame_scratch.items.len);
+    try std.testing.expectEqual(@as(usize, 2), decoder.streamedSequenceBlockCount());
+
+    var undrained = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_compressed_buffer_len = 12,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer undrained.deinit();
+    const partial = try undrained.step(frame.items, output[0..1]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, partial.status);
+    try std.testing.expectEqual(@as(usize, 1), partial.progress.output_written);
+    try std.testing.expect(undrained.isBlockStreaming());
+    try std.testing.expectError(error.OutputTooSmall, undrained.finish());
+    try std.testing.expectEqualSlices(u8, "OutputTooSmall", undrained.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "direct_output", undrained.diagnostics().last_error_phase_name);
 }
 
 test "zstd native incremental decoder directly streams sequence-free literal sections" {
@@ -21554,7 +21816,8 @@ test "zstd native incremental decoder directly streams sequence-free literal sec
         input_offset += result.progress.input_read;
         output_offset += result.progress.output_written;
         saw_block_stream = saw_block_stream or decoder.isBlockStreaming();
-        try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
         try std.testing.expect(decoder.compressedBufferCapacity() <= 9);
         if (result.status == .need_input) try std.testing.expect(input_offset < frame.items.len);
         if (result.status == .need_output) try std.testing.expect(output_offset < output.len);
@@ -21641,7 +21904,8 @@ test "zstd native incremental multi compressed keeps direct history across outpu
         const end = @min(output.len, written + 150);
         const result = try decoder.step("", output[written..end]);
         written += result.progress.output_written;
-        try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
         if (result.status == .done) break;
         try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
     }
@@ -21869,6 +22133,46 @@ test "zstd native incremental decoder streams dictionary compressed blocks direc
     try std.testing.expectError(error.NeedDictionary, missing.step(encoded.frame, output[0..0]));
     try std.testing.expectEqualSlices(u8, "NeedDictionary", missing.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "frame", missing.diagnostics().last_error_phase_name);
+}
+
+test "zstd native incremental block stream resumes dictionary sequences" {
+    const dict = NativeDictionary.init(0x555a_4451, "abcdefghijklmnop");
+    const payload = "pfx-abcdefghijklmnop-tail";
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = true,
+    }, dict);
+    defer std.testing.allocator.free(encoded.frame);
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+
+    var decoder = NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, dict, .{
+        .expected_output_len = payload.len,
+        .max_compressed_buffer_len = encoded.frame.len - 1,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    var saw_block_stream = false;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.frame.len, input_offset + 3);
+        const output_end = @min(output.len, output_offset + 1);
+        const result = try decoder.step(encoded.frame[input_offset..input_end], output[output_offset..output_end]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        saw_block_stream = saw_block_stream or decoder.isBlockStreaming();
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
+        if (result.status == .need_input) try std.testing.expect(input_offset < encoded.frame.len);
+        if (result.status == .need_output) try std.testing.expect(output_offset < output.len);
+    }
+    try decoder.finish();
+    try std.testing.expect(saw_block_stream);
+    try std.testing.expectEqual(encoded.frame.len, input_offset);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expectEqual(@as(usize, 1), decoder.streamedSequenceBlockCount());
 }
 
 test "zstd native incremental dictionary-set streams directly" {

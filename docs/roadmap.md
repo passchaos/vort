@@ -8702,3 +8702,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   upstream decodecorpus gate, the 273-case libzstd 1.5.5 matrix, public frame and
   dictionary probes, encode/decode benchmark gates, and full repository
   test/check validation remain green.
+  Replaced the incremental Zstd block-stream path's decoded-block fallback for
+  sequence-bearing compressed blocks with a persistent execution cursor. FSE
+  states, reverse bit position, repeated offsets, Huffman literals, and partial
+  literal/match runs now survive arbitrary caller-output boundaries; matches
+  read from the bounded rolling history and bytes emitted earlier in the same
+  call. One-byte-output tests cover Repeat_Mode across blocks, all three tables
+  in compressed FSE mode, and preset-dictionary matches. The upstream 5,400-frame
+  gate executes 61,951 sequence-bearing blocks on this path and now rejects any
+  non-zero decoded-scratch length or capacity during block streaming. The
+  complete-frame direct path still retains its small-output scratch fallback;
+  sharing this cursor there is the next memory-model cleanup.

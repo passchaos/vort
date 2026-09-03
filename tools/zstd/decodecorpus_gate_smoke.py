@@ -50,6 +50,9 @@ print(
     f'decodecorpus_max_compressed_buffered=131104 '
     f'decodecorpus_max_compressed_capacity=131104 '
     f'decodecorpus_streamed_literal_blocks=3 '
+    f'decodecorpus_streamed_sequence_blocks=7 '
+    f'decodecorpus_max_block_stream_decoded_buffered=0 '
+    f'decodecorpus_max_block_stream_decoded_capacity=0 '
     f'sequence_mode_mask={mode:#x} combined_mode_mask={combined:#x}',
     file=sys.stderr,
 )
@@ -92,11 +95,32 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_max_compressed_buffered": "64",
             "decodecorpus_max_compressed_capacity": "64",
             "decodecorpus_streamed_literal_blocks": "1",
+            "decodecorpus_streamed_sequence_blocks": "1",
+            "decodecorpus_max_block_stream_decoded_buffered": "0",
+            "decodecorpus_max_block_stream_decoded_capacity": "0",
             "unsupported": "0",
             "sequence_mode_mask": "0x5",
             "combined_mode_mask": "0x5",
         }
         with self.assertRaisesRegex(RuntimeError, "did not exercise bounded block streaming"):
+            gate.validate_campaign_summary(fields, gate.CAMPAIGNS[0], 0)
+
+    def test_gate_rejects_decoded_scratch_during_block_streaming(self) -> None:
+        fields = {
+            "decodecorpus_cases": "200",
+            "decodecorpus_incremental_cases": "200",
+            "decodecorpus_block_stream_cases": "1",
+            "decodecorpus_max_compressed_buffered": "64",
+            "decodecorpus_max_compressed_capacity": "64",
+            "decodecorpus_streamed_literal_blocks": "1",
+            "decodecorpus_streamed_sequence_blocks": "1",
+            "decodecorpus_max_block_stream_decoded_buffered": "1",
+            "decodecorpus_max_block_stream_decoded_capacity": "8",
+            "unsupported": "0",
+            "sequence_mode_mask": "0x5",
+            "combined_mode_mask": "0x5",
+        }
+        with self.assertRaisesRegex(RuntimeError, "retained decoded block scratch"):
             gate.validate_campaign_summary(fields, gate.CAMPAIGNS[0], 0)
 
     def test_driver_runs_and_cleans_success_and_failure_corpora(self) -> None:
@@ -129,6 +153,9 @@ class DecodeCorpusGateTests(unittest.TestCase):
             self.assertIn("zstd_decodecorpus_gate=ok campaigns=2 cases=400", success.stdout)
             self.assertIn("block_stream_cases=200", success.stdout)
             self.assertIn("max_compressed_buffered=131104", success.stdout)
+            self.assertIn("streamed_sequence_blocks=14", success.stdout)
+            self.assertIn("max_block_stream_decoded_buffered=0", success.stdout)
+            self.assertIn("max_block_stream_decoded_capacity=0", success.stdout)
             self.assertIn("sequence_mode_mask=0x000000000000000f", success.stdout)
             self.assertEqual(list(scratch.iterdir()), [])
 
