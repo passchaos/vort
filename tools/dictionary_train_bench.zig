@@ -3,7 +3,8 @@ const vort = @import("vort");
 
 const Options = struct { iterations: usize = 20, rounds: usize = 3, csv_path: ?[]const u8 = null };
 const Case = struct { name: []const u8, samples: []const []const u8 };
-const Mode = enum { basic, validated };
+const Mode = enum { basic, validated, validated_separate, validated_targets, zstd_validated };
+const validated_targets = [_]usize{ 512, 384, 320, 256, 128 };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -37,6 +38,9 @@ pub fn main(init: std.process.Init) !void {
     for (cases) |case| {
         try benchmarkCase(init, &csv.writer, case, .basic, options);
         try benchmarkCase(init, &csv.writer, case, .validated, options);
+        try benchmarkCase(init, &csv.writer, case, .validated_separate, options);
+        try benchmarkCase(init, &csv.writer, case, .validated_targets, options);
+        try benchmarkCase(init, &csv.writer, case, .zstd_validated, options);
     }
     if (options.csv_path) |path| {
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
@@ -49,8 +53,9 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn benchmarkCase(init: std.process.Init, writer: *std.Io.Writer, case: Case, mode: Mode, options: Options) !void {
-    const training = if (mode == .validated) case.samples[0 .. case.samples.len - 4] else case.samples;
-    const validation = if (mode == .validated) case.samples[case.samples.len - 4 ..] else &.{};
+    const basic = mode == .basic;
+    const training = if (!basic) case.samples[0 .. case.samples.len - 4] else case.samples;
+    const validation = if (!basic) case.samples[case.samples.len - 4 ..] else &.{};
     var best_ns: u64 = std.math.maxInt(u64);
     var best_checksum: usize = 0;
     for (0..options.rounds) |_| {
@@ -60,6 +65,41 @@ fn benchmarkCase(init: std.process.Init, writer: *std.Io.Writer, case: Case, mod
             const dictionary = switch (mode) {
                 .basic => try vort.trainDictionaryAlloc(init.gpa, training, .{ .target_size = 512, .max_phrases = 1024 }),
                 .validated => try vort.dictionary.trainValidatedAlloc(init.gpa, training, validation, .{ .target_size = 512, .max_phrases = 1024 }),
+                .validated_separate => blk: {
+                    var combined: std.ArrayList(u8) = .empty;
+                    errdefer combined.deinit(init.gpa);
+                    for (validated_targets) |target_size| {
+                        const trained = try vort.dictionary.trainValidatedAlloc(init.gpa, training, validation, .{ .target_size = target_size, .max_phrases = 1024 });
+                        defer init.gpa.free(trained);
+                        try combined.appendSlice(init.gpa, trained);
+                    }
+                    break :blk try combined.toOwnedSlice(init.gpa);
+                },
+                .validated_targets => blk: {
+                    const trained = try vort.dictionary.trainValidatedTargetsAlloc(
+                        init.gpa,
+                        training,
+                        validation,
+                        &validated_targets,
+                        .{ .target_size = 512, .max_phrases = 1024 },
+                    );
+                    defer trained.deinit(init.gpa);
+                    var combined: std.ArrayList(u8) = .empty;
+                    errdefer combined.deinit(init.gpa);
+                    for (trained.dictionaries) |candidate| try combined.appendSlice(init.gpa, candidate.?);
+                    break :blk try combined.toOwnedSlice(init.gpa);
+                },
+                .zstd_validated => blk: {
+                    const trained = try vort.zstdTrainValidatedStandardDictionaryAlloc(
+                        init.gpa,
+                        training,
+                        validation,
+                        .{ .target_size = 512, .max_phrases = 1024 },
+                        0x564f_5254,
+                    );
+                    defer trained.deinit(init.gpa);
+                    break :blk try init.gpa.dupe(u8, trained.bytes);
+                },
             };
             checksum +%= dictionary.len;
             for (dictionary) |byte| checksum +%= byte;

@@ -8557,3 +8557,19 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   median validated throughput improving from `0.235/0.237/0.034` MB/s to
   `0.814/0.830/0.109` MB/s (`3.47x/3.51x/3.19x`) for text/JSON/binary with
   identical dictionary checksums.
+  Validation-guided training now also shares each collected phrase configuration
+  across multiple requested target sizes through `trainValidatedTargetsAlloc`.
+  The standard Zstd trainer uses that batch API for its 100/75/62.5/50/25%
+  history ladder instead of repeating the complete phrase scan five times. A
+  retained separate-call oracle covers zero, duplicate, small-linear, and
+  512-candidate indexed targets, while the Zstd-level oracle compares complete
+  dictionary bytes including entropy tables and repcodes. The expanded 15-row
+  training gate pins basic, single-target, five separate targets, five shared
+  targets, and complete Zstd training checksums. Twelve alternating ReleaseFast
+  A/B pairs against `38c474df` improve the complete Zstd validated trainer from
+  `154.8` ms to `49.1` ms for three runs (`3.16x`, 12/12 wins) with identical
+  checksums. Two reuse-aware size experiments were deliberately rejected: a
+  multiplied codec-independent estimate selected longer text/binary histories
+  that regressed libzstd held-out levels, while selecting by Vort's actual frame
+  bytes could not distinguish the retained small payloads and regressed libzstd
+  source rows. Neither experimental API remains in the public surface.

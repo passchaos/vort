@@ -15,7 +15,7 @@ def main() -> int:
         rows = list(csv.DictReader(file))
     expected_rows = {
         (mode, case)
-        for mode in ("basic", "validated")
+        for mode in ("basic", "validated", "validated_separate", "validated_targets", "zstd_validated")
         for case in ("text", "json", "binary")
     }
     if len(rows) != len(expected_rows) or {(row["mode"], row["case"]) for row in rows} != expected_rows:
@@ -27,14 +27,35 @@ def main() -> int:
         ("validated", "text"): 1018100,
         ("validated", "json"): 803940,
         ("validated", "binary"): 1276760,
+        ("validated_separate", "text"): 3191280,
+        ("validated_separate", "json"): 2525080,
+        ("validated_separate", "binary"): 3808660,
+        ("validated_targets", "text"): 3191280,
+        ("validated_targets", "json"): 2525080,
+        ("validated_targets", "binary"): 3808660,
+        ("zstd_validated", "text"): 423100,
+        ("zstd_validated", "json"): 486380,
+        ("zstd_validated", "binary"): 862560,
     }
     for row in rows:
         expected_checksum = expected_checksums[(row["mode"], row["case"])]
         if int(row["checksum"]) != expected_checksum or int(row["best_ns"]) <= 0:
             raise SystemExit(f"invalid benchmark row: {row!r}")
-        minimum_throughput = 300_000 if row["mode"] == "basic" else 100_000
+        minimum_throughput = {
+            "basic": 300_000,
+            "validated": 100_000,
+            "validated_separate": 15_000,
+            "validated_targets": 75_000,
+            "zstd_validated": 50_000,
+        }[row["mode"]]
         if args.enforce_throughput and int(row["bytes_per_second"]) < minimum_throughput:
             raise SystemExit(f"dictionary training throughput regressed: {row!r}")
+    by_key = {(row["mode"], row["case"]): row for row in rows}
+    for case in ("text", "json", "binary"):
+        separate = int(by_key[("validated_separate", case)]["bytes_per_second"])
+        shared = int(by_key[("validated_targets", case)]["bytes_per_second"])
+        if shared < separate * 2:
+            raise SystemExit(f"multi-target dictionary scan reuse regressed for {case}: {shared}/{separate}")
     print(f"dictionary_train_bench_gate=ok rows={len(rows)}")
     return 0
 

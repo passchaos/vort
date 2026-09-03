@@ -383,27 +383,29 @@ pub fn trainValidatedStandardDictionaryAlloc(
     if (dictionary_id == 0) return error.InvalidDictionaryMetadata;
     if (training_samples.len == 0 or validation_samples.len == 0) return error.InvalidDictionaryTraining;
     const target_sizes = validatedDictionaryTargetSizes(options.target_size);
-    var best_content: ?[]u8 = null;
-    errdefer if (best_content) |bytes| allocator.free(bytes);
+    var candidates = try dictionary_mod.trainValidatedTargetsAlloc(
+        allocator,
+        training_samples,
+        validation_samples,
+        &target_sizes,
+        options,
+    );
+    defer candidates.deinit(allocator);
+    var best_index: ?usize = null;
     var best_estimated_bits: usize = std.math.maxInt(usize);
-    for (target_sizes) |target_size| {
-        if (target_size == 0) continue;
-        var candidate_options = options;
-        candidate_options.target_size = target_size;
-        const candidate = try dictionary_mod.trainValidatedAlloc(allocator, training_samples, validation_samples, candidate_options);
-        errdefer allocator.free(candidate);
+    for (candidates.dictionaries, 0..) |maybe_candidate, index| {
+        const candidate = maybe_candidate.?;
         if (candidate.len < 8) {
-            allocator.free(candidate);
             continue;
         }
         const score = try dictionary_mod.validationScoreAlloc(allocator, candidate, validation_samples, options.min_phrase_len);
-        if (best_content == null or score.estimated_bits < best_estimated_bits) {
-            if (best_content) |bytes| allocator.free(bytes);
-            best_content = candidate;
+        if (best_index == null or score.estimated_bits < best_estimated_bits) {
+            best_index = index;
             best_estimated_bits = score.estimated_bits;
-        } else allocator.free(candidate);
+        }
     }
-    const content = best_content orelse return error.InvalidDictionaryTraining;
+    const selected_index = best_index orelse return error.InvalidDictionaryTraining;
+    const content = candidates.take(selected_index).?;
     defer allocator.free(content);
     const entropy_samples = try allocator.alloc([]const u8, training_samples.len + validation_samples.len);
     defer allocator.free(entropy_samples);
@@ -475,6 +477,51 @@ test "standard Zstd validated trainer selects deterministic bounded history" {
     // Validation samples participate in final entropy estimation after history
     // selection, matching the complete corpus supplied to reference trainers.
     try std.testing.expect(!std.mem.eql(u8, first.bytes, training_only.bytes));
+    const separate = try trainValidatedStandardDictionarySeparateAlloc(
+        std.testing.allocator,
+        &training,
+        &validation,
+        .{ .target_size = 64 },
+        0x1000_0004,
+    );
+    defer separate.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, separate.bytes, first.bytes);
+}
+
+fn trainValidatedStandardDictionarySeparateAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: NativeDictionaryTrainOptions,
+    dictionary_id: u32,
+) Error!OwnedStandardDictionary {
+    var best_content: ?[]u8 = null;
+    errdefer if (best_content) |bytes| allocator.free(bytes);
+    var best_estimated_bits: usize = std.math.maxInt(usize);
+    for (validatedDictionaryTargetSizes(options.target_size)) |target_size| {
+        if (target_size == 0) continue;
+        var candidate_options = options;
+        candidate_options.target_size = target_size;
+        const candidate = try dictionary_mod.trainValidatedAlloc(allocator, training_samples, validation_samples, candidate_options);
+        errdefer allocator.free(candidate);
+        if (candidate.len < 8) {
+            allocator.free(candidate);
+            continue;
+        }
+        const score = try dictionary_mod.validationScoreAlloc(allocator, candidate, validation_samples, options.min_phrase_len);
+        if (best_content == null or score.estimated_bits < best_estimated_bits) {
+            if (best_content) |bytes| allocator.free(bytes);
+            best_content = candidate;
+            best_estimated_bits = score.estimated_bits;
+        } else allocator.free(candidate);
+    }
+    const content = best_content orelse return error.InvalidDictionaryTraining;
+    defer allocator.free(content);
+    const entropy_samples = try allocator.alloc([]const u8, training_samples.len + validation_samples.len);
+    defer allocator.free(entropy_samples);
+    @memcpy(entropy_samples[0..training_samples.len], training_samples);
+    @memcpy(entropy_samples[training_samples.len..], validation_samples);
+    return standardDictionaryFromSelectedContentAndSamplesAlloc(allocator, content, entropy_samples, dictionary_id);
 }
 
 fn standardDictionaryFromSelectedContentAndSamplesAlloc(

@@ -345,7 +345,72 @@ pub fn trainValidatedAlloc(
     validation_samples: []const []const u8,
     options: TrainOptions,
 ) ![]u8 {
-    if (options.target_size == 0) return allocator.alloc(u8, 0);
+    var trained = try trainValidatedTargetsAlloc(
+        allocator,
+        training_samples,
+        validation_samples,
+        &.{options.target_size},
+        options,
+    );
+    const result = trained.take(0).?;
+    trained.deinit(allocator);
+    return result;
+}
+
+pub const OwnedValidatedDictionaries = struct {
+    dictionaries: []?[]u8,
+
+    /// Transfer one dictionary to the caller so `deinit` releases only the
+    /// remaining entries. Each index may be taken at most once.
+    pub fn take(self: *OwnedValidatedDictionaries, index: usize) ?[]u8 {
+        if (index >= self.dictionaries.len) return null;
+        const dictionary = self.dictionaries[index];
+        self.dictionaries[index] = null;
+        return dictionary;
+    }
+
+    pub fn deinit(self: OwnedValidatedDictionaries, allocator: std.mem.Allocator) void {
+        for (self.dictionaries) |dictionary| if (dictionary) |bytes| allocator.free(bytes);
+        allocator.free(self.dictionaries);
+    }
+};
+
+const ValidatedBest = struct {
+    bytes: ?[]u8 = null,
+    covered: usize = 0,
+    matches: usize = 0,
+    distance_bits: usize = std.math.maxInt(usize),
+};
+
+/// Train the same validation-guided candidate family for several dictionary
+/// sizes while collecting each phrase configuration only once. Results retain
+/// the caller's target order and are byte-identical to separate
+/// `trainValidatedAlloc` calls. Release them with `OwnedValidatedDictionaries.deinit`.
+pub fn trainValidatedTargetsAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    target_sizes: []const usize,
+    options: TrainOptions,
+) !OwnedValidatedDictionaries {
+    var has_nonzero_target = false;
+    for (target_sizes) |target_size| has_nonzero_target = has_nonzero_target or target_size != 0;
+    if (!has_nonzero_target) {
+        const dictionaries = try allocator.alloc(?[]u8, target_sizes.len);
+        errdefer allocator.free(dictionaries);
+        var initialized: usize = 0;
+        errdefer for (dictionaries[0..initialized]) |dictionary| allocator.free(dictionary.?);
+        for (dictionaries) |*dictionary| {
+            dictionary.* = try allocator.alloc(u8, 0);
+            initialized += 1;
+        }
+        return .{ .dictionaries = dictionaries };
+    }
+    const best = try allocator.alloc(ValidatedBest, target_sizes.len);
+    defer allocator.free(best);
+    @memset(best, .{});
+    errdefer for (best) |entry| if (entry.bytes) |bytes| allocator.free(bytes);
+
     const Candidate = struct { min_phrase_len: usize, max_phrase_len: usize, max_phrases: usize };
     const candidates = [_]Candidate{
         .{ .min_phrase_len = options.min_phrase_len, .max_phrase_len = options.max_phrase_len, .max_phrases = options.max_phrases },
@@ -354,11 +419,6 @@ pub fn trainValidatedAlloc(
         .{ .min_phrase_len = 6, .max_phrase_len = 32, .max_phrases = @max(options.max_phrases, 1024) },
     };
 
-    var best: ?[]u8 = null;
-    errdefer if (best) |bytes| allocator.free(bytes);
-    var best_covered: usize = 0;
-    var best_matches: usize = 0;
-    var best_distance_bits: usize = std.math.maxInt(usize);
     for (candidates) |candidate| {
         const candidate_options: TrainOptions = .{
             .target_size = options.target_size,
@@ -373,30 +433,12 @@ pub fn trainValidatedAlloc(
             defer allocator.free(phrases);
             sortPhrases(phrases, ranking);
             for ([_]TrainLayout{ .ranked, .best_near_end }) |layout| {
-                const trained = try assembleDictionaryAlloc(allocator, phrases, options.target_size, layout);
-                errdefer allocator.free(trained);
-                var covered: usize = 0;
-                var matches: usize = 0;
-                var distance_bits: usize = 0;
-                for (validation_samples) |sample| {
-                    const summary = try summarizeMatchesAlloc(allocator, trained, sample, options.min_phrase_len);
-                    covered = std.math.add(usize, covered, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
-                    matches = std.math.add(usize, matches, summary.matches) catch return error.InvalidDictionaryTraining;
-                    distance_bits = std.math.add(usize, distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+                for (target_sizes, best) |target_size, *entry| {
+                    if (target_size == 0) continue;
+                    const trained = try assembleDictionaryAlloc(allocator, phrases, target_size, layout);
+                    errdefer allocator.free(trained);
+                    try retainValidatedCandidate(allocator, entry, trained, validation_samples, options.min_phrase_len);
                 }
-                // Coverage and sequence count dominate. For exact ties, prefer the
-                // layout whose matches need fewer offset bits; the original ranked
-                // layout remains first and therefore wins complete ties.
-                if (best == null or covered > best_covered or
-                    (covered == best_covered and matches < best_matches) or
-                    (covered == best_covered and matches == best_matches and distance_bits < best_distance_bits))
-                {
-                    if (best) |bytes| allocator.free(bytes);
-                    best = trained;
-                    best_covered = covered;
-                    best_matches = matches;
-                    best_distance_bits = distance_bits;
-                } else allocator.free(trained);
             }
         }
     }
@@ -405,25 +447,56 @@ pub fn trainValidatedAlloc(
     // destroy longer record structure. Keep one raw corpus-tail candidate so
     // validation can retain naturally adjacent bytes when that structure
     // generalizes better to held-out payloads.
-    const tail = try trainSampleTailAlloc(allocator, training_samples, options.target_size);
-    errdefer allocator.free(tail);
-    var tail_covered: usize = 0;
-    var tail_matches: usize = 0;
-    var tail_distance_bits: usize = 0;
-    for (validation_samples) |sample| {
-        const summary = try summarizeMatchesAlloc(allocator, tail, sample, options.min_phrase_len);
-        tail_covered = std.math.add(usize, tail_covered, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
-        tail_matches = std.math.add(usize, tail_matches, summary.matches) catch return error.InvalidDictionaryTraining;
-        tail_distance_bits = std.math.add(usize, tail_distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+    for (target_sizes, best) |target_size, *entry| {
+        if (target_size == 0) {
+            entry.bytes = try allocator.alloc(u8, 0);
+            continue;
+        }
+        const tail = try trainSampleTailAlloc(allocator, training_samples, target_size);
+        errdefer allocator.free(tail);
+        try retainValidatedCandidate(allocator, entry, tail, validation_samples, options.min_phrase_len);
     }
-    if (best == null or tail_covered > best_covered or
-        (tail_covered == best_covered and tail_matches < best_matches) or
-        (tail_covered == best_covered and tail_matches == best_matches and tail_distance_bits < best_distance_bits))
+
+    const dictionaries = try allocator.alloc(?[]u8, target_sizes.len);
+    var initialized: usize = 0;
+    errdefer {
+        for (dictionaries[0..initialized]) |dictionary| if (dictionary) |bytes| allocator.free(bytes);
+        allocator.free(dictionaries);
+    }
+    for (best, dictionaries) |*entry, *dictionary| {
+        dictionary.* = entry.bytes orelse try allocator.alloc(u8, 0);
+        entry.bytes = null;
+        initialized += 1;
+    }
+    return .{ .dictionaries = dictionaries };
+}
+
+fn retainValidatedCandidate(
+    allocator: std.mem.Allocator,
+    best: *ValidatedBest,
+    candidate: []u8,
+    validation_samples: []const []const u8,
+    min_match_len: usize,
+) !void {
+    var covered: usize = 0;
+    var matches: usize = 0;
+    var distance_bits: usize = 0;
+    for (validation_samples) |sample| {
+        const summary = try summarizeMatchesAlloc(allocator, candidate, sample, min_match_len);
+        covered = std.math.add(usize, covered, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
+        matches = std.math.add(usize, matches, summary.matches) catch return error.InvalidDictionaryTraining;
+        distance_bits = std.math.add(usize, distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+    }
+    // Coverage and sequence count dominate. For exact ties, prefer the layout
+    // whose matches need fewer offset bits. Candidate enumeration order remains
+    // unchanged, so the original ranked layout wins complete ties.
+    if (best.bytes == null or covered > best.covered or
+        (covered == best.covered and matches < best.matches) or
+        (covered == best.covered and matches == best.matches and distance_bits < best.distance_bits))
     {
-        if (best) |bytes| allocator.free(bytes);
-        best = tail;
-    } else allocator.free(tail);
-    return best orelse try allocator.alloc(u8, 0);
+        if (best.bytes) |bytes| allocator.free(bytes);
+        best.* = .{ .bytes = candidate, .covered = covered, .matches = matches, .distance_bits = distance_bits };
+    } else allocator.free(candidate);
 }
 
 fn trainSampleTailAlloc(allocator: std.mem.Allocator, samples: []const []const u8, target_size: usize) ![]u8 {
@@ -1183,6 +1256,64 @@ test "validated dictionary trainer reuses collection without changing selection"
     }
 }
 
+test "validated dictionary trainer shares phrase scans across target sizes" {
+    var storage: [8][192]u8 = undefined;
+    var samples: [8][]const u8 = undefined;
+    for (&storage, &samples, 0..) |*sample, *view, sample_index| {
+        var state: u32 = 0x85eb_ca6b +% @as(u32, @intCast(sample_index * 8191));
+        for (sample, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = if (index % 31 < 25)
+                "multi-target-validation-record-"[(index + sample_index * 5) % 31]
+            else
+                @truncate(state >> 24);
+        }
+        view.* = sample;
+    }
+    const training = samples[0..6];
+    const validation = samples[6..];
+    for ([_]TrainOptions{
+        .{ .target_size = 128, .min_phrase_len = 3, .max_phrase_len = 12, .max_phrases = 96 },
+        .{ .target_size = 128, .min_phrase_len = 4, .max_phrase_len = 24, .max_phrases = 512 },
+    }) |options| {
+        const targets = [_]usize{ 128, 96, 64, 32, 0, 64 };
+        const actual = try trainValidatedTargetsAlloc(std.testing.allocator, training, validation, &targets, options);
+        defer actual.deinit(std.testing.allocator);
+        for (targets, actual.dictionaries) |target_size, maybe_dictionary| {
+            var target_options = options;
+            target_options.target_size = target_size;
+            const expected = try trainValidatedReferenceAlloc(std.testing.allocator, training, validation, target_options);
+            defer std.testing.allocator.free(expected);
+            try std.testing.expectEqualSlices(u8, expected, maybe_dictionary.?);
+        }
+    }
+}
+
+test "validated target training releases every allocation failure path" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const training = [_][]const u8{
+                "alpha shared record one",
+                "alpha shared record two",
+            };
+            const validation = [_][]const u8{"alpha shared record three"};
+            var trained = try trainValidatedTargetsAlloc(
+                allocator,
+                &training,
+                &validation,
+                &.{ 32, 16, 0 },
+                .{ .target_size = 32, .max_phrases = 32 },
+            );
+            defer trained.deinit(allocator);
+            const taken = trained.take(1) orelse return error.InvalidDictionaryTraining;
+            defer allocator.free(taken);
+            try std.testing.expectEqual(@as(?[]u8, null), trained.take(1));
+            try std.testing.expectEqual(@as(?[]u8, null), trained.take(99));
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
+}
+
 test "dictionary trainer handles empty target" {
     const samples = [_][]const u8{"sample"};
     const dict = try trainAlloc(std.testing.allocator, &samples, .{ .target_size = 0 });
@@ -1196,6 +1327,25 @@ test "dictionary trainer handles empty target" {
     );
     defer std.testing.allocator.free(validated);
     try std.testing.expectEqual(@as(usize, 0), validated.len);
+    const empty_targets = try trainValidatedTargetsAlloc(
+        std.testing.allocator,
+        &samples,
+        &samples,
+        &.{ 0, 0 },
+        .{ .target_size = 0, .min_phrase_len = 2, .max_phrase_len = 1 },
+    );
+    defer empty_targets.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 2), empty_targets.dictionaries.len);
+    for (empty_targets.dictionaries) |dictionary| try std.testing.expectEqual(@as(usize, 0), dictionary.?.len);
+    const no_targets = try trainValidatedTargetsAlloc(
+        std.testing.allocator,
+        &samples,
+        &samples,
+        &.{},
+        .{ .target_size = 0, .min_phrase_len = 2, .max_phrase_len = 1 },
+    );
+    defer no_targets.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 0), no_targets.dictionaries.len);
 }
 
 test "dictionary trainer replaces low-value phrase candidates" {
