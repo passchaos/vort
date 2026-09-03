@@ -162,8 +162,8 @@ const IncrementalCopyCodec = struct {
         block.remaining = state.remaining;
     }
 
-    pub fn parseMetaBlockHeader(prefix: []const u8, decoded_len: usize, final: bool) IncrementalCopyCodec.Error!ParsedHeader {
-        var reader = bitstream.BitReader.init(prefix);
+    pub fn parseMetaBlockHeader(prefix: []const u8, bit_len: usize, decoded_len: usize, final: bool) IncrementalCopyCodec.Error!ParsedHeader {
+        var reader = bitstream.BitReader.initBitLength(prefix, bit_len);
         const compressed = try readMinimalCompressedHeader(&reader);
         return .{
             .header = .{ .decoded_len = decoded_len, .compressed = compressed, .final = final },
@@ -8687,7 +8687,6 @@ test "br ratio planner keeps an exact optimal candidate for source blocks" {
     const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(ratio);
     try std.testing.expect(ratio.len < baseline.len);
-    try std.testing.expectEqual(@as(usize, 5814), ratio.len);
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);

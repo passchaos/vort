@@ -5,11 +5,20 @@ pub const Error = core.Error;
 
 pub const BitReader = struct {
     input: []const u8,
+    bit_len: usize,
     byte_index: usize = 0,
     bit_index: u3 = 0,
 
     pub fn init(input: []const u8) BitReader {
-        return .{ .input = input };
+        return .{ .input = input, .bit_len = input.len * 8 };
+    }
+
+    /// Initialize over a prefix whose final byte may contain synthetic high
+    /// padding. Reads remain bounded to `bit_len`, so parsers can distinguish
+    /// retained partial-byte input from a complete zero-padded byte.
+    pub fn initBitLength(input: []const u8, bit_len: usize) BitReader {
+        std.debug.assert(bit_len <= input.len * 8);
+        return .{ .input = input, .bit_len = bit_len };
     }
 
     pub fn bitPosition(self: BitReader) usize {
@@ -34,17 +43,14 @@ pub const BitReader = struct {
     }
 
     pub fn skipBits(self: *BitReader, count: u6) Error!void {
-        if (self.byte_index > self.input.len) return error.TruncatedFrame;
-        const remaining_bits = (self.input.len - self.byte_index) * 8 - @as(usize, self.bit_index);
-        if (@as(usize, count) > remaining_bits) return error.TruncatedFrame;
+        if (!self.hasBits(count)) return error.TruncatedFrame;
 
         self.advanceBitsAssumeAvailable(count);
     }
 
     pub fn hasBits(self: BitReader, count: u6) bool {
-        if (self.byte_index > self.input.len) return false;
-        const remaining_bits = (self.input.len - self.byte_index) * 8 - @as(usize, self.bit_index);
-        return @as(usize, count) <= remaining_bits;
+        const position = self.bitPosition();
+        return position <= self.bit_len and @as(usize, count) <= self.bit_len - position;
     }
 
     pub fn hasStagedBits(self: BitReader, count: u6) bool {
@@ -103,7 +109,7 @@ pub const BitReader = struct {
 
     pub fn readAlignedBytes(self: *BitReader, output: []u8) Error!void {
         if (self.bit_index != 0) return error.CorruptFrame;
-        if (self.byte_index > self.input.len or self.input.len - self.byte_index < output.len) return error.TruncatedFrame;
+        if (self.byte_index > self.input.len or output.len > (self.bit_len -| self.bitPosition()) / 8) return error.TruncatedFrame;
         @memcpy(output, self.input[self.byte_index..][0..output.len]);
         self.byte_index += output.len;
     }
@@ -892,6 +898,16 @@ test "BitReader consumes LSB-first deflate bits" {
     try std.testing.expectEqual(@as(usize, 10), reader.bitPosition());
     reader.alignToByte();
     try std.testing.expectEqual(@as(usize, 2), reader.byteOffset());
+}
+
+test "BitReader exact bit length rejects high padding bits" {
+    const bytes = [_]u8{ 0b1110_1101, 0xff };
+    var reader = BitReader.initBitLength(&bytes, 11);
+    try std.testing.expectEqual(@as(u8, 0b101), try reader.readBits(u8, 3));
+    try std.testing.expectEqual(@as(u8, 0b1111_1101), try reader.readBits(u8, 8));
+    try std.testing.expectEqual(@as(usize, 11), reader.bitPosition());
+    try std.testing.expect(!reader.hasBits(1));
+    try std.testing.expectError(error.TruncatedFrame, reader.readBits(u1, 1));
 }
 
 test "BitWriter bulk packing matches scalar bit packing" {

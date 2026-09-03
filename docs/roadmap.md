@@ -8619,6 +8619,19 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   command block types remain at 32 until a real wider stream is found. The
   self-referential 32 KiB `src/br.zig` ratio fixture moved from 5,526 to 5,814
   bytes as this test code changed; the preceding HEAD and the widened decoder
-  both produce 5,814 bytes with checksum 740,269 from the same current input,
-  so the matching planner gate update records fixture drift rather than an
-  encoder regression.
+  both produced 5,814 bytes with checksum 740,269 from the same input. The
+  absolute byte assertion was therefore retired in favor of the stable relative
+  gates: ratio mode must beat balanced mode by at least 100 bytes and remain
+  within 1.02x of libbrotli quality 8.
+  Fixed a Brotli byte-progressive copy-decoder livelock exposed by the complete
+  test suite's static-dictionary `information` case. Its valid nine-byte stream
+  ends the compressed header in a partial retained byte; the decoder consumed
+  all input but only offered whole bytes to the bounded header parser, then
+  returned zero-progress `need_input` forever. `BitReader.initBitLength` now
+  carries the exact logical bit count, allowing header parsing through that
+  partial byte without accepting synthetic high padding. The fixed nine-byte
+  wire is pinned independently of encoder changes, and every copy-decoder split
+  helper now rejects exhausted-input/output no-progress responses. The formerly
+  hanging Debug run completes all 419 Brotli tests; the libbrotli 100-case,
+  840-run progressive differential and all Brotli benchmark/profile gates
+  remain green.

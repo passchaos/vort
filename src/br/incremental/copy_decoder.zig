@@ -193,14 +193,14 @@ pub fn Decoder(comptime Codec: type) type {
                 },
                 .compressed_header => {
                     while (true) {
-                        // Only expose complete bytes to the ordinary parser.
-                        // The partial tail is valid retained input, but padding
-                        // it with zeroes could make a truncated prefix appear
-                        // to be a complete Huffman header.
-                        const complete_bytes = self.header_bit_count / 8;
-                        if (complete_bytes != 0) {
+                        // The normalized header may start and end partway
+                        // through bytes. Pass its exact logical bit length so
+                        // the ordinary parser can inspect the final retained
+                        // byte without treating synthetic high padding as input.
+                        if (self.header_len != 0) {
                             const parsed = Codec.parseMetaBlockHeader(
-                                self.header_bytes[0..complete_bytes],
+                                self.header_bytes[0..self.header_len],
+                                self.header_bit_count,
                                 self.decoded_len,
                                 self.final_meta_block,
                             ) catch |err| switch (err) {

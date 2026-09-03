@@ -16,6 +16,8 @@ fn drainSplit(encoded: []const u8, expected: []const u8, history: []u8, input_ch
         const step = try decoder.step(encoded[input_offset..input_end], decoded[output_offset..output_end]);
         input_offset += step.progress.input_read;
         output_offset += step.progress.output_written;
+        if (step.status == .need_input) try std.testing.expect(input_offset < encoded.len);
+        if (step.status == .need_output) try std.testing.expect(output_offset < decoded.len);
     }
     try decoder.finish();
     try std.testing.expectEqual(encoded.len, input_offset);
@@ -319,4 +321,15 @@ test "byte-progressive compressed copy decoder emits transformed dictionary word
         var history: [32 * 1024]u8 = undefined;
         try drainSplit(encoded, payload, &history, 1, 1);
     }
+}
+
+test "byte-progressive copy decoder completes a partial-byte static dictionary header" {
+    // Stable planner output for `information`: the compressed header ends in
+    // the final retained byte, with command bits following it. A decoder that
+    // exposes only complete header bytes consumes all nine input bytes and then
+    // returns `need_input` forever without producing output.
+    const encoded = [_]u8{ 66, 1, 0, 60, 4, 64, 0, 19, 149 };
+    const expected = "information";
+    var history: [32 * 1024]u8 = undefined;
+    try drainSplit(&encoded, expected, &history, 1, 1);
 }
