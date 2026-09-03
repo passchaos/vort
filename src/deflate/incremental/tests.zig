@@ -668,6 +668,18 @@ test "raw deflate incremental fixed literal decoder streams matches and truncati
     try decoder.finish();
     try std.testing.expectEqualSlices(u8, "repeat repeat repeat repeat repeat", &output);
 
+    var exact_decoder = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(.{ .expected_output_len = output.len }, &history);
+    var exact_output: [output.len]u8 = undefined;
+    const exact_result = try exact_decoder.step(matched, &exact_output);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, exact_result.status);
+    try std.testing.expectEqual(exact_output.len, exact_result.progress.output_written);
+    const normalized = try exact_decoder.step(matched[exact_result.progress.input_read..], &.{});
+    try std.testing.expectEqual(core.StepResult.Status.done, normalized.status);
+    try std.testing.expectEqual(matched.len - exact_result.progress.input_read, normalized.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), normalized.progress.output_written);
+    try exact_decoder.finish();
+    try std.testing.expectEqualSlices(u8, &output, &exact_output);
+
     const literal = try deflate.encodeRawFixedWithOptionsAlloc(std.testing.allocator, "truncated literals", .{ .strategy = .huffman_only });
     defer std.testing.allocator.free(literal);
     var truncated = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
@@ -800,6 +812,38 @@ test "zlib incremental decoder streams dynamic input and validates adler" {
     try std.testing.expectEqualSlices(u8, payload, &output);
 }
 
+test "zlib incremental decoder consumes footer after exact output fill" {
+    const payload = "zlib exact caller buffer boundary" ** 8;
+    const encoded = try deflate.encodeZlibFixedAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.ZlibIncrementalDecoder.init(.{ .expected_output_len = payload.len }, &history);
+    var output: [payload.len]u8 = undefined;
+    const result = try decoder.step(encoded, &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, result.status);
+    try std.testing.expectEqual(encoded.len, result.progress.input_read);
+    try std.testing.expectEqual(payload.len, result.progress.output_written);
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+
+    const empty = try deflate.encodeZlibFixedAlloc(std.testing.allocator, "");
+    defer std.testing.allocator.free(empty);
+    var empty_decoder = try deflate.ZlibIncrementalDecoder.init(.{ .expected_output_len = 0 }, &history);
+    const empty_result = try empty_decoder.step(empty, &.{});
+    try std.testing.expectEqual(core.StepResult.Status.done, empty_result.status);
+    try std.testing.expectEqual(empty.len, empty_result.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), empty_result.progress.output_written);
+    try empty_decoder.finish();
+
+    var truncated = try deflate.ZlibIncrementalDecoder.init(.{ .expected_output_len = payload.len }, &history);
+    const truncated_result = try truncated.step(encoded[0 .. encoded.len - 1], &output);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, truncated_result.status);
+    try std.testing.expectEqual(encoded.len - 1, truncated_result.progress.input_read);
+    try std.testing.expectEqual(payload.len, truncated_result.progress.output_written);
+    try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+    try std.testing.expectEqualStrings("footer", truncated.diagnostics().last_error_phase_name);
+}
+
 test "zlib incremental decoder rejects checksum dictionary and truncation" {
     var encoded = try deflate.encodeZlibFixedAlloc(std.testing.allocator, "checksum");
     defer std.testing.allocator.free(encoded);
@@ -844,6 +888,15 @@ test "zlib incremental decoder validates and uses preset dictionary" {
     try decoder.finish();
     try std.testing.expectEqualSlices(u8, payload, &output);
 
+    var exact = try deflate.ZlibIncrementalDecoder.initWithDictionary(.{ .expected_output_len = payload.len }, &history, dictionary);
+    var exact_output: [payload.len]u8 = undefined;
+    const exact_result = try exact.step(encoded, &exact_output);
+    try std.testing.expectEqual(core.StepResult.Status.done, exact_result.status);
+    try std.testing.expectEqual(encoded.len, exact_result.progress.input_read);
+    try std.testing.expectEqual(payload.len, exact_result.progress.output_written);
+    try exact.finish();
+    try std.testing.expectEqualSlices(u8, payload, &exact_output);
+
     var wrong = try deflate.ZlibIncrementalDecoder.initWithDictionary(.{}, &history, "wrong dictionary");
     _ = try wrong.step(encoded[0..2], &.{});
     try std.testing.expectError(error.NeedDictionary, wrong.step(encoded[2..6], &.{}));
@@ -868,6 +921,15 @@ test "zlib incremental decoder resolves split DICTID from dictionary set" {
     }
     try decoder.finish();
     try std.testing.expectEqualSlices(u8, payload, &output);
+
+    var exact = try deflate.ZlibIncrementalDecoder.initWithDictionarySet(.{ .expected_output_len = payload.len }, &history, set);
+    var exact_output: [payload.len]u8 = undefined;
+    const exact_result = try exact.step(encoded, &exact_output);
+    try std.testing.expectEqual(core.StepResult.Status.done, exact_result.status);
+    try std.testing.expectEqual(encoded.len, exact_result.progress.input_read);
+    try std.testing.expectEqual(payload.len, exact_result.progress.output_written);
+    try exact.finish();
+    try std.testing.expectEqualSlices(u8, payload, &exact_output);
 
     var missing = try deflate.ZlibIncrementalDecoder.initWithDictionarySet(.{}, &history, deflate.ZlibDictionarySet.fromEntries(&.{}));
     _ = try missing.step(encoded[0..2], &.{});
@@ -894,6 +956,38 @@ test "gzip incremental decoder streams dynamic input and validates footer" {
     }
     try decoder.finish();
     try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "gzip incremental decoder consumes footer after exact output fill" {
+    const payload = "gzip exact caller buffer boundary" ** 8;
+    const encoded = try deflate.encodeGzipFixedAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.GzipIncrementalDecoder.init(.{ .expected_output_len = payload.len }, &history);
+    var output: [payload.len]u8 = undefined;
+    const result = try decoder.step(encoded, &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, result.status);
+    try std.testing.expectEqual(encoded.len, result.progress.input_read);
+    try std.testing.expectEqual(payload.len, result.progress.output_written);
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+
+    const empty = try deflate.encodeGzipFixedAlloc(std.testing.allocator, "");
+    defer std.testing.allocator.free(empty);
+    var empty_decoder = try deflate.GzipIncrementalDecoder.init(.{ .expected_output_len = 0 }, &history);
+    const empty_result = try empty_decoder.step(empty, &.{});
+    try std.testing.expectEqual(core.StepResult.Status.done, empty_result.status);
+    try std.testing.expectEqual(empty.len, empty_result.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), empty_result.progress.output_written);
+    try empty_decoder.finish();
+
+    var truncated = try deflate.GzipIncrementalDecoder.init(.{ .expected_output_len = payload.len }, &history);
+    const truncated_result = try truncated.step(encoded[0 .. encoded.len - 1], &output);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, truncated_result.status);
+    try std.testing.expectEqual(encoded.len - 1, truncated_result.progress.input_read);
+    try std.testing.expectEqual(payload.len, truncated_result.progress.output_written);
+    try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+    try std.testing.expectEqualStrings("footer", truncated.diagnostics().last_error_phase_name);
 }
 
 test "gzip incremental decoder parses optional header metadata" {

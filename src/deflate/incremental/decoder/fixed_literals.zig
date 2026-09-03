@@ -280,6 +280,15 @@ pub const Decoder = struct {
                 self.phase = .match_copy;
             },
             .match_copy => {
+                // A previous call may have filled the caller's output exactly
+                // while copying the final match byte. Advance to the symbol
+                // phase before checking output space so a zero-length drain can
+                // still consume an already-buffered EOB.
+                if (self.match_remaining == 0) {
+                    self.match_len = 0;
+                    self.phase = .symbols;
+                    continue;
+                }
                 if (output_written == output.len) return result(input_read, output_written, .need_output);
                 while (self.match_remaining != 0 and output_written < output.len) {
                     const source = (self.history_pos + self.history.len - self.match_distance) % self.history.len;

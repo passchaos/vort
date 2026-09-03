@@ -737,7 +737,8 @@ defer zstd_incremental_encoder.deinit();
 // Dynamic blocks currently progress through HLIT/HDIST/HCLEN and the split
 // code-length alphabet/repeats into byte-progressive payload literals and matches.
 // ZlibIncrementalDecoder layers split CMF/FLG and streaming Adler/footer
-// validation over that raw decoder without allowing footer prefetch.
+// validation over that raw decoder without allowing footer prefetch. Exact-size
+// caller output can finish the raw match and consume EOB/footer in the same step.
 // initWithDictionary validates split DICTID and seeds the raw 32 KiB history
 // from the caller-owned preset dictionary.
 // GzipIncrementalDecoder supports split FEXTRA/FNAME/FCOMMENT/FHCRC plus

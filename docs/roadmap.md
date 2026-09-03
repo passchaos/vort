@@ -8673,3 +8673,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   enter the new block-streaming state, which releases raw input progressively,
   retains one byte for RLE, and buffers at most one compressed block while
   preserving cross-block entropy/repeat/history state.
+  Fixed an incremental DEFLATE wrapper boundary exposed by the full root suite:
+  when the final match filled caller output exactly, the raw decoder remained in
+  `match_copy` and zlib/gzip returned `need_output` before consuming an already
+  buffered EOB and wrapper footer. Raw match completion is now normalized before
+  checking output space, and both wrappers perform a zero-input reservoir drain
+  before supplying more bytes. One-call exact-output tests now cover raw DEFLATE,
+  zlib, gzip, preset dictionaries, dictionary sets, empty payloads, truncated
+  footers, and concatenated dictionary-backed streams.

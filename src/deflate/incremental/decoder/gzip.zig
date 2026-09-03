@@ -233,6 +233,7 @@ pub fn Decoder(comptime Codec: type) type {
                         continue;
                     }
                     if (drained.status == .need_output) {
+                        if (drained.progress.output_written != 0) continue;
                         // The raw decoder can retain one decoded literal when
                         // passed an empty output slice. If the cumulative cap is
                         // already exhausted, surface the limit now rather than
@@ -249,7 +250,11 @@ pub fn Decoder(comptime Codec: type) type {
                         self.phase = .footer;
                         continue;
                     }
-                    if (supplied.status == .need_output) return result(input_read, output_written, .need_output);
+                    // Re-enter the raw phase once so an EOB already buffered
+                    // behind an exactly filled caller output can advance to the
+                    // footer. A pending literal or match immediately returns
+                    // need_output from the drain at the top of this phase.
+                    if (supplied.status == .need_output) continue;
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
                 },
                 .footer => {

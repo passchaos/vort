@@ -1532,7 +1532,10 @@ test "root incremental zlib decoder exposes dictionary-set selection" {
     var history: [32 * 1024]u8 = undefined;
     var decoder = try ZlibIncrementalDecoder.initWithDictionarySet(.{ .expected_output_len = payload.len }, &history, ZlibDictionarySet.fromEntries(&entries));
     var output: [payload.len]u8 = undefined;
-    _ = try decoder.step(encoded, &output);
+    const result = try decoder.step(encoded, &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, result.status);
+    try std.testing.expectEqual(encoded.len, result.progress.input_read);
+    try std.testing.expectEqual(payload.len, result.progress.output_written);
     try decoder.finish();
     try std.testing.expectEqualSlices(u8, payload, &output);
 }

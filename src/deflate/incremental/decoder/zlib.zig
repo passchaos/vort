@@ -191,22 +191,36 @@ pub fn Decoder(comptime Codec: type) type {
                     self.phase = .raw;
                 },
                 .raw => {
-                    const raw_input = if (input_read < input.len) input[input_read .. input_read + 1] else "";
-                    const raw_result = self.raw.step(raw_input, output[output_written..]) catch |err| return self.failRaw(err);
-                    input_read += raw_result.progress.input_read;
-                    self.total_input += raw_result.progress.input_read;
-                    if (raw_result.progress.output_written != 0) {
-                        const produced = output[output_written..][0..raw_result.progress.output_written];
-                        self.adler.update(produced);
-                        output_written += produced.len;
-                        self.total_output += produced.len;
-                        self.stream_output += produced.len;
-                    }
-                    if (raw_result.status == .done) {
+                    // Drain the raw bit reservoir before supplying another byte.
+                    // In particular, when the caller's output slice filled
+                    // exactly on the final literal/match, the EOB may already
+                    // be buffered and can advance us to the Adler footer
+                    // without asking for an unnecessary extra output buffer.
+                    const drained = self.raw.step("", output[output_written..]) catch |err| return self.failRaw(err);
+                    self.recordRawProgress(drained, output, &input_read, &output_written);
+                    if (drained.status == .done) {
                         self.phase = .footer;
                         continue;
                     }
-                    if (raw_result.status == .need_output) return result(input_read, output_written, .need_output);
+                    if (drained.status == .need_output) {
+                        // A match copy can fill this output slice exactly and
+                        // then return need_output after normalizing back to the
+                        // symbol phase. Re-enter once to let an already-buffered
+                        // EOB advance to the footer; zero-progress need_output
+                        // below is the real request for caller space.
+                        if (drained.progress.output_written != 0) continue;
+                        if (self.remainingRawLimit() == 0) return self.fail(.raw, self.cumulativeLimitError());
+                        return result(input_read, output_written, .need_output);
+                    }
+                    if (input_read == input.len) return result(input_read, output_written, .need_input);
+
+                    const supplied = self.raw.step(input[input_read .. input_read + 1], output[output_written..]) catch |err| return self.failRaw(err);
+                    self.recordRawProgress(supplied, output, &input_read, &output_written);
+                    if (supplied.status == .done) {
+                        self.phase = .footer;
+                        continue;
+                    }
+                    if (supplied.status == .need_output) continue;
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
                 },
                 .footer => {
@@ -262,6 +276,16 @@ pub fn Decoder(comptime Codec: type) type {
         fn validateExpectedOutput(self: *Self) Error!void {
             if (self.options.expected_output_len) |expected|
                 if (self.total_output != expected) return self.fail(self.phase, error.SizeMismatch);
+        }
+        fn recordRawProgress(self: *Self, raw_result: core.StepResult, output: []const u8, input_read: *usize, output_written: *usize) void {
+            input_read.* += raw_result.progress.input_read;
+            self.total_input += raw_result.progress.input_read;
+            if (raw_result.progress.output_written == 0) return;
+            const produced = output[output_written.*..][0..raw_result.progress.output_written];
+            self.adler.update(produced);
+            output_written.* += produced.len;
+            self.total_output += produced.len;
+            self.stream_output += produced.len;
         }
         fn cumulativeLimitError(self: *const Self) Error {
             if (self.options.expected_output_len) |expected| {
