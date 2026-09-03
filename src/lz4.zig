@@ -1123,6 +1123,25 @@ pub const NativeIncrementalFrameDecoder = struct {
     direct_content_hasher: std.hash.XxHash32 = std.hash.XxHash32.init(0),
     direct_expected_content_checksum: u32 = 0,
     direct_frame_len: usize = 0,
+    block_stream_input_offset: usize = 0,
+    block_stream_stage: BlockStreamStage = .block_header,
+    block_stream_block_len: usize = 0,
+    block_stream_raw_remaining: usize = 0,
+    block_stream_block_compressed: bool = false,
+    block_stream_block_index: usize = 0,
+    block_stream_block_size_max: usize = 0,
+    block_stream_block_independent: bool = true,
+    block_stream_block_checksum: bool = false,
+    block_stream_block_hasher: std.hash.XxHash32 = std.hash.XxHash32.init(0),
+    block_stream_frame_expected_len: ?usize = null,
+    block_stream_frame_decoded_len: usize = 0,
+    block_stream_content_checksum: bool = false,
+    block_stream_content_hasher: std.hash.XxHash32 = std.hash.XxHash32.init(0),
+    block_stream_checksum: [4]u8 = undefined,
+    block_stream_checksum_read: usize = 0,
+    block_stream_checksum_buffered: usize = 0,
+    block_stream_checksum_retained_prefix: usize = 0,
+    block_stream_checksum_after: BlockStreamChecksumAfter = .finish_block,
     input_received: usize = 0,
     output_written: usize = 0,
     skippable_output: []u8 = &.{},
@@ -1138,7 +1157,9 @@ pub const NativeIncrementalFrameDecoder = struct {
     last_error_phase: ?Phase = null,
 
     pub const Phase = enum { frame, output, direct_output, done };
-    const InternalPhase = enum { frame, output, direct_output, skippable_stream, done };
+    const InternalPhase = enum { frame, output, direct_output, block_stream, skippable_stream, done };
+    const BlockStreamStage = enum { block_header, raw_payload, compressed_payload, block_checksum, compressed_decode, compressed_output, content_checksum, finished };
+    const BlockStreamChecksumAfter = enum { finish_block, compressed_decode };
 
     pub const Options = struct {
         /// Maximum compressed bytes retained while waiting for one complete
@@ -1213,6 +1234,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.decoded_scratch.clearRetainingCapacity();
         self.decoded_offset = 0;
         self.resetDirectOutput();
+        self.resetBlockStream();
         self.input_received = 0;
         self.output_written = 0;
         self.last_error_name = "";
@@ -1227,12 +1249,14 @@ pub const NativeIncrementalFrameDecoder = struct {
         const decoded_len: ?usize = switch (self.phase) {
             .frame => null,
             .direct_output => self.direct_decoded_len,
+            .block_stream => self.block_stream_frame_expected_len,
             .skippable_stream => null,
             .output, .done => self.decoded_scratch.items.len,
         };
         const decoded_remaining: ?usize = switch (self.phase) {
             .frame => null,
             .direct_output => self.direct_decoded_len - self.direct_decoded_read,
+            .block_stream => if (self.block_stream_frame_expected_len) |expected| expected - self.block_stream_frame_decoded_len else null,
             .skippable_stream => null,
             .output, .done => self.decoded_scratch.items.len - self.decoded_offset,
         };
@@ -1274,6 +1298,12 @@ pub const NativeIncrementalFrameDecoder = struct {
     /// `max_compressed_buffer_len`, this never grows past that configured cap.
     pub fn compressedBufferCapacity(self: *const NativeIncrementalFrameDecoder) usize {
         return self.frame_scratch.capacity;
+    }
+
+    /// True while input prefixes are released block-by-block instead of
+    /// retaining the complete encoded frame.
+    pub fn isBlockStreaming(self: *const NativeIncrementalFrameDecoder) bool {
+        return self.phase == .block_stream;
     }
 
     pub fn finish(self: *NativeIncrementalFrameDecoder) Error!void {
