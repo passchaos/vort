@@ -165,21 +165,23 @@ Current interpretation:
   most one block while carrying dictionary/history, Huffman/FSE tables, and
   repeat offsets forward. Exact-size allocation variants and incremental `expected_output_len`
   plus `finish()` provide strict SizeMismatch semantics when callers know the
-  expected output length. LZ4 native incremental decoding has started moving
-  beyond the whole-frame facade with a direct-output path for raw linked or
-  independent blocks plus independent and linked compressed blocks with
-  block/content checksum verification when the caller supplies one contiguous
-  frame output buffer. Frames without an embedded content size can also use
+  expected output length. LZ4 native incremental decoding now moves oversized
+  frames to a block-streaming path: raw linked or independent blocks drain
+  directly, while independent and linked compressed blocks retain one encoded
+  block and one decoded-block scratch. Optional compressed-block checksums are
+  read and verified after releasing the encoded payload and before exposing the
+  decoded scratch to caller output, so a compressed-payload-size buffer cap is
+  sufficient. Complete frames still use the prevalidated direct-output path
+  when possible. Frames without an embedded content size can also use
   direct output when callers provide either `expected_output_len` or
   `max_decoded_buffer_len` as the preflight cap. Frames whose Dictionary_ID
   resolves through the explicit dictionary or dictionary-set incremental
   constructors can stream dictionary-backed compressed blocks directly. Linked
-  compressed drains now keep a bounded 64 KiB direct history window, so caller
-  output chunks that split frame history can continue without the whole-frame
-  scratch fallback; if a caller buffer is too small for an atomic compressed
-  block, the decoder falls back to the bounded scratch facade after returning
-  any available progress. LZ4 skippable metadata is now independent of that data
-  frame limitation: only its eight-byte header is retained, and the payload is
+  compressed drains keep a bounded 64 KiB history window, so caller output
+  chunks that split frame history can continue without retaining the whole
+  frame. Compressed-block output remains block-atomic internally and drains its
+  block-sized scratch under caller backpressure. LZ4 skippable metadata is also
+  independent of data-frame size: only its eight-byte header is retained, and the payload is
   discarded or captured incrementally under the same bounded-input API.
   Zstd native incremental decoding now
   has matching direct-output slices for raw/RLE blocks and compressed native

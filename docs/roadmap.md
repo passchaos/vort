@@ -8725,3 +8725,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `frame` phase; eight bytes is sufficient and seven reports
   `OutputLimitExceeded`. A 4 KiB metadata fixture followed by a normal data
   frame, plus public liblz4 probe coverage, pins the behavior.
+  LZ4 incremental data frames now switch to block streaming when a complete
+  frame exceeds `max_compressed_buffer_len`. Raw blocks drain directly; linked,
+  independent, and dictionary-backed compressed blocks retain at most one
+  encoded block and one decoded-block scratch while carrying a bounded 64 KiB
+  history and content checksum across blocks. For checksum-bearing compressed
+  blocks, the decoder first decodes the block, releases its encoded payload,
+  reads and validates the four-byte block checksum, and only then drains decoded
+  bytes to the caller. A regression pins a cap exactly equal to compressed
+  payload length and verifies corrupt checksums produce zero caller output.

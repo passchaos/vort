@@ -21,7 +21,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   native frame/block/skippable headers plus plain, standard-dictionary-aware, and dictionary-set-aware Zstd sequence-mode summaries, zero-allocation native stream/block
   iterators, reusable raw-block decoder, and
   caller-owned encode/decode-into/append, incremental frame encode with optional pledged content size and preset dictionary, plus reusable
-  scratch encoder/decoder APIs; incremental skippable frames retain only their
+  scratch encoder/decoder APIs; oversized incremental data frames release raw
+  blocks directly and retain at most one encoded compressed block plus one
+  decoded-block scratch, validating compressed-block checksums before output;
+  incremental skippable frames retain only their
   8-byte header while discarding or capturing arbitrary-size metadata directly
   from caller input,
   pure Zig native Zstandard frame encode/bounded/caller-owned decode with header
