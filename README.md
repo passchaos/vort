@@ -51,8 +51,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   native frames (including dictionary, dictionary-set, no-content-size,
   bounded-history multi-block paths, per-block compressed-input retention when
   a frame exceeds the configured buffer limit, resumable zero-scratch output
-  for sequence-free raw/RLE/Huffman literal sections, and small-output scratch
-  fallback for sequence blocks), zero-allocation native stream/block iterators, and
+  for sequence-free raw/RLE/Huffman literal sections, header-only incremental
+  discard/capture of arbitrarily large skippable-frame payloads, and small-output
+  scratch fallback for sequence blocks), zero-allocation native stream/block iterators, and
   dependency-free standard full-dictionary generation from caller-selected
   history content using portable baseline entropy tables, plus first-stage
   corpus training of a complete literal Huffman alphabet and OF/ML/LL sequence
@@ -689,6 +690,8 @@ defer zstd_bounded_incremental.deinit();
 // block at a time. isBlockStreaming() exposes that path and
 // compressedBufferedBytes()/compressedBufferCapacity() report logical and
 // allocated encoded-input storage; both stay within a finite configured cap.
+// Skippable frames retain only their 8-byte header; metadata payloads are
+// discarded or copied into caller-owned skippable_output storage incrementally.
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
 // Brotli's general incremental decoder can instead pledge expected_compressed_len
 // (or use initExactCompressedSize) to auto-validate/decode stored or compressed

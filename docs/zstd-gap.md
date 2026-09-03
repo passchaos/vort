@@ -303,6 +303,14 @@ Recommended next comparison steps:
   Sequence-free raw/RLE/Huffman literal sections inside compressed blocks now
   retain a persistent literal/Huffman cursor and write directly into tiny caller
   buffers without `decoded_scratch`; the same suite exercises 132 such blocks.
+  Skippable-frame payloads now follow a separate incremental state after their
+  eight-byte header. They are discarded or copied into caller-owned capture
+  storage directly from input, so metadata size no longer counts against
+  `max_compressed_buffer_len`; completion statistics and events remain atomic,
+  truncated payloads still report `TruncatedFrame` in the public `frame` phase,
+  and a limit below eight bytes still reports `OutputLimitExceeded`. A 4 KiB
+  metadata fixture under a 16-byte cap also verifies bounded scratch, partial
+  capture, and continuation into the following data frame.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

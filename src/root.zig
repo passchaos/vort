@@ -5085,16 +5085,22 @@ test "root native incremental decoders enforce compressed limits on skippable fr
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = 0,
         .max_decoded_buffer_len = 0,
-        .max_compressed_buffer_len = zstd_skip.len - 1,
+        .max_compressed_buffer_len = 8,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [1]u8 = undefined;
 
-    try std.testing.expectError(error.OutputLimitExceeded, zstd_decoder.step(zstd_skip, zstd_output[0..0]));
-    try std.testing.expectEqual(zstd_skip.len - 1, zstd_decoder.snapshot().input_received);
-    try std.testing.expectEqual(@as(usize, 0), zstd_decoder.diagnostics().output_written);
-    try std.testing.expectEqualSlices(u8, "OutputLimitExceeded", zstd_decoder.diagnostics().last_error_name);
-    try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().last_error_phase_name);
+    // Zstd skippable payloads are consumed incrementally after their eight-byte
+    // header, so metadata of any size can pass through a header-sized scratch
+    // limit without producing decoded output.
+    const zstd_skipped = try zstd_decoder.step(zstd_skip, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_skipped.status);
+    try std.testing.expectEqual(zstd_skip.len, zstd_skipped.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_skipped.progress.output_written);
+    try std.testing.expectEqual(zstd_skip.len, zstd_decoder.snapshot().input_received);
+    try std.testing.expectEqual(@as(usize, zstd_skip.len - 8), zstd_decoder.snapshot().skippable_total);
+    try std.testing.expectEqualSlices(u8, "", zstd_decoder.diagnostics().last_error_name);
+    try zstd_decoder.finish();
     const zstd_small_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 11, "");
     defer std.testing.allocator.free(zstd_small_skip);
     zstd_decoder.reset();

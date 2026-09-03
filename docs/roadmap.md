@@ -8692,3 +8692,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   before supplying more bytes. One-call exact-output tests now cover raw DEFLATE,
   zlib, gzip, preset dictionaries, dictionary sets, empty payloads, truncated
   footers, and concatenated dictionary-backed streams.
+  Removed the remaining whole-payload requirement for incremental Zstd
+  skippable frames. The decoder now retains only the eight-byte magic/length
+  header, then discards or captures metadata directly from caller input while
+  preserving atomic event totals and exact truncation diagnostics. A 4 KiB
+  skippable payload passes under a 16-byte compressed-buffer cap and continues
+  into a following data frame; an eight-byte cap is sufficient, while seven
+  bytes still fails explicitly. Debug and ReleaseFast Zstd tests, the 5,400-frame
+  upstream decodecorpus gate, the 273-case libzstd 1.5.5 matrix, public frame and
+  dictionary probes, encode/decode benchmark gates, and full repository
+  test/check validation remain green.
