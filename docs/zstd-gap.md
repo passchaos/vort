@@ -290,7 +290,12 @@ Recommended next comparison steps:
   Their cumulative observed sequence-mode mask is `0xffffffffffffffff`,
   covering all 64 LL/OF/ML mode tuples; seed 17's first frame also exposed and
   now pins legal zero-length RLE blocks, including their required one-byte
-  payload.
+  payload. `run-zstd-decodecorpus-gate` reproduces all six campaigns directly
+  from upstream `tests/decodecorpus`, carries the observed mode mask between
+  runs, requires the final 64/64 mask, and deletes each temporary corpus before
+  moving to the next one. Its self-contained smoke step validates argument
+  orchestration, summary parsing, failure propagation, and cleanup without
+  requiring the optional upstream checkout.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

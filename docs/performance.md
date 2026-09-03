@@ -14,6 +14,7 @@ zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate
 zig build run-zstd-compat-probe
+zig build -Doptimize=ReleaseFast run-zstd-decodecorpus-gate -j1
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-dashboard

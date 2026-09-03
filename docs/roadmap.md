@@ -8663,4 +8663,8 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   possible LL/OF/ML table-mode tuples. Seed 17's first frame exposed a valid
   zero-length RLE block that the native allocator, caller-buffer, and
   size-preflight paths had rejected; all three now consume its mandatory
-  one-byte payload while producing zero bytes.
+  one-byte payload while producing zero bytes. The optional
+  `run-zstd-decodecorpus-gate` now regenerates this complete fixed-seed suite
+  from a local upstream checkout, validates the cumulative 64/64 mask, and
+  cleans each corpus automatically; a self-contained fake-tool smoke keeps the
+  orchestration and failure/cleanup behavior covered in ordinary CI.

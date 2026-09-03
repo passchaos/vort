@@ -3085,6 +3085,22 @@ pub fn build(b: *std.Build) void {
     );
     zstd_compat_probe_step.dependOn(&run_zstd_compat_probe.step);
 
+    const zstd_decodecorpus_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/decodecorpus_gate.py" });
+    zstd_decodecorpus_gate.addArtifactArg(zstd_compat_probe_exe);
+    if (b.args) |args| zstd_decodecorpus_gate.addArgs(args);
+    const zstd_decodecorpus_gate_step = b.step(
+        "run-zstd-decodecorpus-gate",
+        "Generate and decode the deterministic upstream Zstd corpus suite",
+    );
+    zstd_decodecorpus_gate_step.dependOn(&zstd_decodecorpus_gate.step);
+
+    const zstd_decodecorpus_gate_smoke = b.addSystemCommand(&.{ "python3", "tools/zstd/decodecorpus_gate_smoke.py" });
+    const zstd_decodecorpus_gate_smoke_step = b.step(
+        "run-zstd-decodecorpus-gate-smoke",
+        "Validate Zstd decodecorpus gate orchestration and cleanup",
+    );
+    zstd_decodecorpus_gate_smoke_step.dependOn(&zstd_decodecorpus_gate_smoke.step);
+
     const run_native_library_bench_path_csv = b.addRunArtifact(native_library_bench_exe);
     run_native_library_bench_path_csv.addArgs(&.{
         "--iterations",
@@ -4013,6 +4029,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(native_summary_error_negative_smoke_step);
     ci_smoke_step.dependOn(zstd_native_summary_dashboard_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
+    ci_smoke_step.dependOn(zstd_decodecorpus_gate_smoke_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_timeout_smoke_step);
     ci_smoke_step.dependOn(snappy_report_gate_step);
