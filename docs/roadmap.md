@@ -8587,4 +8587,17 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   but neutral-positive (`1.011x`, 9/16 wins), so this is retained as an allocator
   pressure improvement rather than a throughput claim. The 15-row training gate
   now requires balanced allocation bytes/counts on every row and caps complete
-  Zstd validation at 500 allocations, 60 resize events, and 8 MiB requested.
+  Zstd validation at 501 allocations, 60 resize events, and 8 MiB requested.
+  Validation candidate scoring now builds a reusable 256-bucket first-byte
+  dictionary index and shares its offset scratch across all held-out samples.
+  Bucket entries retain ascending dictionary offsets and only strictly longer
+  matches replace the current winner, preserving the linear scanner's earliest
+  equal-length tie. Per-position/indexed-summary differential tests cover
+  minimum lengths 1/2/3/4/8/16/64 and overlong inputs plus an explicit repeated
+  phrase tie. Twelve alternating ReleaseFast A/B pairs against `34644bdd` show
+  five-target text/JSON/binary training improving by `1.35x/1.11x/1.20x` and
+  complete Zstd validation by `1.28x/1.09x/1.19x`, with 12/12 wins on every row
+  and identical checksums. The reusable index adds one allocation and about
+  6.1 KiB cumulative scratch to these 512-byte-target workloads; the allocation
+  gate permits that single bounded scratch while retaining the preceding
+  balance, resize, and 8 MiB limits.

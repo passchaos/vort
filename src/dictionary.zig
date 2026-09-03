@@ -382,6 +382,66 @@ const ValidatedBest = struct {
     distance_bits: usize = std.math.maxInt(usize),
 };
 
+const DictionaryMatchIndexScratch = struct {
+    positions: std.ArrayList(usize) = .empty,
+
+    fn deinit(self: *DictionaryMatchIndexScratch, allocator: std.mem.Allocator) void {
+        self.positions.deinit(allocator);
+        self.* = .{};
+    }
+
+    fn build(
+        self: *DictionaryMatchIndexScratch,
+        allocator: std.mem.Allocator,
+        dict: []const u8,
+        min_match_len: usize,
+    ) !DictionaryMatchIndex {
+        if (min_match_len == 0) return error.InvalidDictionaryTraining;
+        const position_count = if (dict.len < min_match_len) 0 else dict.len - min_match_len + 1;
+        try self.positions.resize(allocator, position_count);
+
+        var counts: [256]usize = @splat(0);
+        for (dict[0..position_count]) |byte| counts[byte] += 1;
+        var starts: [257]usize = @splat(0);
+        for (counts, 0..) |count, byte| starts[byte + 1] = starts[byte] + count;
+        var cursors: [256]usize = undefined;
+        @memcpy(&cursors, starts[0..256]);
+        for (dict[0..position_count], 0..) |byte, position| {
+            self.positions.items[cursors[byte]] = position;
+            cursors[byte] += 1;
+        }
+        return .{
+            .starts = starts,
+            .positions = self.positions.items,
+            .min_match_len = min_match_len,
+        };
+    }
+};
+
+const DictionaryMatchIndex = struct {
+    starts: [257]usize,
+    positions: []const usize,
+    min_match_len: usize,
+
+    fn findBest(self: DictionaryMatchIndex, dict: []const u8, sample: []const u8) DictionaryMatchCandidate {
+        var best: DictionaryMatchCandidate = .{};
+        if (sample.len < self.min_match_len) return best;
+        const byte = sample[0];
+        for (self.positions[self.starts[byte]..self.starts[@as(usize, byte) + 1]]) |offset| {
+            if (self.min_match_len > 1 and !std.mem.eql(
+                u8,
+                dict[offset + 1 ..][0 .. self.min_match_len - 1],
+                sample[1..self.min_match_len],
+            )) continue;
+            const max_len = @min(dict.len - offset, sample.len);
+            var len = self.min_match_len;
+            while (len < max_len and dict[offset + len] == sample[len]) len += 1;
+            if (len > best.length) best = .{ .offset = offset, .length = len };
+        }
+        return best;
+    }
+};
+
 /// Train the same validation-guided candidate family for several dictionary
 /// sizes while collecting each phrase configuration only once. Results retain
 /// the caller's target order and are byte-identical to separate
@@ -410,6 +470,8 @@ pub fn trainValidatedTargetsAlloc(
     defer allocator.free(best);
     @memset(best, .{});
     errdefer for (best) |entry| if (entry.bytes) |bytes| allocator.free(bytes);
+    var match_index_scratch: DictionaryMatchIndexScratch = .{};
+    defer match_index_scratch.deinit(allocator);
 
     const Candidate = struct { min_phrase_len: usize, max_phrase_len: usize, max_phrases: usize };
     const candidates = [_]Candidate{
@@ -437,7 +499,7 @@ pub fn trainValidatedTargetsAlloc(
                     if (target_size == 0) continue;
                     const trained = try assembleDictionaryAlloc(allocator, phrases, target_size, layout);
                     errdefer allocator.free(trained);
-                    try retainValidatedCandidate(allocator, entry, trained, validation_samples, options.min_phrase_len);
+                    try retainValidatedCandidate(allocator, &match_index_scratch, entry, trained, validation_samples, options.min_phrase_len);
                 }
             }
         }
@@ -454,7 +516,7 @@ pub fn trainValidatedTargetsAlloc(
         }
         const tail = try trainSampleTailAlloc(allocator, training_samples, target_size);
         errdefer allocator.free(tail);
-        try retainValidatedCandidate(allocator, entry, tail, validation_samples, options.min_phrase_len);
+        try retainValidatedCandidate(allocator, &match_index_scratch, entry, tail, validation_samples, options.min_phrase_len);
     }
 
     const dictionaries = try allocator.alloc(?[]u8, target_sizes.len);
@@ -473,16 +535,18 @@ pub fn trainValidatedTargetsAlloc(
 
 fn retainValidatedCandidate(
     allocator: std.mem.Allocator,
+    match_index_scratch: *DictionaryMatchIndexScratch,
     best: *ValidatedBest,
     candidate: []u8,
     validation_samples: []const []const u8,
     min_match_len: usize,
 ) !void {
+    const match_index = try match_index_scratch.build(allocator, candidate, min_match_len);
     var covered: usize = 0;
     var matches: usize = 0;
     var distance_bits: usize = 0;
     for (validation_samples) |sample| {
-        const summary = try summarizeMatches(candidate, sample, min_match_len);
+        const summary = try summarizeMatchesIndexed(candidate, sample, match_index);
         covered = std.math.add(usize, covered, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
         matches = std.math.add(usize, matches, summary.matches) catch return error.InvalidDictionaryTraining;
         distance_bits = std.math.add(usize, distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
@@ -723,6 +787,26 @@ pub fn summarizeMatches(dict: []const u8, sample: []const u8, min_match_len: usi
     while (sample_offset + min_match_len <= sample.len) {
         const best = findBestDictionaryMatch(dict, sample[sample_offset..], min_match_len);
         if (best.length < min_match_len) {
+            sample_offset += 1;
+            continue;
+        }
+        summary.matches += 1;
+        summary.covered_bytes += best.length;
+        summary.longest = @max(summary.longest, best.length);
+        const logical_position = std.math.add(usize, dict.len, sample_offset) catch return error.InvalidDictionaryTraining;
+        const distance = logical_position - best.offset;
+        summary.distance_bits += std.math.log2_int(usize, distance) + 1;
+        sample_offset += best.length;
+    }
+    return summary;
+}
+
+fn summarizeMatchesIndexed(dict: []const u8, sample: []const u8, index: DictionaryMatchIndex) !MatchSummary {
+    var summary: MatchSummary = .{};
+    var sample_offset: usize = 0;
+    while (sample_offset + index.min_match_len <= sample.len) {
+        const best = index.findBest(dict, sample[sample_offset..]);
+        if (best.length < index.min_match_len) {
             sample_offset += 1;
             continue;
         }
@@ -1433,6 +1517,42 @@ test "streaming dictionary match summary equals materialized oracle" {
         try std.testing.expectEqual(expected, try summarizeMatches(&dictionary, &sample, min_match_len));
     }
     try std.testing.expectError(error.InvalidDictionaryTraining, summarizeMatches(&dictionary, &sample, 0));
+}
+
+test "dictionary prefix index matches linear scan and preserves earliest ties" {
+    var dictionary: [257]u8 = undefined;
+    var sample: [383]u8 = undefined;
+    var state: u32 = 0x243f_6a88;
+    for (&dictionary) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    for (&sample, 0..) |*byte, position| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (position % 41 < 27) dictionary[(position * 11) % (dictionary.len - 32)] else @truncate(state >> 24);
+    }
+
+    var scratch: DictionaryMatchIndexScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    for ([_]usize{ 1, 2, 3, 4, 8, 16, 64, 258 }) |min_match_len| {
+        const index = try scratch.build(std.testing.allocator, &dictionary, min_match_len);
+        for (0..sample.len + 1) |position| {
+            const expected = findBestDictionaryMatch(&dictionary, sample[position..], min_match_len);
+            const actual = index.findBest(&dictionary, sample[position..]);
+            try std.testing.expectEqual(expected, actual);
+        }
+        try std.testing.expectEqual(
+            try summarizeMatches(&dictionary, &sample, min_match_len),
+            try summarizeMatchesIndexed(&dictionary, &sample, index),
+        );
+    }
+
+    const repeated = "abcXabcY";
+    const repeated_index = try scratch.build(std.testing.allocator, repeated, 3);
+    try std.testing.expectEqual(
+        DictionaryMatchCandidate{ .offset = 0, .length = 3 },
+        repeated_index.findBest(repeated, "abcZ"),
+    );
 }
 
 test "dictionary patch codec round trips matched and literal bytes" {
