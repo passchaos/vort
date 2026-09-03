@@ -50,8 +50,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   history decode APIs, direct-output incremental decode for raw/RLE/compressed
   native frames (including dictionary, dictionary-set, no-content-size,
   bounded-history multi-block paths, per-block compressed-input retention when
-  a frame exceeds the configured buffer limit, and small-output scratch
-  fallback), zero-allocation native stream/block iterators, and
+  a frame exceeds the configured buffer limit, resumable zero-scratch output
+  for sequence-free raw/RLE/Huffman literal sections, and small-output scratch
+  fallback for sequence blocks), zero-allocation native stream/block iterators, and
   dependency-free standard full-dictionary generation from caller-selected
   history content using portable baseline entropy tables, plus first-stage
   corpus training of a complete literal Huffman alphabet and OF/ML/LL sequence

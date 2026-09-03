@@ -2542,6 +2542,10 @@ pub const NativeIncrementalFrameDecoder = struct {
     block_stream_content_hasher: std.hash.XxHash64 = std.hash.XxHash64.init(0),
     block_stream_checksum: [4]u8 = undefined,
     block_stream_checksum_read: usize = 0,
+    block_stream_literal_section: ?LiteralOnlySection = null,
+    block_stream_huffman_state: ?HuffmanLiteralDecodeState = null,
+    block_stream_literal_offset: usize = 0,
+    streamed_literal_block_count: usize = 0,
     input_received: usize = 0,
     output_written: usize = 0,
     skippable_output: []u8 = &.{},
@@ -2555,7 +2559,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     pub const Phase = enum { frame, output, direct_output, done };
 
     const InternalPhase = enum { frame, output, direct_output, block_stream, done };
-    const BlockStreamStage = enum { block_header, raw_payload, rle_payload, rle_output, compressed_payload, compressed_output, checksum, finished };
+    const BlockStreamStage = enum { block_header, raw_payload, rle_payload, rle_output, compressed_payload, compressed_literals, compressed_output, checksum, finished };
 
     pub const Options = struct {
         /// Maximum compressed bytes retained while waiting for validation.
@@ -2637,6 +2641,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.skippable_written = 0;
         self.skippable_total = 0;
         self.skippable_event_count = 0;
+        self.streamed_literal_block_count = 0;
     }
 
     pub fn snapshot(self: *const NativeIncrementalFrameDecoder) Snapshot {
@@ -2685,6 +2690,12 @@ pub const NativeIncrementalFrameDecoder = struct {
         return self.frame_scratch.capacity;
     }
 
+    /// Number of sequence-free compressed blocks emitted directly without a
+    /// decoded-block scratch buffer in this logical stream.
+    pub fn streamedLiteralBlockCount(self: *const NativeIncrementalFrameDecoder) usize {
+        return self.streamed_literal_block_count;
+    }
+
     pub fn diagnostics(self: *const NativeIncrementalFrameDecoder) core.StreamingDiagnostics {
         const snap = self.snapshot();
         return .{
@@ -2702,6 +2713,8 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (self.phase == .block_stream) {
             const err: Error = if ((self.block_stream_stage == .raw_payload and self.block_stream_block_remaining != 0 and self.blockStreamInput().len != 0) or
                 (self.block_stream_stage == .rle_output and self.block_stream_block_remaining != 0) or
+                (self.block_stream_stage == .compressed_literals and self.block_stream_literal_section != null and
+                    self.block_stream_literal_offset != self.block_stream_literal_section.?.regenerated_size) or
                 (self.block_stream_stage == .compressed_output and self.decoded_offset != self.decoded_scratch.items.len))
                 error.OutputTooSmall
             else
@@ -3050,6 +3063,32 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 };
                             }
                             const block = self.blockStreamInput()[0..self.block_stream_block_remaining];
+                            var literal_state = self.direct_sequence_state;
+                            const literal_section = parseLiteralsSection(block, &literal_state) catch |err| {
+                                self.recordError(.block_stream, err);
+                                return err;
+                            };
+                            if (literal_section.sequence_count == 0) {
+                                validateSupportedLiteralSection(literal_section) catch |err| {
+                                    self.recordError(.block_stream, err);
+                                    return err;
+                                };
+                                expectConsumedBlock(literal_section.sequence_payload_offset, block.len) catch |err| {
+                                    self.recordError(.block_stream, err);
+                                    return err;
+                                };
+                                try self.ensureBlockStreamOutputFits(literal_section.regenerated_size);
+                                self.direct_sequence_state = literal_state;
+                                self.block_stream_literal_section = literal_section;
+                                self.block_stream_huffman_state = initHuffmanLiteralDecodeState(block, literal_section) catch |err| {
+                                    self.recordError(.block_stream, err);
+                                    return err;
+                                };
+                                self.block_stream_literal_offset = 0;
+                                self.streamed_literal_block_count += 1;
+                                self.block_stream_stage = .compressed_literals;
+                                continue;
+                            }
                             var preflight_state = self.direct_sequence_state;
                             const initial_history_len = std.math.add(usize, self.direct_history.items.len, 0) catch {
                                 self.recordError(.block_stream, error.IntegerOverflow);
@@ -3088,6 +3127,57 @@ pub const NativeIncrementalFrameDecoder = struct {
                             self.decoded_offset = 0;
                             self.consumeBlockStreamInput(self.block_stream_block_remaining);
                             self.block_stream_stage = .compressed_output;
+                        },
+                        .compressed_literals => {
+                            const section = self.block_stream_literal_section orelse {
+                                self.recordError(.block_stream, error.CorruptFrame);
+                                return error.CorruptFrame;
+                            };
+                            if (self.block_stream_literal_offset == section.regenerated_size) {
+                                self.block_stream_literal_section = null;
+                                self.block_stream_huffman_state = null;
+                                self.block_stream_literal_offset = 0;
+                                self.consumeBlockStreamInput(self.block_stream_block_remaining);
+                                self.block_stream_block_remaining = 0;
+                                try self.finishBlockStreamBlock();
+                                continue;
+                            }
+                            if (output_written_step == output.len) {
+                                return .{
+                                    .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                    .status = .need_output,
+                                };
+                            }
+                            const n = @min(section.regenerated_size - self.block_stream_literal_offset, output.len - output_written_step);
+                            const dest = output[output_written_step..][0..n];
+                            switch (section.kind) {
+                                .raw => @memcpy(
+                                    dest,
+                                    self.blockStreamInput()[section.literal_payload_offset + self.block_stream_literal_offset ..][0..n],
+                                ),
+                                .rle => @memset(dest, self.blockStreamInput()[section.literal_payload_offset]),
+                                .compressed, .treeless => {
+                                    const huffman_state = &(self.block_stream_huffman_state orelse {
+                                        self.recordError(.block_stream, error.CorruptFrame);
+                                        return error.CorruptFrame;
+                                    });
+                                    copyLiteralsFromHuffmanState(
+                                        huffman_state,
+                                        &section,
+                                        self.block_stream_literal_offset,
+                                        dest,
+                                    ) catch |err| {
+                                        self.recordError(.block_stream, err);
+                                        return err;
+                                    };
+                                },
+                            }
+                            if (self.block_stream_content_checksum) self.block_stream_content_hasher.update(dest);
+                            try self.rememberDirectOutput(dest);
+                            self.block_stream_literal_offset += n;
+                            self.block_stream_frame_decoded_len += n;
+                            output_written_step += n;
+                            self.output_written += n;
                         },
                         .compressed_output => {
                             if (self.decoded_offset == self.decoded_scratch.items.len) {
@@ -3222,6 +3312,9 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.block_stream_content_checksum = false;
         self.block_stream_content_hasher = std.hash.XxHash64.init(0);
         self.block_stream_checksum_read = 0;
+        self.block_stream_literal_section = null;
+        self.block_stream_huffman_state = null;
+        self.block_stream_literal_offset = 0;
     }
 
     fn beginBlockStreamIfSupported(self: *NativeIncrementalFrameDecoder) Error!bool {
@@ -18525,6 +18618,42 @@ test "zstd literal-only writer reuses Huffman tree across blocks" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
+
+    const first_header_offset = (try inspectNativeFrameHeader(encoded)).payload_offset;
+    const first_payload_len: usize = @intCast(std.mem.readInt(u24, encoded[first_header_offset..][0..3], .little) >> 3);
+    const compressed_limit = first_payload_len + 3;
+    try std.testing.expect(compressed_limit < encoded.len);
+    var incremental = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_compressed_buffer_len = compressed_limit,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer incremental.deinit();
+    const incremental_output = try std.testing.allocator.alloc(u8, payload.len);
+    defer std.testing.allocator.free(incremental_output);
+    var incremental_input: usize = 0;
+    var incremental_written: usize = 0;
+    var saw_block_stream = false;
+    while (incremental.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, incremental_input + 997);
+        const output_end = @min(payload.len, incremental_written + 257);
+        const step_result = try incremental.step(
+            encoded[incremental_input..input_end],
+            incremental_output[incremental_written..output_end],
+        );
+        incremental_input += step_result.progress.input_read;
+        incremental_written += step_result.progress.output_written;
+        saw_block_stream = saw_block_stream or incremental.isBlockStreaming();
+        try std.testing.expectEqual(@as(usize, 0), incremental.decoded_scratch.items.len);
+        try std.testing.expect(incremental.compressedBufferCapacity() <= compressed_limit);
+        if (step_result.status == .need_input) try std.testing.expect(incremental_input < encoded.len);
+        if (step_result.status == .need_output) try std.testing.expect(incremental_written < payload.len);
+    }
+    try incremental.finish();
+    try std.testing.expect(saw_block_stream);
+    try std.testing.expectEqual(encoded.len, incremental_input);
+    try std.testing.expectEqual(payload.len, incremental_written);
+    try std.testing.expectEqualSlices(u8, payload, incremental_output);
 }
 
 test "zstd literal-only writer emits non-divisible four-stream Huffman" {
@@ -21194,6 +21323,50 @@ test "zstd native incremental decoder releases compressed blocks before frame en
     try std.testing.expectEqual(payload.len, output_offset);
     try std.testing.expectEqualSlices(u8, payload, &output);
     try std.testing.expectEqual(@as(usize, 0), decoder.frame_scratch.items.len);
+}
+
+test "zstd native incremental decoder directly streams sequence-free literal sections" {
+    const expected = "zzzzabcde";
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, expected.len, .{});
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 3, false);
+    try frame.append(std.testing.allocator, (4 << 3) | 1); // Four RLE literals.
+    try frame.append(std.testing.allocator, 'z');
+    try frame.append(std.testing.allocator, 0); // No sequences.
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 7, true);
+    try frame.append(std.testing.allocator, 5 << 3); // Five raw literals.
+    try frame.appendSlice(std.testing.allocator, "abcde");
+    try frame.append(std.testing.allocator, 0); // No sequences.
+    var checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, expected)), .little);
+    try frame.appendSlice(std.testing.allocator, &checksum);
+
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = expected.len,
+        .max_compressed_buffer_len = 9,
+        .max_decoded_buffer_len = expected.len,
+    });
+    defer decoder.deinit();
+    var output: [expected.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    var saw_block_stream = false;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(frame.items.len, input_offset + 4);
+        const output_end = @min(output.len, output_offset + 2);
+        const result = try decoder.step(frame.items[input_offset..input_end], output[output_offset..output_end]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        saw_block_stream = saw_block_stream or decoder.isBlockStreaming();
+        try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+        try std.testing.expect(decoder.compressedBufferCapacity() <= 9);
+        if (result.status == .need_input) try std.testing.expect(input_offset < frame.items.len);
+        if (result.status == .need_output) try std.testing.expect(output_offset < output.len);
+    }
+    try decoder.finish();
+    try std.testing.expect(saw_block_stream);
+    try std.testing.expectEqualSlices(u8, expected, &output);
 }
 
 test "zstd native incremental decoder streams raw then compressed blocks" {

@@ -300,6 +300,9 @@ Recommended next comparison steps:
   requiring the optional upstream checkout. Every generated frame is now also
   decoded incrementally with a 128 KiB-plus-header compressed-input limit; all
   5,400 pass, and 714 frames exceed that limit and exercise block streaming.
+  Sequence-free raw/RLE/Huffman literal sections inside compressed blocks now
+  retain a persistent literal/Huffman cursor and write directly into tiny caller
+  buffers without `decoded_scratch`; the same suite exercises 132 such blocks.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

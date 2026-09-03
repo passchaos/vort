@@ -8679,6 +8679,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   enter the new block-streaming state, which releases raw input progressively,
   retains one byte for RLE, and buffers at most one compressed block while
   preserving cross-block entropy/repeat/history state.
+  Sequence-free compressed blocks now keep their parsed literal section and
+  Huffman cursor across calls, streaming raw/RLE/Huffman literals into tiny
+  caller buffers with no decoded-block scratch. The fixed upstream campaigns
+  exercise this new path on 132 blocks while retaining the 5,400/5,400 and
+  64/64 compatibility results.
   Fixed an incremental DEFLATE wrapper boundary exposed by the full root suite:
   when the final match filled caller output exactly, the raw decoder remained in
   `match_copy` and zlib/gzip returned `need_output` before consuming an already

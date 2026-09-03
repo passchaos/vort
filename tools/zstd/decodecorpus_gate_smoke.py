@@ -49,6 +49,7 @@ print(
     f'decodecorpus_incremental_cases={count} decodecorpus_block_stream_cases={count // 2} '
     f'decodecorpus_max_compressed_buffered=131104 '
     f'decodecorpus_max_compressed_capacity=131104 '
+    f'decodecorpus_streamed_literal_blocks=3 '
     f'sequence_mode_mask={mode:#x} combined_mode_mask={combined:#x}',
     file=sys.stderr,
 )
@@ -90,6 +91,7 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_block_stream_cases": "0",
             "decodecorpus_max_compressed_buffered": "64",
             "decodecorpus_max_compressed_capacity": "64",
+            "decodecorpus_streamed_literal_blocks": "1",
             "unsupported": "0",
             "sequence_mode_mask": "0x5",
             "combined_mode_mask": "0x5",
