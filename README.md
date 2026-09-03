@@ -525,7 +525,8 @@ var lz4_bounded_incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOpti
 defer lz4_bounded_incremental.deinit();
 // Skippable frames retain only their 8-byte header; their metadata payload can
 // exceed max_compressed_buffer_len and is discarded or copied into caller-owned
-// skippable_output incrementally. Data frames still use the configured frame cap.
+// skippable_output incrementally. Oversized data frames switch to block-bounded
+// input; compressed LZ4 blocks require the cap to hold one encoded block.
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
 const lz4_dict = vort.Lz4NativeDictionary.init(0x1234, "previous lz4 history");
 const lz4_dict_options: vort.Lz4NativeFrameOptions = .{ .content_checksum = false };
