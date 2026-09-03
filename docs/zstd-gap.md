@@ -255,6 +255,17 @@ High-byte literal writer note:
 
 Recommended next comparison steps:
 
+- The runtime `run-zstd-compat-probe` matrix now includes compression level 22,
+  four real source-file rows when the local zstd checkout is available, 15
+  advanced parameter frames (content-size/checksum flags, window logs 10/21,
+  long-distance matching, and all nine standard strategies), four unknown-size
+  streaming/flush frames, four upstream golden-decompression frames, and three
+  upstream golden error frames rejected through both size preflight and decode.
+  The optional upstream files are read from `~/Work`-relative paths and do not
+  make clean checkouts depend on those repositories. The current local run
+  covers 246 cases with zero unsupported frames against libzstd 1.5.5; this is
+  stronger compatibility evidence, but not proof of arbitrary-frame parity.
+
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-
    literal/single-predefined-sequence shape before broadening levels/corpora.
