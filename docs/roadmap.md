@@ -4,19 +4,23 @@ This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
 architecture blindly.
 
-### Current completion audit (2026-08-30)
+### Current completion audit (2026-09-04)
 
 The long-term objective is **not complete**. Current evidence still leaves these
 major gaps before Vort can claim broad industry-best parity:
 
-- Brotli general-purpose compression is not implemented; production encoding
-  currently covers stored streams, single-byte RLE, and externally gated short
-  alternating patterns only.
+- Full libbrotli-class general-purpose compression is not implemented. The
+  production encoder now covers stored streams, compressed-or-stored
+  planner-backed LZ77/Huffman streams, bounded multi-meta-block input, and a
+  vetted static-dictionary subset, but still lacks libbrotli's complete adaptive
+  block splitting, context modeling, and quality/ratio range.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
-  entropy block switching, static dictionaries, and consecutive compressed
-  meta-blocks. Arbitrary upstream Brotli streams still need broader decoder
-  coverage; the general fallback facade buffers a bounded complete payload.
+  entropy block switching, static dictionaries, consecutive compressed
+  meta-blocks, and the full 256 literal/distance block-type ranges. Arbitrary
+  upstream Brotli streams still need broader decoder coverage, command block
+  types remain capped at 32, and the general fallback facade buffers a bounded
+  complete payload.
 - Incremental DEFLATE source and JSON throughput now reach or exceed the local
   zlib-ng level-6 comparison on the locked 256 KiB fixtures, while broader
   real-corpus, ratio, memory, and cross-platform parity still needs evidence.
@@ -8734,3 +8738,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   reads and validates the four-byte block checksum, and only then drains decoded
   bytes to the caller. A regression pins a cap exactly equal to compressed
   payload length and verifies corrupt checksums produce zero caller output.
+  Expanded Brotli literal block-type storage from the measured 64-entry tier to
+  the complete RFC 7932 range of 256. The additional state is limited to literal
+  context modes/map entries and the small block-switch tree; the independently
+  bounded 256 literal Huffman-tree slots are unchanged. A handcrafted stream
+  declares all 256 types, advances through type 255, selects its distinct
+  literal tree, and round-trips through summary, allocating, and one-byte-input /
+  three-byte-output decode. The upstream differential also sends this exact wire
+  through system libbrotli and all 56 progressive chunk combinations, preventing
+  a self-generated/self-decoded fixture from serving as the only evidence. The
+  256-count truncated header remains `TruncatedFrame`, and the test writer rejects
+  the unrepresentable 257 boundary. Command block types remain at the measured
+  32-entry implementation tier pending a compact tree-storage design or real
+  wider upstream wire.

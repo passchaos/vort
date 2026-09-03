@@ -162,11 +162,12 @@ Open items include:
 - Platform/performance matrix: architecture-specific acceleration, memory-use
   dashboards, and ReleaseFast library-level benchmark evidence remain incomplete.
 
-The Brotli progressive decoder currently retains 64 literal block types, 32
-command block types, and the complete 256-entry distance type/tree and literal
-tree ranges. The literal tier is backed by a real libbrotli quality-11 Graphviz
-stream that uses more than 32 types; it is not yet the complete 256-type RFC
-range.
+The Brotli progressive decoder currently retains the complete 256-entry literal
+and distance block-type/context-tree ranges, while command block types remain at
+a measured 32-entry tier. A real libbrotli quality-11 Graphviz stream exercises
+more than 32 literal types, and a handcrafted maximum-width stream is
+cross-decoded by libbrotli plus Vort's one-shot and byte-progressive paths. The
+remaining block-type compatibility limit is the command family.
 
 ## Next recommended work
 
