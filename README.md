@@ -383,6 +383,7 @@ zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate  # optional runtim
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate  # optional runtime libzstd comparison
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-gate  # libzstd encode comparison and level-policy gate
 zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate  # parallel-vs-serial multi-block scheduling
+zig build run-zstd-large-sequence-probe  # >512-sequence wide-block encode plus Vort/libzstd decode
 zig build run-zstd-compat-probe  # optional system-libzstd decode matrix
 # Optional deep zstd upstream decodecorpus differential (paired z*.zst / z* files):
 zig build -Doptimize=ReleaseFast run-zstd-compat-probe -- \

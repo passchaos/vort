@@ -58,6 +58,10 @@ const max_bootstrap_sequence_count = 128;
 // capacity separate so a complete linear/DP plan is not discarded solely due
 // to the recursion-oriented stack bound.
 const max_native_sequence_count = 512;
+// A Zstd block is bounded to 128 KiB and every LZ77 sequence consumes at least
+// one minimum-length match. Keep the large hash-parser path bounded by that
+// format-derived maximum instead of raising the small-path stack arrays.
+const max_large_native_sequence_count = std.compress.zstd.block_size_max / lz77.min_match_len;
 const min_compressed_sequence_table_count = 12;
 const max_predefined_sequence_states = 64;
 const mixed_match_path_search_budget = 512;
@@ -9835,6 +9839,8 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     defer lazy_tokens.deinit(allocator);
     var optimal_scratch: lz77.OptimalScratch = .{};
     defer optimal_scratch.deinit(allocator);
+    var large_sequence_scratch: LargeSequenceScratch = .{};
+    defer large_sequence_scratch.deinit(allocator);
     var duplicate_index: DuplicateMatchIndex = undefined;
     const duplicate_index_ptr: ?*DuplicateMatchIndex = if (block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len) blk: {
         duplicate_index.build(block);
@@ -9875,7 +9881,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     const greedy_ok = if (block.len <= 32 * 1024)
         try emitGreedyHashMatchCompressedBlockReuse(allocator, &candidate, block, last, &greedy_tokens)
     else
-        try emitHashMatchCompressedBlock(allocator, &candidate, block, last, .greedy);
+        try emitHashMatchCompressedBlockWithSequenceScratch(allocator, &candidate, block, last, .greedy, &large_sequence_scratch);
     try retainShortestCandidate(allocator, greedy_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
@@ -9886,7 +9892,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
         if (block.len <= 32 * 1024)
             try emitLazyHashMatchCompressedBlockReuse(allocator, &candidate, block, last, &lazy_tokens)
         else
-            try emitHashMatchCompressedBlock(allocator, &candidate, block, last, .lazy)
+            try emitHashMatchCompressedBlockWithSequenceScratch(allocator, &candidate, block, last, .lazy, &large_sequence_scratch)
     else
         false;
     try retainShortestCandidate(allocator, lazy_ok, candidate.items, &best);
@@ -9907,7 +9913,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     const pre_beam_best_len = best.items.len;
     var rep_beam_len: ?usize = null;
     if (rep_beam_stats) |stats| {
-        const rep_beam_ok = try emitHashTokenSequenceBlock(allocator, &candidate, block, last, rep_beam_scratch.reversed.items, stats);
+        const rep_beam_ok = try emitHashTokenSequenceBlockReuse(allocator, &candidate, block, last, rep_beam_scratch.reversed.items, stats, &large_sequence_scratch);
         if (rep_beam_ok) rep_beam_len = candidate.items.len;
         try retainShortestCandidate(allocator, rep_beam_ok, candidate.items, &best);
     }
@@ -9920,7 +9926,14 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
             (pre_beam_best_len != 0 and rep_beam_len != null and rep_beam_len.? * 32 <= pre_beam_best_len * 31));
     if (!beam_is_decisive) {
         candidate.clearRetainingCapacity();
-        const optimal_ok = try emitOptimalHashMatchCompressedBlockReuse(allocator, &candidate, block, last, &optimal_scratch);
+        const optimal_ok = try emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch(
+            allocator,
+            &candidate,
+            block,
+            last,
+            &optimal_scratch,
+            &large_sequence_scratch,
+        );
         try retainShortestCandidate(allocator, optimal_ok, candidate.items, &best);
     }
 
@@ -10031,6 +10044,7 @@ pub const NativeMatchStageScratch = struct {
     lazy_tokens: std.ArrayList(lz77.Token) = .empty,
     optimal: lz77.OptimalScratch = .{},
     rep_beam: lz77.RepBeamScratch = .{},
+    large_sequences: LargeSequenceScratch = .{},
     duplicate_index: ?*DuplicateMatchIndex = null,
     duplicate_index_input_ptr: ?[*]const u8 = null,
     duplicate_index_input_len: usize = 0,
@@ -10038,6 +10052,7 @@ pub const NativeMatchStageScratch = struct {
 
     pub fn deinit(self: *NativeMatchStageScratch, allocator: std.mem.Allocator) void {
         if (self.duplicate_index) |index| allocator.destroy(index);
+        self.large_sequences.deinit(allocator);
         self.optimal.deinit(allocator);
         self.rep_beam.deinit(allocator);
         self.lazy_tokens.deinit(allocator);
@@ -10131,37 +10146,37 @@ pub fn benchmarkNativeMatchStage(
             const parser_options = zstdHashParserOptions(block.len);
             const stats = try double_fast_match.planReuse(&scratch.double_fast_tokens, allocator, block, parser_options);
             sequence_count = stats.matches;
-            break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, scratch.double_fast_tokens.items, stats);
+            break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, scratch.double_fast_tokens.items, stats, &scratch.large_sequences);
         } else false,
         .greedy => if (block.len <= 32 * 1024) blk: {
             const parser_options = zstdHashParserOptions(block.len);
             const stats = try lz77.hashGreedyPlanAutoTinyReuse(&scratch.greedy_tokens, allocator, block, parser_options);
             sequence_count = stats.matches;
-            break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, scratch.greedy_tokens.items, stats);
+            break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, scratch.greedy_tokens.items, stats, &scratch.large_sequences);
         } else blk: {
             const plan = try lz77.hashGreedyPlanAutoTinyAlloc(allocator, block, zstdHashParserOptions(block.len));
             defer plan.deinit(allocator);
             sequence_count = plan.stats.matches;
-            break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, plan.tokens, plan.stats);
+            break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, plan.tokens, plan.stats, &scratch.large_sequences);
         },
         .lazy => if (match_search_budget >= lazy_match_min_search_budget)
             if (block.len <= 32 * 1024) blk: {
                 const parser_options = zstdHashParserOptions(block.len);
                 const stats = try lz77.hashLazyGreedyPlanTinyReuse(&scratch.lazy_tokens, allocator, block, parser_options);
                 sequence_count = stats.matches;
-                break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, scratch.lazy_tokens.items, stats);
+                break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, scratch.lazy_tokens.items, stats, &scratch.large_sequences);
             } else blk: {
                 const plan = try lz77.lazyGreedyPlanAlloc(allocator, block, zstdHashParserOptions(block.len));
                 defer plan.deinit(allocator);
                 sequence_count = plan.stats.matches;
-                break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, plan.tokens, plan.stats);
+                break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, plan.tokens, plan.stats, &scratch.large_sequences);
             }
         else
             false,
         .optimal => blk: {
             const stats = try lz77.optimalPlanReuse(&scratch.optimal, allocator, block, zstdHashParserOptions(block.len));
             sequence_count = stats.matches;
-            break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, scratch.optimal.tokens.items, stats);
+            break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, scratch.optimal.tokens.items, stats, &scratch.large_sequences);
         },
         .rep_beam => blk: {
             const stats = lz77.optimalRepBeamPlanReuse(&scratch.rep_beam, allocator, block, zstdHashParserOptions(block.len)) catch |err| switch (err) {
@@ -10169,7 +10184,7 @@ pub fn benchmarkNativeMatchStage(
                 else => return err,
             };
             sequence_count = stats.matches;
-            break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, scratch.rep_beam.reversed.items, stats);
+            break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, scratch.rep_beam.reversed.items, stats, &scratch.large_sequences);
         },
         .repeated => try emitRepeatedPatternCompressedBlock(allocator, &scratch.candidate, block, last),
         .multi_duplicate => if (match_search_budget >= multi_duplicate_min_search_budget)
@@ -10222,6 +10237,19 @@ fn retainShortestCandidate(allocator: std.mem.Allocator, ok: bool, candidate: []
 const ZstdHashParser = enum { greedy, lazy, optimal };
 
 fn emitHashMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, parser: ZstdHashParser) Error!bool {
+    var scratch: LargeSequenceScratch = .{};
+    defer scratch.deinit(allocator);
+    return try emitHashMatchCompressedBlockWithSequenceScratch(allocator, out, block, last, parser, &scratch);
+}
+
+fn emitHashMatchCompressedBlockWithSequenceScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    parser: ZstdHashParser,
+    sequence_scratch: *LargeSequenceScratch,
+) Error!bool {
     const parser_options: lz77.GreedyOptions = .{
         .window_len = @min(block.len, lz77.default_window_len),
         .max_chain = 128,
@@ -10238,7 +10266,7 @@ fn emitHashMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
         .optimal => try lz77.optimalPlanAlloc(allocator, block, parser_options),
     };
     defer plan.deinit(allocator);
-    return try emitHashTokenSequenceBlock(allocator, out, block, last, plan.tokens, plan.stats);
+    return try emitHashTokenSequenceBlockReuse(allocator, out, block, last, plan.tokens, plan.stats, sequence_scratch);
 }
 
 fn emitGreedyHashMatchCompressedBlockReuse(
@@ -10290,6 +10318,26 @@ fn emitOptimalHashMatchCompressedBlockReuse(
     last: bool,
     scratch: *lz77.OptimalScratch,
 ) Error!bool {
+    var sequence_scratch: LargeSequenceScratch = .{};
+    defer sequence_scratch.deinit(allocator);
+    return try emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch(
+        allocator,
+        out,
+        block,
+        last,
+        scratch,
+        &sequence_scratch,
+    );
+}
+
+fn emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    scratch: *lz77.OptimalScratch,
+    sequence_scratch: *LargeSequenceScratch,
+) Error!bool {
     const parser_options: lz77.GreedyOptions = .{
         .window_len = @min(block.len, lz77.default_window_len),
         .max_chain = 128,
@@ -10301,7 +10349,7 @@ fn emitOptimalHashMatchCompressedBlockReuse(
         .lazy_min_gain = 1,
     };
     const stats = try lz77.optimalPlanReuse(scratch, allocator, block, parser_options);
-    return try emitHashTokenSequenceBlock(allocator, out, block, last, scratch.tokens.items, stats);
+    return try emitHashTokenSequenceBlockReuse(allocator, out, block, last, scratch.tokens.items, stats, sequence_scratch);
 }
 
 test "zstd reusable greedy hash emitter matches allocating wire" {
@@ -10385,6 +10433,154 @@ test "zstd hash emitter supports more than bootstrap sequence capacity" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
+}
+
+test "zstd hash emitter uses dynamic scratch beyond native stack capacity" {
+    const sequence_count = max_native_sequence_count + 1;
+    const block_len = 32 * 1024 + 1;
+    var payload: [block_len]u8 = undefined;
+    var tokens: [block_len - sequence_count * 3]lz77.Token = undefined;
+    @memcpy(payload[0..4], "abcd");
+    for ("abcd", 0..) |byte, i| tokens[i] = .{ .literal = byte };
+    var payload_len: usize = 4;
+    var token_len: usize = 4;
+    for (0..sequence_count) |_| {
+        @memcpy(payload[payload_len..][0..4], "abcd");
+        payload_len += 4;
+        tokens[token_len] = .{ .match = .{ .length = 4, .distance = 4 } };
+        token_len += 1;
+    }
+    var state: u32 = 0x6a09_e667;
+    while (payload_len < payload.len) {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        const byte: u8 = @truncate(state >> 24);
+        payload[payload_len] = byte;
+        tokens[token_len] = .{ .literal = byte };
+        payload_len += 1;
+        token_len += 1;
+    }
+    const stats: lz77.PlanStats = .{
+        .literals = block_len - sequence_count * 4,
+        .matches = sequence_count,
+        .matched_bytes = sequence_count * 4,
+    };
+    try std.testing.expectEqual(stats.tokenCount(), token_len);
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{ .content_checksum = false });
+    try std.testing.expect(try emitHashTokenSequenceBlock(std.testing.allocator, &frame, &payload, true, tokens[0..token_len], stats));
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    const modes = try inspectNativeFrameBlockSequenceModes(frame.items, first_block);
+    try std.testing.expectEqual(sequence_count, modes.sequence_count);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, modes.match_length_mode);
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, input_tokens: []const lz77.Token, input_stats: lz77.PlanStats) !void {
+            var out: std.ArrayList(u8) = .empty;
+            defer out.deinit(allocator);
+            try out.appendSlice(allocator, "prefix");
+            _ = emitHashTokenSequenceBlock(allocator, &out, input, true, input_tokens, input_stats) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix", out.items);
+                return err;
+            };
+            try std.testing.expectEqualSlices(u8, "prefix", out.items[0.."prefix".len]);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ &payload, tokens[0..token_len], stats });
+}
+
+test "zstd dynamic hash emitter writes three-byte sequence counts" {
+    const sequence_count = 0x7f00;
+    const block_len = 4 + sequence_count * 4;
+    const payload = try std.testing.allocator.alloc(u8, block_len);
+    defer std.testing.allocator.free(payload);
+    const tokens = try std.testing.allocator.alloc(lz77.Token, 4 + sequence_count);
+    defer std.testing.allocator.free(tokens);
+
+    @memcpy(payload[0..4], "abcd");
+    for ("abcd", 0..) |byte, i| tokens[i] = .{ .literal = byte };
+    for (0..sequence_count) |i| {
+        @memcpy(payload[4 + i * 4 ..][0..4], "abcd");
+        tokens[4 + i] = .{ .match = .{ .length = 4, .distance = 4 } };
+    }
+    const stats: lz77.PlanStats = .{
+        .literals = 4,
+        .matches = sequence_count,
+        .matched_bytes = sequence_count * 4,
+    };
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{ .content_checksum = false });
+    try std.testing.expect(try emitHashTokenSequenceBlock(std.testing.allocator, &frame, payload, true, tokens, stats));
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    const modes = try inspectNativeFrameBlockSequenceModes(frame.items, first_block);
+    try std.testing.expectEqual(sequence_count, modes.sequence_count);
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "zstd dynamic hash emitter rejects impossible sequence count without mutation" {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+    try out.appendSlice(std.testing.allocator, "prefix");
+    try std.testing.expect(!try emitHashTokenSequenceBlock(
+        std.testing.allocator,
+        &out,
+        "tiny",
+        true,
+        &.{},
+        .{ .matches = max_large_native_sequence_count + 1 },
+    ));
+    try std.testing.expectEqualSlices(u8, "prefix", out.items);
+}
+
+test "zstd wide generated parser candidates exceed native stack capacity" {
+    const payload = try std.testing.allocator.alloc(u8, std.compress.zstd.block_size_max);
+    defer std.testing.allocator.free(payload);
+    var state: u32 = 0xfeed_beef;
+    for (payload, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(state >> 16);
+    }
+
+    var scratch: NativeMatchStageScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    inline for (.{ NativeMatchStage.double_fast, .greedy, .lazy, .optimal }) |stage| {
+        _ = try benchmarkPrepareNativeMatchStageScratch(std.testing.allocator, payload, &scratch);
+        const result = try benchmarkNativeMatchStage(std.testing.allocator, payload, true, 96, stage, &scratch);
+        try std.testing.expect(result.sequence_count > max_native_sequence_count);
+        try std.testing.expect(result.available);
+        try std.testing.expect(result.encoded_len < payload.len);
+    }
+}
+
+test "zstd large predefined planner matches small planner" {
+    var values: [max_native_sequence_count]usize = undefined;
+    var large_states: [max_native_sequence_count]u8 = undefined;
+    var viable_masks: [max_native_sequence_count]u64 = undefined;
+    var state: u32 = 0x510e_527f;
+    const cases = [_]struct { []const SequenceSymbol, u8, usize }{
+        .{ &sequence_predefined.literal_symbols, 0, 4096 },
+        .{ &sequence_predefined.offset_symbols, 2, 32 * 1024 },
+        .{ &sequence_predefined.match_symbols, 0, 1024 },
+    };
+    for (cases) |case| {
+        for (&values) |*value| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            value.* = (state >> 16) % case[2];
+        }
+        const expected = try planPredefinedSequenceValues(&values, case[0], case[1]);
+        const actual = planLargePredefinedSequenceValues(&values, case[0], case[1], &large_states, &viable_masks);
+        try std.testing.expectEqual(expected != null, actual);
+        if (expected) |plan| try std.testing.expectEqualSlices(u8, plan.states[0..plan.len], &large_states);
+    }
 }
 
 test "zstd native match stage benchmark mirrors production emitters" {
@@ -10932,7 +11128,68 @@ fn emitHashTokenSequenceBlock(
     tokens: []const lz77.Token,
     stats: lz77.PlanStats,
 ) Error!bool {
-    if (stats.matches < 2 or stats.matches > max_native_sequence_count) return false;
+    var scratch: LargeSequenceScratch = .{};
+    defer scratch.deinit(allocator);
+    return try emitHashTokenSequenceBlockReuse(allocator, out, block, last, tokens, stats, &scratch);
+}
+
+const LargeSequenceScratch = struct {
+    values: std.ArrayList(usize) = .empty,
+    states: std.ArrayList(u8) = .empty,
+    viable_masks: std.ArrayList(u64) = .empty,
+    literals_prefix: std.ArrayList(u8) = .empty,
+    payload: std.ArrayList(u8) = .empty,
+    sequence_bits: std.ArrayList(u8) = .empty,
+
+    fn deinit(self: *LargeSequenceScratch, allocator: std.mem.Allocator) void {
+        self.sequence_bits.deinit(allocator);
+        self.payload.deinit(allocator);
+        self.literals_prefix.deinit(allocator);
+        self.viable_masks.deinit(allocator);
+        self.states.deinit(allocator);
+        self.values.deinit(allocator);
+        self.* = .{};
+    }
+};
+
+fn emitHashTokenSequenceBlockReuse(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    tokens: []const lz77.Token,
+    stats: lz77.PlanStats,
+    scratch: *LargeSequenceScratch,
+) Error!bool {
+    if (stats.matches < 2 or
+        stats.matches > max_large_native_sequence_count or
+        stats.matches > block.len / lz77.min_match_len) return false;
+    if (stats.matches > max_native_sequence_count) {
+        // Preserve the compact-block wire and allocation profile. The dynamic
+        // path exists for wide Zstd blocks whose natural sequence count cannot
+        // fit the legacy stack scratch. Limit this first slice to terminal
+        // blocks until the independent block planner carries repcodes across
+        // compressed blocks.
+        if (!last or block.len <= 32 * 1024) return false;
+        const value_count = std.math.mul(usize, stats.matches, 4) catch return error.IntegerOverflow;
+        try scratch.values.resize(allocator, value_count);
+        const literal_lens = scratch.values.items[0..stats.matches];
+        const offsets = scratch.values.items[stats.matches .. stats.matches * 2];
+        const match_lens = scratch.values.items[stats.matches * 2 .. stats.matches * 3];
+        const literal_ends = scratch.values.items[stats.matches * 3 .. stats.matches * 4];
+        return try emitLargeHashTokenSequenceBlock(
+            allocator,
+            out,
+            block,
+            last,
+            tokens,
+            literal_lens,
+            offsets,
+            match_lens,
+            literal_ends,
+            scratch,
+        );
+    }
     var literal_lens: [max_native_sequence_count]usize = undefined;
     var offsets: [max_native_sequence_count]usize = undefined;
     var match_lens: [max_native_sequence_count]usize = undefined;
@@ -10955,6 +11212,141 @@ fn emitHashTokenSequenceBlock(
     };
     if (position != block.len or count < 2) return false;
     return try emitBestSequenceCompressedBlock(allocator, out, block, last, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], literal_start);
+}
+
+fn emitLargeHashTokenSequenceBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    tokens: []const lz77.Token,
+    literal_lens: []usize,
+    offsets: []usize,
+    match_lens: []usize,
+    literal_ends: []usize,
+    scratch: *LargeSequenceScratch,
+) Error!bool {
+    const output_start = out.items.len;
+    errdefer out.items.len = output_start;
+    const sequence_count = literal_lens.len;
+    if (sequence_count <= max_native_sequence_count or
+        sequence_count > max_large_native_sequence_count or
+        offsets.len != sequence_count or
+        match_lens.len != sequence_count or
+        literal_ends.len != sequence_count) return false;
+
+    var position: usize = 0;
+    var literal_start: usize = 0;
+    var count: usize = 0;
+    for (tokens) |token| switch (token) {
+        .literal => {
+            position = std.math.add(usize, position, 1) catch return false;
+            if (position > block.len) return false;
+        },
+        .match => |match| {
+            if (count == sequence_count or match.length < lz77.min_match_len or match.distance == 0) return false;
+            literal_lens[count] = position - literal_start;
+            offsets[count] = match.distance;
+            match_lens[count] = match.length;
+            position = std.math.add(usize, position, match.length) catch return false;
+            if (position > block.len) return false;
+            literal_ends[count] = position;
+            literal_start = position;
+            count += 1;
+        },
+    };
+    if (position != block.len or count != sequence_count) return false;
+
+    return try emitLargePredefinedSequenceCompressedBlock(
+        allocator,
+        out,
+        block,
+        last,
+        literal_lens,
+        offsets,
+        match_lens,
+        literal_ends,
+        literal_start,
+        scratch,
+    );
+}
+
+fn emitLargePredefinedSequenceCompressedBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    scratch: *LargeSequenceScratch,
+) Error!bool {
+    const sequence_count = literal_lens.len;
+    if (sequence_count <= max_native_sequence_count or
+        sequence_count > max_large_native_sequence_count or
+        offsets.len != sequence_count or
+        match_lens.len != sequence_count or
+        literal_ends.len != sequence_count) return false;
+
+    scratch.literals_prefix.clearRetainingCapacity();
+    _ = try emitSequenceLiteralsSection(
+        allocator,
+        &scratch.literals_prefix,
+        block,
+        literal_lens,
+        literal_ends,
+        tail_start,
+    );
+
+    const state_len = std.math.mul(usize, sequence_count, 3) catch return error.IntegerOverflow;
+    try scratch.states.resize(allocator, state_len);
+    try scratch.viable_masks.resize(allocator, sequence_count);
+    const literal_states = scratch.states.items[0..sequence_count];
+    const offset_states = scratch.states.items[sequence_count .. sequence_count * 2];
+    const match_states = scratch.states.items[sequence_count * 2 .. sequence_count * 3];
+    if (!planLargePredefinedSequenceValues(literal_lens, &sequence_predefined.literal_symbols, 0, literal_states, scratch.viable_masks.items) or
+        !planLargePredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2, offset_states, scratch.viable_masks.items) or
+        !planLargePredefinedSequenceValues(match_lens, &sequence_predefined.match_symbols, 0, match_states, scratch.viable_masks.items)) return false;
+
+    scratch.payload.clearRetainingCapacity();
+    try scratch.payload.appendSlice(allocator, scratch.literals_prefix.items);
+    try emitSequenceCount(allocator, &scratch.payload, sequence_count);
+    try scratch.payload.append(allocator, 0x00); // LL, OF, and ML all use Predefined_Mode.
+
+    scratch.sequence_bits.clearRetainingCapacity();
+    var writer: ReverseBitstreamWriter = .{};
+    var i = sequence_count;
+    while (i > 0) {
+        i -= 1;
+        const literal_symbol = sequence_predefined.literal_symbols[literal_states[i]];
+        const offset_symbol = sequence_predefined.offset_symbols[offset_states[i]];
+        const match_symbol = sequence_predefined.match_symbols[match_states[i]];
+
+        if (i + 1 < sequence_count) {
+            if (offset_states[i + 1] < offset_symbol.next_state or
+                match_states[i + 1] < match_symbol.next_state or
+                literal_states[i + 1] < literal_symbol.next_state) return error.CorruptFrame;
+            try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, offset_states[i + 1] - offset_symbol.next_state, offset_symbol.state_bits);
+            try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, match_states[i + 1] - match_symbol.next_state, match_symbol.state_bits);
+            try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, literal_states[i + 1] - literal_symbol.next_state, literal_symbol.state_bits);
+        }
+        try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, literal_lens[i] - literal_symbol.base, literal_symbol.additional_bits);
+        try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, match_lens[i] - match_symbol.base, match_symbol.additional_bits);
+        try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, offsets[i] - offset_symbol.base, offset_symbol.additional_bits);
+    }
+    try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, match_states[0], 6);
+    try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, offset_states[0], 5);
+    try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, literal_states[0], 6);
+    try writer.finish(allocator, &scratch.sequence_bits);
+    try scratch.payload.appendSlice(allocator, scratch.sequence_bits.items);
+
+    const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
+    if (scratch.payload.items.len + 3 >= raw_block_len) return false;
+    try emitBlockHeader(allocator, out, 2, scratch.payload.items.len, last);
+    try out.appendSlice(allocator, scratch.payload.items);
+    return true;
 }
 
 fn emitDictionaryMatchCompressedBlock(
@@ -14215,6 +14607,20 @@ const ReverseBitstreamWriter = struct {
     }
 };
 
+fn addCheckedReverseBits(
+    writer: *ReverseBitstreamWriter,
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    value: usize,
+    bits: u8,
+) Error!void {
+    if (bits > @bitSizeOf(usize)) return error.CorruptFrame;
+    if (bits == 0) {
+        if (value != 0) return error.CorruptFrame;
+    } else if (value >= (@as(usize, 1) << @intCast(bits))) return error.CorruptFrame;
+    try writer.addBits(allocator, out, value, bits);
+}
+
 fn emitFseHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: *const SmallHuffmanLiteralPlan) Error!bool {
     var weights: [255]u8 = undefined;
     // Zstandard does not serialize the final Huffman weight. The decoder
@@ -15891,6 +16297,70 @@ fn planPredefinedSequenceValues(values: []const usize, symbols: []const Sequence
         if (plan.states[i + 1] >= symbols.len) return null;
     }
     return plan;
+}
+
+fn planLargePredefinedSequenceValues(
+    values: []const usize,
+    symbols: []const SequenceSymbol,
+    min_additional_bits: u8,
+    states: []u8,
+    viable_masks: []u64,
+) bool {
+    if (values.len == 0 or
+        values.len > max_large_native_sequence_count or
+        states.len != values.len or
+        viable_masks.len != values.len or
+        symbols.len == 0 or
+        symbols.len > max_predefined_sequence_states) return false;
+
+    // One viability mask per input value is enough to reconstruct the same
+    // lowest-state path as the small planner. This keeps temporary planning
+    // memory linear in the sequence count instead of count * table states.
+    var viable_next: u64 = 0;
+    var pos = values.len;
+    while (pos > 0) {
+        pos -= 1;
+        var viable_current: u64 = 0;
+        var encodable_states = predefinedEncodableStateMask(values[pos], symbols, min_additional_bits);
+        while (encodable_states != 0) {
+            const state: usize = @ctz(encodable_states);
+            encodable_states &= encodable_states - 1;
+            if (pos == values.len - 1) {
+                viable_current |= @as(u64, 1) << @intCast(state);
+                continue;
+            }
+
+            const symbol = symbols[state];
+            const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
+            const first_next: usize = symbol.next_state;
+            const end_next = @min(symbols.len, first_next + transition_count);
+            if (first_next >= end_next) continue;
+            const width = end_next - first_next;
+            const low_mask = if (width == 64) std.math.maxInt(u64) else (@as(u64, 1) << @intCast(width)) - 1;
+            const possible = viable_next & (low_mask << @intCast(first_next));
+            if (possible == 0) continue;
+            viable_current |= @as(u64, 1) << @intCast(state);
+        }
+        viable_next = viable_current;
+        viable_masks[pos] = viable_current;
+    }
+
+    if (viable_next == 0) return false;
+    states[0] = @intCast(@ctz(viable_next));
+    for (0..values.len - 1) |i| {
+        const symbol = symbols[states[i]];
+        const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
+        const first_next: usize = symbol.next_state;
+        const end_next = @min(symbols.len, first_next + transition_count);
+        if (first_next >= end_next) return false;
+        const width = end_next - first_next;
+        const low_mask = if (width == 64) std.math.maxInt(u64) else (@as(u64, 1) << @intCast(width)) - 1;
+        const possible = viable_masks[i + 1] & (low_mask << @intCast(first_next));
+        if (possible == 0) return false;
+        states[i + 1] = @intCast(@ctz(possible));
+        if (states[i + 1] >= symbols.len) return false;
+    }
+    return true;
 }
 
 fn planPredefinedSequenceValuesReference(values: []const usize, symbols: []const SequenceSymbol, min_additional_bits: u8) Error!?PredefinedSequencePlan {

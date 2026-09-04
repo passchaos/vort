@@ -12,6 +12,7 @@ COLUMNS = [
     "rounds", "warmup", "median_ns", "ns_per_block", "checksum",
 ]
 CASES = {"text", "json", "binary"}
+WIDE_SEQUENCE_CASE = "wide_sequences"
 CANDIDATES = {"primary", "adaptive_0", "adaptive_1"}
 STAGES = {
     "duplicate_index", "mixed", "double_fast", "greedy", "lazy", "optimal",
@@ -56,6 +57,7 @@ def main() -> int:
         for candidate in CANDIDATES
         for stage in STAGES
     }
+    expected.add((WIDE_SEQUENCE_CASE, "primary", "double_fast"))
     assert {(row["case"], row["candidate"], row["stage"]) for row in rows} == expected
     assert len(rows) == len(expected)
     for row in rows:
@@ -85,7 +87,14 @@ def main() -> int:
         if row["stage"] in {"double_fast", "greedy", "lazy", "optimal", "rep_beam"}:
             assert sequences > 0, row
         if row["stage"] == "double_fast":
-            assert encoded_bytes <= DOUBLE_FAST_MAX_BYTES[(row["case"], row["candidate"])], row
+            if row["case"] == WIDE_SEQUENCE_CASE:
+                assert int(row["block_size"]) == 128 * 1024, row
+                assert int(row["block_count"]) == 1, row
+                assert available_blocks == 1, row
+                assert sequences > 512, row
+                assert encoded_bytes <= 39_598, row
+            else:
+                assert encoded_bytes <= DOUBLE_FAST_MAX_BYTES[(row["case"], row["candidate"])], row
         if row["stage"] == "rep_beam":
             assert encoded_bytes <= REP_BEAM_MAX_BYTES[(row["case"], row["candidate"])], row
 

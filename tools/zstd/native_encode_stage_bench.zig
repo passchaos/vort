@@ -1,7 +1,11 @@
 const std = @import("std");
 const vort = @import("vort");
 
-const Case = struct { name: []const u8, payload: []const u8 };
+const Case = struct {
+    name: []const u8,
+    payload: []const u8,
+    primary_double_fast_only: bool = false,
+};
 const Options = struct {
     iterations: usize = 1,
     rounds: usize = 7,
@@ -49,10 +53,18 @@ pub fn main(init: std.process.Init) !void {
         state = state *% 1_664_525 +% 1_013_904_223;
         byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(state >> 16);
     }
+    const wide_sequences = try init.gpa.alloc(u8, std.compress.zstd.block_size_max);
+    defer init.gpa.free(wide_sequences);
+    state = 0xfeed_beef;
+    for (wide_sequences, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(state >> 16);
+    }
     const cases = [_]Case{
         .{ .name = "text", .payload = "Zstandard encode benchmark text with repeated structure and punctuation.\n" ** 512 },
         .{ .name = "json", .payload = numbered_json.items },
         .{ .name = "binary", .payload = binary },
+        .{ .name = "wide_sequences", .payload = wide_sequences, .primary_double_fast_only = true },
     };
 
     const policy = try vort.zstd.nativeEncodeLevelDiagnostics(options.level, .{});
@@ -70,6 +82,7 @@ pub fn main(init: std.process.Init) !void {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
         for (candidates) |candidate| {
             if (options.only_candidate) |wanted| if (!std.mem.eql(u8, wanted, candidate.name)) continue;
+            if (case.primary_double_fast_only and !std.mem.eql(u8, candidate.name, "primary")) continue;
             if (candidate.block_size >= case.payload.len and !std.mem.eql(u8, candidate.name, "primary")) continue;
             const search_budget = if (std.mem.eql(u8, candidate.name, "primary"))
                 policy.primary_options.match_search_budget
@@ -103,7 +116,7 @@ fn benchmarkCandidate(
     defer scratch.deinit(allocator);
     var selected_rows: usize = 0;
 
-    if (stageSelected(options.only_stage, "duplicate_index")) {
+    if (!case.primary_double_fast_only and stageSelected(options.only_stage, "duplicate_index")) {
         const indexed_block_count = try prepareAllBlocks(allocator, case.payload, candidate.block_size, &scratch);
         vort.zstd.benchmarkInvalidateNativeMatchStageScratch(&scratch);
         try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .index, indexed_block_count, 0, 0, 0, 0, &scratch);
@@ -111,6 +124,7 @@ fn benchmarkCandidate(
     }
     for (stages) |stage| {
         if (!stageSelected(options.only_stage, @tagName(stage))) continue;
+        if (case.primary_double_fast_only and stage != .double_fast) continue;
         const probe = try evaluateAllBlocks(allocator, case.payload, candidate.block_size, search_budget, stage, &scratch);
         try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .{ .candidate = stage }, probe.available_blocks, probe.sequence_count, probe.encoded_len, probe.literals_bytes, probe.sequence_bytes, &scratch);
         selected_rows += 1;

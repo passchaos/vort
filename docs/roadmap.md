@@ -9109,3 +9109,20 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   at level 1 (4/5 wins) and `1.087x` at level 3 (3/5 wins); worst per-file ratios
   were about `0.975x` and `0.970x`, so the claim remains aggregate rather than
   universal.
+  Removed the encoder's fixed 512-sequence rejection for wide Zstd blocks. The
+  existing stack path remains byte-identical through 512 sequences; larger
+  hash-parser plans use allocator-backed linear scratch bounded by the 128 KiB
+  block size and minimum match length, and currently emit predefined LL/OF/ML
+  tables. Five local Silesia 128 KiB blocks now retain all 20 measured
+  double-fast/greedy/lazy/optimal candidates (2,509--19,038 sequences), with
+  selected frames of 75,660/12,946/26,689/62,228/11,450 bytes for
+  ooffice/nci/mozilla/dickens/xml. Vort and system zstd decode all five exactly.
+  Fixed-CPU level-1 A/B records major size wins (roughly 9%--86%) with mixed
+  latency: ooffice and dickens are about 0.77x/0.83x baseline, while nci,
+  mozilla, and xml are about 1.89x/13.61x/26.54x because useful primary results
+  replace expensive fallback work. Boundary tests cover 513 sequences, the
+  32,512 three-byte count tier, small/large planner equivalence, and every
+  allocation-failure rollback point. A dedicated runtime-libzstd probe and a
+  primary/double-fast stage-gate row keep the 128 KiB path externally visible.
+  Large compressed-FSE sequence plans remain
+  future ratio work.

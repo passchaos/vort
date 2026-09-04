@@ -3027,6 +3027,20 @@ pub fn build(b: *std.Build) void {
     const zstd_native_encode_stage_bench_gate_step = b.step("run-zstd-native-encode-stage-bench-gate", "Validate native Zstd stage benchmark coverage");
     zstd_native_encode_stage_bench_gate_step.dependOn(&zstd_native_encode_stage_bench_gate.step);
 
+    const zstd_large_sequence_probe_exe = b.addExecutable(.{
+        .name = "vort-zstd-large-sequence-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/large_sequence_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_zstd_large_sequence_probe = b.addRunArtifact(zstd_large_sequence_probe_exe);
+    const zstd_large_sequence_probe_step = b.step("run-zstd-large-sequence-probe", "Validate wide-block Zstd sequence encoding with runtime libzstd");
+    zstd_large_sequence_probe_step.dependOn(&run_zstd_large_sequence_probe.step);
+
     const zstd_dictionary_probe_exe = b.addExecutable(.{
         .name = "vort-zstd-dictionary-probe",
         .root_module = b.createModule(.{
@@ -3974,6 +3988,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_encode_bench_exe.step);
     check_step.dependOn(&zstd_level_schedule_bench_exe.step);
     check_step.dependOn(&zstd_native_encode_stage_bench_exe.step);
+    check_step.dependOn(&zstd_large_sequence_probe_exe.step);
     check_step.dependOn(&zstd_dictionary_probe_exe.step);
     check_step.dependOn(&zstd_full_dictionary_diff_exe.step);
     check_step.dependOn(&zstd_dictionary_trainer_compare_exe.step);
