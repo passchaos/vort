@@ -68,6 +68,9 @@ const mixed_match_path_search_budget = 512;
 // improving the locked 32 KiB structured corpus. Keep it for level 4+ and for
 // callers that explicitly request a larger native search budget.
 const mixed_match_min_search_budget = 96;
+// The independent double-fast/repeat-beam consensus is useful from level 3's
+// 64-state budget onward. Lower levels keep their existing single-parser path.
+const decisive_wide_match_min_search_budget = 64;
 // Level 1 already evaluates greedy and optimal hash plans. A third lazy pass
 // preserves its locked wires but cannot improve them, so begin that extra ratio
 // work at level 2's 32-state budget.
@@ -9604,7 +9607,7 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
 }
 
 inline fn shouldProbeDecisiveWideMatch(block: []const u8, match_search_budget: usize, rep_beam_search: bool) bool {
-    return rep_beam_search and match_search_budget >= mixed_match_min_search_budget and
+    return rep_beam_search and match_search_budget >= decisive_wide_match_min_search_budget and
         block.len >= serial_mixed_input_min and !preferSerialMixedSearch(block);
 }
 
@@ -18584,14 +18587,23 @@ test "zstd wide double fast consensus matches full arbitration" {
     }
     try std.testing.expect(!preferSerialMixedSearch(&payload));
 
-    var consensus: std.ArrayList(u8) = .empty;
-    defer consensus.deinit(std.testing.allocator);
-    try std.testing.expect(try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &consensus, &payload, true, null));
-    try std.testing.expectEqual(@as(usize, 8600), consensus.items.len);
-    var exhaustive: std.ArrayList(u8) = .empty;
-    defer exhaustive.deinit(std.testing.allocator);
-    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &exhaustive, &payload, true, 96, true, null, null));
-    try std.testing.expectEqualSlices(u8, exhaustive.items, consensus.items);
+    try std.testing.expect(shouldProbeDecisiveWideMatch(&payload, 64, true));
+    try std.testing.expect(!shouldProbeDecisiveWideMatch(&payload, 63, true));
+    try std.testing.expect(!shouldProbeDecisiveWideMatch(&payload, 96, false));
+    for ([_]usize{ 64, 96 }) |budget| {
+        var consensus: std.ArrayList(u8) = .empty;
+        defer consensus.deinit(std.testing.allocator);
+        try std.testing.expect(try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &consensus, &payload, true, null));
+        try std.testing.expectEqual(@as(usize, 8600), consensus.items.len);
+        var exhaustive: std.ArrayList(u8) = .empty;
+        defer exhaustive.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &exhaustive, &payload, true, budget, true, null, null));
+        try std.testing.expectEqualSlices(u8, exhaustive.items, consensus.items);
+        var selected: std.ArrayList(u8) = .empty;
+        defer selected.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbe(std.testing.allocator, &selected, &payload, true, budget, null));
+        try std.testing.expectEqualSlices(u8, exhaustive.items, selected.items);
+    }
 }
 
 test "zstd wide double fast disagreement falls back to full arbitration" {
@@ -18606,13 +18618,15 @@ test "zstd wide double fast disagreement falls back to full arbitration" {
     var consensus: std.ArrayList(u8) = .empty;
     defer consensus.deinit(std.testing.allocator);
     try std.testing.expect(!try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &consensus, &payload, true, null));
-    var exhaustive: std.ArrayList(u8) = .empty;
-    defer exhaustive.deinit(std.testing.allocator);
-    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &exhaustive, &payload, true, 96, true, null, null));
-    var selected: std.ArrayList(u8) = .empty;
-    defer selected.deinit(std.testing.allocator);
-    try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbe(std.testing.allocator, &selected, &payload, true, 96, null));
-    try std.testing.expectEqualSlices(u8, exhaustive.items, selected.items);
+    for ([_]usize{ 64, 96 }) |budget| {
+        var exhaustive: std.ArrayList(u8) = .empty;
+        defer exhaustive.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &exhaustive, &payload, true, budget, true, null, null));
+        var selected: std.ArrayList(u8) = .empty;
+        defer selected.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbe(std.testing.allocator, &selected, &payload, true, budget, null));
+        try std.testing.expectEqualSlices(u8, exhaustive.items, selected.items);
+    }
 }
 
 test "zstd level one returns a decisive non-prefix primary frame" {

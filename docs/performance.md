@@ -968,7 +968,7 @@ eight-run nine-row matrix measures `3.27x`, with every size/checksum unchanged
 and control rows within about 1.6%.
 
 The retained double-fast parser now participates in a narrow block-level
-consensus check for wide, ratio-level blocks. Its candidate must compress by at
+consensus check for wide level-3 and level-9+ blocks. Its candidate must compress by at
 least 3:1 and match the independent repeat-beam candidate byte-for-byte before
 the encoder skips mixed, greedy, lazy, optimal, repeated, and duplicate
 families. A 1,008-case audit found 280 double-fast candidates below the size
@@ -986,4 +986,13 @@ covered exactly 184 cases with zero disagreement. Against the committed
 double-wire implementation, twelve fixed-CPU-8 pairs improve binary level 9 by
 another `1.24x` with 12/12 wins; an eight-run nine-row matrix measures `1.27x`,
 with controls within about 2%. The encode gate now uses three iterations and
-three rounds and requires binary level 9 below half of level-3 latency.
+three rounds; after extending the same proof to level 3, both optimized levels
+are checked independently against level 1.
+
+The same token-consensus probe now starts at level 3's 64-state budget rather
+than only at level 4+/ratio budgets. A separate 1,008-case audit found 168
+wide blocks whose double-fast wire met the 3:1 threshold, 89 token/statistics
+agreements with repeat-beam, and 89/89 byte-exact matches with full level-3
+arbitration. Twelve fixed-CPU-8 binary level-3 pairs improve by `2.14x` with
+12/12 wins; an eight-run nine-row matrix measures `2.38x`, retains every
+size/checksum, and keeps controls within about 2%.

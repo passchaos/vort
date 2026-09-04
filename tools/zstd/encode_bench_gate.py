@@ -83,10 +83,12 @@ def main() -> int:
     assert int(binary_rows[3]["vort_ns"]) < int(binary_rows[1]["vort_ns"]) * 4, binary_rows
     # Ratio levels accept a wide primary only after it reaches the audited 3:1
     # decisive threshold. Inside that primary, matching double-fast and
-    # repeat-beam tokens bypass the remaining families. The benchmark uses
-    # three iterations and rounds so this relation does not depend on a single
-    # scheduler sample.
-    assert int(binary_rows[9]["vort_ns"]) * 2 < int(binary_rows[3]["vort_ns"]), binary_rows
+    # repeat-beam tokens bypass the remaining families at levels 3 and 9. The
+    # benchmark uses three iterations and rounds so these relations do not
+    # depend on a single scheduler sample. Level 1 does not run the consensus
+    # probe and remains the stable control for both optimized levels.
+    assert int(binary_rows[3]["vort_ns"]) * 4 < int(binary_rows[1]["vort_ns"]) * 3, binary_rows
+    assert int(binary_rows[9]["vort_ns"]) * 4 < int(binary_rows[1]["vort_ns"]) * 3, binary_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 
