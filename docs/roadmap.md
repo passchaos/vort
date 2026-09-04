@@ -8893,3 +8893,7 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   by about 3% on average. It was reverted; future table-layout work should use
   a separate specialized table representation rather than perturbing the shared
   decoder's code layout.
+  A separate X2-style table was then prototyped only inside the four-stream
+  path, combining a second symbol when both codes fit one table-width prefix.
+  It measured only about 742--752 MiB/s on `ascii64k`, below the retained X1
+  path's roughly 780 MiB/s, so the larger table and decode logic were removed.
