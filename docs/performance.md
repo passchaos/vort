@@ -13,6 +13,9 @@ zig build -Doptimize=ReleaseFast run-snappy-report-gate
 zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate
+zig build -Doptimize=ReleaseFast run-zstd-encode-bench-gate
+zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate
+zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench-gate
 zig build run-zstd-compat-probe
 zig build -Doptimize=ReleaseFast run-zstd-decodecorpus-gate -j1
 zig build bench-deflate-decode -Doptimize=ReleaseFast
@@ -1046,3 +1049,28 @@ pairs improve the target level-3 encode by `7.06x` on average (`7.04x` median,
 12/12 wins). An eight-run 12-row matrix measures `7.10x`; the other eleven
 case/level rows remain within about 1% and keep their frame sizes unchanged.
 Level 2 and level 9+ continue to require double-fast/repeat-beam consensus.
+
+## Zstd speed-level multi-block scheduling (2026-09-04)
+
+Large level-1--3 encodes now overlap the primary candidate on the calling thread
+with the larger adaptive split candidate in a worker. This restores concurrency
+lost when the level-9 primary was moved into the worker set: level 9+ retains
+that three-worker shape because its primary can itself spawn mixed-search work,
+while levels 4--8 keep their existing scheduling. Candidate sets, deferred-small
+split rules, strict shortest-frame arbitration, and tie order are unchanged.
+
+An 80-case generated audit spanning 129/192 KiB, five distributed-noise
+densities, four seeds, and plain/copied-tail shapes found the larger adaptive
+split won every level-1 and level-3 case; the deferred smaller split won none.
+The retained 129 KiB fixture is byte-identical to complete serial arbitration at
+levels 1/2/3 and decodes through the public API. Twelve alternating ReleaseFast
+A/B pairs pinned to separate performance cores measured median speedups of
+`1.038x` for level 1 and `1.090x` for level 3, with unchanged 28,328/27,758-byte
+frames. A same-process parallel-versus-serial gate on efficiency cores measured
+stable medians of roughly `1.075x`/`1.072x`/`1.116x` for levels 1/2/3 across
+five runs, each 5/5 wins; its conservative enforced floor is `1.01x`. Five
+256 KiB prefixes from the local Silesia corpus retained identical output in a
+separate candidate/baseline check pinned to two efficiency cores. Geometric-mean
+speedups were `1.109x` at level 1 (4/5 files faster) and `1.087x` at level 3
+(3/5 faster); the slowest individual rows were about `0.975x` and `0.970x`, so
+this is an aggregate scheduling gain rather than a claim that every file wins.

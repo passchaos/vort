@@ -5041,6 +5041,12 @@ const LevelFrameCandidate = struct {
     }
 };
 
+inline fn shouldOverlapPrimaryOnCoordinator(input_len: usize, primary_block_size: usize, level: c_int, has_precomputed_primary: bool) bool {
+    return level >= 1 and level <= 3 and
+        input_len > primary_block_size and
+        !has_precomputed_primary;
+}
+
 // Ratio-oriented mixed lookahead is independent from the remaining match
 // families. Run it beside those families with a thread-safe temporary allocator
 // and copy only its completed block back after join, so callers may continue to
@@ -5131,11 +5137,10 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         // parallel ladder because a boundary immediately after the larger
         // block can uniquely favor the smaller block size.
         const defer_smallest_candidate = input.len > deferred_adaptive_candidate_input_min;
-        // The primary and split encoders are independent full-frame jobs. Put
-        // the primary in the same worker set instead of running it on the
-        // coordinator after starting the split workers. This lets the
-        // scheduler place all codec work uniformly and, at high levels, keeps
-        // the primary mixed-search worker from being delayed behind a split.
+        // The primary and split encoders are independent full-frame jobs.
+        // Levels 1-3 overlap primary work on the coordinator with the larger
+        // split worker, avoiding a second thread. Ratio levels keep primary in
+        // the worker set so its internal mixed-search worker is not delayed.
         var candidates: [3]LevelFrameCandidate = undefined;
         const parallelize_primary = level >= 9 and input.len > deferred_adaptive_candidate_input_min and precomputed_primary == null;
         const adaptive_start: usize = @intFromBool(parallelize_primary);
@@ -5159,7 +5164,20 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
                 };
                 spawned += 1;
             }
+            var coordinator_primary: ?NativeFrameEncodeResult = null;
+            var coordinator_err: ?Error = null;
+            const overlap_primary_on_coordinator = shouldOverlapPrimaryOnCoordinator(input.len, primary_options.block_size_max, level, precomputed_primary != null);
+            if (overlap_primary_on_coordinator) {
+                if (encodeNativeFrameWithOptionsAlloc(parallel_allocator, input, primary_options)) |result|
+                    coordinator_primary = result
+                else |err|
+                    coordinator_err = err;
+            }
             for (threads[0..spawned]) |thread| thread.join();
+            if (coordinator_err) |err| {
+                for (candidates[0..candidate_count]) |candidate| if (candidate.result) |result| parallel_allocator.free(result.frame);
+                return err;
+            }
             var best = if (parallelize_primary) blk: {
                 if (candidates[0].err) |err| {
                     for (candidates[0..candidate_count]) |candidate| if (candidate.result) |result| parallel_allocator.free(result.frame);
@@ -5171,7 +5189,7 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
             } else if (precomputed_primary) |primary| blk: {
                 precomputed_primary = null;
                 break :blk primary;
-            } else encodeNativeFrameWithOptionsAlloc(parallel_allocator, input, primary_options) catch |err| {
+            } else if (coordinator_primary) |primary| primary else encodeNativeFrameWithOptionsAlloc(parallel_allocator, input, primary_options) catch |err| {
                 for (candidates[0..candidate_count]) |candidate| if (candidate.result) |result| parallel_allocator.free(result.frame);
                 return err;
             };
@@ -18493,6 +18511,66 @@ test "zstd parallel adaptive candidates match serial selection" {
     const actual = try encodeFrameWithLevelAlloc(std.testing.allocator, structured.items, level);
     defer std.testing.allocator.free(actual);
     try std.testing.expectEqualSlices(u8, expected.frame, actual);
+}
+
+test "zstd speed levels overlap only fresh primary candidates" {
+    const block_size = std.compress.zstd.block_size_max;
+    try std.testing.expect(shouldOverlapPrimaryOnCoordinator(block_size + 1, block_size, 1, false));
+    try std.testing.expect(shouldOverlapPrimaryOnCoordinator(block_size + 1, block_size, 2, false));
+    try std.testing.expect(shouldOverlapPrimaryOnCoordinator(block_size + 1, block_size, 3, false));
+    try std.testing.expect(!shouldOverlapPrimaryOnCoordinator(block_size, block_size, 1, false));
+    try std.testing.expect(!shouldOverlapPrimaryOnCoordinator(block_size + 1, block_size, 0, false));
+    try std.testing.expect(!shouldOverlapPrimaryOnCoordinator(block_size + 1, block_size, 4, false));
+    try std.testing.expect(!shouldOverlapPrimaryOnCoordinator(block_size + 1, block_size, 9, false));
+    try std.testing.expect(!shouldOverlapPrimaryOnCoordinator(block_size + 1, block_size, 1, true));
+}
+
+test "zstd speed levels overlap multiblock primary and adaptive candidates" {
+    var payload: [129 * 1024]u8 = undefined;
+    var state: u32 = @truncate(0x9e37_79b9 +% 129 *% 0x10001 +% 16 *% 0x101 +% 23);
+    for (&payload, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(state >> 16);
+    }
+    const copy_len = payload.len / 4;
+    @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+
+    for ([_]c_int{ 1, 2, 3 }) |level| {
+        const primary_options = try nativeFrameOptionsForLevel(level, .{});
+        var expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, primary_options);
+        defer std.testing.allocator.free(expected.frame);
+        for (adaptiveLevelBlockSizes(level)) |block_size| {
+            const candidate = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, adaptiveLevelCandidateOptions(primary_options, block_size));
+            if (candidate.frame.len < expected.frame.len) {
+                std.testing.allocator.free(expected.frame);
+                expected = candidate;
+            } else std.testing.allocator.free(candidate.frame);
+        }
+
+        const actual = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, level);
+        defer std.testing.allocator.free(actual);
+        try std.testing.expectEqual(if (level <= 2) @as(usize, 28_328) else 27_758, actual.len);
+        try std.testing.expectEqualSlices(u8, expected.frame, actual);
+        var reusable = LevelFrameEncoder.init(std.testing.allocator);
+        defer reusable.deinit();
+        try std.testing.expectEqualSlices(u8, actual, try reusable.encodeScratch(&payload, level));
+        const decoded = try decodeFrameAlloc(std.testing.allocator, actual);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, &payload, decoded);
+    }
+}
+
+test "zstd overlapping level candidates release initial allocation failures" {
+    var payload: [129 * 1024]u8 = undefined;
+    var state: u32 = 0x243f_6a88;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, encodeFrameWithLevelAlloc(failing.allocator(), &payload, 1));
+    try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
 }
 
 test "zstd deferred adaptive candidate preserves primary and split winners" {

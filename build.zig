@@ -2987,6 +2987,26 @@ pub fn build(b: *std.Build) void {
     const zstd_encode_bench_gate_step = b.step("run-zstd-encode-bench-gate", "Validate Zstd encode comparison CSV");
     zstd_encode_bench_gate_step.dependOn(&zstd_encode_bench_gate.step);
 
+    const zstd_level_schedule_bench_exe = b.addExecutable(.{
+        .name = "vort-zstd-level-schedule-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/level_schedule_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_zstd_level_schedule_bench = b.addRunArtifact(zstd_level_schedule_bench_exe);
+    if (b.args) |args| run_zstd_level_schedule_bench.addArgs(args);
+    const zstd_level_schedule_bench_step = b.step("run-zstd-level-schedule-bench", "Compare parallel and serial Zstd level scheduling");
+    zstd_level_schedule_bench_step.dependOn(&run_zstd_level_schedule_bench.step);
+    const run_zstd_level_schedule_bench_csv = b.addRunArtifact(zstd_level_schedule_bench_exe);
+    run_zstd_level_schedule_bench_csv.addArgs(&.{ "--iterations", "1", "--rounds", "5", "--csv", "zig-out/vort-zstd-level-schedule-bench.csv" });
+    const zstd_level_schedule_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/level_schedule_bench_gate.py", "--csv", "zig-out/vort-zstd-level-schedule-bench.csv" });
+    zstd_level_schedule_bench_gate.step.dependOn(&run_zstd_level_schedule_bench_csv.step);
+    const zstd_level_schedule_bench_gate_step = b.step("run-zstd-level-schedule-bench-gate", "Validate Zstd level scheduling benchmark");
+    zstd_level_schedule_bench_gate_step.dependOn(&zstd_level_schedule_bench_gate.step);
+
     const zstd_native_encode_stage_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-native-encode-stage-bench",
         .root_module = b.createModule(.{
@@ -3952,6 +3972,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_reference_bench_exe.step);
     check_step.dependOn(&zstd_decode_profile_exe.step);
     check_step.dependOn(&zstd_encode_bench_exe.step);
+    check_step.dependOn(&zstd_level_schedule_bench_exe.step);
     check_step.dependOn(&zstd_native_encode_stage_bench_exe.step);
     check_step.dependOn(&zstd_dictionary_probe_exe.step);
     check_step.dependOn(&zstd_full_dictionary_diff_exe.step);

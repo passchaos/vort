@@ -179,6 +179,13 @@ Current interpretation:
   complete 64-state arbitration. The fixed 2,038-versus-2,037-byte frame boundary
   improves level-3 throughput by about `7.06x` (12/12 fixed-CPU pairs); level 2
   and level 9+ retain strict double-fast/repeat-beam consensus.
+- Multi-block levels 1--3 overlap primary encoding on the caller thread with the
+  larger adaptive split worker while preserving the exact candidate set and
+  shortest-frame result. An 80-case 129/192 KiB audit found the larger split won
+  every generated case, and the fixed 129 KiB frame remains byte-identical to
+  serial arbitration at all three levels. Fixed-CPU A/B medians improve level 1
+  by about `1.038x` and level 3 by `1.090x`; a dedicated same-process gate also
+  covers level 2 and enforces a conservative `1.01x` floor per level.
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug

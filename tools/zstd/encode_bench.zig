@@ -44,11 +44,21 @@ pub fn main(init: std.process.Init) !void {
     }
     const tradeoff_copy_len = level3_tradeoff.len / 4;
     @memcpy(level3_tradeoff[level3_tradeoff.len - tradeoff_copy_len ..], level3_tradeoff[level3_tradeoff.len / 4 ..][0..tradeoff_copy_len]);
+    const multiblock = try init.gpa.alloc(u8, 129 * 1024);
+    defer init.gpa.free(multiblock);
+    state = @truncate(0x9e37_79b9 +% 129 *% 0x10001 +% 16 *% 0x101 +% 23);
+    for (multiblock, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(state >> 16);
+    }
+    const multiblock_copy_len = multiblock.len / 4;
+    @memcpy(multiblock[multiblock.len - multiblock_copy_len ..], multiblock[multiblock.len / 4 ..][0..multiblock_copy_len]);
     const cases = [_]Case{
         .{ .name = "text", .payload = "Zstandard encode benchmark text with repeated structure and punctuation.\n" ** 512 },
         .{ .name = "json", .payload = numbered_json.items },
         .{ .name = "binary", .payload = binary },
         .{ .name = "level3_tradeoff", .payload = level3_tradeoff },
+        .{ .name = "multiblock", .payload = multiblock },
     };
     const levels = [_]c_int{ 1, 3, 9 };
 

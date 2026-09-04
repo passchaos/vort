@@ -5,7 +5,7 @@ import csv
 from pathlib import Path
 
 COLUMNS = ["case", "reference_version", "level", "input_bytes", "vort_bytes", "reference_bytes", "size_over_reference", "iterations", "rounds", "vort_ns", "reference_ns", "vort_mib_s", "reference_mib_s", "vort_over_reference", "checksum"]
-CASES = {"text", "json", "binary", "level3_tradeoff"}
+CASES = {"text", "json", "binary", "level3_tradeoff", "multiblock"}
 LEVELS = {1, 3, 9}
 
 def main() -> int:
@@ -84,8 +84,8 @@ def main() -> int:
     # Ratio levels accept a wide primary only after it reaches the audited 3:1
     # decisive threshold. Inside that primary, matching double-fast and
     # At level 1, a 4:15 double-fast result can return before repeat-beam as an
-    # explicit fastest-level tradeoff. Levels 3 and 9 retain the independent
-    # repeat-beam consensus. The
+    # explicit fastest-level tradeoff. Level 3 has a stricter 1:16 shortcut;
+    # level 9 retains independent repeat-beam consensus. The
     # benchmark uses three iterations and rounds so these relations do not
     # depend on a single scheduler sample. Keep level 1 at least 1.5x faster
     # than level 3, and keep the two consensus levels within 25% of each other.
@@ -98,6 +98,10 @@ def main() -> int:
     assert int(tradeoff_rows[3]["vort_bytes"]) == 2_038, tradeoff_rows
     assert int(tradeoff_rows[9]["vort_bytes"]) == 2_037, tradeoff_rows
     assert int(tradeoff_rows[3]["vort_ns"]) * 3 < int(tradeoff_rows[9]["vort_ns"]), tradeoff_rows
+    multiblock_rows = {int(row["level"]): row for row in rows if row["case"] == "multiblock"}
+    assert int(multiblock_rows[1]["vort_bytes"]) == 28_328, multiblock_rows
+    assert int(multiblock_rows[3]["vort_bytes"]) == 27_758, multiblock_rows
+    assert int(multiblock_rows[9]["vort_bytes"]) == 27_455, multiblock_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 

@@ -9088,3 +9088,24 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   all four bytes, so the wider validation only added work: the isolated binary
   stage measured about `0.985x` median throughput with 3/12 wins, despite exact
   token and encoded-byte parity.
+  Restored overlapping primary/adaptive frame evaluation for large level-1--3
+  inputs after auditing the multi-block path. The larger adaptive split won all
+  80 generated 129/192 KiB wide-alphabet cases at both levels 1 and 3, while the
+  deferred smaller split never won. This does not prove that primary can be
+  dropped on arbitrary inputs, but it showed that serializing primary after the
+  split worker was pure latency on the audited shapes.
+  Primary now runs on the coordinator while the larger split runs in the worker,
+  preserving the exact candidate set, deferred-small rule, and tie order. A
+  permanent 129 KiB oracle checks complete serial arbitration, one-shot/reusable
+  byte equality, exact 28,328/28,328/27,758-byte level-1/2/3 frames, and decode;
+  an injected initial OOM checks joined-worker cleanup. Twelve alternating
+  ReleaseFast pairs pinned to separate performance cores improve level 1 by
+  `1.038x` median and level 3 by `1.090x`, with identical output. The new
+  same-process `run-zstd-level-schedule-bench-gate` compares parallel production
+  against a serial reference for all three speed levels and enforces exact
+  checksums plus a conservative `1.01x` speedup floor.
+  A separate five-file check over 256 KiB prefixes from the local Silesia corpus
+  retained identical outputs and measured geometric-mean speedups of `1.109x`
+  at level 1 (4/5 wins) and `1.087x` at level 3 (3/5 wins); worst per-file ratios
+  were about `0.975x` and `0.970x`, so the claim remains aggregate rather than
+  universal.

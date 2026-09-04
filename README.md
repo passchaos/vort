@@ -381,6 +381,8 @@ zig build -Doptimize=ReleaseFast run-snappy-report-gate
 zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate  # optional runtime libsnappy comparison
 zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate  # optional runtime liblz4 comparison
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate  # optional runtime libzstd comparison
+zig build -Doptimize=ReleaseFast run-zstd-encode-bench-gate  # libzstd encode comparison and level-policy gate
+zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate  # parallel-vs-serial multi-block scheduling
 zig build run-zstd-compat-probe  # optional system-libzstd decode matrix
 # Optional deep zstd upstream decodecorpus differential (paired z*.zst / z* files):
 zig build -Doptimize=ReleaseFast run-zstd-compat-probe -- \
