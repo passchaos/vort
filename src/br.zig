@@ -32,6 +32,7 @@ const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
 const incremental_planned_encoder_tests = @import("br/incremental/planned_encoder_tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
+pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
 pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
 pub const PlannedEncodeOptions = struct { level: PlannedCompressionLevel = .fast };
@@ -115,7 +116,7 @@ const IncrementalLiteralCodec = struct {
 
 const IncrementalCopyCodec = struct {
     pub const Error = br.Error;
-    pub const max_stream_header_bytes: usize = 16 * 1024;
+    pub const max_stream_header_bytes: usize = default_incremental_compressed_header_bytes;
     pub const Header = struct {
         decoded_len: usize,
         compressed: MinimalCompressedHeader,
@@ -561,6 +562,42 @@ pub const IncrementalTestSupport = struct {
         try writer.writeBits(allocator, 1, 1); // final command selects the second symbol
         try writer.writeBits(allocator, 1, 1); // final literals bb; its copy is ignored
         try writer.writeBits(allocator, 1, 1);
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    /// Build a one-byte stream whose 256 command trees make the compressed
+    /// header exceed the decoder's built-in 16 KiB staging buffer. Callers can
+    /// use this to exercise explicit `compressed_header_scratch` storage.
+    pub fn encodeLargeCompressedHeader(allocator: std.mem.Allocator) Error![]u8 {
+        const command = commandEntryForLengths(1, 2) orelse return error.InvalidBlockPlan;
+        var command_lengths: [command_lut.entries.len]u4 = @splat(0);
+        for (0..256) |i| command_lengths[i * 2] = 8;
+        if (command_lengths[command.symbol] == 0) return error.InvalidBlockPlan;
+        const command_encoder = try huffman.HuffmanTable(command_lut.entries.len).Encoder.init(&command_lengths);
+
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writer.writeBits(allocator, 1, 1); // ISLAST
+        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 0, 16); // MLEN - 1
+        try writeBlockTypeCount(allocator, &writer, 1); // NBLTYPESL
+        try writeBlockTypeCount(allocator, &writer, 256); // NBLTYPESI
+        try writeSimpleSingleSymbolPrefix(allocator, &writer, 258, 1);
+        try writeSimpleSingleSymbolPrefix(allocator, &writer, 26, 0);
+        try writer.writeBits(allocator, 0, 2); // first command block count = 1
+        try writeBlockTypeCount(allocator, &writer, 1); // NBLTYPESD
+        try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+        try writer.writeBits(allocator, 1, 4); // NDIRECT = 1
+        try writer.writeBits(allocator, 0, 2); // literal context mode
+        try writeBlockTypeCount(allocator, &writer, 1); // NTREESL
+        try writeBlockTypeCount(allocator, &writer, 1); // NTREESD
+        try writeSimpleSingleSymbolPrefix(allocator, &writer, 256, 'x');
+        for (0..256) |_| try complex_prefix.write(allocator, &writer, command_lengths.len, &command_lengths);
+        try writeSimpleSingleSymbolPrefix(allocator, &writer, 65, 16);
+        try writer.writeHuffmanBits(allocator, command_encoder.codes[command.symbol], command_encoder.bits[command.symbol]);
         return try encoded.toOwnedSlice(allocator);
     }
 

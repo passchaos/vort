@@ -8777,3 +8777,18 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   frame and repository-owned 68-distance-tree frame exercise both cold paths;
   all 952 progressive chunk combinations and the common-tree performance/header
   gates remain green.
+  Added caller-owned extended compressed-header scratch to
+  `BrotliIncrementalCopyStreamDecoder.Options`. The default remains the embedded
+  16 KiB buffer and therefore preserves the 652,288-byte decoder state; a
+  larger caller slice is selected only when supplied and survives `reset()`. A
+  deterministic valid fixture contains 256 non-trivial 704-symbol command trees
+  and a 17,261-byte stream/header: the default decoder returns
+  `UnsupportedBrotliFeature` at exactly 16 KiB retained input, while an external
+  scratch buffer decodes it incrementally. Python/system libbrotli independently
+  accepts the same stream, and the upstream differential feeds it in 257-byte
+  chunks with one-byte output. Header ingestion batches up to 4 KiB per parse
+  attempt and returns any complete over-read bytes to the current input cursor,
+  avoiding excessive reparsing for ordinary chunk sizes without changing
+  metadata/stored/next-meta-block boundaries. Because parsing still restarts from
+  the retained prefix, adversarial one-byte delivery of very large headers is
+  intentionally left to the future resumable header parser.

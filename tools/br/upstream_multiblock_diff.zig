@@ -213,6 +213,7 @@ pub fn main(init: std.process.Init) !void {
     var wide_literal_type_cases: usize = 0;
     var maximum_literal_type_cases: usize = 0;
     var maximum_command_type_cases: usize = 0;
+    var extended_header_cases: usize = 0;
     for (cases) |case| {
         for (case.qualities) |quality| {
             for (case.modes) |mode| {
@@ -402,6 +403,19 @@ pub fn main(init: std.process.Init) !void {
     progress_matrix_streams += 1;
     maximum_command_type_cases += 1;
 
+    const large_header = try vort.br.IncrementalTestSupport.encodeLargeCompressedHeader(init.gpa);
+    defer init.gpa.free(large_header);
+    if (large_header.len <= vort.brotliDefaultIncrementalCompressedHeaderBytes) return error.ReferenceEncodeFailed;
+    var large_header_reference_output: [1]u8 = undefined;
+    try reference.decode(large_header, &large_header_reference_output);
+    if (!std.mem.eql(u8, "x", &large_header_reference_output)) return error.ReferenceDecodeFailed;
+    const large_header_scratch = try init.gpa.alloc(u8, large_header.len);
+    defer init.gpa.free(large_header_scratch);
+    try decodeProgressChunksWithHeaderScratch(init.gpa, large_header, "x", 16, 257, 1, large_header_scratch);
+    progress_matrix_runs += 1;
+    progress_matrix_streams += 1;
+    extended_header_cases += 1;
+
     const metadata = "vort/libbrotli metadata boundary";
     const metadata_operations = [_]libbrotli.Runtime.StreamingOperation{
         .{ .flush = text },
@@ -429,8 +443,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} reference_version={x}\n",
-        .{ cases_run, one_shot_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} reference_version={x}\n",
+        .{ cases_run, one_shot_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, reference.version() },
     );
     try stdout.interface.flush();
 }
@@ -522,6 +536,10 @@ fn progressChunkMatrixCaseCount() usize {
 }
 
 fn decodeProgressChunks(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, lgwin: u32, input_chunk_len: usize, output_chunk_len: usize) !void {
+    return decodeProgressChunksWithHeaderScratch(allocator, encoded, expected, lgwin, input_chunk_len, output_chunk_len, &.{});
+}
+
+fn decodeProgressChunksWithHeaderScratch(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, lgwin: u32, input_chunk_len: usize, output_chunk_len: usize, header_scratch: []u8) !void {
     // Keep exactly the useful portion of the advertised window so larger-window
     // cases exercise caller-owned history without overallocating short streams.
     const history = try allocator.alloc(u8, @min(expected.len, (@as(usize, 1) << @intCast(lgwin)) - 16));
@@ -529,6 +547,7 @@ fn decodeProgressChunks(allocator: std.mem.Allocator, encoded: []const u8, expec
     var decoder = vort.BrotliIncrementalCopyStreamDecoder.initWithOptions(history, .{
         .max_output_len = expected.len,
         .expected_output_len = expected.len,
+        .compressed_header_scratch = header_scratch,
     });
     const output = try allocator.alloc(u8, expected.len);
     defer allocator.free(output);

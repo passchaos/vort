@@ -171,10 +171,12 @@ and byte-progressive paths. Command trees beyond the common first 32 use packed
 decoder state below its existing 1.5 MiB budget. Literal and distance trees use
 the same representation beyond their first 64 hot entries, reducing
 `BrotliIncrementalCopyStreamDecoder` from 1,499,168 to 652,288 bytes while the
-real 247-literal-tree and 68-distance-tree upstream cases continue to decode. The progressive path still
-intentionally bounds each compressed meta-block header to 16 KiB, so a
-pathological maximum-count set of complex trees can still report
-`UnsupportedBrotliFeature`; the one-shot decoder parses directly from input.
+real 247-literal-tree and 68-distance-tree upstream cases continue to decode.
+The progressive path keeps a 16 KiB built-in compressed-header buffer but now
+accepts larger caller-owned `compressed_header_scratch`; a 17,261-byte legal
+header is rejected explicitly at the default bound and decodes through the
+external scratch path. The one-shot decoder continues to parse directly from
+input.
 
 ## Next recommended work
 

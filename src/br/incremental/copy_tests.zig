@@ -125,6 +125,41 @@ test "byte-progressive copy decoder accepts stored and metadata first blocks" {
     try std.testing.expectEqual(metadata.len, lengths[0]);
 }
 
+test "byte-progressive copy decoder uses caller-owned compressed header scratch" {
+    const encoded = try br.IncrementalTestSupport.encodeLargeCompressedHeader(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len > br.default_incremental_compressed_header_bytes);
+
+    var history: [1]u8 = undefined;
+    var default_decoder = br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{ .expected_output_len = 1 });
+    var output: [1]u8 = undefined;
+    try std.testing.expectError(error.UnsupportedBrotliFeature, default_decoder.step(encoded, &output));
+    try std.testing.expectEqual(br.default_incremental_compressed_header_bytes, default_decoder.snapshot().retained_input_bytes);
+    try std.testing.expectEqualSlices(u8, "compressed_header", default_decoder.diagnostics().last_error_phase_name);
+
+    const header_scratch = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(header_scratch);
+    var decoder = br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .expected_output_len = 1,
+        .compressed_header_scratch = header_scratch,
+    });
+    var input_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 257);
+        const step = try decoder.step(encoded[input_offset..input_end], output[0..0]);
+        input_offset += step.progress.input_read;
+        if (step.status == .need_output) break;
+        try std.testing.expectEqual(br.IncrementalCopyStreamDecoder.Phase.compressed_header, decoder.snapshot().phase);
+        try std.testing.expect(decoder.snapshot().retained_input_bytes <= header_scratch.len);
+    }
+    const done = try decoder.step(encoded[input_offset..], &output);
+    input_offset += done.progress.input_read;
+    try std.testing.expectEqual(.done, done.status);
+    try decoder.finish();
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqualSlices(u8, "x", &output);
+}
+
 test "byte-progressive compressed copy decoder streams following stored blocks" {
     const encoded = try br.IncrementalTestSupport.encodeCompressedAlternatingThenStored(std.testing.allocator, 'x', 'y', 257, " tail");
     defer std.testing.allocator.free(encoded);

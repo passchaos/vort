@@ -109,6 +109,7 @@ pub const BrotliStreamDecoder = br.StreamDecoder;
 pub const BrotliIncrementalStreamDecoder = br.IncrementalStreamDecoder;
 pub const BrotliIncrementalLiteralStreamDecoder = br.IncrementalLiteralStreamDecoder;
 pub const BrotliIncrementalCopyStreamDecoder = br.IncrementalCopyStreamDecoder;
+pub const brotliDefaultIncrementalCompressedHeaderBytes = br.default_incremental_compressed_header_bytes;
 pub const BrotliIncrementalRleStreamDecoder = br.IncrementalRleStreamDecoder;
 pub const BrotliIncrementalStoredStreamDecoder = br.IncrementalStoredStreamDecoder;
 pub const BrotliIncrementalStoredStreamEncoder = br.IncrementalStoredStreamEncoder;

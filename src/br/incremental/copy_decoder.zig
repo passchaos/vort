@@ -53,6 +53,11 @@ pub fn Decoder(comptime Codec: type) type {
         pub const Options = struct {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
+            /// Optional caller-owned storage for compressed meta-block headers.
+            /// The decoder uses it only when it is larger than the built-in
+            /// bounded buffer. It must remain valid and must not alias input,
+            /// output, or history for the lifetime of the decoder.
+            compressed_header_scratch: []u8 = &.{},
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
         };
@@ -199,7 +204,7 @@ pub fn Decoder(comptime Codec: type) type {
                         // byte without treating synthetic high padding as input.
                         if (self.header_len != 0) {
                             const parsed = Codec.parseMetaBlockHeader(
-                                self.header_bytes[0..self.header_len],
+                                self.headerStorage()[0..self.header_len],
                                 self.header_bit_count,
                                 self.decoded_len,
                                 self.final_meta_block,
@@ -208,13 +213,28 @@ pub fn Decoder(comptime Codec: type) type {
                                 else => return self.fail(.compressed_header, err),
                             };
                             if (parsed) |ready| {
+                                // Batched probing may include complete bytes
+                                // after the compressed header. Return those to
+                                // this call's input cursor; only a sub-byte tail
+                                // belongs in the cross-phase bit reservoir.
+                                const unread_bytes = (self.header_bit_count - ready.bits_read) / 8;
+                                std.debug.assert(unread_bytes <= input_read);
+                                input_read -= unread_bytes;
+                                self.header_bit_count -= unread_bytes * 8;
+                                self.header_len = (self.header_bit_count + 7) / 8;
                                 try self.installCompressedHeader(ready);
                                 break;
                             }
                         }
                         if (input_read == input.len) return result(input_read, output_written, .need_input);
-                        try self.appendHeaderByte(input[input_read]);
-                        input_read += 1;
+                        // Parse bounded batches rather than restarting the
+                        // complete header parser after every byte. On success,
+                        // whole over-read bytes are returned to the caller input
+                        // cursor below and only the sub-byte suffix enters the
+                        // u128 reservoir.
+                        const append_end = input_read + @min(@as(usize, 4096), input.len - input_read);
+                        while (input_read < append_end) : (input_read += 1)
+                            try self.appendHeaderByte(input[input_read]);
                     }
                 },
                 .command => {
@@ -568,7 +588,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.header_bit_count = self.staged_bit_count;
             self.header_len = (@as(usize, self.staged_bit_count) + 7) / 8;
             var bits = self.staged_bits;
-            for (self.header_bytes[0..self.header_len]) |*byte| {
+            for (self.headerStorage()[0..self.header_len]) |*byte| {
                 byte.* = @truncate(bits);
                 bits >>= 8;
             }
@@ -577,15 +597,16 @@ pub fn Decoder(comptime Codec: type) type {
             self.phase = .compressed_header;
         }
         fn appendHeaderByte(self: *Self, value: u8) Error!void {
-            if (self.header_bit_count > self.header_bytes.len * 8 - 8)
+            const storage = self.headerStorage();
+            if (self.header_bit_count > storage.len * 8 - 8)
                 return self.fail(.compressed_header, error.UnsupportedBrotliFeature);
             const byte_index = self.header_bit_count / 8;
             const bit_index: u3 = @intCast(self.header_bit_count % 8);
             if (bit_index == 0) {
-                self.header_bytes[byte_index] = value;
+                storage[byte_index] = value;
             } else {
-                self.header_bytes[byte_index] |= value << bit_index;
-                self.header_bytes[byte_index + 1] = value >> @intCast(8 - @as(usize, bit_index));
+                storage[byte_index] |= value << bit_index;
+                storage[byte_index + 1] = value >> @intCast(8 - @as(usize, bit_index));
             }
             self.header_bit_count += 8;
             self.header_len = (self.header_bit_count + 7) / 8;
@@ -595,9 +616,10 @@ pub fn Decoder(comptime Codec: type) type {
             const remaining = self.header_bit_count - parsed.bits_read;
             if (remaining > 127) return self.fail(.compressed_header, error.CorruptFrame);
             var staged: u128 = 0;
+            const storage = self.headerStorage();
             for (0..remaining) |bit| {
                 const source = parsed.bits_read + bit;
-                const value = (self.header_bytes[source / 8] >> @intCast(source % 8)) & 1;
+                const value = (storage[source / 8] >> @intCast(source % 8)) & 1;
                 staged |= @as(u128, value) << @intCast(bit);
             }
             self.staged_bits = staged;
@@ -607,6 +629,11 @@ pub fn Decoder(comptime Codec: type) type {
             self.header_len = 0;
             self.header_bit_count = 0;
             self.phase = .command;
+        }
+        fn headerStorage(self: *Self) []u8 {
+            if (self.options.compressed_header_scratch.len > self.header_bytes.len)
+                return self.options.compressed_header_scratch;
+            return &self.header_bytes;
         }
         fn pushLastDistance(last_distances: *[4]usize, distance: usize) void {
             last_distances[0] = last_distances[1];
