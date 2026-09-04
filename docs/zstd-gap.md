@@ -164,6 +164,10 @@ Current interpretation:
   32 KiB block; every allocation-failure path restores the caller's prior
   output. Timing was only a noisy `1.04x` average (5/12 wins), so this is kept
   as a deterministic allocation improvement rather than a throughput claim.
+  Consensus disagreement also reuses the completed repeat-beam plan during full
+  arbitration. The fixed fallback case stays at 1,393 bytes while improving by
+  `1.25x`/`1.21x`/`1.13x` at levels 1/3/9, each across 12/12 fixed-CPU wins,
+  and removes four allocations plus 897,583 requested bytes.
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug

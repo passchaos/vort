@@ -1013,3 +1013,12 @@ bytes while preserving the exact wire. The speed effect is intentionally not
 claimed as a stable win: twelve fixed-CPU-8 pairs averaged `1.04x` but only 5/12
 pairs won. The allocation reduction and exhaustive failure rollback are pinned
 by tests instead.
+
+When that probe reaches repeat-beam but the two parsers disagree, the fallback
+now carries the already-computed `PlanStats` and token scratch into full
+arbitration instead of running repeat-beam a second time. The fixed 16 KiB
+disagreement fixture remains byte-identical. Twelve fixed-CPU-8 pairs at each
+level improve fallback throughput by `1.25x`, `1.21x`, and `1.13x` for levels
+1, 3, and 9 respectively, with 12/12 wins at every level. A counting-allocator
+comparison on the same fixture also removes four allocations and 897,583
+cumulative requested bytes.

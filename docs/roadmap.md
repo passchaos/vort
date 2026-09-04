@@ -9018,3 +9018,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   allocation plus 13,028 fewer requested bytes on the locked 32 KiB binary
   block, with identical output. Twelve fixed-CPU-8 timing pairs averaged only
   `1.04x` with 5/12 wins, so no throughput claim is attached to this change.
+  Reused the repeat-beam plan when the consensus probe fails after completing
+  both parsers. A compile-time-specialized internal selector takes the existing
+  scratch and `PlanStats`, while ordinary calls retain their previous branch-free
+  shape. The fixed disagreement input remains 1,393 bytes. Twelve fixed-CPU-8
+  pairs at levels 1/3/9 improve fallback throughput by `1.25x`/`1.21x`/`1.13x`,
+  with 12/12 wins in every group; the existing disagreement test compares each
+  reused result byte-for-byte with complete fresh arbitration. A counting
+  allocator additionally pins four fewer allocations and 897,583 fewer
+  requested bytes on that fallback.
