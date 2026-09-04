@@ -8842,9 +8842,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   frame output, cursor reset across two independent compressed blocks, exact
   compressed-input caps, content checksum completion, and malformed match
   rejection before any caller output. The public native probe adds the same
-  one-byte-output path. Checksummed, linked, dictionary-backed, and >64 KiB
-  decoded compressed blocks intentionally retain the existing block-atomic
+  one-byte-output path. Checksummed and >64 KiB decoded compressed blocks
+  intentionally retain the existing block-atomic
   scratch path until their checksum and rolling-history state can be separated
   without weakening checksum-before-output behavior.
   Registered the new `compressed-block-cursor` probe capability in the public
   probe dashboard, validation smoke, JSON schema, and documentation.
+  Extended that cursor to consume bounded prefix history, covering linked blocks
+  and preset-dictionary blocks under arbitrary caller backpressure. Frame tests
+  force a linked second block to reference a 64 KiB raw prefix and a separate
+  dictionary frame to reference its preset bytes; both remain at zero decoded
+  scratch. The rolling 64 KiB history also removes the decoded-size restriction:
+  a 128 KiB compressed block now drains directly, while block-checksummed blocks
+  remain on the atomic fallback path.

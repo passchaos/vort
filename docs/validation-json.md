@@ -1998,7 +1998,7 @@ Example:
     },
     {
       "capability": "compressed-block-cursor",
-      "cases": 1,
+      "cases": 4,
       "ok": true,
       "ok_probe_count": 1,
       "present": true,
@@ -2149,7 +2149,7 @@ Example:
       "timeout_seconds": 120.0,
       "cases": 114,
       "marker": "lz4_native_probe",
-      "output": "lz4_native_probe_ok cases=114\nlz4_native_probe_coverage capability=block cases=114\nlz4_native_probe_coverage capability=bounded-limits cases=114\nlz4_native_probe_coverage capability=checksum cases=114\nlz4_native_probe_coverage capability=chunked cases=63\nlz4_native_probe_coverage capability=compressed-block-cursor cases=1\nlz4_native_probe_coverage capability=reusable-chunked cases=63\nlz4_native_probe_coverage capability=dictionary cases=114\nlz4_native_probe_coverage capability=dictionary-set cases=114\nlz4_native_probe_coverage capability=incremental cases=63\nlz4_native_probe_coverage capability=lib-generated cases=63\nlz4_native_probe_coverage capability=malformed cases=114\nlz4_native_probe_coverage capability=native-generated cases=114\nlz4_native_probe_coverage capability=skippable cases=114\n",
+      "output": "lz4_native_probe_ok cases=114\nlz4_native_probe_coverage capability=block cases=114\nlz4_native_probe_coverage capability=bounded-limits cases=114\nlz4_native_probe_coverage capability=checksum cases=114\nlz4_native_probe_coverage capability=chunked cases=63\nlz4_native_probe_coverage capability=compressed-block-cursor cases=4\nlz4_native_probe_coverage capability=reusable-chunked cases=63\nlz4_native_probe_coverage capability=dictionary cases=114\nlz4_native_probe_coverage capability=dictionary-set cases=114\nlz4_native_probe_coverage capability=incremental cases=63\nlz4_native_probe_coverage capability=lib-generated cases=63\nlz4_native_probe_coverage capability=malformed cases=114\nlz4_native_probe_coverage capability=native-generated cases=114\nlz4_native_probe_coverage capability=skippable cases=114\n",
       "reported_capabilities": [
         "block",
         "bounded-limits",
@@ -2170,7 +2170,7 @@ Example:
         "bounded-limits": 114,
         "checksum": 114,
         "chunked": 63,
-        "compressed-block-cursor": 1,
+        "compressed-block-cursor": 4,
         "dictionary": 114,
         "dictionary-set": 114,
         "incremental": 63,
