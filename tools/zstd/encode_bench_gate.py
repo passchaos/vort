@@ -77,6 +77,10 @@ def main() -> int:
     assert int(binary_rows[1]["vort_bytes"]) <= 8_607, binary_rows
     assert int(binary_rows[3]["vort_bytes"]) <= 8_607, binary_rows
     assert int(binary_rows[9]["vort_bytes"]) <= 8_607, binary_rows
+    # Wide-alphabet level 3 returns its already-computed primary frame instead
+    # of evaluating the adaptive split ladder. Keep the former roughly 5.8x
+    # level-1 latency cliff from returning while leaving ample CI headroom.
+    assert int(binary_rows[3]["vort_ns"]) < int(binary_rows[1]["vort_ns"]) * 4, binary_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 

@@ -8947,3 +8947,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   five-row profile gave only about 0.3% average gain on `ascii64k`, while
   `huffman80k` and `large_json` regressed by about 10% and 4%. The five-symbol
   batch remains the stable production point.
+  Level 3 now also returns an already-computed primary frame for wide-alphabet,
+  single-block inputs instead of evaluating the 4 KiB screen and possible 2 KiB
+  deferred split. This is an explicit speed-level tradeoff: a temporary
+  1,152-case audit spanning 9--128 KiB, 41--256 symbols, eight seeds, and plain
+  plus copied-tail shapes found 22 split winners totaling 175 bytes, with a
+  worst individual gain of 22 bytes; 1,130 cases were unchanged. A focused
+  test pins that worst observed 6146-versus-6124-byte counterexample and checks
+  one-shot/reusable output plus round-trip decode. Twelve alternating
+  fixed-CPU-8 binary level-3 pairs improve mean throughput by `4.01x` with
+  12/12 wins. An eight-run complete matrix measures `4.11x` on the target,
+  preserves every locked size/checksum, and keeps other rows within
+  `0.98--1.06x`; the encode gate now prevents the prior level-3 binary latency
+  cliff from returning.

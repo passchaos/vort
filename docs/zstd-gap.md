@@ -131,6 +131,11 @@ Current interpretation:
   1,024-case generated audit found 11 split winners totaling 92 saved bytes
   (worst case 29 bytes); the other 1,013 cases were unchanged. The locked JSON
   frame remains 640 bytes while throughput improves by roughly 3.8x.
+- The level-3 speed policy also stops after its primary frame on wide-alphabet
+  single-block input. A 1,152-case audit found 22 split winners totaling 175
+  bytes, with a 22-byte worst case; the other 1,130 cases were unchanged. The
+  locked binary frame remains 8,607 bytes while throughput improves by about
+  `4.0x` (12/12 fixed-CPU pairs). Levels 4+ retain exhaustive split arbitration.
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug

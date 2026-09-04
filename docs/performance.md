@@ -943,3 +943,14 @@ silently. Twelve fixed-CPU-8 pairs keep the benchmark JSON frame at 640 bytes
 and improve level-3 throughput from about 3.4 MiB/s to 12.6--13.1 MiB/s
 (`~3.8x`, 12/12 wins). An eight-run nine-row matrix preserved every locked
 size/checksum and kept non-target rows within noise.
+
+Level 3 now also treats a wide-alphabet, single-block primary as final instead
+of evaluating its 4 KiB screen and possible 2 KiB deferred split. A 1,152-case
+audit spanning 9--128 KiB, 41--256 symbols, eight seeds, and plain/copied-tail
+shapes found 1,130 cases with no loss and 22 split winners totaling 175 bytes;
+the worst individual cost was 22 bytes. That counterexample is retained as a
+6146-byte primary versus 6124-byte exhaustive split test, including one-shot,
+reusable, and decode verification. Twelve alternating fixed-CPU-8 binary
+level-3 pairs improved mean throughput by `4.01x` with 12/12 wins. An eight-run
+nine-row matrix measured `4.11x` on the target (about 2.4 to 10 MiB/s), kept
+all sizes/checksums identical, and left control rows within `0.98--1.06x`.
