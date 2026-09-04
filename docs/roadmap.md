@@ -8861,3 +8861,8 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   block-stream cursor when a compressed block exceeds the caller's current
   output slice, preserving prior output/history and avoiding the old whole-frame
   decoded-scratch fallback.
+  Replaced the cursor's byte-at-a-time match replay with bounded prefix copies
+  plus doubling copies from the current output span. A nine-pair ReleaseFast A/B
+  run against commit `72609544` on a 256 KiB repetitive frame measured median
+  throughput-equivalent speedups of 1.081x, 2.387x, and 5.399x for 1-, 127-,
+  and 4096-byte caller output slices respectively.

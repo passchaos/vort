@@ -108,14 +108,35 @@ pub const Cursor = struct {
                     self.stage = .match;
                 },
                 .match => {
-                    while (self.match_remaining != 0 and written < output.len) {
-                        output[written] = if (self.match_offset > written)
-                            historyByteFromEnd(history, self.match_offset - written)
-                        else
-                            output[written - self.match_offset];
-                        written += 1;
-                        self.decoded_len += 1;
-                        self.match_remaining -= 1;
+                    const output_remaining = output.len - written;
+                    if (self.match_remaining != 0 and output_remaining != 0) {
+                        var copy_len = @min(self.match_remaining, output_remaining);
+                        if (copy_len == 1) {
+                            output[written] = if (self.match_offset > written)
+                                historyByteFromEnd(history, self.match_offset - written)
+                            else
+                                output[written - self.match_offset];
+                            written += 1;
+                            self.decoded_len += 1;
+                            self.match_remaining -= 1;
+                            if (self.match_remaining != 0)
+                                return .{ .output_written = written, .done = false };
+                            self.stage = .token;
+                            continue;
+                        }
+                        if (self.match_offset > written) {
+                            const history_len = @min(copy_len, self.match_offset - written);
+                            copyHistoryFromEnd(history, self.match_offset - written, output[written..][0..history_len]);
+                            written += history_len;
+                            self.decoded_len += history_len;
+                            self.match_remaining -= history_len;
+                            copy_len -= history_len;
+                        }
+                        if (copy_len != 0) {
+                            copyMatchFromOutput(output, &written, self.match_offset, copy_len);
+                            self.decoded_len += copy_len;
+                            self.match_remaining -= copy_len;
+                        }
                     }
                     if (self.match_remaining != 0) return .{ .output_written = written, .done = false };
                     self.stage = .token;
@@ -135,6 +156,34 @@ fn historyByteFromEnd(history: History, distance: usize) u8 {
     std.debug.assert(distance != 0 and distance <= history.bytes.len);
     const logical_index = history.bytes.len - distance;
     return history.bytes[(history.start + logical_index) % history.bytes.len];
+}
+
+fn copyHistoryFromEnd(history: History, distance: usize, output: []u8) void {
+    std.debug.assert(distance != 0 and distance <= history.bytes.len);
+    const logical_index = history.bytes.len - distance;
+    const physical_index = (history.start + logical_index) % history.bytes.len;
+    const first_len = @min(output.len, history.bytes.len - physical_index);
+    @memcpy(output[0..first_len], history.bytes[physical_index..][0..first_len]);
+    @memcpy(output[first_len..], history.bytes[0 .. output.len - first_len]);
+}
+
+fn copyMatchFromOutput(output: []u8, written: *usize, distance: usize, len: usize) void {
+    std.debug.assert(distance != 0 and distance <= written.*);
+    const repeat_start = written.* - distance;
+    const destination_start = written.*;
+    written.* += len;
+
+    var copied: usize = 0;
+    while (copied < len) {
+        const available = if (copied == 0) distance else copied;
+        const copy_len = @min(available, len - copied);
+        const source_start = if (copied == 0) repeat_start else destination_start;
+        @memcpy(
+            output[destination_start + copied ..][0..copy_len],
+            output[source_start..][0..copy_len],
+        );
+        copied += copy_len;
+    }
 }
 
 fn checkedAdd(a: usize, b: usize) Error!usize {
