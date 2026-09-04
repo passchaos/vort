@@ -9035,3 +9035,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   bytes on a pinned 16 KiB case, but fixed-CPU timing regressed levels 1/3/9 to
   about `0.96x`/`0.91x`/`0.94x` with only 3/12, 1/12, and 0/12 wins. The extra
   serialization was removed; fallback retains only the profitable beam reuse.
+  Added a deliberately speed-oriented level-1 shortcut at a stricter `4/15`
+  double-fast block ratio. A 784-case audit found 136 applicable wide blocks:
+  double-fast was smaller in 51 cases by 144 bytes total, equal in 76, and
+  larger in nine by 133 bytes total, for an aggregate 11-byte reduction but a
+  worst individual cost of 32 bytes. That 6,619-versus-6,587-byte case is pinned
+  across block, one-shot, reusable, and decode APIs; level 2 retains exhaustive
+  arbitration. Twelve fixed-CPU-8 binary level-1 pairs improve by `2.20x` with
+  12/12 wins. An eight-run nine-row matrix measures `2.22x`, preserves the
+  locked 8,607-byte wire/checksum, and keeps controls within about 2%.

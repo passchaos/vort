@@ -71,6 +71,7 @@ const mixed_match_min_search_budget = 96;
 // The independent double-fast/repeat-beam consensus is useful from level 1's
 // 16-state budget onward. The rep-beam level policy keeps levels 4-8 out.
 const decisive_wide_match_min_search_budget = 16;
+const fastest_wide_match_search_budget = 16;
 // Level 1 already evaluates greedy and optimal hash plans. A third lazy pass
 // preserves its locked wires but cannot improve them, so begin that extra ratio
 // work at level 2's 32-state budget.
@@ -9641,7 +9642,15 @@ noinline fn emitNativeMatchCompressedBlockWithWideProbe(
     defer if (rep_beam_scratch == null) local_rep_beam.deinit(allocator);
     const beam_scratch = rep_beam_scratch orelse &local_rep_beam;
     var rep_beam_stats: ?lz77.PlanStats = null;
-    if (try emitDecisiveWideMatchCompressedBlock(allocator, out, block, last, beam_scratch, &rep_beam_stats)) return true;
+    if (try emitDecisiveWideMatchCompressedBlock(
+        allocator,
+        out,
+        block,
+        last,
+        match_search_budget == fastest_wide_match_search_budget,
+        beam_scratch,
+        &rep_beam_stats,
+    )) return true;
     if (rep_beam_stats) |stats|
         return try emitNativeMatchCompressedBlockWithPrecomputedBeam(allocator, out, block, last, match_search_budget, beam_scratch, stats);
     return try emitNativeMatchCompressedBlock(allocator, out, block, last, match_search_budget, true, rep_beam_scratch);
@@ -9652,6 +9661,7 @@ noinline fn emitDecisiveWideMatchCompressedBlock(
     out: *std.ArrayList(u8),
     block: []const u8,
     last: bool,
+    allow_fast_level_tradeoff: bool,
     rep_beam: *lz77.RepBeamScratch,
     precomputed_rep_beam_stats: *?lz77.PlanStats,
 ) Error!bool {
@@ -9671,6 +9681,8 @@ noinline fn emitDecisiveWideMatchCompressedBlock(
         out.items.len = output_start;
         return false;
     }
+    if (allow_fast_level_tradeoff and
+        (out.items.len - output_start) * 15 <= block.len * 4) return true;
 
     const rep_beam_stats = lz77.optimalRepBeamPlanReuse(rep_beam, allocator, block, parser_options) catch |err| switch (err) {
         error.InvalidBlockPlan => {
@@ -18648,7 +18660,7 @@ test "zstd wide double fast consensus matches full arbitration" {
         var beam_scratch: lz77.RepBeamScratch = .{};
         defer beam_scratch.deinit(std.testing.allocator);
         var beam_stats: ?lz77.PlanStats = null;
-        try std.testing.expect(try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &consensus, &payload, true, &beam_scratch, &beam_stats));
+        try std.testing.expect(try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &consensus, &payload, true, false, &beam_scratch, &beam_stats));
         try std.testing.expect(beam_stats != null);
         try std.testing.expectEqualSlices(u8, "prefix", consensus.items[0.."prefix".len]);
         try std.testing.expectEqual(@as(usize, "prefix".len + 8600), consensus.items.len);
@@ -18663,7 +18675,7 @@ test "zstd wide double fast consensus matches full arbitration" {
     }
 }
 
-test "zstd wide double fast disagreement falls back to full arbitration" {
+test "zstd wide double fast disagreement is isolated to fastest policy" {
     var payload: [16 * 1024]u8 = undefined;
     var state: u32 = @truncate(0x9e37_79b9 +% 16 *% 0x10001 +% 4 *% 0x101 +% 6 *% 0x0100_0193);
     for (&payload, 0..) |*byte, index| {
@@ -18678,13 +18690,26 @@ test "zstd wide double fast disagreement falls back to full arbitration" {
     var beam_scratch: lz77.RepBeamScratch = .{};
     defer beam_scratch.deinit(std.testing.allocator);
     var beam_stats: ?lz77.PlanStats = null;
-    try std.testing.expect(!try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &consensus, &payload, true, &beam_scratch, &beam_stats));
+    try std.testing.expect(!try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &consensus, &payload, true, false, &beam_scratch, &beam_stats));
     try std.testing.expect(beam_stats != null);
     try std.testing.expectEqualSlices(u8, "prefix", consensus.items);
-    for ([_]usize{ 16, 32, 64, 96 }) |budget| {
+    var fast: std.ArrayList(u8) = .empty;
+    defer fast.deinit(std.testing.allocator);
+    var fastest_beam: lz77.RepBeamScratch = .{};
+    defer fastest_beam.deinit(std.testing.allocator);
+    var fastest_stats: ?lz77.PlanStats = null;
+    try std.testing.expect(try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &fast, &payload, true, true, &fastest_beam, &fastest_stats));
+    try std.testing.expectEqual(@as(usize, 1403), fast.items.len);
+    var fastest_selected: std.ArrayList(u8) = .empty;
+    defer fastest_selected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbe(std.testing.allocator, &fastest_selected, &payload, true, 16, null));
+    try std.testing.expectEqualSlices(u8, fast.items, fastest_selected.items);
+
+    for ([_]usize{ 32, 64, 96 }) |budget| {
         var exhaustive: std.ArrayList(u8) = .empty;
         defer exhaustive.deinit(std.testing.allocator);
         try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &exhaustive, &payload, true, budget, true, null, null));
+        try std.testing.expectEqual(@as(usize, 1386), exhaustive.items.len);
         var selected: std.ArrayList(u8) = .empty;
         defer selected.deinit(std.testing.allocator);
         try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbe(std.testing.allocator, &selected, &payload, true, budget, null));
@@ -18707,7 +18732,7 @@ test "zstd wide consensus rolls back every allocation failure" {
             var beam_scratch: lz77.RepBeamScratch = .{};
             defer beam_scratch.deinit(allocator);
             var beam_stats: ?lz77.PlanStats = null;
-            const result = emitDecisiveWideMatchCompressedBlock(allocator, &output, &payload, true, &beam_scratch, &beam_stats) catch |err| {
+            const result = emitDecisiveWideMatchCompressedBlock(allocator, &output, &payload, true, false, &beam_scratch, &beam_stats) catch |err| {
                 try std.testing.expectEqualSlices(u8, "prefix", output.items);
                 return err;
             };
@@ -18758,7 +18783,7 @@ test "zstd wide consensus writes directly into caller scratch" {
     var direct_beam: lz77.RepBeamScratch = .{};
     defer direct_beam.deinit(direct_allocator.allocator());
     var direct_stats: ?lz77.PlanStats = null;
-    try std.testing.expect(try emitDecisiveWideMatchCompressedBlock(direct_allocator.allocator(), &direct_output, &payload, true, &direct_beam, &direct_stats));
+    try std.testing.expect(try emitDecisiveWideMatchCompressedBlock(direct_allocator.allocator(), &direct_output, &payload, true, false, &direct_beam, &direct_stats));
 
     try std.testing.expectEqualSlices(u8, reference_output.items, direct_output.items);
     try std.testing.expectEqual(reference_allocator.allocations - 1, direct_allocator.allocations);
@@ -18771,7 +18796,7 @@ test "zstd wide consensus fallback reuses repeat beam scratch" {
             var probe_beam: lz77.RepBeamScratch = .{};
             defer probe_beam.deinit(allocator);
             var probe_stats: ?lz77.PlanStats = null;
-            if (try emitDecisiveWideMatchCompressedBlock(allocator, out, block, true, &probe_beam, &probe_stats)) return true;
+            if (try emitDecisiveWideMatchCompressedBlock(allocator, out, block, true, false, &probe_beam, &probe_stats)) return true;
             return try emitNativeMatchCompressedBlock(allocator, out, block, true, budget, true, null);
         }
     };
@@ -18796,6 +18821,49 @@ test "zstd wide consensus fallback reuses repeat beam scratch" {
     try std.testing.expectEqualSlices(u8, reference_output.items, reuse_output.items);
     try std.testing.expectEqual(reference_allocator.allocations - 4, reuse_allocator.allocations);
     try std.testing.expectEqual(reference_allocator.allocated_bytes - 897_583, reuse_allocator.allocated_bytes);
+}
+
+test "zstd fastest wide policy pins worst audited double fast tradeoff" {
+    var payload: [32 * 1024]u8 = undefined;
+    var state: u32 = @truncate(0x9e37_79b9 +% 32 *% 0x10001 +% 16 *% 0x101 +% 17 +% 7 *% 0x0100_0193);
+    for (&payload, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17 + 7 * 13) else @truncate(state >> 16);
+    }
+    const copy_len = payload.len / 4;
+    @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+    try std.testing.expect(!preferSerialMixedSearch(&payload));
+
+    var fast: std.ArrayList(u8) = .empty;
+    defer fast.deinit(std.testing.allocator);
+    var fast_beam: lz77.RepBeamScratch = .{};
+    defer fast_beam.deinit(std.testing.allocator);
+    var fast_stats: ?lz77.PlanStats = null;
+    try std.testing.expect(try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &fast, &payload, true, true, &fast_beam, &fast_stats));
+    try std.testing.expect(fast_stats == null);
+    try std.testing.expectEqual(@as(usize, 6619), fast.items.len);
+
+    var exhaustive: std.ArrayList(u8) = .empty;
+    defer exhaustive.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &exhaustive, &payload, true, 16, true, null, null));
+    try std.testing.expectEqual(@as(usize, 6587), exhaustive.items.len);
+    var selected: std.ArrayList(u8) = .empty;
+    defer selected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbe(std.testing.allocator, &selected, &payload, true, 16, null));
+    try std.testing.expectEqualSlices(u8, fast.items, selected.items);
+
+    const level1 = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, 1);
+    defer std.testing.allocator.free(level1);
+    try std.testing.expectEqual(@as(usize, 6626), level1.len);
+    var reusable = LevelFrameEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    try std.testing.expectEqualSlices(u8, level1, try reusable.encodeScratch(&payload, 1));
+    const level2 = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, 2);
+    defer std.testing.allocator.free(level2);
+    try std.testing.expect(level2.len < level1.len);
+    const decoded = try decodeFrameAlloc(std.testing.allocator, level1);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
 }
 
 test "zstd level one returns a decisive non-prefix primary frame" {

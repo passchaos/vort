@@ -168,6 +168,11 @@ Current interpretation:
   arbitration. The fixed fallback case stays at 1,393 bytes while improving by
   `1.25x`/`1.21x`/`1.13x` at levels 1/3/9, each across 12/12 fixed-CPU wins,
   and removes four allocations plus 897,583 requested bytes.
+- Level 1 treats a double-fast block at or below `4/15` of source size as final.
+  A 784-case audit found 51 smaller, 76 equal, and nine larger results versus
+  complete 16-state arbitration; the aggregate was 11 bytes smaller, while the
+  worst individual cost was 32 bytes. The locked binary row keeps its 8,607-byte
+  frame and improves by about `2.20x` (12/12 fixed-CPU pairs).
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug

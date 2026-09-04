@@ -1022,3 +1022,15 @@ level improve fallback throughput by `1.25x`, `1.21x`, and `1.13x` for levels
 1, 3, and 9 respectively, with 12/12 wins at every level. A counting-allocator
 comparison on the same fixture also removes four allocations and 897,583
 cumulative requested bytes.
+
+Level 1 now accepts the double-fast block directly at the stricter `4/15`
+source-size threshold instead of requiring repeat-beam consensus. Across 784
+generated wide blocks, 136 met this threshold: double-fast beat complete
+16-state arbitration in 51 cases by 144 bytes total, tied 76, and lost nine by
+133 bytes total; aggregate output was 11 bytes smaller, while the worst
+individual tradeoff was 32 bytes. That worst 6,619-versus-6,587-byte case is
+pinned through block, one-shot, reusable, and decode paths; level 2 retains the
+smaller exhaustive result. Twelve fixed-CPU-8 binary level-1 pairs improve by
+`2.20x` with 12/12 wins. An eight-run nine-row matrix measures `2.22x`, keeps
+the locked 8,607-byte benchmark wire unchanged, and leaves all controls within
+about 2%.
