@@ -136,6 +136,11 @@ Current interpretation:
   bytes, with a 22-byte worst case; the other 1,130 cases were unchanged. The
   locked binary frame remains 8,607 bytes while throughput improves by about
   `4.0x` (12/12 fixed-CPU pairs). Levels 4+ retain exhaustive split arbitration.
+- Level 9+ keeps ratio semantics stricter: wide-alphabet primary frames return
+  early only at 3:1 compression or better. A 1,008-case structured/noise audit
+  produced 280 qualifying cases and zero split winners, after an unrestricted
+  audit had exposed 71 counterexamples. The locked binary level-9 frame remains
+  8,607 bytes and improves by about `3.3x` (12/12 fixed-CPU pairs).
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug

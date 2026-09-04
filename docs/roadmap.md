@@ -8960,3 +8960,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   preserves every locked size/checksum, and keeps other rows within
   `0.98--1.06x`; the encode gate now prevents the prior level-3 binary latency
   cliff from returning.
+  A corresponding level-9 wide-alphabet shortcut was deliberately not applied
+  unconditionally. The first 1,152-case audit found 71 adaptive split winners
+  totaling 1,412 bytes, with a 67-byte maximum. Requiring the completed primary
+  frame to be at most one third of the input isolated the useful strongly
+  structured subset: a second 1,008-case audit across 9--128 KiB, seven noise
+  ratios, eight seeds, and plain/copied-tail variants found 280 qualifying
+  cases and zero split winners. Tests pin the 8,607-byte level-9/22 primary
+  winner and a 10,842-versus-10,809-byte below-threshold split fallback. Twelve
+  alternating fixed-CPU-8 binary level-9 pairs improve mean throughput by
+  `3.30x` with 12/12 wins; an eight-run nine-row matrix measures `3.27x`,
+  preserves every size/checksum, and keeps controls within about 1.6%.

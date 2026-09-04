@@ -4925,12 +4925,14 @@ pub const LevelFrameEncoder = struct {
             return (try self.primary.encodeScratch(input, primary_options)).frame;
 
         const wide_primary_is_final = shouldReturnFastWidePrimary(input, level, primary_options.block_size_max);
+        const probe_ratio_wide_primary = shouldProbeRatioDecisiveWidePrimary(input, level, primary_options.block_size_max);
         if (input.len <= primary_options.block_size_max and
-            (level == 1 or wide_primary_is_final or findPrefixTailDuplicateMatch(input) != null))
+            (level == 1 or wide_primary_is_final or probe_ratio_wide_primary or findPrefixTailDuplicateMatch(input) != null))
         {
             const primary = try self.primary.encodeScratch(input, primary_options);
             const decisive_ratio: usize = if (level == 1) 32 else 256;
             if (primary.frame.len <= input.len / decisive_ratio or
+                (probe_ratio_wide_primary and primary.frame.len <= input.len / 3) or
                 wide_primary_is_final) return primary.frame;
         }
         if (shouldProbeRatioDecisivePrimary(input, level, primary_options.block_size_max)) {
@@ -5079,6 +5081,7 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     var precomputed_primary: ?NativeFrameEncodeResult = null;
     errdefer if (precomputed_primary) |result| allocator.free(result.frame);
     const wide_primary_is_final = shouldReturnFastWidePrimary(input, level, primary_options.block_size_max);
+    const probe_ratio_wide_primary = shouldProbeRatioDecisiveWidePrimary(input, level, primary_options.block_size_max);
     // Extremely small single-block results cannot be beaten meaningfully by
     // splitting: each additional adaptive block costs a three-byte header.
     // Level 1 and selected level-3 shapes also compute primary first so the
@@ -5088,12 +5091,13 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     if (level > 0 and
         input.len > 8 * 1024 and
         input.len <= primary_options.block_size_max and
-        (level == 1 or wide_primary_is_final or findPrefixTailDuplicateMatch(input) != null))
+        (level == 1 or wide_primary_is_final or probe_ratio_wide_primary or findPrefixTailDuplicateMatch(input) != null))
     {
         const primary = try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
         const decisive_ratio: usize = if (level == 1) 32 else 256;
-        if (primary.frame.len <= input.len / decisive_ratio) return primary.frame;
-        if (level == 1 or wide_primary_is_final)
+        if (primary.frame.len <= input.len / decisive_ratio or
+            (probe_ratio_wide_primary and primary.frame.len <= input.len / 3)) return primary.frame;
+        if (level == 1 or wide_primary_is_final or probe_ratio_wide_primary)
             precomputed_primary = primary
         else
             allocator.free(primary.frame);
@@ -5229,6 +5233,13 @@ inline fn shouldProbeRatioDecisivePrimary(input: []const u8, level: c_int, prima
 
 inline fn shouldReturnFastWidePrimary(input: []const u8, level: c_int, primary_block_size: usize) bool {
     return (level == 1 or level == 3) and
+        input.len > 8 * 1024 and
+        input.len <= primary_block_size and
+        !preferSerialMixedSearch(input);
+}
+
+inline fn shouldProbeRatioDecisiveWidePrimary(input: []const u8, level: c_int, primary_block_size: usize) bool {
+    return level >= 9 and
         input.len > 8 * 1024 and
         input.len <= primary_block_size and
         !preferSerialMixedSearch(input);
@@ -18434,6 +18445,67 @@ test "zstd level three wide primary pins bounded split tradeoff" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, selected);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "zstd ratio levels accept decisive wide primary frame" {
+    var payload: [32 * 1024]u8 = undefined;
+    var state: u32 = 0xfeed_beef;
+    for (&payload, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(state >> 16);
+    }
+    try std.testing.expect(!preferSerialMixedSearch(&payload));
+
+    for ([_]c_int{ 9, 22 }) |level| {
+        const primary_options = try nativeFrameOptionsForLevel(level, .{});
+        try std.testing.expect(shouldProbeRatioDecisiveWidePrimary(&payload, level, primary_options.block_size_max));
+        const primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, primary_options);
+        defer std.testing.allocator.free(primary.frame);
+        try std.testing.expectEqual(@as(usize, 8607), primary.frame.len);
+        try std.testing.expect(primary.frame.len <= payload.len / 3);
+        for (adaptiveLevelBlockSizes(level)) |block_size| {
+            const split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, adaptiveLevelCandidateOptions(primary_options, block_size));
+            defer std.testing.allocator.free(split.frame);
+            try std.testing.expect(primary.frame.len < split.frame.len);
+        }
+
+        const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, level);
+        defer std.testing.allocator.free(selected);
+        try std.testing.expectEqualSlices(u8, primary.frame, selected);
+        var reusable = LevelFrameEncoder.init(std.testing.allocator);
+        defer reusable.deinit();
+        try std.testing.expectEqualSlices(u8, primary.frame, try reusable.encodeScratch(&payload, level));
+    }
+}
+
+test "zstd ratio wide primary below threshold retains split arbitration" {
+    var payload: [12 * 1024]u8 = undefined;
+    var state: u32 = @truncate(0x9e37_79b9 +% 12 *% 0x10001 +% 128 *% 0x101 +% 5 *% 0x0100_0193);
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast((state >> 16) % 128);
+    }
+
+    const level: c_int = 9;
+    const primary_options = try nativeFrameOptionsForLevel(level, .{});
+    try std.testing.expect(shouldProbeRatioDecisiveWidePrimary(&payload, level, primary_options.block_size_max));
+    const primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, primary_options);
+    defer std.testing.allocator.free(primary.frame);
+    try std.testing.expectEqual(@as(usize, 10_842), primary.frame.len);
+    try std.testing.expect(primary.frame.len > payload.len / 3);
+    var exhaustive = try std.testing.allocator.dupe(u8, primary.frame);
+    defer std.testing.allocator.free(exhaustive);
+    for (adaptiveLevelBlockSizes(level)) |block_size| {
+        const split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, adaptiveLevelCandidateOptions(primary_options, block_size));
+        if (split.frame.len < exhaustive.len) {
+            std.testing.allocator.free(exhaustive);
+            exhaustive = split.frame;
+        } else std.testing.allocator.free(split.frame);
+    }
+    try std.testing.expectEqual(@as(usize, 10_809), exhaustive.len);
+    const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, level);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, exhaustive, selected);
 }
 
 test "zstd level one returns a decisive non-prefix primary frame" {

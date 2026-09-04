@@ -81,6 +81,10 @@ def main() -> int:
     # of evaluating the adaptive split ladder. Keep the former roughly 5.8x
     # level-1 latency cliff from returning while leaving ample CI headroom.
     assert int(binary_rows[3]["vort_ns"]) < int(binary_rows[1]["vort_ns"]) * 4, binary_rows
+    # Ratio levels accept a wide primary only after it reaches the audited 3:1
+    # decisive threshold. Keep level 9 below twice the now-stable level-3
+    # latency while allowing normal shared-runner variance.
+    assert int(binary_rows[9]["vort_ns"]) < int(binary_rows[3]["vort_ns"]) * 2, binary_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 

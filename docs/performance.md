@@ -954,3 +954,15 @@ reusable, and decode verification. Twelve alternating fixed-CPU-8 binary
 level-3 pairs improved mean throughput by `4.01x` with 12/12 wins. An eight-run
 nine-row matrix measured `4.11x` on the target (about 2.4 to 10 MiB/s), kept
 all sizes/checksums identical, and left control rows within `0.98--1.06x`.
+
+Ratio levels now have a narrower wide-alphabet shortcut: the primary must also
+be no larger than one third of the source. An initial 1,152-case unrestricted
+audit rejected unconditional early return after finding 71 split winners
+(1,412 bytes total, worst 67 bytes). A second 1,008-case audit spanning
+9--128 KiB, seven distributed-noise ratios, eight seeds, and plain/copied-tail
+shapes found 280 inputs meeting the 3:1 threshold and zero split winners. Tests
+pin the 8,607-byte level-9/22 primary winner and a below-threshold
+10,842-versus-10,809-byte fallback split. Twelve alternating fixed-CPU-8
+binary level-9 pairs improve mean throughput by `3.30x` with 12/12 wins; an
+eight-run nine-row matrix measures `3.27x`, with every size/checksum unchanged
+and control rows within about 1.6%.
