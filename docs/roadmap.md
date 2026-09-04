@@ -8814,3 +8814,19 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   moving the complete sequence dispatcher out of line each regressed at least
   one tracked FSE-heavy shape. Future work should avoid repeating these changes
   without first isolating the observed code-layout sensitivity.
+  Follow-up fixed-CPU experiments narrowed that warning further. Zeroing the
+  complete 13 KiB empty sequence-frame state instead of copying its static
+  template kept equivalent initialized storage but still reduced `huffman80k`
+  by about 12.0%; shrinking the FSE builder's symbol-next scratch from 256 to
+  the format-required 64 entries reduced it by about 6.2%. A 32-bit reservoir
+  dedicated to <=9-bit FSE state transitions lost about 11.4%, and hand-copying
+  non-overlapping matches up to 16 bytes lost about 11.4% on `huffman80k`, 6.0%
+  on `large_json`, and 5.1% on `binary_mixed`. Extending the all-FSE/raw loop
+  through the existing FSE/FSE/RLE helper still improved its target by about
+  9.9%, but regressed `large_json` by about 2.0% and `binary_mixed` by 1.6%; a
+  dictionary-free match-copy shortcut showed a positive isolated profile but
+  regressed `huffman80k` by about 11% in the independent reference binary.
+  Cache-line aligning the public decode entry, marking the generic non-terminal
+  sequence edge likely, and hinting generic reader/offset-mode/offset-zero paths
+  were likewise neutral or negative. All candidates were fully reverted. The
+  retained cold FSE state-failure hint remains the only change from this pass.
