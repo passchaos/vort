@@ -168,7 +168,10 @@ Graphviz stream exercises more than 32 literal types; handcrafted maximum-width
 literal and command streams are cross-decoded by libbrotli plus Vort's one-shot
 and byte-progressive paths. Command trees beyond the common first 32 use packed
 4-bit code lengths and one lazily expanded active-tree cache, keeping the public
-decoder state below its existing 1.5 MiB budget. The progressive path still
+decoder state below its existing 1.5 MiB budget. Literal and distance trees use
+the same representation beyond their first 64 hot entries, reducing
+`BrotliIncrementalCopyStreamDecoder` from 1,499,168 to 652,288 bytes while the
+real 247-literal-tree and 68-distance-tree upstream cases continue to decode. The progressive path still
 intentionally bounds each compressed meta-block header to 16 KiB, so a
 pathological maximum-count set of complex trees can still report
 `UnsupportedBrotliFeature`; the one-shot decoder parses directly from input.

@@ -178,7 +178,8 @@ const IncrementalCopyCodec = struct {
         const context = try literalContextFromMode(header.compressed.literal_context_modes[block_type], previous, second_previous);
         const tree_index = header.compressed.literal_context_map[@as(usize, block_type) * 64 + context];
         if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
-        const symbol = try header.compressed.literal_trees[tree_index].decode(reader);
+        const tree = try literalPrefixForDecode(&header.compressed, tree_index);
+        const symbol = try tree.decode(reader);
         if (symbol > 0xff) return error.InvalidHuffmanCode;
         if (header.compressed.literal_block.remaining != 0) header.compressed.literal_block.remaining -= 1;
         return @intCast(symbol);
@@ -203,7 +204,8 @@ const IncrementalCopyCodec = struct {
         if (block_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
         const tree_index = header.compressed.distance_context_map[@as(usize, block_type) * 4 + distanceContext(copy_len)];
         if (tree_index >= max_distance_context_trees) return error.UnsupportedBrotliFeature;
-        const symbol = try header.compressed.distance_trees[tree_index].decode(reader);
+        const tree = try distancePrefixForDecode(&header.compressed, tree_index);
+        const symbol = try tree.decode(reader);
         if (header.compressed.distance_block.remaining != 0) header.compressed.distance_block.remaining -= 1;
         if (symbol < 16) return .{
             .distance = try resolveShortDistance(symbol, last_distances),
@@ -1177,43 +1179,49 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
     };
 }
 
-const inline_command_tree_count = 32;
-const packed_command_length_bytes = (command_lut.entries.len + 1) / 2;
-const PackedCommandPrefixCode = struct {
-    single_symbol_plus_one: u16 = 0,
-    active_entries: u16 = 0,
-    lengths: [packed_command_length_bytes]u8 = @splat(0),
+fn PackedPrefixCode(comptime alphabet_size: usize) type {
+    return struct {
+        single_symbol_plus_one: u16 = 0,
+        active_entries: u16 = 0,
+        lengths: [(alphabet_size + 1) / 2]u8 = @splat(0),
 
-    fn init(tree: *const PrefixCode(command_lut.entries.len)) PackedCommandPrefixCode {
-        var compact: PackedCommandPrefixCode = .{};
-        if (tree.single_symbol) |symbol| {
-            compact.single_symbol_plus_one = symbol + 1;
+        const Self = @This();
+
+        fn init(tree: *const PrefixCode(alphabet_size)) Self {
+            var compact: Self = .{};
+            if (tree.single_symbol) |symbol| {
+                compact.single_symbol_plus_one = symbol + 1;
+                return compact;
+            }
+            compact.active_entries = @intCast(tree.table.len);
+            for (tree.table.entries[0..tree.table.len]) |entry| {
+                const byte_index = entry.symbol / 2;
+                const shift: u3 = @intCast((entry.symbol & 1) * 4);
+                compact.lengths[byte_index] |= @as(u8, entry.bits) << shift;
+            }
             return compact;
         }
-        compact.active_entries = @intCast(tree.table.len);
-        for (tree.table.entries[0..tree.table.len]) |entry| {
-            const byte_index = entry.symbol / 2;
-            const shift: u3 = @intCast((entry.symbol & 1) * 4);
-            compact.lengths[byte_index] |= @as(u8, entry.bits) << shift;
-        }
-        return compact;
-    }
 
-    fn expand(self: *const PackedCommandPrefixCode) Error!PrefixCode(command_lut.entries.len) {
-        if (self.single_symbol_plus_one != 0)
-            return .{ .single_symbol = self.single_symbol_plus_one - 1 };
-        var lengths: [command_lut.entries.len]u4 = undefined;
-        for (&lengths, 0..) |*length, symbol| {
-            const shift: u3 = @intCast((symbol & 1) * 4);
-            length.* = @truncate(self.lengths[symbol / 2] >> shift);
+        fn expand(self: *const Self) Error!PrefixCode(alphabet_size) {
+            if (self.single_symbol_plus_one != 0)
+                return .{ .single_symbol = self.single_symbol_plus_one - 1 };
+            var lengths: [alphabet_size]u4 = undefined;
+            for (&lengths, 0..) |*length, symbol| {
+                const shift: u3 = @intCast((symbol & 1) * 4);
+                length.* = @truncate(self.lengths[symbol / 2] >> shift);
+            }
+            const tree: PrefixCode(alphabet_size) = .{
+                .table = try huffman.HuffmanTable(alphabet_size).init(&lengths),
+            };
+            if (tree.table.len != self.active_entries) return error.InvalidHuffmanCode;
+            return tree;
         }
-        const tree: PrefixCode(command_lut.entries.len) = .{
-            .table = try huffman.HuffmanTable(command_lut.entries.len).init(&lengths),
-        };
-        if (tree.table.len != self.active_entries) return error.InvalidHuffmanCode;
-        return tree;
-    }
-};
+    };
+}
+
+const inline_literal_tree_count = 64;
+const inline_command_tree_count = 32;
+const inline_distance_tree_count = 64;
 
 const MinimalCompressedHeader = struct {
     npostfix: u2,
@@ -1223,15 +1231,21 @@ const MinimalCompressedHeader = struct {
     literal_context_modes: [max_literal_block_types]u2,
     literal_block: BlockSwitchState(max_literal_block_types),
     literal_context_map: [max_literal_block_types * 64]u8,
-    literal_trees: [max_literal_context_trees]PrefixCode(256),
+    literal_trees: [inline_literal_tree_count]PrefixCode(256),
+    packed_literal_trees: [max_literal_context_trees - inline_literal_tree_count]PackedPrefixCode(256) = @splat(.{}),
+    active_packed_literal_tree: PrefixCode(256) = .{},
+    active_packed_literal_tree_index: u16 = std.math.maxInt(u16),
     command_block: BlockSwitchState(max_command_block_types),
     insert_copy_trees: [inline_command_tree_count]PrefixCode(704),
-    packed_insert_copy_trees: [max_command_block_types - inline_command_tree_count]PackedCommandPrefixCode = @splat(.{}),
+    packed_insert_copy_trees: [max_command_block_types - inline_command_tree_count]PackedPrefixCode(704) = @splat(.{}),
     active_packed_insert_copy_tree: PrefixCode(704) = .{},
     active_packed_insert_copy_tree_index: u16 = std.math.maxInt(u16),
     distance_block: BlockSwitchState(max_distance_block_types),
     distance_context_map: [max_distance_block_types * 4]u8,
-    distance_trees: [max_distance_context_trees]PrefixCode(max_distance_alphabet_size),
+    distance_trees: [inline_distance_tree_count]PrefixCode(max_distance_alphabet_size),
+    packed_distance_trees: [max_distance_context_trees - inline_distance_tree_count]PackedPrefixCode(max_distance_alphabet_size) = @splat(.{}),
+    active_packed_distance_tree: PrefixCode(max_distance_alphabet_size) = .{},
+    active_packed_distance_tree_index: u16 = std.math.maxInt(u16),
 };
 
 pub const CompressedHeaderProfile = header_profile.Profile;
@@ -4138,11 +4152,16 @@ inline fn readCompressedHeaderContextMaps(reader: *bitstream.BitReader, header: 
 }
 
 inline fn readCompressedHeaderLiteralTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
-    header.literal_trees[0] = try readPrefixCode(256, reader);
-    var literal_tree_index: u16 = 1;
+    var literal_tree_index: u16 = 0;
     while (literal_tree_index < tree_count) : (literal_tree_index += 1) {
-        header.literal_trees[literal_tree_index] = try readPrefixCode(256, reader);
+        const tree = try readPrefixCode(256, reader);
+        if (literal_tree_index < inline_literal_tree_count) {
+            header.literal_trees[literal_tree_index] = tree;
+        } else {
+            header.packed_literal_trees[literal_tree_index - inline_literal_tree_count] = PackedPrefixCode(256).init(&tree);
+        }
     }
+    header.active_packed_literal_tree_index = std.math.maxInt(u16);
 }
 
 inline fn readCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
@@ -4152,18 +4171,23 @@ inline fn readCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header:
         if (command_tree_index < inline_command_tree_count) {
             header.insert_copy_trees[command_tree_index] = tree;
         } else {
-            header.packed_insert_copy_trees[command_tree_index - inline_command_tree_count] = PackedCommandPrefixCode.init(&tree);
+            header.packed_insert_copy_trees[command_tree_index - inline_command_tree_count] = PackedPrefixCode(704).init(&tree);
         }
     }
     header.active_packed_insert_copy_tree_index = std.math.maxInt(u16);
 }
 
 inline fn readCompressedHeaderDistanceTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, alphabet_size: usize) Error!void {
-    header.distance_trees[0] = try readPrefixCodeRuntime(max_distance_alphabet_size, alphabet_size, reader);
-    var distance_tree_index: u16 = 1;
+    var distance_tree_index: u16 = 0;
     while (distance_tree_index < tree_count) : (distance_tree_index += 1) {
-        header.distance_trees[distance_tree_index] = try readPrefixCodeRuntime(max_distance_alphabet_size, alphabet_size, reader);
+        const tree = try readPrefixCodeRuntime(max_distance_alphabet_size, alphabet_size, reader);
+        if (distance_tree_index < inline_distance_tree_count) {
+            header.distance_trees[distance_tree_index] = tree;
+        } else {
+            header.packed_distance_trees[distance_tree_index - inline_distance_tree_count] = PackedPrefixCode(max_distance_alphabet_size).init(&tree);
+        }
     }
+    header.active_packed_distance_tree_index = std.math.maxInt(u16);
 }
 
 inline fn finishCompressedHeader(header: *MinimalCompressedHeader, shape: CompressedHeaderShape, tree_counts: CompressedHeaderTreeCounts) void {
@@ -4261,10 +4285,16 @@ pub fn benchmarkCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stre
 }
 
 fn readCompressedHeaderLiteralTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, profile: *PrefixCodeProfile) Error!void {
-    header.literal_trees[0] = try readPrefixCodeRuntimeProfiled(256, 256, reader, io, profile);
-    var tree_index: u16 = 1;
-    while (tree_index < tree_count) : (tree_index += 1)
-        header.literal_trees[tree_index] = try readPrefixCodeRuntimeProfiled(256, 256, reader, io, profile);
+    var tree_index: u16 = 0;
+    while (tree_index < tree_count) : (tree_index += 1) {
+        const tree = try readPrefixCodeRuntimeProfiled(256, 256, reader, io, profile);
+        if (tree_index < inline_literal_tree_count) {
+            header.literal_trees[tree_index] = tree;
+        } else {
+            header.packed_literal_trees[tree_index - inline_literal_tree_count] = PackedPrefixCode(256).init(&tree);
+        }
+    }
+    header.active_packed_literal_tree_index = std.math.maxInt(u16);
 }
 
 fn readCompressedHeaderCommandTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, profile: *PrefixCodeProfile) Error!void {
@@ -4274,17 +4304,23 @@ fn readCompressedHeaderCommandTreesProfiled(io: std.Io, reader: *bitstream.BitRe
         if (tree_index < inline_command_tree_count) {
             header.insert_copy_trees[tree_index] = tree;
         } else {
-            header.packed_insert_copy_trees[tree_index - inline_command_tree_count] = PackedCommandPrefixCode.init(&tree);
+            header.packed_insert_copy_trees[tree_index - inline_command_tree_count] = PackedPrefixCode(704).init(&tree);
         }
     }
     header.active_packed_insert_copy_tree_index = std.math.maxInt(u16);
 }
 
 fn readCompressedHeaderDistanceTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, alphabet_size: usize, profile: *PrefixCodeProfile) Error!void {
-    header.distance_trees[0] = try readPrefixCodeRuntimeProfiled(max_distance_alphabet_size, alphabet_size, reader, io, profile);
-    var tree_index: u16 = 1;
-    while (tree_index < tree_count) : (tree_index += 1)
-        header.distance_trees[tree_index] = try readPrefixCodeRuntimeProfiled(max_distance_alphabet_size, alphabet_size, reader, io, profile);
+    var tree_index: u16 = 0;
+    while (tree_index < tree_count) : (tree_index += 1) {
+        const tree = try readPrefixCodeRuntimeProfiled(max_distance_alphabet_size, alphabet_size, reader, io, profile);
+        if (tree_index < inline_distance_tree_count) {
+            header.distance_trees[tree_index] = tree;
+        } else {
+            header.packed_distance_trees[tree_index - inline_distance_tree_count] = PackedPrefixCode(max_distance_alphabet_size).init(&tree);
+        }
+    }
+    header.active_packed_distance_tree_index = std.math.maxInt(u16);
 }
 
 fn collectCompressedHeaderStarts(allocator: std.mem.Allocator, stream: []const u8) Error![]usize {
@@ -4333,7 +4369,12 @@ fn accumulateCompressedHeaderTableShape(profile: *CompressedHeaderProfile, heade
     accumulatePrefixTableShape(26, profile, &header.command_block.length_tree);
     accumulatePrefixTableShape(max_distance_block_types + 2, profile, &header.distance_block.type_tree);
     accumulatePrefixTableShape(26, profile, &header.distance_block.length_tree);
-    for (header.literal_trees[0..header.literal_tree_count]) |*tree| accumulatePrefixTableShape(256, profile, tree);
+    const inline_literal_count = @min(@as(usize, header.literal_tree_count), inline_literal_tree_count);
+    for (header.literal_trees[0..inline_literal_count]) |*tree| accumulatePrefixTableShape(256, profile, tree);
+    if (header.literal_tree_count > inline_literal_tree_count) {
+        const packed_count = @as(usize, header.literal_tree_count) - inline_literal_tree_count;
+        for (header.packed_literal_trees[0..packed_count]) |*tree| accumulatePackedPrefixShape(profile, tree);
+    }
     const inline_count = @min(@as(usize, header.command_block.block_type_count), inline_command_tree_count);
     for (header.insert_copy_trees[0..inline_count]) |*tree| accumulatePrefixTableShape(704, profile, tree);
     if (header.command_block.block_type_count > inline_command_tree_count) {
@@ -4343,7 +4384,17 @@ fn accumulateCompressedHeaderTableShape(profile: *CompressedHeaderProfile, heade
             profile.tree_entries +%= tree.active_entries;
         }
     }
-    for (header.distance_trees[0..header.distance_tree_count]) |*tree| accumulatePrefixTableShape(max_distance_alphabet_size, profile, tree);
+    const inline_distance_count = @min(@as(usize, header.distance_tree_count), inline_distance_tree_count);
+    for (header.distance_trees[0..inline_distance_count]) |*tree| accumulatePrefixTableShape(max_distance_alphabet_size, profile, tree);
+    if (header.distance_tree_count > inline_distance_tree_count) {
+        const packed_count = @as(usize, header.distance_tree_count) - inline_distance_tree_count;
+        for (header.packed_distance_trees[0..packed_count]) |*tree| accumulatePackedPrefixShape(profile, tree);
+    }
+}
+
+fn accumulatePackedPrefixShape(profile: *CompressedHeaderProfile, tree: anytype) void {
+    profile.tree_symbols +%= @intFromBool(tree.single_symbol_plus_one != 0);
+    profile.tree_entries +%= tree.active_entries;
 }
 
 fn accumulatePrefixTableShape(comptime alphabet_size: usize, profile: *CompressedHeaderProfile, tree: *const PrefixCode(alphabet_size)) void {
@@ -4490,7 +4541,8 @@ fn processMinimalCompressedMetaBlock(
             const context = try literalContext(&header, output, written.*);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
-            const literal = try header.literal_trees[tree_index].decode(reader);
+            const tree = try literalPrefixForDecode(&header, tree_index);
+            const literal = try tree.decode(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;
@@ -4536,6 +4588,7 @@ fn processLargeCompressedMetaBlock(
 const clustered_literal_tree_threshold: u16 = 16;
 
 fn prepareLiteralTailLookups(header: *MinimalCompressedHeader) bool {
+    if (header.literal_tree_count > inline_literal_tree_count) return false;
     for (header.literal_trees[0..header.literal_tree_count]) |*tree|
         if (!tree.canPrepareTailLookup()) return false;
     for (header.literal_trees[0..header.literal_tree_count]) |*tree|
@@ -4563,7 +4616,8 @@ noinline fn processDecodedCompressedPayload(
             const context = try literalContext(header, output, written.*);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
-            const literal = try header.literal_trees[tree_index].decode(reader);
+            const tree = try literalPrefixForDecode(header, tree_index);
+            const literal = try tree.decode(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;
@@ -4609,7 +4663,8 @@ noinline fn processTailLookupCompressedPayload(
             const context = literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
-            const literal = try header.literal_trees[tree_index].decodeTailLookup(reader);
+            const tree = try literalPrefixForDecode(header, tree_index);
+            const literal = try tree.decodeTailLookup(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;
@@ -4664,7 +4719,8 @@ fn skipMinimalCompressedMetaBlock(
             const context = try literal_history.context(&header);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
-            const literal = try header.literal_trees[tree_index].decode(reader);
+            const tree = try literalPrefixForDecode(&header, tree_index);
+            const literal = try tree.decode(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             literal_history.push(@intCast(literal));
             written += 1;
@@ -7482,6 +7538,26 @@ fn commandPrefixForDecode(header: *MinimalCompressedHeader) Error!*const PrefixC
     return &header.active_packed_insert_copy_tree;
 }
 
+fn literalPrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(256) {
+    if (index >= header.literal_tree_count) return error.CorruptFrame;
+    if (index < inline_literal_tree_count) return &header.literal_trees[index];
+    if (header.active_packed_literal_tree_index != index) {
+        header.active_packed_literal_tree = try header.packed_literal_trees[index - inline_literal_tree_count].expand();
+        header.active_packed_literal_tree_index = index;
+    }
+    return &header.active_packed_literal_tree;
+}
+
+fn distancePrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(max_distance_alphabet_size) {
+    if (index >= header.distance_tree_count) return error.CorruptFrame;
+    if (index < inline_distance_tree_count) return &header.distance_trees[index];
+    if (header.active_packed_distance_tree_index != index) {
+        header.active_packed_distance_tree = try header.packed_distance_trees[index - inline_distance_tree_count].expand();
+        header.active_packed_distance_tree_index = index;
+    }
+    return &header.active_packed_distance_tree;
+}
+
 fn ensureLiteralBlock(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!void {
     return ensureLiteralBlockAny(header, reader);
 }
@@ -7536,7 +7612,8 @@ fn readMinimalDistance(
         if (header.distance_block.current_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
         const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
         if (tree_index >= max_distance_context_trees) return error.UnsupportedBrotliFeature;
-        const decoded = try header.distance_trees[tree_index].decode(reader);
+        const tree = try distancePrefixForDecode(header, tree_index);
+        const decoded = try tree.decode(reader);
         if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
         break :blk decoded;
     };
@@ -15789,21 +15866,27 @@ test "br minimal compressed stream switches final RFC command block type" {
     try std.testing.expectEqualSlices(u8, expected, progressive[0..output_offset]);
 }
 
-test "br packed command prefix preserves complex trees" {
-    var lengths: [command_lut.entries.len]u4 = @splat(0);
-    lengths[8] = 1;
-    lengths[136] = 1;
-    const original: PrefixCode(command_lut.entries.len) = .{
-        .table = try huffman.HuffmanTable(command_lut.entries.len).init(&lengths),
-    };
-    const compact = PackedCommandPrefixCode.init(&original);
-    const expanded = try compact.expand();
-    try std.testing.expectEqual(original.table.len, expanded.table.len);
-    try std.testing.expectEqualSlices(
-        huffman.HuffmanTable(command_lut.entries.len).Entry,
-        original.table.entries[0..original.table.len],
-        expanded.table.entries[0..expanded.table.len],
-    );
+test "br packed prefix preserves literal command and distance trees" {
+    inline for (.{ 256, command_lut.entries.len, max_distance_alphabet_size }) |alphabet_size| {
+        var lengths: [alphabet_size]u4 = @splat(0);
+        lengths[8] = 1;
+        lengths[136] = 1;
+        const original: PrefixCode(alphabet_size) = .{
+            .table = try huffman.HuffmanTable(alphabet_size).init(&lengths),
+        };
+        const compact = PackedPrefixCode(alphabet_size).init(&original);
+        const expanded = try compact.expand();
+        try std.testing.expectEqual(original.table.len, expanded.table.len);
+        try std.testing.expectEqualSlices(
+            huffman.HuffmanTable(alphabet_size).Entry,
+            original.table.entries[0..original.table.len],
+            expanded.table.entries[0..expanded.table.len],
+        );
+
+        const single = PrefixCode(alphabet_size){ .single_symbol = 17 };
+        const expanded_single = try PackedPrefixCode(alphabet_size).init(&single).expand();
+        try std.testing.expectEqual(single.single_symbol, expanded_single.single_symbol);
+    }
 }
 
 test "br minimal compressed stream switches literal block tree" {

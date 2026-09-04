@@ -8766,3 +8766,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   though ordinary and maximum-count simple-tree streams are supported; removing
   that cap requires a resumable header parser rather than another large fixed
   buffer.
+  Generalized the packed command-tree representation to literal and distance
+  Huffman groups. Their first 64 trees remain expanded for measured common
+  streams; higher indexes retain packed 4-bit canonical lengths and share one
+  lazily expanded active-tree cache per family. This reduces
+  `BrotliIncrementalCopyStreamDecoder` from 1,499,168 to 652,288 bytes
+  (`-846,880`, about `-56.5%`) while preserving the 16 KiB compressed-header
+  bound. Generic single/complex pack-expand tests cover all 256-, 704-, and
+  520-symbol alphabets. The upstream differential's real Godot 247-literal-tree
+  frame and repository-owned 68-distance-tree frame exercise both cold paths;
+  all 952 progressive chunk combinations and the common-tree performance/header
+  gates remain green.
