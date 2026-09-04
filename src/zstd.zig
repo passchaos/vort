@@ -4932,6 +4932,10 @@ pub const LevelFrameEncoder = struct {
             if (primary.frame.len <= input.len / decisive_ratio or
                 (level == 1 and !preferSerialMixedSearch(input))) return primary.frame;
         }
+        if (shouldProbeRatioDecisivePrimary(input, level, primary_options.block_size_max)) {
+            const primary = try self.primary.encodeScratch(input, primary_options);
+            if (primary.frame.len <= input.len / 32) return primary.frame;
+        }
 
         self.output_scratch.clearRetainingCapacity();
         const selected = encodeFrameWithLevelAndOptionsAlloc(self.allocator, input, level, options) catch |err| {
@@ -5092,6 +5096,11 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         else
             allocator.free(primary.frame);
     }
+    if (shouldProbeRatioDecisivePrimary(input, level, primary_options.block_size_max)) {
+        const primary = try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
+        if (primary.frame.len <= input.len / 32) return primary.frame;
+        precomputed_primary = primary;
+    }
     if (level == 1 and precomputed_primary != null and !preferSerialMixedSearch(input)) {
         // The fast level has already paid for its complete primary frame. On
         // wide-alphabet one-block inputs, the 1/2 KiB split ladder has not won
@@ -5116,7 +5125,7 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         // scheduler place all codec work uniformly and, at high levels, keeps
         // the primary mixed-search worker from being delayed behind a split.
         var candidates: [3]LevelFrameCandidate = undefined;
-        const parallelize_primary = level >= 9 and input.len > deferred_adaptive_candidate_input_min;
+        const parallelize_primary = level >= 9 and input.len > deferred_adaptive_candidate_input_min and precomputed_primary == null;
         const adaptive_start: usize = @intFromBool(parallelize_primary);
         var candidate_count: usize = adaptive_start;
         if (parallelize_primary) candidates[0] = .{ .allocator = parallel_allocator, .input = input, .options = primary_options };
@@ -5207,6 +5216,14 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         } else allocator.free(candidate.frame);
     }
     return best.frame;
+}
+
+inline fn shouldProbeRatioDecisivePrimary(input: []const u8, level: c_int, primary_block_size: usize) bool {
+    return level >= 9 and
+        input.len > 8 * 1024 and
+        input.len <= primary_block_size and
+        findPrefixTailDuplicateMatch(input) == null and
+        preferSerialMixedSearch(input);
 }
 
 pub fn encodedFrameBound(input_len: usize) Error!usize {
@@ -10522,6 +10539,108 @@ test "zstd decisive primary frame bypasses adaptive candidates across levels" {
         defer std.testing.allocator.free(selected);
         try std.testing.expectEqualSlices(u8, primary.frame, selected);
     }
+}
+
+test "zstd ratio level accepts decisive structured primary frame" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = payload.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{index});
+        try payload.appendSlice(std.testing.allocator, formatted);
+    }
+
+    const level: c_int = 9;
+    const options = try nativeFrameOptionsForLevel(level, .{});
+    try std.testing.expect(findPrefixTailDuplicateMatch(payload.items) == null);
+    try std.testing.expect(preferSerialMixedSearch(payload.items));
+    try std.testing.expect(shouldProbeRatioDecisivePrimary(payload.items, level, options.block_size_max));
+
+    const primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, options);
+    defer std.testing.allocator.free(primary.frame);
+    try std.testing.expect(primary.frame.len <= payload.items.len / 32);
+    try std.testing.expect(primary.frame.len > payload.items.len / 256);
+    for (adaptiveLevelBlockSizes(level)) |block_size| {
+        const split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, adaptiveLevelCandidateOptions(options, block_size));
+        defer std.testing.allocator.free(split.frame);
+        try std.testing.expect(primary.frame.len < split.frame.len);
+    }
+
+    const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, level);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, primary.frame, selected);
+
+    var reusable = LevelFrameEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    try std.testing.expectEqualSlices(u8, primary.frame, try reusable.encodeScratch(payload.items, level));
+
+    const level22_options = try nativeFrameOptionsForLevel(22, .{});
+    try std.testing.expect(shouldProbeRatioDecisivePrimary(payload.items, 22, level22_options.block_size_max));
+    const level22_primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, level22_options);
+    defer std.testing.allocator.free(level22_primary.frame);
+    const level22_selected = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 22);
+    defer std.testing.allocator.free(level22_selected);
+    try std.testing.expectEqualSlices(u8, level22_primary.frame, level22_selected);
+}
+
+test "zstd ratio decisive primary matches generated split arbitration" {
+    const level: c_int = 9;
+    const options = try nativeFrameOptionsForLevel(level, .{});
+    var decisive_cases: usize = 0;
+    for (0..12) |seed| {
+        var payload: std.ArrayList(u8) = .empty;
+        defer payload.deinit(std.testing.allocator);
+        const target_len = 24 * 1024 + seed * 733;
+        while (payload.items.len < target_len) {
+            var line: [160]u8 = undefined;
+            const formatted = try std.fmt.bufPrint(
+                &line,
+                "{{\"id\":{d},\"shard\":{d},\"service\":\"vort\",\"message\":\"decisive primary corpus\"}}\n",
+                .{ payload.items.len / 64, seed % 7 },
+            );
+            try payload.appendSlice(std.testing.allocator, formatted);
+        }
+
+        var expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, options);
+        defer std.testing.allocator.free(expected.frame);
+        if (!shouldProbeRatioDecisivePrimary(payload.items, level, options.block_size_max) or
+            expected.frame.len > payload.items.len / 32) continue;
+        decisive_cases += 1;
+        for (adaptiveLevelBlockSizes(level)) |block_size| {
+            const split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, adaptiveLevelCandidateOptions(options, block_size));
+            if (split.frame.len < expected.frame.len) {
+                std.testing.allocator.free(expected.frame);
+                expected = split;
+            } else std.testing.allocator.free(split.frame);
+        }
+
+        const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, level);
+        defer std.testing.allocator.free(selected);
+        try std.testing.expectEqualSlices(u8, expected.frame, selected);
+    }
+    try std.testing.expectEqual(@as(usize, 12), decisive_cases);
+
+    var non_decisive: [32 * 1024]u8 = undefined;
+    var random_state: u32 = 0x243f_6a88;
+    for (&non_decisive) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast('A' + ((random_state >> 24) & 31));
+    }
+    try std.testing.expect(shouldProbeRatioDecisivePrimary(&non_decisive, level, options.block_size_max));
+    var non_decisive_expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &non_decisive, options);
+    defer std.testing.allocator.free(non_decisive_expected.frame);
+    try std.testing.expect(non_decisive_expected.frame.len > non_decisive.len / 32);
+    for (adaptiveLevelBlockSizes(level)) |block_size| {
+        const split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &non_decisive, adaptiveLevelCandidateOptions(options, block_size));
+        if (split.frame.len < non_decisive_expected.frame.len) {
+            std.testing.allocator.free(non_decisive_expected.frame);
+            non_decisive_expected = split;
+        } else std.testing.allocator.free(split.frame);
+    }
+    const non_decisive_selected = try encodeFrameWithLevelAlloc(std.testing.allocator, &non_decisive, level);
+    defer std.testing.allocator.free(non_decisive_selected);
+    try std.testing.expectEqualSlices(u8, non_decisive_expected.frame, non_decisive_selected);
 }
 
 test "zstd native match stage benchmark rejects stale duplicate index" {

@@ -121,6 +121,12 @@ Current interpretation:
   MiB/s to 781.84 MiB/s (`4.16x`, 12/12 wins); a same-process run reaches about
   0.66x of libzstd 1.5.5, up from roughly 0.16x. This is a focused decode improvement,
   not a general Zstd parity claim.
+- The level-9+ encoder now recognizes a low-alphabet one-block primary frame at
+  or below 1/32 of source size as decisive and skips the remaining adaptive
+  split search. The locked 32 KiB JSON row keeps its exact 640-byte wire while
+  improving from about 2.45 MiB/s to 12.5--13.1 MiB/s (`5.2x`); generated
+  exhaustive-arbitration tests pin the boundary. This closes a scheduling cliff,
+  not the broader encoder throughput gap to libzstd.
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug

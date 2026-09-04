@@ -62,6 +62,11 @@ def main() -> int:
     # over libzstd 1.5.5 on this locked corpus. Keep lower-level ceilings
     # independent because they intentionally omit that ratio-oriented parser.
     assert int(json_rows[9]["vort_bytes"]) <= 640, json_rows
+    # A one-block ratio result below 1/32 of this low-alphabet corpus is
+    # decisive over the adaptive split ladder. Keep the high-level facade's
+    # early return visible rather than allowing it to regress to the former
+    # full three-candidate search.
+    assert int(json_rows[9]["vort_ns"]) * 2 < int(json_rows[3]["vort_ns"]), json_rows
     text_rows = {int(row["level"]): row for row in rows if row["case"] == "text"}
     # Selecting compressed Huffman weights for low-byte alphabets closes all
     # but one byte of the repetitive-text gap to the locked libzstd row.

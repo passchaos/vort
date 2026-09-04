@@ -914,3 +914,22 @@ and 1,178.58 MiB/s for libzstd 1.5.5 (`0.6685x`). The reference gate floor for
 this row is raised from `0.14x` to `0.50x`. This evidence applies to the locked
 64 KiB sequence-free, four-stream, high-entropy ASCII shape; it is not a general
 Zstd decompression parity claim.
+
+## Zstd decisive ratio-level primary frames (2026-09-04)
+
+The level-aware one-shot and reusable encoders now accept a single-block level-9+
+primary result immediately when distributed alphabet sampling classifies the
+input as structured and the encoded frame is no larger than 1/32 of the source.
+This extends the existing exact 1/256 prefix-tail shortcut with a conservative
+structured-data policy, avoiding the otherwise mandatory 8 KiB split candidate.
+If the primary misses the threshold, the allocating encoder retains it for
+normal arbitration rather than encoding it a second time.
+
+Twelve alternating fixed-CPU-8 comparisons at 20 encodes per side moved the
+locked 32 KiB JSON level-9 row from about 2.45 MiB/s to 12.5--13.1 MiB/s
+(`5.2x`, 12/12 wins), while preserving the exact 640-byte output and libzstd
+round trip. An eight-run complete nine-row matrix kept every encoded size and
+checksum identical; non-target level/corpus medians stayed within noise. A
+12-case generated structured oracle compares the early return byte-for-byte
+with exhaustive primary/4 KiB/8 KiB arbitration, and a low-alphabet
+non-decisive case pins the fallback and primary-result reuse path.

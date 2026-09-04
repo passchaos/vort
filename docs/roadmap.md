@@ -8897,3 +8897,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   path, combining a second symbol when both codes fit one table-width prefix.
   It measured only about 742--752 MiB/s on `ascii64k`, below the retained X1
   path's roughly 780 MiB/s, so the larger table and decode logic were removed.
+  Extended the one-block decisive-primary policy to level 9+ structured inputs.
+  When distributed alphabet sampling selects the low-alphabet path and the
+  complete primary frame is at most 1/32 of the source, the encoder now returns
+  it without evaluating the 8 KiB split; a miss retains the primary for normal
+  arbitration instead of recomputing it. Twelve alternating fixed-CPU-8 runs
+  improve the locked 32 KiB JSON level-9 row from about 2.45 MiB/s to
+  12.5--13.1 MiB/s (`5.2x`, 12/12 wins), with the exact 640-byte wire unchanged.
+  An eight-run nine-row matrix preserves every size/checksum and keeps control
+  rows within noise. Focused tests compare one-shot and reusable output with
+  exhaustive primary/4 KiB/8 KiB arbitration across 12 generated structured
+  inputs and pin a non-decisive low-alphabet fallback.
