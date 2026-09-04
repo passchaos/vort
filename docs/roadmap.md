@@ -8887,3 +8887,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `decodecorpus` campaigns remain byte-exact: 5,400 frames, all 64 sequence-mode
   tuples, 2,699 block-stream frames, and 76,578 streamed sequence blocks with
   zero decoded scratch.
+  A follow-up that prevalidated the full Huffman lookup table and removed the
+  per-symbol `valid` branch improved `ascii64k` by about 3.5%, but an eight-run
+  13-row reference sweep regressed `huffman80k` by about 12% and `large_json`
+  by about 3% on average. It was reverted; future table-layout work should use
+  a separate specialized table representation rather than perturbing the shared
+  decoder's code layout.
