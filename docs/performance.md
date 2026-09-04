@@ -1034,3 +1034,15 @@ smaller exhaustive result. Twelve fixed-CPU-8 binary level-1 pairs improve by
 `2.20x` with 12/12 wins. An eight-run nine-row matrix measures `2.22x`, keeps
 the locked 8,607-byte benchmark wire unchanged, and leaves all controls within
 about 2%.
+
+Level 3 now has an additional, much stricter direct-double-fast cutoff at a
+`1/16` block/source ratio. A 784-case wide-alphabet audit spanning 9--63 KiB,
+seven noise densities, eight seeds, and plain/copied-tail inputs found eight
+qualifying blocks: three direct candidates saved eight bytes total, four tied,
+and one cost a single byte. That worst case is retained as a 2,038-byte level-3
+frame versus the strict level-9 2,037-byte frame, with block, one-shot, reusable,
+decode, and allocation-failure rollback coverage. Twelve alternating fixed-CPU-8
+pairs improve the target level-3 encode by `7.06x` on average (`7.04x` median,
+12/12 wins). An eight-run 12-row matrix measures `7.10x`; the other eleven
+case/level rows remain within about 1% and keep their frame sizes unchanged.
+Level 2 and level 9+ continue to require double-fast/repeat-beam consensus.

@@ -35,10 +35,20 @@ pub fn main(init: std.process.Init) !void {
         state = state *% 1_664_525 +% 1_013_904_223;
         byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(state >> 16);
     }
+    const level3_tradeoff = try init.gpa.alloc(u8, 32 * 1024);
+    defer init.gpa.free(level3_tradeoff);
+    state = @truncate(0x9e37_79b9 +% 32 *% 0x10001 +% 4 *% 0x101 +% 17 +% 1 *% 0x0100_0193);
+    for (level3_tradeoff, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 60) @truncate(index * 17 + 13) else @truncate(state >> 16);
+    }
+    const tradeoff_copy_len = level3_tradeoff.len / 4;
+    @memcpy(level3_tradeoff[level3_tradeoff.len - tradeoff_copy_len ..], level3_tradeoff[level3_tradeoff.len / 4 ..][0..tradeoff_copy_len]);
     const cases = [_]Case{
         .{ .name = "text", .payload = "Zstandard encode benchmark text with repeated structure and punctuation.\n" ** 512 },
         .{ .name = "json", .payload = numbered_json.items },
         .{ .name = "binary", .payload = binary },
+        .{ .name = "level3_tradeoff", .payload = level3_tradeoff },
     };
     const levels = [_]c_int{ 1, 3, 9 };
 

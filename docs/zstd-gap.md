@@ -173,6 +173,12 @@ Current interpretation:
   complete 16-state arbitration; the aggregate was 11 bytes smaller, while the
   worst individual cost was 32 bytes. The locked binary row keeps its 8,607-byte
   frame and improves by about `2.20x` (12/12 fixed-CPU pairs).
+- Level 3 uses a narrower `1/16` direct-double-fast cutoff for exceptionally
+  compressible wide blocks. A 784-case audit found eight qualifying cases: three
+  smaller by eight bytes total, four equal, and one larger by one byte versus
+  complete 64-state arbitration. The fixed 2,038-versus-2,037-byte frame boundary
+  improves level-3 throughput by about `7.06x` (12/12 fixed-CPU pairs); level 2
+  and level 9+ retain strict double-fast/repeat-beam consensus.
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug

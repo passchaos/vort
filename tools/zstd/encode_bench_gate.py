@@ -5,7 +5,7 @@ import csv
 from pathlib import Path
 
 COLUMNS = ["case", "reference_version", "level", "input_bytes", "vort_bytes", "reference_bytes", "size_over_reference", "iterations", "rounds", "vort_ns", "reference_ns", "vort_mib_s", "reference_mib_s", "vort_over_reference", "checksum"]
-CASES = {"text", "json", "binary"}
+CASES = {"text", "json", "binary", "level3_tradeoff"}
 LEVELS = {1, 3, 9}
 
 def main() -> int:
@@ -92,6 +92,12 @@ def main() -> int:
     assert int(binary_rows[1]["vort_ns"]) * 3 < int(binary_rows[3]["vort_ns"]) * 2, binary_rows
     consensus_times = [int(binary_rows[level]["vort_ns"]) for level in (3, 9)]
     assert max(consensus_times) * 4 < min(consensus_times) * 5, binary_rows
+    tradeoff_rows = {int(row["level"]): row for row in rows if row["case"] == "level3_tradeoff"}
+    # Level 3 accepts the audited one-byte ratio tradeoff at a 1:16 block
+    # ratio, while level 9 retains exhaustive arbitration and its smaller wire.
+    assert int(tradeoff_rows[3]["vort_bytes"]) == 2_038, tradeoff_rows
+    assert int(tradeoff_rows[9]["vort_bytes"]) == 2_037, tradeoff_rows
+    assert int(tradeoff_rows[3]["vort_ns"]) * 3 < int(tradeoff_rows[9]["vort_ns"]), tradeoff_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 

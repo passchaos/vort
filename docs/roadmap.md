@@ -9044,3 +9044,47 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   arbitration. Twelve fixed-CPU-8 binary level-1 pairs improve by `2.20x` with
   12/12 wins. An eight-run nine-row matrix measures `2.22x`, preserves the
   locked 8,607-byte wire/checksum, and keeps controls within about 2%.
+  Added a narrower level-3 block shortcut for especially strong wide-alphabet
+  matches. A temporary 784-case audit spanning 9--63 KiB, seven noise densities,
+  eight seeds, and plain/copied-tail shapes compared direct double-fast output
+  with complete 64- and 96-state arbitration. At a 1:16 block ratio, eight cases
+  qualified: double-fast was smaller three times by eight bytes total, equal four
+  times, and larger once by one byte. Level 3 now accepts that explicit one-byte
+  worst-case speed tradeoff; level 2 and level 9+ still require parser consensus.
+  The fixed counterexample is pinned at 2,038 versus 2,037 frame bytes across
+  one-shot/reusable/decode APIs and allocation-failure rollback. Twelve
+  alternating fixed-CPU-8 pairs improve the target level-3 encode by about
+  `7.06x` with 12/12 wins; an eight-run 12-row matrix measures `7.10x` and keeps
+  every control within about 1%.
+  Two follow-up attempts to reduce double-fast token allocations were rejected.
+  Retaining its token list in `LevelFrameEncoder` removed five allocator growth
+  calls on the locked 32 KiB binary block, but even a branch-specialized hot
+  path reached only about `0.982x` median throughput with 3/12 wins. Reserving
+  one third of the input directly inside the parser reduced the same cold list
+  from five allocations and 127,446 requested bytes to one exact 65,532-byte
+  allocation, but the isolated double-fast stage measured about `0.978x` with
+  4/12 wins and end-to-end levels 1/3/9 remained noise-level. Both code changes
+  were removed; Zig's allocator can grow this list efficiently enough that the
+  extra branch/reservation work is not justified.
+  A follow-up repeat-beam cleanup that accumulated `PlanStats` during token
+  backtracking instead of scanning the completed token list was also rejected.
+  It preserved every stage counter and encoded byte, but the isolated 32 KiB
+  binary repeat-beam stage measured about `0.991x` median throughput with only
+  4/12 fixed-CPU wins. The separate linear statistics pass remains clearer and
+  was restored; the remaining beam cost is in forward state expansion and match
+  discovery rather than final accounting.
+  A single-candidate `?Match` specialization that hoisted repeat-beam match
+  bounds and removed the generic output-slice/count interface was rejected more
+  strongly: the isolated binary stage fell to about `0.914x` median with 0/12
+  wins. The compiler optimizes the current one-element array/count path better.
+  Compacting each repeat-beam state by reconstructing its token during
+  backtracking was likewise rejected. The representation fell from 16 to 12
+  bytes per state and retained exact tokens/statistics, but the added recovery
+  branches left the isolated binary stage at about `0.996x` median with 5/12
+  wins. The explicit token remains in the state until a layout that improves
+  both cache traffic and backtracking cost is demonstrated.
+  Replacing the compact repeat-beam index's fourth-byte collision check with a
+  full four-byte anchor comparison was also rejected. The index already hashes
+  all four bytes, so the wider validation only added work: the isolated binary
+  stage measured about `0.985x` median throughput with 3/12 wins, despite exact
+  token and encoded-byte parity.
