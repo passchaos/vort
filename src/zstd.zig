@@ -5081,8 +5081,8 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     // splitting: each additional adaptive block costs a three-byte header.
     // Level 1 also computes primary first because its generated-corpus split
     // ladder has no winner once the complete primary frame is below 1/32 of
-    // source size. Higher levels keep the stricter structural prefix check:
-    // level 3 has real counterexamples to the general ratio-only rule.
+    // source size. The structural prefix shortcut remains exact at higher
+    // levels; a separate level-3/ratio policy below records its bounded tradeoff.
     if (level > 0 and
         input.len > 8 * 1024 and
         input.len <= primary_options.block_size_max and
@@ -5219,7 +5219,7 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
 }
 
 inline fn shouldProbeRatioDecisivePrimary(input: []const u8, level: c_int, primary_block_size: usize) bool {
-    return level >= 9 and
+    return (level == 3 or level >= 9) and
         input.len > 8 * 1024 and
         input.len <= primary_block_size and
         findPrefixTailDuplicateMatch(input) == null and
@@ -10582,6 +10582,14 @@ test "zstd ratio level accepts decisive structured primary frame" {
     const level22_selected = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 22);
     defer std.testing.allocator.free(level22_selected);
     try std.testing.expectEqualSlices(u8, level22_primary.frame, level22_selected);
+
+    const level3_options = try nativeFrameOptionsForLevel(3, .{});
+    try std.testing.expect(shouldProbeRatioDecisivePrimary(payload.items, 3, level3_options.block_size_max));
+    const level3_primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, level3_options);
+    defer std.testing.allocator.free(level3_primary.frame);
+    const level3_selected = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 3);
+    defer std.testing.allocator.free(level3_selected);
+    try std.testing.expectEqualSlices(u8, level3_primary.frame, level3_selected);
 }
 
 test "zstd ratio decisive primary matches generated split arbitration" {
@@ -10641,6 +10649,42 @@ test "zstd ratio decisive primary matches generated split arbitration" {
     const non_decisive_selected = try encodeFrameWithLevelAlloc(std.testing.allocator, &non_decisive, level);
     defer std.testing.allocator.free(non_decisive_selected);
     try std.testing.expectEqualSlices(u8, non_decisive_expected.frame, non_decisive_selected);
+
+    // Pin one observed level-3 tradeoff from the broader 1,024-case audit. The
+    // 32:1 policy deliberately accepts this bounded seven-byte ratio cost to
+    // avoid running the complete adaptive split ladder at a speed-oriented
+    // level. Higher ratio levels keep their own selection policy.
+    var bounded_tradeoff: [54_718]u8 = undefined;
+    const unit = "fn encode(input: []const u8) ![]u8 { return compress(input); }\n";
+    for (&bounded_tradeoff, 0..) |*byte, index| byte.* = unit[(index + 59 * 3) % unit.len];
+    var marker: usize = 252;
+    while (marker < bounded_tradeoff.len) : (marker += 252)
+        bounded_tradeoff[marker] = @intCast('0' + (marker / 252 + 3) % 10);
+    const level3_options = try nativeFrameOptionsForLevel(3, .{});
+    const level3_primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &bounded_tradeoff, level3_options);
+    defer std.testing.allocator.free(level3_primary.frame);
+    var exhaustive = level3_primary;
+    exhaustive.frame = try std.testing.allocator.dupe(u8, level3_primary.frame);
+    defer std.testing.allocator.free(exhaustive.frame);
+    for (adaptiveLevelBlockSizes(3)) |block_size| {
+        const split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &bounded_tradeoff, adaptiveLevelCandidateOptions(level3_options, block_size));
+        if (split.frame.len < exhaustive.frame.len) {
+            std.testing.allocator.free(exhaustive.frame);
+            exhaustive = split;
+        } else std.testing.allocator.free(split.frame);
+    }
+    try std.testing.expect(level3_primary.frame.len <= bounded_tradeoff.len / 32);
+    try std.testing.expectEqual(@as(usize, 333), level3_primary.frame.len);
+    try std.testing.expectEqual(@as(usize, 326), exhaustive.frame.len);
+    const level3_fast = try encodeFrameWithLevelAlloc(std.testing.allocator, &bounded_tradeoff, 3);
+    defer std.testing.allocator.free(level3_fast);
+    try std.testing.expectEqualSlices(u8, level3_primary.frame, level3_fast);
+    var reusable_level3 = LevelFrameEncoder.init(std.testing.allocator);
+    defer reusable_level3.deinit();
+    try std.testing.expectEqualSlices(u8, level3_primary.frame, try reusable_level3.encodeScratch(&bounded_tradeoff, 3));
+    const decoded = try decodeFrameAlloc(std.testing.allocator, level3_fast);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &bounded_tradeoff, decoded);
 }
 
 test "zstd native match stage benchmark rejects stale duplicate index" {

@@ -933,3 +933,13 @@ checksum identical; non-target level/corpus medians stayed within noise. A
 12-case generated structured oracle compares the early return byte-for-byte
 with exhaustive primary/4 KiB/8 KiB arbitration, and a low-alphabet
 non-decisive case pins the fallback and primary-result reuse path.
+
+The same policy now covers level 3 as an explicit speed/ratio tradeoff. A
+1,024-case, 16-shape audit found that 1,013 cases retained the exhaustive winner;
+11 cases preferred a split by 92 bytes total, with a worst individual cost of
+29 bytes. A locked plain-structured counterexample records the exact 333-byte
+primary versus 326-byte exhaustive result so this tradeoff cannot disappear
+silently. Twelve fixed-CPU-8 pairs keep the benchmark JSON frame at 640 bytes
+and improve level-3 throughput from about 3.4 MiB/s to 12.6--13.1 MiB/s
+(`~3.8x`, 12/12 wins). An eight-run nine-row matrix preserved every locked
+size/checksum and kept non-target rows within noise.

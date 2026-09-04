@@ -127,6 +127,10 @@ Current interpretation:
   improving from about 2.45 MiB/s to 12.5--13.1 MiB/s (`5.2x`); generated
   exhaustive-arbitration tests pin the boundary. This closes a scheduling cliff,
   not the broader encoder throughput gap to libzstd.
+- Level 3 applies the same threshold as a documented speed/ratio tradeoff. A
+  1,024-case generated audit found 11 split winners totaling 92 saved bytes
+  (worst case 29 bytes); the other 1,013 cases were unchanged. The locked JSON
+  frame remains 640 bytes while throughput improves by roughly 3.8x.
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug

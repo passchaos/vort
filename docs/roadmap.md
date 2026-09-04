@@ -8908,3 +8908,42 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   rows within noise. Focused tests compare one-shot and reusable output with
   exhaustive primary/4 KiB/8 KiB arbitration across 12 generated structured
   inputs and pin a non-decisive low-alphabet fallback.
+  Auditing the same ratio-only shortcut for level 3 found a bounded speed/ratio
+  tradeoff. A temporary
+  1,024-case, 16-shape audit found 11 adaptive split winners at every 1/32,
+  1/48, and 1/64 primary threshold; 1/128 still retained nine winners, while
+  1/256 matched no samples. Both plain structured and copied-tail inputs were
+  represented. The level-3 speed policy now accepts this tradeoff explicitly:
+  the locked JSON remains 640 bytes while twelve fixed-CPU-8 pairs improve
+  throughput from about 3.4 MiB/s to 12.6--13.1 MiB/s (`~3.8x`, 12/12 wins).
+  A focused test pins one real 333-versus-326-byte counterexample, while the
+  12 generated level-9 cases and level 22 continue to require byte-exact
+  primary/exhaustive agreement.
+  Replacing adaptive greedy blocks with the diagnostic double-fast parser was
+  also rejected: across 31,680 generated 2/4 KiB blocks, double-fast was smaller
+  30,897 times but larger 537 times (up to 14 bytes), so it cannot preserve the
+  existing best-of-family result. Seeding the remaining exact single-match scan
+  from greedy matches preserved wire bytes but slowed the locked level-3 JSON
+  row by about 10--11%, even after extending only the longest seed match before
+  one payload estimate. Both production experiments were removed.
+  A two-vector 64-byte unroll of the exact match extension loop was also
+  rejected. Although it preserved every tested boundary, the isolated 4 KiB
+  JSON single-duplicate stage slowed from about 235 to 347 microseconds per
+  block. The existing one-vector 32-byte loop remains preferable with current
+  Zig/LLVM code generation.
+  A broader attempt to promote the diagnostic double-fast parser into adaptive
+  small-block selection was also rejected. Across 31,680 generated 2/4 KiB
+  blocks it beat greedy 30,897 times but lost 537 times by up to 14 bytes, so it
+  cannot replace that candidate. Nor can it safely skip optimal based on a
+  relative lead: at a strict 1/8 lead, optimal still won 384 of 833 triggered
+  blocks by up to six bytes; 1/2 and 1/4 thresholds had zero coverage. The
+  temporary audit was removed.
+  A final narrow FSE-reader experiment removed the second range check after
+  `peekSmall`; although the first check makes the subtraction logically safe,
+  the altered optimized code layout reduced `huffman80k` throughput by about
+  9.7% across 16 fixed-CPU pairs and left `large_json` neutral. It was reverted.
+  Expanding the retained four-stream Huffman batch from five to eight symbols
+  for trees with maximum code width seven or less was also rejected. A 12-run
+  five-row profile gave only about 0.3% average gain on `ascii64k`, while
+  `huffman80k` and `large_json` regressed by about 10% and 4%. The five-symbol
+  batch remains the stable production point.
