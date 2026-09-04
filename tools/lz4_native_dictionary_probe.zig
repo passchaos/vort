@@ -516,7 +516,10 @@ fn checkDictionaryDirectFallback(allocator: std.mem.Allocator) !void {
     const partial = try decoder.step("", output[0..5]);
     try expect(partial.status == .need_output);
     try expect(partial.progress.output_written == 5);
-    try expect(decoder.decoded_scratch.items.len == payload.len);
+    try expect(decoder.isBlockStreaming());
+    try expect(decoder.isCompressedBlockStreaming());
+    try expect(decoder.decodedBufferedBytes() == 0);
+    try expect(decoder.decodedBufferCapacity() == 0);
     const done = try decoder.step("", output[5..]);
     try expect(done.status == .done);
     try expectEqualSlices(payload, &output);
@@ -545,7 +548,10 @@ fn checkDictionarySetDirectFallback(allocator: std.mem.Allocator) !void {
     const partial = try decoder.step("", output[0..5]);
     try expect(partial.status == .need_output);
     try expect(partial.progress.output_written == 5);
-    try expect(decoder.decoded_scratch.items.len == payload.len);
+    try expect(decoder.isBlockStreaming());
+    try expect(decoder.isCompressedBlockStreaming());
+    try expect(decoder.decodedBufferedBytes() == 0);
+    try expect(decoder.decodedBufferCapacity() == 0);
     const done = try decoder.step("", output[5..]);
     try expect(done.status == .done);
     try expectEqualSlices(payload, &output);

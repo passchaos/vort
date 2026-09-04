@@ -371,7 +371,8 @@ fn checkLinkedDirectFallback(allocator: std.mem.Allocator, case: Case, frame: []
     const partial = try decoder.step("", output[64 * 1024 ..][0..127]);
     if (partial.status != .need_output) return error.Lz4ProbeMismatch;
     if (partial.progress.output_written != 127) return error.Lz4ProbeSizeMismatch;
-    if (decoder.decoded_scratch.items.len != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!decoder.isBlockStreaming() or !decoder.isCompressedBlockStreaming()) return error.Lz4ProbeMismatch;
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.Lz4ProbeSizeMismatch;
     const done = try decoder.step("", output[64 * 1024 + 127 ..]);
     if (done.status != .done) return error.Lz4ProbeMismatch;
     try expectPayload(case, output);

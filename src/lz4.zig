@@ -1535,7 +1535,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                                     .status = .need_output,
                                 };
                             }
-                            try self.fallbackDirectOutputToScratch();
+                            try self.switchDirectOutputToBlockStream();
                             continue;
                         }
                         const source = self.frame_scratch.items[self.direct_payload_offset..][0..self.direct_payload_len];
@@ -2116,21 +2116,22 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.resetSkippableStream();
     }
 
-    fn fallbackDirectOutputToScratch(self: *NativeIncrementalFrameDecoder) Error!void {
-        const frame_len = self.direct_frame_len;
-        const already_emitted = self.direct_decoded_read;
-        self.decodeCompleteFrame(self.frame_scratch.items[0..frame_len]) catch |err| {
-            self.recordError(.direct_output, err);
-            return err;
-        };
-        if (already_emitted > self.decoded_scratch.items.len) {
-            self.recordError(.direct_output, error.SizeMismatch);
-            return error.SizeMismatch;
-        }
-        self.decoded_offset = already_emitted;
-        self.resetDirectOutput();
-        self.discardFrameScratchPrefix(frame_len);
-        self.phase = .output;
+    fn switchDirectOutputToBlockStream(self: *NativeIncrementalFrameDecoder) Error!void {
+        const header = try parseFrameHeader(self.frame_scratch.items[0..self.direct_frame_len]);
+        self.resetBlockStream();
+        self.block_stream_input_offset = self.direct_payload_offset;
+        self.block_stream_stage = .compressed_decode;
+        self.block_stream_block_len = self.direct_payload_len;
+        self.block_stream_block_compressed = true;
+        self.block_stream_block_index = self.direct_block_index;
+        self.block_stream_block_size_max = header.block_size_max;
+        self.block_stream_block_independent = self.direct_block_independent;
+        self.block_stream_block_checksum = self.direct_block_checksum;
+        self.block_stream_frame_expected_len = self.direct_decoded_len;
+        self.block_stream_frame_decoded_len = self.direct_decoded_read;
+        self.block_stream_content_checksum = self.direct_content_checksum;
+        self.block_stream_content_hasher = self.direct_content_hasher;
+        self.phase = .block_stream;
     }
 
     fn rememberDirectOutput(self: *NativeIncrementalFrameDecoder, bytes: []const u8) Error!void {
@@ -7878,7 +7879,7 @@ test "lz4 native incremental decoder streams no-size compressed frame directly" 
     try std.testing.expectEqualSlices(u8, "direct_output", bad.diagnostics().last_error_phase_name);
 }
 
-test "lz4 native incremental compressed block falls back for small output" {
+test "lz4 native incremental compressed block switches to cursor for small output" {
     const payload = ("fedcba9876543210" ** 8) ** 64;
     const encoded = try encodePureFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .content_checksum = false,
@@ -7899,25 +7900,23 @@ test "lz4 native incremental compressed block falls back for small output" {
     const initial = try decoder.step(encoded, output[0..0]);
     try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
     try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+    try std.testing.expect(!decoder.isBlockStreaming());
 
     var written: usize = 0;
     while (true) {
         const end = @min(output.len, written + 127);
         const result = try decoder.step("", output[written..end]);
         written += result.progress.output_written;
+        try std.testing.expect(decoder.isBlockStreaming() or result.status == .done);
         if (result.status == .done) break;
         try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
-        if (decoder.decoded_scratch.items.len != 0) {
-            // Compressed LZ4 blocks are currently decoded atomically in the
-            // direct path.  A small caller buffer therefore falls back to the
-            // mature whole-frame scratch path instead of spinning with
-            // zero-progress need_output.
-            try std.testing.expectEqual(payload.len, decoder.decoded_scratch.items.len);
-        }
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
     }
     try std.testing.expectEqual(payload.len, written);
     try std.testing.expectEqualSlices(u8, payload, &output);
     try std.testing.expectEqual(payload.len, decoder.diagnostics().output_written);
+    try std.testing.expectEqual(@as(usize, 1), decoder.streamedCompressedBlockCount());
 }
 
 test "lz4 native incremental decoder streams multiple compressed blocks directly" {

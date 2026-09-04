@@ -26,6 +26,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   arbitrary caller backpressure with no
   decoded-block scratch, including linked-block and preset-dictionary history;
   compressed-block checksums are validated before starting caller output;
+  complete prevalidated frames switch to the same cursor instead of
+  materializing the frame when a compressed block exceeds caller output;
   incremental skippable frames retain only their
   8-byte header while discarding or capturing arbitrary-size metadata directly
   from caller input,

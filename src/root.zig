@@ -5364,7 +5364,7 @@ test "root native incremental finish reports direct-output not drained" {
     try std.testing.expectEqual(@as(usize, 5), lz4_partial.progress.output_written);
     try std.testing.expectError(error.OutputTooSmall, lz4_partial_decoder.finish());
     try std.testing.expectEqualSlices(u8, "OutputTooSmall", lz4_partial_decoder.diagnostics().last_error_name);
-    try std.testing.expectEqualSlices(u8, "output", lz4_partial_decoder.diagnostics().last_error_phase_name);
+    try std.testing.expectEqualSlices(u8, "direct_output", lz4_partial_decoder.diagnostics().last_error_phase_name);
 
     const zstd_payload = "root-zstd-finish-output-too-small" ** 4;
     const zstd_frame = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, zstd_payload, .{
@@ -6244,7 +6244,7 @@ test "root native no-size dictionary-set streams diagnose missing later dictiona
     try std.testing.expectEqualSlices(u8, "frame", zstd_missing.diagnostics().last_error_phase_name);
 }
 
-test "root lz4 linked direct-output falls back for small output" {
+test "root lz4 linked direct-output switches to cursor for small output" {
     var lz4_payload: [64 * 1024 + 4096]u8 = undefined;
     var state: u32 = 0x1234_abcd;
     for (lz4_payload[0 .. 64 * 1024]) |*byte| {
@@ -6281,7 +6281,10 @@ test "root lz4 linked direct-output falls back for small output" {
     try std.testing.expectEqual(StepResult.Status.need_output, partial.status);
     try std.testing.expectEqual(@as(usize, 127), partial.progress.output_written);
     try std.testing.expectEqual(lz4_payload.len, decoder.snapshot().decoded_len.?);
-    try std.testing.expectEqual(lz4_payload.len, decoder.decoded_scratch.items.len);
+    try std.testing.expect(decoder.isBlockStreaming());
+    try std.testing.expect(decoder.isCompressedBlockStreaming());
+    try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+    try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
     const done = try decoder.step("", output[64 * 1024 + 127 ..]);
     try std.testing.expectEqual(StepResult.Status.done, done.status);
     try std.testing.expectEqualSlices(u8, &lz4_payload, &output);
@@ -6346,7 +6349,10 @@ test "root native dictionary direct-output handles small output" {
     try std.testing.expectEqual(StepResult.Status.need_output, lz4_partial.status);
     try std.testing.expectEqual(@as(usize, 5), lz4_partial.progress.output_written);
     try std.testing.expectEqual(lz4_payload.len, lz4_decoder.snapshot().decoded_len.?);
-    try std.testing.expectEqual(lz4_payload.len, lz4_decoder.decoded_scratch.items.len);
+    try std.testing.expect(lz4_decoder.isBlockStreaming());
+    try std.testing.expect(lz4_decoder.isCompressedBlockStreaming());
+    try std.testing.expectEqual(@as(usize, 0), lz4_decoder.decodedBufferedBytes());
+    try std.testing.expectEqual(@as(usize, 0), lz4_decoder.decodedBufferCapacity());
     const lz4_done = try lz4_decoder.step("", lz4_output[5..]);
     try std.testing.expectEqual(StepResult.Status.done, lz4_done.status);
     try std.testing.expectEqualSlices(u8, lz4_payload, &lz4_output);
@@ -6407,7 +6413,10 @@ test "root native dictionary-set direct-output handles small output" {
     try std.testing.expectEqual(StepResult.Status.need_output, lz4_partial.status);
     try std.testing.expectEqual(@as(usize, 5), lz4_partial.progress.output_written);
     try std.testing.expectEqual(lz4_payload.len, lz4_decoder.snapshot().decoded_len.?);
-    try std.testing.expectEqual(lz4_payload.len, lz4_decoder.decoded_scratch.items.len);
+    try std.testing.expect(lz4_decoder.isBlockStreaming());
+    try std.testing.expect(lz4_decoder.isCompressedBlockStreaming());
+    try std.testing.expectEqual(@as(usize, 0), lz4_decoder.decodedBufferedBytes());
+    try std.testing.expectEqual(@as(usize, 0), lz4_decoder.decodedBufferCapacity());
     const lz4_done = try lz4_decoder.step("", lz4_output[5..]);
     try std.testing.expectEqual(StepResult.Status.done, lz4_done.status);
     try std.testing.expectEqualSlices(u8, lz4_payload, &lz4_output);

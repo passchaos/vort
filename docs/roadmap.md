@@ -8857,3 +8857,7 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   compressed payloads are hashed and verified while retained, then handed to the
   same cursor, preserving checksum-before-output while eliminating decoded
   scratch from that last compressed-block tier.
+  Complete frames that initially select direct output now switch in place to the
+  block-stream cursor when a compressed block exceeds the caller's current
+  output slice, preserving prior output/history and avoiding the old whole-frame
+  decoded-scratch fallback.
