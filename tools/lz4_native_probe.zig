@@ -41,6 +41,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkSplitSkippableHeaderIncremental(init.gpa);
     checked += 1;
+    try checkCompressedBlockCursorIncremental(init.gpa);
+    checked += 1;
     try checkSkippableOnlyStream(init.gpa);
     checked += 1;
     try checkSkippableThenEmptyFrame(init.gpa);
@@ -66,6 +68,7 @@ pub fn main(init: std.process.Init) !void {
         "bounded-limits",
         "checksum",
         "chunked",
+        "compressed-block-cursor",
         "reusable-chunked",
         "dictionary",
         "dictionary-set",
@@ -76,6 +79,7 @@ pub fn main(init: std.process.Init) !void {
         "skippable",
     }, &.{
         .{ .capability = "chunked", .cases = lib_generated_cases },
+        .{ .capability = "compressed-block-cursor", .cases = 1 },
         .{ .capability = "reusable-chunked", .cases = lib_generated_cases },
         .{ .capability = "incremental", .cases = lib_generated_cases },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
@@ -1195,6 +1199,53 @@ fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {
 
     const done = try decoder.step(encoded[2..], &output);
     if (done.status != .done) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, payload, &output)) return error.Lz4ProbeMismatch;
+    try decoder.finish();
+}
+
+fn checkCompressedBlockCursorIncremental(allocator: std.mem.Allocator) !void {
+    const payload = ("0123456789abcdef" ** 8) ** 64;
+    const encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, payload, .{
+        .content_checksum = true,
+        .block_checksum = false,
+        .block_mode = .independent,
+        .block_size_id = .max64kb,
+    });
+    defer allocator.free(encoded);
+    const block = (try vort.lz4InspectNativeFrameFirstBlock(encoded)) orelse
+        return error.Lz4ProbeSizeMismatch;
+    if (!block.is_compressed) return error.Lz4ProbeMismatch;
+
+    var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_compressed_buffer_len = block.payload_len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    var saw_cursor = false;
+    while (true) {
+        const output_end = @min(output.len, output_offset + 1);
+        const result = try decoder.step(encoded[input_offset..], output[output_offset..output_end]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        saw_cursor = saw_cursor or decoder.isCompressedBlockStreaming();
+        if (decoder.compressedBufferedBytes() > block.payload_len or
+            decoder.compressedBufferCapacity() > block.payload_len or
+            decoder.decodedBufferedBytes() != 0 or
+            decoder.decodedBufferCapacity() != 0)
+        {
+            return error.Lz4ProbeSizeMismatch;
+        }
+        if (result.status == .done) break;
+        if (result.progress.input_read == 0 and result.progress.output_written == 0)
+            return error.Lz4ProbeMismatch;
+    }
+    if (!saw_cursor or decoder.streamedCompressedBlockCount() != 1 or
+        input_offset != encoded.len or output_offset != payload.len)
+        return error.Lz4ProbeSizeMismatch;
     if (!std.mem.eql(u8, payload, &output)) return error.Lz4ProbeMismatch;
     try decoder.finish();
 }

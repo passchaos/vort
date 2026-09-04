@@ -8830,3 +8830,21 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   sequence edge likely, and hinting generic reader/offset-mode/offset-zero paths
   were likewise neutral or negative. All candidates were fully reverted. The
   retained cold FSE state-failure hint remains the only change from this pass.
+  Added the first decoded-scratch-free LZ4 compressed-block stream tier. After
+  the existing full compressed-block preflight, independent dictionary-free
+  blocks up to 64 KiB without a block checksum retain a resumable token/literal/
+  match cursor and write through arbitrary caller output slices. The encoded
+  block remains bounded and retained until the cursor completes; emitted bytes
+  are kept as the block's bounded match history, while content checksums update
+  incrementally. Public decoded-buffer metrics and a streamed-block counter make
+  the zero-scratch path observable. Focused tests cover every output chunk size
+  for a mixed literal/match block, long literal and match extensions, one-byte
+  frame output, cursor reset across two independent compressed blocks, exact
+  compressed-input caps, content checksum completion, and malformed match
+  rejection before any caller output. The public native probe adds the same
+  one-byte-output path. Checksummed, linked, dictionary-backed, and >64 KiB
+  decoded compressed blocks intentionally retain the existing block-atomic
+  scratch path until their checksum and rolling-history state can be separated
+  without weakening checksum-before-output behavior.
+  Registered the new `compressed-block-cursor` probe capability in the public
+  probe dashboard, validation smoke, JSON schema, and documentation.

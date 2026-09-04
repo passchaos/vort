@@ -1944,9 +1944,10 @@ aggregate health cross-checks the retained Markdown tables against the JSON
 coverage/capability/probe rows. It adds a
 `coverage` list keyed by codec (`lz4`/`zstd`) and surface (`frame`/`dictionary`),
 and adds a `capabilities` list for cross-cutting library behaviors such as
-lib-generated frames, incremental drains, chunked split input, reusable chunked
-decoder drains, dictionaries, dictionary training, malformed input, checksums,
-Huffman literals, sequence tables, and block APIs. Each probe row also records
+lib-generated frames, incremental drains, chunked split input, resumable LZ4
+compressed-block cursors, reusable chunked decoder drains, dictionaries,
+dictionary training, malformed input, checksums, Huffman literals, sequence
+tables, and block APIs. Each probe row also records
 `timed_out` and `timeout_seconds`; the dashboard treats a timeout as a failed
 probe and still writes JSON/Markdown artifacts so CI failures show which probe
 exceeded its budget.
@@ -1958,10 +1959,10 @@ Example:
   "schema": "vort.native_codec_probes",
   "schema_version": 1,
   "ok": true,
-  "capability_count": 16,
+  "capability_count": 17,
   "coverage_count": 4,
   "probe_count": 4,
-  "total_cases": 386,
+  "total_cases": 387,
   "capabilities": [
     {
       "capability": "lib-generated",
@@ -1973,7 +1974,7 @@ Example:
     },
     {
       "capability": "native-generated",
-      "cases": 350,
+      "cases": 351,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1996,6 +1997,14 @@ Example:
       "probe_count": 4
     },
     {
+      "capability": "compressed-block-cursor",
+      "cases": 1,
+      "ok": true,
+      "ok_probe_count": 1,
+      "present": true,
+      "probe_count": 1
+    },
+    {
       "capability": "reusable-chunked",
       "cases": 197,
       "ok": true,
@@ -2013,7 +2022,7 @@ Example:
     },
     {
       "capability": "dictionary",
-      "cases": 149,
+      "cases": 150,
       "ok": true,
       "ok_probe_count": 3,
       "present": true,
@@ -2029,7 +2038,7 @@ Example:
     },
     {
       "capability": "dictionary-set",
-      "cases": 121,
+      "cases": 122,
       "ok": true,
       "ok_probe_count": 3,
       "present": true,
@@ -2037,7 +2046,7 @@ Example:
     },
     {
       "capability": "skippable",
-      "cases": 350,
+      "cases": 351,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -2045,7 +2054,7 @@ Example:
     },
     {
       "capability": "malformed",
-      "cases": 352,
+      "cases": 353,
       "ok": true,
       "ok_probe_count": 3,
       "present": true,
@@ -2053,7 +2062,7 @@ Example:
     },
     {
       "capability": "checksum",
-      "cases": 357,
+      "cases": 358,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -2061,7 +2070,7 @@ Example:
     },
     {
       "capability": "bounded-limits",
-      "cases": 354,
+      "cases": 355,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -2085,7 +2094,7 @@ Example:
     },
     {
       "capability": "block",
-      "cases": 113,
+      "cases": 114,
       "ok": true,
       "ok_probe_count": 1,
       "present": true,
@@ -2094,7 +2103,7 @@ Example:
   ],
   "coverage": [
     {
-      "cases": 113,
+      "cases": 114,
       "codec": "lz4",
       "ok": true,
       "ok_probe_count": 1,
@@ -2138,14 +2147,15 @@ Example:
       "returncode": 0,
       "timed_out": false,
       "timeout_seconds": 120.0,
-      "cases": 113,
+      "cases": 114,
       "marker": "lz4_native_probe",
-      "output": "lz4_native_probe_ok cases=113\nlz4_native_probe_coverage capability=block cases=113\nlz4_native_probe_coverage capability=bounded-limits cases=113\nlz4_native_probe_coverage capability=checksum cases=113\nlz4_native_probe_coverage capability=chunked cases=63\nlz4_native_probe_coverage capability=reusable-chunked cases=63\nlz4_native_probe_coverage capability=dictionary cases=113\nlz4_native_probe_coverage capability=dictionary-set cases=113\nlz4_native_probe_coverage capability=incremental cases=63\nlz4_native_probe_coverage capability=lib-generated cases=63\nlz4_native_probe_coverage capability=malformed cases=113\nlz4_native_probe_coverage capability=native-generated cases=113\nlz4_native_probe_coverage capability=skippable cases=113\n",
+      "output": "lz4_native_probe_ok cases=114\nlz4_native_probe_coverage capability=block cases=114\nlz4_native_probe_coverage capability=bounded-limits cases=114\nlz4_native_probe_coverage capability=checksum cases=114\nlz4_native_probe_coverage capability=chunked cases=63\nlz4_native_probe_coverage capability=compressed-block-cursor cases=1\nlz4_native_probe_coverage capability=reusable-chunked cases=63\nlz4_native_probe_coverage capability=dictionary cases=114\nlz4_native_probe_coverage capability=dictionary-set cases=114\nlz4_native_probe_coverage capability=incremental cases=63\nlz4_native_probe_coverage capability=lib-generated cases=63\nlz4_native_probe_coverage capability=malformed cases=114\nlz4_native_probe_coverage capability=native-generated cases=114\nlz4_native_probe_coverage capability=skippable cases=114\n",
       "reported_capabilities": [
         "block",
         "bounded-limits",
         "checksum",
         "chunked",
+        "compressed-block-cursor",
         "dictionary",
         "dictionary-set",
         "incremental",
@@ -2156,20 +2166,21 @@ Example:
         "skippable"
       ],
       "reported_capability_cases": {
-        "block": 113,
-        "bounded-limits": 113,
-        "checksum": 113,
+        "block": 114,
+        "bounded-limits": 114,
+        "checksum": 114,
         "chunked": 63,
-        "dictionary": 113,
-        "dictionary-set": 113,
+        "compressed-block-cursor": 1,
+        "dictionary": 114,
+        "dictionary-set": 114,
         "incremental": 63,
         "lib-generated": 63,
-        "malformed": 113,
-        "native-generated": 113,
+        "malformed": 114,
+        "native-generated": 114,
         "reusable-chunked": 63,
-        "skippable": 113
+        "skippable": 114
       },
-      "reported_capability_count": 12
+      "reported_capability_count": 13
     },
     {
       "label": "lz4-native-dictionary-probe",

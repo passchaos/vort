@@ -6,6 +6,7 @@ const block_format = @import("lz4/block_format.zig");
 const length = @import("lz4/length.zig");
 const literal_copy = @import("lz4/literal_copy.zig");
 const incremental_encoder = @import("lz4/incremental/frame_encoder.zig");
+const incremental_block_decoder = @import("lz4/incremental/block_decoder.zig");
 const incremental_tests = @import("lz4/incremental/tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
@@ -1132,6 +1133,8 @@ pub const NativeIncrementalFrameDecoder = struct {
     block_stream_block_independent: bool = true,
     block_stream_block_checksum: bool = false,
     block_stream_block_hasher: std.hash.XxHash32 = std.hash.XxHash32.init(0),
+    block_stream_compressed_cursor: ?incremental_block_decoder.Cursor = null,
+    streamed_compressed_block_count: usize = 0,
     block_stream_frame_expected_len: ?usize = null,
     block_stream_frame_decoded_len: usize = 0,
     block_stream_content_checksum: bool = false,
@@ -1240,6 +1243,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.skippable_written = 0;
         self.skippable_total = 0;
         self.skippable_event_count = 0;
+        self.streamed_compressed_block_count = 0;
         self.resetSkippableStream();
     }
 
@@ -1298,10 +1302,34 @@ pub const NativeIncrementalFrameDecoder = struct {
         return self.frame_scratch.capacity;
     }
 
+    /// Number of decoded bytes retained by the whole-frame or block fallback.
+    /// Direct and compressed-block cursor paths keep this at zero.
+    pub fn decodedBufferedBytes(self: *const NativeIncrementalFrameDecoder) usize {
+        return self.decoded_scratch.items.len - self.decoded_offset;
+    }
+
+    /// Allocated capacity backing decoded fallback output. A fresh decoder that
+    /// remains on direct or cursor-based output keeps this at zero.
+    pub fn decodedBufferCapacity(self: *const NativeIncrementalFrameDecoder) usize {
+        return self.decoded_scratch.capacity;
+    }
+
     /// True while input prefixes are released block-by-block instead of
     /// retaining the complete encoded frame.
     pub fn isBlockStreaming(self: *const NativeIncrementalFrameDecoder) bool {
         return self.phase == .block_stream;
+    }
+
+    /// True while a validated compressed block is being decoded directly into
+    /// caller output across resumable `step()` calls.
+    pub fn isCompressedBlockStreaming(self: *const NativeIncrementalFrameDecoder) bool {
+        return self.phase == .block_stream and self.block_stream_compressed_cursor != null;
+    }
+
+    /// Number of compressed blocks decoded incrementally without materializing
+    /// a complete decoded block in scratch storage.
+    pub fn streamedCompressedBlockCount(self: *const NativeIncrementalFrameDecoder) usize {
+        return self.streamed_compressed_block_count;
     }
 
     pub fn finish(self: *NativeIncrementalFrameDecoder) Error!void {
@@ -1312,7 +1340,9 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (self.phase == .block_stream) {
             const err: Error = if ((self.block_stream_stage == .raw_payload and
                 self.block_stream_raw_remaining != 0 and self.blockStreamInput().len != 0) or
-                (self.block_stream_stage == .compressed_output and self.decoded_offset != self.decoded_scratch.items.len))
+                (self.block_stream_stage == .compressed_output and
+                    (self.block_stream_compressed_cursor != null or
+                        self.decoded_offset != self.decoded_scratch.items.len)))
                 error.OutputTooSmall
             else
                 error.TruncatedFrame;
@@ -1672,6 +1702,19 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 return err;
                             };
                             try self.ensureBlockStreamOutputFits(decoded_len);
+                            if (!self.block_stream_block_checksum and
+                                self.block_stream_block_independent and
+                                self.direct_dictionary_history.len == 0 and
+                                decoded_len <= max_block_history_len)
+                            {
+                                self.direct_history.clearRetainingCapacity();
+                                try self.direct_history.ensureTotalCapacity(self.allocator, decoded_len);
+                                self.block_stream_compressed_cursor = incremental_block_decoder.Cursor.init(decoded_len);
+                                self.decoded_scratch.clearRetainingCapacity();
+                                self.decoded_offset = 0;
+                                self.block_stream_stage = .compressed_output;
+                                continue;
+                            }
                             self.decoded_scratch.clearRetainingCapacity();
                             try self.decoded_scratch.resize(self.allocator, decoded_len);
                             const written = decodeBlockWithPrefixIntoSliceNoAlloc(block, self.decoded_scratch.items, decoded_len, history) catch |err| {
@@ -1695,6 +1738,34 @@ pub const NativeIncrementalFrameDecoder = struct {
                             }
                         },
                         .compressed_output => {
+                            if (self.block_stream_compressed_cursor) |*cursor| {
+                                const output_start = output_written_step;
+                                const block = self.blockStreamInput()[0..self.block_stream_block_len];
+                                const result = cursor.step(block, self.direct_history.items, output[output_start..]) catch |err| {
+                                    self.recordError(.block_stream, err);
+                                    return err;
+                                };
+                                const produced = output[output_start..][0..result.output_written];
+                                self.direct_history.appendSliceAssumeCapacity(produced);
+                                if (self.block_stream_content_checksum) self.block_stream_content_hasher.update(produced);
+                                self.block_stream_frame_decoded_len += produced.len;
+                                self.output_written += produced.len;
+                                output_written_step += produced.len;
+                                if (!result.done) {
+                                    if (result.output_written != 0) continue;
+                                    return .{
+                                        .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                        .status = .need_output,
+                                    };
+                                }
+                                self.consumeBlockStreamInput(self.block_stream_block_len);
+                                self.block_stream_compressed_cursor = null;
+                                self.direct_history.clearRetainingCapacity();
+                                self.streamed_compressed_block_count += 1;
+                                self.block_stream_block_index += 1;
+                                self.block_stream_stage = .block_header;
+                                continue;
+                            }
                             if (self.decoded_offset == self.decoded_scratch.items.len) {
                                 if (!self.block_stream_block_independent) try self.rememberDirectOutput(self.decoded_scratch.items);
                                 if (self.block_stream_content_checksum) self.block_stream_content_hasher.update(self.decoded_scratch.items);
@@ -1830,6 +1901,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.block_stream_block_independent = true;
         self.block_stream_block_checksum = false;
         self.block_stream_block_hasher = std.hash.XxHash32.init(0);
+        self.block_stream_compressed_cursor = null;
         self.block_stream_frame_expected_len = null;
         self.block_stream_frame_decoded_len = 0;
         self.block_stream_content_checksum = false;
@@ -7245,6 +7317,138 @@ test "lz4 native incremental compressed block checksum fits exact payload cap" {
     try std.testing.expectEqual(@as(usize, 0), bad.snapshot().output_written);
     try std.testing.expectEqualSlices(u8, "ChecksumMismatch", bad.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "direct_output", bad.diagnostics().last_error_phase_name);
+}
+
+test "lz4 native block stream drains compressed block through one-byte output without decoded scratch" {
+    const payload = ("0123456789abcdef" ** 8) ** 64;
+    const encoded = try encodePureFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = true,
+        .block_checksum = false,
+        .block_mode = .independent,
+        .block_size_id = .max64kb,
+    });
+    defer std.testing.allocator.free(encoded);
+    const block = (try inspectNativeFrameFirstBlock(encoded)) orelse return error.CorruptFrame;
+    try std.testing.expect(block.is_compressed);
+
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_compressed_buffer_len = block.payload_len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    const first = try decoder.step(encoded, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, first.status);
+    try std.testing.expect(decoder.isBlockStreaming());
+    try std.testing.expect(decoder.isCompressedBlockStreaming());
+    try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+    try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
+
+    var input_offset = first.progress.input_read;
+    var output_offset: usize = 0;
+    while (true) {
+        const result = try decoder.step(encoded[input_offset..], output[output_offset .. output_offset + 1]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        try std.testing.expect(decoder.compressedBufferedBytes() <= block.payload_len);
+        try std.testing.expect(decoder.compressedBufferCapacity() <= block.payload_len);
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
+        if (result.status == .done) break;
+        try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
+    }
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqual(payload.len, output_offset);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expectEqual(payload.len, decoder.diagnostics().output_written);
+    try std.testing.expectEqual(@as(usize, 1), decoder.streamedCompressedBlockCount());
+}
+
+test "lz4 native block stream resets compressed cursor across independent blocks" {
+    const payload = try std.testing.allocator.alloc(u8, max_block_history_len + 4096);
+    defer std.testing.allocator.free(payload);
+    const pattern = "0123456789abcdef";
+    for (payload, 0..) |*byte, index| byte.* = pattern[index % pattern.len];
+    const encoded = try encodePureFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = true,
+        .block_checksum = false,
+        .block_mode = .independent,
+        .block_size_id = .max64kb,
+    });
+    defer std.testing.allocator.free(encoded);
+    const first = (try inspectNativeFrameFirstBlock(encoded)) orelse return error.CorruptFrame;
+    const second = (try inspectNativeFrameBlockAt(encoded, first.next_header_offset)) orelse return error.CorruptFrame;
+    try std.testing.expect(first.is_compressed);
+    try std.testing.expect(second.is_compressed);
+    const compressed_limit = @max(first.payload_len, second.payload_len);
+
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_compressed_buffer_len = compressed_limit,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    const output = try std.testing.allocator.alloc(u8, payload.len);
+    defer std.testing.allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    var saw_cursor = false;
+    while (true) {
+        const end = @min(output.len, output_offset + 97);
+        const result = try decoder.step(encoded[input_offset..], output[output_offset..end]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        saw_cursor = saw_cursor or decoder.isCompressedBlockStreaming();
+        try std.testing.expect(decoder.compressedBufferedBytes() <= compressed_limit);
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferedBytes());
+        try std.testing.expectEqual(@as(usize, 0), decoder.decodedBufferCapacity());
+        if (result.status == .done) break;
+        try std.testing.expect(result.progress.input_read != 0 or result.progress.output_written != 0);
+    }
+    try std.testing.expect(saw_cursor);
+    try std.testing.expectEqual(@as(usize, 2), decoder.streamedCompressedBlockCount());
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqual(payload.len, output_offset);
+    try std.testing.expectEqualSlices(u8, payload, output);
+}
+
+test "lz4 native block stream rejects malformed compressed block before output" {
+    const payload = ("0123456789abcdef" ** 8) ** 64;
+    const encoded = try encodePureFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .block_checksum = false,
+        .block_mode = .independent,
+        .block_size_id = .max64kb,
+    });
+    defer std.testing.allocator.free(encoded);
+    const block = (try inspectNativeFrameFirstBlock(encoded)) orelse return error.CorruptFrame;
+    try std.testing.expect(block.is_compressed);
+
+    const corrupt = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(corrupt);
+    var block_offset = block.payload_offset;
+    const token = corrupt[block_offset];
+    block_offset += 1;
+    var literal_len: usize = token >> 4;
+    if (literal_len == 15) literal_len += try readLengthExtension(corrupt, &block_offset);
+    block_offset += literal_len;
+    try std.testing.expect(block.payload_offset + block.payload_len - block_offset >= 2);
+    corrupt[block_offset] = 0;
+    corrupt[block_offset + 1] = 0;
+
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_compressed_buffer_len = block.payload_len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = @splat(0xa5);
+    try std.testing.expectError(error.InvalidMatch, decoder.step(corrupt, &output));
+    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().output_written);
+    for (output) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
+    try std.testing.expectEqualSlices(u8, "InvalidMatch", decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "direct_output", decoder.diagnostics().last_error_phase_name);
 }
 
 test "lz4 native incremental decoder streams no-size compressed frame directly" {

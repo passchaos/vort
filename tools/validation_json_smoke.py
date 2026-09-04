@@ -507,6 +507,7 @@ def main() -> int:
             "native-generated",
             "incremental",
             "chunked",
+            "compressed-block-cursor",
             "reusable-chunked",
             "fse-repeat",
             "dictionary",
