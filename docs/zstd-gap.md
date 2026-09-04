@@ -113,6 +113,14 @@ Current interpretation:
   format, long-distance matching in the encoder/decoder pipeline, corpus
   throughput/ratio dashboards, and repeatable same-machine comparisons against
   zstd CLI/library modes.
+- Large sequence-free four-stream Huffman sections now follow upstream zstd's
+  independent-stream scheduling: all four streams advance together and decode
+  five symbols per 64-bit reservoir load, with the existing checked decoder
+  handling every stream tail. On the locked 64 KiB high-entropy ASCII frame,
+  twelve alternating fixed-CPU runs improve Vort's median from about 188.03
+  MiB/s to 781.84 MiB/s (`4.16x`, 12/12 wins); a same-process run reaches about
+  0.66x of libzstd 1.5.5, up from roughly 0.16x. This is a focused decode improvement,
+  not a general Zstd parity claim.
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug

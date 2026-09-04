@@ -896,3 +896,21 @@ or cross-platform leadership. A broader per-row Adler batching attempt regressed
 both checksum policies by about 1%, a global 12-bit semantic table produced only
 about `1.004x/1.002x`, and extending speculative match copies through 16 bytes
 was neutral; all three experiments were reverted.
+
+## Zstd interleaved four-stream Huffman decode (2026-09-04)
+
+`perf` attributed 98.56% of the locked `ascii64k` profile's cycles to the
+sequence-free Huffman literal loop. Following the scheduling used by the local
+upstream `~/Work/zstd` decoder, Vort now advances all four independent literal
+streams together and decodes five symbols per stream from each 64-bit reservoir
+load. The ordinary checked decoder still handles each stream tail and validates
+its reverse-bitstream end marker.
+
+Twelve alternating fixed-CPU-8 runs at 5,000 decodes moved the median from about
+188.03 MiB/s to 781.84 MiB/s, a `4.16x` improvement with 12/12 wins against
+commit `49848ad8`.
+A same-process 1,000-iteration comparison measured about 787.90 MiB/s for Vort
+and 1,178.58 MiB/s for libzstd 1.5.5 (`0.6685x`). The reference gate floor for
+this row is raised from `0.14x` to `0.50x`. This evidence applies to the locked
+64 KiB sequence-free, four-stream, high-entropy ASCII shape; it is not a general
+Zstd decompression parity claim.

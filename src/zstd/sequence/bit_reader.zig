@@ -153,6 +153,27 @@ pub const Reader = struct {
         return (reservoir >> shift) & ((@as(u32, 1) << total_bits) - 1);
     }
 
+    /// Load five adjacent Huffman prefixes from one 64-bit reservoir. The
+    /// earliest reverse-stream bit is returned at the high end of the selected
+    /// range, so callers can decode variable-length symbols by advancing a
+    /// logical bit offset without reloading input for every symbol.
+    pub fn peekBulkHuffmanFive(self: Reader, bit_count: u4) u64 {
+        std.debug.assert(bit_count != 0 and @as(usize, bit_count) * 5 <= self.remaining_bits);
+        const total_bits: u6 = @as(u6, bit_count) * 5;
+        const start = self.remaining_bits - total_bits;
+        const first_byte = start >> 3;
+        const shift: u3 = @intCast(start & 7);
+        const available_bytes = self.bytes.len - first_byte;
+        const reservoir = if (available_bytes >= @sizeOf(u64))
+            std.mem.readInt(u64, self.bytes[first_byte..][0..@sizeOf(u64)], .little)
+        else blk: {
+            var padded: [8]u8 = @splat(0);
+            @memcpy(padded[0..available_bytes], self.bytes[first_byte..]);
+            break :blk std.mem.readInt(u64, &padded, .little);
+        };
+        return (reservoir >> shift) & ((@as(u64, 1) << total_bits) - 1);
+    }
+
     /// Consume a code after a successful bulk Huffman lookup. The caller just
     /// proved that a full table width remains, and every valid code is no wider
     /// than that width, so this unchecked update removes a redundant bounds
@@ -269,6 +290,20 @@ test "Zstd reverse reader paired Huffman peek matches checked prefix" {
             try std.testing.expectEqual(
                 @as(u32, @intCast(try reader.peek(@as(u8, width) * 2))),
                 reader.peekBulkHuffmanPair(width),
+            );
+    }
+}
+
+test "Zstd reverse reader five-symbol Huffman peek matches checked prefix" {
+    var bytes: [12]u8 = .{ 0x35, 0xa6, 0x59, 0xc3, 0x17, 0xe8, 0x42, 0x91, 0x6b, 0xf4, 0x28, 0xd0 };
+    for (0..32) |prefix_bits| {
+        var reader = try Reader.init(&bytes);
+        if (prefix_bits != 0) try reader.skip(@intCast(prefix_bits));
+        var width: u4 = 1;
+        while (width <= 11 and @as(usize, width) * 5 <= reader.available()) : (width += 1)
+            try std.testing.expectEqual(
+                @as(u64, @intCast(try reader.peek(@as(u8, width) * 5))),
+                reader.peekBulkHuffmanFive(width),
             );
     }
 }

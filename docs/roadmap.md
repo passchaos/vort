@@ -8873,3 +8873,17 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   output-size diagnostics, linked rolling history, and preset dictionaries.
   Checksummed compressed blocks intentionally remain input-atomic so their
   payload can be verified before any decoded bytes are exposed.
+  Reworked the large sequence-free Zstd Huffman path after comparing its hot
+  loop with the local upstream `~/Work/zstd` decoder. Four independent literal
+  streams now advance together, each decoding five symbols from one 64-bit
+  reservoir before reloading; checked per-stream tail decoding still validates
+  every reverse-bitstream end marker. A width-1...11/alignment oracle pins the
+  five-prefix gather, and the large four-stream fixture corrupts each of the
+  four terminal markers independently. Twelve alternating fixed-CPU-8 runs at
+  5,000 decodes improve the locked 64 KiB high-entropy ASCII median from about
+  188.03 MiB/s to 781.84 MiB/s (`4.16x`, 12/12 wins). The same-process libzstd
+  1.5.5 row now reaches about 0.66x instead of 0.16x, so its regression floor is
+  raised from 0.14x to 0.50x. The 273-case runtime matrix and all six upstream
+  `decodecorpus` campaigns remain byte-exact: 5,400 frames, all 64 sequence-mode
+  tuples, 2,699 block-stream frames, and 76,578 streamed sequence blocks with
+  zero decoded scratch.
