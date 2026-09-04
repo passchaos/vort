@@ -31,7 +31,7 @@ const Match = struct {
 /// half of a production consensus probe. Its recent-offset updates mirror
 /// Zstd's literal-length-sensitive repcode rules, while its output remains
 /// ordinary LZ77 distances so the production sequence writer is still the
-/// wire-format authority. Production accepts it early only when the independent
+/// wire-format authority. Level-aware production accepts it early only when the independent
 /// repeat-beam parser emits the same complete token stream and statistics.
 pub fn planReuse(
     tokens: *std.ArrayList(lz77.Token),

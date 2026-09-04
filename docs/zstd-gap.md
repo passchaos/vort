@@ -141,7 +141,7 @@ Current interpretation:
   produced 280 qualifying cases and zero split winners, after an unrestricted
   audit had exposed 71 counterexamples. The locked binary level-9 frame remains
   8,607 bytes and improves by about `3.3x` (12/12 fixed-CPU pairs).
-- Wide level-3 and level-9+ blocks can now stop candidate-family arbitration when double-fast
+- Wide level-1--3 and level-9+ blocks can now stop candidate-family arbitration when double-fast
   and repeat-beam independently emit the same block at 3:1 compression or
   better. Of 280 qualifying generated cases, 184 reached consensus and all 184
   matched exhaustive arbitration byte-for-byte; omitting the consensus check
@@ -155,6 +155,10 @@ Current interpretation:
   generated wide blocks meeting the 3:1 threshold, 89 parser agreements all
   matched complete level-3 arbitration. The locked binary row remains 8,607
   bytes while improving by about `2.14x` (12/12 fixed-CPU pairs).
+- The consensus trigger also covers level 1's 16-state and level 2's 32-state
+  budgets. Both 1,008-case audits found 89 agreements and 89/89 matches with
+  their complete arbitration. The locked binary level-1 row gains `1.71x`
+  (12/12 fixed-CPU pairs) without changing its 8,607-byte wire.
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug

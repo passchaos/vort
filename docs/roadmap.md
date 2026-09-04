@@ -8972,7 +8972,7 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `3.30x` with 12/12 wins; an eight-run nine-row matrix measures `3.27x`,
   preserves every size/checksum, and keeps controls within about 1.6%.
   The diagnostic double-fast parser now forms the cheap half of a narrow
-  block-level consensus proof. On wide level-3 and level-9+ blocks, a candidate at 3:1
+  block-level consensus proof. On wide level-1--3 and level-9+ blocks, a candidate at 3:1
   compression or better may return early only when the independent repeat-beam
   parser emits identical complete block bytes. A temporary 1,008-case audit
   found 280 threshold matches, 184 parser agreements, and zero differences
@@ -8990,8 +8990,8 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   over the committed double-wire implementation (12/12 wins); an eight-run
   nine-row matrix measures `1.27x`, preserves every size/checksum, and keeps
   controls within about 2%. The default encode gate now uses three iterations
-  and three rounds; after extending the proof to level 3, both optimized levels
-  are checked independently against level 1.
+  and three rounds; later level extensions keep every optimized binary row
+  mutually bounded rather than assuming one remains a stable slow control.
   Extended the same token-consensus proof down to level 3's 64-state budget. A
   separate 1,008-case audit found 168 wide blocks meeting the 3:1 threshold and
   89 double-fast/repeat-beam token agreements; all 89 matched complete level-3
@@ -8999,5 +8999,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   cover both 64- and 96-state paths plus the 63-state disabled boundary. Twelve
   fixed-CPU-8 binary level-3 pairs improve by `2.14x` with 12/12 wins; an
   eight-run complete matrix measures `2.38x`, preserves every size/checksum,
-  and keeps controls within about 2%. The encode gate independently requires
-  levels 3 and 9 below 75% of the level-1 binary latency.
+  and keeps controls within about 2%. The next level-1 extension replaces this
+  temporary cross-level relationship with a symmetric latency bound.
+  Extended the consensus trigger through level 1's 16-state and level 2's
+  32-state budgets. Separate passes over the same 1,008-case corpus found the
+  same 168 threshold matches and 89 token/statistics agreements at each level;
+  all 89 matched the corresponding complete arbitration. Permanent tests cover
+  16/32/64/96-state success and disagreement fallbacks plus the disabled
+  15-state boundary. Twelve fixed-CPU-8 binary level-1 pairs improve by `1.71x`
+  with 12/12 wins; an eight-run complete matrix measures `1.64x`, preserves all
+  wires/checksums, and leaves levels 3/9 within 0.5%. The encode gate now keeps
+  all three binary levels within 25% latency of one another.

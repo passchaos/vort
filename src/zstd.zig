@@ -68,9 +68,9 @@ const mixed_match_path_search_budget = 512;
 // improving the locked 32 KiB structured corpus. Keep it for level 4+ and for
 // callers that explicitly request a larger native search budget.
 const mixed_match_min_search_budget = 96;
-// The independent double-fast/repeat-beam consensus is useful from level 3's
-// 64-state budget onward. Lower levels keep their existing single-parser path.
-const decisive_wide_match_min_search_budget = 64;
+// The independent double-fast/repeat-beam consensus is useful from level 1's
+// 16-state budget onward. The rep-beam level policy keeps levels 4-8 out.
+const decisive_wide_match_min_search_budget = 16;
 // Level 1 already evaluates greedy and optimal hash plans. A third lazy pass
 // preserves its locked wires but cannot improve them, so begin that extra ratio
 // work at level 2's 32-state budget.
@@ -18587,10 +18587,10 @@ test "zstd wide double fast consensus matches full arbitration" {
     }
     try std.testing.expect(!preferSerialMixedSearch(&payload));
 
-    try std.testing.expect(shouldProbeDecisiveWideMatch(&payload, 64, true));
-    try std.testing.expect(!shouldProbeDecisiveWideMatch(&payload, 63, true));
+    try std.testing.expect(shouldProbeDecisiveWideMatch(&payload, 16, true));
+    try std.testing.expect(!shouldProbeDecisiveWideMatch(&payload, 15, true));
     try std.testing.expect(!shouldProbeDecisiveWideMatch(&payload, 96, false));
-    for ([_]usize{ 64, 96 }) |budget| {
+    for ([_]usize{ 16, 32, 64, 96 }) |budget| {
         var consensus: std.ArrayList(u8) = .empty;
         defer consensus.deinit(std.testing.allocator);
         try std.testing.expect(try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &consensus, &payload, true, null));
@@ -18618,7 +18618,7 @@ test "zstd wide double fast disagreement falls back to full arbitration" {
     var consensus: std.ArrayList(u8) = .empty;
     defer consensus.deinit(std.testing.allocator);
     try std.testing.expect(!try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &consensus, &payload, true, null));
-    for ([_]usize{ 64, 96 }) |budget| {
+    for ([_]usize{ 16, 32, 64, 96 }) |budget| {
         var exhaustive: std.ArrayList(u8) = .empty;
         defer exhaustive.deinit(std.testing.allocator);
         try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &exhaustive, &payload, true, budget, true, null, null));
