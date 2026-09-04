@@ -82,9 +82,10 @@ def main() -> int:
     # level-1 latency cliff from returning while leaving ample CI headroom.
     assert int(binary_rows[3]["vort_ns"]) < int(binary_rows[1]["vort_ns"]) * 4, binary_rows
     # Ratio levels accept a wide primary only after it reaches the audited 3:1
-    # decisive threshold. Keep level 9 below twice the now-stable level-3
-    # latency while allowing normal shared-runner variance.
-    assert int(binary_rows[9]["vort_ns"]) < int(binary_rows[3]["vort_ns"]) * 2, binary_rows
+    # decisive threshold. Inside that primary, matching double-fast and
+    # repeat-beam wires bypass the remaining families. The old path was around
+    # 1.4x level-3 latency; the consensus path is substantially faster.
+    assert int(binary_rows[9]["vort_ns"]) < int(binary_rows[3]["vort_ns"]), binary_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 

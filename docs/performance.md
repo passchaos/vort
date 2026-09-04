@@ -966,3 +966,16 @@ pin the 8,607-byte level-9/22 primary winner and a below-threshold
 binary level-9 pairs improve mean throughput by `3.30x` with 12/12 wins; an
 eight-run nine-row matrix measures `3.27x`, with every size/checksum unchanged
 and control rows within about 1.6%.
+
+The retained double-fast parser now participates in a narrow block-level
+consensus check for wide, ratio-level blocks. Its candidate must compress by at
+least 3:1 and match the independent repeat-beam candidate byte-for-byte before
+the encoder skips mixed, greedy, lazy, optimal, repeated, and duplicate
+families. A 1,008-case audit found 280 double-fast candidates below the size
+threshold: 184 agreed with repeat-beam, and all 184 matched complete arbitration
+exactly. Without the agreement requirement, 16 cases lost 242 bytes in total
+(worst 32), so the broader shortcut was rejected. Twelve fixed-CPU-8 binary
+level-9 pairs improve mean throughput by `2.74x` with 12/12 wins on top of the
+frame-level shortcut; an eight-run nine-row matrix measures `2.76x`,
+keeps all output bytes/checksums unchanged, and leaves control rows neutral or
+faster.

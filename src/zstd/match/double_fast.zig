@@ -27,10 +27,12 @@ const Match = struct {
 /// collisions, rep0 is tested one byte ahead, and rep1 is tested immediately
 /// after every stored match.
 ///
-/// The parser is intentionally exposed only through Zstd's diagnostic stage.
-/// Its recent-offset updates mirror Zstd's literal-length-sensitive repcode
-/// rules, while its output remains ordinary LZ77 distances so the production
-/// sequence writer is still the wire-format authority.
+/// The parser is exposed through Zstd's diagnostic stage and used as the cheap
+/// half of a production consensus probe. Its recent-offset updates mirror
+/// Zstd's literal-length-sensitive repcode rules, while its output remains
+/// ordinary LZ77 distances so the production sequence writer is still the
+/// wire-format authority. Production accepts it early only when the independent
+/// repeat-beam parser emits the same complete block bytes.
 pub fn planReuse(
     tokens: *std.ArrayList(lz77.Token),
     allocator: std.mem.Allocator,

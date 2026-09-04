@@ -8971,3 +8971,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alternating fixed-CPU-8 binary level-9 pairs improve mean throughput by
   `3.30x` with 12/12 wins; an eight-run nine-row matrix measures `3.27x`,
   preserves every size/checksum, and keeps controls within about 1.6%.
+  The diagnostic double-fast parser now forms the cheap half of a narrow
+  block-level consensus proof. On wide ratio-level blocks, a candidate at 3:1
+  compression or better may return early only when the independent repeat-beam
+  parser emits identical complete block bytes. A temporary 1,008-case audit
+  found 280 threshold matches, 184 parser agreements, and zero differences
+  between those agreements and complete arbitration. The agreement is
+  necessary: double-fast alone lost on 16 cases by 242 bytes total and up to 32
+  bytes. Tests retain both an 8,600-byte consensus winner and a disagreement
+  fallback. Twelve fixed-CPU-8 binary level-9 pairs improve mean throughput by
+  `2.74x` with 12/12 wins on top of the frame shortcut; an eight-run nine-row
+  matrix confirms `2.76x`, identical wires/checksums, and neutral-to-positive
+  controls.
