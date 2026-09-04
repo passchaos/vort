@@ -9010,3 +9010,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   with 12/12 wins; an eight-run complete matrix measures `1.64x`, preserves all
   wires/checksums, and leaves levels 3/9 within 0.5%. The encode gate now keeps
   all three binary levels within 25% latency of one another.
+  Removed the consensus helper's temporary encoded-block buffer. Double-fast
+  now writes directly into the caller's reusable candidate list; a saved entry
+  length transactionally restores prior output on threshold misses, parser
+  disagreements, and all injected allocation failures. A counting-allocator
+  test compares the retained temporary-buffer reference and pins one fewer
+  allocation plus 13,028 fewer requested bytes on the locked 32 KiB binary
+  block, with identical output. Twelve fixed-CPU-8 timing pairs averaged only
+  `1.04x` with 5/12 wins, so no throughput claim is attached to this change.

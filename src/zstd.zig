@@ -9630,6 +9630,8 @@ noinline fn emitDecisiveWideMatchCompressedBlock(
     last: bool,
     reusable_rep_beam: ?*lz77.RepBeamScratch,
 ) Error!bool {
+    const output_start = out.items.len;
+    errdefer out.items.len = output_start;
     var double_fast_tokens: std.ArrayList(lz77.Token) = .empty;
     defer double_fast_tokens.deinit(allocator);
     const parser_options = zstdHashParserOptions(block.len);
@@ -9637,22 +9639,30 @@ noinline fn emitDecisiveWideMatchCompressedBlock(
         error.InvalidBlockPlan => return false,
         else => return err,
     };
-    var double_fast: std.ArrayList(u8) = .empty;
-    defer double_fast.deinit(allocator);
-    if (!try emitHashTokenSequenceBlock(allocator, &double_fast, block, last, double_fast_tokens.items, double_fast_stats) or
-        double_fast.items.len > block.len / 3) return false;
+    if (!try emitHashTokenSequenceBlock(allocator, out, block, last, double_fast_tokens.items, double_fast_stats) or
+        out.items.len - output_start > block.len / 3)
+    {
+        out.items.len = output_start;
+        return false;
+    }
 
     var local_rep_beam: lz77.RepBeamScratch = .{};
     defer if (reusable_rep_beam == null) local_rep_beam.deinit(allocator);
     const rep_beam = reusable_rep_beam orelse &local_rep_beam;
     const rep_beam_stats = lz77.optimalRepBeamPlanReuse(rep_beam, allocator, block, parser_options) catch |err| switch (err) {
-        error.InvalidBlockPlan => return false,
+        error.InvalidBlockPlan => {
+            out.items.len = output_start;
+            return false;
+        },
         else => return err,
     };
     if (!std.meta.eql(double_fast_stats, rep_beam_stats) or
-        !nativeMatchTokenSlicesEqual(double_fast_tokens.items, rep_beam.reversed.items)) return false;
+        !nativeMatchTokenSlicesEqual(double_fast_tokens.items, rep_beam.reversed.items))
+    {
+        out.items.len = output_start;
+        return false;
+    }
 
-    try out.appendSlice(allocator, double_fast.items);
     return true;
 }
 
@@ -18593,12 +18603,14 @@ test "zstd wide double fast consensus matches full arbitration" {
     for ([_]usize{ 16, 32, 64, 96 }) |budget| {
         var consensus: std.ArrayList(u8) = .empty;
         defer consensus.deinit(std.testing.allocator);
+        try consensus.appendSlice(std.testing.allocator, "prefix");
         try std.testing.expect(try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &consensus, &payload, true, null));
-        try std.testing.expectEqual(@as(usize, 8600), consensus.items.len);
+        try std.testing.expectEqualSlices(u8, "prefix", consensus.items[0.."prefix".len]);
+        try std.testing.expectEqual(@as(usize, "prefix".len + 8600), consensus.items.len);
         var exhaustive: std.ArrayList(u8) = .empty;
         defer exhaustive.deinit(std.testing.allocator);
         try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &exhaustive, &payload, true, budget, true, null, null));
-        try std.testing.expectEqualSlices(u8, exhaustive.items, consensus.items);
+        try std.testing.expectEqualSlices(u8, exhaustive.items, consensus.items["prefix".len..]);
         var selected: std.ArrayList(u8) = .empty;
         defer selected.deinit(std.testing.allocator);
         try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbe(std.testing.allocator, &selected, &payload, true, budget, null));
@@ -18617,7 +18629,9 @@ test "zstd wide double fast disagreement falls back to full arbitration" {
 
     var consensus: std.ArrayList(u8) = .empty;
     defer consensus.deinit(std.testing.allocator);
+    try consensus.appendSlice(std.testing.allocator, "prefix");
     try std.testing.expect(!try emitDecisiveWideMatchCompressedBlock(std.testing.allocator, &consensus, &payload, true, null));
+    try std.testing.expectEqualSlices(u8, "prefix", consensus.items);
     for ([_]usize{ 16, 32, 64, 96 }) |budget| {
         var exhaustive: std.ArrayList(u8) = .empty;
         defer exhaustive.deinit(std.testing.allocator);
@@ -18627,6 +18641,73 @@ test "zstd wide double fast disagreement falls back to full arbitration" {
         try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbe(std.testing.allocator, &selected, &payload, true, budget, null));
         try std.testing.expectEqualSlices(u8, exhaustive.items, selected.items);
     }
+}
+
+test "zstd wide consensus rolls back every allocation failure" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            var payload: [32 * 1024]u8 = undefined;
+            var state: u32 = 0xfeed_beef;
+            for (&payload, 0..) |*byte, index| {
+                state = state *% 1_664_525 +% 1_013_904_223;
+                byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(state >> 16);
+            }
+            var output: std.ArrayList(u8) = .empty;
+            defer output.deinit(allocator);
+            try output.appendSlice(allocator, "prefix");
+            const result = emitDecisiveWideMatchCompressedBlock(allocator, &output, &payload, true, null) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix", output.items);
+                return err;
+            };
+            try std.testing.expect(result);
+            try std.testing.expectEqualSlices(u8, "prefix", output.items[0.."prefix".len]);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
+}
+
+test "zstd wide consensus writes directly into caller scratch" {
+    const Reference = struct {
+        fn emit(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8) !bool {
+            var double_fast_tokens: std.ArrayList(lz77.Token) = .empty;
+            defer double_fast_tokens.deinit(allocator);
+            const parser_options = zstdHashParserOptions(block.len);
+            const double_fast_stats = try double_fast_match.planReuse(&double_fast_tokens, allocator, block, parser_options);
+            var double_fast: std.ArrayList(u8) = .empty;
+            defer double_fast.deinit(allocator);
+            if (!try emitHashTokenSequenceBlock(allocator, &double_fast, block, true, double_fast_tokens.items, double_fast_stats) or
+                double_fast.items.len > block.len / 3) return false;
+
+            var rep_beam: lz77.RepBeamScratch = .{};
+            defer rep_beam.deinit(allocator);
+            const rep_beam_stats = try lz77.optimalRepBeamPlanReuse(&rep_beam, allocator, block, parser_options);
+            if (!std.meta.eql(double_fast_stats, rep_beam_stats) or
+                !nativeMatchTokenSlicesEqual(double_fast_tokens.items, rep_beam.reversed.items)) return false;
+            try out.appendSlice(allocator, double_fast.items);
+            return true;
+        }
+    };
+
+    var payload: [32 * 1024]u8 = undefined;
+    var state: u32 = 0xfeed_beef;
+    for (&payload, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(state >> 16);
+    }
+
+    var reference_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reference_output: std.ArrayList(u8) = .empty;
+    defer reference_output.deinit(reference_allocator.allocator());
+    try std.testing.expect(try Reference.emit(reference_allocator.allocator(), &reference_output, &payload));
+
+    var direct_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var direct_output: std.ArrayList(u8) = .empty;
+    defer direct_output.deinit(direct_allocator.allocator());
+    try std.testing.expect(try emitDecisiveWideMatchCompressedBlock(direct_allocator.allocator(), &direct_output, &payload, true, null));
+
+    try std.testing.expectEqualSlices(u8, reference_output.items, direct_output.items);
+    try std.testing.expectEqual(reference_allocator.allocations - 1, direct_allocator.allocations);
+    try std.testing.expect(direct_allocator.allocated_bytes + reference_output.items.len <= reference_allocator.allocated_bytes);
 }
 
 test "zstd level one returns a decisive non-prefix primary frame" {

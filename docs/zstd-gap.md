@@ -159,6 +159,11 @@ Current interpretation:
   budgets. Both 1,008-case audits found 89 agreements and 89/89 matches with
   their complete arbitration. The locked binary level-1 row gains `1.71x`
   (12/12 fixed-CPU pairs) without changing its 8,607-byte wire.
+  The selected double-fast wire now writes directly into the reusable caller
+  scratch. This removes one allocation and 13,028 requested bytes on the locked
+  32 KiB block; every allocation-failure path restores the caller's prior
+  output. Timing was only a noisy `1.04x` average (5/12 wins), so this is kept
+  as a deterministic allocation improvement rather than a throughput claim.
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug

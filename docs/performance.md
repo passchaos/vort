@@ -1004,3 +1004,12 @@ arbitration. Twelve fixed-CPU-8 binary level-1 pairs improve by `1.71x` with
 12/12 wins; an eight-run nine-row matrix measures `1.64x`, keeps all wires and
 checksums unchanged, and leaves levels 3/9 within 0.5% of baseline. The gate now
 requires all three binary levels to remain within 25% latency of one another.
+
+The consensus helper now emits its double-fast wire directly into the caller's
+reusable candidate buffer and transactionally restores the original length on
+threshold misses, parser disagreements, or allocation failures. On the locked
+32 KiB binary block this removes one allocation and 13,028 cumulative requested
+bytes while preserving the exact wire. The speed effect is intentionally not
+claimed as a stable win: twelve fixed-CPU-8 pairs averaged `1.04x` but only 5/12
+pairs won. The allocation reduction and exhaustive failure rollback are pinned
+by tests instead.
