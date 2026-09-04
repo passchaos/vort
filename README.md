@@ -22,11 +22,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   iterators, reusable raw-block decoder, and
   caller-owned encode/decode-into/append, incremental frame encode with optional pledged content size and preset dictionary, plus reusable
   scratch encoder/decoder APIs; oversized incremental data frames release raw
-  blocks directly, and compressed blocks without block checksums
-  use a resumable token cursor under arbitrary caller backpressure with no
+  blocks directly, and compressed blocks use a resumable token cursor under
+  arbitrary caller backpressure with no
   decoded-block scratch, including linked-block and preset-dictionary history;
-  checksummed compressed blocks retain at most one encoded block plus
-  one decoded-block scratch, validating compressed-block checksums before output;
+  compressed-block checksums are validated before starting caller output;
   incremental skippable frames retain only their
   8-byte header while discarding or capturing arbitrary-size metadata directly
   from caller input,

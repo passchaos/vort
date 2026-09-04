@@ -8853,5 +8853,7 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   force a linked second block to reference a 64 KiB raw prefix and a separate
   dictionary frame to reference its preset bytes; both remain at zero decoded
   scratch. The rolling 64 KiB history also removes the decoded-size restriction:
-  a 128 KiB compressed block now drains directly, while block-checksummed blocks
-  remain on the atomic fallback path.
+  a 128 KiB compressed block now drains directly. Finally, block-checksummed
+  compressed payloads are hashed and verified while retained, then handed to the
+  same cursor, preserving checksum-before-output while eliminating decoded
+  scratch from that last compressed-block tier.

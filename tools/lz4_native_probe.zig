@@ -1207,7 +1207,7 @@ fn checkCompressedBlockCursorIncremental(allocator: std.mem.Allocator) !void {
     const payload = ("0123456789abcdef" ** 8) ** 64;
     const encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, payload, .{
         .content_checksum = true,
-        .block_checksum = false,
+        .block_checksum = true,
         .block_mode = .independent,
         .block_size_id = .max64kb,
     });
