@@ -28,6 +28,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   compressed-block checksums are validated before starting caller output;
   complete prevalidated frames switch to the same cursor instead of
   materializing the frame when a compressed block exceeds caller output;
+  compressed blocks without block checksums also consume split input directly
+  when the configured compressed-buffer cap is smaller than their payload;
   incremental skippable frames retain only their
   8-byte header while discarding or capturing arbitrary-size metadata directly
   from caller input,
@@ -530,7 +532,9 @@ defer lz4_bounded_incremental.deinit();
 // Skippable frames retain only their 8-byte header; their metadata payload can
 // exceed max_compressed_buffer_len and is discarded or copied into caller-owned
 // skippable_output incrementally. Oversized data frames switch to block-bounded
-// input; compressed LZ4 blocks require the cap to hold one encoded block.
+// input. Compressed LZ4 blocks without block checksums can stream under a
+// header-sized cap; checksummed blocks require the cap to hold one encoded
+// block so checksum failure is reported before caller output is exposed.
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
 const lz4_dict = vort.Lz4NativeDictionary.init(0x1234, "previous lz4 history");
 const lz4_dict_options: vort.Lz4NativeFrameOptions = .{ .content_checksum = false };

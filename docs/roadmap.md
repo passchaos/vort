@@ -8866,3 +8866,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   run against commit `72609544` on a 256 KiB repetitive frame measured median
   throughput-equivalent speedups of 1.081x, 2.387x, and 5.399x for 1-, 127-,
   and 4096-byte caller output slices respectively.
+  Added a second cursor that parses no-block-checksum compressed payloads across
+  arbitrary input boundaries. Such blocks no longer require the compressed
+  buffer cap to hold their complete payload; tests exercise one-byte input and
+  output, split length extensions, truncated payloads, invalid offsets, exact
+  output-size diagnostics, linked rolling history, and preset dictionaries.
+  Checksummed compressed blocks intentionally remain input-atomic so their
+  payload can be verified before any decoded bytes are exposed.
