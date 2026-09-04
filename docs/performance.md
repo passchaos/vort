@@ -1066,7 +1066,11 @@ The retained 129 KiB fixture is byte-identical to complete serial arbitration at
 levels 1/2/3 and decodes through the public API. Twelve alternating ReleaseFast
 A/B pairs pinned to separate performance cores measured median speedups of
 `1.038x` for level 1 and `1.090x` for level 3 before sequence-table reuse. The
-current frames are 27,863/27,517 bytes at levels 1/3. A same-process
+current frames are 27,863/27,517 bytes at levels 1/3. Wide cross-block sequence
+state is now covered separately by `run-zstd-large-sequence-probe`: its public
+256 KiB frame is 69,882 bytes, contains 2,044 sequences in each 128 KiB block,
+and uses ML=Repeat in the second block while decoding byte-exactly through Vort
+and runtime libzstd 1.5.5. A same-process
 parallel-versus-serial gate on efficiency cores measured
 stable medians of roughly `1.075x`/`1.072x`/`1.116x` for levels 1/2/3 across
 five runs, each 5/5 wins; its conservative enforced floor is `1.01x`. Five

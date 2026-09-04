@@ -345,9 +345,16 @@ Recommended next comparison steps:
   through both Vort and the system zstd CLI. A
   generated 513-sequence boundary, the three-byte 32,512-sequence count tier,
   planner equivalence, and exhaustive allocation-failure rollback are pinned by
-  unit tests. `run-zstd-large-sequence-probe` also pins a deterministic 128 KiB
-  public-library frame with more than 512 sequences through both Vort and the
-  runtime libzstd decoder, while the native stage gate retains a matching
+  unit tests. Wide non-terminal blocks now commit their selected FSE tables and
+  repcode ring transactionally; following wide blocks use a scratch-backed
+  reachability DP to price Repeat_Mode exactly against fresh
+  RLE/predefined/compressed-FSE tables. The 513-sequence two-block regression
+  selects LL=Repeat, OF=RLE, and ML=Repeat in block two, covering both compressed
+  and RLE table reuse after the offset ring changes.
+  `run-zstd-large-sequence-probe` also pins deterministic 128 KiB single-block
+  and 256 KiB two-wide-block public-library frames through both Vort and runtime
+  libzstd; the latter is 69,882 bytes with 2,044 sequences in each block and
+  selects ML=Repeat in block two. The native stage gate retains a matching
   primary/double-fast row. Fixed-CPU interleaved level-1 measurements versus the previous
   commit show a deliberate ratio/latency tradeoff: sizes fall by roughly
   9%--86%, while the slower `ooffice`/`dickens` cases run at about 0.77x/0.83x
@@ -357,13 +364,13 @@ Recommended next comparison steps:
   without inflating fixed stack plans. On the deterministic probe, selecting
   LL=FSE, OF=FSE, and ML=RLE reduces the double-fast block from 39,598 to
   33,754 bytes (14.8%) and the selected frame from 39,303 to 35,046 bytes
-  (10.8%). Small-sequence multi-block frames now evaluate previous LL/OF/ML
+  (10.8%). Multi-block frames now evaluate previous LL/OF/ML
   tables as exact Repeat_Mode candidates, carry the repcode ring across accepted
   blocks, preserve both across zero-sequence blocks, and seed them from standard
   dictionaries. The locked 129 KiB benchmark shrinks from
   28,328/28,328/27,758 bytes at levels 1/2/3 to 27,863/27,863/27,517; level 9
-  shrinks from 27,455 to 27,363. A fresh multi-file corpus pass and state-aware
-  emission for >512-sequence blocks inside multi-block frames remain follow-up work.
+  shrinks from 27,455 to 27,363. A fresh multi-file corpus pass and reducing the
+  wide candidate's decode/re-encode preparation cost remain follow-up work.
 
 - The runtime `run-zstd-compat-probe` matrix now includes compression level 22,
   four real source-file rows when the local zstd checkout is available, 15
