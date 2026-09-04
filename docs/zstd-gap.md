@@ -109,8 +109,8 @@ Current interpretation:
   Huffman-literals sections, can reuse that tree for treeless repeat-literals
   blocks, and decodes FSE-compressed sequence tables for the currently supported
   sequence execution path. The broader gap remains open until Vort has
-  a native frame entropy mode, dictionary training integrated with the native
-  format, long-distance matching in the encoder/decoder pipeline, corpus
+  long-distance matching in the encoder/decoder pipeline, broader compression
+  strategy coverage, corpus
   throughput/ratio dashboards, and repeatable same-machine comparisons against
   zstd CLI/library modes.
 - Large sequence-free four-stream Huffman sections now follow upstream zstd's
@@ -357,8 +357,13 @@ Recommended next comparison steps:
   without inflating fixed stack plans. On the deterministic probe, selecting
   LL=FSE, OF=FSE, and ML=RLE reduces the double-fast block from 39,598 to
   33,754 bytes (14.8%) and the selected frame from 39,303 to 35,046 bytes
-  (10.8%); a fresh multi-file corpus pass and cross-block repeat-table reuse
-  remain follow-up work.
+  (10.8%). Small-sequence multi-block frames now evaluate previous LL/OF/ML
+  tables as exact Repeat_Mode candidates, carry the repcode ring across accepted
+  blocks, preserve both across zero-sequence blocks, and seed them from standard
+  dictionaries. The locked 129 KiB benchmark shrinks from
+  28,328/28,328/27,758 bytes at levels 1/2/3 to 27,863/27,863/27,517; level 9
+  shrinks from 27,455 to 27,363. A fresh multi-file corpus pass and state-aware
+  emission for >512-sequence blocks inside multi-block frames remain follow-up work.
 
 - The runtime `run-zstd-compat-probe` matrix now includes compression level 22,
   four real source-file rows when the local zstd checkout is available, 15

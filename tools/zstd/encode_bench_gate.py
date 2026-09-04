@@ -99,9 +99,11 @@ def main() -> int:
     assert int(tradeoff_rows[9]["vort_bytes"]) == 2_037, tradeoff_rows
     assert int(tradeoff_rows[3]["vort_ns"]) * 3 < int(tradeoff_rows[9]["vort_ns"]), tradeoff_rows
     multiblock_rows = {int(row["level"]): row for row in rows if row["case"] == "multiblock"}
-    assert int(multiblock_rows[1]["vort_bytes"]) == 28_328, multiblock_rows
-    assert int(multiblock_rows[3]["vort_bytes"]) == 27_758, multiblock_rows
-    assert int(multiblock_rows[9]["vort_bytes"]) == 27_455, multiblock_rows
+    # Cross-block sequence-table reuse removes repeated FSE descriptions while
+    # preserving exact candidate arbitration at every level.
+    assert int(multiblock_rows[1]["vort_bytes"]) == 27_863, multiblock_rows
+    assert int(multiblock_rows[3]["vort_bytes"]) == 27_517, multiblock_rows
+    assert int(multiblock_rows[9]["vort_bytes"]) == 27_363, multiblock_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 

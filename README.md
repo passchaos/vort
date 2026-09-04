@@ -39,8 +39,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   and treeless repeat Huffman-literals, minimal RLE-sequence, mixed
   RLE/predefined/FSE sequence-table, repeated sequence-table, and streaming
   default sequence compressed-block fallback encode/decode with exact
-  RLE/predefined/compressed-FSE table arbitration, including wide blocks with
-  more than 512 sequences, and
+  RLE/predefined/compressed-FSE table arbitration, transactional cross-block
+  sequence-table Repeat_Mode and repcode state, including wide blocks with more
+  than 512 sequences, and
   frequency-aware single-/four-stream Huffman literal emission
   (covering the full direct-tree symbol range `0...128`, FSE-compressed
   high-byte weights, non-4-divisible four-stream splits, and treeless repeat

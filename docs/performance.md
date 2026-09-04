@@ -941,7 +941,7 @@ The same policy now covers level 3 as an explicit speed/ratio tradeoff. A
 1,024-case, 16-shape audit found that 1,013 cases retained the exhaustive winner;
 11 cases preferred a split by 92 bytes total, with a worst individual cost of
 29 bytes. A locked plain-structured counterexample records the exact 333-byte
-primary versus 326-byte exhaustive result so this tradeoff cannot disappear
+primary versus 291-byte exhaustive result after cross-block FSE-table reuse, so this tradeoff cannot disappear
 silently. Twelve fixed-CPU-8 pairs keep the benchmark JSON frame at 640 bytes
 and improve level-3 throughput from about 3.4 MiB/s to 12.6--13.1 MiB/s
 (`~3.8x`, 12/12 wins). An eight-run nine-row matrix preserved every locked
@@ -1065,8 +1065,9 @@ split won every level-1 and level-3 case; the deferred smaller split won none.
 The retained 129 KiB fixture is byte-identical to complete serial arbitration at
 levels 1/2/3 and decodes through the public API. Twelve alternating ReleaseFast
 A/B pairs pinned to separate performance cores measured median speedups of
-`1.038x` for level 1 and `1.090x` for level 3, with unchanged 28,328/27,758-byte
-frames. A same-process parallel-versus-serial gate on efficiency cores measured
+`1.038x` for level 1 and `1.090x` for level 3 before sequence-table reuse. The
+current frames are 27,863/27,517 bytes at levels 1/3. A same-process
+parallel-versus-serial gate on efficiency cores measured
 stable medians of roughly `1.075x`/`1.072x`/`1.116x` for levels 1/2/3 across
 five runs, each 5/5 wins; its conservative enforced floor is `1.01x`. Five
 256 KiB prefixes from the local Silesia corpus retained identical output in a

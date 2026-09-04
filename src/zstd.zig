@@ -836,10 +836,9 @@ pub const NativeDictionary = struct {
         return init(derivedId(content), content);
     }
 
-    /// Borrow the raw history portion of a standard full dictionary. Entropy
-    /// tables and repcodes remain available through the returned `view`; this
-    /// native dictionary intentionally uses only content history until the
-    /// encoder/decoder public state can seed Repeat_Mode from full dictionaries.
+    /// Borrow a standard full dictionary. Native encoding seeds its initial FSE
+    /// tables and repcodes, decoding additionally seeds the Huffman tree, and
+    /// `content` remains the history slice used for match references.
     pub fn initFromStandardDictionary(bytes: []const u8) Error!StandardDictionaryNativeView {
         const view = try inspectStandardDictionary(bytes);
         return .{ .dictionary = .{ .id = view.id, .content = view.content, .standard_bytes = bytes }, .view = view };
@@ -8716,6 +8715,35 @@ test "zstd dictionary-aware sequence inspector seeds trained repeat tables" {
     try std.testing.expectEqual(@as(u32, 1_658_167_111), checksum_mod.crc32(decoded));
 }
 
+test "zstd native writer can reuse standard dictionary sequence tables" {
+    const dictionary_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.dict.hex"), " \r\n\t");
+    const frame_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.frame.hex"), " \r\n\t");
+    const dictionary_bytes = try std.testing.allocator.alloc(u8, dictionary_hex.len / 2);
+    defer std.testing.allocator.free(dictionary_bytes);
+    _ = try std.fmt.hexToBytes(dictionary_bytes, dictionary_hex);
+    const source_frame = try std.testing.allocator.alloc(u8, frame_hex.len / 2);
+    defer std.testing.allocator.free(source_frame);
+    _ = try std.fmt.hexToBytes(source_frame, frame_hex);
+
+    const standard = try NativeDictionary.initFromStandardDictionary(dictionary_bytes);
+    const payload = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, source_frame, standard.dictionary);
+    defer std.testing.allocator.free(payload);
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    }, standard.dictionary);
+    defer std.testing.allocator.free(encoded.frame);
+    const block = try inspectNativeFrameFirstBlock(encoded.frame);
+    const modes = try inspectNativeFrameBlockSequenceModesWithDictionary(encoded.frame, block, standard.dictionary);
+    try std.testing.expect(modes.sequence_count != 0);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, modes.match_length_mode);
+    const decoded = try decodeFrameAllocWithDictionary(std.testing.allocator, encoded.frame, standard.dictionary);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
 fn dictionaryForInspectedFrame(frame: []const u8, dictionary: NativeDictionary) Error!?NativeDictionary {
     const header = try inspectNativeFrameHeader(frame);
     if (header.dictionary_id == 0) return null;
@@ -9429,6 +9457,7 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
     rep_beam_search: bool,
     rep_beam_scratch: ?*lz77.RepBeamScratch,
 ) Error!void {
+    try ensureEncoderSequenceState(state, dictionary);
     const CandidateKind = enum { dictionary, history, huffman, match };
     var candidate: std.ArrayList(u8) = .empty;
     defer candidate.deinit(allocator);
@@ -9441,14 +9470,16 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
         try emitDictionaryMatchCompressedBlock(allocator, &candidate, block, last, dict, frame_offset, match_search_budget)
     else
         false;
-    if (dictionary_ok) {
+    const dictionary_ready = dictionary_ok and try prepareSequenceCandidateForFrame(allocator, &candidate, block, last, &state.sequence_state);
+    if (dictionary_ready) {
         try best.appendSlice(allocator, candidate.items);
         best_kind = .dictionary;
     }
 
     candidate.clearRetainingCapacity();
     const history_ok = try emitFrameHistoryMatchCompressedBlock(allocator, &candidate, block, last, frame_history);
-    if (history_ok and (best_kind == null or candidate.items.len < best.items.len)) {
+    const history_ready = history_ok and try prepareSequenceCandidateForFrame(allocator, &candidate, block, last, &state.sequence_state);
+    if (history_ready and (best_kind == null or candidate.items.len < best.items.len)) {
         best.clearRetainingCapacity();
         try best.appendSlice(allocator, candidate.items);
         best_kind = .history;
@@ -9459,15 +9490,16 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
         const match_ok = if (shouldProbeDecisiveWideMatch(block, match_search_budget, true)) blk: {
             break :blk try emitNativeMatchCompressedBlockWithWideProbe(allocator, &candidate, block, last, match_search_budget, rep_beam_scratch);
         } else try emitNativeMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, true, rep_beam_scratch);
+        const match_ready = match_ok and try prepareSequenceCandidateForFrame(allocator, &candidate, block, last, &state.sequence_state);
         match_tested = true;
-        if (match_ok) {
+        if (match_ready) {
             // A literal-only prefix code needs at least one bit for every input
             // byte when the block is not RLE. The match candidate includes its
             // block/section headers, so meeting this lower bound proves that no
             // raw, RLE, or Huffman-only candidate can tie or beat it.
             if (candidate.items.len <= block.len / 8) {
                 state.previous_huffman_plan = null;
-                try out.appendSlice(allocator, candidate.items);
+                try appendSequenceCandidateAndCommit(allocator, out, candidate.items, last, &state.sequence_state);
                 return;
             }
             try best.appendSlice(allocator, candidate.items);
@@ -9475,9 +9507,9 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
         }
     }
 
-    var huffman_state = state.*;
+    var huffman_plan = state.previous_huffman_plan;
     candidate.clearRetainingCapacity();
-    const huffman_ok = try emitSmallHuffmanLiteralBlock(allocator, &candidate, block, last, &huffman_state);
+    const huffman_ok = try emitSmallHuffmanLiteralBlock(allocator, &candidate, block, last, &huffman_plan);
     // Preserve the historical Huffman-on-equal tie preference.
     if (huffman_ok and (best_kind == null or candidate.items.len <= best.items.len)) {
         best.clearRetainingCapacity();
@@ -9488,7 +9520,8 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
     if (!match_tested) {
         candidate.clearRetainingCapacity();
         const match_ok = try emitNativeMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, rep_beam_search, rep_beam_scratch);
-        if (match_ok and (best_kind == null or candidate.items.len < best.items.len)) {
+        const match_ready = match_ok and try prepareSequenceCandidateForFrame(allocator, &candidate, block, last, &state.sequence_state);
+        if (match_ready and (best_kind == null or candidate.items.len < best.items.len)) {
             best.clearRetainingCapacity();
             try best.appendSlice(allocator, candidate.items);
             best_kind = .match;
@@ -9498,22 +9531,22 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
     if (best_kind) |kind| switch (kind) {
         .dictionary => {
             state.previous_huffman_plan = null;
-            try out.appendSlice(allocator, best.items);
+            try appendSequenceCandidateAndCommit(allocator, out, best.items, last, &state.sequence_state);
             return;
         },
         .history => {
             state.previous_huffman_plan = null;
-            try out.appendSlice(allocator, best.items);
+            try appendSequenceCandidateAndCommit(allocator, out, best.items, last, &state.sequence_state);
             return;
         },
         .huffman => {
             try out.appendSlice(allocator, best.items);
-            state.* = huffman_state;
+            state.previous_huffman_plan = huffman_plan;
             return;
         },
         .match => {
             state.previous_huffman_plan = null;
-            try out.appendSlice(allocator, best.items);
+            try appendSequenceCandidateAndCommit(allocator, out, best.items, last, &state.sequence_state);
             return;
         },
     };
@@ -11061,7 +11094,7 @@ test "zstd ratio decisive primary matches generated split arbitration" {
     }
     try std.testing.expect(level3_primary.frame.len <= bounded_tradeoff.len / 32);
     try std.testing.expectEqual(@as(usize, 333), level3_primary.frame.len);
-    try std.testing.expectEqual(@as(usize, 326), exhaustive.frame.len);
+    try std.testing.expectEqual(@as(usize, 291), exhaustive.frame.len);
     const level3_fast = try encodeFrameWithLevelAlloc(std.testing.allocator, &bounded_tradeoff, 3);
     defer std.testing.allocator.free(level3_fast);
     try std.testing.expectEqualSlices(u8, level3_primary.frame, level3_fast);
@@ -12627,6 +12660,38 @@ fn emitSequenceCompressedBlockWithTablePlans(
     prebuilt_literals: ?[]const u8,
     prebuilt_read_fields: ?[]const BitField,
 ) Error!bool {
+    return try emitSequenceCompressedBlockWithTablePlansAndOffsets(
+        allocator,
+        out,
+        block,
+        last,
+        literal_lens,
+        offsets,
+        match_lens,
+        literal_ends,
+        tail_start,
+        plan,
+        prebuilt_literals,
+        prebuilt_read_fields,
+        initial_repeated_offsets,
+    );
+}
+
+fn emitSequenceCompressedBlockWithTablePlansAndOffsets(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    plan: SequenceCombinedEmitPlan,
+    prebuilt_literals: ?[]const u8,
+    prebuilt_read_fields: ?[]const BitField,
+    initial_offsets: [3]usize,
+) Error!bool {
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
     if (prebuilt_literals) |prefix|
@@ -12641,12 +12706,13 @@ fn emitSequenceCompressedBlockWithTablePlans(
 
     var read_fields: [max_native_sequence_count * 6]BitField = undefined;
     const selected_read_fields = if (prebuilt_read_fields) |fields| fields else blk: {
-        const read_field_count = try sequenceReadFieldsWithTablePlans(
+        const read_field_count = try sequenceReadFieldsWithTablePlansAndOffsets(
             read_fields[0..],
             literal_lens,
             offsets,
             match_lens,
             plan,
+            initial_offsets,
         );
         break :blk read_fields[0..read_field_count];
     };
@@ -12661,6 +12727,253 @@ fn emitSequenceCompressedBlockWithTablePlans(
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
     return true;
+}
+
+fn prepareSequenceCandidateForFrame(
+    allocator: std.mem.Allocator,
+    candidate: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    current: *const SequenceEncoderState,
+) Error!bool {
+    if (candidate.items.len < 3) return error.CorruptFrame;
+    const header = std.mem.readInt(u24, candidate.items[0..3], .little);
+    if (((header >> 1) & 0x3) != 2) return error.CorruptFrame;
+    const payload_len: usize = @intCast(header >> 3);
+    if (candidate.items.len != payload_len + 3) return error.CorruptFrame;
+    // A dictionary-free first block already uses the standard initial tables
+    // and repcodes. Keep its candidate wire unchanged; if it is non-terminal,
+    // the commit path parses only the winner to establish the next block state.
+    if (current.previous_tables == null and std.meta.eql(current.repeated_offsets, initial_repeated_offsets)) return true;
+    const payload = candidate.items[3..];
+
+    var original_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(payload, &original_state);
+    if (section.sequence_count == 0) return true;
+    // The wide path is currently terminal and uses dynamic scratch. It cannot
+    // affect a later table, but must not encode repeat selectors against the
+    // wrong starting repcode history.
+    if (section.sequence_count > max_native_sequence_count)
+        return std.meta.eql(current.repeated_offsets, initial_repeated_offsets);
+    if (section.sequence_count == 1 and
+        section.sequence_payload_offset < payload.len and
+        sequence_predefined.isModeByte(payload[section.sequence_payload_offset]))
+    {
+        const sequence = try single_predefined.decode(payload[section.sequence_payload_offset + 1 ..]);
+        var repeated_offsets = initial_repeated_offsets;
+        const match_offset = try resolveSequenceOffset(
+            sequence.offset_base,
+            sequence.offset_bits,
+            sequence.offset_extra,
+            sequence.literal_len,
+            &repeated_offsets,
+        );
+        const literal_lens = [_]usize{sequence.literal_len};
+        const offsets = [_]usize{match_offset};
+        const match_lens = [_]usize{sequence.match_len};
+        const literal_end = std.math.add(usize, sequence.literal_len, sequence.match_len) catch return error.IntegerOverflow;
+        const literal_ends = [_]usize{literal_end};
+        return try replaceSequenceCandidateWithFrameState(
+            allocator,
+            candidate,
+            block,
+            last,
+            &literal_lens,
+            &offsets,
+            &match_lens,
+            &literal_ends,
+            literal_end,
+            current,
+        );
+    }
+
+    var sequence_offset = section.sequence_payload_offset;
+    const original_spec = try resolveSequenceModeSpec(
+        try parseSequenceModeSpec(payload, &sequence_offset, section.sequence_count),
+        null,
+    );
+    var decode_state = try initSequenceDecodeState(
+        original_spec,
+        section.sequence_count,
+        try ReverseBitReader.init(payload[original_spec.bitstream_offset..]),
+        initial_repeated_offsets,
+    );
+    var literal_lens: [max_native_sequence_count]usize = undefined;
+    var offsets: [max_native_sequence_count]usize = undefined;
+    var match_lens: [max_native_sequence_count]usize = undefined;
+    var literal_ends: [max_native_sequence_count]usize = undefined;
+    var cursor: usize = 0;
+    for (0..section.sequence_count) |i| {
+        const sequence = try readModeSequence(&decode_state);
+        literal_lens[i] = sequence.literal_len;
+        offsets[i] = sequence.match_offset;
+        match_lens[i] = sequence.match_len;
+        cursor = std.math.add(usize, cursor, sequence.literal_len) catch return error.IntegerOverflow;
+        cursor = std.math.add(usize, cursor, sequence.match_len) catch return error.IntegerOverflow;
+        if (cursor > block.len) return error.CorruptFrame;
+        literal_ends[i] = cursor;
+    }
+    const count = section.sequence_count;
+    return try replaceSequenceCandidateWithFrameState(
+        allocator,
+        candidate,
+        block,
+        last,
+        literal_lens[0..count],
+        offsets[0..count],
+        match_lens[0..count],
+        literal_ends[0..count],
+        cursor,
+        current,
+    );
+}
+
+fn appendSequenceCandidateAndCommit(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    candidate: []const u8,
+    last: bool,
+    state: *SequenceEncoderState,
+) Error!void {
+    if (last) return out.appendSlice(allocator, candidate);
+
+    // Decode only the compact sequence description to derive the committed
+    // table and repcode state. Do this into a local copy and append first so an
+    // allocation failure cannot advance state past bytes the caller never got.
+    if (candidate.len < 3) return error.CorruptFrame;
+    const header = std.mem.readInt(u24, candidate[0..3], .little);
+    if (((header >> 1) & 0x3) != 2) return error.CorruptFrame;
+    const payload_len: usize = @intCast(header >> 3);
+    if (candidate.len != payload_len + 3) return error.CorruptFrame;
+    const payload = candidate[3..];
+    var next = state.*;
+    var parse_state: SequenceFrameState = .{ .previous_tables = next.previous_tables };
+    const section = try parseLiteralsSection(payload, &parse_state);
+    if (section.sequence_count != 0) {
+        var sequence_offset = section.sequence_payload_offset;
+        const spec = try resolveSequenceModeSpec(
+            try parseSequenceModeSpec(payload, &sequence_offset, section.sequence_count),
+            next.previous_tables,
+        );
+        var decode_state = try initSequenceDecodeState(
+            spec,
+            section.sequence_count,
+            try ReverseBitReader.init(payload[spec.bitstream_offset..]),
+            next.repeated_offsets,
+        );
+        while (decode_state.remaining != 0) _ = try readModeSequence(&decode_state);
+        next.previous_tables = spec.tables();
+        next.repeated_offsets = decode_state.repeated_offsets;
+    }
+    try out.appendSlice(allocator, candidate);
+    state.* = next;
+}
+
+fn replaceSequenceCandidateWithFrameState(
+    allocator: std.mem.Allocator,
+    candidate: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    current: *const SequenceEncoderState,
+) Error!bool {
+    const count = literal_lens.len;
+    const plan = (try bestTablePlanSequenceWithPreviousTables(
+        block,
+        literal_lens[0..count],
+        offsets[0..count],
+        match_lens[0..count],
+        literal_ends[0..count],
+        tail_start,
+        if (current.previous_tables) |*tables| tables else null,
+        current.repeated_offsets,
+    )) orelse return false;
+
+    var replacement: std.ArrayList(u8) = .empty;
+    defer replacement.deinit(allocator);
+    if (!try emitSequenceCompressedBlockWithTablePlansAndOffsets(
+        allocator,
+        &replacement,
+        block,
+        last,
+        literal_lens[0..count],
+        offsets[0..count],
+        match_lens[0..count],
+        literal_ends[0..count],
+        tail_start,
+        plan.plan,
+        null,
+        null,
+        current.repeated_offsets,
+    )) return false;
+    try candidate.ensureTotalCapacity(allocator, replacement.items.len);
+    candidate.clearRetainingCapacity();
+    candidate.appendSliceAssumeCapacity(replacement.items);
+    return true;
+}
+
+fn predefinedSequenceTables() SequenceTables {
+    return .{
+        .ll_mode = .predefined,
+        .of_mode = .predefined,
+        .ml_mode = .predefined,
+        .literal_rle = null,
+        .offset_rle = null,
+        .match_rle = null,
+    };
+}
+
+fn sequenceTablesFromEmitPlan(plan: SequenceCombinedEmitPlan, previous: ?*const SequenceTables) Error!SequenceTables {
+    const literal = try sequenceTableFromEmitPlan(plan.literal, .literal, previous);
+    const offset = try sequenceTableFromEmitPlan(plan.offset, .offset, previous);
+    const match = try sequenceTableFromEmitPlan(plan.match, .match, previous);
+    return .{
+        .ll_mode = literal.mode,
+        .of_mode = offset.mode,
+        .ml_mode = match.mode,
+        .literal_rle = literal.rle,
+        .offset_rle = offset.rle,
+        .match_rle = match.rle,
+        .literal_fse = literal.fse,
+        .offset_fse = offset.fse,
+        .match_fse = match.fse,
+    };
+}
+
+fn sequenceTableFromEmitPlan(
+    plan: SequenceTableEmitPlan,
+    kind: SequenceTableKind,
+    previous: ?*const SequenceTables,
+) Error!ResolvedSymbolTable {
+    return switch (plan) {
+        .rle => |code| .{ .mode = .rle, .rle = try sequenceRleSymbol(kind, code) },
+        .predefined => .{ .mode = .predefined, .rle = null },
+        .compressed => |compressed| blk: {
+            var offset: usize = 0;
+            const table = try readFseSequenceTable(
+                compressed.table_payload[0..compressed.table_payload_len],
+                &offset,
+                sequenceTableBases(kind),
+                sequenceTableBits(kind),
+                sequenceTableSymbolCountMax(kind),
+                sequenceTableAccuracyLogMax(kind),
+            );
+            if (offset != compressed.table_payload_len) return error.CorruptFrame;
+            break :blk .{ .mode = .compressed, .rle = null, .fse = table };
+        },
+        .repeat => blk: {
+            const tables = previous orelse return error.CorruptFrame;
+            break :blk switch (kind) {
+                .literal => .{ .mode = tables.ll_mode, .rle = tables.literal_rle, .fse = tables.literal_fse },
+                .offset => .{ .mode = tables.of_mode, .rle = tables.offset_rle, .fse = tables.offset_fse },
+                .match => .{ .mode = tables.ml_mode, .rle = tables.match_rle, .fse = tables.match_fse },
+            };
+        },
+    };
 }
 
 fn emitMultiSequencePredefinedCompressedBlock(
@@ -13332,6 +13645,7 @@ const SequenceTableEmitPlan = union(enum) {
     rle: u8,
     predefined: PredefinedSequencePlan,
     compressed: CompressedSequencePlan,
+    repeat: RepeatSequencePlan,
 };
 
 const CompressedSequencePlan = struct {
@@ -13345,6 +13659,19 @@ const CompressedSequencePlan = struct {
     transition_bits: [max_native_sequence_count]u8 = undefined,
     table_payload: [64]u8 = undefined,
     table_payload_len: usize = 0,
+};
+
+const RepeatSequenceSource = struct {
+    mode: SymbolMode,
+    rle: ?SequenceSymbol,
+    symbols: []const SequenceSymbol,
+    accuracy_log: u8,
+};
+
+const RepeatSequencePlan = struct {
+    len: usize,
+    source: RepeatSequenceSource,
+    states: [max_native_sequence_count]u16 = undefined,
 };
 
 const LargeCompressedSequenceBuffers = struct {
@@ -13525,7 +13852,7 @@ const SequenceCombinedPlanCandidate = struct {
 };
 
 const SequenceTablePlanAlternatives = struct {
-    items: [3]SequenceTableEmitPlan = undefined,
+    items: [4]SequenceTableEmitPlan = undefined,
     len: usize = 0,
 
     fn add(self: *SequenceTablePlanAlternatives, plan: SequenceTableEmitPlan) Error!void {
@@ -13548,12 +13875,25 @@ fn bestTablePlanSequence(
     literal_ends: []const usize,
     tail_start: usize,
 ) Error!?SequenceCombinedPlanCandidate {
+    return try bestTablePlanSequenceWithPreviousTables(block, literal_lens, offsets, match_lens, literal_ends, tail_start, null, initial_repeated_offsets);
+}
+
+fn bestTablePlanSequenceWithPreviousTables(
+    block: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    previous_tables: ?*const SequenceTables,
+    initial_offsets: [3]usize,
+) Error!?SequenceCombinedPlanCandidate {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
     if (literal_lens.len != literal_ends.len) return error.CorruptFrame;
     if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
 
     const literals_section_len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
-    return try bestTablePlanSequenceWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len);
+    return try bestTablePlanSequenceWithLiteralsLenAndPreviousTables(literal_lens, offsets, match_lens, literals_section_len, previous_tables, initial_offsets);
 }
 
 fn bestTablePlanSequenceWithLiteralsLen(
@@ -13562,7 +13902,18 @@ fn bestTablePlanSequenceWithLiteralsLen(
     match_lens: []const usize,
     literals_section_len: usize,
 ) Error!?SequenceCombinedPlanCandidate {
-    return try bestTablePlanSequenceWithLiteralsLenInternal(literal_lens, offsets, match_lens, literals_section_len, true);
+    return try bestTablePlanSequenceWithLiteralsLenAndPreviousTables(literal_lens, offsets, match_lens, literals_section_len, null, initial_repeated_offsets);
+}
+
+fn bestTablePlanSequenceWithLiteralsLenAndPreviousTables(
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literals_section_len: usize,
+    previous_tables: ?*const SequenceTables,
+    initial_offsets: [3]usize,
+) Error!?SequenceCombinedPlanCandidate {
+    return try bestTablePlanSequenceWithLiteralsLenInternal(literal_lens, offsets, match_lens, literals_section_len, true, previous_tables, initial_offsets);
 }
 
 fn bestTablePayloadLenWithLiteralsLen(
@@ -13571,7 +13922,7 @@ fn bestTablePayloadLenWithLiteralsLen(
     match_lens: []const usize,
     literals_section_len: usize,
 ) Error!?usize {
-    const candidate = try bestTablePlanSequenceWithLiteralsLenInternal(literal_lens, offsets, match_lens, literals_section_len, false) orelse return null;
+    const candidate = try bestTablePlanSequenceWithLiteralsLenInternal(literal_lens, offsets, match_lens, literals_section_len, false, null, initial_repeated_offsets) orelse return null;
     return candidate.payload_len;
 }
 
@@ -13581,25 +13932,27 @@ fn bestTablePlanSequenceWithLiteralsLenInternal(
     match_lens: []const usize,
     literals_section_len: usize,
     comptime retain_plan: bool,
+    previous_tables: ?*const SequenceTables,
+    initial_offsets: [3]usize,
 ) Error!?SequenceCombinedPlanCandidate {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
     if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
 
-    const literal_alternatives = try sequenceTablePlanAlternatives(literal_lens, .literal);
-    const offset_alternatives = try offsetSequenceTablePlanAlternatives(literal_lens, offsets);
-    const match_alternatives = try sequenceTablePlanAlternatives(match_lens, .match);
+    const literal_alternatives = try sequenceTablePlanAlternativesWithPrevious(literal_lens, .literal, previous_tables);
+    const offset_alternatives = try offsetSequenceTablePlanAlternativesWithPrevious(literal_lens, offsets, previous_tables, initial_offsets);
+    const match_alternatives = try sequenceTablePlanAlternativesWithPrevious(match_lens, .match, previous_tables);
     if (literal_alternatives.len == 0 or offset_alternatives.len == 0 or match_alternatives.len == 0) return null;
-    var literal_costs: [3]?SequenceTableBitCost = @splat(null);
-    var offset_costs: [3]?SequenceTableBitCost = @splat(null);
-    var match_costs: [3]?SequenceTableBitCost = @splat(null);
+    var literal_costs: [4]?SequenceTableBitCost = @splat(null);
+    var offset_costs: [4]?SequenceTableBitCost = @splat(null);
+    var match_costs: [4]?SequenceTableBitCost = @splat(null);
     for (literal_alternatives.items[0..literal_alternatives.len], 0..) |plan, i| {
-        literal_costs[i] = try sequenceTablePlanBitCost(plan, .literal, literal_lens, literal_lens, offsets);
+        literal_costs[i] = try sequenceTablePlanBitCostWithOffsets(plan, .literal, literal_lens, literal_lens, offsets, initial_offsets);
     }
     for (offset_alternatives.items[0..offset_alternatives.len], 0..) |plan, i| {
-        offset_costs[i] = try sequenceTablePlanBitCost(plan, .offset, offsets, literal_lens, offsets);
+        offset_costs[i] = try sequenceTablePlanBitCostWithOffsets(plan, .offset, offsets, literal_lens, offsets, initial_offsets);
     }
     for (match_alternatives.items[0..match_alternatives.len], 0..) |plan, i| {
-        match_costs[i] = try sequenceTablePlanBitCost(plan, .match, match_lens, literal_lens, offsets);
+        match_costs[i] = try sequenceTablePlanBitCostWithOffsets(plan, .match, match_lens, literal_lens, offsets, initial_offsets);
     }
 
     var best_plan: SequenceCombinedEmitPlan = undefined;
@@ -13618,7 +13971,7 @@ fn bestTablePlanSequenceWithLiteralsLenInternal(
                     .offset = offset_plan,
                     .match = match_plan,
                 };
-                if (!sequenceCombinedPlanNeedsGenericEmitter(combined)) continue;
+                if (previous_tables == null and !sequenceCombinedPlanNeedsGenericEmitter(combined)) continue;
                 const literal_cost = literal_costs[literal_i] orelse continue;
                 const offset_cost = offset_costs[offset_i] orelse continue;
                 const match_cost = match_costs[match_i] orelse continue;
@@ -13652,9 +14005,20 @@ fn sequenceTablePlanBitCost(
     literal_lens: []const usize,
     offsets: []const usize,
 ) Error!?SequenceTableBitCost {
+    return try sequenceTablePlanBitCostWithOffsets(plan, kind, values, literal_lens, offsets, initial_repeated_offsets);
+}
+
+fn sequenceTablePlanBitCostWithOffsets(
+    plan: SequenceTableEmitPlan,
+    kind: SequenceTableKind,
+    values: []const usize,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    initial_offsets: [3]usize,
+) Error!?SequenceTableBitCost {
     try validateSequenceTablePlanLen(plan, values.len);
     var bit_count: usize = 0;
-    var repeated_offsets = initial_repeated_offsets;
+    var repeated_offsets = initial_offsets;
     switch (plan) {
         .rle => |code| {
             const symbol = try sequenceRleSymbol(kind, code);
@@ -13693,6 +14057,15 @@ fn sequenceTablePlanBitCost(
                 if (i + 1 < values.len) bit_count += compressed.transition_bits[i];
             }
         },
+        .repeat => |repeat| {
+            bit_count = repeatSequenceInitialStateBits(repeat.source);
+            for (values, 0..) |value, i| {
+                const symbol = try sequenceTableSymbol(plan, kind, i);
+                if (!try sequenceSymbolAcceptsValue(symbol, kind, value, literal_lens[i], offsets[i], &repeated_offsets)) return null;
+                bit_count += symbol.additional_bits;
+                if (i + 1 < values.len) bit_count += symbol.state_bits;
+            }
+        },
     }
     return .{ .payload_len = sequenceTablePayloadLen(plan), .bit_count = bit_count };
 }
@@ -13709,6 +14082,7 @@ fn sequenceTablePlanBitCostReference(
         .rle => 0,
         .predefined => predefinedInitialStateBits(kind),
         .compressed => |compressed| compressed.accuracy_log,
+        .repeat => |repeat| repeatSequenceInitialStateBits(repeat.source),
     };
     var repeated_offsets = initial_repeated_offsets;
     for (values, 0..) |value, i| {
@@ -13725,6 +14099,7 @@ fn sequenceTablePlanBitCostReference(
                 .rle => 0,
                 .predefined => symbol.state_bits,
                 .compressed => |compressed| compressed.transition_bits[i],
+                .repeat => symbol.state_bits,
             }) catch return error.IntegerOverflow;
         }
     }
@@ -13763,6 +14138,10 @@ fn sequenceCombinedPlanNeedsGenericEmitter(plan: SequenceCombinedEmitPlan) bool 
 }
 
 fn sequenceTablePlanAlternatives(values: []const usize, kind: SequenceTableKind) Error!SequenceTablePlanAlternatives {
+    return try sequenceTablePlanAlternativesWithPrevious(values, kind, null);
+}
+
+fn sequenceTablePlanAlternativesWithPrevious(values: []const usize, kind: SequenceTableKind, previous_tables: ?*const SequenceTables) Error!SequenceTablePlanAlternatives {
     var alternatives: SequenceTablePlanAlternatives = .{};
     const bases = sequenceTableBases(kind);
     const bits = sequenceTableBits(kind);
@@ -13775,22 +14154,210 @@ fn sequenceTablePlanAlternatives(values: []const usize, kind: SequenceTableKind)
     if (try planCompressedSequenceValues(values, kind)) |plan| {
         try alternatives.add(.{ .compressed = plan });
     }
+    if (previous_tables) |tables| {
+        if (try planRepeatSequenceValues(values, kind, previousSequenceTable(tables, kind))) |plan|
+            try alternatives.add(.{ .repeat = plan });
+    }
     return alternatives;
 }
 
 fn offsetSequenceTablePlanAlternatives(literal_lens: []const usize, offsets: []const usize) Error!SequenceTablePlanAlternatives {
+    return try offsetSequenceTablePlanAlternativesWithPrevious(literal_lens, offsets, null, initial_repeated_offsets);
+}
+
+fn offsetSequenceTablePlanAlternativesWithPrevious(
+    literal_lens: []const usize,
+    offsets: []const usize,
+    previous_tables: ?*const SequenceTables,
+    initial_offsets: [3]usize,
+) Error!SequenceTablePlanAlternatives {
     if (literal_lens.len != offsets.len) return error.CorruptFrame;
     var alternatives: SequenceTablePlanAlternatives = .{};
-    if (try rleSequenceCodeForValues(offsets, &of_base, &of_bits)) |code| {
+    if (previous_tables == null and std.meta.eql(initial_offsets, initial_repeated_offsets))
+        return try offsetSequenceTablePlanAlternativesLegacy(literal_lens, offsets);
+
+    var codes: [max_native_sequence_count]u8 = undefined;
+    var repeated_offsets = initial_offsets;
+    for (offsets, 0..) |offset, i|
+        codes[i] = try chooseOffsetSequenceCode(literal_lens[i], offset, &repeated_offsets);
+    if (rleSequenceCode(codes[0..offsets.len])) |code| {
         try alternatives.add(.{ .rle = code });
     }
-    if (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) |plan| {
+    if (try planPredefinedSequenceCodes(codes[0..offsets.len], &sequence_predefined.offset_symbols, .offset)) |plan| {
         try alternatives.add(.{ .predefined = plan });
     }
-    if (try planCompressedOffsetSequenceValues(literal_lens, offsets)) |plan| {
+    if (try planCompressedSequenceCodes(codes[0..offsets.len])) |plan| {
         try alternatives.add(.{ .compressed = plan });
     }
+    if (previous_tables) |tables| {
+        if (try planRepeatSequenceCodes(codes[0..offsets.len], .offset, previousSequenceTable(tables, .offset))) |plan|
+            try alternatives.add(.{ .repeat = plan });
+    }
     return alternatives;
+}
+
+fn offsetSequenceTablePlanAlternativesLegacy(literal_lens: []const usize, offsets: []const usize) Error!SequenceTablePlanAlternatives {
+    var alternatives: SequenceTablePlanAlternatives = .{};
+    if (try rleSequenceCodeForValues(offsets, &of_base, &of_bits)) |code|
+        try alternatives.add(.{ .rle = code });
+    if (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) |plan|
+        try alternatives.add(.{ .predefined = plan });
+    if (try planCompressedOffsetSequenceValues(literal_lens, offsets)) |plan|
+        try alternatives.add(.{ .compressed = plan });
+    return alternatives;
+}
+
+fn previousSequenceTable(tables: *const SequenceTables, kind: SequenceTableKind) RepeatSequenceSource {
+    return switch (kind) {
+        .literal => .{
+            .mode = tables.ll_mode,
+            .rle = tables.literal_rle,
+            .symbols = if (tables.ll_mode == .predefined) sequenceTablePredefinedSymbols(.literal) else tables.literal_fse.entries[0..tables.literal_fse.len],
+            .accuracy_log = if (tables.ll_mode == .predefined) predefinedInitialStateBits(.literal) else tables.literal_fse.accuracy_log,
+        },
+        .offset => .{
+            .mode = tables.of_mode,
+            .rle = tables.offset_rle,
+            .symbols = if (tables.of_mode == .predefined) sequenceTablePredefinedSymbols(.offset) else tables.offset_fse.entries[0..tables.offset_fse.len],
+            .accuracy_log = if (tables.of_mode == .predefined) predefinedInitialStateBits(.offset) else tables.offset_fse.accuracy_log,
+        },
+        .match => .{
+            .mode = tables.ml_mode,
+            .rle = tables.match_rle,
+            .symbols = if (tables.ml_mode == .predefined) sequenceTablePredefinedSymbols(.match) else tables.match_fse.entries[0..tables.match_fse.len],
+            .accuracy_log = if (tables.ml_mode == .predefined) predefinedInitialStateBits(.match) else tables.match_fse.accuracy_log,
+        },
+    };
+}
+
+fn repeatSequenceInitialStateBits(source: RepeatSequenceSource) u8 {
+    return switch (source.mode) {
+        .predefined, .compressed => source.accuracy_log,
+        .rle => 0,
+        .repeat => unreachable,
+    };
+}
+
+fn planRepeatSequenceValues(
+    values: []const usize,
+    kind: SequenceTableKind,
+    source: RepeatSequenceSource,
+) Error!?RepeatSequencePlan {
+    if (values.len == 0 or values.len > max_native_sequence_count) return null;
+    var codes: [max_native_sequence_count]u8 = undefined;
+    for (values, 0..) |value, i|
+        codes[i] = sequenceCodeForValue(value, sequenceTableBases(kind), sequenceTableBits(kind)) catch return null;
+    return try planRepeatSequenceCodes(codes[0..values.len], kind, source);
+}
+
+fn planRepeatSequenceCodes(codes: []const u8, kind: SequenceTableKind, source: RepeatSequenceSource) Error!?RepeatSequencePlan {
+    if (codes.len == 0 or codes.len > max_native_sequence_count) return null;
+    var plan: RepeatSequencePlan = .{ .len = codes.len, .source = source };
+    if (source.mode == .rle) {
+        const symbol = source.rle orelse return null;
+        for (codes) |code| if (!sequenceSymbolMatchesCode(symbol, kind, code)) return null;
+        return plan;
+    }
+    const symbols = switch (source.mode) {
+        .predefined => sequenceTablePredefinedSymbols(kind),
+        .compressed => source.symbols,
+        .rle => unreachable,
+        .repeat => return null,
+    };
+    if (symbols.len == 0 or symbols.len > max_sequence_fse_table_size) return null;
+    const mask_words = max_sequence_fse_table_size / 64;
+    var viable: [max_native_sequence_count][mask_words]u64 = @splat(@splat(0));
+    var pos = codes.len;
+    while (pos > 0) {
+        pos -= 1;
+        for (symbols, 0..) |symbol, state| {
+            if (!sequenceSymbolMatchesCode(symbol, kind, codes[pos])) continue;
+            if (pos == codes.len - 1) {
+                setSequenceStateBit(&viable[pos], state);
+                continue;
+            }
+            const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
+            const first_next: usize = symbol.next_state;
+            const end_next = @min(symbols.len, first_next + transition_count);
+            if (first_next < end_next and firstSequenceStateInRange(&viable[pos + 1], first_next, end_next) != null)
+                setSequenceStateBit(&viable[pos], state);
+        }
+    }
+    plan.states[0] = @intCast(firstSequenceStateInRange(&viable[0], 0, symbols.len) orelse return null);
+    for (0..codes.len - 1) |i| {
+        const symbol = symbols[plan.states[i]];
+        const end_next = @min(symbols.len, @as(usize, symbol.next_state) + (@as(usize, 1) << @intCast(symbol.state_bits)));
+        plan.states[i + 1] = @intCast(firstSequenceStateInRange(&viable[i + 1], symbol.next_state, end_next) orelse return null);
+    }
+    return plan;
+}
+
+fn rleSequenceCode(codes: []const u8) ?u8 {
+    if (codes.len == 0) return null;
+    const code = codes[0];
+    for (codes[1..]) |other| if (other != code) return null;
+    return code;
+}
+
+fn planPredefinedSequenceCodes(
+    codes: []const u8,
+    symbols: []const SequenceSymbol,
+    kind: SequenceTableKind,
+) Error!?PredefinedSequencePlan {
+    if (codes.len == 0 or codes.len > max_native_sequence_count or symbols.len > max_predefined_sequence_states) return null;
+    var next_choice: [max_native_sequence_count][max_predefined_sequence_states]u8 = undefined;
+    var viable_next: u64 = 0;
+    var pos = codes.len;
+    while (pos > 0) {
+        pos -= 1;
+        var viable_current: u64 = 0;
+        for (symbols, 0..) |symbol, state| {
+            if (!sequenceSymbolMatchesCode(symbol, kind, codes[pos])) continue;
+            if (pos == codes.len - 1) {
+                viable_current |= @as(u64, 1) << @intCast(state);
+                continue;
+            }
+            const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
+            const first_next: usize = symbol.next_state;
+            const end_next = @min(symbols.len, first_next + transition_count);
+            if (first_next >= end_next) continue;
+            const width = end_next - first_next;
+            const low_mask = if (width == 64) std.math.maxInt(u64) else (@as(u64, 1) << @intCast(width)) - 1;
+            const possible = viable_next & (low_mask << @intCast(first_next));
+            if (possible == 0) continue;
+            viable_current |= @as(u64, 1) << @intCast(state);
+            next_choice[pos][state] = @intCast(@ctz(possible));
+        }
+        viable_next = viable_current;
+    }
+    if (viable_next == 0) return null;
+    var plan: PredefinedSequencePlan = .{ .len = codes.len };
+    plan.states[0] = @intCast(@ctz(viable_next));
+    for (0..codes.len - 1) |i| plan.states[i + 1] = next_choice[i][plan.states[i]];
+    return plan;
+}
+
+fn sequenceSymbolMatchesCode(symbol: SequenceSymbol, kind: SequenceTableKind, code: u8) bool {
+    const bases = sequenceTableBases(kind);
+    const bits = sequenceTableBits(kind);
+    return code < bases.len and code < bits.len and symbol.base == bases[code] and symbol.additional_bits == bits[code];
+}
+
+fn setSequenceStateBit(mask: *[max_sequence_fse_table_size / 64]u64, state: usize) void {
+    mask[state / 64] |= @as(u64, 1) << @intCast(state % 64);
+}
+
+fn firstSequenceStateInRange(mask: *const [max_sequence_fse_table_size / 64]u64, start: usize, end: usize) ?usize {
+    var state = start;
+    while (state < end) {
+        const word = mask[state / 64] >> @intCast(state % 64);
+        if (word != 0) {
+            const found = state + @ctz(word);
+            if (found < end) return found;
+        }
+        state = ((state / 64) + 1) * 64;
+    }
+    return null;
 }
 
 fn rleSequenceCodeForValues(values: []const usize, bases: []const usize, bits: []const u8) Error!?u8 {
@@ -13828,11 +14395,19 @@ fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) 
 }
 
 fn planCompressedOffsetSequenceValues(literal_lens: []const usize, offsets: []const usize) Error!?CompressedSequencePlan {
+    return try planCompressedOffsetSequenceValuesWithOffsets(literal_lens, offsets, initial_repeated_offsets);
+}
+
+fn planCompressedOffsetSequenceValuesWithOffsets(
+    literal_lens: []const usize,
+    offsets: []const usize,
+    initial_offsets: [3]usize,
+) Error!?CompressedSequencePlan {
     if (literal_lens.len != offsets.len) return error.CorruptFrame;
     if (offsets.len < min_compressed_sequence_table_count or offsets.len > max_native_sequence_count) return null;
 
     var codes: [max_native_sequence_count]u8 = undefined;
-    var repeated_offsets = initial_repeated_offsets;
+    var repeated_offsets = initial_offsets;
     for (offsets, 0..) |offset, i| {
         codes[i] = try chooseOffsetSequenceCode(literal_lens[i], offset, &repeated_offsets);
     }
@@ -14204,6 +14779,17 @@ fn sequencePayloadLenWithTablePlansAndLiteralsLen(
     match_lens: []const usize,
     plan: SequenceCombinedEmitPlan,
 ) Error!usize {
+    return try sequencePayloadLenWithTablePlansAndLiteralsLenAndOffsets(literals_section_len, literal_lens, offsets, match_lens, plan, initial_repeated_offsets);
+}
+
+fn sequencePayloadLenWithTablePlansAndLiteralsLenAndOffsets(
+    literals_section_len: usize,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    plan: SequenceCombinedEmitPlan,
+    initial_offsets: [3]usize,
+) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
     if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
 
@@ -14215,12 +14801,13 @@ fn sequencePayloadLenWithTablePlansAndLiteralsLen(
     len = std.math.add(usize, len, sequenceTablePayloadLen(plan.match)) catch return error.IntegerOverflow;
 
     var read_fields: [max_native_sequence_count * 6]BitField = undefined;
-    const read_field_count = try sequenceReadFieldsWithTablePlans(
+    const read_field_count = try sequenceReadFieldsWithTablePlansAndOffsets(
         read_fields[0..],
         literal_lens,
         offsets,
         match_lens,
         plan,
+        initial_offsets,
     );
     var bit_count: usize = 1; // Reverse bitstream end marker.
     for (read_fields[0..read_field_count]) |field| {
@@ -14236,6 +14823,17 @@ fn sequenceReadFieldsWithTablePlans(
     match_lens: []const usize,
     plan: SequenceCombinedEmitPlan,
 ) Error!usize {
+    return try sequenceReadFieldsWithTablePlansAndOffsets(out, literal_lens, offsets, match_lens, plan, initial_repeated_offsets);
+}
+
+fn sequenceReadFieldsWithTablePlansAndOffsets(
+    out: []BitField,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    plan: SequenceCombinedEmitPlan,
+    initial_offsets: [3]usize,
+) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
     if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
     try validateSequenceTablePlanLen(plan.literal, literal_lens.len);
@@ -14247,7 +14845,7 @@ fn sequenceReadFieldsWithTablePlans(
     try appendInitialSequenceStateField(out, &count, plan.offset, .offset);
     try appendInitialSequenceStateField(out, &count, plan.match, .match);
 
-    var repeated_offsets = initial_repeated_offsets;
+    var repeated_offsets = initial_offsets;
     for (0..literal_lens.len) |i| {
         const literal_symbol = try sequenceTableSymbol(plan.literal, .literal, i);
         const offset_symbol = try sequenceTableSymbol(plan.offset, .offset, i);
@@ -14314,6 +14912,11 @@ fn appendInitialSequenceStateField(out: []BitField, count: *usize, plan: Sequenc
             if (compressed.len == 0) return error.CorruptFrame;
             try appendBitField(out, count, compressed.initial_state, compressed.accuracy_log);
         },
+        .repeat => |repeat| {
+            if (repeat.len == 0) return error.CorruptFrame;
+            if (repeat.source.mode != .rle)
+                try appendBitField(out, count, repeat.states[0], repeatSequenceInitialStateBits(repeat.source));
+        },
     }
 }
 
@@ -14330,6 +14933,13 @@ fn appendSequenceTransitionField(out: []BitField, count: *usize, plan: SequenceT
             if (index + 1 >= compressed.len) return error.CorruptFrame;
             try appendBitField(out, count, compressed.transition_values[index], compressed.transition_bits[index]);
         },
+        .repeat => |repeat| {
+            if (index + 1 >= repeat.len) return error.CorruptFrame;
+            if (repeat.source.mode == .rle) return;
+            const symbol = try sequenceTableSymbol(plan, kind, index);
+            if (repeat.states[index + 1] < symbol.next_state) return error.CorruptFrame;
+            try appendBitField(out, count, repeat.states[index + 1] - symbol.next_state, symbol.state_bits);
+        },
     }
 }
 
@@ -14338,6 +14948,7 @@ fn validateSequenceTablePlanLen(plan: SequenceTableEmitPlan, len: usize) Error!v
         .rle => {},
         .predefined => |predefined| if (predefined.len != len) return error.CorruptFrame,
         .compressed => |compressed| if (compressed.len != len) return error.CorruptFrame,
+        .repeat => |repeat| if (repeat.len != len) return error.CorruptFrame,
     }
 }
 
@@ -14357,6 +14968,15 @@ fn sequenceTableSymbol(plan: SequenceTableEmitPlan, kind: SequenceTableKind, ind
             symbol.next_state = @intCast(compressed.next_states[index]);
             symbol.state_bits = compressed.state_bits[index];
             break :blk symbol;
+        },
+        .repeat => |repeat| blk: {
+            if (index >= repeat.len) return error.CorruptFrame;
+            const state = repeat.states[index];
+            break :blk switch (repeat.source.mode) {
+                .predefined, .compressed => if (state < repeat.source.symbols.len) repeat.source.symbols[state] else return error.CorruptFrame,
+                .rle => repeat.source.rle orelse return error.CorruptFrame,
+                .repeat => unreachable,
+            };
         },
     };
 }
@@ -14390,6 +15010,7 @@ fn sequenceTableMode(plan: SequenceTableEmitPlan) SymbolMode {
         .rle => .rle,
         .predefined => .predefined,
         .compressed => .compressed,
+        .repeat => .repeat,
     };
 }
 
@@ -14406,6 +15027,7 @@ fn appendSequenceTablePayload(allocator: std.mem.Allocator, out: *std.ArrayList(
         .rle => |code| try out.append(allocator, code),
         .predefined => {},
         .compressed => |compressed| try out.appendSlice(allocator, compressed.table_payload[0..compressed.table_payload_len]),
+        .repeat => {},
     }
 }
 
@@ -14422,6 +15044,7 @@ fn sequenceTablePayloadLen(plan: SequenceTableEmitPlan) usize {
         .rle => 1,
         .predefined => 0,
         .compressed => |compressed| compressed.table_payload_len,
+        .repeat => 0,
     };
 }
 
@@ -14532,6 +15155,22 @@ fn sequenceTablePredefinedMinAdditionalBits(kind: SequenceTableKind) u8 {
     return switch (kind) {
         .literal, .match => 0,
         .offset => 2,
+    };
+}
+
+fn sequenceTableSymbolCountMax(kind: SequenceTableKind) usize {
+    return switch (kind) {
+        .literal => sequence_table_symbol_count_max.literal,
+        .offset => sequence_table_symbol_count_max.offset,
+        .match => sequence_table_symbol_count_max.match,
+    };
+}
+
+fn sequenceTableAccuracyLogMax(kind: SequenceTableKind) u4 {
+    return switch (kind) {
+        .literal => sequence_table_accuracy_log_max.literal,
+        .offset => sequence_table_accuracy_log_max.offset,
+        .match => sequence_table_accuracy_log_max.match,
     };
 }
 
@@ -14820,13 +15459,13 @@ const SmallHuffmanLiteralPlan = struct {
     max_bit_count: u4 = 0,
 };
 
-fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *LiteralOnlyEncoderState) Error!bool {
+fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, previous_huffman_plan: *?SmallHuffmanLiteralPlan) Error!bool {
     const plan = smallHuffmanLiteralPlan(block) orelse return false;
     if (findRepeatedPatternSegment(block)) |pattern| {
         if (pattern.match_len >= 16) return false;
     }
 
-    const reuse_previous_tree = if (state.previous_huffman_plan) |*previous| smallHuffmanPlansEqual(previous, &plan) else false;
+    const reuse_previous_tree = if (previous_huffman_plan.*) |*previous| smallHuffmanPlansEqual(previous, &plan) else false;
     var huffman_tree: std.ArrayList(u8) = .empty;
     defer huffman_tree.deinit(allocator);
     if (!reuse_previous_tree and !try emitSmallHuffmanTree(allocator, &huffman_tree, &plan)) return false;
@@ -14839,13 +15478,30 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
     if (payload.items.len >= block.len) return false;
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
-    state.previous_huffman_plan = plan;
+    previous_huffman_plan.* = plan;
     return true;
 }
 
 const LiteralOnlyEncoderState = struct {
     previous_huffman_plan: ?SmallHuffmanLiteralPlan = null,
+    sequence_state: SequenceEncoderState = .{},
+    sequence_state_initialized: bool = false,
 };
+
+const SequenceEncoderState = struct {
+    previous_tables: ?SequenceTables = null,
+    repeated_offsets: [3]usize = initial_repeated_offsets,
+};
+
+fn ensureEncoderSequenceState(state: *LiteralOnlyEncoderState, dictionary: ?NativeDictionary) Error!void {
+    if (state.sequence_state_initialized) return;
+    const dictionary_state = try initialSequenceFrameState(dictionary);
+    state.sequence_state = .{
+        .previous_tables = dictionary_state.previous_tables,
+        .repeated_offsets = dictionary_state.repeated_offsets,
+    };
+    state.sequence_state_initialized = true;
+}
 
 fn smallHuffmanPlansEqual(a: *const SmallHuffmanLiteralPlan, b: *const SmallHuffmanLiteralPlan) bool {
     if (a.len != b.len or a.max_symbol != b.max_symbol or a.max_bit_count != b.max_bit_count) return false;
@@ -19511,7 +20167,7 @@ test "zstd speed levels overlap multiblock primary and adaptive candidates" {
 
         const actual = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, level);
         defer std.testing.allocator.free(actual);
-        try std.testing.expectEqual(if (level <= 2) @as(usize, 28_328) else 27_758, actual.len);
+        try std.testing.expectEqual(if (level <= 2) @as(usize, 27_863) else 27_517, actual.len);
         try std.testing.expectEqualSlices(u8, expected.frame, actual);
         var reusable = LevelFrameEncoder.init(std.testing.allocator);
         defer reusable.deinit();
@@ -21024,7 +21680,7 @@ test "zstd literal-only writer emits max direct Huffman symbol set" {
     var direct_huffman: std.ArrayList(u8) = .empty;
     defer direct_huffman.deinit(std.testing.allocator);
     var direct_state: LiteralOnlyEncoderState = .{};
-    try std.testing.expect(try emitSmallHuffmanLiteralBlock(std.testing.allocator, &direct_huffman, &payload, true, &direct_state));
+    try std.testing.expect(try emitSmallHuffmanLiteralBlock(std.testing.allocator, &direct_huffman, &payload, true, &direct_state.previous_huffman_plan));
 
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
     defer std.testing.allocator.free(encoded);
@@ -21880,6 +22536,316 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     try direct_incremental.finish();
     try std.testing.expectEqualSlices(u8, payload.items, incremental_output);
     try std.testing.expectEqual(@as(usize, 1), direct_incremental.streamedSequenceBlockCount());
+}
+
+test "zstd sequence emitter reuses compressed FSE tables across blocks" {
+    const literal_lens = [_]usize{
+        8, 1, 2, 3, 2, 4, 3, 1,
+        2, 3, 2, 4, 3, 1, 2, 3,
+        2, 4, 3, 1, 2, 3, 2, 4,
+        3, 1, 2, 3, 2, 4, 3, 1,
+    };
+    const offsets = [_]usize{
+        4, 4, 1, 8, 8, 4, 4, 8,
+        1, 1, 8, 4, 4, 8, 1, 1,
+        8, 4, 4, 8, 1, 1, 8, 4,
+        4, 8, 1, 1, 8, 4, 4, 8,
+    };
+    const match_lens = [_]usize{
+        4, 5, 4, 6, 5, 4, 6, 5,
+        4, 5, 4, 6, 5, 4, 6, 5,
+        4, 5, 4, 6, 5, 4, 6, 5,
+        4, 5, 4, 6, 5, 4, 6, 5,
+    };
+    var literal_ends: [literal_lens.len]usize = undefined;
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    for (offsets, 0..) |offset, i| {
+        for (0..literal_lens[i]) |j|
+            try payload.append(std.testing.allocator, 'a' + @as(u8, @intCast((i + j) % 26)));
+        for (0..match_lens[i]) |_|
+            try payload.append(std.testing.allocator, payload.items[payload.items.len - offset]);
+        literal_ends[i] = payload.items.len;
+    }
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    const zero_sequence_gap = "gap";
+    const raw_gap = "raw";
+    const rle_gap = "zzzz";
+    try emitFrameHeader(std.testing.allocator, &frame, payload.items.len * 2 + zero_sequence_gap.len + raw_gap.len + rle_gap.len, .{ .content_checksum = false });
+    var state: SequenceEncoderState = .{};
+    var first: std.ArrayList(u8) = .empty;
+    defer first.deinit(std.testing.allocator);
+    try std.testing.expect(try emitBestSequenceCompressedBlock(std.testing.allocator, &first, payload.items, false, &literal_lens, &offsets, &match_lens, &literal_ends, payload.items.len));
+    try std.testing.expect(try prepareSequenceCandidateForFrame(std.testing.allocator, &first, payload.items, false, &state));
+    try appendSequenceCandidateAndCommit(std.testing.allocator, &frame, first.items, false, &state);
+    var zero_sequence_payload: std.ArrayList(u8) = .empty;
+    defer zero_sequence_payload.deinit(std.testing.allocator);
+    try emitLiteralsHeader(std.testing.allocator, &zero_sequence_payload, .raw, zero_sequence_gap.len);
+    try zero_sequence_payload.appendSlice(std.testing.allocator, zero_sequence_gap);
+    try zero_sequence_payload.append(std.testing.allocator, 0);
+    try emitBlockHeader(std.testing.allocator, &frame, 2, zero_sequence_payload.items.len, false);
+    try frame.appendSlice(std.testing.allocator, zero_sequence_payload.items);
+    try emitRawBlock(std.testing.allocator, &frame, raw_gap, false);
+    try emitRleBlock(std.testing.allocator, &frame, 'z', rle_gap.len, false);
+
+    var second: std.ArrayList(u8) = .empty;
+    defer second.deinit(std.testing.allocator);
+    try std.testing.expect(try emitBestSequenceCompressedBlock(std.testing.allocator, &second, payload.items, true, &literal_lens, &offsets, &match_lens, &literal_ends, payload.items.len));
+    const without_repeat_len = second.items.len;
+    try std.testing.expect(try prepareSequenceCandidateForFrame(std.testing.allocator, &second, payload.items, true, &state));
+    try std.testing.expect(second.items.len < without_repeat_len);
+    try frame.appendSlice(std.testing.allocator, second.items);
+
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    const first_modes = try inspectNativeFrameBlockSequenceModes(frame.items, first_block);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, first_modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, first_modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, first_modes.match_length_mode);
+    const zero_sequence_block = try inspectNativeFrameBlockAt(frame.items, first_block.next_header_offset);
+    const zero_sequence_modes = try inspectNativeFrameBlockSequenceModes(frame.items, zero_sequence_block);
+    try std.testing.expectEqual(@as(usize, 0), zero_sequence_modes.sequence_count);
+    const raw_block = try inspectNativeFrameBlockAt(frame.items, zero_sequence_block.next_header_offset);
+    try std.testing.expectEqual(NativeBlockType.raw, raw_block.block_type);
+    const rle_block = try inspectNativeFrameBlockAt(frame.items, raw_block.next_header_offset);
+    try std.testing.expectEqual(NativeBlockType.rle, rle_block.block_type);
+    const second_block = try inspectNativeFrameBlockAt(frame.items, rle_block.next_header_offset);
+    const second_modes = try inspectNativeFrameBlockSequenceModes(frame.items, second_block);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, second_modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, second_modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, second_modes.match_length_mode);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqual(payload.items.len * 2 + zero_sequence_gap.len + raw_gap.len + rle_gap.len, decoded.len);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded[0..payload.items.len]);
+    const gap_start = payload.items.len;
+    try std.testing.expectEqualSlices(u8, zero_sequence_gap ++ raw_gap ++ rle_gap, decoded[gap_start..][0 .. zero_sequence_gap.len + raw_gap.len + rle_gap.len]);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded[gap_start + zero_sequence_gap.len + raw_gap.len + rle_gap.len ..]);
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, decoded, std_decoded);
+}
+
+test "zstd sequence repeat planner handles predefined and RLE tables" {
+    const literal_values = [_]usize{ 0, 1, 2, 3, 4, 5, 6, 7 };
+    const predefined_tables = predefinedSequenceTables();
+    const predefined = (try planRepeatSequenceValues(
+        &literal_values,
+        .literal,
+        previousSequenceTable(&predefined_tables, .literal),
+    )) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(SymbolMode.repeat, sequenceTableMode(.{ .repeat = predefined }));
+    try std.testing.expectEqual(@as(u8, 6), repeatSequenceInitialStateBits(predefined.source));
+
+    const rle_code = try sequenceCodeForValue(8, &ml_base, &ml_bits);
+    const rle_symbol = try sequenceRleSymbol(.match, rle_code);
+    var rle_tables = predefinedSequenceTables();
+    rle_tables.ml_mode = .rle;
+    rle_tables.match_rle = rle_symbol;
+    const matching = [_]usize{ 8, 8, 8 };
+    const rle_repeat = (try planRepeatSequenceValues(
+        &matching,
+        .match,
+        previousSequenceTable(&rle_tables, .match),
+    )) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(@as(u8, 0), repeatSequenceInitialStateBits(rle_repeat.source));
+    try std.testing.expectEqual(rle_symbol, try sequenceTableSymbol(.{ .repeat = rle_repeat }, .match, 2));
+    try std.testing.expectEqual(@as(?RepeatSequencePlan, null), try planRepeatSequenceValues(
+        &.{ 8, 9 },
+        .match,
+        previousSequenceTable(&rle_tables, .match),
+    ));
+}
+
+test "zstd sequence emitter reuses RLE tables across blocks" {
+    const literal_lens = [_]usize{ 4, 4, 4 };
+    const offsets = [_]usize{ 4, 4, 4 };
+    const match_lens = [_]usize{ 4, 4, 4 };
+    const literal_ends = [_]usize{ 8, 16, 24 };
+    const payload = "abcdabcdwxyzwxyzABCDABCD";
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len * 2, .{ .content_checksum = false });
+    var state: SequenceEncoderState = .{};
+    var first: std.ArrayList(u8) = .empty;
+    defer first.deinit(std.testing.allocator);
+    try std.testing.expect(try emitBestSequenceCompressedBlock(std.testing.allocator, &first, payload, false, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len));
+    try std.testing.expect(try prepareSequenceCandidateForFrame(std.testing.allocator, &first, payload, false, &state));
+    try appendSequenceCandidateAndCommit(std.testing.allocator, &frame, first.items, false, &state);
+
+    var second: std.ArrayList(u8) = .empty;
+    defer second.deinit(std.testing.allocator);
+    try std.testing.expect(try emitBestSequenceCompressedBlock(std.testing.allocator, &second, payload, true, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len));
+    const without_repeat_len = second.items.len;
+    try std.testing.expect(try prepareSequenceCandidateForFrame(std.testing.allocator, &second, payload, true, &state));
+    try std.testing.expect(second.items.len < without_repeat_len);
+    try frame.appendSlice(std.testing.allocator, second.items);
+
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    const first_modes = try inspectNativeFrameBlockSequenceModes(frame.items, first_block);
+    try std.testing.expectEqual(NativeSequenceTableMode.rle, first_modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.rle, first_modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.rle, first_modes.match_length_mode);
+    const second_block = try inspectNativeFrameBlockAt(frame.items, first_block.next_header_offset);
+    const second_modes = try inspectNativeFrameBlockSequenceModes(frame.items, second_block);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, second_modes.literal_length_mode);
+    // The first block's direct offset updates the repcode ring, so the same
+    // absolute offset has a different code in the second block and is cheaper
+    // as a fresh RLE table. LL and ML still reuse their RLE tables.
+    try std.testing.expectEqual(NativeSequenceTableMode.rle, second_modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, second_modes.match_length_mode);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload ++ payload, decoded);
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, decoded, std_decoded);
+}
+
+test "zstd sequence emitter reuses standard dictionary FSE tables" {
+    const samples = [_][]const u8{
+        "service=vort region=west status=ok message=alpha alpha alpha",
+        "service=vort region=east status=ok message=beta beta beta",
+        "service=vort region=north status=warn message=gamma gamma",
+    };
+    const trained = try trainStandardDictionaryAlloc(
+        std.testing.allocator,
+        &samples,
+        .{ .target_size = 64 },
+        0x1000_0005,
+    );
+    defer trained.deinit(std.testing.allocator);
+    const dict = trained.asDictionary();
+    const dictionary_state = try initialSequenceFrameState(dict);
+    var state: SequenceEncoderState = .{
+        .previous_tables = dictionary_state.previous_tables,
+        .repeated_offsets = dictionary_state.repeated_offsets,
+    };
+
+    const literal_lens = [_]usize{ 8, 1, 2, 3, 2, 4, 3, 1 };
+    const offsets = [_]usize{ 4, 4, 1, 8, 8, 4, 4, 8 };
+    const match_lens = [_]usize{ 4, 5, 4, 6, 5, 4, 6, 5 };
+    var literal_ends: [literal_lens.len]usize = undefined;
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    for (offsets, 0..) |offset, i| {
+        for (0..literal_lens[i]) |j|
+            try payload.append(std.testing.allocator, 'a' + @as(u8, @intCast((i + j) % 26)));
+        for (0..match_lens[i]) |_|
+            try payload.append(std.testing.allocator, payload.items[payload.items.len - offset]);
+        literal_ends[i] = payload.items.len;
+    }
+    const tables = &(state.previous_tables orelse return error.CorruptFrame);
+    var offset_codes: [offsets.len]u8 = undefined;
+    var repeated_offsets = state.repeated_offsets;
+    for (offsets, 0..) |offset, i|
+        offset_codes[i] = try chooseOffsetSequenceCode(literal_lens[i], offset, &repeated_offsets);
+    const plan: SequenceCombinedEmitPlan = .{
+        .literal = .{ .repeat = (try planRepeatSequenceValues(&literal_lens, .literal, previousSequenceTable(tables, .literal))) orelse return error.CorruptFrame },
+        .offset = .{ .repeat = (try planRepeatSequenceCodes(&offset_codes, .offset, previousSequenceTable(tables, .offset))) orelse return error.CorruptFrame },
+        .match = .{ .repeat = (try planRepeatSequenceValues(&match_lens, .match, previousSequenceTable(tables, .match))) orelse return error.CorruptFrame },
+    };
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.items.len, .{ .content_checksum = false, .dictionary_id = dict.id });
+    try std.testing.expect(try emitSequenceCompressedBlockWithTablePlansAndOffsets(
+        std.testing.allocator,
+        &frame,
+        payload.items,
+        true,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        payload.items.len,
+        plan,
+        null,
+        null,
+        state.repeated_offsets,
+    ));
+    const block = try inspectNativeFrameFirstBlock(frame.items);
+    const modes = try inspectNativeFrameBlockSequenceModesWithDictionary(frame.items, block, dict);
+    try std.testing.expect(
+        modes.literal_length_mode == .repeat or modes.offset_mode == .repeat or modes.match_length_mode == .repeat,
+    );
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, frame.items, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+}
+
+test "zstd sequence candidate allocation failures preserve output and prior state" {
+    const literal_lens = [_]usize{ 8, 1, 2, 3, 2, 4, 3, 1, 2, 3, 2, 4, 3, 1, 2, 3 };
+    const offsets = [_]usize{ 4, 4, 1, 8, 8, 4, 4, 8, 1, 1, 8, 4, 4, 8, 1, 1 };
+    const match_lens = [_]usize{ 4, 5, 4, 6, 5, 4, 6, 5, 4, 5, 4, 6, 5, 4, 6, 5 };
+    var literal_ends: [literal_lens.len]usize = undefined;
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    for (offsets, 0..) |offset, i| {
+        for (0..literal_lens[i]) |j|
+            try payload.append(std.testing.allocator, 'a' + @as(u8, @intCast((i + j) % 26)));
+        for (0..match_lens[i]) |_|
+            try payload.append(std.testing.allocator, payload.items[payload.items.len - offset]);
+        literal_ends[i] = payload.items.len;
+    }
+    var candidate: std.ArrayList(u8) = .empty;
+    defer candidate.deinit(std.testing.allocator);
+    try std.testing.expect(try emitBestSequenceCompressedBlock(std.testing.allocator, &candidate, payload.items, true, &literal_lens, &offsets, &match_lens, &literal_ends, payload.items.len));
+    var current: SequenceEncoderState = .{};
+    try std.testing.expect(try prepareSequenceCandidateForFrame(std.testing.allocator, &candidate, payload.items, false, &current));
+    var committed: std.ArrayList(u8) = .empty;
+    defer committed.deinit(std.testing.allocator);
+    try appendSequenceCandidateAndCommit(std.testing.allocator, &committed, candidate.items, false, &current);
+    var repeated_candidate: std.ArrayList(u8) = .empty;
+    defer repeated_candidate.deinit(std.testing.allocator);
+    try repeated_candidate.appendSlice(std.testing.allocator, candidate.items);
+    try std.testing.expect(try prepareSequenceCandidateForFrame(std.testing.allocator, &repeated_candidate, payload.items, true, &current));
+    const original = try std.testing.allocator.dupe(u8, repeated_candidate.items);
+    defer std.testing.allocator.free(original);
+
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, source: []const u8, initial_state: SequenceEncoderState) !void {
+            var state = initial_state;
+            var output: std.ArrayList(u8) = .empty;
+            defer output.deinit(allocator);
+            try output.appendSlice(allocator, "prefix");
+            const before = state;
+            appendSequenceCandidateAndCommit(allocator, &output, source, false, &state) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix", output.items);
+                try std.testing.expectEqual(before.repeated_offsets, state.repeated_offsets);
+                try std.testing.expectEqual(before.previous_tables.?.ll_mode, state.previous_tables.?.ll_mode);
+                try std.testing.expectEqual(before.previous_tables.?.of_mode, state.previous_tables.?.of_mode);
+                try std.testing.expectEqual(before.previous_tables.?.ml_mode, state.previous_tables.?.ml_mode);
+                return err;
+            };
+            try std.testing.expect(output.items.len > "prefix".len);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ original, current });
+}
+
+test "zstd sequence candidate commit is atomic on allocation failure" {
+    const literal_lens = [_]usize{ 4, 4, 4 };
+    const offsets = [_]usize{ 4, 4, 4 };
+    const match_lens = [_]usize{ 4, 4, 4 };
+    const literal_ends = [_]usize{ 8, 16, 24 };
+    const payload = "abcdabcdwxyzwxyzABCDABCD";
+    var candidate: std.ArrayList(u8) = .empty;
+    defer candidate.deinit(std.testing.allocator);
+    try std.testing.expect(try emitBestSequenceCompressedBlock(std.testing.allocator, &candidate, payload, false, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len));
+    const original_state: SequenceEncoderState = .{};
+    var state = original_state;
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(std.testing.allocator);
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, appendSequenceCandidateAndCommit(failing.allocator(), &output, candidate.items, false, &state));
+    try std.testing.expectEqual(@as(usize, 0), output.items.len);
+    try std.testing.expectEqual(original_state.repeated_offsets, state.repeated_offsets);
+    try std.testing.expectEqual(@as(?SequenceTables, null), state.previous_tables);
 }
 
 test "zstd compressed sequence state scratch fits one byte" {

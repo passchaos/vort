@@ -132,13 +132,62 @@ test "Zstd incremental frame encoder emits entropy-coded blocks" {
 
     var blocks = try zstd.iterateNativeFrameBlocks(frame);
     var compressed_count: usize = 0;
+    var repeat_count: usize = 0;
     while (try blocks.next()) |block| {
-        if (block.block_type == .compressed) compressed_count += 1;
+        if (block.block_type == .compressed) {
+            compressed_count += 1;
+            const modes = try zstd.inspectNativeFrameBlockSequenceModes(frame, block);
+            if (modes.sequence_count != 0 and
+                (modes.literal_length_mode == .repeat or modes.offset_mode == .repeat or modes.match_length_mode == .repeat))
+                repeat_count += 1;
+        }
     }
     try std.testing.expect(compressed_count != 0);
+    try std.testing.expect(repeat_count != 0);
     const decoded = try zstd.decodeFrameAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "Zstd incremental frame encoder clears repeat tables on reset" {
+    const payload = try std.testing.allocator.alloc(u8, 129 * 1024);
+    defer std.testing.allocator.free(payload);
+    var random_state: u32 = @truncate(0x9e37_79b9 +% 129 *% 0x10001 +% 16 *% 0x101 +% 23);
+    for (payload, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(random_state >> 16);
+    }
+    const copy_len = payload.len / 4;
+    @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+    var encoder = try zstd.NativeIncrementalFrameEncoder.init(std.testing.allocator, .{
+        .include_content_size = false,
+        .content_checksum = false,
+        .selection = .literal_only,
+        .block_size_max = 2 * 1024,
+        .match_search_budget = 64,
+    });
+    defer encoder.deinit();
+    const first = try encodeSplit(&encoder, payload);
+    defer std.testing.allocator.free(first);
+    var first_blocks = try zstd.iterateNativeFrameBlocks(first);
+    _ = (try first_blocks.next()).?;
+    const repeated = (try first_blocks.next()).?;
+    const repeated_modes = try zstd.inspectNativeFrameBlockSequenceModes(first, repeated);
+    try std.testing.expect(
+        repeated_modes.literal_length_mode == .repeat or
+            repeated_modes.offset_mode == .repeat or
+            repeated_modes.match_length_mode == .repeat,
+    );
+
+    encoder.reset();
+    const reset_frame = try encodeSplit(&encoder, payload);
+    defer std.testing.allocator.free(reset_frame);
+    try std.testing.expectEqualSlices(u8, first, reset_frame);
+    const reset_first = try zstd.inspectNativeFrameFirstBlock(reset_frame);
+    const reset_modes = try zstd.inspectNativeFrameBlockSequenceModes(reset_frame, reset_first);
+    try std.testing.expect(reset_modes.literal_length_mode != .repeat);
+    try std.testing.expect(reset_modes.offset_mode != .repeat);
+    try std.testing.expect(reset_modes.match_length_mode != .repeat);
 }
 
 test "Zstd incremental frame encoder references preset dictionary history" {

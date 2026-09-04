@@ -9128,4 +9128,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Scratch-backed compressed-FSE planning lowers that deterministic stage block
   from 39,598 to 33,754 bytes and the selected frame from 39,303 to 35,046 bytes;
   its chosen sequence modes are LL=FSE, OF=FSE, and ML=RLE. Cross-block table
-  reuse remains future ratio work.
+  reuse now carries the selected LL/OF/ML tables and repcode ring transactionally
+  across small-sequence blocks, preserves tables across zero-sequence blocks,
+  and seeds the same planner from standard dictionaries. The retained 129 KiB
+  benchmark frame falls from 28,328/28,328/27,758 bytes at levels 1/2/3 to
+  27,863/27,863/27,517 bytes; level 9 falls from 27,455 to 27,363 bytes.
+  Extending state-aware emission to >512-sequence blocks inside multi-block frames remains
+  future ratio work.

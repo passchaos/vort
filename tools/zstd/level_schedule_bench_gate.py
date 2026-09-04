@@ -26,9 +26,9 @@ def main() -> int:
         assert int(row["parallel_checksum"]) == int(row["serial_checksum"]), row
         assert float(row["speedup"]) > 1.01, row
     by_level = {int(row["level"]): row for row in rows}
-    assert int(by_level[1]["encoded_bytes"]) == 28_328, by_level
-    assert int(by_level[2]["encoded_bytes"]) == 28_328, by_level
-    assert int(by_level[3]["encoded_bytes"]) == 27_758, by_level
+    assert int(by_level[1]["encoded_bytes"]) == 27_863, by_level
+    assert int(by_level[2]["encoded_bytes"]) == 27_863, by_level
+    assert int(by_level[3]["encoded_bytes"]) == 27_517, by_level
     print(f"zstd_level_schedule_bench_gate=ok rows={len(rows)}")
     return 0
 
