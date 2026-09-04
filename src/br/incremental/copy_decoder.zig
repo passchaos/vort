@@ -598,10 +598,10 @@ pub fn Decoder(comptime Codec: type) type {
         }
         fn appendHeaderByte(self: *Self, value: u8) Error!void {
             const storage = self.headerStorage();
-            if (self.header_bit_count > storage.len * 8 - 8)
-                return self.fail(.compressed_header, error.UnsupportedBrotliFeature);
             const byte_index = self.header_bit_count / 8;
             const bit_index: u3 = @intCast(self.header_bit_count % 8);
+            if (byte_index >= storage.len or (bit_index != 0 and byte_index + 1 >= storage.len))
+                return self.fail(.compressed_header, error.UnsupportedBrotliFeature);
             if (bit_index == 0) {
                 storage[byte_index] = value;
             } else {

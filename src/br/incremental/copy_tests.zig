@@ -158,6 +158,18 @@ test "byte-progressive copy decoder uses caller-owned compressed header scratch"
     try decoder.finish();
     try std.testing.expectEqual(encoded.len, input_offset);
     try std.testing.expectEqualSlices(u8, "x", &output);
+
+    decoder.reset();
+    output[0] = 0;
+    input_offset = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 4096);
+        const step = try decoder.step(encoded[input_offset..input_end], &output);
+        input_offset += step.progress.input_read;
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqualSlices(u8, "x", &output);
 }
 
 test "byte-progressive compressed copy decoder streams following stored blocks" {
