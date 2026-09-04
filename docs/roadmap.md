@@ -9027,3 +9027,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   reused result byte-for-byte with complete fresh arbitration. A counting
   allocator additionally pins four fewer allocations and 897,583 fewer
   requested bytes on that fallback.
+  Reusing the rejected double-fast wire as an additional fallback candidate was
+  also audited and rejected. Across 168 wide 3:1 cases at each 16/32/64/96
+  budget, 89 were existing consensus hits; among the remaining 79, double-fast
+  was smaller 63 times by 186 bytes total, tied once, and lost 15 times by 241
+  bytes total. Strict final arbitration could preserve correctness and gain two
+  bytes on a pinned 16 KiB case, but fixed-CPU timing regressed levels 1/3/9 to
+  about `0.96x`/`0.91x`/`0.94x` with only 3/12, 1/12, and 0/12 wins. The extra
+  serialization was removed; fallback retains only the profitable beam reuse.
