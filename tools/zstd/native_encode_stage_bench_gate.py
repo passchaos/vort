@@ -92,7 +92,7 @@ def main() -> int:
                 assert int(row["block_count"]) == 1, row
                 assert available_blocks == 1, row
                 assert sequences > 512, row
-                assert encoded_bytes <= 39_598, row
+                assert encoded_bytes <= 33_754, row
             else:
                 assert encoded_bytes <= DOUBLE_FAST_MAX_BYTES[(row["case"], row["candidate"])], row
         if row["stage"] == "rep_beam":

@@ -46,10 +46,11 @@ pub fn main(init: std.process.Init) !void {
         return error.LargeSequenceProbeMismatch;
     const block = try vort.zstdInspectNativeFrameFirstBlock(encoded.frame);
     const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(encoded.frame, block);
-    if (modes.sequence_count <= 512 or
-        modes.literal_length_mode != .predefined or
-        modes.offset_mode != .predefined or
-        modes.match_length_mode != .predefined) return error.LargeSequenceProbeMismatch;
+    if (encoded.frame.len > 35_046 or
+        modes.sequence_count <= 512 or
+        modes.literal_length_mode != .compressed or
+        modes.offset_mode != .compressed or
+        modes.match_length_mode != .rle) return error.LargeSequenceProbeMismatch;
 
     const native_decoded = try vort.zstdDecodeNativeFrameAlloc(init.gpa, encoded.frame);
     defer init.gpa.free(native_decoded);
@@ -62,8 +63,8 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [512]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "zstd_large_sequence_probe=ok input_bytes={d} sequences={d} stage_bytes={d} frame_bytes={d} version={s}\n",
-        .{ payload.len, modes.sequence_count, stage.encoded_len, encoded.frame.len, runtime.version() },
+        "zstd_large_sequence_probe=ok input_bytes={d} sequences={d} stage_bytes={d} frame_bytes={d} ll={s} of={s} ml={s} version={s}\n",
+        .{ payload.len, modes.sequence_count, stage.encoded_len, encoded.frame.len, @tagName(modes.literal_length_mode), @tagName(modes.offset_mode), @tagName(modes.match_length_mode), runtime.version() },
     );
     try stdout.interface.flush();
 }

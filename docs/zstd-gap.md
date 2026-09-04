@@ -335,13 +335,14 @@ Recommended next comparison steps:
 
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded
-  allocator-backed metadata, predefined-state, and reverse-bitstream scratch up
+  allocator-backed metadata, FSE/predefined-state, and reverse-bitstream scratch up
   to the format-derived 128 KiB/minimum-match ceiling of 43,690 sequences; the
   existing `<=512` path and wire output remain unchanged. On the first 128 KiB
   of local Silesia `ooffice`, `nci`, `mozilla`, `dickens`, and `xml`, all 20
   double-fast/greedy/lazy/optimal candidates now emit instead of returning
-  unavailable. Selected one-block frames are 75,660/12,946/26,689/62,228/11,450
-  bytes and decode byte-exactly through both Vort and the system zstd CLI. A
+  unavailable. The preceding predefined-only slice produced selected one-block
+  frames of 75,660/12,946/26,689/62,228/11,450 bytes and decoded byte-exactly
+  through both Vort and the system zstd CLI. A
   generated 513-sequence boundary, the three-byte 32,512-sequence count tier,
   planner equivalence, and exhaustive allocation-failure rollback are pinned by
   unit tests. `run-zstd-large-sequence-probe` also pins a deterministic 128 KiB
@@ -352,8 +353,12 @@ Recommended next comparison steps:
   9%--86%, while the slower `ooffice`/`dickens` cases run at about 0.77x/0.83x
   baseline and the other three improve because their previously ineffective
   primary candidates avoid expensive fallback work. Large-path compressed-FSE
-  planning remains follow-up work; the first implementation deliberately emits
-  only predefined sequence tables instead of inflating fixed stack plans.
+  planning now uses scratch-backed RLE/predefined/compressed-FSE alternatives
+  without inflating fixed stack plans. On the deterministic probe, selecting
+  LL=FSE, OF=FSE, and ML=RLE reduces the double-fast block from 39,598 to
+  33,754 bytes (14.8%) and the selected frame from 39,303 to 35,046 bytes
+  (10.8%); a fresh multi-file corpus pass and cross-block repeat-table reuse
+  remain follow-up work.
 
 - The runtime `run-zstd-compat-probe` matrix now includes compression level 22,
   four real source-file rows when the local zstd checkout is available, 15
