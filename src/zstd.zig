@@ -7236,7 +7236,10 @@ const SequenceFseTable = struct {
     accuracy_log: u8 = 0,
 
     fn symbol(self: *const SequenceFseTable, state: usize) Error!SequenceSymbol {
-        if (state >= self.len) return error.CorruptFrame;
+        if (state >= self.len) {
+            @branchHint(.unlikely);
+            return error.CorruptFrame;
+        }
         return self.entries[state];
     }
 
@@ -8237,6 +8240,19 @@ test "zstd native default sequence tables reject invalid states as corrupt" {
     try std.testing.expectError(error.CorruptFrame, defaultLiteralLengthSymbol(sequence_predefined.literal_symbols.len));
     try std.testing.expectError(error.CorruptFrame, defaultOffsetSymbol(sequence_predefined.offset_symbols.len));
     try std.testing.expectError(error.CorruptFrame, defaultMatchLengthSymbol(sequence_predefined.match_symbols.len));
+}
+
+test "zstd compressed sequence tables preserve checked state bounds" {
+    const expected: SequenceSymbol = .{
+        .base = 17,
+        .additional_bits = 3,
+        .next_state = 5,
+        .state_bits = 2,
+    };
+    var table: SequenceFseTable = .{ .len = 1, .accuracy_log = 1 };
+    table.entries[0] = expected;
+    try std.testing.expectEqual(expected, try table.symbol(0));
+    try std.testing.expectError(error.CorruptFrame, table.symbol(1));
 }
 
 test "zstd native repeat-offset resolver follows selector updates" {

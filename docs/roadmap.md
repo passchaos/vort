@@ -8792,3 +8792,25 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   metadata/stored/next-meta-block boundaries. Because parsing still restarts from
   the retained prefix, adversarial one-byte delivery of very large headers is
   intentionally left to the future resumable header parser.
+  Marked the checked compressed-FSE state-table failure edge as unlikely while
+  preserving the exact `CorruptFrame` boundary. The initial state is bounded by
+  the validated table log and every later state comes from a validated entry, so
+  valid sequence-heavy blocks remain on the fallthrough lookup path without
+  weakening hostile-input handling; a focused unit test pins both state zero and
+  `state == len`. Sixteen alternating fixed-CPU-8 profile pairs at 1,500 decodes
+  improve the 5,161-sequence `huffman80k` median by 1.76% (16/16 wins), with
+  `large_json` slightly positive and the other rows within about 0.3% at the
+  median. Twelve longer pairs at 3,000 target decodes confirm a 1.44% median
+  improvement (12/12 wins). An independent eight-pair 13-row caller-owned
+  libzstd comparison measures `huffman80k` at +2.42%, `large_json` at +1.47%,
+  and `binary_mixed` at +0.12% medians. The ReleaseFast profile/reference gates,
+  273-case libzstd 1.5.5 probe, and six-campaign 5,400-frame upstream
+  `decodecorpus` gate remain green, including all 64 LL/OF/ML mode tuples.
+  Several broader candidates were measured and fully reverted: a separate
+  all-FSE/raw-literal loop improved its target by about 11--13% but repeatedly
+  regressed the adjacent FSE/FSE/RLE row by roughly 2--4%; handwritten repcode
+  rotation, removing the duplicate narrow-reader bounds check, sparse empty
+  frame-state initialization, direct final-symbol FSE table construction, and
+  moving the complete sequence dispatcher out of line each regressed at least
+  one tracked FSE-heavy shape. Future work should avoid repeating these changes
+  without first isolating the observed code-layout sensitivity.
