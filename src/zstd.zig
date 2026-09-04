@@ -9646,12 +9646,25 @@ noinline fn emitDecisiveWideMatchCompressedBlock(
         error.InvalidBlockPlan => return false,
         else => return err,
     };
-    var beam: std.ArrayList(u8) = .empty;
-    defer beam.deinit(allocator);
-    if (!try emitHashTokenSequenceBlock(allocator, &beam, block, last, rep_beam.reversed.items, rep_beam_stats) or
-        !std.mem.eql(u8, double_fast.items, beam.items)) return false;
+    if (!std.meta.eql(double_fast_stats, rep_beam_stats) or
+        !nativeMatchTokenSlicesEqual(double_fast_tokens.items, rep_beam.reversed.items)) return false;
 
     try out.appendSlice(allocator, double_fast.items);
+    return true;
+}
+
+fn nativeMatchTokenSlicesEqual(a: []const lz77.Token, b: []const lz77.Token) bool {
+    if (a.len != b.len) return false;
+    for (a, b) |left, right| switch (left) {
+        .literal => |literal| switch (right) {
+            .literal => |other| if (literal != other) return false,
+            .match => return false,
+        },
+        .match => |match| switch (right) {
+            .literal => return false,
+            .match => |other| if (match.length != other.length or match.distance != other.distance) return false,
+        },
+    };
     return true;
 }
 

@@ -979,3 +979,11 @@ level-9 pairs improve mean throughput by `2.74x` with 12/12 wins on top of the
 frame-level shortcut; an eight-run nine-row matrix measures `2.76x`,
 keeps all output bytes/checksums unchanged, and leaves control rows neutral or
 faster.
+The consensus now compares parser tokens and accounting before the second wire
+would be generated, because deterministic token encoding makes equal token
+streams sufficient. On the same 1,008-case audit, token and wire agreement each
+covered exactly 184 cases with zero disagreement. Against the committed
+double-wire implementation, twelve fixed-CPU-8 pairs improve binary level 9 by
+another `1.24x` with 12/12 wins; an eight-run nine-row matrix measures `1.27x`,
+with controls within about 2%. The encode gate now uses three iterations and
+three rounds and requires binary level 9 below half of level-3 latency.

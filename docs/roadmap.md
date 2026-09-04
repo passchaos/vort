@@ -8983,3 +8983,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `2.74x` with 12/12 wins on top of the frame shortcut; an eight-run nine-row
   matrix confirms `2.76x`, identical wires/checksums, and neutral-to-positive
   controls.
+  The consensus proof now compares parser tokens and `PlanStats` before a second
+  entropy wire is built. The same 1,008-case audit found token consensus and
+  wire consensus on exactly the same 184 cases, with zero disagreement. Twelve
+  fixed-CPU-8 pairs improve the locked binary level-9 row by another `1.24x`
+  over the committed double-wire implementation (12/12 wins); an eight-run
+  nine-row matrix measures `1.27x`, preserves every size/checksum, and keeps
+  controls within about 2%. The default encode gate now uses three iterations
+  and three rounds before requiring binary level 9 below half of level-3
+  latency.

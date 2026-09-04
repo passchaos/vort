@@ -2981,7 +2981,7 @@ pub fn build(b: *std.Build) void {
     const zstd_encode_bench_step = b.step("run-zstd-encode-bench", "Compare Zstd encoding with runtime libzstd");
     zstd_encode_bench_step.dependOn(&run_zstd_encode_bench.step);
     const run_zstd_encode_bench_csv = b.addRunArtifact(zstd_encode_bench_exe);
-    run_zstd_encode_bench_csv.addArgs(&.{ "--iterations", "1", "--rounds", "1", "--csv", "zig-out/vort-zstd-encode-bench.csv" });
+    run_zstd_encode_bench_csv.addArgs(&.{ "--iterations", "3", "--rounds", "3", "--csv", "zig-out/vort-zstd-encode-bench.csv" });
     const zstd_encode_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/encode_bench_gate.py", "--csv", "zig-out/vort-zstd-encode-bench.csv" });
     zstd_encode_bench_gate.step.dependOn(&run_zstd_encode_bench_csv.step);
     const zstd_encode_bench_gate_step = b.step("run-zstd-encode-bench-gate", "Validate Zstd encode comparison CSV");

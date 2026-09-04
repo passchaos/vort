@@ -32,7 +32,7 @@ const Match = struct {
 /// Zstd's literal-length-sensitive repcode rules, while its output remains
 /// ordinary LZ77 distances so the production sequence writer is still the
 /// wire-format authority. Production accepts it early only when the independent
-/// repeat-beam parser emits the same complete block bytes.
+/// repeat-beam parser emits the same complete token stream and statistics.
 pub fn planReuse(
     tokens: *std.ArrayList(lz77.Token),
     allocator: std.mem.Allocator,

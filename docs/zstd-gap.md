@@ -147,6 +147,10 @@ Current interpretation:
   matched exhaustive arbitration byte-for-byte; omitting the consensus check
   had 16 regressions. The locked binary level-9 row gains another `2.74x` with
   identical wire output.
+  Comparing the two token streams and their accounting before emitting the
+  repeat-beam wire removes redundant entropy construction: token and wire
+  consensus covered the same 184 audit cases with zero disagreement, and the
+  locked row gains another `1.24x` over the committed double-wire check.
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug
