@@ -3488,6 +3488,25 @@ pub fn summarizeStreamAllocWithDiagnostics(allocator: std.mem.Allocator, stream:
 }
 
 pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    if (allocatingSummaryHistoryHint(stream, max_output_len)) |history_len| {
+        const history = allocator.alloc(u8, history_len) catch |alloc_err| {
+            // The header-only hint is deliberately speculative. Preserve the
+            // old error precedence when allocation fails: malformed streams
+            // and streams that never need the larger history still complete
+            // through the fixed in-state ring, while a genuine exhaustion
+            // reports the original allocation failure.
+            return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, null) catch |summary_err| switch (summary_err) {
+                error.SummaryHistoryExhausted => return alloc_err,
+                else => |public_err| return public_err,
+            };
+        };
+        defer allocator.free(history);
+        return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, history) catch |err| switch (err) {
+            error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
+            else => |public_err| public_err,
+        };
+    }
+
     // Most Brotli streams never reference history beyond the encoder's common
     // 16-bit window. Avoid reserving as much as 16 MiB merely because the wire
     // header advertises WBITS=24; retry with the declared window only when the
@@ -3513,6 +3532,76 @@ pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, 
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
         else => |public_err| public_err,
     };
+}
+
+const eager_summary_history_decoded_len_max = 2 * 1024 * 1024;
+
+fn allocatingSummaryHistoryHint(stream: []const u8, max_output_len: usize) ?usize {
+    if (stream.len < large_stream_decode_threshold) return null;
+    var reader = bitstream.BitReader.init(stream);
+    const window_bits = readWindowBitsValue(&reader) catch return null;
+    const header = readStreamMetaBlockHeader(&reader) catch return null;
+    const compressed = switch (header) {
+        .compressed => |value| value,
+        else => return null,
+    };
+    if (!compressed.final or
+        compressed.decoded_len > max_output_len or
+        compressed.decoded_len > eager_summary_history_decoded_len_max) return null;
+    const history_len = @min(compressed.decoded_len, (@as(usize, 1) << window_bits) - 16);
+    return if (history_len > planner_max_backward_distance) history_len else null;
+}
+
+test "br allocating summary history hint is bounded and conservative" {
+    var final_large: std.ArrayList(u8) = .empty;
+    defer final_large.deinit(std.testing.allocator);
+    var final_writer = BitWriter{ .out = &final_large };
+    try writeWindowBits(std.testing.allocator, &final_writer, 20);
+    try writeLastCompressedMetaBlockHeader(std.testing.allocator, &final_writer, planner_max_backward_distance + 1);
+    try final_large.resize(std.testing.allocator, large_stream_decode_threshold);
+    try std.testing.expectEqual(
+        planner_max_backward_distance + 1,
+        allocatingSummaryHistoryHint(final_large.items, planner_max_backward_distance + 1).?,
+    );
+    try std.testing.expect(allocatingSummaryHistoryHint(final_large.items, planner_max_backward_distance) == null);
+    try std.testing.expect(allocatingSummaryHistoryHint(final_large.items[0 .. large_stream_decode_threshold - 1], std.math.maxInt(usize)) == null);
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    var diagnostics: StreamSummaryDiagnostics = undefined;
+    const malformed_result = summarizeStreamAllocWithDiagnostics(failing.allocator(), final_large.items, &diagnostics);
+    if (malformed_result) |_| return error.TestUnexpectedResult else |err| try std.testing.expect(err != error.OutOfMemory);
+    try std.testing.expectEqual(StreamSummaryErrorPhase.compressed_meta_block, diagnostics.phase);
+
+    var non_final: std.ArrayList(u8) = .empty;
+    defer non_final.deinit(std.testing.allocator);
+    var non_final_writer = BitWriter{ .out = &non_final };
+    try writeWindowBits(std.testing.allocator, &non_final_writer, 20);
+    try writeCompressedMetaBlockHeader(std.testing.allocator, &non_final_writer, planner_max_backward_distance + 1, false);
+    try non_final.resize(std.testing.allocator, large_stream_decode_threshold);
+    try std.testing.expect(allocatingSummaryHistoryHint(non_final.items, std.math.maxInt(usize)) == null);
+
+    var too_large: std.ArrayList(u8) = .empty;
+    defer too_large.deinit(std.testing.allocator);
+    var too_large_writer = BitWriter{ .out = &too_large };
+    try writeWindowBits(std.testing.allocator, &too_large_writer, 24);
+    try writeLastCompressedMetaBlockHeader(std.testing.allocator, &too_large_writer, eager_summary_history_decoded_len_max + 1);
+    try too_large.resize(std.testing.allocator, large_stream_decode_threshold);
+    try std.testing.expect(allocatingSummaryHistoryHint(too_large.items, std.math.maxInt(usize)) == null);
+
+    var small_window: std.ArrayList(u8) = .empty;
+    defer small_window.deinit(std.testing.allocator);
+    var small_window_writer = BitWriter{ .out = &small_window };
+    try writeWindowBits(std.testing.allocator, &small_window_writer, 16);
+    try writeLastCompressedMetaBlockHeader(std.testing.allocator, &small_window_writer, planner_max_backward_distance + 1);
+    try small_window.resize(std.testing.allocator, large_stream_decode_threshold);
+    try std.testing.expect(allocatingSummaryHistoryHint(small_window.items, std.math.maxInt(usize)) == null);
+
+    const stored = try std.testing.allocator.alloc(u8, planner_max_backward_distance + 1);
+    defer std.testing.allocator.free(stored);
+    @memset(stored, 0xa5);
+    const stored_stream = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, stored, .{ .window_bits = 24 });
+    defer std.testing.allocator.free(stored_stream);
+    try std.testing.expect(allocatingSummaryHistoryHint(stored_stream, std.math.maxInt(usize)) == null);
+    try std.testing.expectEqual(stored.len, (try summarizeStreamAlloc(std.testing.failing_allocator, stored_stream)).decoded_bytes);
 }
 
 fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8) SummaryError!StreamSummary {

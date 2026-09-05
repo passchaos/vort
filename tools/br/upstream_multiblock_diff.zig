@@ -215,6 +215,7 @@ pub fn main(init: std.process.Init) !void {
     var maximum_command_type_cases: usize = 0;
     var extended_header_cases: usize = 0;
     var operation_schedule_cases: usize = 0;
+    var allocating_summary_history_cases: usize = 0;
     for (cases) |case| {
         for (case.qualities) |quality| {
             for (case.modes) |mode| {
@@ -259,6 +260,17 @@ pub fn main(init: std.process.Init) !void {
                         return err;
                     };
                     if (summary.decoded_bytes != case.expected.len) return error.SizeMismatch;
+                    if (std.mem.eql(u8, case.name, "large-source-clustered") and quality == 8) {
+                        var counting = std.testing.FailingAllocator.init(init.gpa, .{});
+                        const allocated_summary = try vort.brSummarizeStreamAlloc(counting.allocator(), encoded);
+                        if (allocated_summary.decoded_bytes != case.expected.len or counting.allocations != 1 or counting.deallocations != 1)
+                            return error.ReferenceDecodeFailed;
+                        var failing = std.testing.FailingAllocator.init(init.gpa, .{ .fail_index = 0 });
+                        if (vort.brSummarizeStreamAlloc(failing.allocator(), encoded)) |_|
+                            return error.ReferenceDecodeFailed
+                        else |err| if (err != error.OutOfMemory) return err;
+                        allocating_summary_history_cases += 1;
+                    }
                     if (used_caller_history) {
                         const decoded = try vort.brDecodeStreamAlloc(init.gpa, encoded);
                         defer init.gpa.free(decoded);
@@ -529,8 +541,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ cases_run, one_shot_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ cases_run, one_shot_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }

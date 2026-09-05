@@ -80,6 +80,9 @@ def main() -> int:
                 raise AssertionError(f"exact alloc regression {name}: {by_case[name]}")
             if int(by_case[name]["alloc_ns"]) > int(by_case[name]["vort_ns"]) * 2:
                 raise AssertionError(f"alloc regression {name}: {by_case[name]}")
+        clustered = by_case["clustered_q8"]
+        if int(clustered["size_ns"]) > int(clustered["vort_ns"]) * 3:
+            raise AssertionError(f"clustered summary regression: {clustered}")
     clustered = by_case["clustered_q8"]
     if int(clustered["max_literal_context_trees"]) < 32 or int(clustered["max_distance_context_trees"]) < 8:
         raise AssertionError(f"clustered header coverage regression: {clustered}")

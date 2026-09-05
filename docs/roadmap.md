@@ -9247,6 +9247,19 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   and upstream differential checks. Nine fixed-core pairs fell from roughly
   1,104.5 to 1,076.8 MiB/s (`0.975x`, 1/9 wins); the doubled lookup footprint
   costs more cache bandwidth than it saves in long-code fallback.
+  Allocating Brotli summaries now inspect only the window and first meta-block
+  header before choosing history for large final-compressed streams. When a
+  16 KiB-or-larger input declares more than the inline 65,520-byte history but
+  no more than 2 MiB of output, the summary allocates its exact bounded history
+  before the first payload pass instead of decoding until context is lost and
+  then restarting from byte zero. Small, stored, metadata-first, multi-block,
+  and larger streams retain the allocation-free-first policy. Allocation
+  failure reruns that original path so malformed/limit errors keep precedence,
+  while genuine history exhaustion returns OOM. The retained 1 MiB clustered
+  q8 case now uses exactly one balanced allocation/deallocation; seven
+  fixed-core pairs reduce median `size_ns` from about 336.4 to 217.6 ms for 100
+  summaries (`1.55x`). The ReleaseFast reference gate caps clustered summary
+  time at three times caller-owned decode, versus roughly 2.4x measured.
   Parameterized the in-table tail lookup and widened only high-tree command and
   distance tables from eight to nine bits. The 290 KiB header remains the same
   size because each lookup still occupies unused canonical-entry storage; all
