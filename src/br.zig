@@ -1209,7 +1209,7 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
             return self.single_symbol != null or self.table.canBuildTailLookup8();
         }
 
-        pub fn decodeTailLookup(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+        pub inline fn decodeTailLookup(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
             if (self.single_symbol) |symbol| return symbol;
             return self.table.decodeValueTailLookup8(reader);
         }
@@ -3167,7 +3167,10 @@ pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8
             .compressed => |header| {
                 const meta_block_end = try checkedDecodedEnd(written, header.decoded_len, max_output_len);
                 try out.resize(allocator, meta_block_end);
-                try processMinimalCompressedMetaBlock(&reader, out.items, &written, header.decoded_len, &last_distances, window_bits);
+                if (stream.len >= large_stream_decode_threshold)
+                    try processLargeCompressedMetaBlock(&reader, out.items, &written, header.decoded_len, &last_distances, window_bits)
+                else
+                    try processMinimalCompressedMetaBlock(&reader, out.items, &written, header.decoded_len, &last_distances, window_bits);
                 if (written != meta_block_end) return error.SizeMismatch;
                 if (header.final) {
                     try ensureZeroPaddingAndEnd(reader);

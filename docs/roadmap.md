@@ -9214,3 +9214,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   median from about 679.8 to 862.7 MiB/s (`1.269x`, 7/7 wins) with identical
   checksums. The complete 13-row ReleaseFast libbrotli gate and the 100-case /
   1,401-run upstream progressive differential remain green.
+  A follow-up profile showed the thin `PrefixCode.decodeTailLookup` call
+  boundary itself consuming roughly 10% of clustered decode after command and
+  distance lookup landed. Inlining that wrapper remains isolated to the
+  high-tree path and lets the existing underlying table primitive optimize into
+  each literal/command/distance call site. Nine alternating fixed-core
+  ReleaseFast pairs improve the clustered median again from about 861.6 to
+  1,059.2 MiB/s (`1.229x`, 9/9 wins), with identical checksums; the strict gate
+  floor rises from `0.40x` to `0.50x` libbrotli throughput. The one-pass
+  allocator-returning decoder now uses the same large-stream dispatcher, rather
+  than falling back to the compact small-stream payload loop after resizing its
+  final output.

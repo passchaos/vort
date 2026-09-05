@@ -59,9 +59,10 @@ def main() -> int:
         "structured_q4": 1.10,
         "text_q11": 1.55, "structured_q11": 1.05, "repetitive_q11": 1.75,
         # The isolated high-tree path now gives literal, command, and distance
-        # trees in-table lookups. Keep margin below the fixed-core ~0.46x result
-        # while preventing a regression to the former ~0.36x implementation.
-        "clustered_q8": 0.40,
+        # trees in-table lookups and inlines the lookup wrapper. Keep margin
+        # below the fixed-core ~0.56x result while preventing a regression to
+        # the former ~0.46x implementation.
+        "clustered_q8": 0.50,
     }
     if args.enforce_throughput:
         for name, floor in floors.items():
