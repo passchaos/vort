@@ -58,10 +58,10 @@ def main() -> int:
         "text_q3": 1.45, "structured_q3": 1.15, "repetitive_q3": 1.70,
         "structured_q4": 1.10,
         "text_q11": 1.55, "structured_q11": 1.05, "repetitive_q11": 1.75,
-        # The clustered row is a coverage guard for Vort's current compact
-        # tables, not yet a performance-parity claim against libbrotli's wide
-        # decode tables. Keep a conservative floor so regressions remain loud.
-        "clustered_q8": 0.09,
+        # The isolated high-tree path now gives literal, command, and distance
+        # trees in-table lookups. Keep margin below the fixed-core ~0.46x result
+        # while preventing a regression to the former ~0.36x implementation.
+        "clustered_q8": 0.40,
     }
     if args.enforce_throughput:
         for name, floor in floors.items():

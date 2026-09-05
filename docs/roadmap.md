@@ -9202,3 +9202,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   allocation relationships. A clean-parent A/B reproduced the Debug text/tiny
   floor failures, confirming they predated this fast path rather than relaxing
   the production regression contract.
+  The isolated high-tree Brotli payload path now prepares the existing in-table
+  eight-bit lookup for command and distance trees as well as literal trees. It
+  preflights every declared auxiliary tree before mutating any table, applies
+  only when all command/distance trees are in the inline tiers, and dispatches
+  through a compile-time-specialized `noinline` loop; ordinary streams retain
+  their prior compact decoder and code layout. An atomic sparse-plus-dense
+  regression proves failed preparation leaves earlier command trees unchanged,
+  while successful command/distance lookups decode identically. Seven
+  alternating fixed-core ReleaseFast pairs improve the 1 MiB `clustered_q8`
+  median from about 679.8 to 862.7 MiB/s (`1.269x`, 7/7 wins) with identical
+  checksums. The complete 13-row ReleaseFast libbrotli gate and the 100-case /
+  1,401-run upstream progressive differential remain green.

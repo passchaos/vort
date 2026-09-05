@@ -4679,7 +4679,10 @@ fn processLargeCompressedMetaBlock(
     try readMinimalCompressedHeaderInto(reader, &header);
     if (header.literal_tree_count < clustered_literal_tree_threshold or !prepareLiteralTailLookups(&header))
         return processDecodedCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, &header);
-    return processTailLookupCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, &header);
+    const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(&header);
+    if (auxiliary_tail_lookups)
+        return processTailLookupCompressedPayload(true, reader, output, written, meta_block_end, last_distances, window_bits, &header);
+    return processTailLookupCompressedPayload(false, reader, output, written, meta_block_end, last_distances, window_bits, &header);
 }
 
 const clustered_literal_tree_threshold: u16 = 16;
@@ -4689,6 +4692,20 @@ fn prepareLiteralTailLookups(header: *MinimalCompressedHeader) bool {
     for (header.literal_trees[0..header.literal_tree_count]) |*tree|
         if (!tree.canPrepareTailLookup()) return false;
     for (header.literal_trees[0..header.literal_tree_count]) |*tree|
+        std.debug.assert(tree.prepareTailLookup());
+    return true;
+}
+
+fn prepareAuxiliaryTailLookups(header: *MinimalCompressedHeader) bool {
+    if (header.command_block.block_type_count > inline_command_tree_count or
+        header.distance_tree_count > inline_distance_tree_count) return false;
+    for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree|
+        if (!tree.canPrepareTailLookup()) return false;
+    for (header.distance_trees[0..header.distance_tree_count]) |*tree|
+        if (!tree.canPrepareTailLookup()) return false;
+    for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree|
+        std.debug.assert(tree.prepareTailLookup());
+    for (header.distance_trees[0..header.distance_tree_count]) |*tree|
         std.debug.assert(tree.prepareTailLookup());
     return true;
 }
@@ -4739,6 +4756,7 @@ noinline fn processDecodedCompressedPayload(
 }
 
 noinline fn processTailLookupCompressedPayload(
+    comptime auxiliary_tail_lookups: bool,
     reader: *bitstream.BitReader,
     output: []u8,
     written: *usize,
@@ -4749,7 +4767,10 @@ noinline fn processTailLookupCompressedPayload(
 ) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     while (written.* < meta_block_end) {
-        const command_symbol = try readCommandSymbol(header, reader);
+        const command_symbol = if (auxiliary_tail_lookups)
+            try readCommandSymbolTailLookup(header, reader)
+        else
+            try readCommandSymbol(header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
         if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
         var i: usize = 0;
@@ -4768,7 +4789,10 @@ noinline fn processTailLookupCompressedPayload(
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
         if (written.* == meta_block_end) return;
-        const decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
+        const decoded_distance = if (auxiliary_tail_lookups)
+            try readMinimalDistanceTailLookup(header, reader, lengths, last_distances)
+        else
+            try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
@@ -7614,6 +7638,15 @@ fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitRea
     return readCommandSymbolAny(header, reader);
 }
 
+fn readCommandSymbolTailLookup(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!u16 {
+    if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0)
+        try switchBlockAny(max_command_block_types, &header.command_block, reader);
+    if (header.command_block.current_type >= inline_command_tree_count) return error.UnsupportedBrotliFeature;
+    const symbol = try header.insert_copy_trees[header.command_block.current_type].decodeTailLookup(reader);
+    if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
+    return symbol;
+}
+
 fn readCommandSymbolAny(header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
     if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0) {
         try switchBlockAny(max_command_block_types, &header.command_block, reader);
@@ -7697,12 +7730,14 @@ fn literalContextFromMode(mode: u2, previous: u8, second_previous: u8) Error!usi
     return literal_context.value(mode, previous, second_previous);
 }
 
+const DecodedBrotliDistance = struct { distance: usize, update_ring: bool };
+
 fn readMinimalDistance(
     header: *MinimalCompressedHeader,
     reader: *bitstream.BitReader,
     lengths: InsertCopyLengths,
     last_distances: *[4]usize,
-) Error!struct { distance: usize, update_ring: bool } {
+) Error!DecodedBrotliDistance {
     const symbol = if (lengths.distance_symbol_zero) 0 else blk: {
         try ensureDistanceBlock(header, reader);
         const context = distanceContext(lengths.copy_len);
@@ -7718,6 +7753,33 @@ fn readMinimalDistance(
         .distance = try resolveShortDistance(symbol, last_distances),
         // RFC 7932 code zero reuses the newest distance without advancing the
         // ring; all other short codes are installed as a newly used distance.
+        .update_ring = symbol != 0,
+    };
+    const direct_index = symbol - 16;
+    return .{ .distance = if (direct_index < header.ndirect)
+        @as(usize, direct_index) + 1
+    else
+        try readRegularDistance(header, reader, symbol), .update_ring = true };
+}
+
+fn readMinimalDistanceTailLookup(
+    header: *MinimalCompressedHeader,
+    reader: *bitstream.BitReader,
+    lengths: InsertCopyLengths,
+    last_distances: *[4]usize,
+) Error!DecodedBrotliDistance {
+    const symbol = if (lengths.distance_symbol_zero) 0 else blk: {
+        try ensureDistanceBlock(header, reader);
+        const context = distanceContext(lengths.copy_len);
+        if (header.distance_block.current_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
+        const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
+        if (tree_index >= inline_distance_tree_count) return error.UnsupportedBrotliFeature;
+        const decoded = try header.distance_trees[tree_index].decodeTailLookup(reader);
+        if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
+        break :blk decoded;
+    };
+    if (symbol < 16) return .{
+        .distance = try resolveShortDistance(symbol, last_distances),
         .update_ring = symbol != 0,
     };
     const direct_index = symbol - 16;
@@ -16569,6 +16631,30 @@ test "br literal tail lookup preparation is atomic on dense groups" {
     const before = header.literal_trees[0];
     try std.testing.expect(!prepareLiteralTailLookups(&header));
     try std.testing.expectEqualSlices(u8, std.mem.asBytes(&before), std.mem.asBytes(&header.literal_trees[0]));
+}
+
+test "br auxiliary tail lookup preparation is atomic and decodes both families" {
+    var header: MinimalCompressedHeader = undefined;
+    header.command_block = .{ .block_type_count = 2 };
+    header.distance_tree_count = 1;
+    const sparse_command_lengths = [_]u4{7} ++ [_]u4{0} ** 703;
+    header.insert_copy_trees[0] = .{ .table = try huffman.HuffmanTable(704).init(&sparse_command_lengths) };
+    var dense_command_lengths: [704]u4 = undefined;
+    @memset(dense_command_lengths[0..320], 9);
+    @memset(dense_command_lengths[320..], 10);
+    header.insert_copy_trees[1] = .{ .table = try huffman.HuffmanTable(704).init(&dense_command_lengths) };
+    const sparse_distance_lengths = [_]u4{7} ++ [_]u4{0} ** (max_distance_alphabet_size - 1);
+    header.distance_trees[0] = .{ .table = try huffman.HuffmanTable(max_distance_alphabet_size).init(&sparse_distance_lengths) };
+    const command_before = header.insert_copy_trees[0];
+    try std.testing.expect(!prepareAuxiliaryTailLookups(&header));
+    try std.testing.expectEqualSlices(u8, std.mem.asBytes(&command_before), std.mem.asBytes(&header.insert_copy_trees[0]));
+
+    header.command_block.block_type_count = 1;
+    try std.testing.expect(prepareAuxiliaryTailLookups(&header));
+    var command_reader = bitstream.BitReader.init(&.{ 0, 0 });
+    var distance_reader = bitstream.BitReader.init(&.{ 0, 0 });
+    try std.testing.expectEqual(@as(u16, 0), try header.insert_copy_trees[0].decodeTailLookup(&command_reader));
+    try std.testing.expectEqual(@as(u16, 0), try header.distance_trees[0].decodeTailLookup(&distance_reader));
 }
 
 test "br zero context map reader accepts plain and RLE all-zero maps" {
