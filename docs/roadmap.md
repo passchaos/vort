@@ -9506,6 +9506,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alternating fixed-CPU-30 dictionary pairs improve full validated Zstd
   training by 1.028x/1.033x/1.010x for text/JSON/binary, with 23/27 wins and
   unchanged checksums.
+  Removing repeated symbol and state-index checks from the internal
+  Huffman-weight FSE size estimator was rejected as too small. A checked
+  reference and validated-table fast path matched exactly across more than 300
+  randomized tableLog 5/6 streams, but nine fixed-CPU-30 trainer pairs reached
+  only 1.0055x aggregate throughput: text was neutral at 0.999x and JSON/binary
+  improved about 0.3% each. The checked helpers remain shared with emission.
   Shrinking the Huffman-weight FSE compression table from the generic
   512-state/64-transform maximum to its actual 64-state/16-transform bounds was
   rejected as noise-level. The poisoned-output table oracle remained exact,
