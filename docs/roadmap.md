@@ -6418,6 +6418,17 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   deterministic output rather than symbol-by-symbol identity. Current local
   ReleaseFast evidence improves the dense literal alphabet by about `4.18x`
   while retaining the full-width implementation as the reference.
+- Dense back-reference package-merge now recovers code lengths with one
+  multiplicity array and a reverse pass over the package DAG instead of
+  traversing that DAG independently from every selected root. Selection, stable
+  tie-breaking, and output lengths remain unchanged; the original traversal is
+  retained as a focused oracle. Nine alternating fixed-CPU-30 ReleaseFast pairs
+  improve dense literal, 128-active Zstd, and 256-active Zstd construction by
+  `1.290x`/`1.447x`/`1.469x`, all 9/9 wins. The full validated dictionary path
+  improves text/JSON/binary medians by `1.013x`/`1.011x`/`1.237x` with 24/27
+  wins overall and identical checksums. The Huffman-length gate directly checks
+  exact output and a conservative recovery-throughput floor against the old
+  root traversal.
 - Dynamic-header code-length RLE is now isolated under
   `src/deflate/dynamic/code_length_rle.zig` and walks HLIT/HDIST as one logical
   sequence without materializing their 316-entry concatenation. It emits ops,

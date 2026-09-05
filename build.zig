@@ -254,7 +254,7 @@ pub fn build(b: *std.Build) void {
         "zig-out/vort-huffman-length-bench.csv",
     });
     huffman_length_bench_gate.step.dependOn(&run_huffman_length_bench_csv.step);
-    const huffman_length_bench_gate_step = b.step("run-huffman-length-bench-gate", "Require compact sparse package-merge speedups");
+    const huffman_length_bench_gate_step = b.step("run-huffman-length-bench-gate", "Require Huffman code-length construction speedups");
     huffman_length_bench_gate_step.dependOn(&huffman_length_bench_gate.step);
 
     const deflate_code_length_rle_bench_exe = b.addExecutable(.{

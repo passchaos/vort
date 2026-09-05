@@ -1030,6 +1030,15 @@ pub fn treeCodeLengthsFullWidth(comptime n: usize, freqs: *const [n]u32, max_bit
     return packageMergeCodeLengths(n, freqs, max_bits, active);
 }
 
+/// Back-reference package merge with the original per-root DAG traversal.
+/// Retained as a focused equivalence and performance reference.
+pub fn treeCodeLengthsBackrefTraversal(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n]u4 {
+    var active: usize = 0;
+    for (freqs.*) |freq| active += @intFromBool(freq != 0);
+    std.debug.assert(n > 64 and active > 64);
+    return backrefPackageMergeCodeLengthsReference(n, freqs, max_bits, active);
+}
+
 fn compactPackageMergeCodeLengths(
     comptime n: usize,
     freqs: *const [n]u32,
@@ -1055,6 +1064,20 @@ fn compactPackageMergeCodeLengths(
 }
 
 fn backrefPackageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
+    return backrefPackageMergeCodeLengthsWithRecovery(n, freqs, max_bits, active, true);
+}
+
+fn backrefPackageMergeCodeLengthsReference(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
+    return backrefPackageMergeCodeLengthsWithRecovery(n, freqs, max_bits, active, false);
+}
+
+fn backrefPackageMergeCodeLengthsWithRecovery(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active: usize,
+    comptime linear_recovery: bool,
+) [n]u4 {
     comptime std.debug.assert(n * max_code_bits <= std.math.maxInt(u16));
     const invalid = std.math.maxInt(u16);
     const Node = struct {
@@ -1126,8 +1149,32 @@ fn backrefPackageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_b
     const selected_count = 2 * active - 2;
     std.debug.assert(selected_count <= current_len);
     var lengths: [n]u4 = @splat(0);
-    for (current[0..selected_count]) |index|
-        accumulateBackrefLengths(Node, n, nodes[0..node_len], index, &lengths);
+    if (comptime linear_recovery) {
+        var multiplicities: [n * max_code_bits]u16 = undefined;
+        @memset(multiplicities[0..node_len], 0);
+        for (current[0..selected_count]) |index| multiplicities[index] += 1;
+        var index = node_len;
+        while (index > active) {
+            index -= 1;
+            const multiplicity = multiplicities[index];
+            if (multiplicity == 0) continue;
+            // Every occurrence of an internal node reaches every leaf below
+            // it, so its multiplicity cannot exceed the final code length.
+            std.debug.assert(multiplicity <= max_bits);
+            const node = nodes[index];
+            multiplicities[node.left] += multiplicity;
+            multiplicities[node.right] += multiplicity;
+            std.debug.assert(multiplicities[node.left] <= max_bits);
+            std.debug.assert(multiplicities[node.right] <= max_bits);
+        }
+        for (nodes[0..active], multiplicities[0..active]) |node, multiplicity| {
+            std.debug.assert(multiplicity != 0 and multiplicity <= max_bits);
+            lengths[node.symbol] = @intCast(multiplicity);
+        }
+    } else {
+        for (current[0..selected_count]) |index|
+            accumulateBackrefLengths(Node, n, nodes[0..node_len], index, &lengths);
+    }
     return lengths;
 }
 
@@ -2064,6 +2111,41 @@ test "dense back-reference package-merge preserves optimal weighted cost" {
         );
         try std.testing.expect(kraftCost(freqs.len, &production, 15) <= (@as(usize, 1) << 15));
         try std.testing.expectEqual(production, treeCodeLengths(freqs.len, &freqs, 15));
+    }
+}
+
+test "linear back-reference recovery matches root traversal" {
+    var state: u32 = 0xbb67_ae85;
+    {
+        var freqs: [286]u32 = undefined;
+        for (0..48) |seed| {
+            for (&freqs, 0..) |*freq, symbol| {
+                state = state *% 1_664_525 +% 1_013_904_223;
+                freq.* = if ((symbol + seed) % 17 == 0) 0 else 1 + ((state >> 16) % 4096);
+            }
+            var active: usize = 0;
+            for (freqs) |frequency| active += @intFromBool(frequency != 0);
+            try std.testing.expect(active > 64);
+            try std.testing.expectEqual(
+                backrefPackageMergeCodeLengthsReference(freqs.len, &freqs, 15, active),
+                backrefPackageMergeCodeLengths(freqs.len, &freqs, 15, active),
+            );
+        }
+    }
+    {
+        var freqs: [256]u32 = undefined;
+        for (0..48) |seed| {
+            @memset(&freqs, 0);
+            const active = 65 + (seed * 37) % 192;
+            for (0..active) |index| {
+                state = state *% 1_664_525 +% 1_013_904_223;
+                freqs[(index * 149 + seed * 53) % freqs.len] = 1 + ((state >> 16) % 4096);
+            }
+            try std.testing.expectEqual(
+                backrefPackageMergeCodeLengthsReference(freqs.len, &freqs, 11, active),
+                backrefPackageMergeCodeLengths(freqs.len, &freqs, 11, active),
+            );
+        }
     }
 }
 

@@ -31,23 +31,26 @@ pub fn main(init: std.process.Init) !void {
         } else return error.UnknownArgument;
     }
 
-    var rows: [16]Row = undefined;
+    var rows: [19]Row = undefined;
     rows[0] = try measure(init, "literal-sparse-18", 286, sparseLiteralFreqs(18), 15, iterations, false);
     rows[1] = try measure(init, "literal-sparse-18", 286, sparseLiteralFreqs(18), 15, iterations, true);
     rows[2] = try measure(init, "literal-sparse-48", 286, sparseLiteralFreqs(48), 15, iterations, false);
     rows[3] = try measure(init, "literal-sparse-48", 286, sparseLiteralFreqs(48), 15, iterations, true);
     rows[4] = try measure(init, "literal-dense", 286, denseLiteralFreqs(), 15, iterations, false);
     rows[5] = try measure(init, "literal-dense", 286, denseLiteralFreqs(), 15, iterations, true);
-    rows[6] = try measure(init, "distance", 30, distanceFreqs(), 15, iterations, false);
-    rows[7] = try measure(init, "code-length", 19, codeLengthFreqs(), 7, iterations, false);
-    rows[8] = try measure(init, "zstd-known-32", 256, knownActiveFreqs(32), 11, iterations, false);
-    rows[9] = try measureKnownActive(init, "zstd-known-32", knownActiveFreqs(32), 11, iterations);
-    rows[10] = try measure(init, "zstd-known-64", 256, knownActiveFreqs(64), 11, iterations, false);
-    rows[11] = try measureKnownActive(init, "zstd-known-64", knownActiveFreqs(64), 11, iterations);
-    rows[12] = try measure(init, "zstd-known-128", 256, knownActiveFreqs(128), 11, iterations, false);
-    rows[13] = try measureKnownActive(init, "zstd-known-128", knownActiveFreqs(128), 11, iterations);
-    rows[14] = try measure(init, "zstd-known-256", 256, knownActiveFreqs(256), 11, iterations, false);
-    rows[15] = try measureKnownActive(init, "zstd-known-256", knownActiveFreqs(256), 11, iterations);
+    rows[6] = try measureBackrefTraversal(init, "literal-dense", 286, denseLiteralFreqs(), 15, iterations);
+    rows[7] = try measure(init, "distance", 30, distanceFreqs(), 15, iterations, false);
+    rows[8] = try measure(init, "code-length", 19, codeLengthFreqs(), 7, iterations, false);
+    rows[9] = try measure(init, "zstd-known-32", 256, knownActiveFreqs(32), 11, iterations, false);
+    rows[10] = try measureKnownActive(init, "zstd-known-32", knownActiveFreqs(32), 11, iterations);
+    rows[11] = try measure(init, "zstd-known-64", 256, knownActiveFreqs(64), 11, iterations, false);
+    rows[12] = try measureKnownActive(init, "zstd-known-64", knownActiveFreqs(64), 11, iterations);
+    rows[13] = try measure(init, "zstd-known-128", 256, knownActiveFreqs(128), 11, iterations, false);
+    rows[14] = try measureKnownActive(init, "zstd-known-128", knownActiveFreqs(128), 11, iterations);
+    rows[15] = try measureBackrefTraversal(init, "zstd-known-128", 256, knownActiveFreqs(128), 11, iterations);
+    rows[16] = try measure(init, "zstd-known-256", 256, knownActiveFreqs(256), 11, iterations, false);
+    rows[17] = try measureKnownActive(init, "zstd-known-256", knownActiveFreqs(256), 11, iterations);
+    rows[18] = try measureBackrefTraversal(init, "zstd-known-256", 256, knownActiveFreqs(256), 11, iterations);
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
@@ -116,6 +119,31 @@ fn measureKnownActive(init: std.process.Init, comptime name: []const u8, seed_fr
     std.mem.doNotOptimizeAway(checksum);
     const seconds = @as(f64, @floatFromInt(elapsed)) / @as(f64, std.time.ns_per_s);
     return .{ .case = name, .mode = "known-active", .symbols = freqs.len, .active = active, .max_bits = max_bits, .iterations = iterations, .elapsed_ns = elapsed, .builds_per_s = @as(f64, @floatFromInt(iterations)) / seconds, .checksum = checksum, .cost_checksum = cost_checksum };
+}
+
+fn measureBackrefTraversal(init: std.process.Init, comptime name: []const u8, comptime n: usize, seed_freqs: [n]u32, comptime max_bits: u4, iterations: usize) !Row {
+    var active: usize = 0;
+    var first_active: usize = 0;
+    for (seed_freqs, 0..) |freq, symbol| {
+        if (freq == 0) continue;
+        if (active == 0) first_active = symbol;
+        active += 1;
+    }
+    var freqs = seed_freqs;
+    var checksum: u64 = 0;
+    var cost_checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(init.io);
+    for (0..iterations) |i| {
+        freqs[first_active] = seed_freqs[first_active] + @as(u32, @intCast(i & 1));
+        const lengths = vort.huffman.treeCodeLengthsBackrefTraversal(n, &freqs, max_bits);
+        checksum +%= lengths[i % n];
+        checksum +%= lengths[(i * 17 + 3) % n];
+        for (freqs, lengths) |frequency, code_bits| cost_checksum +%= @as(u64, frequency) * code_bits;
+    }
+    const elapsed = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+    std.mem.doNotOptimizeAway(checksum);
+    const seconds = @as(f64, @floatFromInt(elapsed)) / @as(f64, std.time.ns_per_s);
+    return .{ .case = name, .mode = "root-traversal", .symbols = n, .active = active, .max_bits = max_bits, .iterations = iterations, .elapsed_ns = elapsed, .builds_per_s = @as(f64, @floatFromInt(iterations)) / seconds, .checksum = checksum, .cost_checksum = cost_checksum };
 }
 
 fn sparseLiteralFreqs(comptime active: usize) [286]u32 {
