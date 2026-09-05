@@ -9424,3 +9424,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   corpus entering the new path. Branch hints and restoring the original full
   table call shape did not remove the code-layout cost, so the indexed-node
   implementation remains in production.
+  A single-implementation structure-of-arrays variant was rejected too. Keeping
+  weights contiguous and splitting child pairs and leaf symbols reduced the hot
+  comparison footprint without changing indexes or tie order; nine focused
+  pairs improved dense literal/128-active/256-active construction by
+  1.17x/1.15x/1.10x, all 9/9 wins. Nine trainer pairs were again mixed: binary
+  improved 1.055x (9/9), text was neutral at 0.998x, and JSON regressed 1.5%
+  with 0/9 wins, leaving only a 1.011x aggregate gain. The interleaved node
+  representation remains preferable until the caller or compiler can isolate
+  these workload-specific layout effects without penalizing full tables.
