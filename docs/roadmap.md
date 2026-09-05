@@ -9465,3 +9465,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1.5%/1.1% while binary regressed about 1.0% in all 9 runs. Aggregate
   throughput moved only 1.004x, so each FSE candidate continues to construct
   its own small 16-symbol statistics table.
+  Small Huffman plan construction no longer zeroes its 1 KiB frequency table
+  immediately before overwriting all 256 entries from the four histogram lanes.
+  Code and bit-count lookup tables retain their required zero initialization,
+  and the striped-vs-scalar plan oracle compares the complete frequency array,
+  including inactive symbols. Nine alternating fixed-CPU-30 dictionary pairs
+  improve full validated Zstd training by 1.049x/1.026x/1.024x for
+  text/JSON/binary, with 26/27 wins and identical output checksums.

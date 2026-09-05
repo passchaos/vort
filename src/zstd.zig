@@ -14265,12 +14265,14 @@ fn addBytesToSmallHuffmanFrequencies(frequencies: *SmallHuffmanFrequencies, byte
 }
 
 fn smallHuffmanLiteralPlanFromFrequencies(frequencies: *const SmallHuffmanFrequencies) SmallHuffmanLiteralPlan {
-    var plan: SmallHuffmanLiteralPlan = .{};
+    // This loop overwrites every frequency slot. Avoid zeroing the 1 KiB field
+    // first while retaining the plan's zero-initialized code lookup tables.
+    var plan: SmallHuffmanLiteralPlan = .{ .frequencies = undefined };
     for (0..256) |symbol| {
         var frequency: u32 = 0;
         inline for (0..small_huffman_frequency_lane_count) |lane| frequency += frequencies[lane][symbol];
-        if (frequency == 0) continue;
         plan.frequencies[symbol] = frequency;
+        if (frequency == 0) continue;
         plan.symbols[plan.len] = @intCast(symbol);
         plan.len += 1;
     }
