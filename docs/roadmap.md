@@ -9497,3 +9497,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   nine alternating fixed-CPU-30 dictionary pairs improve the full validated
   Zstd path by 1.024x/1.021x/1.006x for text/JSON/binary, with 24/27 wins and
   identical checksums.
+  Replacing the back-reference node's stored creation serial with its identical
+  arena index was rejected. Keeping the node layout unchanged and changing only
+  the equal-weight comparator improved dense/128-active focused construction by
+  4.2%/1.6%, but the 256-active case reached 0.997x and won only 1/9 fixed-core
+  pairs. Removing the now-redundant field improved dense construction further
+  but still left the full-table case at 0.996x (2/9 wins). The explicit serial
+  remains because its load produces better code for the important dense Zstd
+  shape despite being mathematically equivalent to the node index.
