@@ -9242,6 +9242,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   was also neutral: nine fixed-core pairs measured about `0.999x` median. The
   compiler already keeps the pointed value effectively live, so the explicit
   deferred synchronization was removed.
+  A ten-bit command/distance tail lookup was rejected despite fitting the
+  current tree storage and passing complete-tree, dense-capacity, truncation,
+  and upstream differential checks. Nine fixed-core pairs fell from roughly
+  1,104.5 to 1,076.8 MiB/s (`0.975x`, 1/9 wins); the doubled lookup footprint
+  costs more cache bandwidth than it saves in long-code fallback.
   Parameterized the in-table tail lookup and widened only high-tree command and
   distance tables from eight to nine bits. The 290 KiB header remains the same
   size because each lookup still occupies unused canonical-entry storage; all
