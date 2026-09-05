@@ -9225,3 +9225,20 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   allocator-returning decoder now uses the same large-stream dispatcher, rather
   than falling back to the compact small-stream payload loop after resizing its
   final output.
+  A high-tree-only follow-up that fused regular-distance extra-bit parsing into
+  the tail-lookup helper was rejected: nine fixed-core pairs measured about
+  `0.996x` median throughput with mixed wins. The shared, separately tested
+  regular-distance implementation remains preferable.
+  Switching only the high-tree payload from `BitReader` to the existing
+  reservoir-backed `BufferedBitReader` was also rejected. It preserved the
+  complete 100-case / 1,401-run upstream differential, but nine fixed-core
+  pairs reached only about `1.008x` median with 7/9 wins, below the threshold
+  for carrying reader-state conversion and additional generic instantiations.
+  Reading adjacent insert/copy extra fields through one combined bit-reader
+  operation was rejected as well. An exhaustive 704-command by eight-alignment
+  oracle proved exact values and cursor positions, but nine fixed-core
+  end-to-end pairs regressed clustered decode to about `0.973x` median.
+  Caching the high-tree payload's caller-owned output cursor in a local scalar
+  was also neutral: nine fixed-core pairs measured about `0.999x` median. The
+  compiler already keeps the pointed value effectively live, so the explicit
+  deferred synchronization was removed.
