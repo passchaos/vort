@@ -6407,6 +6407,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1.028x (9/9 wins); JSON/source/binary remain within 0.2% and cross-window
   improves about 1.5%. The incremental zlib-ng gate now requires this row to
   match or beat the linked competitor in both output size and throughput.
+  That uniform-prefix probe now compares 32-byte vectors followed by word and
+  scalar tails instead of relying on the standard scalar `allEqual` loop. Tests
+  cover every mismatch position and vector/word tail boundary. Nine alternating
+  fixed-CPU-30 pairs improve the same 271-byte repetitive stream by another
+  1.257x (9/9 wins); JSON/source/binary/cross-window controls remain within
+  0.4%, bringing the locked repetitive path to roughly 4 GiB/s and about 1.8x
+  local zlib-ng level 6 throughput.
 - Dynamic DEFLATE encoder tables now build canonical code arrays directly from
   code lengths instead of first materializing the decoder-oriented bucketed
   `HuffmanTable` and rescanning its entries. The focused Huffman build benchmark

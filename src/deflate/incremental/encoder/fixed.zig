@@ -319,7 +319,7 @@ pub fn Encoder(comptime Codec: type) type {
 }
 
 fn uniqueByteCount(input: []const u8) usize {
-    if (input.len != 0 and std.mem.allEqual(u8, input, input[0])) return 1;
+    if (input.len != 0 and allBytesEqual(input, input[0])) return 1;
     var seen: [256]bool = @splat(false);
     var count: usize = 0;
     for (input) |byte| {
@@ -332,9 +332,37 @@ fn uniqueByteCount(input: []const u8) usize {
     return count;
 }
 
+fn allBytesEqual(input: []const u8, byte: u8) bool {
+    // Long byte runs dominate low-entropy admission. Compare a cache-line half
+    // at a time before the word/scalar tails instead of clearing and updating
+    // the general 256-entry distinct-byte set for the common uniform case.
+    const repeated: @Vector(32, u8) = @splat(byte);
+    var cursor: usize = 0;
+    while (cursor + 32 <= input.len) : (cursor += 32) {
+        const values: @Vector(32, u8) = input[cursor..][0..32].*;
+        if (@as(u32, @bitCast(values == repeated)) != std.math.maxInt(u32)) return false;
+    }
+    while (cursor + 8 <= input.len) : (cursor += 8) {
+        const value = std.mem.readInt(u64, input[cursor..][0..8], .little);
+        if (value != @as(u64, byte) * 0x0101_0101_0101_0101) return false;
+    }
+    for (input[cursor..]) |value| if (value != byte) return false;
+    return true;
+}
+
 test "saturated unique byte count handles uniform and mixed inputs" {
     try std.testing.expectEqual(@as(usize, 0), uniqueByteCount(""));
     try std.testing.expectEqual(@as(usize, 1), uniqueByteCount("aaaaaaaaaaaaaaaa"));
     try std.testing.expectEqual(@as(usize, 4), uniqueByteCount("abacabadabacaba"));
     try std.testing.expectEqual(@as(usize, 5), uniqueByteCount("abcdeeeeeeeeeeee"));
+
+    var bytes: [97]u8 = @splat('x');
+    for (0..bytes.len + 1) |len|
+        try std.testing.expect(allBytesEqual(bytes[0..len], 'x'));
+    for (&bytes) |*value| {
+        value.* = 'y';
+        try std.testing.expect(!allBytesEqual(&bytes, 'x'));
+        try std.testing.expectEqual(@as(usize, 2), uniqueByteCount(&bytes));
+        value.* = 'x';
+    }
 }
