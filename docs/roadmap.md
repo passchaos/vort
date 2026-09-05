@@ -9472,3 +9472,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   including inactive symbols. Nine alternating fixed-CPU-30 dictionary pairs
   improve full validated Zstd training by 1.049x/1.026x/1.024x for
   text/JSON/binary, with 26/27 wins and identical output checksums.
+  Narrowing the per-block striped Huffman histogram was rejected. A phase-aware
+  five-lane `u16` design is overflow-safe for the 262,143-byte literal-header
+  limit, while a four-lane mixed `u32`/`u16` design preserves the original hot
+  loop and is safe for the 128 KiB Zstd block limit; the unbounded dictionary
+  aggregate remained `u32` in both cases. Fragmented-slice and maximum-length
+  oracles matched scalar counts exactly. Nevertheless, the five-lane form fell
+  to 0.316x/0.343x/0.665x and the mixed-width form to
+  0.443x/0.476x/0.772x for text/JSON/binary, all 0/27 wins. Narrow counter
+  updates cost far more than the smaller clear/cache footprint on this CPU.
