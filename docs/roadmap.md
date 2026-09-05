@@ -9506,6 +9506,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alternating fixed-CPU-30 dictionary pairs improve full validated Zstd
   training by 1.028x/1.033x/1.010x for text/JSON/binary, with 23/27 wins and
   unchanged checksums.
+  Shrinking the Huffman-weight FSE compression table from the generic
+  512-state/64-transform maximum to its actual 64-state/16-transform bounds was
+  rejected as noise-level. The poisoned-output table oracle remained exact,
+  but nine fixed-CPU-30 trainer pairs improved text/JSON/binary by only
+  1.0039x/1.0035x/1.0005x. The generic private table layout remains because the
+  aggregate change is well below the 1% retention bar.
   Replacing the back-reference node's stored creation serial with its identical
   arena index was rejected. Keeping the node layout unchanged and changing only
   the equal-weight comparator improved dense/128-active focused construction by
