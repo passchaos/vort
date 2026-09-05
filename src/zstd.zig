@@ -16643,7 +16643,7 @@ fn fillSmallHuffmanWeights(plan: *SmallHuffmanLiteralPlan) ?void {
     }
     plan.max_bit_count = max_bit_count;
 
-    std.mem.sort(u8, plan.symbols[0..plan.len], &lengths, smallHuffmanSymbolLess);
+    sortSmallHuffmanSymbolsByLength(plan.symbols[0..plan.len], &lengths, plan.max_bit_count);
     var prefix: usize = 0;
     var previous_weight = plan.max_bit_count + 1 - lengths[plan.symbols[0]];
     for (plan.symbols[0..plan.len], 0..) |symbol, i| {
@@ -16664,6 +16664,44 @@ fn smallHuffmanSymbolLess(lengths: *const [256]u4, lhs: u8, rhs: u8) bool {
     const rhs_bits = lengths[rhs];
     if (lhs_bits != rhs_bits) return lhs_bits > rhs_bits;
     return lhs < rhs;
+}
+
+fn sortSmallHuffmanSymbolsByLength(symbols: []u8, lengths: *const [256]u4, max_bit_count: u4) void {
+    std.debug.assert(max_bit_count <= 11);
+    var count_by_bits: [12]u16 = @splat(0);
+    for (symbols) |symbol| {
+        const bit_count = lengths[symbol];
+        std.debug.assert(bit_count != 0 and bit_count <= max_bit_count);
+        count_by_bits[bit_count] += 1;
+    }
+
+    var next_by_bits: [12]u16 = @splat(0);
+    var next: u16 = 0;
+    var bit_count: usize = max_bit_count;
+    while (bit_count != 0) : (bit_count -= 1) {
+        next_by_bits[bit_count] = next;
+        next += count_by_bits[bit_count];
+    }
+    std.debug.assert(next == symbols.len);
+
+    // Callers collect active symbols in ascending byte order. Stable bucket
+    // insertion therefore preserves the symbol-order tie-break within each
+    // descending code-length bucket without a comparison sort.
+    var ordered: [256]u8 = undefined;
+    for (symbols) |symbol| {
+        const symbol_bits = lengths[symbol];
+        ordered[next_by_bits[symbol_bits]] = symbol;
+        next_by_bits[symbol_bits] += 1;
+    }
+    @memcpy(symbols, ordered[0..symbols.len]);
+}
+
+pub fn benchmarkSmallHuffmanSymbolBucketSort(symbols: []u8, lengths: *const [256]u4, max_bit_count: u4) void {
+    sortSmallHuffmanSymbolsByLength(symbols, lengths, max_bit_count);
+}
+
+pub fn benchmarkSmallHuffmanSymbolComparisonSort(symbols: []u8, lengths: *const [256]u4) void {
+    std.mem.sort(u8, symbols, lengths, smallHuffmanSymbolLess);
 }
 
 fn validateSmallHuffmanLastWeight(plan: *const SmallHuffmanLiteralPlan) ?void {
@@ -23045,6 +23083,30 @@ test "zstd finalized Huffman plan indexes bit counts by symbol" {
             smallHuffmanCode(&plan, @intCast(symbol)) orelse return error.CorruptFrame,
             plan.codes[symbol],
         );
+    }
+}
+
+test "zstd Huffman symbol bucket order matches comparison sort" {
+    var state: u32 = 0x510e_527f;
+    for (1..257) |len| {
+        var lengths: [256]u4 = @splat(0);
+        var expected: [256]u8 = undefined;
+        var actual: [256]u8 = undefined;
+        var max_bit_count: u4 = 0;
+        for (0..len) |index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const symbol: u8 = @intCast((index * 251 + len * 37) % 256);
+            const bit_count: u4 = @intCast(1 + ((state >> 16) % 11));
+            lengths[symbol] = bit_count;
+            expected[index] = symbol;
+            actual[index] = symbol;
+            max_bit_count = @max(max_bit_count, bit_count);
+        }
+        std.mem.sort(u8, expected[0..len], {}, std.sort.asc(u8));
+        @memcpy(actual[0..len], expected[0..len]);
+        std.mem.sort(u8, expected[0..len], &lengths, smallHuffmanSymbolLess);
+        sortSmallHuffmanSymbolsByLength(actual[0..len], &lengths, max_bit_count);
+        try std.testing.expectEqualSlices(u8, expected[0..len], actual[0..len]);
     }
 }
 

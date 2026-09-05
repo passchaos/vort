@@ -17,6 +17,9 @@ EXPECTED = {
     "zstd-known-64": {"production", "known-active"},
     "zstd-known-128": {"production", "known-active", "root-traversal"},
     "zstd-known-256": {"production", "known-active", "root-traversal"},
+    "zstd-sort-64": {"bucket-sort", "comparison-sort"},
+    "zstd-sort-128": {"bucket-sort", "comparison-sort"},
+    "zstd-sort-256": {"bucket-sort", "comparison-sort"},
     "distance": {"production"},
     "code-length": {"production"},
 }
@@ -87,7 +90,20 @@ def main() -> int:
     dense_known_geomean = (known_ratios[2] * known_ratios[3]) ** 0.5
     if dense_known_geomean < 1.005:
         raise SystemExit(f"dense known-active package merge speedup too small ({dense_known_geomean:.3f})")
-    print(f"huffman length gate: sparse18={ratios[0]:.2f}x sparse48={ratios[1]:.2f}x dense={dense_ratio:.2f}x recovery-dense={recovery_ratios[0]:.2f}x recovery128={recovery_ratios[1]:.2f}x recovery256={recovery_ratios[2]:.2f}x known32={known_ratios[0]:.2f}x known64={known_ratios[1]:.2f}x known128={known_ratios[2]:.2f}x known256={known_ratios[3]:.2f}x rows={len(rows)}")
+    sort_ratios = []
+    for case in ("zstd-sort-64", "zstd-sort-128", "zstd-sort-256"):
+        bucket = by_key[(case, "bucket-sort")]
+        comparison = by_key[(case, "comparison-sort")]
+        if bucket["checksum"] != comparison["checksum"] or bucket["cost_checksum"] != comparison["cost_checksum"]:
+            raise SystemExit(f"{case}: bucket/comparison sort mismatch")
+        ratio = float(bucket["builds_per_s"]) / float(comparison["builds_per_s"])
+        if ratio < 1.05:
+            raise SystemExit(f"{case}: Huffman bucket sort speedup too small ({ratio:.3f})")
+        sort_ratios.append(ratio)
+    sort_geomean = (sort_ratios[0] * sort_ratios[1] * sort_ratios[2]) ** (1 / 3)
+    if sort_geomean < 1.10:
+        raise SystemExit(f"Huffman bucket sort geometric speedup too small ({sort_geomean:.3f})")
+    print(f"huffman length gate: sparse18={ratios[0]:.2f}x sparse48={ratios[1]:.2f}x dense={dense_ratio:.2f}x recovery-dense={recovery_ratios[0]:.2f}x recovery128={recovery_ratios[1]:.2f}x recovery256={recovery_ratios[2]:.2f}x known32={known_ratios[0]:.2f}x known64={known_ratios[1]:.2f}x known128={known_ratios[2]:.2f}x known256={known_ratios[3]:.2f}x sort64={sort_ratios[0]:.2f}x sort128={sort_ratios[1]:.2f}x sort256={sort_ratios[2]:.2f}x rows={len(rows)}")
     return 0
 
 

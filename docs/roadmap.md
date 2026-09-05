@@ -9433,3 +9433,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   with 0/9 wins, leaving only a 1.011x aggregate gain. The interleaved node
   representation remains preferable until the caller or compiler can isolate
   these workload-specific layout effects without penalizing full tables.
+  Zstd Huffman plan finalization now replaces its generic comparison sort with
+  an 11-bucket stable distribution pass. Active symbols already arrive in byte
+  order, so iterating them once preserves the exact symbol tie-break within
+  descending code-length buckets. A randomized 1–256-symbol oracle compares the
+  complete order with the retained comparison-sort reference. The focused
+  Huffman gate now covers 64/128/256-active sort kernels and measures
+  3.36x/4.44x/5.38x local ReleaseFast speedups with identical checksums. Nine
+  alternating fixed-CPU-30 dictionary pairs improve the full validated Zstd
+  path by 1.018x/1.030x/1.038x for text/JSON/binary, with 26/27 wins and
+  unchanged dictionary checksums.
