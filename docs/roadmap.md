@@ -9412,3 +9412,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   a 2.0x binary-training win but repeatedly regressed text or JSON by 0.5–3%.
   Speculative failure cost and classifier/code-layout overhead make this unsafe
   to retain until callers can cheaply prove the depth bound.
+  Packing each back-reference package's `(weight, creation_index)` into one
+  directly comparable `u64` and shrinking the DAG node to two `u16` children
+  was rejected for the same cross-workload reason. Nine fixed-CPU-30 focused
+  pairs improved dense literal, 128-active Zstd, and 256-active Zstd package
+  merge by about 1.19x/1.38x/1.43x, all 9/9 wins. Trainer tracing then showed
+  text and JSON build only two full 256-symbol tables while binary builds 53,638
+  mostly partial 65–223-symbol tables. Restricting the packed representation to
+  partial Zstd tables retained a 1.17x binary gain, but nine end-to-end pairs
+  still regressed text by 1.1% and JSON by 1.9% (JSON 0/9 wins), despite neither
+  corpus entering the new path. Branch hints and restoring the original full
+  table call shape did not remove the code-layout cost, so the indexed-node
+  implementation remains in production.
