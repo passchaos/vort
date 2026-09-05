@@ -9361,6 +9361,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   miss and insertion preserved the original key layout and allocation totals,
   but nine fixed-CPU-30 pairs produced only 1.002x aggregate throughput with
   16/27 wins. It was removed as noise-level complexity.
+  An exact `u128` packed key for phrases up to 15 bytes was rejected in both a
+  mixed dual-index form and a form limited to configurations whose maximum
+  phrase length fit entirely. The latter still regressed JSON/binary by about
+  1.6%/0.9%, reached 0.994x aggregate throughput, and won only 9/27 fixed-core
+  pairs; integer-key hashing plus a second table did not beat short Wyhash.
   Storing only one exact Wyhash-to-index representative (with a collision-safe
   linear fallback) also failed: despite a smaller map, nine fixed-CPU-30 pairs
   reached 0.970x aggregate throughput and won only 7/27 runs. The ordinary
