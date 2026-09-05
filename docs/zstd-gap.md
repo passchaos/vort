@@ -384,6 +384,14 @@ Recommended next comparison steps:
   format-wide 512-state ceiling. The common 128-state case uses two rather than
   eight `u64` words per sequence, reducing that buffer by 75%; tests cover
   64/128/256/512-state boundaries without changing the selected state path.
+  One-shot frame assembly now keeps one `LargeSequenceScratch` across candidate
+  emission and frame-state rewriting, while `NativeFrameEncoder` retains it
+  across calls. On the two-33-KiB wide fixture this removes 13 allocations and
+  76,482 cumulatively requested bytes inside one frame; a warmed reusable
+  encoder removes a further 18 allocations on its next byte-identical call.
+  Injected OOM followed by successful reuse and final allocation balance cover
+  the new ownership path; the generic incremental encoder keeps its allocation-free
+  state layout and continues to use block-local scratch.
 
 - The runtime `run-zstd-compat-probe` matrix now includes compression level 22,
   four real source-file rows when the local zstd checkout is available, 15

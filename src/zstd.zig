@@ -241,7 +241,7 @@ const IncrementalEncoderCodec = struct {
         try emitBlock(allocator, out, block, last);
     }
     pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: usize, match_search_budget: usize) zstd.Error!void {
-        try emitLiteralOnlyCompressedBlockWithHistory(allocator, out, block, last, state, dictionary, frame_history, frame_offset, match_search_budget, false, null);
+        try emitLiteralOnlyCompressedBlockWithHistoryAndScratch(allocator, out, block, last, state, dictionary, frame_history, frame_offset, match_search_budget, false, null, null);
     }
     pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash64) zstd.Error!void {
         if (!options.content_checksum) return;
@@ -5645,7 +5645,9 @@ pub fn encodeLiteralOnlyFrameAppend(
 ) Error!void {
     var rep_beam_scratch: lz77.RepBeamScratch = .{};
     defer rep_beam_scratch.deinit(allocator);
-    try encodeLiteralOnlyFrameAppendWithDictionaryInternal(allocator, out, input, options, null, &rep_beam_scratch);
+    var large_sequence_scratch: LargeSequenceScratch = .{};
+    defer large_sequence_scratch.deinit(allocator);
+    try encodeLiteralOnlyFrameAppendWithDictionaryInternal(allocator, out, input, options, null, &rep_beam_scratch, &large_sequence_scratch);
 }
 
 fn encodeLiteralOnlyFrameAppendWithDictionaryInternal(
@@ -5655,6 +5657,7 @@ fn encodeLiteralOnlyFrameAppendWithDictionaryInternal(
     options: NativeFrameOptions,
     dictionary: ?NativeDictionary,
     rep_beam_scratch: *lz77.RepBeamScratch,
+    large_sequence_scratch: ?*LargeSequenceScratch,
 ) Error!void {
     const frame_options = optionsWithNativeDictionary(options, dictionary);
     const match_search_budget = try nativeMatchSearchBudget(frame_options);
@@ -5666,7 +5669,7 @@ fn encodeLiteralOnlyFrameAppendWithDictionaryInternal(
     var frame_history: incremental_history.Rolling = .{};
     defer frame_history.deinit(allocator);
     if (input.len == 0) {
-        try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, "", true, &encoder_state, dictionary, 0, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch);
+        try emitLiteralOnlyCompressedBlockWithDictionaryAndScratch(allocator, out, "", true, &encoder_state, dictionary, 0, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch, large_sequence_scratch);
     } else {
         while (offset < input.len) {
             const block_end = @min(input.len, offset + block_size_max);
@@ -5679,7 +5682,7 @@ fn encodeLiteralOnlyFrameAppendWithDictionaryInternal(
             // appendCompletedBlock can index them for the following block.
             if (!last)
                 try frame_history.prepareCompletedBlock(allocator, block, native_dictionary_window_len);
-            try emitLiteralOnlyCompressedBlockWithHistory(allocator, out, block, last, &encoder_state, dictionary, frame_history.view(), offset, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch);
+            try emitLiteralOnlyCompressedBlockWithHistoryAndScratch(allocator, out, block, last, &encoder_state, dictionary, frame_history.view(), offset, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch, large_sequence_scratch);
             if (!last) frame_history.appendCompletedBlock(block, native_dictionary_window_len);
             offset = block_end;
         }
@@ -5850,12 +5853,14 @@ pub const NativeFrameEncoder = struct {
     literal_scratch: std.ArrayList(u8) = .empty,
     output_scratch: std.ArrayList(u8) = .empty,
     rep_beam_scratch: lz77.RepBeamScratch = .{},
+    large_sequence_scratch: LargeSequenceScratch = .{},
 
     pub fn init(allocator: std.mem.Allocator) NativeFrameEncoder {
         return .{ .allocator = allocator };
     }
 
     pub fn deinit(self: *NativeFrameEncoder) void {
+        self.large_sequence_scratch.deinit(self.allocator);
         self.rep_beam_scratch.deinit(self.allocator);
         self.output_scratch.deinit(self.allocator);
         self.literal_scratch.deinit(self.allocator);
@@ -6024,7 +6029,7 @@ pub const NativeFrameEncoder = struct {
                 return .raw_or_rle;
             },
             .literal_only => {
-                try encodeLiteralOnlyFrameAppendWithDictionaryInternal(self.allocator, out, input, frame_options, dictionary, &self.rep_beam_scratch);
+                try encodeLiteralOnlyFrameAppendWithDictionaryInternal(self.allocator, out, input, frame_options, dictionary, &self.rep_beam_scratch, &self.large_sequence_scratch);
                 return .literal_only;
             },
             .auto => {},
@@ -6032,7 +6037,7 @@ pub const NativeFrameEncoder = struct {
 
         self.raw_scratch.clearRetainingCapacity();
         self.literal_scratch.clearRetainingCapacity();
-        try encodeLiteralOnlyFrameAppendWithDictionaryInternal(self.allocator, &self.literal_scratch, input, frame_options, dictionary, &self.rep_beam_scratch);
+        try encodeLiteralOnlyFrameAppendWithDictionaryInternal(self.allocator, &self.literal_scratch, input, frame_options, dictionary, &self.rep_beam_scratch, &self.large_sequence_scratch);
 
         // The raw/RLE candidate's byte length can be computed from its block
         // segmentation without copying input or hashing it a second time.
@@ -9437,6 +9442,35 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     );
 }
 
+fn emitLiteralOnlyCompressedBlockWithDictionaryAndScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    state: *LiteralOnlyEncoderState,
+    dictionary: ?NativeDictionary,
+    frame_offset: usize,
+    match_search_budget: usize,
+    rep_beam_search: bool,
+    rep_beam_scratch: ?*lz77.RepBeamScratch,
+    large_sequence_scratch: ?*LargeSequenceScratch,
+) Error!void {
+    return try emitLiteralOnlyCompressedBlockWithHistoryAndScratch(
+        allocator,
+        out,
+        block,
+        last,
+        state,
+        dictionary,
+        emptyIncrementalHistoryView(),
+        frame_offset,
+        match_search_budget,
+        rep_beam_search,
+        rep_beam_scratch,
+        large_sequence_scratch,
+    );
+}
+
 fn emptyIncrementalHistoryView() incremental_history.View {
     const Empty = struct {
         var index: incremental_history_index.Index = .{};
@@ -9457,6 +9491,36 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
     rep_beam_search: bool,
     rep_beam_scratch: ?*lz77.RepBeamScratch,
 ) Error!void {
+    return try emitLiteralOnlyCompressedBlockWithHistoryAndScratch(
+        allocator,
+        out,
+        block,
+        last,
+        state,
+        dictionary,
+        frame_history,
+        frame_offset,
+        match_search_budget,
+        rep_beam_search,
+        rep_beam_scratch,
+        null,
+    );
+}
+
+fn emitLiteralOnlyCompressedBlockWithHistoryAndScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    state: *LiteralOnlyEncoderState,
+    dictionary: ?NativeDictionary,
+    frame_history: incremental_history.View,
+    frame_offset: usize,
+    match_search_budget: usize,
+    rep_beam_search: bool,
+    rep_beam_scratch: ?*lz77.RepBeamScratch,
+    large_sequence_scratch: ?*LargeSequenceScratch,
+) Error!void {
     try ensureEncoderSequenceState(state, dictionary);
     const CandidateKind = enum { dictionary, history, huffman, match };
     var candidate: std.ArrayList(u8) = .empty;
@@ -9470,7 +9534,7 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
         try emitDictionaryMatchCompressedBlock(allocator, &candidate, block, last, dict, frame_offset, match_search_budget)
     else
         false;
-    const dictionary_ready = dictionary_ok and try prepareSequenceCandidateForFrame(allocator, &candidate, block, last, &state.sequence_state);
+    const dictionary_ready = dictionary_ok and try prepareSequenceCandidateForFrameWithScratch(allocator, &candidate, block, last, &state.sequence_state, large_sequence_scratch);
     if (dictionary_ready) {
         try best.appendSlice(allocator, candidate.items);
         best_kind = .dictionary;
@@ -9478,7 +9542,7 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
 
     candidate.clearRetainingCapacity();
     const history_ok = try emitFrameHistoryMatchCompressedBlock(allocator, &candidate, block, last, frame_history);
-    const history_ready = history_ok and try prepareSequenceCandidateForFrame(allocator, &candidate, block, last, &state.sequence_state);
+    const history_ready = history_ok and try prepareSequenceCandidateForFrameWithScratch(allocator, &candidate, block, last, &state.sequence_state, large_sequence_scratch);
     if (history_ready and (best_kind == null or candidate.items.len < best.items.len)) {
         best.clearRetainingCapacity();
         try best.appendSlice(allocator, candidate.items);
@@ -9489,9 +9553,9 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
         candidate.clearRetainingCapacity();
         var match_state_applied = false;
         const match_ok = if (shouldProbeDecisiveWideMatch(block, match_search_budget, true)) blk: {
-            break :blk try emitNativeMatchCompressedBlockWithWideProbeForFrame(allocator, &candidate, block, last, match_search_budget, rep_beam_scratch, &state.sequence_state, &match_state_applied);
-        } else try emitNativeMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, true, rep_beam_scratch);
-        const match_ready = match_ok and (match_state_applied or try prepareSequenceCandidateForFrame(allocator, &candidate, block, last, &state.sequence_state));
+            break :blk try emitNativeMatchCompressedBlockWithWideProbeForFrame(allocator, &candidate, block, last, match_search_budget, rep_beam_scratch, &state.sequence_state, &match_state_applied, large_sequence_scratch);
+        } else try emitNativeMatchCompressedBlockWithSequenceScratch(allocator, &candidate, block, last, match_search_budget, true, rep_beam_scratch, large_sequence_scratch);
+        const match_ready = match_ok and (match_state_applied or try prepareSequenceCandidateForFrameWithScratch(allocator, &candidate, block, last, &state.sequence_state, large_sequence_scratch));
         match_tested = true;
         if (match_ready) {
             // A literal-only prefix code needs at least one bit for every input
@@ -9520,8 +9584,8 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
 
     if (!match_tested) {
         candidate.clearRetainingCapacity();
-        const match_ok = try emitNativeMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, rep_beam_search, rep_beam_scratch);
-        const match_ready = match_ok and try prepareSequenceCandidateForFrame(allocator, &candidate, block, last, &state.sequence_state);
+        const match_ok = try emitNativeMatchCompressedBlockWithSequenceScratch(allocator, &candidate, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, large_sequence_scratch);
+        const match_ready = match_ok and try prepareSequenceCandidateForFrameWithScratch(allocator, &candidate, block, last, &state.sequence_state, large_sequence_scratch);
         if (match_ready and (best_kind == null or candidate.items.len < best.items.len)) {
             best.clearRetainingCapacity();
             try best.appendSlice(allocator, candidate.items);
@@ -9587,11 +9651,15 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
 }
 
 fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, rep_beam_search: bool, rep_beam_scratch: ?*lz77.RepBeamScratch) Error!bool {
-    return try emitNativeMatchCompressedBlockImpl(false, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, undefined);
+    return try emitNativeMatchCompressedBlockWithSequenceScratch(allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null);
+}
+
+fn emitNativeMatchCompressedBlockWithSequenceScratch(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, rep_beam_search: bool, rep_beam_scratch: ?*lz77.RepBeamScratch, large_sequence_scratch: ?*LargeSequenceScratch) Error!bool {
+    return try emitNativeMatchCompressedBlockImpl(false, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, undefined, large_sequence_scratch);
 }
 
 fn emitNativeMatchCompressedBlockWithPrecomputedBeam(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, rep_beam_scratch: *lz77.RepBeamScratch, rep_beam_stats: lz77.PlanStats) Error!bool {
-    return try emitNativeMatchCompressedBlockImpl(true, allocator, out, block, last, match_search_budget, true, rep_beam_scratch, rep_beam_stats);
+    return try emitNativeMatchCompressedBlockImpl(true, allocator, out, block, last, match_search_budget, true, rep_beam_scratch, rep_beam_stats, null);
 }
 
 fn emitNativeMatchCompressedBlockImpl(
@@ -9604,6 +9672,7 @@ fn emitNativeMatchCompressedBlockImpl(
     rep_beam_search: bool,
     rep_beam_scratch: ?*lz77.RepBeamScratch,
     precomputed_rep_beam_stats: lz77.PlanStats,
+    large_sequence_scratch: ?*LargeSequenceScratch,
 ) Error!bool {
     if (match_search_budget == 0) return false;
     // A prefix repeated through the end is already represented by one
@@ -9632,7 +9701,7 @@ fn emitNativeMatchCompressedBlockImpl(
             // arbitrate the exact same mixed candidate below.
             const non_mixed_budget = mixed_match_min_search_budget - 1;
             var mixed_dominated = false;
-            const non_mixed_ok = try emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats);
+            const non_mixed_ok = try emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
             if (mixed_dominated) return non_mixed_ok;
 
             var mixed: std.ArrayList(u8) = .empty;
@@ -9659,7 +9728,7 @@ fn emitNativeMatchCompressedBlockImpl(
         if (std.Thread.spawn(.{}, MixedBlockCandidate.run, .{&mixed_candidate})) |thread| {
             const non_mixed_budget = mixed_match_min_search_budget - 1;
             var mixed_dominated = false;
-            const non_mixed_ok = emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats) catch |err| {
+            const non_mixed_ok = emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch) catch |err| {
                 cancel_mixed.store(true, .release);
                 thread.join();
                 if (mixed_candidate.frame) |frame| std.heap.smp_allocator.free(frame);
@@ -9681,7 +9750,7 @@ fn emitNativeMatchCompressedBlockImpl(
         // Thread creation is an optimization only. If the platform refuses a
         // worker, fall through to the byte-identical serial selector below.
     }
-    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null, precomputed_rep_beam_stats);
+    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null, precomputed_rep_beam_stats, large_sequence_scratch);
 }
 
 inline fn shouldProbeDecisiveWideMatch(block: []const u8, match_search_budget: usize, rep_beam_search: bool) bool {
@@ -9715,7 +9784,7 @@ noinline fn emitNativeMatchCompressedBlockWithWideProbe(
     match_search_budget: usize,
     rep_beam_scratch: ?*lz77.RepBeamScratch,
 ) Error!bool {
-    return try emitNativeMatchCompressedBlockWithWideProbeInternal(allocator, out, block, last, match_search_budget, rep_beam_scratch, null, null);
+    return try emitNativeMatchCompressedBlockWithWideProbeInternal(allocator, out, block, last, match_search_budget, rep_beam_scratch, null, null, null);
 }
 
 noinline fn emitNativeMatchCompressedBlockWithWideProbeForFrame(
@@ -9727,9 +9796,10 @@ noinline fn emitNativeMatchCompressedBlockWithWideProbeForFrame(
     rep_beam_scratch: ?*lz77.RepBeamScratch,
     sequence_state: *const SequenceEncoderState,
     state_applied: *bool,
+    large_sequence_scratch: ?*LargeSequenceScratch,
 ) Error!bool {
     state_applied.* = false;
-    return try emitNativeMatchCompressedBlockWithWideProbeInternal(allocator, out, block, last, match_search_budget, rep_beam_scratch, sequence_state, state_applied);
+    return try emitNativeMatchCompressedBlockWithWideProbeInternal(allocator, out, block, last, match_search_budget, rep_beam_scratch, sequence_state, state_applied, large_sequence_scratch);
 }
 
 noinline fn emitNativeMatchCompressedBlockWithWideProbeInternal(
@@ -9741,6 +9811,7 @@ noinline fn emitNativeMatchCompressedBlockWithWideProbeInternal(
     rep_beam_scratch: ?*lz77.RepBeamScratch,
     sequence_state: ?*const SequenceEncoderState,
     state_applied: ?*bool,
+    large_sequence_scratch: ?*LargeSequenceScratch,
 ) Error!bool {
     var local_rep_beam: lz77.RepBeamScratch = .{};
     defer if (rep_beam_scratch == null) local_rep_beam.deinit(allocator);
@@ -9762,10 +9833,11 @@ noinline fn emitNativeMatchCompressedBlockWithWideProbeInternal(
         &rep_beam_stats,
         direct_sequence_state,
         state_applied,
+        large_sequence_scratch,
     )) return true;
     if (rep_beam_stats) |stats|
-        return try emitNativeMatchCompressedBlockWithPrecomputedBeam(allocator, out, block, last, match_search_budget, beam_scratch, stats);
-    return try emitNativeMatchCompressedBlock(allocator, out, block, last, match_search_budget, true, rep_beam_scratch);
+        return try emitNativeMatchCompressedBlockImpl(true, allocator, out, block, last, match_search_budget, true, beam_scratch, stats, large_sequence_scratch);
+    return try emitNativeMatchCompressedBlockWithSequenceScratch(allocator, out, block, last, match_search_budget, true, rep_beam_scratch, large_sequence_scratch);
 }
 
 noinline fn emitDecisiveWideMatchCompressedBlock(
@@ -9777,7 +9849,7 @@ noinline fn emitDecisiveWideMatchCompressedBlock(
     rep_beam: *lz77.RepBeamScratch,
     precomputed_rep_beam_stats: *?lz77.PlanStats,
 ) Error!bool {
-    return try emitDecisiveWideMatchCompressedBlockInternal(allocator, out, block, last, speed_policy, rep_beam, precomputed_rep_beam_stats, null, null);
+    return try emitDecisiveWideMatchCompressedBlockInternal(allocator, out, block, last, speed_policy, rep_beam, precomputed_rep_beam_stats, null, null, null);
 }
 
 noinline fn emitDecisiveWideMatchCompressedBlockInternal(
@@ -9790,6 +9862,7 @@ noinline fn emitDecisiveWideMatchCompressedBlockInternal(
     precomputed_rep_beam_stats: *?lz77.PlanStats,
     sequence_state: ?*const SequenceEncoderState,
     state_applied: ?*bool,
+    large_sequence_scratch: ?*LargeSequenceScratch,
 ) Error!bool {
     const output_start = out.items.len;
     errdefer out.items.len = output_start;
@@ -9802,7 +9875,7 @@ noinline fn emitDecisiveWideMatchCompressedBlockInternal(
         error.InvalidBlockPlan => return false,
         else => return err,
     };
-    if (!try emitHashTokenSequenceBlockReuseForFrame(allocator, out, block, last, double_fast_tokens.items, double_fast_stats, null, sequence_state) or
+    if (!try emitHashTokenSequenceBlockReuseForFrame(allocator, out, block, last, double_fast_tokens.items, double_fast_stats, large_sequence_scratch, sequence_state) or
         out.items.len - output_start > block.len / 3)
     {
         out.items.len = output_start;
@@ -9896,7 +9969,7 @@ fn findPrefixTailDuplicateMatch(block: []const u8) ?DuplicateMatch {
 }
 
 fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, enable_rep_beam: bool, reusable_rep_beam: ?*lz77.RepBeamScratch, mixed_dominated: ?*bool) Error!bool {
-    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, undefined);
+    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, undefined, null);
 }
 
 fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
@@ -9910,6 +9983,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     reusable_rep_beam: ?*lz77.RepBeamScratch,
     mixed_dominated: ?*bool,
     precomputed_rep_beam_stats: lz77.PlanStats,
+    large_sequence_scratch: ?*LargeSequenceScratch,
 ) Error!bool {
     if (match_search_budget == 0) return false;
     if (mixed_dominated) |value| value.* = false;
@@ -9928,8 +10002,9 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     defer lazy_tokens.deinit(allocator);
     var optimal_scratch: lz77.OptimalScratch = .{};
     defer optimal_scratch.deinit(allocator);
-    var large_sequence_scratch: LargeSequenceScratch = .{};
-    defer large_sequence_scratch.deinit(allocator);
+    var local_large_sequence_scratch: LargeSequenceScratch = .{};
+    defer if (large_sequence_scratch == null) local_large_sequence_scratch.deinit(allocator);
+    const sequence_scratch = large_sequence_scratch orelse &local_large_sequence_scratch;
     var duplicate_index: DuplicateMatchIndex = undefined;
     const duplicate_index_ptr: ?*DuplicateMatchIndex = if (block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len) blk: {
         duplicate_index.build(block);
@@ -9970,7 +10045,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     const greedy_ok = if (block.len <= 32 * 1024)
         try emitGreedyHashMatchCompressedBlockReuse(allocator, &candidate, block, last, &greedy_tokens)
     else
-        try emitHashMatchCompressedBlockWithSequenceScratch(allocator, &candidate, block, last, .greedy, &large_sequence_scratch);
+        try emitHashMatchCompressedBlockWithSequenceScratch(allocator, &candidate, block, last, .greedy, sequence_scratch);
     try retainShortestCandidate(allocator, greedy_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
@@ -9981,7 +10056,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
         if (block.len <= 32 * 1024)
             try emitLazyHashMatchCompressedBlockReuse(allocator, &candidate, block, last, &lazy_tokens)
         else
-            try emitHashMatchCompressedBlockWithSequenceScratch(allocator, &candidate, block, last, .lazy, &large_sequence_scratch)
+            try emitHashMatchCompressedBlockWithSequenceScratch(allocator, &candidate, block, last, .lazy, sequence_scratch)
     else
         false;
     try retainShortestCandidate(allocator, lazy_ok, candidate.items, &best);
@@ -10002,7 +10077,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     const pre_beam_best_len = best.items.len;
     var rep_beam_len: ?usize = null;
     if (rep_beam_stats) |stats| {
-        const rep_beam_ok = try emitHashTokenSequenceBlockReuse(allocator, &candidate, block, last, rep_beam_scratch.reversed.items, stats, &large_sequence_scratch);
+        const rep_beam_ok = try emitHashTokenSequenceBlockReuse(allocator, &candidate, block, last, rep_beam_scratch.reversed.items, stats, sequence_scratch);
         if (rep_beam_ok) rep_beam_len = candidate.items.len;
         try retainShortestCandidate(allocator, rep_beam_ok, candidate.items, &best);
     }
@@ -10021,7 +10096,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
             block,
             last,
             &optimal_scratch,
-            &large_sequence_scratch,
+            sequence_scratch,
         );
         try retainShortestCandidate(allocator, optimal_ok, candidate.items, &best);
     }
@@ -13128,6 +13203,17 @@ fn prepareSequenceCandidateForFrame(
     last: bool,
     current: *const SequenceEncoderState,
 ) Error!bool {
+    return try prepareSequenceCandidateForFrameWithScratch(allocator, candidate, block, last, current, null);
+}
+
+fn prepareSequenceCandidateForFrameWithScratch(
+    allocator: std.mem.Allocator,
+    candidate: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    current: *const SequenceEncoderState,
+    large_sequence_scratch: ?*LargeSequenceScratch,
+) Error!bool {
     if (candidate.items.len < 3) return error.CorruptFrame;
     const header = std.mem.readInt(u24, candidate.items[0..3], .little);
     if (((header >> 1) & 0x3) != 2) return error.CorruptFrame;
@@ -13148,8 +13234,9 @@ fn prepareSequenceCandidateForFrame(
             try parseSequenceModeSpec(payload, &sequence_offset, section.sequence_count),
             null,
         );
-        var scratch: LargeSequenceScratch = .{};
-        defer scratch.deinit(allocator);
+        var local_scratch: LargeSequenceScratch = .{};
+        defer if (large_sequence_scratch == null) local_scratch.deinit(allocator);
+        const scratch = large_sequence_scratch orelse &local_scratch;
         const value_count = std.math.mul(usize, section.sequence_count, 4) catch return error.IntegerOverflow;
         try scratch.values.resize(allocator, value_count);
         const literal_lens = scratch.values.items[0..section.sequence_count];
@@ -13185,7 +13272,7 @@ fn prepareSequenceCandidateForFrame(
             match_lens,
             literal_ends,
             cursor,
-            &scratch,
+            scratch,
             if (current.previous_tables) |*tables| tables else null,
             current.repeated_offsets,
         )) return false;
@@ -21022,6 +21109,7 @@ test "zstd wide consensus applies current frame sequence state directly" {
         &beam,
         &sequence_state,
         &first_state_applied,
+        null,
     ));
     try std.testing.expect(first_state_applied);
     try appendSequenceCandidateAndCommit(std.testing.allocator, &frame, first.items, false, &sequence_state);
@@ -21038,6 +21126,7 @@ test "zstd wide consensus applies current frame sequence state directly" {
         &beam,
         &sequence_state,
         &second_state_applied,
+        null,
     ));
     try std.testing.expect(second_state_applied);
     var strict: std.ArrayList(u8) = .empty;
@@ -21052,6 +21141,7 @@ test "zstd wide consensus applies current frame sequence state directly" {
         &beam,
         &sequence_state,
         &strict_state_applied,
+        null,
     ));
     try std.testing.expect(!strict_state_applied);
 
@@ -21106,6 +21196,7 @@ test "zstd wide consensus applies current frame sequence state directly" {
                 &local_beam,
                 &initial_state,
                 &state_applied,
+                null,
             ) catch |err| {
                 try std.testing.expect(!state_applied);
                 try std.testing.expectEqualSlices(u8, "prefix", output.items);
@@ -21117,6 +21208,120 @@ test "zstd wide consensus applies current frame sequence state directly" {
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ &payload, sequence_state });
+}
+
+test "zstd reusable encoder retains wide sequence scratch" {
+    const block_len = 33 * 1024;
+    var payload: [block_len * 2]u8 = undefined;
+    for (0..2) |block_index| {
+        const block = payload[block_index * block_len ..][0..block_len];
+        var random_state: u32 = @truncate(0xfeed_beef +% block_index *% 0x9e37_79b9);
+        for (block, 0..) |*byte, index| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            const low: u8 = if (index % 64 < 48) @truncate((index * 17) & 0x7f) else @truncate((random_state >> 16) & 0x7f);
+            byte.* = low | @as(u8, @intCast(block_index << 7));
+        }
+    }
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .block_size_max = block_len,
+        .match_search_budget = 16,
+        .rep_beam_search = true,
+    };
+    var counting = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var encoder = NativeFrameEncoder.init(counting.allocator());
+    var encoder_live = true;
+    defer if (encoder_live) encoder.deinit();
+    const first = try encoder.encodeScratch(&payload, options);
+    const expected = try std.testing.allocator.dupe(u8, first.frame);
+    defer std.testing.allocator.free(expected);
+    const first_allocations = counting.allocations;
+    const capacities = .{
+        encoder.large_sequence_scratch.values.capacity,
+        encoder.large_sequence_scratch.states.capacity,
+        encoder.large_sequence_scratch.repeat_states.capacity,
+        encoder.large_sequence_scratch.repeat_viable_masks.capacity,
+        encoder.large_sequence_scratch.sequence_bits.capacity,
+    };
+    const second = try encoder.encodeScratch(&payload, options);
+    const second_allocations = counting.allocations - first_allocations;
+    try std.testing.expectEqualSlices(u8, expected, second.frame);
+    try std.testing.expectEqual(capacities, .{
+        encoder.large_sequence_scratch.values.capacity,
+        encoder.large_sequence_scratch.states.capacity,
+        encoder.large_sequence_scratch.repeat_states.capacity,
+        encoder.large_sequence_scratch.repeat_viable_masks.capacity,
+        encoder.large_sequence_scratch.sequence_bits.capacity,
+    });
+    try std.testing.expectEqual(first_allocations - 18, second_allocations);
+
+    counting.fail_index = counting.alloc_index;
+    try std.testing.expectError(error.OutOfMemory, encoder.encodeScratch(&payload, options));
+    try std.testing.expectEqual(@as(usize, 0), encoder.output_scratch.items.len);
+    counting.fail_index = std.math.maxInt(usize);
+    const recovered = try encoder.encodeScratch(&payload, options);
+    try std.testing.expectEqualSlices(u8, expected, recovered.frame);
+    encoder.deinit();
+    encoder_live = false;
+    try std.testing.expectEqual(counting.allocated_bytes, counting.freed_bytes);
+}
+
+test "zstd frame-level wide sequence scratch removes repeated allocations" {
+    const block_len = 33 * 1024;
+    var payload: [block_len * 2]u8 = undefined;
+    for (0..2) |block_index| {
+        const block = payload[block_index * block_len ..][0..block_len];
+        var random_state: u32 = @truncate(0xfeed_beef +% block_index *% 0x9e37_79b9);
+        for (block, 0..) |*byte, index| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            const low: u8 = if (index % 64 < 48) @truncate((index * 17) & 0x7f) else @truncate((random_state >> 16) & 0x7f);
+            byte.* = low | @as(u8, @intCast(block_index << 7));
+        }
+    }
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .block_size_max = block_len,
+        .match_search_budget = 16,
+        .rep_beam_search = true,
+    };
+
+    var reference_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reference_output: std.ArrayList(u8) = .empty;
+    defer reference_output.deinit(reference_allocator.allocator());
+    var reference_beam: lz77.RepBeamScratch = .{};
+    defer reference_beam.deinit(reference_allocator.allocator());
+    try encodeLiteralOnlyFrameAppendWithDictionaryInternal(
+        reference_allocator.allocator(),
+        &reference_output,
+        &payload,
+        options,
+        null,
+        &reference_beam,
+        null,
+    );
+
+    var reuse_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reuse_output: std.ArrayList(u8) = .empty;
+    defer reuse_output.deinit(reuse_allocator.allocator());
+    var reuse_beam: lz77.RepBeamScratch = .{};
+    defer reuse_beam.deinit(reuse_allocator.allocator());
+    var sequence_scratch: LargeSequenceScratch = .{};
+    defer sequence_scratch.deinit(reuse_allocator.allocator());
+    try encodeLiteralOnlyFrameAppendWithDictionaryInternal(
+        reuse_allocator.allocator(),
+        &reuse_output,
+        &payload,
+        options,
+        null,
+        &reuse_beam,
+        &sequence_scratch,
+    );
+
+    try std.testing.expectEqualSlices(u8, reference_output.items, reuse_output.items);
+    try std.testing.expectEqual(reference_allocator.allocations - 13, reuse_allocator.allocations);
+    try std.testing.expectEqual(reference_allocator.allocated_bytes - 76_482, reuse_allocator.allocated_bytes);
 }
 
 test "zstd wide double fast disagreement is isolated to fastest policy" {

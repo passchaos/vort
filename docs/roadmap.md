@@ -9150,3 +9150,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   128-state tables need two `u64` words per sequence instead of the fixed eight,
   while 64/128/256/512-state tests retain exact path selection. Future ratio work should broaden
   the real multi-file corpus and remove the remaining fallback preparation pass.
+  Frame assembly now reuses one dynamic sequence scratch across hash candidates
+  and fallback rewriting; `NativeFrameEncoder` retains that capacity across
+  calls without putting allocator-owned data into the generic incremental state.
+  On the two-33-KiB fixture, frame-local reuse removes 13 allocations and 76,482
+  cumulatively requested bytes, and the next reusable-encoder call removes 18
+  allocations while preserving exact output. OOM recovery and final deallocation
+  balance are pinned by the same reusable-encoder test.

@@ -1079,7 +1079,12 @@ retain full candidate arbitration. The runtime probe additionally pins a
 history matches, with 526 sequences per block and LL/ML=Repeat plus OF=RLE in
 the second 33 KiB block. Its Repeat reachability DP now allocates two `u64`
 words per sequence for the normal 128-state tables instead of eight, a 75%
-reduction for that scratch buffer while preserving the exact wire. A same-process
+reduction for that scratch buffer while preserving the exact wire. Frame-level
+scratch reuse removes another 13 allocations and 76,482 cumulatively requested
+bytes from the two-33-KiB path; retaining the same scratch in
+`NativeFrameEncoder` removes 18 allocations on the next identical encode. The
+tests also cover recovery after an injected OOM and balanced final deallocation.
+A same-process
 parallel-versus-serial gate on efficiency cores measured
 stable medians of roughly `1.075x`/`1.072x`/`1.116x` for levels 1/2/3 across
 five runs, each 5/5 wins; its conservative enforced floor is `1.01x`. Five
