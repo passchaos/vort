@@ -97,6 +97,44 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(wide_native_decoded);
     if (!std.mem.eql(u8, wide_multi_payload, wide_native_decoded)) return error.LargeSequenceProbeMismatch;
 
+    const fast_block_len = 33 * 1024;
+    const fast_multi_payload = try init.gpa.alloc(u8, fast_block_len * 2);
+    defer init.gpa.free(fast_multi_payload);
+    for (0..2) |block_index| {
+        const fast_block = fast_multi_payload[block_index * fast_block_len ..][0..fast_block_len];
+        state = @truncate(0xfeed_beef +% block_index *% 0x9e37_79b9);
+        for (fast_block, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const low: u8 = if (index % 64 < 48) @truncate((index * 17) & 0x7f) else @truncate((state >> 16) & 0x7f);
+            byte.* = low | @as(u8, @intCast(block_index << 7));
+        }
+    }
+    const fast_multi = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, fast_multi_payload, .{
+        .selection = .literal_only,
+        .content_checksum = true,
+        .block_size_max = fast_block_len,
+        .match_search_budget = 16,
+        .rep_beam_search = true,
+    });
+    defer init.gpa.free(fast_multi.frame);
+    var fast_blocks = try vort.zstdIterateNativeFrameBlocks(fast_multi.frame);
+    const fast_first_block = (try fast_blocks.next()) orelse return error.LargeSequenceProbeMismatch;
+    const fast_second_block = (try fast_blocks.next()) orelse return error.LargeSequenceProbeMismatch;
+    if (try fast_blocks.next() != null or fast_first_block.last or !fast_second_block.last)
+        return error.LargeSequenceProbeMismatch;
+    const fast_first_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(fast_multi.frame, fast_first_block);
+    const fast_second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(fast_multi.frame, fast_second_block);
+    if (fast_multi.frame.len > 15_517 or
+        fast_first_modes.sequence_count <= 512 or
+        fast_second_modes.sequence_count <= 512 or
+        fast_second_modes.literal_length_mode != .repeat or
+        fast_second_modes.offset_mode != .rle or
+        fast_second_modes.match_length_mode != .repeat) return error.LargeSequenceProbeMismatch;
+    const fast_reference_decoded = try init.gpa.alloc(u8, fast_multi_payload.len);
+    defer init.gpa.free(fast_reference_decoded);
+    try runtime.decode(fast_multi.frame, fast_reference_decoded);
+    if (!std.mem.eql(u8, fast_multi_payload, fast_reference_decoded)) return error.LargeSequenceProbeMismatch;
+
     const multi_payload = try init.gpa.alloc(u8, 129 * 1024);
     defer init.gpa.free(multi_payload);
     state = @truncate(0x9e37_79b9 +% 129 *% 0x10001 +% 16 *% 0x101 +% 23);
@@ -162,8 +200,8 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [512]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "zstd_large_sequence_probe=ok input_bytes={d} sequences={d} stage_bytes={d} frame_bytes={d} ll={s} of={s} ml={s} wide_multiblock_bytes={d} wide_first_sequences={d} wide_second_sequences={d} wide_second_ll={s} wide_second_of={s} wide_second_ml={s} repeat_blocks={d} multiblock_bytes={d} dictionary_repeat={s} version={s}\n",
-        .{ payload.len, modes.sequence_count, stage.encoded_len, encoded.frame.len, @tagName(modes.literal_length_mode), @tagName(modes.offset_mode), @tagName(modes.match_length_mode), wide_multi.frame.len, wide_first_modes.sequence_count, wide_second_modes.sequence_count, @tagName(wide_second_modes.literal_length_mode), @tagName(wide_second_modes.offset_mode), @tagName(wide_second_modes.match_length_mode), repeat_blocks, multi.frame.len, @tagName(dictionary_modes.literal_length_mode), runtime.version() },
+        "zstd_large_sequence_probe=ok input_bytes={d} sequences={d} stage_bytes={d} frame_bytes={d} ll={s} of={s} ml={s} wide_multiblock_bytes={d} wide_first_sequences={d} wide_second_sequences={d} wide_second_ll={s} wide_second_of={s} wide_second_ml={s} fast_multiblock_bytes={d} fast_second_sequences={d} fast_second_ll={s} fast_second_of={s} fast_second_ml={s} repeat_blocks={d} multiblock_bytes={d} dictionary_repeat={s} version={s}\n",
+        .{ payload.len, modes.sequence_count, stage.encoded_len, encoded.frame.len, @tagName(modes.literal_length_mode), @tagName(modes.offset_mode), @tagName(modes.match_length_mode), wide_multi.frame.len, wide_first_modes.sequence_count, wide_second_modes.sequence_count, @tagName(wide_second_modes.literal_length_mode), @tagName(wide_second_modes.offset_mode), @tagName(wide_second_modes.match_length_mode), fast_multi.frame.len, fast_second_modes.sequence_count, @tagName(fast_second_modes.literal_length_mode), @tagName(fast_second_modes.offset_mode), @tagName(fast_second_modes.match_length_mode), repeat_blocks, multi.frame.len, @tagName(dictionary_modes.literal_length_mode), runtime.version() },
     );
     try stdout.interface.flush();
 }

@@ -369,8 +369,17 @@ Recommended next comparison steps:
   blocks, preserve both across zero-sequence blocks, and seed them from standard
   dictionaries. The locked 129 KiB benchmark shrinks from
   28,328/28,328/27,758 bytes at levels 1/2/3 to 27,863/27,863/27,517; level 9
-  shrinks from 27,455 to 27,363. A fresh multi-file corpus pass and reducing the
-  wide candidate's decode/re-encode preparation cost remain follow-up work.
+  shrinks from 27,455 to 27,363. The level-1/3 decisive-wide path now feeds the
+  current frame tables and repcodes directly into its agreed hash parse instead
+  of encoding with initial state and then decoding/re-emitting the candidate. A
+  513-sequence allocation oracle records 16 fewer allocations and 237,173 fewer
+  cumulatively requested bytes with byte-identical output. The runtime probe also
+  covers this production path with a 15,517-byte two-block frame whose disjoint
+  byte alphabets exclude cross-block history matches; each 33 KiB block contains
+  526 sequences and the second selects LL/ML=Repeat plus OF=RLE. Strict ratio
+  levels and non-decisive fallback candidates retain complete legacy arbitration;
+  avoiding their decode/re-encode preparation cost and running a fresh multi-file
+  corpus pass remain follow-up work.
 
 - The runtime `run-zstd-compat-probe` matrix now includes compression level 22,
   four real source-file rows when the local zstd checkout is available, 15

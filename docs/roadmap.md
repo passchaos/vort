@@ -9137,7 +9137,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   runtime-libzstd probe adds a 69,882-byte public 256 KiB frame whose two blocks
   each contain 2,044 sequences and whose second block selects ML=Repeat. The retained 129 KiB
   benchmark frame falls from 28,328/28,328/27,758 bytes at levels 1/2/3 to
-  27,863/27,863/27,517 bytes; level 9 falls from 27,455 to 27,363 bytes. Future
-  ratio work should broaden the real multi-file corpus and avoid decoding and
-  re-emitting a wide candidate when its parser can consume frame entropy state
-  directly.
+  27,863/27,863/27,517 bytes; level 9 falls from 27,455 to 27,363 bytes. The
+  level-1/3 decisive-wide consensus path now consumes the current frame tables
+  and repcodes directly, eliminating its decode/re-encode preparation pass while
+  leaving strict ratio-level and fallback arbitration unchanged. A 513-sequence
+  oracle pins byte identity and measures 16 fewer allocations plus 237,173 fewer
+  cumulative requested bytes. The runtime-libzstd probe also exercises this
+  production path with a 15,517-byte two-block frame whose disjoint byte
+  alphabets exclude cross-block history matches; both 33 KiB blocks have 526
+  sequences and the second selects LL/ML=Repeat plus OF=RLE. Future ratio work should broaden
+  the real multi-file corpus and remove the remaining fallback preparation pass.

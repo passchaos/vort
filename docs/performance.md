@@ -1070,7 +1070,14 @@ current frames are 27,863/27,517 bytes at levels 1/3. Wide cross-block sequence
 state is now covered separately by `run-zstd-large-sequence-probe`: its public
 256 KiB frame is 69,882 bytes, contains 2,044 sequences in each 128 KiB block,
 and uses ML=Repeat in the second block while decoding byte-exactly through Vort
-and runtime libzstd 1.5.5. A same-process
+and runtime libzstd 1.5.5. The speed-level decisive-wide consensus path now emits
+against current frame entropy state directly. On the 513-sequence unit fixture
+this preserves the exact rewritten wire while removing 16 allocations and
+237,173 cumulative requested bytes; strict ratio-level and non-decisive paths
+retain full candidate arbitration. The runtime probe additionally pins a
+15,517-byte two-block level-1-style frame whose disjoint byte alphabets exclude
+history matches, with 526 sequences per block and LL/ML=Repeat plus OF=RLE in
+the second 33 KiB block. A same-process
 parallel-versus-serial gate on efficiency cores measured
 stable medians of roughly `1.075x`/`1.072x`/`1.116x` for levels 1/2/3 across
 five runs, each 5/5 wins; its conservative enforced floor is `1.01x`. Five

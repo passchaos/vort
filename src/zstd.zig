@@ -9487,10 +9487,11 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
 
     if (best_kind == null and rep_beam_search and rleByte(block) == null) {
         candidate.clearRetainingCapacity();
+        var match_state_applied = false;
         const match_ok = if (shouldProbeDecisiveWideMatch(block, match_search_budget, true)) blk: {
-            break :blk try emitNativeMatchCompressedBlockWithWideProbe(allocator, &candidate, block, last, match_search_budget, rep_beam_scratch);
+            break :blk try emitNativeMatchCompressedBlockWithWideProbeForFrame(allocator, &candidate, block, last, match_search_budget, rep_beam_scratch, &state.sequence_state, &match_state_applied);
         } else try emitNativeMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, true, rep_beam_scratch);
-        const match_ready = match_ok and try prepareSequenceCandidateForFrame(allocator, &candidate, block, last, &state.sequence_state);
+        const match_ready = match_ok and (match_state_applied or try prepareSequenceCandidateForFrame(allocator, &candidate, block, last, &state.sequence_state));
         match_tested = true;
         if (match_ready) {
             // A literal-only prefix code needs at least one bit for every input
@@ -9714,18 +9715,53 @@ noinline fn emitNativeMatchCompressedBlockWithWideProbe(
     match_search_budget: usize,
     rep_beam_scratch: ?*lz77.RepBeamScratch,
 ) Error!bool {
+    return try emitNativeMatchCompressedBlockWithWideProbeInternal(allocator, out, block, last, match_search_budget, rep_beam_scratch, null, null);
+}
+
+noinline fn emitNativeMatchCompressedBlockWithWideProbeForFrame(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    match_search_budget: usize,
+    rep_beam_scratch: ?*lz77.RepBeamScratch,
+    sequence_state: *const SequenceEncoderState,
+    state_applied: *bool,
+) Error!bool {
+    state_applied.* = false;
+    return try emitNativeMatchCompressedBlockWithWideProbeInternal(allocator, out, block, last, match_search_budget, rep_beam_scratch, sequence_state, state_applied);
+}
+
+noinline fn emitNativeMatchCompressedBlockWithWideProbeInternal(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    match_search_budget: usize,
+    rep_beam_scratch: ?*lz77.RepBeamScratch,
+    sequence_state: ?*const SequenceEncoderState,
+    state_applied: ?*bool,
+) Error!bool {
     var local_rep_beam: lz77.RepBeamScratch = .{};
     defer if (rep_beam_scratch == null) local_rep_beam.deinit(allocator);
     const beam_scratch = rep_beam_scratch orelse &local_rep_beam;
     var rep_beam_stats: ?lz77.PlanStats = null;
-    if (try emitDecisiveWideMatchCompressedBlock(
+    const speed_policy = wideMatchSpeedPolicy(match_search_budget);
+    // Strict/ratio levels promise equivalence with complete arbitration under
+    // the legacy first-pass wire. Speed levels already accept their documented
+    // bounded tradeoff, so they can encode a decisive wide candidate directly
+    // against the current frame state and avoid a decode/re-encode pass.
+    const direct_sequence_state = if (speed_policy == .strict) null else sequence_state;
+    if (try emitDecisiveWideMatchCompressedBlockInternal(
         allocator,
         out,
         block,
         last,
-        wideMatchSpeedPolicy(match_search_budget),
+        speed_policy,
         beam_scratch,
         &rep_beam_stats,
+        direct_sequence_state,
+        state_applied,
     )) return true;
     if (rep_beam_stats) |stats|
         return try emitNativeMatchCompressedBlockWithPrecomputedBeam(allocator, out, block, last, match_search_budget, beam_scratch, stats);
@@ -9741,9 +9777,24 @@ noinline fn emitDecisiveWideMatchCompressedBlock(
     rep_beam: *lz77.RepBeamScratch,
     precomputed_rep_beam_stats: *?lz77.PlanStats,
 ) Error!bool {
+    return try emitDecisiveWideMatchCompressedBlockInternal(allocator, out, block, last, speed_policy, rep_beam, precomputed_rep_beam_stats, null, null);
+}
+
+noinline fn emitDecisiveWideMatchCompressedBlockInternal(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    speed_policy: WideMatchSpeedPolicy,
+    rep_beam: *lz77.RepBeamScratch,
+    precomputed_rep_beam_stats: *?lz77.PlanStats,
+    sequence_state: ?*const SequenceEncoderState,
+    state_applied: ?*bool,
+) Error!bool {
     const output_start = out.items.len;
     errdefer out.items.len = output_start;
     precomputed_rep_beam_stats.* = null;
+    if (state_applied) |applied| applied.* = false;
     var double_fast_tokens: std.ArrayList(lz77.Token) = .empty;
     defer double_fast_tokens.deinit(allocator);
     const parser_options = zstdHashParserOptions(block.len);
@@ -9751,13 +9802,17 @@ noinline fn emitDecisiveWideMatchCompressedBlock(
         error.InvalidBlockPlan => return false,
         else => return err,
     };
-    if (!try emitHashTokenSequenceBlock(allocator, out, block, last, double_fast_tokens.items, double_fast_stats) or
+    if (!try emitHashTokenSequenceBlockReuseForFrame(allocator, out, block, last, double_fast_tokens.items, double_fast_stats, null, sequence_state) or
         out.items.len - output_start > block.len / 3)
     {
         out.items.len = output_start;
         return false;
     }
-    if (acceptWideDoubleFastTradeoff(speed_policy, out.items.len - output_start, block.len)) return true;
+    const direct_state_applied = sequence_state != null and double_fast_stats.matches > max_native_sequence_count;
+    if (acceptWideDoubleFastTradeoff(speed_policy, out.items.len - output_start, block.len)) {
+        if (state_applied) |applied| applied.* = direct_state_applied;
+        return true;
+    }
 
     const rep_beam_stats = lz77.optimalRepBeamPlanReuse(rep_beam, allocator, block, parser_options) catch |err| switch (err) {
         error.InvalidBlockPlan => {
@@ -9774,6 +9829,7 @@ noinline fn emitDecisiveWideMatchCompressedBlock(
         return false;
     }
 
+    if (state_applied) |applied| applied.* = direct_state_applied;
     return true;
 }
 
@@ -10581,9 +10637,29 @@ test "zstd dynamic hash emitter reuses sequence tables across wide blocks" {
     ));
     try appendSequenceCandidateAndCommit(std.testing.allocator, &frame, first.items, false, &sequence_state);
     const previous_tables = &(sequence_state.previous_tables orelse return error.CorruptFrame);
+    var rewritten_second: std.ArrayList(u8) = .empty;
+    defer rewritten_second.deinit(std.testing.allocator);
+    try std.testing.expect(try emitHashTokenSequenceBlockReuse(
+        std.testing.allocator,
+        &rewritten_second,
+        &payload,
+        true,
+        tokens[0..token_len],
+        stats,
+        &scratch,
+    ));
+    try std.testing.expect(try prepareSequenceCandidateForFrame(
+        std.testing.allocator,
+        &rewritten_second,
+        &payload,
+        true,
+        &sequence_state,
+    ));
+    var direct_second: std.ArrayList(u8) = .empty;
+    defer direct_second.deinit(std.testing.allocator);
     try std.testing.expect(try emitHashTokenSequenceBlockReuseWithState(
         std.testing.allocator,
-        &frame,
+        &direct_second,
         &payload,
         true,
         tokens[0..token_len],
@@ -10592,6 +10668,48 @@ test "zstd dynamic hash emitter reuses sequence tables across wide blocks" {
         previous_tables,
         sequence_state.repeated_offsets,
     ));
+    try std.testing.expectEqualSlices(u8, rewritten_second.items, direct_second.items);
+    try frame.appendSlice(std.testing.allocator, direct_second.items);
+
+    var reference_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reference_scratch: LargeSequenceScratch = .{};
+    defer reference_scratch.deinit(reference_allocator.allocator());
+    var reference_second: std.ArrayList(u8) = .empty;
+    defer reference_second.deinit(reference_allocator.allocator());
+    try std.testing.expect(try emitHashTokenSequenceBlockReuse(
+        reference_allocator.allocator(),
+        &reference_second,
+        &payload,
+        true,
+        tokens[0..token_len],
+        stats,
+        &reference_scratch,
+    ));
+    try std.testing.expect(try prepareSequenceCandidateForFrame(
+        reference_allocator.allocator(),
+        &reference_second,
+        &payload,
+        true,
+        &sequence_state,
+    ));
+    var direct_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var direct_scratch: LargeSequenceScratch = .{};
+    defer direct_scratch.deinit(direct_allocator.allocator());
+    var measured_direct: std.ArrayList(u8) = .empty;
+    defer measured_direct.deinit(direct_allocator.allocator());
+    try std.testing.expect(try emitHashTokenSequenceBlockReuseForFrame(
+        direct_allocator.allocator(),
+        &measured_direct,
+        &payload,
+        true,
+        tokens[0..token_len],
+        stats,
+        &direct_scratch,
+        &sequence_state,
+    ));
+    try std.testing.expectEqualSlices(u8, reference_second.items, measured_direct.items);
+    try std.testing.expectEqual(reference_allocator.allocations - 16, direct_allocator.allocations);
+    try std.testing.expectEqual(reference_allocator.allocated_bytes - 237_173, direct_allocator.allocated_bytes);
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
     const first_modes = try inspectNativeFrameBlockSequenceModes(frame.items, first_block);
@@ -11336,6 +11454,37 @@ fn emitHashTokenSequenceBlockReuse(
     scratch: *LargeSequenceScratch,
 ) Error!bool {
     return try emitHashTokenSequenceBlockReuseWithState(allocator, out, block, last, tokens, stats, scratch, null, initial_repeated_offsets);
+}
+
+fn emitHashTokenSequenceBlockReuseForFrame(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    tokens: []const lz77.Token,
+    stats: lz77.PlanStats,
+    scratch: ?*LargeSequenceScratch,
+    sequence_state: ?*const SequenceEncoderState,
+) Error!bool {
+    if (stats.matches <= max_native_sequence_count or sequence_state == null) {
+        if (scratch) |large_scratch|
+            return try emitHashTokenSequenceBlockReuse(allocator, out, block, last, tokens, stats, large_scratch);
+        return try emitHashTokenSequenceBlock(allocator, out, block, last, tokens, stats);
+    }
+    const state = sequence_state.?;
+    var local_scratch: LargeSequenceScratch = .{};
+    defer if (scratch == null) local_scratch.deinit(allocator);
+    return try emitHashTokenSequenceBlockReuseWithState(
+        allocator,
+        out,
+        block,
+        last,
+        tokens,
+        stats,
+        scratch orelse &local_scratch,
+        if (state.previous_tables) |*tables| tables else null,
+        state.repeated_offsets,
+    );
 }
 
 fn emitHashTokenSequenceBlockReuseWithState(
@@ -20811,6 +20960,130 @@ test "zstd wide double fast consensus matches full arbitration" {
         try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbe(std.testing.allocator, &selected, &payload, true, budget, null));
         try std.testing.expectEqualSlices(u8, exhaustive.items, selected.items);
     }
+}
+
+test "zstd wide consensus applies current frame sequence state directly" {
+    var payload: [33 * 1024]u8 = undefined;
+    var random_state: u32 = 0xfeed_beef;
+    for (&payload, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(random_state >> 16);
+    }
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len * 2, .{ .content_checksum = false });
+    var sequence_state: SequenceEncoderState = .{};
+    var beam: lz77.RepBeamScratch = .{};
+    defer beam.deinit(std.testing.allocator);
+
+    var first: std.ArrayList(u8) = .empty;
+    defer first.deinit(std.testing.allocator);
+    var first_state_applied = false;
+    try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbeForFrame(
+        std.testing.allocator,
+        &first,
+        &payload,
+        false,
+        16,
+        &beam,
+        &sequence_state,
+        &first_state_applied,
+    ));
+    try std.testing.expect(first_state_applied);
+    try appendSequenceCandidateAndCommit(std.testing.allocator, &frame, first.items, false, &sequence_state);
+
+    var direct: std.ArrayList(u8) = .empty;
+    defer direct.deinit(std.testing.allocator);
+    var second_state_applied = false;
+    try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbeForFrame(
+        std.testing.allocator,
+        &direct,
+        &payload,
+        true,
+        16,
+        &beam,
+        &sequence_state,
+        &second_state_applied,
+    ));
+    try std.testing.expect(second_state_applied);
+    var strict: std.ArrayList(u8) = .empty;
+    defer strict.deinit(std.testing.allocator);
+    var strict_state_applied = true;
+    try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbeForFrame(
+        std.testing.allocator,
+        &strict,
+        &payload,
+        true,
+        96,
+        &beam,
+        &sequence_state,
+        &strict_state_applied,
+    ));
+    try std.testing.expect(!strict_state_applied);
+
+    var rewritten: std.ArrayList(u8) = .empty;
+    defer rewritten.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockWithWideProbe(
+        std.testing.allocator,
+        &rewritten,
+        &payload,
+        true,
+        16,
+        &beam,
+    ));
+    try std.testing.expect(try prepareSequenceCandidateForFrame(
+        std.testing.allocator,
+        &rewritten,
+        &payload,
+        true,
+        &sequence_state,
+    ));
+    try std.testing.expectEqualSlices(u8, rewritten.items, direct.items);
+    try frame.appendSlice(std.testing.allocator, direct.items);
+
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    const second_block = try inspectNativeFrameBlockAt(frame.items, first_block.next_header_offset);
+    const second_modes = try inspectNativeFrameBlockSequenceModes(frame.items, second_block);
+    try std.testing.expect(second_modes.sequence_count > max_native_sequence_count);
+    try std.testing.expect(
+        second_modes.literal_length_mode == .repeat or
+            second_modes.offset_mode == .repeat or
+            second_modes.match_length_mode == .repeat,
+    );
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded[0..payload.len]);
+    try std.testing.expectEqualSlices(u8, &payload, decoded[payload.len..]);
+
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, initial_state: SequenceEncoderState) !void {
+            var output: std.ArrayList(u8) = .empty;
+            defer output.deinit(allocator);
+            try output.appendSlice(allocator, "prefix");
+            var local_beam: lz77.RepBeamScratch = .{};
+            defer local_beam.deinit(allocator);
+            var state_applied = true;
+            const result = emitNativeMatchCompressedBlockWithWideProbeForFrame(
+                allocator,
+                &output,
+                input,
+                true,
+                16,
+                &local_beam,
+                &initial_state,
+                &state_applied,
+            ) catch |err| {
+                try std.testing.expect(!state_applied);
+                try std.testing.expectEqualSlices(u8, "prefix", output.items);
+                return err;
+            };
+            try std.testing.expect(result);
+            try std.testing.expect(state_applied);
+            try std.testing.expectEqualSlices(u8, "prefix", output.items[0.."prefix".len]);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ &payload, sequence_state });
 }
 
 test "zstd wide double fast disagreement is isolated to fastest policy" {
