@@ -9323,3 +9323,45 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   rejected as well. It shrank copied plan state, but nine fixed-CPU-30 pairs
   improved text/JSON by only 1.8%/0.9% while binary regressed consistently by
   about 1.2% (0.45% aggregate gain, 15/27 wins), below the retention bar.
+  Replacing short-slice Wyhash calls in dictionary phrase collection with an
+  incrementally updated FNV-1a key was rejected. Full byte equality preserved
+  collision safety and trainer output, but nine fixed-CPU-30 pairs reached only
+  0.994x aggregate throughput with binary regressing about 2.6%; Zig's tuned
+  short-input Wyhash remains the better choice for the current 3–32-byte ranges.
+  Lowering the phrase-map activation threshold from 128 retained candidates to
+  64 was rejected too. Nine fixed-CPU-30 pairs regressed all three trainer
+  medians and reached 0.995x aggregate throughput with only 8/27 wins, so the
+  existing linear-to-hash crossover remains unchanged.
+  Raising the same crossover to 256 was neutral as well: nine fixed-CPU-30
+  pairs reached only 1.002x aggregate throughput with 16/27 wins. The measured
+  128-entry crossover remains in production.
+  Pre-reserving the phrase index from its 128-entry activation point to the
+  current 1,024-candidate cap was rejected despite saving 10–12 allocations and
+  roughly 77–179 KiB per validated training case. Nine fixed-CPU-30 pairs
+  regressed text/JSON medians by about 1.3%/0.6%; eager allocation and the larger
+  table footprint outweighed avoided growth, so geometric outliers were not used
+  to justify retaining it.
+  Precomputing each candidate's ordinary Wyhash for lookup and occasional
+  insertion was rejected too. It left allocation counts unchanged but enlarged
+  hash-map keys; nine fixed-CPU-30 pairs regressed binary by about 3.2% and
+  reached 0.996x aggregate throughput despite small text/JSON gains.
+  Replacing slice keys with bare phrase indexes reduced allocated bytes by
+  roughly 12–14%, but added an indirection to every stored-key hash. Nine
+  fixed-CPU-30 pairs regressed JSON/binary by about 2.1%/1.3% and reached only
+  0.988x aggregate throughput, so this smaller but slower table was removed.
+  Storing only one exact Wyhash-to-index representative (with a collision-safe
+  linear fallback) also failed: despite a smaller map, nine fixed-CPU-30 pairs
+  reached 0.970x aggregate throughput and won only 7/27 runs. The ordinary
+  string-key map remains faster, especially on high-uniqueness binary samples.
+  Periodically rebuilding that string map every 1,024 replacements to remove
+  tombstones was rejected as well: it preserved allocations and bytes but
+  regressed text/JSON by about 0.5%/2.5%; only binary improved (6.8%), leaving
+  mixed results and just 13/27 wins.
+  Finally, using the hash map's adapted-key API to reuse one Wyhash across a
+  miss and insertion preserved the original key layout and allocation totals,
+  but nine fixed-CPU-30 pairs produced only 1.002x aggregate throughput with
+  16/27 wins. It was removed as noise-level complexity.
+  Storing only one exact Wyhash-to-index representative (with a collision-safe
+  linear fallback) also failed: despite a smaller map, nine fixed-CPU-30 pairs
+  reached 0.970x aggregate throughput and won only 7/27 runs. The ordinary
+  string-key map remains faster, especially on high-uniqueness binary samples.
