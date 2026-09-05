@@ -9497,6 +9497,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   nine alternating fixed-CPU-30 dictionary pairs improve the full validated
   Zstd path by 1.024x/1.021x/1.006x for text/JSON/binary, with 24/27 wins and
   identical checksums.
+  FSE compression tables are now built directly into caller-owned storage
+  instead of returning their roughly 1.5 KiB state/transform arrays by value.
+  Only the `table_len` state prefix and `max_symbol+1` transform prefix are
+  initialized; consumers already enforce those bounds. A poisoned-output oracle
+  compares more than 100 randomized tableLog 5–9 tables against the previous
+  zero-initialized construction and verifies every reachable field. Nine
+  alternating fixed-CPU-30 dictionary pairs improve full validated Zstd
+  training by 1.028x/1.033x/1.010x for text/JSON/binary, with 23/27 wins and
+  unchanged checksums.
   Replacing the back-reference node's stored creation serial with its identical
   arena index was rejected. Keeping the node layout unchanged and changing only
   the equal-weight comparator improved dense/128-active focused construction by

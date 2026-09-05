@@ -16979,7 +16979,9 @@ fn emitFseCompressedHuffmanWeightsWithTableLog(allocator: std.mem.Allocator, out
         table_log,
     );
 
-    const table = try buildFseCompressionTable(
+    var table: FseCompressionTable = undefined;
+    try buildFseCompressionTable(
+        &table,
         normalized[0 .. @as(usize, max_symbol) + 1],
         max_symbol,
         table_log,
@@ -17015,7 +17017,8 @@ fn fseCompressedHuffmanWeightsSerializedLen(weights: []const u8, table_log: u8) 
         max_symbol,
         table_log,
     );
-    const table = try buildFseCompressionTable(normalized[0 .. @as(usize, max_symbol) + 1], max_symbol, table_log);
+    var table: FseCompressionTable = undefined;
+    try buildFseCompressionTable(&table, normalized[0 .. @as(usize, max_symbol) + 1], max_symbol, table_log);
     return std.math.add(usize, header_len, try fseCompressedSymbolsSerializedLen(weights, &table)) catch return error.IntegerOverflow;
 }
 
@@ -17412,18 +17415,16 @@ fn flushFseNormalizedCountBitsFixed(comptime emit_bytes: bool, out: []u8, writte
     bit_count.* -= 16;
 }
 
-fn buildFseCompressionTable(normalized: []const i16, max_symbol: u8, table_log: u8) Error!FseCompressionTable {
+fn buildFseCompressionTable(table: *FseCompressionTable, normalized: []const i16, max_symbol: u8, table_log: u8) Error!void {
     if (normalized.len != @as(usize, max_symbol) + 1) return error.CorruptFrame;
     if (table_log > max_fse_compression_table_log or max_symbol > max_fse_compression_symbol) return error.CorruptFrame;
     const table_size: usize = @as(usize, 1) << @intCast(table_log);
     const table_mask = table_size - 1;
     const step = (table_size >> 1) + (table_size >> 3) + 3;
 
-    var table: FseCompressionTable = .{
-        .table_log = table_log,
-        .table_len = table_size,
-        .max_symbol = max_symbol,
-    };
+    table.table_log = table_log;
+    table.table_len = table_size;
+    table.max_symbol = max_symbol;
     var table_symbols: [max_fse_compression_table_size]u8 = undefined;
     var high_threshold: usize = table_size - 1;
 
@@ -17469,6 +17470,7 @@ fn buildFseCompressionTable(normalized: []const i16, max_symbol: u8, table_log: 
         const transform = &table.transforms[symbol];
         switch (value) {
             0 => {
+                transform.delta_find_state = 0;
                 transform.delta_nb_bits = ((@as(i32, table_log) + 1) << 16) - @as(i32, @intCast(table_size));
             },
             -1, 1 => {
@@ -17487,6 +17489,11 @@ fn buildFseCompressionTable(normalized: []const i16, max_symbol: u8, table_log: 
         }
     }
     if (total != table_size) return error.CorruptFrame;
+}
+
+fn buildFseCompressionTableReference(normalized: []const i16, max_symbol: u8, table_log: u8) Error!FseCompressionTable {
+    var table: FseCompressionTable = .{};
+    try buildFseCompressionTable(&table, normalized, max_symbol, table_log);
     return table;
 }
 
@@ -23536,9 +23543,60 @@ test "zstd FSE normalized-count length matches fixed writer" {
 
 test "zstd FSE compression table rejects invalid parameters as corrupt" {
     const normalized = [_]i16{ 1, 31 };
-    try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(&normalized, 1, max_fse_compression_table_log + 1));
-    try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(&normalized, max_fse_compression_symbol + 1, 5));
-    try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(normalized[0..1], 1, 5));
+    var table: FseCompressionTable = undefined;
+    try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(&table, &normalized, 1, max_fse_compression_table_log + 1));
+    try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(&table, &normalized, max_fse_compression_symbol + 1, 5));
+    try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(&table, normalized[0..1], 1, 5));
+}
+
+test "zstd caller-owned FSE compression table overwrites reachable state" {
+    var state: u32 = 0x5be0_cd19;
+    var cases: usize = 0;
+    for (5..max_fse_compression_table_log + 1) |table_log_value| {
+        const table_log: u8 = @intCast(table_log_value);
+        for (0..48) |seed| {
+            const max_symbol: u8 = @intCast(1 + (seed * 11) % huffman_weight_symbol_max);
+            var counts: [huffman_weight_symbol_max + 1]u32 = @splat(0);
+            var total: usize = 0;
+            for (counts[0 .. @as(usize, max_symbol) + 1], 0..) |*count, symbol| {
+                state = state *% 1_664_525 +% 1_013_904_223;
+                count.* = if (symbol != 0 and symbol != max_symbol and (state & 7) == 0)
+                    0
+                else
+                    1 + ((state >> 16) % 113);
+                total += count.*;
+            }
+            var normalized: [huffman_weight_symbol_max + 1]i16 = @splat(0);
+            normalizeFseCounts(
+                counts[0 .. @as(usize, max_symbol) + 1],
+                total,
+                table_log,
+                normalized[0 .. @as(usize, max_symbol) + 1],
+            ) orelse continue;
+
+            const expected = try buildFseCompressionTableReference(
+                normalized[0 .. @as(usize, max_symbol) + 1],
+                max_symbol,
+                table_log,
+            );
+            var actual: FseCompressionTable = undefined;
+            @memset(std.mem.asBytes(&actual), 0xa5);
+            try buildFseCompressionTable(
+                &actual,
+                normalized[0 .. @as(usize, max_symbol) + 1],
+                max_symbol,
+                table_log,
+            );
+            try std.testing.expectEqual(expected.table_log, actual.table_log);
+            try std.testing.expectEqual(expected.table_len, actual.table_len);
+            try std.testing.expectEqual(expected.max_symbol, actual.max_symbol);
+            try std.testing.expectEqualSlices(u16, expected.state_table[0..expected.table_len], actual.state_table[0..actual.table_len]);
+            for (expected.transforms[0 .. @as(usize, max_symbol) + 1], actual.transforms[0 .. @as(usize, max_symbol) + 1]) |want, got|
+                try std.testing.expectEqual(want, got);
+            cases += 1;
+        }
+    }
+    try std.testing.expect(cases > 100);
 }
 
 test "zstd FSE decode table builder rejects oversized inputs as corrupt" {
