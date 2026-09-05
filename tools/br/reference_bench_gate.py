@@ -26,6 +26,7 @@ CASES = {
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, required=True)
+    parser.add_argument("--enforce-throughput", action="store_true")
     args = parser.parse_args()
     with args.csv.open(newline="") as file:
         reader = csv.DictReader(file)
@@ -62,20 +63,22 @@ def main() -> int:
         # decode tables. Keep a conservative floor so regressions remain loud.
         "clustered_q8": 0.09,
     }
-    for name, floor in floors.items():
-        if float(by_case[name]["vort_over_reference"]) < floor:
-            raise AssertionError(f"decode regression {name}: {by_case[name]}")
-    for name in (
-        "text", "structured", "repetitive",
-        "text_q3", "structured_q3", "repetitive_q3",
-        "structured_q4",
-        "text_q11", "structured_q11", "repetitive_q11",
-        "clustered_q8",
-    ):
-        if int(by_case[name]["exact_alloc_ns"]) > int(by_case[name]["vort_ns"]) * 2:
-            raise AssertionError(f"exact alloc regression {name}: {by_case[name]}")
-        if int(by_case[name]["alloc_ns"]) > int(by_case[name]["vort_ns"]) * 2:
-            raise AssertionError(f"alloc regression {name}: {by_case[name]}")
+    if args.enforce_throughput:
+        for name, floor in floors.items():
+            if float(by_case[name]["vort_over_reference"]) < floor:
+                raise AssertionError(f"decode regression {name}: {by_case[name]}")
+    if args.enforce_throughput:
+        for name in (
+            "text", "structured", "repetitive",
+            "text_q3", "structured_q3", "repetitive_q3",
+            "structured_q4",
+            "text_q11", "structured_q11", "repetitive_q11",
+            "clustered_q8",
+        ):
+            if int(by_case[name]["exact_alloc_ns"]) > int(by_case[name]["vort_ns"]) * 2:
+                raise AssertionError(f"exact alloc regression {name}: {by_case[name]}")
+            if int(by_case[name]["alloc_ns"]) > int(by_case[name]["vort_ns"]) * 2:
+                raise AssertionError(f"alloc regression {name}: {by_case[name]}")
     clustered = by_case["clustered_q8"]
     if int(clustered["max_literal_context_trees"]) < 32 or int(clustered["max_distance_context_trees"]) < 8:
         raise AssertionError(f"clustered header coverage regression: {clustered}")

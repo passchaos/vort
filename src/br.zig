@@ -3266,6 +3266,16 @@ fn checkedDecodedEnd(written: usize, decoded_len: usize, max_output_len: usize) 
 }
 
 pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
+    // The direct stored encoder's common WBITS=16 wire is payload+4 bytes.
+    // Gate the colder shape validation on that exact-size relation so ordinary
+    // compressed frames enter their established hot path without another call.
+    if (stream.len >= 4 and stream.len - 4 == output.len) {
+        if (singleUncompressedStreamPayload(stream)) |payload| {
+            std.debug.assert(payload.len == output.len);
+            @memcpy(output, payload);
+            return payload.len;
+        }
+    }
     if (stream.len >= large_stream_decode_threshold) return decodeLargeStreamInto(stream, output);
     var reader = bitstream.BitReader.init(stream);
     const window_bits = try readWindowBitsValue(&reader);
@@ -3293,6 +3303,56 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
             },
         }
     }
+}
+
+/// Recognize the common one-uncompressed-meta-block Brotli shape without
+/// constructing a bit reader or entering the generic meta-block loop. The
+/// shape is accepted only when its complete wire is canonical and ends in the
+/// exact byte-aligned final-empty marker; every other stream falls back to the
+/// full decoder and therefore retains its existing validation/error behavior.
+noinline fn singleUncompressedStreamPayload(stream: []const u8) ?[]const u8 {
+    if (stream.len < @sizeOf(u64)) return null;
+    const wire = std.mem.readInt(u64, stream[0..@sizeOf(u64)], .little);
+    var bit_pos: u6 = 0;
+
+    if ((wire & 1) == 0) {
+        bit_pos = 1; // WBITS=16.
+    } else {
+        const low3 = (wire >> 1) & 0x7;
+        if (low3 != 0) {
+            bit_pos = 4; // WBITS=18...24.
+        } else {
+            const tail = (wire >> 4) & 0x7;
+            if (tail == 1) return null; // Reserved window code.
+            bit_pos = 7; // WBITS=10...17.
+        }
+    }
+
+    if (((wire >> bit_pos) & 1) != 0) return null; // ISLAST=false.
+    bit_pos += 1;
+    const mnibbles_code: u2 = @intCast((wire >> bit_pos) & 0x3);
+    if (mnibbles_code == 0b11) return null; // Metadata block.
+    bit_pos += 2;
+    const length_bits: u6 = @intCast((4 + @as(usize, mnibbles_code)) * 4);
+    const len_mask = (@as(u64, 1) << length_bits) - 1;
+    const len_minus_one = (wire >> bit_pos) & len_mask;
+    if (length_bits > 16 and ((len_minus_one >> (length_bits - 4)) & 0xf) == 0) return null;
+    bit_pos += length_bits;
+    if (((wire >> bit_pos) & 1) == 0) return null; // ISUNCOMPRESSED=true.
+    bit_pos += 1;
+
+    const pad_bits: u6 = @intCast((8 - (@as(usize, bit_pos) & 7)) & 7);
+    if (pad_bits != 0) {
+        const pad_mask = (@as(u64, 1) << pad_bits) - 1;
+        if (((wire >> bit_pos) & pad_mask) != 0) return null;
+    }
+    const payload_start = (@as(usize, bit_pos) + 7) / 8;
+    const payload_len = @as(usize, @intCast(len_minus_one)) + 1;
+    if (payload_start > stream.len or payload_len > stream.len - payload_start) return null;
+    const payload_end = payload_start + payload_len;
+    if (payload_end >= stream.len or stream.len - payload_end != 1) return null;
+    if (stream[payload_end] != 0b11) return null; // ISLAST + ISLASTEMPTY + zero padding.
+    return stream[payload_start..payload_end];
 }
 
 const large_stream_decode_threshold: usize = 16 * 1024;
@@ -8361,6 +8421,94 @@ test "br stored stream round trips hello with known bytes" {
     try std.testing.expectError(error.OutputLimitExceeded, decodeStreamIntoLimited(encoded, &out, 4));
     try std.testing.expectEqualSlices(u8, &([_]u8{0xaa} ** 5), &out);
     try std.testing.expectError(error.OutputTooSmall, decodeStreamIntoLimited(encoded, out[0..4], 5));
+}
+
+test "br single uncompressed stream fast path validates complete canonical wire" {
+    const payload = "hello";
+    const encoded = try encodeStoredStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqualSlices(u8, payload, singleUncompressedStreamPayload(encoded).?);
+    var oversized_output: [payload.len + 3]u8 = @splat(0xcc);
+    try std.testing.expectEqual(payload.len, try decodeStreamInto(encoded, &oversized_output));
+    try std.testing.expectEqualSlices(u8, payload, oversized_output[0..payload.len]);
+    try std.testing.expectEqualSlices(u8, &([_]u8{0xcc} ** 3), oversized_output[payload.len..]);
+
+    inline for (.{ 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24 }) |window_bits| {
+        const window_encoded = try encodeStoredStreamWithOptionsAlloc(
+            std.testing.allocator,
+            "window",
+            .{ .window_bits = window_bits },
+        );
+        defer std.testing.allocator.free(window_encoded);
+        try std.testing.expectEqualSlices(u8, "window", singleUncompressedStreamPayload(window_encoded).?);
+        var window_output: ["window".len]u8 = undefined;
+        try std.testing.expectEqual(window_output.len, try decodeStreamInto(window_encoded, &window_output));
+        try std.testing.expectEqualSlices(u8, "window", &window_output);
+    }
+
+    inline for (.{ 65_537, 1_048_577 }) |len| {
+        const input = try std.testing.allocator.alloc(u8, len);
+        defer std.testing.allocator.free(input);
+        @memset(input, 0xa5);
+        const tier_encoded = try encodeStoredStreamAlloc(std.testing.allocator, input);
+        defer std.testing.allocator.free(tier_encoded);
+        try std.testing.expectEqualSlices(u8, input, singleUncompressedStreamPayload(tier_encoded).?);
+    }
+
+    var nonzero_padding = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(nonzero_padding);
+    nonzero_padding[2] |= 0x20;
+    try std.testing.expect(singleUncompressedStreamPayload(nonzero_padding) == null);
+    var output: [payload.len]u8 = @splat(0xcc);
+    try std.testing.expectError(error.CorruptFrame, decodeStreamInto(nonzero_padding, &output));
+
+    var bad_terminator = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_terminator);
+    bad_terminator[bad_terminator.len - 1] = 0x07;
+    try std.testing.expect(singleUncompressedStreamPayload(bad_terminator) == null);
+    try std.testing.expectError(error.CorruptFrame, decodeStreamInto(bad_terminator, &output));
+
+    const trailing = try std.mem.concat(std.testing.allocator, u8, &.{ encoded, &.{0} });
+    defer std.testing.allocator.free(trailing);
+    try std.testing.expect(singleUncompressedStreamPayload(trailing) == null);
+    try std.testing.expectError(error.TrailingData, decodeStreamInto(trailing, &output));
+
+    try std.testing.expect(singleUncompressedStreamPayload(encoded[0 .. encoded.len - 1]) == null);
+    try std.testing.expectError(error.TruncatedFrame, decodeStreamInto(encoded[0 .. encoded.len - 1], &output));
+    @memset(&output, 0xcc);
+    try std.testing.expectError(error.OutputTooSmall, decodeStreamInto(encoded, output[0 .. output.len - 1]));
+    try std.testing.expectEqualSlices(u8, &([_]u8{0xcc} ** payload.len), &output);
+
+    const noncanonical = [_]u8{ 0x44, 0x00, 0x00, 0x01, 'h', 'e', 'l', 'l', 'o', 0x03 };
+    try std.testing.expect(singleUncompressedStreamPayload(&noncanonical) == null);
+    try std.testing.expectError(error.CorruptFrame, decodeStreamInto(&noncanonical, &output));
+}
+
+test "br single uncompressed stream fast path rejects other legal shapes" {
+    const compressed = try encodeRleStreamAlloc(std.testing.allocator, "aaaaaaaaaaaaaaaa");
+    defer std.testing.allocator.free(compressed);
+    try std.testing.expect(singleUncompressedStreamPayload(compressed) == null);
+    var compressed_output: [16]u8 = undefined;
+    try std.testing.expectEqual(compressed_output.len, try decodeStreamInto(compressed, &compressed_output));
+
+    const with_metadata = try encodeStoredStreamWithOptionsAlloc(
+        std.testing.allocator,
+        "payload",
+        .{ .metadata = "metadata" },
+    );
+    defer std.testing.allocator.free(with_metadata);
+    try std.testing.expect(singleUncompressedStreamPayload(with_metadata) == null);
+    var metadata_output: ["payload".len]u8 = undefined;
+    try std.testing.expectEqual(metadata_output.len, try decodeStreamInto(with_metadata, &metadata_output));
+    try std.testing.expectEqualSlices(u8, "payload", &metadata_output);
+
+    const chunks = [_][]const u8{ "first", "second" };
+    const multi_block = try encodeStoredStreamChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(multi_block);
+    try std.testing.expect(singleUncompressedStreamPayload(multi_block) == null);
+    var multi_output: ["firstsecond".len]u8 = undefined;
+    try std.testing.expectEqual(multi_output.len, try decodeStreamInto(multi_block, &multi_output));
+    try std.testing.expectEqualSlices(u8, "firstsecond", &multi_output);
 }
 
 test "br default stored caller output matches allocating wire at length boundaries" {

@@ -2745,6 +2745,7 @@ pub fn build(b: *std.Build) void {
         "python3", "tools/br/reference_bench_gate.py",
         "--csv",   "zig-out/vort-br-reference-bench.csv",
     });
+    if (optimize == .ReleaseFast) br_reference_bench_gate.addArg("--enforce-throughput");
     br_reference_bench_gate.step.dependOn(&run_br_reference_bench_gate_csv.step);
     const br_reference_bench_gate_step = b.step(
         "run-br-reference-bench-gate",

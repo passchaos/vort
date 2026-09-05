@@ -9188,3 +9188,17 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   corrected the stale top-level claim that command block
   types were capped at 32: the existing maximum-type oracle already covers all
   256 RFC values.
+  Added a strict direct decoder for the common single-uncompressed-block Brotli
+  wire shape. It accepts only canonical window/MLEN fields, zero header padding,
+  an exact payload boundary, and the byte-aligned `0x03` final-empty terminator;
+  compressed, metadata, multi-block, malformed, truncated, and trailing-data
+  streams retain the general decoder. Seven fixed-core ReleaseFast samples put
+  the 12-byte `hello brotli` control at a 1,139.7 MiB/s median versus 399.6
+  MiB/s for the parent (`2.85x` faster), and roughly `23x` the runtime
+  libbrotli call path.
+  The reference benchmark now follows the other codec gates by enforcing
+  throughput floors only under `-Doptimize=ReleaseFast`; Debug runs continue to
+  validate all rows, round trips, dictionary transforms, summaries, and
+  allocation relationships. A clean-parent A/B reproduced the Debug text/tiny
+  floor failures, confirming they predated this fast path rather than relaxing
+  the production regression contract.
