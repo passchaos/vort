@@ -17010,9 +17010,11 @@ fn fseCompressedHuffmanWeightsSerializedLen(weights: []const u8, table_log: u8) 
         table_log,
         normalized[0 .. @as(usize, max_symbol) + 1],
     ) orelse return null;
-    var header: [128]u8 = undefined;
-    var header_len: usize = 0;
-    try emitFseNormalizedCountFixed(&header, &header_len, normalized[0 .. @as(usize, max_symbol) + 1], max_symbol, table_log);
+    const header_len = try fseNormalizedCountSerializedLen(
+        normalized[0 .. @as(usize, max_symbol) + 1],
+        max_symbol,
+        table_log,
+    );
     const table = try buildFseCompressionTable(normalized[0 .. @as(usize, max_symbol) + 1], max_symbol, table_log);
     return std.math.add(usize, header_len, try fseCompressedSymbolsSerializedLen(weights, &table)) catch return error.IntegerOverflow;
 }
@@ -17284,6 +17286,47 @@ fn emitFseNormalizedCountFixed(
     max_symbol: u8,
     table_log: u8,
 ) Error!void {
+    try encodeFseNormalizedCountFixed(true, out, written, normalized, max_symbol, table_log);
+}
+
+fn fseNormalizedCountSerializedLen(
+    normalized: []const i16,
+    max_symbol: u8,
+    table_log: u8,
+) Error!usize {
+    var empty: [0]u8 = .{};
+    var written: usize = 0;
+    try encodeFseNormalizedCountFixed(false, &empty, &written, normalized, max_symbol, table_log);
+    return written;
+}
+
+pub fn benchmarkFseNormalizedCountSerializedLen(
+    normalized: []const i16,
+    max_symbol: u8,
+    table_log: u8,
+) Error!usize {
+    return try fseNormalizedCountSerializedLen(normalized, max_symbol, table_log);
+}
+
+pub fn benchmarkEmitFseNormalizedCountFixed(
+    out: []u8,
+    normalized: []const i16,
+    max_symbol: u8,
+    table_log: u8,
+) Error!usize {
+    var written: usize = 0;
+    try emitFseNormalizedCountFixed(out, &written, normalized, max_symbol, table_log);
+    return written;
+}
+
+fn encodeFseNormalizedCountFixed(
+    comptime emit_bytes: bool,
+    out: []u8,
+    written: *usize,
+    normalized: []const i16,
+    max_symbol: u8,
+    table_log: u8,
+) Error!void {
     if (table_log < 5 or table_log > max_fse_compression_table_log) return error.CorruptFrame;
     if (normalized.len != @as(usize, max_symbol) + 1) return error.CorruptFrame;
     written.* = 0;
@@ -17306,7 +17349,7 @@ fn emitFseNormalizedCountFixed(
                 run_start += 24;
                 bit_stream += @as(u64, 0xffff) << @intCast(bit_count);
                 bit_count += 16;
-                try flushFseNormalizedCountBitsFixed(out, written, &bit_stream, &bit_count);
+                try flushFseNormalizedCountBitsFixed(emit_bytes, out, written, &bit_stream, &bit_count);
             }
             while (symbol >= run_start + 3) {
                 run_start += 3;
@@ -17315,7 +17358,7 @@ fn emitFseNormalizedCountFixed(
             }
             bit_stream += @as(u64, @intCast(symbol - run_start)) << @intCast(bit_count);
             bit_count += 2;
-            if (bit_count > 16) try flushFseNormalizedCountBitsFixed(out, written, &bit_stream, &bit_count);
+            if (bit_count > 16) try flushFseNormalizedCountBitsFixed(emit_bytes, out, written, &bit_stream, &bit_count);
         }
 
         var count: i32 = normalized[symbol];
@@ -17334,16 +17377,20 @@ fn emitFseNormalizedCountFixed(
             nb_bits -= 1;
             threshold >>= 1;
         }
-        if (bit_count > 16) try flushFseNormalizedCountBitsFixed(out, written, &bit_stream, &bit_count);
+        if (bit_count > 16) try flushFseNormalizedCountBitsFixed(emit_bytes, out, written, &bit_stream, &bit_count);
     }
 
     if (remaining != 1) return error.CorruptFrame;
     const byte_count = (@as(usize, bit_count) + 7) / 8;
-    for (0..byte_count) |_| {
-        if (written.* >= out.len) return error.OutputTooSmall;
-        out[written.*] = @truncate(bit_stream);
-        written.* += 1;
-        bit_stream >>= 8;
+    if (comptime emit_bytes) {
+        for (0..byte_count) |_| {
+            if (written.* >= out.len) return error.OutputTooSmall;
+            out[written.*] = @truncate(bit_stream);
+            written.* += 1;
+            bit_stream >>= 8;
+        }
+    } else {
+        written.* += byte_count;
     }
 }
 
@@ -17354,10 +17401,12 @@ fn flushFseNormalizedCountBits(allocator: std.mem.Allocator, out: *std.ArrayList
     bit_count.* -= 16;
 }
 
-fn flushFseNormalizedCountBitsFixed(out: []u8, written: *usize, bit_stream: *u64, bit_count: *u8) Error!void {
-    if (out.len - written.* < 2) return error.OutputTooSmall;
-    out[written.*] = @truncate(bit_stream.*);
-    out[written.* + 1] = @truncate(bit_stream.* >> 8);
+fn flushFseNormalizedCountBitsFixed(comptime emit_bytes: bool, out: []u8, written: *usize, bit_stream: *u64, bit_count: *u8) Error!void {
+    if (comptime emit_bytes) {
+        if (out.len - written.* < 2) return error.OutputTooSmall;
+        out[written.*] = @truncate(bit_stream.*);
+        out[written.* + 1] = @truncate(bit_stream.* >> 8);
+    }
     written.* += 2;
     bit_stream.* >>= 16;
     bit_count.* -= 16;
@@ -23435,6 +23484,54 @@ test "zstd FSE normalized-count writers reject invalid table logs as corrupt" {
     try std.testing.expectError(error.CorruptFrame, emitFseNormalizedCountFixed(&fixed_out, &fixed_written, &normalized, 1, max_fse_compression_table_log + 1));
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
     try std.testing.expectEqual(@as(usize, 0), fixed_written);
+}
+
+test "zstd FSE normalized-count length matches fixed writer" {
+    var state: u32 = 0x1f83_d9ab;
+    var cases: usize = 0;
+    for (5..max_fse_compression_table_log + 1) |table_log_value| {
+        const table_log: u8 = @intCast(table_log_value);
+        for (0..64) |seed| {
+            const max_symbol: u8 = @intCast(1 + (seed * 7) % huffman_weight_symbol_max);
+            var counts: [huffman_weight_symbol_max + 1]u32 = @splat(0);
+            var total: usize = 0;
+            for (counts[0 .. @as(usize, max_symbol) + 1], 0..) |*count, symbol| {
+                state = state *% 1_664_525 +% 1_013_904_223;
+                count.* = if (symbol != 0 and symbol != max_symbol and (state & 3) == 0)
+                    0
+                else
+                    1 + ((state >> 16) % 97);
+                total += count.*;
+            }
+            var normalized: [huffman_weight_symbol_max + 1]i16 = @splat(0);
+            normalizeFseCounts(
+                counts[0 .. @as(usize, max_symbol) + 1],
+                total,
+                table_log,
+                normalized[0 .. @as(usize, max_symbol) + 1],
+            ) orelse continue;
+
+            var encoded: [128]u8 = undefined;
+            var written: usize = 0;
+            try emitFseNormalizedCountFixed(
+                &encoded,
+                &written,
+                normalized[0 .. @as(usize, max_symbol) + 1],
+                max_symbol,
+                table_log,
+            );
+            try std.testing.expectEqual(
+                written,
+                try fseNormalizedCountSerializedLen(
+                    normalized[0 .. @as(usize, max_symbol) + 1],
+                    max_symbol,
+                    table_log,
+                ),
+            );
+            cases += 1;
+        }
+    }
+    try std.testing.expect(cases > 100);
 }
 
 test "zstd FSE compression table rejects invalid parameters as corrupt" {

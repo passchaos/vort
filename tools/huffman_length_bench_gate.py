@@ -20,6 +20,7 @@ EXPECTED = {
     "zstd-sort-64": {"bucket-sort", "comparison-sort"},
     "zstd-sort-128": {"bucket-sort", "comparison-sort"},
     "zstd-sort-256": {"bucket-sort", "comparison-sort"},
+    "zstd-fse-header-length": {"count-only", "fixed-writer"},
     "distance": {"production"},
     "code-length": {"production"},
 }
@@ -103,7 +104,14 @@ def main() -> int:
     sort_geomean = (sort_ratios[0] * sort_ratios[1] * sort_ratios[2]) ** (1 / 3)
     if sort_geomean < 1.10:
         raise SystemExit(f"Huffman bucket sort geometric speedup too small ({sort_geomean:.3f})")
-    print(f"huffman length gate: sparse18={ratios[0]:.2f}x sparse48={ratios[1]:.2f}x dense={dense_ratio:.2f}x recovery-dense={recovery_ratios[0]:.2f}x recovery128={recovery_ratios[1]:.2f}x recovery256={recovery_ratios[2]:.2f}x known32={known_ratios[0]:.2f}x known64={known_ratios[1]:.2f}x known128={known_ratios[2]:.2f}x known256={known_ratios[3]:.2f}x sort64={sort_ratios[0]:.2f}x sort128={sort_ratios[1]:.2f}x sort256={sort_ratios[2]:.2f}x rows={len(rows)}")
+    count_only = by_key[("zstd-fse-header-length", "count-only")]
+    fixed_writer = by_key[("zstd-fse-header-length", "fixed-writer")]
+    if count_only["checksum"] != fixed_writer["checksum"]:
+        raise SystemExit("zstd-fse-header-length: count-only/fixed-writer mismatch")
+    header_ratio = float(count_only["builds_per_s"]) / float(fixed_writer["builds_per_s"])
+    if header_ratio < 1.05:
+        raise SystemExit(f"FSE header count-only speedup too small ({header_ratio:.3f})")
+    print(f"huffman length gate: sparse18={ratios[0]:.2f}x sparse48={ratios[1]:.2f}x dense={dense_ratio:.2f}x recovery-dense={recovery_ratios[0]:.2f}x recovery128={recovery_ratios[1]:.2f}x recovery256={recovery_ratios[2]:.2f}x known32={known_ratios[0]:.2f}x known64={known_ratios[1]:.2f}x known128={known_ratios[2]:.2f}x known256={known_ratios[3]:.2f}x sort64={sort_ratios[0]:.2f}x sort128={sort_ratios[1]:.2f}x sort256={sort_ratios[2]:.2f}x fse-header={header_ratio:.2f}x rows={len(rows)}")
     return 0
 
 

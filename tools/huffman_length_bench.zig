@@ -31,7 +31,7 @@ pub fn main(init: std.process.Init) !void {
         } else return error.UnknownArgument;
     }
 
-    var rows: [25]Row = undefined;
+    var rows: [27]Row = undefined;
     rows[0] = try measure(init, "literal-sparse-18", 286, sparseLiteralFreqs(18), 15, iterations, false);
     rows[1] = try measure(init, "literal-sparse-18", 286, sparseLiteralFreqs(18), 15, iterations, true);
     rows[2] = try measure(init, "literal-sparse-48", 286, sparseLiteralFreqs(48), 15, iterations, false);
@@ -57,6 +57,8 @@ pub fn main(init: std.process.Init) !void {
     rows[22] = try measureZstdSymbolSort(init, "zstd-sort-128", 128, iterations, true);
     rows[23] = try measureZstdSymbolSort(init, "zstd-sort-256", 256, iterations, false);
     rows[24] = try measureZstdSymbolSort(init, "zstd-sort-256", 256, iterations, true);
+    rows[25] = try measureZstdFseHeaderLength(init, iterations, false);
+    rows[26] = try measureZstdFseHeaderLength(init, iterations, true);
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
@@ -192,6 +194,28 @@ fn measureZstdSymbolSort(init: std.process.Init, comptime name: []const u8, comp
     std.mem.doNotOptimizeAway(checksum);
     const seconds = @as(f64, @floatFromInt(elapsed)) / @as(f64, std.time.ns_per_s);
     return .{ .case = name, .mode = if (reference) "comparison-sort" else "bucket-sort", .symbols = 256, .active = active, .max_bits = 11, .iterations = iterations, .elapsed_ns = elapsed, .builds_per_s = @as(f64, @floatFromInt(iterations)) / seconds, .checksum = checksum, .cost_checksum = cost_checksum };
+}
+
+fn measureZstdFseHeaderLength(init: std.process.Init, iterations: usize, comptime reference: bool) !Row {
+    var normalized = [_]i16{ -1, 0, 0, 0, 3, 0, 0, 5, 7, 11, 0, 0, 13, 0, 0, 24 };
+    var output: [128]u8 = undefined;
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(init.io);
+    for (0..iterations) |i| {
+        const delta: i16 = @intCast(i & 1);
+        normalized[12] = 13 + delta;
+        normalized[15] = 24 - delta;
+        const len = if (reference)
+            try vort.zstd.benchmarkEmitFseNormalizedCountFixed(&output, &normalized, 15, 6)
+        else
+            try vort.zstd.benchmarkFseNormalizedCountSerializedLen(&normalized, 15, 6);
+        checksum +%= len;
+        if (reference) std.mem.doNotOptimizeAway(&output);
+    }
+    const elapsed = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+    std.mem.doNotOptimizeAway(checksum);
+    const seconds = @as(f64, @floatFromInt(elapsed)) / @as(f64, std.time.ns_per_s);
+    return .{ .case = "zstd-fse-header-length", .mode = if (reference) "fixed-writer" else "count-only", .symbols = normalized.len, .active = 7, .max_bits = 6, .iterations = iterations, .elapsed_ns = elapsed, .builds_per_s = @as(f64, @floatFromInt(iterations)) / seconds, .checksum = checksum, .cost_checksum = checksum };
 }
 
 fn sparseLiteralFreqs(comptime active: usize) [286]u32 {

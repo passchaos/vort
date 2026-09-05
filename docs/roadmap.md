@@ -9488,3 +9488,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1.044x/1.017x/1.043x, all 27 runs winning. Nine trainer pairs improved binary
   by 3.3%, but text/JSON were effectively neutral at 1.002x/0.999x and the
   aggregate reached only 1.012x with 17/27 wins, below the retention bar.
+  FSE normalized-count size estimation now runs the fixed-buffer encoder state
+  machine in count-only mode instead of filling and discarding a 128-byte
+  temporary header. Sequence-table planning and real emission retain byte
+  output and capacity checks. A randomized oracle covering tableLog 5–9 and
+  sparse zero runs matches the fixed writer's exact length for over 100 valid
+  normalized tables. The focused gate measures a 1.33x header-length speedup;
+  nine alternating fixed-CPU-30 dictionary pairs improve the full validated
+  Zstd path by 1.024x/1.021x/1.006x for text/JSON/binary, with 24/27 wins and
+  identical checksums.
