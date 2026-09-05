@@ -975,11 +975,15 @@ pub fn treeCodeLengthsKnownActive(
     comptime n: usize,
     freqs: *const [n]u32,
     max_bits: u4,
-    active_symbols: []const u16,
+    active_symbols: anytype,
 ) [n]u4 {
     if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
-        for (active_symbols[1..], active_symbols[0..active_symbols.len -| 1]) |symbol, previous|
-            std.debug.assert(previous < symbol);
+        std.debug.assert(active_symbols.len <= n);
+        for (active_symbols, 0..) |symbol_value, index| {
+            const symbol: usize = @intCast(symbol_value);
+            std.debug.assert(symbol < n and freqs[symbol] != 0);
+            if (index != 0) std.debug.assert(active_symbols[index - 1] < symbol_value);
+        }
     }
     if (active_symbols.len == 0) return @splat(0);
     if (active_symbols.len == 1) {
@@ -991,19 +995,20 @@ pub fn treeCodeLengthsKnownActive(
         return compactPackageMergeCodeLengthsKnownActive(n, freqs, max_bits, active_symbols, 32);
     if (active_symbols.len <= 64 and n > 64)
         return compactPackageMergeCodeLengthsKnownActive(n, freqs, max_bits, active_symbols, 64);
-    return treeCodeLengths(n, freqs, max_bits);
+    if (n > 64) return backrefPackageMergeCodeLengths(n, freqs, max_bits, active_symbols.len);
+    return packageMergeCodeLengths(n, freqs, max_bits, active_symbols.len);
 }
 
 fn compactPackageMergeCodeLengthsKnownActive(
     comptime n: usize,
     freqs: *const [n]u32,
     max_bits: u4,
-    active_symbols: []const u16,
+    active_symbols: anytype,
     comptime compact_n: usize,
 ) [n]u4 {
     std.debug.assert(active_symbols.len <= compact_n);
     var symbols: [compact_n]u16 = undefined;
-    @memcpy(symbols[0..active_symbols.len], active_symbols);
+    for (active_symbols, 0..) |symbol, index| symbols[index] = @intCast(symbol);
     var compact_freqs: [compact_n]u32 = @splat(0);
     for (symbols[0..active_symbols.len], 0..) |symbol, index| {
         std.debug.assert(symbol < n and freqs[symbol] != 0);
@@ -2029,10 +2034,10 @@ test "compact sparse package-merge matches full-width reference" {
     }
 }
 
-test "known-active package-merge matches scanned sparse builder" {
-    for (2..65) |active_count| {
+test "known-active package-merge matches scanned builder" {
+    for (2..257) |active_count| {
         var freqs: [286]u32 = @splat(0);
-        var active: [64]u16 = undefined;
+        var active: [256]u16 = undefined;
         for (0..active_count) |index| {
             const symbol: u16 = @intCast((index * 97 + 41) % freqs.len);
             active[index] = symbol;

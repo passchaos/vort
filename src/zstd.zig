@@ -16623,7 +16623,17 @@ fn fillSmallHuffmanWeights(plan: *SmallHuffmanLiteralPlan) ?void {
         var expanded: [256]u4 = @splat(0);
         @memcpy(expanded[0..64], &compact_lengths);
         break :blk expanded;
-    } else huffman.treeCodeLengths(256, &plan.frequencies, 11);
+    } else blk: {
+        // Symbols are collected in ascending byte order. Reuse that list so
+        // medium and dense alphabets do not rescan all 256 frequencies merely
+        // to recover the active count before package merge.
+        break :blk huffman.treeCodeLengthsKnownActive(
+            256,
+            &plan.frequencies,
+            11,
+            plan.symbols[0..plan.len],
+        );
+    };
     var max_bit_count: u4 = 0;
     for (plan.symbols[0..plan.len]) |symbol| {
         const bit_count = lengths[symbol];
@@ -23319,12 +23329,11 @@ test "zstd striped Huffman histogram preserves scalar plan" {
     var plan = smallHuffmanLiteralPlanFromFrequencies(&frequencies);
 
     var expected: SmallHuffmanLiteralPlan = .{};
-    for (payload) |byte| {
-        if (expected.frequencies[byte] == 0) {
-            expected.symbols[expected.len] = byte;
-            expected.len += 1;
-        }
-        expected.frequencies[byte] += 1;
+    for (payload) |byte| expected.frequencies[byte] += 1;
+    for (expected.frequencies, 0..) |frequency, symbol| {
+        if (frequency == 0) continue;
+        expected.symbols[expected.len] = @intCast(symbol);
+        expected.len += 1;
     }
     _ = finalizeSmallHuffmanLiteralPlan(&expected) orelse return error.CorruptFrame;
     _ = finalizeSmallHuffmanLiteralPlan(&plan) orelse return error.CorruptFrame;

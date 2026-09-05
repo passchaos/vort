@@ -9289,3 +9289,28 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   ReleaseFast pairs measured the table-pointer change at 2.62x/2.42x/1.55x and
   the indexed-weight follow-up at another 1.12x/1.16x/1.47x for text/JSON/binary,
   all 5/5 wins with unchanged dictionary checksums and allocation totals.
+  Reusing an already-emitted literals-section prefix while rewriting a winning
+  sequence candidate's FSE tables was rejected. Five fixed-CPU-8 pairs improved
+  text by only 1.5%, JSON by 0.2% (3/5 wins), and binary by 0.3%; this does not
+  justify threading borrowed wire slices through the state-rewrite API.
+  A 128-symbol compact back-reference package-merge specialization was also
+  rejected. Although its exact code lengths matched the existing 256-symbol
+  planner for every active count from 65 through 128, nine warmed fixed-CPU-30
+  pairs regressed aggregate trainer time by about 0.9% and won only 7/27
+  corpus runs: the back-reference loops were already bounded by active count,
+  so compacting and remapping added work without shrinking the hot iteration.
+  The retained follow-up instead passes the Zstd planner's already sorted
+  active-byte list to the generic Huffman builder. Its known-active entry point
+  now skips the redundant full-alphabet count scan for 65–256 active symbols
+  before entering the existing back-reference package merge; the ≤64 compact
+  paths remain unchanged. An exhaustive 2–256 active-count oracle matches the
+  scanned builder exactly. Nine warmed alternating fixed-CPU-30 ReleaseFast
+  pairs improve text/JSON/binary trainer medians by about 5.3%/4.3%/2.8%, with
+  27/27 wins and unchanged dictionary checksums. The focused Huffman-length
+  gate now covers 32/64/128/256-active Zstd shapes and checks exact code-length
+  and weighted-cost checksums plus aggregate known-active throughput.
+  Passing that active list through the back-reference builder to skip its leaf
+  scan as well was rejected: nine further fixed-CPU-30 pairs reached only a
+  0.14% aggregate gain, regressed JSON by about 1.1%, and won 16/27 runs. The
+  retained change therefore removes only the measured redundant active-count
+  scan and leaves the mature leaf-construction loop intact.
