@@ -16667,8 +16667,9 @@ fn validateSmallHuffmanLastWeight(plan: *const SmallHuffmanLiteralPlan) ?void {
     const remaining = (@as(usize, 1) << @intCast(plan.max_bit_count)) - weight_power_sum;
     if (!std.math.isPowerOfTwo(remaining)) return null;
     const reconstructed: u4 = @intCast(std.math.log2_int(usize, remaining) + 1);
-    const max_symbol_index = smallHuffmanSymbolIndex(plan, plan.max_symbol) orelse return null;
-    if (reconstructed != plan.weights[max_symbol_index]) return null;
+    const max_symbol_bits = plan.bit_counts[plan.max_symbol];
+    if (max_symbol_bits == 0) return null;
+    if (reconstructed != plan.max_bit_count + 1 - max_symbol_bits) return null;
 }
 
 fn emitSmallHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: *const SmallHuffmanLiteralPlan) Error!bool {
@@ -16934,7 +16935,7 @@ fn emitFseCompressedHuffmanWeightsWithTableLog(allocator: std.mem.Allocator, out
         table_log,
     );
     const bitstream_start = out.items.len;
-    try emitFseCompressedSymbols(allocator, out, weights, table);
+    try emitFseCompressedSymbols(allocator, out, weights, &table);
     return out.items.len > bitstream_start;
 }
 
@@ -16963,10 +16964,10 @@ fn fseCompressedHuffmanWeightsSerializedLen(weights: []const u8, table_log: u8) 
     var header_len: usize = 0;
     try emitFseNormalizedCountFixed(&header, &header_len, normalized[0 .. @as(usize, max_symbol) + 1], max_symbol, table_log);
     const table = try buildFseCompressionTable(normalized[0 .. @as(usize, max_symbol) + 1], max_symbol, table_log);
-    return std.math.add(usize, header_len, try fseCompressedSymbolsSerializedLen(weights, table)) catch return error.IntegerOverflow;
+    return std.math.add(usize, header_len, try fseCompressedSymbolsSerializedLen(weights, &table)) catch return error.IntegerOverflow;
 }
 
-fn fseCompressedSymbolsSerializedLen(symbols: []const u8, table: FseCompressionTable) Error!usize {
+fn fseCompressedSymbolsSerializedLen(symbols: []const u8, table: *const FseCompressionTable) Error!usize {
     if (symbols.len <= 2) return error.CorruptFrame;
     var index = symbols.len;
     var state_1: usize = undefined;
@@ -17011,7 +17012,7 @@ fn fseCompressedSymbolsSerializedLen(symbols: []const u8, table: FseCompressionT
     return (bit_count + 7) / 8;
 }
 
-fn fseEncodedSymbolBitCount(table: FseCompressionTable, state: *usize, symbol: u8) Error!usize {
+fn fseEncodedSymbolBitCount(table: *const FseCompressionTable, state: *usize, symbol: u8) Error!usize {
     if (symbol > table.max_symbol) return error.CorruptFrame;
     const transform = table.transforms[symbol];
     const bits: usize = @intCast((@as(i32, @intCast(state.*)) + transform.delta_nb_bits) >> 16);
@@ -17390,7 +17391,7 @@ fn buildFseCompressionTable(normalized: []const i16, max_symbol: u8, table_log: 
     return table;
 }
 
-fn emitFseCompressedSymbols(allocator: std.mem.Allocator, out: *std.ArrayList(u8), symbols: []const u8, table: FseCompressionTable) Error!void {
+fn emitFseCompressedSymbols(allocator: std.mem.Allocator, out: *std.ArrayList(u8), symbols: []const u8, table: *const FseCompressionTable) Error!void {
     if (symbols.len <= 2) return error.CorruptFrame;
     var writer: ReverseBitstreamWriter = .{};
     var index = symbols.len;
@@ -17443,7 +17444,7 @@ fn emitFseCompressedSymbols(allocator: std.mem.Allocator, out: *std.ArrayList(u8
     try writer.finish(allocator, out);
 }
 
-fn fseInitialState(table: FseCompressionTable, symbol: u8) Error!usize {
+fn fseInitialState(table: *const FseCompressionTable, symbol: u8) Error!usize {
     if (symbol > table.max_symbol) return error.CorruptFrame;
     const transform = table.transforms[symbol];
     const nb_bits_out: usize = @intCast(@divTrunc(transform.delta_nb_bits + (1 << 15), 1 << 16));
@@ -17455,7 +17456,7 @@ fn fseEncodeSymbol(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     writer: *ReverseBitstreamWriter,
-    table: FseCompressionTable,
+    table: *const FseCompressionTable,
     state: *usize,
     symbol: u8,
 ) Error!void {
@@ -17466,7 +17467,7 @@ fn fseEncodeSymbol(
     state.* = try fseNextState(table, state.* >> @intCast(nb_bits_out), 0, transform.delta_find_state);
 }
 
-fn fseNextState(table: FseCompressionTable, value: usize, shift_bits: usize, delta_find_state: i32) Error!usize {
+fn fseNextState(table: *const FseCompressionTable, value: usize, shift_bits: usize, delta_find_state: i32) Error!usize {
     const shifted = value >> @intCast(shift_bits);
     const signed_index = @as(i32, @intCast(shifted)) + delta_find_state;
     if (signed_index < 0) return error.CorruptFrame;
@@ -17477,8 +17478,9 @@ fn fseNextState(table: FseCompressionTable, value: usize, shift_bits: usize, del
 
 fn smallHuffmanExplicitWeight(plan: *const SmallHuffmanLiteralPlan, symbol: u8) u4 {
     if (symbol == plan.max_symbol) return 0;
-    const index = smallHuffmanSymbolIndex(plan, symbol) orelse return 0;
-    return plan.weights[index];
+    const bit_count = plan.bit_counts[symbol];
+    if (bit_count == 0) return 0;
+    return @intCast(plan.max_bit_count + 1 - bit_count);
 }
 
 fn smallHuffmanSymbolIndex(plan: *const SmallHuffmanLiteralPlan, symbol: u8) ?usize {
@@ -23024,6 +23026,11 @@ test "zstd finalized Huffman plan indexes bit counts by symbol" {
             0;
         try std.testing.expectEqual(expected, plan.bit_counts[symbol]);
         try std.testing.expectEqual(present[symbol], plan.bit_counts[symbol] != 0);
+        const expected_weight: u4 = if (symbol == plan.max_symbol or expected == 0)
+            0
+        else
+            @intCast(plan.max_bit_count + 1 - expected);
+        try std.testing.expectEqual(expected_weight, smallHuffmanExplicitWeight(&plan, @intCast(symbol)));
         if (present[symbol]) try std.testing.expectEqual(
             smallHuffmanCode(&plan, @intCast(symbol)) orelse return error.CorruptFrame,
             plan.codes[symbol],
@@ -23565,9 +23572,9 @@ test "zstd FSE compressed symbol writer rejects short streams as corrupt" {
     defer out.deinit(std.testing.allocator);
     const table: FseCompressionTable = .{};
 
-    try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{}, table));
-    try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{1}, table));
-    try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{ 1, 1 }, table));
+    try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{}, &table));
+    try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{1}, &table));
+    try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{ 1, 1 }, &table));
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
 

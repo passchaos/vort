@@ -9280,3 +9280,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   million to 1.54/1.53/1.76 million for text/JSON/binary; same-run throughput
   improved by 2.7% to 6.9%. The resource gate is tightened accordingly to 420
   allocations, 45 resize events, and 2 MiB per validated Zstd training case.
+  Profiling the resulting trainer exposed two accidental copies/searches in the
+  Huffman-weight size estimator rather than dictionary matching itself. Passing
+  the roughly 1 KiB FSE compression table by pointer removes compiler-generated
+  copies at every state transition, and the finalized per-byte Huffman
+  `bit_counts` table now supplies serialized weights directly instead of
+  linearly searching the sorted symbol list. Five alternating fixed-CPU-8
+  ReleaseFast pairs measured the table-pointer change at 2.62x/2.42x/1.55x and
+  the indexed-weight follow-up at another 1.12x/1.16x/1.47x for text/JSON/binary,
+  all 5/5 wins with unchanged dictionary checksums and allocation totals.
