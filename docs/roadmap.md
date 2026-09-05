@@ -9443,3 +9443,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alternating fixed-CPU-30 dictionary pairs improve the full validated Zstd
   path by 1.018x/1.030x/1.038x for text/JSON/binary, with 26/27 wins and
   unchanged dictionary checksums.
+  Sorting compact package-merge leaf indexes by `(frequency, symbol)` before
+  constructing their 16–40 byte packed records was rejected as too small. It
+  preserved exact code lengths and improved the focused 64-active Zstd case by
+  about 2.2%, but 18/48/32-active cases moved by only about 0–1.2%. Nine
+  fixed-CPU-30 trainer pairs improved text/JSON by roughly 0.8% each, left
+  binary effectively unchanged, and reached only 1.0085x aggregate throughput
+  with 20/27 wins, below the retention bar.
