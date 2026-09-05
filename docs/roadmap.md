@@ -6391,6 +6391,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   while zlib-ng remained roughly `2.1-2.5x` faster than Vort on those rows and
   materially smaller on repetitive input; those measured gaps remain active
   optimization targets.
+  Incremental low-entropy block expansion now caches its positive diversity
+  decision until the expanded block is emitted, instead of rescanning the same
+  32 KiB prefix on every caller step while buffering toward 256 KiB. The cache
+  resets at each block and stream boundary; a mixed low-entropy/high-entropy
+  regression pins the next block's return to the normal target. Nine
+  alternating fixed-CPU-30 pairs retain the exact 271-byte repetitive stream
+  while improving throughput by 2.047x (9/9 wins), from roughly 1.54 to
+  3.14 GiB/s. JSON/source/binary controls remain within 0.2%, cross-window
+  improves about 1.5%, and the repetitive row now exceeds local zlib-ng level 6
+  while remaining one byte smaller.
 - Dynamic DEFLATE encoder tables now build canonical code arrays directly from
   code lengths instead of first materializing the decoder-oriented bucketed
   `HuffmanTable` and rescanning its entries. The focused Huffman build benchmark

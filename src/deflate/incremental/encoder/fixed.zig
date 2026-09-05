@@ -23,6 +23,7 @@ pub fn Encoder(comptime Codec: type) type {
         finishing: bool = false,
         final_written: bool = false,
         done: bool = false,
+        low_entropy_expanded: bool = false,
         total_input: usize = 0,
         total_output: usize = 0,
         expected_input_len: ?usize = null,
@@ -95,6 +96,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.finishing = false;
             self.final_written = false;
             self.done = false;
+            self.low_entropy_expanded = false;
             self.total_input = 0;
             self.total_output = 0;
             self.expected_input_len = expected;
@@ -222,14 +224,16 @@ pub fn Encoder(comptime Codec: type) type {
             }
         }
 
-        fn canWriteDirectBlock(self: *const Self, input: []const u8, base_target: usize, block_capacity: usize) bool {
+        fn canWriteDirectBlock(self: *Self, input: []const u8, base_target: usize, block_capacity: usize) bool {
             if (self.plain.items.len != 0 or
                 self.options.adaptive_blocks or
                 self.options.lookahead_len != 0 or
                 block_capacity != base_target or
                 input.len <= block_capacity) return false;
             if (self.options.low_entropy_block_len == 0) return true;
-            return uniqueByteCount(input[0..block_capacity]) > 4;
+            if (uniqueByteCount(input[0..block_capacity]) > 4) return true;
+            self.low_entropy_expanded = true;
+            return false;
         }
 
         fn writeDirectBlock(self: *Self, block: []const u8) Error!void {
@@ -256,6 +260,7 @@ pub fn Encoder(comptime Codec: type) type {
             const block = self.plain.items[0..selected_len];
             try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, final, self.options.compression);
             self.retainHistory(block);
+            self.low_entropy_expanded = false;
             if (selected_len == self.plain.items.len) {
                 self.plain.clearRetainingCapacity();
             } else {
@@ -295,14 +300,17 @@ pub fn Encoder(comptime Codec: type) type {
             if (self.options.lookahead_len >= split.max_block_len) return error.InvalidBlockPlan;
             return split.max_block_len;
         }
-        fn activeBlockTarget(self: *const Self, base: usize) usize {
+        fn activeBlockTarget(self: *Self, base: usize) usize {
             const expanded = self.options.low_entropy_block_len;
             if (expanded == 0 or self.options.adaptive_blocks or self.options.lookahead_len != 0) return base;
             if (self.plain.items.len < base) return base;
+            if (self.low_entropy_expanded) return expanded;
             // A 32 KiB prefix is enough to distinguish byte runs and tiny
             // alphabets from text/source without another parser or allocation.
             // Once expanded, retain that decision until the block is emitted.
-            return if (uniqueByteCount(self.plain.items[0..base]) <= 4) expanded else base;
+            if (uniqueByteCount(self.plain.items[0..base]) > 4) return base;
+            self.low_entropy_expanded = true;
+            return expanded;
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };

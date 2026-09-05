@@ -280,6 +280,45 @@ test "raw deflate incremental low entropy blocks amortize dynamic headers" {
     try std.testing.expectEqual(one_shot.len, encoded.len);
 }
 
+test "raw deflate incremental low entropy decision resets after block" {
+    const low_len = 2048;
+    const high_len = 1025;
+    var payload: [low_len + high_len]u8 = undefined;
+    @memset(payload[0..low_len], 'a');
+    for (payload[low_len..], 0..) |*byte, i|
+        byte.* = @intCast((i * 37 + i / 11) % 251);
+
+    var encoder = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = 1024,
+        .low_entropy_block_len = low_len,
+        .compression = deflate.optionsForLevel(.default),
+    });
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var scratch: [4096]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const end = @min(payload.len, offset + 127);
+        const result = try encoder.step(payload[offset..end], &scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    // The low-entropy block consumed 2 KiB, then the high-entropy block
+    // returned to the normal 1 KiB target instead of inheriting expansion.
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().buffered_input);
+
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const decoded = try deflate.decodeRawAutoAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
 test "raw deflate incremental low entropy block limit validates bounds" {
     var invalid = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
         .block_len = 1024,
