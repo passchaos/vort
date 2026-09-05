@@ -80,6 +80,40 @@ fn nextDictionaryId(id: u32) u32 {
     return if (id == std.math.maxInt(u32)) 1 else id + 1;
 }
 
+fn verifyCustomRepcodes(
+    allocator: std.mem.Allocator,
+    runtime: libzstd.Runtime,
+    source: vort.ZstdOwnedStandardDictionary,
+    payload: []const u8,
+) !void {
+    const bytes = try allocator.dupe(u8, source.bytes);
+    defer allocator.free(bytes);
+    const repcodes = [3]u32{ 9, 5, 2 };
+    const repcode_offset = source.view.content_offset - repcodes.len * @sizeOf(u32);
+    for (repcodes, 0..) |repcode, i|
+        std.mem.writeInt(u32, bytes[repcode_offset + i * 4 ..][0..4], repcode, .little);
+    const parsed = try vort.ZstdNativeDictionary.initFromStandardDictionary(bytes);
+    if (!std.meta.eql(parsed.view.repcodes, repcodes)) return error.InvalidDictionaryMetadata;
+
+    const vort_encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(
+        allocator,
+        payload,
+        .{ .content_checksum = false },
+        parsed.dictionary,
+    );
+    defer allocator.free(vort_encoded.frame);
+    const reference_output = try allocator.alloc(u8, payload.len);
+    defer allocator.free(reference_output);
+    try runtime.decodeUsingDict(vort_encoded.frame, reference_output, bytes);
+    if (!std.mem.eql(u8, payload, reference_output)) return error.SizeMismatch;
+
+    const reference_encoded = try runtime.encodeUsingDictAlloc(allocator, payload, bytes, 1);
+    defer allocator.free(reference_encoded);
+    const decoded = try vort.zstdDecodeFrameAllocWithDictionary(allocator, reference_encoded, parsed.dictionary);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, payload, decoded)) return error.SizeMismatch;
+}
+
 fn compareValidatedHistorySelector(
     allocator: std.mem.Allocator,
     runtime: libzstd.Runtime,
@@ -205,6 +239,7 @@ pub fn main(init: std.process.Init) !void {
         const generated_decoded = try vort.zstdDecodeFrameAllocWithDictionary(init.gpa, generated_reference, generated_dictionary);
         defer init.gpa.free(generated_decoded);
         if (!std.mem.eql(u8, payload, generated_decoded)) return error.SizeMismatch;
+        try verifyCustomRepcodes(init.gpa, runtime, generated, payload);
 
         text_sizes = try compareTrainedDictionaryCase(init.gpa, runtime, &text_training, payload, text_id);
         structured_sizes = try compareTrainedDictionaryCase(init.gpa, runtime, &structured_training, structured_payload, structured_id);
@@ -268,8 +303,8 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [384]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} text={d}/{d} structured={d}/{d} binary={d}/{d} total={d}/{d} selector={d}/{d} sequence_entropy={d}\n",
-        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", text_sizes.trained_size, text_sizes.baseline_size, structured_sizes.trained_size, structured_sizes.baseline_size, binary_sizes.trained_size, binary_sizes.baseline_size, trained_total, baseline_total, selector_sizes.selected_size, selector_sizes.baseline_size, trained_sequence_entropy_len },
+        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} custom_repcodes={s} text={d}/{d} structured={d}/{d} binary={d}/{d} total={d}/{d} selector={d}/{d} sequence_entropy={d}\n",
+        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", if (generated_path == null) "no" else "yes", text_sizes.trained_size, text_sizes.baseline_size, structured_sizes.trained_size, structured_sizes.baseline_size, binary_sizes.trained_size, binary_sizes.baseline_size, trained_total, baseline_total, selector_sizes.selected_size, selector_sizes.baseline_size, trained_sequence_entropy_len },
     );
     try stdout.interface.flush();
 }

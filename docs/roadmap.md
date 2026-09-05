@@ -4,7 +4,7 @@ This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
 architecture blindly.
 
-### Current completion audit (2026-09-04)
+### Current completion audit (2026-09-05)
 
 The long-term objective is **not complete**. Current evidence still leaves these
 major gaps before Vort can claim broad industry-best parity:
@@ -24,13 +24,16 @@ major gaps before Vort can claim broad industry-best parity:
 - Incremental DEFLATE source and JSON throughput now reach or exceed the local
   zlib-ng level-6 comparison on the locked 256 KiB fixtures, while broader
   real-corpus, ratio, memory, and cross-platform parity still needs evidence.
-- Trained Zstd repcode selection, COVER/FastCover-class history selection, and
-  broader entropy-mode parity still require completion and competitor evidence.
+- COVER/FastCover-class history selection and broader Zstd entropy-mode parity
+  still require completion and competitor evidence.
   Vort can now wrap caller-selected history in a dependency-free standard full
   dictionary, train its complete 256-symbol literal Huffman table from sample
   bytes, and train its OF/ML/LL FSE tables from dictionary-aware LZ77 sequence
-  codes. This stage retains baseline repcodes rather than claiming COVER/FastCover
-  equivalence. Standardized seek-table parsing/
+  codes. Its repcode trainer now ranks the first two explicit offsets and keeps
+  a retrained candidate only after an actual forced-compressed corpus-size win
+  of at least 1%; ties and sub-threshold changes retain baseline `1/4/8`. This
+  does not claim COVER/FastCover equivalence.
+  Standardized seek-table parsing/
   iteration, one-shot encoding, checksum-aware range decode, and
   dictionary-aware encoding/range decode are also in place.
 - Cross-platform optimized kernels and reproducible competitor measurements are
@@ -8416,9 +8419,8 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   differential validates Vort-to-libzstd and libzstd-to-Vort operation with the
   trained dictionary; on its deterministic skewed-literal control, libzstd
   level 1 output fell from 1,019 baseline bytes to 508 trained bytes. This was
-  intentionally not full COVER/FastCover; the following sequence-table stage
-  closes the remaining entropy-statistics gap while repcode selection stays
-  open.
+  intentionally not full COVER/FastCover; at this stage sequence-table and
+  repcode training were left to follow-up work.
   Standard full-dictionary training now derives OF/ML/LL normalized-count FSE
   tables from dictionary-aware greedy LZ77 parses of every sample. Each symbol
   begins with a one-count prior so the first Repeat_Mode block can represent
@@ -8429,8 +8431,8 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Huffman and sequence-table lengths; unit tests prove distinct match corpora
   produce distinct sequence entropy. The libzstd 1.5.5 control remains fully
   bidirectional and improves from 1,019 baseline bytes to 502 bytes, with a
-  94-byte trained sequence entropy section. Repcode discovery and a stronger
-  COVER/FastCover-class history selector remain open.
+  94-byte trained sequence entropy section. This stage left repcode discovery
+  and a stronger COVER/FastCover-class history selector open.
   Expanded the full-dictionary gate from one skewed-text control to three
   independently held-out corpus families, always comparing the trained tables
   with baseline tables wrapped around the exact same selected history. On
@@ -8452,9 +8454,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   An attempted upstream-style residual-literal-only Huffman histogram was also
   rejected by the three-family gate: text regressed `502 -> 517`, structured
   `72 -> 80`, and binary stayed at 579 bytes, so raw-byte Huffman statistics
-  remain the measured winner. Upstream zstd's dormant repcode ranking is still
-  disabled behind `#if 0`; Vort likewise keeps repcodes `1/4/8` until both its
-  encoder state and multi-corpus evidence can validate a change.
+  remain the measured winner. Upstream zstd's dormant repcode ranking is
+  disabled behind `#if 0`; Vort therefore left `1/4/8` unchanged in that slice
+  pending direct encoder measurement, which the later strict-winner stage below
+  now provides.
   Added `run-zstd-dictionary-trainer-compare`, a same-corpus held-out comparison
   against the installed `zstd --train`. It generates deterministic text, JSON,
   and binary sample families, gives Vort 32 training plus 4 selector samples,
@@ -9157,3 +9160,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   cumulatively requested bytes, and the next reusable-encoder call removes 18
   allocations while preserving exact output. OOM recovery and final deallocation
   balance are pinned by the same reusable-encoder test.
+  Standard full-dictionary training now evaluates corpus-derived starting
+  repcodes without adopting upstream zstd's dormant heuristic blindly. Greedy
+  and lazy dictionary-aware parses count only explicit offsets among each
+  block's first two sequences with weights 3 and 1, retain `1/4/8` priors, and
+  deterministically rank by count then ascending offset. Vort retrains OF/ML/LL
+  entropy for that candidate and compares complete forced-compressed frames for
+  every sample; only a strict total-byte win of at least 1% replaces the
+  baseline, filtering one-byte boundary noise on large corpora. A focused
+  701/634-distance sample improves 26 to 25 bytes, while a tie corpus remains
+  byte-stable at `1/4/8`. Unit coverage includes ranking, zero/oversized metadata,
+  adoption, tie fallback, round-trip, and every allocation-failure point; the
+  runtime-libzstd differential loads a custom-repcode dictionary and validates
+  both Vort-to-libzstd and libzstd-to-Vort frames.

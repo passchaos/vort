@@ -359,7 +359,10 @@ pub fn standardDictionaryFromContentAlloc(allocator: std.mem.Allocator, content:
 /// Literal statistics deliberately count raw sample bytes rather than only the
 /// residual literals produced by a full Zstd parser, and the history selector
 /// is not COVER/FastCover-equivalent. Every symbol receives a non-zero prior so
-/// the resulting first-block Repeat_Mode tables accept unseen legal codes.
+/// the resulting first-block Repeat_Mode tables accept unseen legal codes. The
+/// first two explicit offsets from each parse also form a candidate starting
+/// repcode set; it is adopted only when retraining its sequence tables reduces
+/// the complete forced-compressed sample size by at least one percent.
 pub fn trainStandardDictionaryAlloc(
     allocator: std.mem.Allocator,
     samples: []const []const u8,
@@ -565,11 +568,66 @@ fn standardDictionaryFromSelectedContentAndSamplesAlloc(
     }
     var sequence_entropy: std.ArrayList(u8) = .empty;
     defer sequence_entropy.deinit(allocator);
-    try trainStandardDictionarySequenceEntropy(allocator, &sequence_entropy, samples, content);
-    const bytes = try allocator.alloc(u8, try dictionary_format.encodedFromEntropyLen(content.len, literal_entropy.items.len, sequence_entropy.items.len));
-    errdefer allocator.free(bytes);
-    _ = try dictionary_format.encodeFromEntropyInto(content, dictionary_id, literal_entropy.items, sequence_entropy.items, bytes);
-    return .{ .bytes = bytes, .view = try inspectStandardDictionary(bytes) };
+    var repcode_counts: StandardDictionaryRepcodeCounts = @splat(0);
+    for (initial_repeated_offsets) |offset| repcode_counts[offset] = 1;
+    var offset_sequences: std.ArrayList(StandardDictionaryOffsetSequence) = .empty;
+    defer offset_sequences.deinit(allocator);
+    var sample_bytes: usize = 0;
+    for (samples) |sample|
+        sample_bytes = std.math.add(usize, sample_bytes, sample.len) catch return error.InvalidDictionaryTraining;
+    // Both parsers use min_match=4 below, so their combined sequence count is
+    // bounded by half the input bytes. Reserve once instead of growing this
+    // training-only trace repeatedly across samples.
+    try offset_sequences.ensureTotalCapacity(allocator, @min(sample_bytes / 2, 4096));
+    const baseline_counts = try collectStandardDictionarySequenceCounts(
+        allocator,
+        samples,
+        content,
+        initial_repeated_offsets,
+        &repcode_counts,
+        &offset_sequences,
+    );
+    try emitStandardDictionarySequenceEntropy(allocator, &sequence_entropy, &baseline_counts);
+    var baseline = try assembleStandardDictionaryAlloc(
+        allocator,
+        content,
+        dictionary_id,
+        literal_entropy.items,
+        sequence_entropy.items,
+        initial_repeated_offsets,
+    );
+    errdefer baseline.deinit(allocator);
+
+    const candidate_repcodes = selectStandardDictionaryRepcodes(&repcode_counts, content.len);
+    if (std.meta.eql(candidate_repcodes, initial_repeated_offsets)) return baseline;
+
+    var candidate_sequence_entropy: std.ArrayList(u8) = .empty;
+    defer candidate_sequence_entropy.deinit(allocator);
+    var candidate_counts = baseline_counts;
+    candidate_counts.offset = @splat(1);
+    try addStandardDictionaryOffsetSequenceCounts(&candidate_counts.offset, offset_sequences.items, candidate_repcodes);
+    try emitStandardDictionarySequenceEntropy(allocator, &candidate_sequence_entropy, &candidate_counts);
+    var candidate = try assembleStandardDictionaryAlloc(
+        allocator,
+        content,
+        dictionary_id,
+        literal_entropy.items,
+        candidate_sequence_entropy.items,
+        candidate_repcodes,
+    );
+    errdefer candidate.deinit(allocator);
+    const encoded_sizes = try standardDictionaryEncodedSampleByteCounts(
+        allocator,
+        baseline.asDictionary(),
+        candidate.asDictionary(),
+        samples,
+    );
+    if (standardDictionaryRepcodeCandidateImproves(encoded_sizes.baseline, encoded_sizes.candidate)) {
+        baseline.deinit(allocator);
+        return candidate;
+    }
+    candidate.deinit(allocator);
+    return baseline;
 }
 
 const StandardDictionarySequenceCounts = struct {
@@ -578,12 +636,123 @@ const StandardDictionarySequenceCounts = struct {
     literal: [sequence_table_symbol_count_max.literal]u32 = @splat(1),
 };
 
-fn trainStandardDictionarySequenceEntropy(
+const standard_dictionary_repcode_limit = 1024;
+const standard_dictionary_repcode_minimum_gain_divisor = 100;
+const StandardDictionaryRepcodeCounts = [standard_dictionary_repcode_limit]u32;
+const standard_dictionary_repcode_weights = [2]u32{ 3, 1 };
+const StandardDictionaryOffsetSequence = struct {
+    literal_len: u32,
+    distance: u16,
+    starts_plan: bool,
+};
+
+fn assembleStandardDictionaryAlloc(
     allocator: std.mem.Allocator,
-    out: *std.ArrayList(u8),
+    content: []const u8,
+    dictionary_id: u32,
+    literal_entropy: []const u8,
+    sequence_entropy: []const u8,
+    repcodes: [3]usize,
+) Error!OwnedStandardDictionary {
+    var encoded_repcodes: [3]u32 = undefined;
+    for (repcodes, 0..) |repcode, i| {
+        if (repcode > std.math.maxInt(u32)) return error.InvalidDictionaryMetadata;
+        encoded_repcodes[i] = @intCast(repcode);
+    }
+    const bytes = try allocator.alloc(
+        u8,
+        try dictionary_format.encodedFromEntropyLen(content.len, literal_entropy.len, sequence_entropy.len),
+    );
+    errdefer allocator.free(bytes);
+    _ = try dictionary_format.encodeFromEntropyAndRepcodesInto(
+        content,
+        dictionary_id,
+        literal_entropy,
+        sequence_entropy,
+        encoded_repcodes,
+        bytes,
+    );
+    return .{ .bytes = bytes, .view = try inspectStandardDictionary(bytes) };
+}
+
+const StandardDictionaryEncodedSampleByteCounts = struct { baseline: usize = 0, candidate: usize = 0 };
+
+fn standardDictionaryEncodedSampleByteCounts(
+    allocator: std.mem.Allocator,
+    baseline: NativeDictionary,
+    candidate: NativeDictionary,
+    samples: []const []const u8,
+) Error!StandardDictionaryEncodedSampleByteCounts {
+    const options: NativeFrameOptions = .{
+        .content_checksum = false,
+        .selection = .literal_only,
+        .match_search_budget = 0,
+    };
+    // Scoring owns no output beyond this function. An arena turns the native
+    // encoder's candidate/list growth into a small number of backing
+    // allocations and releases all transient storage together.
+    var stack_fallback = std.heap.stackFallback(64 * 1024, allocator);
+    var arena: std.heap.ArenaAllocator = .init(stack_fallback.get());
+    defer arena.deinit();
+    var totals: StandardDictionaryEncodedSampleByteCounts = .{};
+    for (samples) |sample| {
+        _ = arena.reset(.retain_capacity);
+        const encoded_sizes = blk: {
+            var encoder = NativeFrameEncoder.init(arena.allocator());
+            defer encoder.deinit();
+            const baseline_encoded = try encoder.encodeScratchWithDictionary(sample, options, baseline);
+            const baseline_len = baseline_encoded.frame.len;
+            const candidate_encoded = try encoder.encodeScratchWithDictionary(sample, options, candidate);
+            break :blk .{ baseline_len, candidate_encoded.frame.len };
+        };
+        totals.baseline = std.math.add(usize, totals.baseline, encoded_sizes[0]) catch return error.IntegerOverflow;
+        totals.candidate = std.math.add(usize, totals.candidate, encoded_sizes[1]) catch return error.IntegerOverflow;
+    }
+    return totals;
+}
+
+fn standardDictionaryRepcodeCandidateImproves(baseline_size: usize, candidate_size: usize) bool {
+    if (candidate_size >= baseline_size) return false;
+    // A one-byte boundary shift across a large corpus is too fragile to justify
+    // changing persistent dictionary metadata. Require a measured gain of at
+    // least one percent (rounded up), while every candidate still has to win
+    // the exact complete-frame byte comparison.
+    const minimum_gain = baseline_size / standard_dictionary_repcode_minimum_gain_divisor +
+        @intFromBool(baseline_size % standard_dictionary_repcode_minimum_gain_divisor != 0);
+    return baseline_size - candidate_size >= minimum_gain;
+}
+
+fn selectStandardDictionaryRepcodes(counts: *const StandardDictionaryRepcodeCounts, content_len: usize) [3]usize {
+    var selected: [3]usize = @splat(0);
+    var selected_counts: [3]u32 = @splat(0);
+    const limit = @min(content_len +| 1, standard_dictionary_repcode_limit);
+    for (1..limit) |offset| {
+        const count = counts[offset];
+        for (0..selected.len) |rank| {
+            // Offsets are visited in ascending order, so inserting only on a
+            // strictly greater count preserves the smaller-offset tie break.
+            if (count <= selected_counts[rank]) continue;
+            var shift = selected.len - 1;
+            while (shift > rank) : (shift -= 1) {
+                selected[shift] = selected[shift - 1];
+                selected_counts[shift] = selected_counts[shift - 1];
+            }
+            selected[rank] = offset;
+            selected_counts[rank] = count;
+            break;
+        }
+    }
+    return selected;
+}
+
+fn collectStandardDictionarySequenceCounts(
+    allocator: std.mem.Allocator,
     samples: []const []const u8,
     dictionary_content: []const u8,
-) Error!void {
+    initial_offsets: [3]usize,
+    repcode_counts: ?*StandardDictionaryRepcodeCounts,
+    offset_sequences: ?*std.ArrayList(StandardDictionaryOffsetSequence),
+) Error!StandardDictionarySequenceCounts {
     var counts: StandardDictionarySequenceCounts = .{};
     var tokens: std.ArrayList(lz77.Token) = .empty;
     defer tokens.deinit(allocator);
@@ -599,7 +768,7 @@ fn trainStandardDictionarySequenceEntropy(
             // compression will. Block splitting also keeps literal lengths in
             // the RFC sequence-code range for arbitrarily large samples.
             options.window_len = lz77.default_window_len;
-            _ = try lz77.hashGreedyPlanWithDictionaryReuse(
+            const greedy_stats = try lz77.hashGreedyPlanWithDictionaryReuse(
                 &tokens,
                 &scratch,
                 allocator,
@@ -607,22 +776,53 @@ fn trainStandardDictionarySequenceEntropy(
                 dictionary_content,
                 options,
             );
-            try addStandardDictionarySequenceCounts(&counts, tokens.items);
+            try addStandardDictionarySequenceCounts(&counts, tokens.items, initial_offsets);
+            if (offset_sequences) |sequences|
+                try appendStandardDictionaryOffsetSequences(allocator, sequences, tokens.items, greedy_stats.matches);
+            if (repcode_counts) |candidate_counts|
+                try addStandardDictionaryRepcodeCounts(candidate_counts, tokens.items, greedy_stats.matches, dictionary_content.len, initial_offsets);
             const lazy = try lz77.lazyGreedyPlanAllocWithDictionary(allocator, block, dictionary_content, options);
             defer lazy.deinit(allocator);
-            try addStandardDictionarySequenceCounts(&counts, lazy.tokens);
+            try addStandardDictionarySequenceCounts(&counts, lazy.tokens, initial_offsets);
+            if (offset_sequences) |sequences|
+                try appendStandardDictionaryOffsetSequences(allocator, sequences, lazy.tokens, lazy.stats.matches);
+            if (repcode_counts) |candidate_counts|
+                try addStandardDictionaryRepcodeCounts(candidate_counts, lazy.tokens, lazy.stats.matches, dictionary_content.len, initial_offsets);
             offset = end;
         }
     }
 
+    return counts;
+}
+
+fn trainStandardDictionarySequenceEntropy(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    samples: []const []const u8,
+    dictionary_content: []const u8,
+    initial_offsets: [3]usize,
+    repcode_counts: ?*StandardDictionaryRepcodeCounts,
+) Error!void {
+    const counts = try collectStandardDictionarySequenceCounts(
+        allocator,
+        samples,
+        dictionary_content,
+        initial_offsets,
+        repcode_counts,
+        null,
+    );
+    try emitStandardDictionarySequenceEntropy(allocator, out, &counts);
+}
+
+fn emitStandardDictionarySequenceEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), counts: *const StandardDictionarySequenceCounts) Error!void {
     try emitStandardDictionaryFseTable(allocator, out, &counts.offset, sequence_table_accuracy_log_max.offset);
     try emitStandardDictionaryFseTable(allocator, out, &counts.match, sequence_table_accuracy_log_max.match);
     try emitStandardDictionaryFseTable(allocator, out, &counts.literal, sequence_table_accuracy_log_max.literal);
 }
 
-fn addStandardDictionarySequenceCounts(counts: *StandardDictionarySequenceCounts, tokens: []const lz77.Token) Error!void {
+fn addStandardDictionarySequenceCounts(counts: *StandardDictionarySequenceCounts, tokens: []const lz77.Token, initial_offsets: [3]usize) Error!void {
     var literal_len: usize = 0;
-    var repeated_offsets = initial_repeated_offsets;
+    var repeated_offsets = initial_offsets;
     for (tokens) |token| switch (token) {
         .literal => literal_len += 1,
         .match => |match| {
@@ -635,6 +835,103 @@ fn addStandardDictionarySequenceCounts(counts: *StandardDictionarySequenceCounts
             literal_len = 0;
         },
     };
+}
+
+fn addStandardDictionaryRepcodeCounts(
+    counts: *StandardDictionaryRepcodeCounts,
+    tokens: []const lz77.Token,
+    match_count: usize,
+    content_len: usize,
+    initial_offsets: [3]usize,
+) Error!void {
+    if (match_count < standard_dictionary_repcode_weights.len) return;
+    var literal_len: usize = 0;
+    var repeated_offsets = initial_offsets;
+    var match_index: usize = 0;
+    for (tokens) |token| switch (token) {
+        .literal => literal_len += 1,
+        .match => |match| {
+            const offset_code = try chooseOffsetSequenceCode(literal_len, match.distance, &repeated_offsets);
+            if (match_index < standard_dictionary_repcode_weights.len and
+                of_bits[offset_code] > 1 and
+                match.distance < standard_dictionary_repcode_limit and
+                match.distance <= content_len)
+            {
+                counts[match.distance] = std.math.add(
+                    u32,
+                    counts[match.distance],
+                    standard_dictionary_repcode_weights[match_index],
+                ) catch return error.InvalidDictionaryTraining;
+            }
+            match_index += 1;
+            literal_len = 0;
+            if (match_index == standard_dictionary_repcode_weights.len) return;
+        },
+    };
+}
+
+fn appendStandardDictionaryOffsetSequences(
+    allocator: std.mem.Allocator,
+    sequences: *std.ArrayList(StandardDictionaryOffsetSequence),
+    tokens: []const lz77.Token,
+    match_count: usize,
+) Error!void {
+    try sequences.ensureUnusedCapacity(allocator, match_count);
+    var literal_len: usize = 0;
+    var first = true;
+    for (tokens) |token| switch (token) {
+        .literal => literal_len += 1,
+        .match => |match| {
+            sequences.appendAssumeCapacity(.{
+                .literal_len = @intCast(literal_len),
+                .distance = match.distance,
+                .starts_plan = first,
+            });
+            first = false;
+            literal_len = 0;
+        },
+    };
+}
+
+fn addStandardDictionaryOffsetSequenceCounts(
+    counts: *[sequence_table_symbol_count_max.offset]u32,
+    sequences: []const StandardDictionaryOffsetSequence,
+    initial_offsets: [3]usize,
+) Error!void {
+    var repeated_offsets = initial_offsets;
+    for (sequences) |sequence| {
+        if (sequence.starts_plan) repeated_offsets = initial_offsets;
+        const offset_code = try chooseOffsetSequenceCode(sequence.literal_len, sequence.distance, &repeated_offsets);
+        counts[offset_code] += 1;
+    }
+}
+
+test "standard Zstd dictionary repcode candidates are weighted and deterministic" {
+    var counts: StandardDictionaryRepcodeCounts = @splat(0);
+    for (initial_repeated_offsets) |offset| counts[offset] = 1;
+    const repeated_second = [_]lz77.Token{
+        .{ .match = .{ .length = 4, .distance = 12 } },
+        .{ .match = .{ .length = 4, .distance = 12 } },
+    };
+    try addStandardDictionaryRepcodeCounts(&counts, &repeated_second, 2, 64, initial_repeated_offsets);
+    try std.testing.expectEqual(@as(u32, 4), counts[12]);
+
+    const repeat_then_direct = [_]lz77.Token{
+        .{ .match = .{ .length = 4, .distance = 1 } },
+        .{ .match = .{ .length = 4, .distance = 13 } },
+    };
+    try addStandardDictionaryRepcodeCounts(&counts, &repeat_then_direct, 2, 64, initial_repeated_offsets);
+    try std.testing.expectEqual(@as(u32, 1), counts[13]);
+
+    counts[12] = 5;
+    counts[21] = 5;
+    counts[31] = 100;
+    // The out-of-content offset is ignored, equal counts prefer the smaller
+    // offset, and the baseline prior supplies a deterministic third choice.
+    try std.testing.expectEqual([3]usize{ 12, 21, 1 }, selectStandardDictionaryRepcodes(&counts, 24));
+    try std.testing.expect(standardDictionaryRepcodeCandidateImproves(26, 25));
+    try std.testing.expect(!standardDictionaryRepcodeCandidateImproves(3754, 3753));
+    try std.testing.expect(!standardDictionaryRepcodeCandidateImproves(100, 100));
 }
 
 fn emitStandardDictionaryFseTable(
@@ -723,6 +1020,151 @@ test "standard Zstd dictionary trainer emits corpus literal entropy" {
         .{ .target_size = 64 },
         0,
     ));
+}
+
+test "standard Zstd dictionary trainer adopts only a smaller repcode model" {
+    var content: [1024]u8 = undefined;
+    var random_state: u32 = 0x6a09_e667;
+    for (&content) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    var sample: [99]u8 = undefined;
+    sample[0] = 0x5a;
+    @memcpy(sample[1..33], content[324..356]);
+    sample[33] = 0xa5;
+    @memcpy(sample[34..66], content[424..456]);
+    sample[66] = 0x3c;
+    @memcpy(sample[67..99], content[224..256]);
+    const samples = [_][]const u8{&sample};
+    const trained = try standardDictionaryFromSelectedContentAndSamplesAlloc(
+        std.testing.allocator,
+        &content,
+        &samples,
+        0x1000_0006,
+    );
+    defer trained.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual([3]u32{ 701, 634, 1 }, trained.view.repcodes);
+    const summary = try summarizeStandardDictionary(trained.bytes);
+    const literal_entropy = trained.bytes[8 .. 8 + summary.huffman_description_len];
+    var baseline_sequence_entropy: std.ArrayList(u8) = .empty;
+    defer baseline_sequence_entropy.deinit(std.testing.allocator);
+    try trainStandardDictionarySequenceEntropy(
+        std.testing.allocator,
+        &baseline_sequence_entropy,
+        &samples,
+        &content,
+        initial_repeated_offsets,
+        null,
+    );
+    var baseline = try assembleStandardDictionaryAlloc(
+        std.testing.allocator,
+        &content,
+        trained.view.id,
+        literal_entropy,
+        baseline_sequence_entropy.items,
+        initial_repeated_offsets,
+    );
+    defer baseline.deinit(std.testing.allocator);
+    const encoded_sizes = try standardDictionaryEncodedSampleByteCounts(
+        std.testing.allocator,
+        baseline.asDictionary(),
+        trained.asDictionary(),
+        &samples,
+    );
+    try std.testing.expectEqual(@as(usize, 25), encoded_sizes.candidate);
+    try std.testing.expectEqual(@as(usize, 26), encoded_sizes.baseline);
+    try std.testing.expect(encoded_sizes.candidate < encoded_sizes.baseline);
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(
+        std.testing.allocator,
+        &sample,
+        .{ .content_checksum = false, .selection = .literal_only },
+        trained.asDictionary(),
+    );
+    defer std.testing.allocator.free(encoded.frame);
+    const decoded = try decodeNativeFrameAllocWithDictionary(
+        std.testing.allocator,
+        encoded.frame,
+        trained.asDictionary(),
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &sample, decoded);
+}
+
+test "standard Zstd dictionary trainer retains baseline repcodes on equal size" {
+    const phrase = "0123456789ABCDEF";
+    const content = "dictionary history with a unique final phrase: " ++ phrase;
+    const sample = phrase ** 40;
+    const trained = try standardDictionaryFromSelectedContentAndSamplesAlloc(
+        std.testing.allocator,
+        content,
+        &.{sample},
+        0x1000_0007,
+    );
+    defer trained.deinit(std.testing.allocator);
+    try std.testing.expectEqual([3]u32{ 1, 4, 8 }, trained.view.repcodes);
+
+    const summary = try summarizeStandardDictionary(trained.bytes);
+    const literal_entropy = trained.bytes[8 .. 8 + summary.huffman_description_len];
+    var candidate_sequence_entropy: std.ArrayList(u8) = .empty;
+    defer candidate_sequence_entropy.deinit(std.testing.allocator);
+    const candidate_repcodes = [3]usize{ 16, 1, 4 };
+    try trainStandardDictionarySequenceEntropy(
+        std.testing.allocator,
+        &candidate_sequence_entropy,
+        &.{sample},
+        content,
+        candidate_repcodes,
+        null,
+    );
+    var candidate = try assembleStandardDictionaryAlloc(
+        std.testing.allocator,
+        content,
+        trained.view.id,
+        literal_entropy,
+        candidate_sequence_entropy.items,
+        candidate_repcodes,
+    );
+    defer candidate.deinit(std.testing.allocator);
+    const encoded_sizes = try standardDictionaryEncodedSampleByteCounts(
+        std.testing.allocator,
+        trained.asDictionary(),
+        candidate.asDictionary(),
+        &.{sample},
+    );
+    try std.testing.expectEqual(encoded_sizes.baseline, encoded_sizes.candidate);
+}
+
+test "standard Zstd dictionary repcode training cleans up every allocation failure" {
+    var content: [1024]u8 = undefined;
+    var random_state: u32 = 0x6a09_e667;
+    for (&content) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    var sample: [99]u8 = undefined;
+    sample[0] = 0x5a;
+    @memcpy(sample[1..33], content[324..356]);
+    sample[33] = 0xa5;
+    @memcpy(sample[34..66], content[424..456]);
+    sample[66] = 0x3c;
+    @memcpy(sample[67..99], content[224..256]);
+    const samples = [_][]const u8{&sample};
+
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, dictionary_content: []const u8, training_samples: []const []const u8) !void {
+            const trained = try standardDictionaryFromSelectedContentAndSamplesAlloc(
+                allocator,
+                dictionary_content,
+                training_samples,
+                0x1000_0008,
+            );
+            defer trained.deinit(allocator);
+            try std.testing.expectEqual([3]u32{ 701, 634, 1 }, trained.view.repcodes);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ &content, &samples });
 }
 
 test "standard Zstd dictionary trainer handles a flat literal corpus" {

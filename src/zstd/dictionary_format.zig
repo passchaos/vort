@@ -69,7 +69,7 @@ pub fn encodedFromEntropyLen(content_len: usize, literal_entropy_len: usize, seq
 
 /// Assemble a full dictionary from caller-provided Huffman and OF/ML/LL FSE
 /// descriptions. The parent codec owns entropy construction and validation;
-/// repcodes remain the portable baseline here.
+/// this compatibility entry point retains the portable baseline repcodes.
 pub fn encodeFromEntropyInto(
     content: []const u8,
     dictionary_id: u32,
@@ -77,8 +77,31 @@ pub fn encodeFromEntropyInto(
     sequence_entropy: []const u8,
     output: []u8,
 ) !usize {
+    return try encodeFromEntropyAndRepcodesInto(
+        content,
+        dictionary_id,
+        literal_entropy,
+        sequence_entropy,
+        baseline_repcodes,
+        output,
+    );
+}
+
+/// Assemble a full dictionary with caller-selected, validated starting
+/// repcodes. The content, entropy sections, and output must not overlap.
+pub fn encodeFromEntropyAndRepcodesInto(
+    content: []const u8,
+    dictionary_id: u32,
+    literal_entropy: []const u8,
+    sequence_entropy: []const u8,
+    repcodes: [3]u32,
+    output: []u8,
+) !usize {
     try validateGenerationInput(content.len, dictionary_id);
     if (literal_entropy.len == 0 or sequence_entropy.len == 0) return error.InvalidDictionaryTraining;
+    for (repcodes) |repcode| {
+        if (repcode == 0 or repcode > content.len) return error.InvalidDictionaryMetadata;
+    }
     const needed = try encodedFromEntropyLen(content.len, literal_entropy.len, sequence_entropy.len);
     if (output.len < needed) return error.OutputTooSmall;
 
@@ -89,7 +112,7 @@ pub fn encodeFromEntropyInto(
     offset += literal_entropy.len;
     @memcpy(output[offset..][0..sequence_entropy.len], sequence_entropy);
     offset += sequence_entropy.len;
-    for (baseline_repcodes) |repcode| {
+    for (repcodes) |repcode| {
         std.mem.writeInt(u32, output[offset..][0..4], repcode, .little);
         offset += 4;
     }
@@ -177,4 +200,41 @@ test "standard dictionary custom entropy assembly is sized before writes" {
     try std.testing.expectError(error.InvalidDictionaryTraining, encodeFromEntropyInto(content, 9, &.{}, baseline_sequence_entropy, &output));
     try std.testing.expectError(error.InvalidDictionaryTraining, encodeFromEntropyInto(content, 9, &literal_entropy, &.{}, &output));
     try std.testing.expectError(error.IntegerOverflow, encodedFromEntropyLen(std.math.maxInt(usize), 1, 1));
+}
+
+test "standard dictionary custom entropy accepts validated repcodes" {
+    const content = "dictionary history";
+    const literal_entropy = [_]u8{ 128, 0x11 };
+    const needed = try encodedFromEntropyLen(content.len, literal_entropy.len, baseline_sequence_entropy.len);
+    var output: [8 + literal_entropy.len + baseline_sequence_entropy.len + 12 + content.len]u8 = undefined;
+    const repcodes = [3]u32{ 3, 7, 11 };
+    try std.testing.expectEqual(needed, try encodeFromEntropyAndRepcodesInto(
+        content,
+        10,
+        &literal_entropy,
+        baseline_sequence_entropy,
+        repcodes,
+        &output,
+    ));
+    const view = try viewAfterEntropy(&output, literal_entropy.len + baseline_sequence_entropy.len);
+    try std.testing.expectEqual(repcodes, view.repcodes);
+
+    const before = output;
+    try std.testing.expectError(error.InvalidDictionaryMetadata, encodeFromEntropyAndRepcodesInto(
+        content,
+        10,
+        &literal_entropy,
+        baseline_sequence_entropy,
+        .{ 0, 7, 11 },
+        &output,
+    ));
+    try std.testing.expectError(error.InvalidDictionaryMetadata, encodeFromEntropyAndRepcodesInto(
+        content,
+        10,
+        &literal_entropy,
+        baseline_sequence_entropy,
+        .{ 3, 7, content.len + 1 },
+        &output,
+    ));
+    try std.testing.expectEqualSlices(u8, &before, &output);
 }

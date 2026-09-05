@@ -35,6 +35,8 @@ def main() -> int:
             raise SystemExit(f"dictionary id mismatch: {output!r}")
         if "generated=yes" not in output or not generated.is_file():
             raise SystemExit(f"Vort dictionary generation was not exercised: {output!r}")
+        if "custom_repcodes=yes" not in output:
+            raise SystemExit(f"custom repcode interoperability was not exercised: {output!r}")
         fields = dict(field.split("=", 1) for field in output.split() if "=" in field)
         def sizes(name: str) -> tuple[int, int]:
             trained, baseline = fields.get(name, "0/0").split("/", 1)
