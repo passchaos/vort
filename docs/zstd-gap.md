@@ -379,7 +379,11 @@ Recommended next comparison steps:
   526 sequences and the second selects LL/ML=Repeat plus OF=RLE. Strict ratio
   levels and non-decisive fallback candidates retain complete legacy arbitration;
   avoiding their decode/re-encode preparation cost and running a fresh multi-file
-  corpus pass remain follow-up work.
+  corpus pass remain follow-up work. Wide Repeat_Mode reachability scratch is
+  also sized from the largest actual previous LL/OF/ML table instead of the
+  format-wide 512-state ceiling. The common 128-state case uses two rather than
+  eight `u64` words per sequence, reducing that buffer by 75%; tests cover
+  64/128/256/512-state boundaries without changing the selected state path.
 
 - The runtime `run-zstd-compat-probe` matrix now includes compression level 22,
   four real source-file rows when the local zstd checkout is available, 15

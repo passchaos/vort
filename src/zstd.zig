@@ -10710,6 +10710,15 @@ test "zstd dynamic hash emitter reuses sequence tables across wide blocks" {
     try std.testing.expectEqualSlices(u8, reference_second.items, measured_direct.items);
     try std.testing.expectEqual(reference_allocator.allocations - 16, direct_allocator.allocations);
     try std.testing.expectEqual(reference_allocator.allocated_bytes - 237_173, direct_allocator.allocated_bytes);
+    const expected_repeat_mask_words = @max(
+        try repeatSequenceMaskWordCount(previousSequenceTable(previous_tables, .literal)),
+        @max(
+            try repeatSequenceMaskWordCount(previousSequenceTable(previous_tables, .offset)),
+            try repeatSequenceMaskWordCount(previousSequenceTable(previous_tables, .match)),
+        ),
+    );
+    try std.testing.expectEqual(sequence_count * expected_repeat_mask_words, direct_scratch.repeat_viable_masks.items.len);
+    try std.testing.expectEqual(@as(usize, 2), expected_repeat_mask_words);
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
     const first_modes = try inspectNativeFrameBlockSequenceModes(frame.items, first_block);
@@ -11708,7 +11717,14 @@ fn emitLargeSequenceCompressedBlockWithState(
     try scratch.state_bits.resize(allocator, state_len);
     try scratch.transition_values.resize(allocator, state_len);
     try scratch.transition_bits.resize(allocator, state_len);
-    const repeat_mask_len = std.math.mul(usize, sequence_count, max_sequence_fse_table_size / 64) catch return error.IntegerOverflow;
+    const repeat_mask_words = if (previous_tables) |tables| @max(
+        try repeatSequenceMaskWordCount(previousSequenceTable(tables, .literal)),
+        @max(
+            try repeatSequenceMaskWordCount(previousSequenceTable(tables, .offset)),
+            try repeatSequenceMaskWordCount(previousSequenceTable(tables, .match)),
+        ),
+    ) else 0;
+    const repeat_mask_len = std.math.mul(usize, sequence_count, repeat_mask_words) catch return error.IntegerOverflow;
     if (previous_tables != null) {
         try scratch.repeat_states.resize(allocator, state_len);
         try scratch.repeat_viable_masks.resize(allocator, repeat_mask_len);
@@ -14198,33 +14214,48 @@ fn planLargeRepeatSequenceCodes(
         .rle => unreachable,
         .repeat => return null,
     };
-    const mask_words = max_sequence_fse_table_size / 64;
-    if (symbols.len == 0 or symbols.len > max_sequence_fse_table_size or viable_masks.len != codes.len * mask_words) return null;
-    const rows: [][mask_words]u64 = @ptrCast(viable_masks);
-    @memset(viable_masks, 0);
+    const mask_words = try repeatSequenceMaskWordCount(source);
+    const required_mask_len = std.math.mul(usize, codes.len, mask_words) catch return error.IntegerOverflow;
+    if (viable_masks.len < required_mask_len) return null;
+    const masks = viable_masks[0..required_mask_len];
+    @memset(masks, 0);
     var pos = codes.len;
     while (pos > 0) {
         pos -= 1;
+        const current_row = masks[pos * mask_words ..][0..mask_words];
         for (symbols, 0..) |symbol, state| {
             if (!sequenceSymbolMatchesCode(symbol, kind, codes[pos])) continue;
             if (pos == codes.len - 1) {
-                setSequenceStateBit(&rows[pos], state);
+                setSequenceStateBit(current_row, state);
                 continue;
             }
             const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
             const first_next: usize = symbol.next_state;
             const end_next = @min(symbols.len, first_next + transition_count);
-            if (first_next < end_next and firstSequenceStateInRange(&rows[pos + 1], first_next, end_next) != null)
-                setSequenceStateBit(&rows[pos], state);
+            const next_row = masks[(pos + 1) * mask_words ..][0..mask_words];
+            if (first_next < end_next and firstSequenceStateInRange(next_row, first_next, end_next) != null)
+                setSequenceStateBit(current_row, state);
         }
     }
-    states[0] = @intCast(firstSequenceStateInRange(&rows[0], 0, symbols.len) orelse return null);
+    states[0] = @intCast(firstSequenceStateInRange(masks[0..mask_words], 0, symbols.len) orelse return null);
     for (0..codes.len - 1) |i| {
         const symbol = symbols[states[i]];
         const end_next = @min(symbols.len, @as(usize, symbol.next_state) + (@as(usize, 1) << @intCast(symbol.state_bits)));
-        states[i + 1] = @intCast(firstSequenceStateInRange(&rows[i + 1], symbol.next_state, end_next) orelse return null);
+        const next_row = masks[(i + 1) * mask_words ..][0..mask_words];
+        states[i + 1] = @intCast(firstSequenceStateInRange(next_row, symbol.next_state, end_next) orelse return null);
     }
     return .{ .len = codes.len, .source = source, .states = states };
+}
+
+fn repeatSequenceMaskWordCount(source: RepeatSequenceSource) Error!usize {
+    return switch (source.mode) {
+        .rle => 0,
+        .predefined, .compressed => if (source.symbols.len != 0 and source.symbols.len <= max_sequence_fse_table_size)
+            (source.symbols.len + 63) / 64
+        else
+            error.CorruptFrame,
+        .repeat => error.CorruptFrame,
+    };
 }
 
 fn largeOffsetSequenceTablePlanAlternatives(
@@ -14839,11 +14870,13 @@ fn sequenceSymbolMatchesCode(symbol: SequenceSymbol, kind: SequenceTableKind, co
     return code < bases.len and code < bits.len and symbol.base == bases[code] and symbol.additional_bits == bits[code];
 }
 
-fn setSequenceStateBit(mask: *[max_sequence_fse_table_size / 64]u64, state: usize) void {
+fn setSequenceStateBit(mask: []u64, state: usize) void {
+    std.debug.assert(state < mask.len * 64);
     mask[state / 64] |= @as(u64, 1) << @intCast(state % 64);
 }
 
-fn firstSequenceStateInRange(mask: *const [max_sequence_fse_table_size / 64]u64, start: usize, end: usize) ?usize {
+fn firstSequenceStateInRange(mask: []const u64, start: usize, end: usize) ?usize {
+    if (start >= end or end > mask.len * 64) return null;
     var state = start;
     while (state < end) {
         const word = mask[state / 64] >> @intCast(state % 64);
@@ -23612,6 +23645,51 @@ test "zstd large sequence plans select a larger FSE table" {
     const state_count = @as(usize, 1) << @as(u6, @intCast(plan.accuracy_log));
     try std.testing.expect(plan.initial_state < state_count);
     for (plan.next_states[0..plan.len]) |state| try std.testing.expect(state < state_count);
+}
+
+test "zstd large repeat planner sizes viability rows to the source table" {
+    const sequence_count = max_native_sequence_count + 1;
+    var codes: [sequence_count]u8 = @splat(0);
+    var states: [sequence_count]u16 = undefined;
+    var symbols: [max_sequence_fse_table_size]SequenceSymbol = undefined;
+    var masks: [sequence_count * (max_sequence_fse_table_size / 64) + 1]u64 = undefined;
+
+    for ([_]usize{ 64, 128, 256, 512 }) |table_len| {
+        const state_bits: u8 = @intCast(std.math.log2_int(usize, table_len));
+        for (symbols[0..table_len]) |*symbol| symbol.* = .{
+            .base = 1,
+            .additional_bits = 0,
+            .next_state = 0,
+            .state_bits = 0,
+        };
+        symbols[table_len - 1] = .{
+            .base = 0,
+            .additional_bits = 0,
+            .next_state = @intCast(table_len - 1),
+            .state_bits = 0,
+        };
+        const source: RepeatSequenceSource = .{
+            .mode = .compressed,
+            .rle = null,
+            .symbols = symbols[0..table_len],
+            .accuracy_log = state_bits,
+        };
+        const mask_words = table_len / 64;
+        try std.testing.expectEqual(mask_words, try repeatSequenceMaskWordCount(source));
+        @memset(&masks, 0xa5a5_a5a5_a5a5_a5a5);
+        const required_mask_len = sequence_count * mask_words;
+        const plan = (try planLargeRepeatSequenceCodes(&codes, .literal, source, &states, masks[0..required_mask_len])) orelse return error.CorruptFrame;
+        try std.testing.expectEqual(sequence_count, plan.len);
+        for (plan.states) |state| try std.testing.expectEqual(@as(u16, @intCast(table_len - 1)), state);
+        try std.testing.expectEqual(@as(u64, 0xa5a5_a5a5_a5a5_a5a5), masks[required_mask_len]);
+        try std.testing.expectEqual(@as(?LargeRepeatSequencePlan, null), try planLargeRepeatSequenceCodes(
+            &codes,
+            .literal,
+            source,
+            &states,
+            masks[0 .. required_mask_len - 1],
+        ));
+    }
 }
 
 test "zstd reference FSE normalization preserves probability mass" {

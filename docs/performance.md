@@ -1077,7 +1077,9 @@ this preserves the exact rewritten wire while removing 16 allocations and
 retain full candidate arbitration. The runtime probe additionally pins a
 15,517-byte two-block level-1-style frame whose disjoint byte alphabets exclude
 history matches, with 526 sequences per block and LL/ML=Repeat plus OF=RLE in
-the second 33 KiB block. A same-process
+the second 33 KiB block. Its Repeat reachability DP now allocates two `u64`
+words per sequence for the normal 128-state tables instead of eight, a 75%
+reduction for that scratch buffer while preserving the exact wire. A same-process
 parallel-versus-serial gate on efficiency cores measured
 stable medians of roughly `1.075x`/`1.072x`/`1.116x` for levels 1/2/3 across
 five runs, each 5/5 wins; its conservative enforced floor is `1.01x`. Five

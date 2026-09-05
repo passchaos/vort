@@ -9145,5 +9145,8 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   cumulative requested bytes. The runtime-libzstd probe also exercises this
   production path with a 15,517-byte two-block frame whose disjoint byte
   alphabets exclude cross-block history matches; both 33 KiB blocks have 526
-  sequences and the second selects LL/ML=Repeat plus OF=RLE. Future ratio work should broaden
+  sequences and the second selects LL/ML=Repeat plus OF=RLE. Repeat reachability
+  storage now scales with the largest actual previous table: Vort's normal
+  128-state tables need two `u64` words per sequence instead of the fixed eight,
+  while 64/128/256/512-state tests retain exact path selection. Future ratio work should broaden
   the real multi-file corpus and remove the remaining fallback preparation pass.
