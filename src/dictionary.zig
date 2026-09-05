@@ -225,6 +225,100 @@ const Phrase = struct {
 };
 
 const phrase_hash_threshold = 128;
+const phrase_index_load_numerator = 3;
+const phrase_index_load_denominator = 4;
+
+const PhraseIndex = struct {
+    const Entry = struct {
+        hash: u64 = 0,
+        index_plus_one: usize = 0,
+    };
+
+    slots: std.ArrayList(Entry) = .empty,
+    count: usize = 0,
+
+    fn deinit(self: *PhraseIndex, allocator: std.mem.Allocator) void {
+        self.slots.deinit(allocator);
+        self.* = .{};
+    }
+
+    fn ensureUnusedCapacity(self: *PhraseIndex, allocator: std.mem.Allocator, additional: usize) !void {
+        const needed = std.math.add(usize, self.count, additional) catch return error.OutOfMemory;
+        if (self.slots.items.len != 0 and needed <= self.slots.items.len / phrase_index_load_denominator * phrase_index_load_numerator) return;
+        var capacity: usize = if (self.slots.items.len == 0) 256 else self.slots.items.len;
+        while (needed > capacity / phrase_index_load_denominator * phrase_index_load_numerator) {
+            capacity = std.math.mul(usize, capacity, 2) catch return error.OutOfMemory;
+        }
+
+        var replacement: std.ArrayList(Entry) = .empty;
+        errdefer replacement.deinit(allocator);
+        try replacement.resize(allocator, capacity);
+        @memset(replacement.items, .{});
+        for (self.slots.items) |entry| {
+            if (entry.index_plus_one != 0) putPhraseIndexAssumeCapacity(replacement.items, entry.hash, entry.index_plus_one - 1);
+        }
+        self.slots.deinit(allocator);
+        self.slots = replacement;
+    }
+
+    fn get(self: *const PhraseIndex, phrases: []const Phrase, bytes: []const u8) ?usize {
+        return self.getWithHash(phrases, bytes, std.hash_map.hashString(bytes));
+    }
+
+    fn getWithHash(self: *const PhraseIndex, phrases: []const Phrase, bytes: []const u8, hash: u64) ?usize {
+        if (self.slots.items.len == 0) return null;
+        const mask = self.slots.items.len - 1;
+        var slot = @as(usize, @truncate(hash)) & mask;
+        var remaining = self.slots.items.len;
+        while (remaining != 0) : (remaining -= 1) {
+            const entry = self.slots.items[slot];
+            if (entry.index_plus_one == 0) return null;
+            const phrase_index = entry.index_plus_one - 1;
+            if (entry.hash == hash and std.mem.eql(u8, phrases[phrase_index].bytes, bytes)) return phrase_index;
+            slot = (slot + 1) & mask;
+        }
+        return null;
+    }
+
+    fn put(self: *PhraseIndex, allocator: std.mem.Allocator, bytes: []const u8, phrase_index: usize) !void {
+        try self.ensureUnusedCapacity(allocator, 1);
+        putPhraseIndexAssumeCapacity(self.slots.items, std.hash_map.hashString(bytes), phrase_index);
+        self.count += 1;
+    }
+
+    fn remove(self: *PhraseIndex, bytes: []const u8, phrase_index: usize) void {
+        const hash = std.hash_map.hashString(bytes);
+        self.removeWithHash(hash, phrase_index);
+    }
+
+    fn removeWithHash(self: *PhraseIndex, hash: u64, phrase_index: usize) void {
+        if (self.slots.items.len == 0) return;
+        const mask = self.slots.items.len - 1;
+        var slot = @as(usize, @truncate(hash)) & mask;
+        while (self.slots.items[slot].index_plus_one != 0) : (slot = (slot + 1) & mask) {
+            const entry = self.slots.items[slot];
+            if (entry.hash != hash or entry.index_plus_one - 1 != phrase_index) continue;
+            var hole = slot;
+            var next = (slot + 1) & mask;
+            while (self.slots.items[next].index_plus_one != 0) : (next = (next + 1) & mask) {
+                const home = @as(usize, @truncate(self.slots.items[next].hash)) & mask;
+                if (((hole -% home) & mask) >= ((next -% home) & mask)) continue;
+                self.slots.items[hole] = self.slots.items[next];
+                hole = next;
+            }
+            self.slots.items[hole] = .{};
+            self.count -= 1;
+            return;
+        }
+    }
+};
+
+fn putPhraseIndexAssumeCapacity(slots: []PhraseIndex.Entry, hash: u64, phrase_index: usize) void {
+    const mask = slots.len - 1;
+    var slot = @as(usize, @truncate(hash)) & mask;
+    while (slots[slot].index_plus_one != 0) slot = (slot + 1) & mask;
+    slots[slot] = .{ .hash = hash, .index_plus_one = phrase_index + 1 };
+}
 
 pub fn trainAlloc(allocator: std.mem.Allocator, samples: []const []const u8, options: TrainOptions) ![]u8 {
     return trainAllocWithLayout(allocator, samples, options, .ranked, .total_frequency);
@@ -247,12 +341,12 @@ fn collectPhrasesAlloc(allocator: std.mem.Allocator, samples: []const []const u8
     if (options.min_phrase_len == 0 or options.min_phrase_len > options.max_phrase_len) return error.InvalidDictionaryTraining;
     var phrases: std.ArrayList(Phrase) = .empty;
     errdefer phrases.deinit(allocator);
-    var phrase_indexes: std.StringHashMapUnmanaged(usize) = .empty;
+    var phrase_indexes: PhraseIndex = .{};
     defer phrase_indexes.deinit(allocator);
     // Once the bounded candidate set is full, the old implementation scanned
-    // every retained phrase for every new substring. Keep a min-heap of phrase
-    // indexes instead; map indexes remain stable because the phrase array is
-    // not reordered until collection is complete.
+    // every retained phrase for every new substring. Keep an open-addressed
+    // phrase index plus a min-heap of stable phrase indexes instead; the phrase
+    // array is not reordered until collection is complete.
     var worst_heap: std.ArrayList(usize) = .empty;
     defer worst_heap.deinit(allocator);
     var heap_positions: std.ArrayList(usize) = .empty;
@@ -268,7 +362,7 @@ fn collectPhrasesAlloc(allocator: std.mem.Allocator, samples: []const []const u8
             var len = options.min_phrase_len;
             while (len <= max_len) : (len += 1) {
                 const phrase = sample[start..][0..len];
-                const existing = if (index_active) phrase_indexes.get(phrase) else findPhrase(phrases.items, phrase);
+                const existing = if (index_active) phrase_indexes.get(phrases.items, phrase) else findPhrase(phrases.items, phrase);
                 if (existing) |idx| {
                     phrases.items[idx].score += len;
                     if (phrases.items[idx].last_sample != sample_index) {
@@ -290,7 +384,7 @@ fn collectPhrasesAlloc(allocator: std.mem.Allocator, samples: []const []const u8
                     const new_phrase: Phrase = .{ .bytes = phrase, .score = len, .last_sample = sample_index };
                     if (phraseBetter({}, new_phrase, phrases.items[worst_heap.items[0]])) {
                         const index = worst_heap.items[0];
-                        if (index_active) _ = phrase_indexes.remove(phrases.items[index].bytes);
+                        if (index_active) phrase_indexes.remove(phrases.items[index].bytes, index);
                         phrases.items[index] = new_phrase;
                         if (index_active) try phrase_indexes.put(allocator, phrase, index);
                         phraseHeapSiftDown(worst_heap.items, heap_positions.items, phrases.items, 0);
@@ -599,9 +693,58 @@ fn findPhrase(phrases: []const Phrase, bytes: []const u8) ?usize {
     return null;
 }
 
-fn initializePhraseIndex(allocator: std.mem.Allocator, indexes: *std.StringHashMapUnmanaged(usize), phrases: []const Phrase) !void {
+fn initializePhraseIndex(allocator: std.mem.Allocator, indexes: *PhraseIndex, phrases: []const Phrase) !void {
     try indexes.ensureUnusedCapacity(allocator, @intCast(phrases.len));
-    for (phrases, 0..) |phrase, index| indexes.putAssumeCapacity(phrase.bytes, index);
+    for (phrases, 0..) |phrase, index| {
+        putPhraseIndexAssumeCapacity(indexes.slots.items, std.hash_map.hashString(phrase.bytes), index);
+        indexes.count += 1;
+    }
+}
+
+test "dictionary phrase index handles collisions and backward-shift deletion" {
+    const phrases = [_]Phrase{
+        .{ .bytes = "alpha", .score = 1 },
+        .{ .bytes = "omega", .score = 1 },
+        .{ .bytes = "sigma", .score = 1 },
+    };
+    var index: PhraseIndex = .{};
+    defer index.deinit(std.testing.allocator);
+    try index.slots.resize(std.testing.allocator, 8);
+    @memset(index.slots.items, .{});
+    const collision_hash: u64 = 7;
+    for (0..phrases.len) |phrase_index| {
+        putPhraseIndexAssumeCapacity(index.slots.items, collision_hash, phrase_index);
+        index.count += 1;
+    }
+
+    for (phrases, 0..) |phrase, phrase_index|
+        try std.testing.expectEqual(phrase_index, index.getWithHash(&phrases, phrase.bytes, collision_hash).?);
+    index.removeWithHash(collision_hash, 1);
+    try std.testing.expectEqual(@as(usize, 0), index.getWithHash(&phrases, "alpha", collision_hash).?);
+    try std.testing.expect(index.getWithHash(&phrases, "omega", collision_hash) == null);
+    try std.testing.expectEqual(@as(usize, 2), index.getWithHash(&phrases, "sigma", collision_hash).?);
+    try std.testing.expectEqual(@as(usize, 2), index.count);
+}
+
+test "dictionary phrase index growth releases every allocation failure" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            var storage: [600][4]u8 = undefined;
+            var phrases: [storage.len]Phrase = undefined;
+            var index: PhraseIndex = .{};
+            defer index.deinit(allocator);
+            for (&storage, &phrases, 0..) |*bytes, *phrase, i| {
+                std.mem.writeInt(u32, bytes, @intCast(i + 1), .little);
+                phrase.* = .{ .bytes = bytes, .score = 1 };
+                try index.put(allocator, bytes, i);
+            }
+            try std.testing.expect(index.slots.items.len >= 1024);
+            try std.testing.expectEqual(phrases.len, index.count);
+            for (&storage, 0..) |*bytes, i|
+                try std.testing.expectEqual(i, index.get(&phrases, bytes).?);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
 }
 
 fn initializePhraseHeap(

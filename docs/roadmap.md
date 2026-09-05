@@ -9366,3 +9366,30 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   linear fallback) also failed: despite a smaller map, nine fixed-CPU-30 pairs
   reached 0.970x aggregate throughput and won only 7/27 runs. The ordinary
   string-key map remains faster, especially on high-uniqueness binary samples.
+  The retained phrase-index replacement uses one allocation containing compact
+  `{Wyhash, phrase_index+1}` slots, a 75% load cap, and backward-shift deletion
+  without tombstones. Hash collisions still compare complete phrase bytes, and
+  tests force colliding wrap-around clusters, middle deletion, growth through
+  1,024 slots, and every allocation-failure point. Fifteen alternating
+  fixed-CPU-30 pairs improved validated/validated-separate/validated-targets
+  training by about 1.07–4.45x with 135/135 wins across text, JSON, and binary.
+  The full Zstd validated path improved 1.006x/1.007x/1.076x (36/45 wins), and
+  its cumulative allocation bytes fell by roughly 10–14 KiB per case without
+  changing allocation counts or dictionary checksums. A follow-up that reused
+  the lookup hash on insertion was rejected at 0.995x aggregate throughput.
+  Replaced the generic phrase StringHashMap with a dedicated single-allocation
+  open-addressed index. Each 16-byte slot retains Wyhash plus a stable phrase
+  index, full byte equality resolves collisions, and backward-shift deletion
+  removes tombstones without periodic rebuilds. Tests force a colliding cluster
+  across the table boundary, delete its middle entry, grow through 1,024 slots,
+  and exhaust every allocation point; the existing scan-reference trainers
+  preserve exact output. Fifteen alternating fixed-CPU-30 ReleaseFast pairs
+  improved validated, separate-validated, and multi-target training on all nine
+  text/JSON/binary combinations (45/45 wins), by roughly 1.07x–4.45x. The full
+  Zstd validated path improves 1.006x/1.007x/1.076x with 36/45 wins, while its
+  cumulative allocation bytes fall by about 10–14 KiB per case. Profiling moves
+  `collectPhrasesAlloc` from roughly 31% to 11% of the combined benchmark.
+  Reusing a precomputed Wyhash across lookup and insertion inside the dedicated
+  index was rejected independently: nine fixed-CPU-30 pairs reached 0.995x
+  aggregate throughput, with JSON and binary both losing every run. Hashing on
+  the uncommon insertion path remains cheaper for surrounding code generation.
