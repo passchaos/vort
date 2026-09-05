@@ -9458,3 +9458,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   mixed: text/JSON improved 1.050x/1.029x, but binary reached 0.997x with only
   2/9 wins. The scalar tail loop remains because the compiler's existing
   record copies interact better with binary-heavy surrounding code.
+  Sharing one Huffman-weight histogram across tableLog 5/6 FSE size estimates
+  and emission candidates was rejected as another mixed micro-optimization. It
+  preserved both tableLog winners, estimator/wire equality, and invalid-weight
+  handling, but nine fixed-CPU-30 trainer pairs improved text/JSON by only
+  1.5%/1.1% while binary regressed about 1.0% in all 9 runs. Aggregate
+  throughput moved only 1.004x, so each FSE candidate continues to construct
+  its own small 16-symbol statistics table.
