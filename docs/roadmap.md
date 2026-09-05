@@ -17,10 +17,9 @@ major gaps before Vort can claim broad industry-best parity:
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
-  meta-blocks, and the full 256 literal/distance block-type ranges. Arbitrary
-  upstream Brotli streams still need broader decoder coverage, command block
-  types remain capped at 32, and the general fallback facade buffers a bounded
-  complete payload.
+  meta-blocks, and the full 256 literal/command/distance block-type ranges.
+  Arbitrary upstream Brotli streams still need broader corpus coverage, and the
+  general fallback facade buffers a bounded complete payload.
 - Incremental DEFLATE source and JSON throughput now reach or exceed the local
   zlib-ng level-6 comparison on the locked 256 KiB fixtures, while broader
   real-corpus, ratio, memory, and cross-platform parity still needs evidence.
@@ -9173,3 +9172,19 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   adoption, tie fallback, round-trip, and every allocation-failure point; the
   runtime-libzstd differential loads a custom-repcode dictionary and validates
   both Vort-to-libzstd and libzstd-to-Vort frames.
+  Audited the next repcode-search step before adding production complexity: all
+  six permutations of the selected `701/634/1` set produce the same 25-byte
+  focused frame, so there is no retained evidence that permutation search beats
+  the deterministic frequency order. The temporary experiment was removed.
+  Expanded the libbrotli upstream multi-meta-block differential beyond
+  flush-only input. The reference harness now exposes PROCESS and explicit
+  FINISH operations, including FINISH carrying the final input, and rejects
+  operations after completion. Eight new q0/q5/q11 schedules cover accumulated
+  PROCESS input, empty PROCESS, repeated empty FLUSH, PROCESS-to-METADATA
+  transitions, and FINISH with pending input. Each stream passes libbrotli
+  decode plus Vort's complete 8-by-7 input/output fragmentation matrix; the
+  gate now reports 100 format cases, 26 matrix streams, and 1,401 progressive
+  runs, plus two rejected operations-after-FINISH schedules. This audit also
+  corrected the stale top-level claim that command block
+  types were capped at 32: the existing maximum-type oracle already covers all
+  256 RFC values.

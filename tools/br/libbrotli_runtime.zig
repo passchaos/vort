@@ -51,6 +51,7 @@ const TransformDictionaryWordFn = *const fn (
 ) callconv(.c) c_int;
 
 const StreamingOperationCode = enum(c_int) {
+    process = 0,
     flush = 1,
     finish = 2,
     metadata = 3,
@@ -197,8 +198,10 @@ pub const Runtime = struct {
         ndirect: ?u32 = null,
     };
     pub const StreamingOperation = union(enum) {
+        process: []const u8,
         flush: []const u8,
         metadata: []const u8,
+        finish: []const u8,
     };
 
     pub fn encodeFlushedChunksWithOptionsAlloc(
@@ -229,11 +232,28 @@ pub const Runtime = struct {
 
         var output: std.ArrayList(u8) = .empty;
         errdefer output.deinit(allocator);
+        var finished = false;
         for (operations) |operation| switch (operation) {
-            .flush => |input| try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.flush), input, &output),
-            .metadata => |input| try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.metadata), input, &output),
+            .process => |input| {
+                if (finished) return error.ReferenceEncodeFailed;
+                try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.process), input, &output);
+            },
+            .flush => |input| {
+                if (finished) return error.ReferenceEncodeFailed;
+                try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.flush), input, &output);
+            },
+            .metadata => |input| {
+                if (finished) return error.ReferenceEncodeFailed;
+                try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.metadata), input, &output);
+            },
+            .finish => |input| {
+                if (finished) return error.ReferenceEncodeFailed;
+                try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.finish), input, &output);
+                finished = true;
+            },
         };
-        try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.finish), &.{}, &output);
+        if (!finished)
+            try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.finish), &.{}, &output);
         if (self.encoder_is_finished(state) == 0) return error.ReferenceEncodeFailed;
         return output.toOwnedSlice(allocator);
     }

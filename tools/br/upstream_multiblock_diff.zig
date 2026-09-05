@@ -214,6 +214,7 @@ pub fn main(init: std.process.Init) !void {
     var maximum_literal_type_cases: usize = 0;
     var maximum_command_type_cases: usize = 0;
     var extended_header_cases: usize = 0;
+    var operation_schedule_cases: usize = 0;
     for (cases) |case| {
         for (case.qualities) |quality| {
             for (case.modes) |mode| {
@@ -440,11 +441,96 @@ pub fn main(init: std.process.Init) !void {
         cases_run += 1;
     }
 
+    const process_finish_operations = [_]libbrotli.Runtime.StreamingOperation{
+        .{ .process = text[0 .. text.len / 2] },
+        .{ .process = &.{} },
+        .{ .process = text[text.len / 2 ..] },
+        .{ .finish = json },
+    };
+    const empty_flush_operations = [_]libbrotli.Runtime.StreamingOperation{
+        .{ .process = tiny_prefix },
+        .{ .flush = &.{} },
+        .{ .flush = &.{} },
+        .{ .process = random[0..73] },
+        .{ .flush = &.{} },
+        .{ .finish = tiny_suffix },
+    };
+    const OperationScheduleCase = struct {
+        name: []const u8,
+        operations: []const libbrotli.Runtime.StreamingOperation,
+        expected: []const u8,
+    };
+    const operation_schedules = [_]OperationScheduleCase{
+        .{ .name = "process-finish-input", .operations = &process_finish_operations, .expected = text ++ json },
+        .{ .name = "empty-flush-process-finish", .operations = &empty_flush_operations, .expected = tiny_expected },
+    };
+    for (operation_schedules) |schedule| {
+        for ([_]u32{ 0, 5, 11 }) |quality| {
+            const encoded = try reference.encodeOperationsAlloc(init.gpa, schedule.operations, .{
+                .quality = quality,
+                .lgwin = 16,
+                .lgblock = 16,
+            });
+            defer init.gpa.free(encoded);
+            const schedule_reference_output = try init.gpa.alloc(u8, schedule.expected.len);
+            defer init.gpa.free(schedule_reference_output);
+            try reference.decode(encoded, schedule_reference_output);
+            if (!std.mem.eql(u8, schedule.expected, schedule_reference_output)) return error.ReferenceDecodeFailed;
+            decodeProgressChunkMatrix(init.gpa, encoded, schedule.expected, 16) catch |err| {
+                std.debug.print("{s} quality={d}: operation schedule decode {s} encoded={d} expected={d}\n", .{ schedule.name, quality, @errorName(err), encoded.len, schedule.expected.len });
+                return err;
+            };
+            progress_matrix_runs += progressChunkMatrixCaseCount();
+            progress_matrix_streams += 1;
+            operation_schedule_cases += 1;
+        }
+    }
+
+    const process_metadata_finish_operations = [_]libbrotli.Runtime.StreamingOperation{
+        .{ .process = text },
+        .{ .metadata = metadata },
+        .{ .process = json },
+        .{ .finish = tiny_suffix },
+    };
+    const process_metadata_expected = text ++ json ++ tiny_suffix;
+    for ([_]u32{ 5, 11 }) |quality| {
+        const encoded = try reference.encodeOperationsAlloc(init.gpa, &process_metadata_finish_operations, .{
+            .quality = quality,
+            .lgwin = 16,
+            .lgblock = 16,
+            .mode = 1,
+        });
+        defer init.gpa.free(encoded);
+        try decodeMetadataProgressChunkMatrix(init.gpa, encoded, process_metadata_expected, metadata, 16);
+        progress_matrix_runs += progressChunkMatrixCaseCount();
+        progress_matrix_streams += 1;
+        operation_schedule_cases += 1;
+    }
+
+    const process_after_finish = [_]libbrotli.Runtime.StreamingOperation{
+        .{ .finish = text },
+        .{ .process = json },
+    };
+    const duplicate_finish = [_]libbrotli.Runtime.StreamingOperation{
+        .{ .finish = text },
+        .{ .finish = &.{} },
+    };
+    for ([_][]const libbrotli.Runtime.StreamingOperation{ &process_after_finish, &duplicate_finish }) |invalid_operations| {
+        try std.testing.expectError(
+            error.ReferenceEncodeFailed,
+            reference.encodeOperationsAlloc(init.gpa, invalid_operations, .{
+                .quality = 5,
+                .lgwin = 16,
+                .lgblock = 16,
+            }),
+        );
+    }
+
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} reference_version={x}\n",
-        .{ cases_run, one_shot_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ cases_run, one_shot_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }
