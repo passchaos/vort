@@ -9450,3 +9450,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   fixed-CPU-30 trainer pairs improved text/JSON by roughly 0.8% each, left
   binary effectively unchanged, and reached only 1.0085x aggregate throughput
   with 20/27 wins, below the retention bar.
+  Bulk-copying the remainder of compact package-merge lists after either merge
+  input was exhausted was rejected despite strong focused results. It preserves
+  comparator calls and exact ordering, and nine fixed-CPU-30 pairs improved the
+  18/48-active DEFLATE and 32/64-active Zstd kernels by roughly
+  1.13x–1.17x, all 36 focused runs winning. End-to-end dictionary training was
+  mixed: text/JSON improved 1.050x/1.029x, but binary reached 0.997x with only
+  2/9 wins. The scalar tail loop remains because the compiler's existing
+  record copies interact better with binary-heavy surrounding code.
