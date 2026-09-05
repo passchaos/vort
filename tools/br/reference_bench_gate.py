@@ -62,7 +62,7 @@ def main() -> int:
         # trees in-table lookups and inlines the lookup wrapper. Keep margin
         # below the fixed-core ~0.56x result while preventing a regression to
         # the former ~0.46x implementation.
-        "clustered_q8": 0.50,
+        "clustered_q8": 0.54,
     }
     if args.enforce_throughput:
         for name, floor in floors.items():

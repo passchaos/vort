@@ -1213,6 +1213,11 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
             if (self.single_symbol) |symbol| return symbol;
             return self.table.decodeValueTailLookup8(reader);
         }
+
+        pub inline fn decodeTailLookup9(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+            if (self.single_symbol) |symbol| return symbol;
+            return self.table.decodeValueTailLookup9(reader);
+        }
     };
 }
 
@@ -4703,13 +4708,13 @@ fn prepareAuxiliaryTailLookups(header: *MinimalCompressedHeader) bool {
     if (header.command_block.block_type_count > inline_command_tree_count or
         header.distance_tree_count > inline_distance_tree_count) return false;
     for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree|
-        if (!tree.canPrepareTailLookup()) return false;
+        if (tree.single_symbol == null and !tree.table.canBuildTailLookup9()) return false;
     for (header.distance_trees[0..header.distance_tree_count]) |*tree|
-        if (!tree.canPrepareTailLookup()) return false;
+        if (tree.single_symbol == null and !tree.table.canBuildTailLookup9()) return false;
     for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree|
-        std.debug.assert(tree.prepareTailLookup());
+        std.debug.assert(tree.single_symbol != null or tree.table.buildTailLookup9());
     for (header.distance_trees[0..header.distance_tree_count]) |*tree|
-        std.debug.assert(tree.prepareTailLookup());
+        std.debug.assert(tree.single_symbol != null or tree.table.buildTailLookup9());
     return true;
 }
 
@@ -7645,7 +7650,7 @@ fn readCommandSymbolTailLookup(header: *MinimalCompressedHeader, reader: *bitstr
     if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0)
         try switchBlockAny(max_command_block_types, &header.command_block, reader);
     if (header.command_block.current_type >= inline_command_tree_count) return error.UnsupportedBrotliFeature;
-    const symbol = try header.insert_copy_trees[header.command_block.current_type].decodeTailLookup(reader);
+    const symbol = try header.insert_copy_trees[header.command_block.current_type].decodeTailLookup9(reader);
     if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
     return symbol;
 }
@@ -7777,7 +7782,7 @@ fn readMinimalDistanceTailLookup(
         if (header.distance_block.current_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
         const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
         if (tree_index >= inline_distance_tree_count) return error.UnsupportedBrotliFeature;
-        const decoded = try header.distance_trees[tree_index].decodeTailLookup(reader);
+        const decoded = try header.distance_trees[tree_index].decodeTailLookup9(reader);
         if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
         break :blk decoded;
     };
@@ -16653,11 +16658,15 @@ test "br auxiliary tail lookup preparation is atomic and decodes both families" 
     try std.testing.expectEqualSlices(u8, std.mem.asBytes(&command_before), std.mem.asBytes(&header.insert_copy_trees[0]));
 
     header.command_block.block_type_count = 1;
+    const two_symbol_command_lengths = [_]u4{ 1, 1 } ++ [_]u4{0} ** 702;
+    header.insert_copy_trees[0] = .{ .table = try huffman.HuffmanTable(704).init(&two_symbol_command_lengths) };
+    const two_symbol_distance_lengths = [_]u4{ 1, 1 } ++ [_]u4{0} ** (max_distance_alphabet_size - 2);
+    header.distance_trees[0] = .{ .table = try huffman.HuffmanTable(max_distance_alphabet_size).init(&two_symbol_distance_lengths) };
     try std.testing.expect(prepareAuxiliaryTailLookups(&header));
     var command_reader = bitstream.BitReader.init(&.{ 0, 0 });
-    var distance_reader = bitstream.BitReader.init(&.{ 0, 0 });
-    try std.testing.expectEqual(@as(u16, 0), try header.insert_copy_trees[0].decodeTailLookup(&command_reader));
-    try std.testing.expectEqual(@as(u16, 0), try header.distance_trees[0].decodeTailLookup(&distance_reader));
+    var distance_reader = bitstream.BitReader.init(&.{ 1, 0 });
+    try std.testing.expectEqual(@as(u16, 0), try header.insert_copy_trees[0].decodeTailLookup9(&command_reader));
+    try std.testing.expectEqual(@as(u16, 1), try header.distance_trees[0].decodeTailLookup9(&distance_reader));
 }
 
 test "br zero context map reader accepts plain and RLE all-zero maps" {

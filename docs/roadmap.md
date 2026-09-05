@@ -9242,3 +9242,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   was also neutral: nine fixed-core pairs measured about `0.999x` median. The
   compiler already keeps the pointed value effectively live, so the explicit
   deferred synchronization was removed.
+  Parameterized the in-table tail lookup and widened only high-tree command and
+  distance tables from eight to nine bits. The 290 KiB header remains the same
+  size because each lookup still occupies unused canonical-entry storage; all
+  auxiliary trees are preflighted before any mutation, while literal trees stay
+  at their proven eight-bit width. A 320-symbol complete-tree oracle checks all
+  decoded values and bit positions, a truncated nine-bit symbol remains strict,
+  and a dense 512-symbol table is rejected. Nine alternating fixed-core
+  ReleaseFast pairs improve `clustered_q8` from a 1,046.4 to 1,102.6 MiB/s
+  median (`1.054x`, 8/9 wins) with identical checksums. The conservative
+  libbrotli ratio floor rises again from `0.50x` to `0.54x`.
