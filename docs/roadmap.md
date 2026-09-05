@@ -9314,3 +9314,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   0.14% aggregate gain, regressed JSON by about 1.1%, and won 16/27 runs. The
   retained change therefore removes only the measured redundant active-count
   scan and leaves the mature leaf-construction loop intact.
+  Leaving the finalized Huffman plan's inactive canonical-code slots
+  uninitialized was rejected too. Although all reads are guarded by active
+  symbols, nine fixed-CPU-30 pairs regressed text/JSON by about 1.0%/1.5% and
+  reached only 0.997x aggregate throughput; the compact zero initialization is
+  retained because it generates better surrounding code.
+  Moving the 1 KiB frequency table out of the finalized Huffman plan was
+  rejected as well. It shrank copied plan state, but nine fixed-CPU-30 pairs
+  improved text/JSON by only 1.8%/0.9% while binary regressed consistently by
+  about 1.2% (0.45% aggregate gain, 15/27 wins), below the retention bar.
