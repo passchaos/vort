@@ -9349,10 +9349,6 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   roughly 12–14%, but added an indirection to every stored-key hash. Nine
   fixed-CPU-30 pairs regressed JSON/binary by about 2.1%/1.3% and reached only
   0.988x aggregate throughput, so this smaller but slower table was removed.
-  Storing only one exact Wyhash-to-index representative (with a collision-safe
-  linear fallback) also failed: despite a smaller map, nine fixed-CPU-30 pairs
-  reached 0.970x aggregate throughput and won only 7/27 runs. The ordinary
-  string-key map remains faster, especially on high-uniqueness binary samples.
   Periodically rebuilding that string map every 1,024 replacements to remove
   tombstones was rejected as well: it preserved allocations and bytes but
   regressed text/JSON by about 0.5%/2.5%; only binary improved (6.8%), leaving
