@@ -9270,3 +9270,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   ReleaseFast pairs improve `clustered_q8` from a 1,046.4 to 1,102.6 MiB/s
   median (`1.054x`, 8/9 wins) with identical checksums. The conservative
   libbrotli ratio floor rises again from `0.50x` to `0.54x`.
+  Standard Zstd dictionary entropy training now retains a dedicated lazy-parser
+  token list and dictionary hash scratch across samples and blocks. The public
+  reusable planner resets a compact head-initialization bitmap between unrelated
+  dictionaries, preserves the allocating API's token order and statistics, and
+  remains usable after allocation failure. On fixed CPU 0, all three benchmark
+  checksums remained identical while allocations fell from 494/494/497 to
+  401/401/408 and cumulatively requested bytes fell from about 7.76/7.76/8.02
+  million to 1.54/1.53/1.76 million for text/JSON/binary; same-run throughput
+  improved by 2.7% to 6.9%. The resource gate is tightened accordingly to 420
+  allocations, 45 resize events, and 2 MiB per validated Zstd training case.

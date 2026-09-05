@@ -53,7 +53,7 @@ def main() -> int:
         ):
             raise SystemExit(f"invalid benchmark row: {row!r}")
         if row["mode"] == "zstd_validated" and (
-            allocations > 501 or resize_events > 60 or allocated_bytes > 8 * 1024 * 1024
+            allocations > 420 or resize_events > 45 or allocated_bytes > 2 * 1024 * 1024
         ):
             raise SystemExit(f"validated Zstd training allocation budget regressed: {row!r}")
         minimum_throughput = {

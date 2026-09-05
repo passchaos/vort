@@ -436,6 +436,117 @@ test "dictionary greedy scratch ignores stale head entries" {
     try expectDictionaryPlanReplays(second_dictionary, second_input, tokens.items);
 }
 
+test "reusable dictionary lazy planner preserves allocating plans" {
+    const dictionaries = [_][]const u8{
+        "sensor=42;status=nominal;" ** 8,
+        "abcdefgh01234567" ** 16,
+        "",
+    };
+    const inputs = [_][]const u8{
+        "sensor=42;status=nominal;sensor=43;status=nominal;" ** 3,
+        "abcdXabcdefgh01234567abcdYabcdefgh01234567" ** 4,
+        "abcabcXabcabcYabcabcZ" ** 5,
+    };
+    const options: GreedyOptions = .{
+        .window_len = 32 * 1024,
+        .max_chain = 64,
+        .nice_len = 96,
+        .max_candidates = 8,
+        .min_match = 4,
+        .max_match = 128,
+        .lazy_min_gain = 2,
+        .min_savings_bits = 4,
+    };
+    var scratch: DictionaryGreedyScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+
+    for (dictionaries, inputs) |dictionary, input| {
+        const reference = try lazyGreedyPlanAllocWithDictionary(std.testing.allocator, input, dictionary, options);
+        defer reference.deinit(std.testing.allocator);
+        const stats = try lazyGreedyPlanWithDictionaryReuse(&tokens, &scratch, std.testing.allocator, input, dictionary, options);
+        try expectEqualTokenSlices(reference.tokens, tokens.items);
+        try std.testing.expectEqual(reference.stats, stats);
+        try expectDictionaryPlanReplays(activeDictionary(dictionary, options), input, tokens.items);
+    }
+}
+
+test "reusable dictionary lazy planner ignores stale head entries" {
+    const options: GreedyOptions = .{ .window_len = 32 * 1024, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
+    var scratch: DictionaryGreedyScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+
+    const first_dictionary = "abcdefgh" ** 32;
+    const first_input = "abcdefghXabcdefghYabcdefgh" ** 4;
+    _ = try lazyGreedyPlanWithDictionaryReuse(&tokens, &scratch, std.testing.allocator, first_input, first_dictionary, options);
+    try expectDictionaryPlanReplays(first_dictionary, first_input, tokens.items);
+
+    const second_dictionary = "qrstuvwx" ** 32;
+    const second_input = "qrstuvwxXqrstuvwxYqrstuvwx" ** 4;
+    const reference = try lazyGreedyPlanAllocWithDictionary(std.testing.allocator, second_input, second_dictionary, options);
+    defer reference.deinit(std.testing.allocator);
+    const stats = try lazyGreedyPlanWithDictionaryReuse(&tokens, &scratch, std.testing.allocator, second_input, second_dictionary, options);
+    try expectEqualTokenSlices(reference.tokens, tokens.items);
+    try std.testing.expectEqual(reference.stats, stats);
+    try expectDictionaryPlanReplays(second_dictionary, second_input, tokens.items);
+}
+
+test "reusable dictionary lazy planner retains all capacity" {
+    const dictionary = "common-prefix:sensor=42;status=nominal;" ** 64;
+    const input = "common-prefix:sensor=42;status=nominal;reading=12345;" ** 32;
+    const options: GreedyOptions = .{ .window_len = 32 * 1024, .max_chain = 64, .nice_len = 96, .max_candidates = 8 };
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    {
+        const allocator = failing.allocator();
+        var scratch: DictionaryGreedyScratch = .{};
+        defer scratch.deinit(allocator);
+        var tokens: std.ArrayList(Token) = .empty;
+        defer tokens.deinit(allocator);
+
+        const first_stats = try lazyGreedyPlanWithDictionaryReuse(&tokens, &scratch, allocator, input, dictionary, options);
+        const capacities = .{ tokens.capacity, scratch.head.capacity, scratch.prev.capacity };
+        const allocations = failing.allocations;
+        const resizes = failing.resize_index;
+        const allocated_bytes = failing.allocated_bytes;
+        const second_stats = try lazyGreedyPlanWithDictionaryReuse(&tokens, &scratch, allocator, input, dictionary, options);
+        try std.testing.expectEqual(first_stats, second_stats);
+        try std.testing.expectEqual(capacities, .{ tokens.capacity, scratch.head.capacity, scratch.prev.capacity });
+        try std.testing.expectEqual(allocations, failing.allocations);
+        try std.testing.expectEqual(resizes, failing.resize_index);
+        try std.testing.expectEqual(allocated_bytes, failing.allocated_bytes);
+    }
+    try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
+}
+
+test "reusable dictionary lazy planner recovers after allocation failure" {
+    const dictionary = "dictionary-history-0123456789" ** 32;
+    const input = "dictionary-history-0123456789-payload" ** 8;
+    const options: GreedyOptions = .{ .window_len = 32 * 1024, .max_chain = 32, .nice_len = 64 };
+    // Let both scratch tables allocate, then fail the first token growth after
+    // the dictionary has already populated the lazy-initialized hash table.
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 2 });
+    {
+        const allocator = failing.allocator();
+        var scratch: DictionaryGreedyScratch = .{};
+        defer scratch.deinit(allocator);
+        var tokens: std.ArrayList(Token) = .empty;
+        defer tokens.deinit(allocator);
+
+        try std.testing.expectError(
+            error.OutOfMemory,
+            lazyGreedyPlanWithDictionaryReuse(&tokens, &scratch, allocator, input, dictionary, options),
+        );
+        failing.fail_index = std.math.maxInt(usize);
+        const stats = try lazyGreedyPlanWithDictionaryReuse(&tokens, &scratch, allocator, input, dictionary, options);
+        try std.testing.expect(stats.matches > 0);
+        try expectDictionaryPlanReplays(dictionary, input, tokens.items);
+    }
+    try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
+}
+
 fn expectDictionaryPlanReplays(dictionary: []const u8, expected: []const u8, tokens: []const Token) !void {
     var output: std.ArrayList(u8) = .empty;
     defer output.deinit(std.testing.allocator);
@@ -493,54 +604,69 @@ pub fn lazyGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []
     const dict = activeDictionary(dictionary, options);
     if (dict.len == 0) return lazyGreedyPlanAlloc(allocator, input, options);
 
-    const table_size = 1 << 15;
-    const head = try allocator.alloc(isize, table_size);
-    defer allocator.free(head);
-    @memset(head, -1);
-    const total = dict.len + input.len;
-    const prev = try allocator.alloc(isize, total);
-    defer allocator.free(prev);
-    seedDictionaryHashes(dict, input, head, prev);
-
+    var scratch: DictionaryGreedyScratch = .{};
+    defer scratch.deinit(allocator);
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
+    const stats = try lazyGreedyPlanWithDictionaryReuse(&tokens, &scratch, allocator, input, dict, options);
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+/// Reusable-token and reusable-table counterpart to
+/// `lazyGreedyPlanAllocWithDictionary`. Independent calls may use unrelated
+/// inputs and dictionaries; the initialization bitmap prevents stale head
+/// entries from entering the next hash chain.
+pub fn lazyGreedyPlanWithDictionaryReuse(tokens: *std.ArrayList(Token), scratch: *DictionaryGreedyScratch, allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !PlanStats {
+    const dict = activeDictionary(dictionary, options);
+    if (dict.len == 0) {
+        if (preferScanLazy(input)) return scanLazyGreedyPlanReuse(tokens, allocator, input, options);
+        if (input.len <= 32 * 1024) return hashLazyGreedyPlanTinyReuse(tokens, allocator, input, options);
+    }
+
+    try scratch.head.resize(allocator, hash_head_table_size);
+    const total = dict.len + input.len;
+    try scratch.prev.resize(allocator, total);
+    @memset(&scratch.head_initialized, 0);
+    seedDictionaryHashesLazy(dict, input, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
+    tokens.clearRetainingCapacity();
     var stats = PlanStats{};
 
     var pos: usize = 0;
     while (pos < input.len) {
         const current = dict.len + pos;
-        const best = findBestCombinedHashMatch(dict, input, current, options, head, prev);
+        const best = findBestCombinedHashMatchLazy(dict, input, current, options, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
         if (!acceptMatch(input, pos, best.length, best.distance, options)) {
-            try tokens.append(allocator, .{ .literal = input[pos] });
+            try appendToken(tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
-            insertCombinedHash(dict, input, current, head, prev);
+            insertCombinedHashLazy(dict, input, current, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
             pos += 1;
             continue;
         }
 
         var current_inserted = false;
         if (pos + 1 < input.len) {
-            insertCombinedHash(dict, input, current, head, prev);
+            insertCombinedHashLazy(dict, input, current, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
             current_inserted = true;
-            const next = findBestCombinedHashMatch(dict, input, current + 1, options, head, prev);
+            const next = findBestCombinedHashMatchLazy(dict, input, current + 1, options, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
             if (next.length >= best.length + options.lazy_min_gain and acceptMatch(input, pos + 1, next.length, next.distance, options)) {
-                try tokens.append(allocator, .{ .literal = input[pos] });
+                try appendToken(tokens, allocator, .{ .literal = input[pos] });
                 stats.literals += 1;
                 pos += 1;
                 continue;
             }
         }
 
-        try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+        try appendToken(tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
         stats.matches += 1;
         stats.matched_bytes += best.length;
         var insert_pos = if (current_inserted) pos + 1 else pos;
         const end = @min(input.len, pos + best.length);
-        while (insert_pos < end) : (insert_pos += 1) insertCombinedHash(dict, input, dict.len + insert_pos, head, prev);
+        while (insert_pos < end) : (insert_pos += 1)
+            insertCombinedHashLazy(dict, input, dict.len + insert_pos, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
         pos += best.length;
     }
 
-    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    return stats;
 }
 
 fn preferScanLazy(input: []const u8) bool {
@@ -1956,22 +2082,10 @@ fn hashAtInput(
     };
 }
 
-fn seedDictionaryHashes(dict: []const u8, input: []const u8, head: anytype, prev: anytype) void {
-    var pos: usize = 0;
-    while (pos + min_match_len <= dict.len) : (pos += 1) insertCombinedHash(dict, input, pos, head, prev);
-}
-
 fn seedDictionaryHashesLazy(dict: []const u8, input: []const u8, head: anytype, prev: anytype, initialized: *[hash_head_init_words]u64) void {
     var pos: usize = 0;
     while (pos + min_match_len <= dict.len) : (pos += 1)
         insertCombinedHashLazy(dict, input, pos, head, prev, initialized);
-}
-
-fn insertCombinedHash(dict: []const u8, input: []const u8, pos: usize, head: anytype, prev: anytype) void {
-    if (pos + min_match_len > dict.len + input.len) return;
-    const h = hash3At(dict, input, pos) & (head.len - 1);
-    prev[pos] = head[h];
-    head[h] = @intCast(pos);
 }
 
 fn insertCombinedHashLazy(dict: []const u8, input: []const u8, pos: usize, head: anytype, prev: anytype, initialized: *[hash_head_init_words]u64) void {

@@ -758,6 +758,10 @@ fn collectStandardDictionarySequenceCounts(
     defer tokens.deinit(allocator);
     var scratch: lz77.DictionaryGreedyScratch = .{};
     defer scratch.deinit(allocator);
+    var lazy_tokens: std.ArrayList(lz77.Token) = .empty;
+    defer lazy_tokens.deinit(allocator);
+    var lazy_scratch: lz77.DictionaryGreedyScratch = .{};
+    defer lazy_scratch.deinit(allocator);
     for (samples) |sample| {
         var offset: usize = 0;
         while (offset < sample.len) {
@@ -781,13 +785,19 @@ fn collectStandardDictionarySequenceCounts(
                 try appendStandardDictionaryOffsetSequences(allocator, sequences, tokens.items, greedy_stats.matches);
             if (repcode_counts) |candidate_counts|
                 try addStandardDictionaryRepcodeCounts(candidate_counts, tokens.items, greedy_stats.matches, dictionary_content.len, initial_offsets);
-            const lazy = try lz77.lazyGreedyPlanAllocWithDictionary(allocator, block, dictionary_content, options);
-            defer lazy.deinit(allocator);
-            try addStandardDictionarySequenceCounts(&counts, lazy.tokens, initial_offsets);
+            const lazy_stats = try lz77.lazyGreedyPlanWithDictionaryReuse(
+                &lazy_tokens,
+                &lazy_scratch,
+                allocator,
+                block,
+                dictionary_content,
+                options,
+            );
+            try addStandardDictionarySequenceCounts(&counts, lazy_tokens.items, initial_offsets);
             if (offset_sequences) |sequences|
-                try appendStandardDictionaryOffsetSequences(allocator, sequences, lazy.tokens, lazy.stats.matches);
+                try appendStandardDictionaryOffsetSequences(allocator, sequences, lazy_tokens.items, lazy_stats.matches);
             if (repcode_counts) |candidate_counts|
-                try addStandardDictionaryRepcodeCounts(candidate_counts, lazy.tokens, lazy.stats.matches, dictionary_content.len, initial_offsets);
+                try addStandardDictionaryRepcodeCounts(candidate_counts, lazy_tokens.items, lazy_stats.matches, dictionary_content.len, initial_offsets);
             offset = end;
         }
     }
