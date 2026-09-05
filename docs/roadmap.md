@@ -9481,3 +9481,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   to 0.316x/0.343x/0.665x and the mixed-width form to
   0.443x/0.476x/0.772x for text/JSON/binary, all 0/27 wins. Narrow counter
   updates cost far more than the smaller clear/cache footprint on this CPU.
+  Prepacking only the back-reference builder's initial leaves as
+  `(u32 frequency, u16 creation_index)` keys was rejected as too narrow. It
+  preserved the original node arena, merge, tie order, and exact code lengths;
+  nine focused pairs improved dense/128-active/256-active construction by
+  1.044x/1.017x/1.043x, all 27 runs winning. Nine trainer pairs improved binary
+  by 3.3%, but text/JSON were effectively neutral at 1.002x/0.999x and the
+  aggregate reached only 1.012x with 17/27 wins, below the retention bar.
