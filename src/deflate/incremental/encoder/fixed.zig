@@ -319,6 +319,7 @@ pub fn Encoder(comptime Codec: type) type {
 }
 
 fn uniqueByteCount(input: []const u8) usize {
+    if (input.len != 0 and std.mem.allEqual(u8, input, input[0])) return 1;
     var seen: [256]bool = @splat(false);
     var count: usize = 0;
     for (input) |byte| {
@@ -329,4 +330,11 @@ fn uniqueByteCount(input: []const u8) usize {
         }
     }
     return count;
+}
+
+test "saturated unique byte count handles uniform and mixed inputs" {
+    try std.testing.expectEqual(@as(usize, 0), uniqueByteCount(""));
+    try std.testing.expectEqual(@as(usize, 1), uniqueByteCount("aaaaaaaaaaaaaaaa"));
+    try std.testing.expectEqual(@as(usize, 4), uniqueByteCount("abacabadabacaba"));
+    try std.testing.expectEqual(@as(usize, 5), uniqueByteCount("abcdeeeeeeeeeeee"));
 }
