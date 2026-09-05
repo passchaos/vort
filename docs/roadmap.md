@@ -9393,3 +9393,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   index was rejected independently: nine fixed-CPU-30 pairs reached 0.995x
   aggregate throughput, with JSON and binary both losing every run. Hashing on
   the uncommon insertion path remains cheaper for surrounding code generation.
+  An ordinary unbounded Huffman tree can match package-merge lengths exactly
+  whenever its natural depth stays within Zstd's 11-bit limit, and focused
+  128/256-symbol benchmarks measured roughly 5.3x/5.5x construction speedups.
+  Production selector experiments were nevertheless rejected: active-count
+  thresholds from 128 through 256 and frequency-spread filters preserved up to
+  a 2.0x binary-training win but repeatedly regressed text or JSON by 0.5–3%.
+  Speculative failure cost and classifier/code-layout overhead make this unsafe
+  to retain until callers can cheaply prove the depth bound.
