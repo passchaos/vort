@@ -105,6 +105,13 @@ accounting, output forms, invalid windows, and the 1,008/1,009-byte boundary
 have direct tests. Four representative window/metadata streams also decode
 byte-exactly through libbrotli (`planned_chunked_window_cases=4`), while the
 default chunked size/performance gate remains unchanged.
+Explicit-window ratio inputs larger than Brotli's 2^24-byte meta-block limit
+now reuse that options-aware bounded multi-meta-block compressor instead of
+falling back to an all-stored stream. WBITS=10 and WBITS=24 tests on a
+16 MiB+17-byte repetitive input both retain the requested header, emit at least
+two compressed meta-blocks, remain below 1% of the input size, and round trip.
+The upstream differential independently decodes both frames through libbrotli
+1.1.0 (`planned_large_window_cases=2`).
 
 ## Milestone 0: repository and validation spine
 

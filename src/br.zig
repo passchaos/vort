@@ -1870,14 +1870,12 @@ fn encodePlannedStreamRatioWithWindowAlloc(allocator: std.mem.Allocator, input: 
     const window_len = try plannedWindowLen(.ratio, window_bits);
     const primary_window_len = @min(window_len, planner_max_backward_distance);
     if (input.len > max_uncompressed_meta_block_len) {
-        if (explicit_window_bits != null)
-            return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .window_bits = window_bits });
         // A Brotli meta-block can describe at most 2^24 output bytes. Keep the
         // stable ratio API total over larger slices by emitting one bounded
         // stream of independently planned blocks rather than failing or
         // returning concatenated Brotli streams (which the format forbids).
         const chunks = [_][]const u8{input};
-        return encodePlannedStreamChunksAlloc(allocator, &chunks);
+        return encodePlannedStreamChunksWithOptionsAlloc(allocator, &chunks, .{ .window_bits = window_bits });
     }
     if (input.len < 5) return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .window_bits = window_bits });
     const parser_options = PlannedParserOptions{
@@ -10337,17 +10335,23 @@ test "br ratio encoder splits input beyond one meta-block" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
 
-    // An explicit planned window remains authoritative even when ratio mode
-    // falls back to bounded multi-meta-block storage for oversized input.
-    const explicit = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{
-        .level = .ratio,
-        .window_bits = 10,
-    });
-    defer std.testing.allocator.free(explicit);
-    const explicit_summary = try summarizeStream(explicit);
-    try std.testing.expectEqual(@as(u5, 10), explicit_summary.window_bits);
-    try std.testing.expect(explicit_summary.stored_only);
-    try std.testing.expectEqual(input.len, explicit_summary.decoded_bytes);
+    for ([_]u5{ 10, 24 }) |window_bits| {
+        // An explicit planned window remains authoritative when ratio mode
+        // switches to its bounded multi-meta-block compressor.
+        const explicit = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{
+            .level = .ratio,
+            .window_bits = window_bits,
+        });
+        defer std.testing.allocator.free(explicit);
+        const explicit_summary = try summarizeStream(explicit);
+        try std.testing.expectEqual(window_bits, explicit_summary.window_bits);
+        try std.testing.expect(explicit_summary.compressed_meta_block_count >= 2);
+        try std.testing.expect(explicit.len < input.len / 100);
+        try std.testing.expectEqual(input.len, explicit_summary.decoded_bytes);
+        const explicit_decoded = try decodeStreamAllocExactSize(std.testing.allocator, explicit, input.len);
+        defer std.testing.allocator.free(explicit_decoded);
+        try std.testing.expectEqualSlices(u8, input, explicit_decoded);
+    }
 }
 
 test "br simple encoder selects RLE or stored streams" {
