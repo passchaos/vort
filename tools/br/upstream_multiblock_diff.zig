@@ -313,7 +313,6 @@ pub fn main(init: std.process.Init) !void {
             }
         }
     }
-
     const one_shot_cases_spec = [_]struct {
         payload: []const u8,
         quality: c_int,
@@ -347,14 +346,16 @@ pub fn main(init: std.process.Init) !void {
     const diverse_encoded = try reference.encodeWithOptionsAlloc(init.gpa, diverse_source, .{
         .quality = 8,
         .mode = 0,
-        .lgwin = 20,
+        .lgwin = 22,
     });
     defer init.gpa.free(diverse_encoded);
     const diverse_summary = try vort.brSummarizeStreamAlloc(init.gpa, diverse_encoded);
     if (diverse_summary.max_distance_block_types <= 64 or
         diverse_summary.max_distance_context_trees <= 64)
+    {
         return error.ReferenceEncodeFailed;
-    try decodeProgressChunks(init.gpa, diverse_encoded, diverse_source, 20, 17, 31);
+    }
+    try decodeProgressChunks(init.gpa, diverse_encoded, diverse_source, 22, 17, 31);
     one_shot_cases += 1;
     if (caller_history_summaries != 8) return error.ReferenceEncodeFailed;
 
@@ -552,7 +553,6 @@ pub fn main(init: std.process.Init) !void {
             }),
         );
     }
-
     // Sweep one-shot libbrotli output across the complete quality/mode range,
     // representative windows, payload sizes, and entropy shapes. The existing
     // cases above target deep structural boundaries; this broader matrix makes
@@ -604,7 +604,6 @@ pub fn main(init: std.process.Init) !void {
             }
         }
     }
-
     // Optional real-corpus coverage deliberately stays outside the default CI
     // contract: callers can point this dependency-free decoder at source,
     // markup, model metadata, or font files from neighboring checkouts without
@@ -645,12 +644,62 @@ pub fn main(init: std.process.Init) !void {
             real_progressive_cases += 1;
         }
     }
+    // Vort-to-libbrotli coverage for every newly exposed planned window. The
+    // producer must advertise the requested window and the independent decoder
+    // must reproduce the payload for all stable compression levels.
+    var planned_window_cases: usize = 0;
+    const planned_window_payload = "windowed planned Brotli interoperability payload 0123456789.\n" ** 32;
+    for ([_]vort.BrotliPlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        for (10..17) |window_bits_usize| {
+            const window_bits: u5 = @intCast(window_bits_usize);
+            const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, planned_window_payload, .{
+                .level = level,
+                .window_bits = window_bits,
+            });
+            defer init.gpa.free(encoded);
+            const summary = try vort.brSummarizeStream(encoded);
+            if (summary.window_bits != window_bits) return error.SizeMismatch;
+            const decoded = try init.gpa.alloc(u8, planned_window_payload.len);
+            defer init.gpa.free(decoded);
+            reference.decode(encoded, decoded) catch |err| {
+                std.debug.print("planned window level={s} lgwin={d} encoded={d}: {s}\n", .{ @tagName(level), window_bits, encoded.len, @errorName(err) });
+                return err;
+            };
+            if (!std.mem.eql(u8, planned_window_payload, decoded)) return error.ReferenceDecodeFailed;
+            planned_window_cases += 1;
+        }
+    }
+    const boundary_prefix_len = (@as(usize, 1) << 10) - 15;
+    var boundary_payload: [boundary_prefix_len + 256]u8 = undefined;
+    var boundary_state: u32 = 0x2c1b_3a49;
+    for (boundary_payload[0..boundary_prefix_len]) |*byte| {
+        boundary_state = boundary_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(boundary_state >> 24);
+    }
+    @memcpy(boundary_payload[boundary_prefix_len..], boundary_payload[0..256]);
+    for ([_]vort.BrotliPlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        for ([_]u5{ 10, 11 }) |window_bits| {
+            const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, &boundary_payload, .{
+                .level = level,
+                .window_bits = window_bits,
+            });
+            defer init.gpa.free(encoded);
+            const decoded = try init.gpa.alloc(u8, boundary_payload.len);
+            defer init.gpa.free(decoded);
+            reference.decode(encoded, decoded) catch |err| {
+                std.debug.print("planned boundary level={s} lgwin={d} encoded={d}: {s}\n", .{ @tagName(level), window_bits, encoded.len, @errorName(err) });
+                return err;
+            };
+            if (!std.mem.eql(u8, &boundary_payload, decoded)) return error.ReferenceDecodeFailed;
+            planned_window_cases += 1;
+        }
+    }
 
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ cases_run, one_shot_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} planned_window_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ cases_run, one_shot_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, planned_window_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }

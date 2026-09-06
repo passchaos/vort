@@ -62,6 +62,18 @@ Brotli decoder evidence, followed by the remaining general Brotli encoder
 features and ratio work. Performance work should then resume on the profiled
 DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
 
+One-shot planned Brotli encoding now accepts an explicit 10...16-bit window at
+all fast/balanced/ratio levels. The advertised window, matcher distance bound,
+optimal-parser proposal, static-dictionary candidate, stored fallback, size
+bound, reusable encoder, and caller-buffer path use one policy. Tests cover all
+21 level/window combinations, stored fallback, invalid 9/17-bit requests, and
+the 1,008/1,009-byte WBITS=10 distance boundary. The runtime libbrotli 1.1.0
+differential independently decodes those combinations plus six boundary frames
+(`planned_window_cases=27`). Omitting the option remains byte-identical for all
+three levels, and the existing eight-row planned encode gate stays green. Full
+17...24-bit planned matching remains future work; stored encoding and decoding
+continue to support the complete RFC 10...24 range.
+
 ## Milestone 0: repository and validation spine
 
 - [x] Zig 0.16 package scaffold.
@@ -8337,7 +8349,8 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Expanded the byte-progressive Brotli decoder's distance block-type and
   context-tree storage from a 64-entry implementation tier to the complete
   256-entry RFC count range. A repository-owned heterogeneous 15 MiB source
-  corpus makes libbrotli 1.1 quality 8 emit 68 distance types/trees, and the
+  corpus makes libbrotli 1.1 quality 8 at window 22 emit 220 distance
+  types/trees, and the
   upstream differential now decodes that real stream through 17-byte input and
   31-byte output chunks. This closes the first incompatibility found by a
   broader local-source audit while keeping the entropy header bounded and
