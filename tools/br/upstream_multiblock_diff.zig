@@ -847,6 +847,55 @@ pub fn main(init: std.process.Init) !void {
         if (!std.mem.eql(u8, planned_large_payload, decoded)) return error.ReferenceDecodeFailed;
         planned_large_window_cases += 1;
     }
+    var planned_metadata_cases: usize = 0;
+    const planned_metadata = "vort one-shot planned metadata";
+    for ([_]vort.BrotliPlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        const window_bits: u5 = if (level == .ratio) 24 else 10;
+        const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, planned_window_payload, .{
+            .level = level,
+            .window_bits = window_bits,
+            .metadata = planned_metadata,
+        });
+        defer init.gpa.free(encoded);
+        const summary = try vort.brSummarizeStream(encoded);
+        if (summary.window_bits != window_bits or
+            summary.metadata_meta_block_count != 1 or
+            summary.metadata_bytes != planned_metadata.len or
+            summary.compressed_meta_block_count < 1) return error.ReferenceEncodeFailed;
+        const decoded = try init.gpa.alloc(u8, planned_window_payload.len);
+        defer init.gpa.free(decoded);
+        try reference.decode(encoded, decoded);
+        if (!std.mem.eql(u8, planned_window_payload, decoded)) return error.ReferenceDecodeFailed;
+        planned_metadata_cases += 1;
+    }
+    const planned_metadata_dictionary_payload = "information";
+    const planned_metadata_dictionary = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, planned_metadata_dictionary_payload, .{
+        .level = .ratio,
+        .window_bits = 24,
+        .metadata = planned_metadata,
+    });
+    defer init.gpa.free(planned_metadata_dictionary);
+    const planned_metadata_dictionary_summary = try vort.brSummarizeStream(planned_metadata_dictionary);
+    if (planned_metadata_dictionary_summary.metadata_meta_block_count != 1 or
+        planned_metadata_dictionary_summary.static_dictionary_copy_count == 0) return error.ReferenceEncodeFailed;
+    var planned_metadata_dictionary_decoded: [planned_metadata_dictionary_payload.len]u8 = undefined;
+    try reference.decode(planned_metadata_dictionary, &planned_metadata_dictionary_decoded);
+    if (!std.mem.eql(u8, planned_metadata_dictionary_payload, &planned_metadata_dictionary_decoded)) return error.ReferenceDecodeFailed;
+    planned_metadata_cases += 1;
+    const planned_metadata_long = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, long_window_payload, .{
+        .level = .ratio,
+        .metadata = planned_metadata,
+    });
+    defer init.gpa.free(planned_metadata_long);
+    const planned_metadata_long_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_metadata_long);
+    if (planned_metadata_long_summary.window_bits != 17 or
+        planned_metadata_long_summary.metadata_meta_block_count != 1 or
+        planned_metadata_long_summary.metadata_bytes != planned_metadata.len) return error.ReferenceEncodeFailed;
+    const planned_metadata_long_decoded = try init.gpa.alloc(u8, long_window_payload.len);
+    defer init.gpa.free(planned_metadata_long_decoded);
+    try reference.decode(planned_metadata_long, planned_metadata_long_decoded);
+    if (!std.mem.eql(u8, long_window_payload, planned_metadata_long_decoded)) return error.ReferenceDecodeFailed;
+    planned_metadata_cases += 1;
     const boundary_prefix_len = (@as(usize, 1) << 10) - 15;
     var boundary_payload: [boundary_prefix_len + 256]u8 = undefined;
     var boundary_state: u32 = 0x2c1b_3a49;
@@ -876,8 +925,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} planned_window_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ cases_run, one_shot_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, planned_window_cases, planned_chunked_window_cases, planned_large_window_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} planned_window_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} planned_metadata_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ cases_run, one_shot_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, planned_window_cases, planned_chunked_window_cases, planned_large_window_cases, planned_metadata_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }

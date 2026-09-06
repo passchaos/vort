@@ -112,6 +112,16 @@ falling back to an all-stored stream. WBITS=10 and WBITS=24 tests on a
 two compressed meta-blocks, remain below 1% of the input size, and round trip.
 The upstream differential independently decodes both frames through libbrotli
 1.1.0 (`planned_large_window_cases=2`).
+One-shot `PlannedEncodeOptions` now also carries an optional initial metadata
+meta-block at fast, balanced, and ratio levels. Metadata participates in each
+complete compressed candidate and the stored fallback before exact-size
+arbitration, so the selected wire and conservative bound remain consistent.
+Tests cover all three levels, WBITS=10/24, caller-buffer and reusable output,
+byte-progressive metadata capture, short-input stored fallback, a winning
+static-dictionary candidate, an automatic 17-bit long-distance winner, and the
+65,536-byte metadata limit. libbrotli 1.1.0 independently decodes all five
+generated payloads (`planned_metadata_cases=5`); omitting metadata preserves established wire
+bytes and the existing performance gates.
 
 ## Milestone 0: repository and validation spine
 
