@@ -13540,13 +13540,11 @@ fn emitTablePlanSequenceCompressedBlockWithLiterals(
     literal_ends: []const usize,
     tail_start: usize,
 ) Error!bool {
-    const best = (try bestTablePlanSequence(
-        block,
+    const best = (try bestTablePlanSequenceWithLiteralsLen(
         literal_lens,
         offsets,
         match_lens,
-        literal_ends,
-        tail_start,
+        literals_prefix.len,
     )) orelse return false;
 
     return try emitSequenceCompressedBlockWithTablePlans(
@@ -15210,7 +15208,10 @@ fn sequenceTablePlanAlternatives(values: []const usize, kind: SequenceTableKind)
 }
 
 fn sequenceTablePlanAlternativesWithPrevious(values: []const usize, kind: SequenceTableKind, previous_tables: ?*const SequenceTables) Error!SequenceTablePlanAlternatives {
-    var alternatives: SequenceTablePlanAlternatives = .{};
+    // `add` initializes every slot before `len` exposes it. Leave the inactive
+    // multi-kilobyte union tail undefined instead of clearing it on every plan.
+    var alternatives: SequenceTablePlanAlternatives = undefined;
+    alternatives.len = 0;
     const bases = sequenceTableBases(kind);
     const bits = sequenceTableBits(kind);
     if (try rleSequenceCodeForValues(values, bases, bits)) |code| {
@@ -15240,7 +15241,10 @@ fn offsetSequenceTablePlanAlternativesWithPrevious(
     initial_offsets: [3]usize,
 ) Error!SequenceTablePlanAlternatives {
     if (literal_lens.len != offsets.len) return error.CorruptFrame;
-    var alternatives: SequenceTablePlanAlternatives = .{};
+    // Consumers inspect only `items[0..len]`; each visible slot is written by
+    // `add`, so clearing the remaining large union entries is unnecessary.
+    var alternatives: SequenceTablePlanAlternatives = undefined;
+    alternatives.len = 0;
     if (previous_tables == null and std.meta.eql(initial_offsets, initial_repeated_offsets))
         return try offsetSequenceTablePlanAlternativesLegacy(literal_lens, offsets);
 
@@ -15265,6 +15269,38 @@ fn offsetSequenceTablePlanAlternativesWithPrevious(
 }
 
 fn offsetSequenceTablePlanAlternativesLegacy(literal_lens: []const usize, offsets: []const usize) Error!SequenceTablePlanAlternatives {
+    // Match the general builder's initialized-prefix contract.
+    var alternatives: SequenceTablePlanAlternatives = undefined;
+    alternatives.len = 0;
+    if (try rleSequenceCodeForValues(offsets, &of_base, &of_bits)) |code|
+        try alternatives.add(.{ .rle = code });
+    if (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) |plan|
+        try alternatives.add(.{ .predefined = plan });
+    if (try planCompressedOffsetSequenceValues(literal_lens, offsets)) |plan|
+        try alternatives.add(.{ .compressed = plan });
+    return alternatives;
+}
+
+fn sequenceTablePlanAlternativesInitializedReference(
+    values: []const usize,
+    kind: SequenceTableKind,
+) Error!SequenceTablePlanAlternatives {
+    var alternatives: SequenceTablePlanAlternatives = .{};
+    const bases = sequenceTableBases(kind);
+    const bits = sequenceTableBits(kind);
+    if (try rleSequenceCodeForValues(values, bases, bits)) |code|
+        try alternatives.add(.{ .rle = code });
+    if (try planPredefinedSequenceValues(values, sequenceTablePredefinedSymbols(kind), sequenceTablePredefinedMinAdditionalBits(kind))) |plan|
+        try alternatives.add(.{ .predefined = plan });
+    if (try planCompressedSequenceValues(values, kind)) |plan|
+        try alternatives.add(.{ .compressed = plan });
+    return alternatives;
+}
+
+fn offsetSequenceTablePlanAlternativesInitializedReference(
+    literal_lens: []const usize,
+    offsets: []const usize,
+) Error!SequenceTablePlanAlternatives {
     var alternatives: SequenceTablePlanAlternatives = .{};
     if (try rleSequenceCodeForValues(offsets, &of_base, &of_bits)) |code|
         try alternatives.add(.{ .rle = code });
@@ -16764,6 +16800,39 @@ test "zstd Huffman tree size estimator matches selected wire" {
     }
 }
 
+test "zstd reserved Huffman stream matches checked append reference" {
+    var payload: [8192]u8 = undefined;
+    for (&payload, 0..) |*byte, i| byte.* = @intCast((i * 37 + i / 11) % 193);
+    for ([_]usize{ 64, 65, 1023, 1024, payload.len }) |len| {
+        const plan = smallHuffmanLiteralPlan(payload[0..len]) orelse return error.CorruptFrame;
+        var expected: std.ArrayList(u8) = .empty;
+        defer expected.deinit(std.testing.allocator);
+        try emitSmallHuffmanStreamCheckedAppendReference(std.testing.allocator, &expected, payload[0..len], &plan);
+        var actual: std.ArrayList(u8) = .empty;
+        defer actual.deinit(std.testing.allocator);
+        try emitSmallHuffmanStream(std.testing.allocator, &actual, payload[0..len], &plan);
+        try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+
+        if (plan.bit_counts[255] == 0) {
+            var invalid: std.ArrayList(u8) = .empty;
+            defer invalid.deinit(std.testing.allocator);
+            try std.testing.expectError(
+                error.CorruptFrame,
+                emitSmallHuffmanStream(std.testing.allocator, &invalid, &.{255}, &plan),
+            );
+            try std.testing.expectEqual(@as(usize, 0), invalid.items.len);
+        }
+    }
+
+    const plan = smallHuffmanLiteralPlan(&payload) orelse return error.CorruptFrame;
+    var prefixed: std.ArrayList(u8) = .empty;
+    defer prefixed.deinit(std.testing.allocator);
+    try prefixed.appendSlice(std.testing.allocator, "prefix");
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, emitSmallHuffmanStream(failing.allocator(), &prefixed, &payload, &plan));
+    try std.testing.expectEqualSlices(u8, "prefix", prefixed.items);
+}
+
 fn fseHuffmanTreeSerializedLen(plan: *const SmallHuffmanLiteralPlan) Error!?usize {
     var weights: [255]u8 = undefined;
     const weight_count: usize = plan.max_symbol;
@@ -17618,6 +17687,10 @@ fn smallHuffmanBitCount(plan: *const SmallHuffmanLiteralPlan, symbol: u8) ?u8 {
 
 fn emitSmallHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: *const SmallHuffmanLiteralPlan) Error!void {
     const lookup = try smallHuffmanLiteralLookup(plan);
+    const max_payload_bits = std.math.mul(usize, block.len, @as(usize, plan.max_bit_count)) catch return error.IntegerOverflow;
+    const max_stream_bits = std.math.add(usize, max_payload_bits, 1) catch return error.IntegerOverflow;
+    const max_stream_bytes = std.math.add(usize, max_stream_bits, 7) catch return error.IntegerOverflow;
+    try out.ensureUnusedCapacity(allocator, max_stream_bytes / 8);
     var accumulator: usize = 0;
     var bit_count: u6 = 0;
     var i = block.len;
@@ -17625,7 +17698,35 @@ fn emitSmallHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8),
         i -= 1;
         const bits = lookup.bit_counts[block[i]];
         if (bits == 0) return error.CorruptFrame;
-        const code = lookup.codes[block[i]];
+        const code: usize = lookup.codes[block[i]];
+        accumulator |= code << bit_count;
+        bit_count += @intCast(bits);
+        while (bit_count >= 8) {
+            out.appendAssumeCapacity(@truncate(accumulator));
+            accumulator >>= 8;
+            bit_count -= 8;
+        }
+    }
+    accumulator |= @as(usize, 1) << bit_count;
+    bit_count += 1;
+    while (bit_count > 0) {
+        out.appendAssumeCapacity(@truncate(accumulator));
+        if (bit_count <= 8) break;
+        accumulator >>= 8;
+        bit_count -= 8;
+    }
+}
+
+fn emitSmallHuffmanStreamCheckedAppendReference(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: *const SmallHuffmanLiteralPlan) Error!void {
+    const lookup = try smallHuffmanLiteralLookup(plan);
+    var accumulator: usize = 0;
+    var bit_count: u6 = 0;
+    var i = block.len;
+    while (i > 0) {
+        i -= 1;
+        const bits = lookup.bit_counts[block[i]];
+        if (bits == 0) return error.CorruptFrame;
+        const code: usize = lookup.codes[block[i]];
         accumulator |= code << bit_count;
         bit_count += @intCast(bits);
         while (bit_count >= 8) {
@@ -18395,12 +18496,12 @@ fn singleMatchPayloadLenFromIndex(block: []const u8, match: DuplicateMatch, lite
     const offset = match.second_start - match.first_start;
     const tail_start = match.second_start + match.len;
     const regenerated_len = literal_len + block.len - tail_start;
-    // Native Huffman literals currently require every symbol <= 128. Removing
-    // A suffix score's logical stream also omits the `start_min` prefix, so at
-    // most `start_min + match.len` high bytes can disappear. An RLE literal
-    // section is impossible when no symbol occurs often enough to fill the
-    // retained stream. Under both conditions the literal section is provably
-    // raw, so avoid two scans plus Huffman construction.
+    // This legacy high-byte shortcut predates full FSE-compressed Huffman
+    // weight emission. It remains profitable for the common wide binary shape,
+    // but can conservatively overestimate rare low-entropy high-byte literals;
+    // keep that limitation explicit until exact scoring can be isolated without
+    // regressing the common selector path. An RLE literal section is impossible
+    // when no symbol occurs often enough to fill the retained stream.
     const removed_len = std.math.add(usize, literal_start, match.len) catch return error.IntegerOverflow;
     const literals_section_len = if (index.high_byte_count > removed_len and index.max_byte_frequency < regenerated_len)
         std.math.add(usize, try literalsHeaderLen(regenerated_len), regenerated_len) catch return error.IntegerOverflow
@@ -23707,6 +23808,43 @@ test "zstd sequence payload scorers reuse exact literal section length" {
     var actual_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
     const actual_count = try sequenceReadFieldsWithTablePlans(&actual_fields, &literal_lens, &offsets, &match_lens, actual_table.plan);
     try std.testing.expectEqualSlices(BitField, expected_fields[0..expected_count], actual_fields[0..actual_count]);
+
+    var literals_prefix: std.ArrayList(u8) = .empty;
+    defer literals_prefix.deinit(std.testing.allocator);
+    _ = try emitSequenceLiteralsSection(std.testing.allocator, &literals_prefix, payload, &literal_lens, &literal_ends, tail_start);
+    try std.testing.expectEqual(literals_section_len, literals_prefix.items.len);
+
+    var rescanned: std.ArrayList(u8) = .empty;
+    defer rescanned.deinit(std.testing.allocator);
+    try std.testing.expect(try emitSequenceCompressedBlockWithTablePlans(
+        std.testing.allocator,
+        &rescanned,
+        payload,
+        true,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        tail_start,
+        expected_table.plan,
+        literals_prefix.items,
+        null,
+    ));
+    var reused: std.ArrayList(u8) = .empty;
+    defer reused.deinit(std.testing.allocator);
+    try std.testing.expect(try emitTablePlanSequenceCompressedBlockWithLiterals(
+        std.testing.allocator,
+        &reused,
+        payload,
+        true,
+        literals_prefix.items,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        tail_start,
+    ));
+    try std.testing.expectEqualSlices(u8, rescanned.items, reused.items);
 }
 
 test "zstd specialized sequence table cost matches generic symbol lookup" {
@@ -23735,6 +23873,83 @@ test "zstd specialized sequence table cost matches generic symbol lookup" {
             );
         }
     }
+}
+
+test "zstd sparse sequence alternatives match initialized reference" {
+    const Test = struct {
+        fn compare(
+            expected: SequenceTablePlanAlternatives,
+            actual: SequenceTablePlanAlternatives,
+            kind: SequenceTableKind,
+            values: []const usize,
+            literal_lens: []const usize,
+            offsets: []const usize,
+            coverage: *u8,
+        ) !void {
+            try std.testing.expectEqual(expected.len, actual.len);
+            for (expected.items[0..expected.len], actual.items[0..actual.len]) |want, got| {
+                try std.testing.expectEqual(std.meta.activeTag(want), std.meta.activeTag(got));
+                coverage.* |= switch (std.meta.activeTag(want)) {
+                    .rle => 1,
+                    .predefined => 2,
+                    .compressed => 4,
+                    .repeat => 8,
+                };
+                var want_payload: std.ArrayList(u8) = .empty;
+                defer want_payload.deinit(std.testing.allocator);
+                var got_payload: std.ArrayList(u8) = .empty;
+                defer got_payload.deinit(std.testing.allocator);
+                try appendSequenceTablePayload(std.testing.allocator, &want_payload, want);
+                try appendSequenceTablePayload(std.testing.allocator, &got_payload, got);
+                try std.testing.expectEqualSlices(u8, want_payload.items, got_payload.items);
+                try std.testing.expectEqual(
+                    try sequenceTablePlanBitCost(want, kind, values, literal_lens, offsets),
+                    try sequenceTablePlanBitCost(got, kind, values, literal_lens, offsets),
+                );
+                for (0..values.len) |i|
+                    try std.testing.expectEqual(try sequenceTableSymbol(want, kind, i), try sequenceTableSymbol(got, kind, i));
+            }
+        }
+    };
+
+    var literal_lens: [128]usize = undefined;
+    var offsets: [128]usize = undefined;
+    var match_lens: [128]usize = undefined;
+    var state: u32 = 0x243f_6a88;
+    var coverage: u8 = 0;
+    for (0..64) |case_index| {
+        const len = 2 + case_index * 2;
+        for (0..len) |i| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            literal_lens[i] = if (case_index % 8 == 0) 3 else (state >> 24) % 36;
+            state = state *% 1_664_525 +% 1_013_904_223;
+            match_lens[i] = if (case_index % 9 == 0) 7 else 3 + (state >> 24) % 51;
+            state = state *% 1_664_525 +% 1_013_904_223;
+            offsets[i] = 4 + (state % 4092);
+        }
+        inline for (.{ SequenceTableKind.literal, .match }) |kind| {
+            const values = if (kind == .literal) literal_lens[0..len] else match_lens[0..len];
+            try Test.compare(
+                try sequenceTablePlanAlternativesInitializedReference(values, kind),
+                try sequenceTablePlanAlternatives(values, kind),
+                kind,
+                values,
+                literal_lens[0..len],
+                offsets[0..len],
+                &coverage,
+            );
+        }
+        try Test.compare(
+            try offsetSequenceTablePlanAlternativesInitializedReference(literal_lens[0..len], offsets[0..len]),
+            try offsetSequenceTablePlanAlternatives(literal_lens[0..len], offsets[0..len]),
+            .offset,
+            offsets[0..len],
+            literal_lens[0..len],
+            offsets[0..len],
+            &coverage,
+        );
+    }
+    try std.testing.expectEqual(@as(u8, 0x07), coverage & 0x07);
 }
 
 test "zstd sequence emitter supports mixed RLE and predefined tables" {
