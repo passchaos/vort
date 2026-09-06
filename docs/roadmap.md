@@ -9923,3 +9923,18 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   match four and never reads them, but generic repeat-beam callers may request
   minimum match three. The builder now writes the empty sentinel for every
   anchorless tail slot, with a pre-poisoned Debug/ReleaseSafe/ReleaseFast oracle.
+  Profiling the 32 KiB Brotli ratio encoder then attributed about 71% of cycles
+  to its exact-wire optimal candidate, including roughly 40% in the DP loop,
+  14% in suffix-length minima, and 12% in four-byte prefix validation. Four
+  follow-ups were rejected. Reducing the 128 valid-candidate budget to
+  112/120/124 grew one to four of five repository-source frames; 126 restored
+  the five wires but could remove less than 1.6% of candidate work. A four-byte
+  hash chain accelerated the five files by roughly 25--34% but grew the primary
+  `src/br.zig` ratio stream by one byte. Hoisting the current prefix improved
+  only `1.005x` geometrically, while splitting its validation into a cheap
+  fourth-byte check plus deferred three-byte verification regressed to `0.977x`.
+  Finally, a bounded `u32` DP cost implementation preserved all measured wires
+  and improved five 32 KiB source rows by `1.068x`, but three progressively
+  stronger section/module-isolation layouts could not preserve both the target
+  and short ratio controls: the fully private module left the target at
+  `0.957x`. Production retains the exact 256-chain/128-candidate `usize` DP.
