@@ -9861,3 +9861,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   wins in every row and a `0.936x` geometric mean. Splitting the bounds into
   additional hot-call arguments increased register pressure enough to outweigh
   the repeated clamping work, so the production parser remains unchanged.
+  Forcing only the repeat-beam index's sole candidate `matchLength` call inline
+  was also rejected. It removed the sampled call and `vzeroupper` boundary while
+  retaining every stage counter and wire byte, but enlarging the beam loop hurt
+  instruction-cache/register behavior: fifteen alternating fixed-CPU-30 pairs
+  measured primary text/JSON/binary at `0.923x`/`0.968x`/`0.975x`, again with
+  0/15 wins in each row and a `0.953x` geometric mean. The shared out-of-line
+  vectorized matcher remains the better code layout.
