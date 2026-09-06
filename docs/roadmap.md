@@ -9903,3 +9903,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   text/JSON throughput to `0.836x`/`0.951x`; binary improved only `1.030x`, for
   a `0.936x` geometric mean. Any future adaptive width must isolate the entire
   wide implementation at a higher boundary so ordinary beam codegen is intact.
+  Isolating the full wide implementation in a dedicated text section and using
+  only a 16-byte high-bit classifier was rejected as well. Fifteen focused
+  fixed-CPU-30 pairs preserved all stage counters/wires, but text/JSON/binary
+  measured `0.897x`/`0.991x`/`0.987x`; replacing the fixed head with dynamic
+  scratch and duplicating the parser still disturbed the profitable narrow
+  layout. The 8,192-entry direction is closed unless the index representation
+  itself changes. During that audit, the compact four-byte index's final three
+  predecessor slots were found to be unwritten. Production Zstd uses minimum
+  match four and never reads them, but generic repeat-beam callers may request
+  minimum match three. The builder now writes the empty sentinel for every
+  anchorless tail slot, with a pre-poisoned Debug/ReleaseSafe/ReleaseFast oracle.
