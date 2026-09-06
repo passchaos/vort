@@ -2802,6 +2802,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_br_upstream_multiblock_diff = b.addRunArtifact(br_upstream_multiblock_diff_exe);
+    if (b.args) |args| run_br_upstream_multiblock_diff.addArgs(args);
     const br_upstream_multiblock_diff_step = b.step(
         "run-br-upstream-multiblock-diff",
         "Decode streamed multi-meta-block libbrotli operation schedules byte progressively",

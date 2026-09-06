@@ -47,6 +47,15 @@ public allocating decoder and through the byte-progressive decoder with
 deeper flushed, metadata, context-tree, 256-block-type, large-header, and full
 chunk-matrix fixtures; it strengthens decoder evidence without implying
 equivalent encoder quality or speed.
+The same differential accepts repeatable `--real-file` inputs with a bounded
+`--real-limit` prefix, so local upstream and application checkouts can extend
+coverage without becoming repository dependencies. A first fixed-CPU run over
+1 MiB prefixes of Godot C source, Qwen tokenizer JSON, OpenCV XML, and an
+OpenType font passed all 16 representative q0/q4/q8/q11, generic/text/font,
+window-10/16/20/24 one-shot and 17-byte-input/31-byte-output progressive cases
+against libbrotli 1.1.0. The build step now forwards arguments to the probe,
+and its summary reports real-corpus counters so an accidentally ignored corpus
+cannot appear green.
 
 The next highest-value deliverable is broader real-corpus and cross-platform
 Brotli decoder evidence, followed by the remaining general Brotli encoder

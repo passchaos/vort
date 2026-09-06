@@ -26,6 +26,21 @@ const Case = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
+    defer args.deinit();
+    _ = args.next();
+    var real_files: std.ArrayList([]const u8) = .empty;
+    defer real_files.deinit(init.gpa);
+    var real_limit: usize = 2 * 1024 * 1024;
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--real-file")) {
+            try real_files.append(init.gpa, args.next() orelse return error.MissingCorpusPath);
+        } else if (std.mem.eql(u8, arg, "--real-limit")) {
+            real_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10);
+            if (real_limit == 0) return error.InvalidBlockPlan;
+        } else return error.UnknownArgument;
+    }
+
     var reference = try libbrotli.Runtime.open();
     defer reference.deinit();
 
@@ -590,13 +605,66 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    // Optional real-corpus coverage deliberately stays outside the default CI
+    // contract: callers can point this dependency-free decoder at source,
+    // markup, model metadata, or font files from neighboring checkouts without
+    // making those repositories build dependencies. Each source is truncated
+    // to a deterministic prefix and crosses representative libbrotli quality,
+    // mode, and window families through allocating and byte-progressive APIs.
+    var real_file_cases: usize = 0;
+    var real_progressive_cases: usize = 0;
+    const RealCaseOptions = struct { quality: c_int, mode: c_int, lgwin: c_int };
+    const real_options = [_]RealCaseOptions{
+        .{ .quality = 0, .mode = 0, .lgwin = 10 },
+        .{ .quality = 4, .mode = 1, .lgwin = 16 },
+        .{ .quality = 8, .mode = 2, .lgwin = 20 },
+        .{ .quality = 11, .mode = 0, .lgwin = 24 },
+    };
+    for (real_files.items) |path| {
+        const payload = try readFilePrefixAlloc(init, path, real_limit);
+        defer init.gpa.free(payload);
+        if (payload.len == 0) return error.EmptyInput;
+        for (real_options) |options| {
+            const encoded = try reference.encodeWithOptionsAlloc(init.gpa, payload, .{
+                .quality = options.quality,
+                .mode = options.mode,
+                .lgwin = options.lgwin,
+            });
+            defer init.gpa.free(encoded);
+            const decoded = vort.brDecodeStreamAlloc(init.gpa, encoded) catch |err| {
+                std.debug.print("real file={s} bytes={d} quality={d} mode={d} lgwin={d} encoded={d}: {s}\n", .{ path, payload.len, options.quality, options.mode, options.lgwin, encoded.len, @errorName(err) });
+                return err;
+            };
+            defer init.gpa.free(decoded);
+            if (!std.mem.eql(u8, payload, decoded)) return error.SizeMismatch;
+            decodeProgressChunks(init.gpa, encoded, payload, @intCast(options.lgwin), 17, 31) catch |err| {
+                std.debug.print("real progressive file={s} bytes={d} quality={d} mode={d} lgwin={d} encoded={d}: {s}\n", .{ path, payload.len, options.quality, options.mode, options.lgwin, encoded.len, @errorName(err) });
+                return err;
+            };
+            real_file_cases += 1;
+            real_progressive_cases += 1;
+        }
+    }
+
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} broad_generated_cases={d} broad_progressive_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ cases_run, one_shot_cases, broad_generated_cases, broad_progressive_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ cases_run, one_shot_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
+}
+
+fn readFilePrefixAlloc(init: std.process.Init, path: []const u8, limit: usize) ![]u8 {
+    const stat = try std.Io.Dir.cwd().statFile(init.io, path, .{});
+    const file_len = std.math.cast(usize, stat.size) orelse limit;
+    const prefix_len = @min(file_len, limit);
+    const payload = try init.gpa.alloc(u8, prefix_len);
+    errdefer init.gpa.free(payload);
+    var file = try std.Io.Dir.cwd().openFile(init.io, path, .{});
+    defer file.close(init.io);
+    const read_len = try file.readPositionalAll(init.io, payload, 0);
+    return init.gpa.realloc(payload, read_len);
 }
 
 fn validateClusterCoverage(case: Case, summary: vort.BrotliStreamSummary) !void {
