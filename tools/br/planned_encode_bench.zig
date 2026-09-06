@@ -26,6 +26,7 @@ const Options = struct {
     iterations: usize = 1000,
     csv_path: ?[]const u8 = null,
     quality_override: ?c_int = null,
+    extended_dictionary_probes: u16 = 0,
     path_limit: usize = 128 * 1024,
     paths: std.ArrayList([]const u8) = .empty,
 
@@ -83,7 +84,7 @@ pub fn main(init: std.process.Init) !void {
     }
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,reference_version,quality,input_bytes,vort_bytes,lazy_bytes,ratio_bytes,ratio_dictionary_copies,ratio_dictionary_bytes,reference_bytes,iterations,vort_ns,lazy_ns,ratio_ns,reference_ns,vort_mib_s,lazy_mib_s,ratio_mib_s,reference_mib_s,vort_over_reference,lazy_over_reference,ratio_over_reference,vort_size_over_reference,lazy_size_over_reference,ratio_size_over_reference,checksum\n");
+    try csv.writer.writeAll("case,reference_version,quality,input_bytes,extended_dictionary_probes,vort_bytes,lazy_bytes,ratio_bytes,ratio_dictionary_copies,ratio_dictionary_bytes,reference_bytes,iterations,vort_ns,lazy_ns,ratio_ns,reference_ns,vort_mib_s,lazy_mib_s,ratio_mib_s,reference_mib_s,vort_over_reference,lazy_over_reference,ratio_over_reference,vort_size_over_reference,lazy_size_over_reference,ratio_size_over_reference,checksum\n");
     for (cases.items) |case| {
         const quality = options.quality_override orelse case.quality orelse 3;
         const vort_encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{ .level = .fast });
@@ -92,7 +93,11 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(reference_encoded);
         const lazy_encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{ .level = .balanced });
         defer init.gpa.free(lazy_encoded);
-        const ratio_encoded = try vort.brEncodePlannedStreamRatioAlloc(init.gpa, case.payload);
+        const extended_dictionary_probes: u16 = if (case.payload.len <= 4096) options.extended_dictionary_probes else 0;
+        const ratio_encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{
+            .level = .ratio,
+            .extended_dictionary_probes = extended_dictionary_probes,
+        });
         defer init.gpa.free(ratio_encoded);
         // Record semantic dictionary use in addition to the encoded size so the
         // benchmark gate catches regressions that silently fall back to literals.
@@ -104,18 +109,19 @@ pub fn main(init: std.process.Init) !void {
             if (!std.mem.eql(u8, case.payload, decoded)) return error.SizeMismatch;
         }
         const samples = try measureInterleaved(init.io, init.gpa, reference, case.payload, options, quality);
-        const lazy_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .balanced);
-        const ratio_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .ratio);
+        const lazy_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .balanced, 0);
+        const ratio_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .ratio, extended_dictionary_probes);
         const total_bytes = case.payload.len * options.iterations;
         const vort_rate = mibPerSecond(total_bytes, samples.vort.ns);
         const reference_rate = mibPerSecond(total_bytes, samples.reference.ns);
         const lazy_rate = mibPerSecond(total_bytes, lazy_sample.ns);
         const ratio_rate = mibPerSecond(total_bytes, ratio_sample.ns);
-        try csv.writer.print("{s},{x},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d}\n", .{
+        try csv.writer.print("{s},{x},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d}\n", .{
             case.name,
             reference.version(),
             quality,
             case.payload.len,
+            extended_dictionary_probes,
             vort_encoded.len,
             lazy_encoded.len,
             ratio_encoded.len,
@@ -150,13 +156,16 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
-fn measurePlanned(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, iterations: usize, level: vort.BrotliPlannedCompressionLevel) !Sample {
+fn measurePlanned(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, iterations: usize, level: vort.BrotliPlannedCompressionLevel, extended_dictionary_probes: u16) !Sample {
     var best = Sample{ .ns = std.math.maxInt(u64), .mix = 0 };
     for (0..5) |_| {
         var mix: usize = 0;
         const start = std.Io.Clock.awake.now(io);
         for (0..iterations) |_| {
-            const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(allocator, payload, .{ .level = level });
+            const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(allocator, payload, .{
+                .level = level,
+                .extended_dictionary_probes = extended_dictionary_probes,
+            });
             mix +%= encoded.len;
             allocator.free(encoded);
         }
@@ -230,9 +239,10 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
     var options = Options{};
     errdefer options.deinit(allocator);
     while (args.next()) |arg| {
-        if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--quality")) options.quality_override = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--limit")) options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--path")) try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath)) else return error.UnknownArgument;
+        if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--quality")) options.quality_override = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--extended-dictionary-probes")) options.extended_dictionary_probes = try std.fmt.parseInt(u16, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--limit")) options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--path")) try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath)) else return error.UnknownArgument;
     }
     if (options.iterations == 0 or options.path_limit == 0) return error.InvalidBlockPlan;
     if (options.quality_override) |quality| if (quality < 0 or quality > 11) return error.InvalidBlockPlan;
+    if (options.extended_dictionary_probes > vort.brotliMaxExtendedDictionaryProbes) return error.InvalidBlockPlan;
     return options;
 }

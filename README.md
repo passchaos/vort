@@ -1099,6 +1099,9 @@ practical starting point for text-oriented workloads. A candidate replaces the
 ordinary LZ/stored result only when its complete Brotli wire is strictly
 smaller. Non-zero budgets require `.ratio`; inputs above 4 KiB and larger
 budgets return `error.InvalidBlockPlan`.
+The planned encode benchmark accepts `--extended-dictionary-probes N`, so this
+opt-in path can be measured with the same built-in and repeatable `--path`
+corpora as the default levels.
 
 ### Native LZ4/Zstd library knobs
 

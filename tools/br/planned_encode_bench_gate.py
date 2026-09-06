@@ -3,7 +3,7 @@
 import argparse, csv
 from pathlib import Path
 
-COLUMNS = ["case", "reference_version", "quality", "input_bytes", "vort_bytes", "lazy_bytes", "ratio_bytes", "ratio_dictionary_copies", "ratio_dictionary_bytes", "reference_bytes", "iterations", "vort_ns", "lazy_ns", "ratio_ns", "reference_ns", "vort_mib_s", "lazy_mib_s", "ratio_mib_s", "reference_mib_s", "vort_over_reference", "lazy_over_reference", "ratio_over_reference", "vort_size_over_reference", "lazy_size_over_reference", "ratio_size_over_reference", "checksum"]
+COLUMNS = ["case", "reference_version", "quality", "input_bytes", "extended_dictionary_probes", "vort_bytes", "lazy_bytes", "ratio_bytes", "ratio_dictionary_copies", "ratio_dictionary_bytes", "reference_bytes", "iterations", "vort_ns", "lazy_ns", "ratio_ns", "reference_ns", "vort_mib_s", "lazy_mib_s", "ratio_mib_s", "reference_mib_s", "vort_over_reference", "lazy_over_reference", "ratio_over_reference", "vort_size_over_reference", "lazy_size_over_reference", "ratio_size_over_reference", "checksum"]
 CASES = {"json", "source", "log", "dictionary", "mixed", "uppercase", "incompressible", "source32k"}
 DICTIONARY_CASES = {"dictionary", "mixed", "uppercase"}
 MAX_LAZY_BYTES = {"json": 62, "source": 84, "log": 82}
@@ -19,6 +19,9 @@ def main():
             assert int(row[key]) > 0, row
         for key in ("ratio_dictionary_copies", "ratio_dictionary_bytes"):
             assert int(row[key]) >= 0, row
+        assert 0 <= int(row["extended_dictionary_probes"]) <= 4096, row
+        if int(row["input_bytes"]) > 4096:
+            assert int(row["extended_dictionary_probes"]) == 0, row
         for key in ("vort_mib_s","lazy_mib_s","ratio_mib_s","reference_mib_s","vort_over_reference","lazy_over_reference","ratio_over_reference","vort_size_over_reference","lazy_size_over_reference","ratio_size_over_reference"):
             assert float(row[key]) > 0, row
         assert int(row["vort_bytes"]) <= int(row["input_bytes"]) + 4, row

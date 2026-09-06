@@ -142,6 +142,19 @@ default-path A/B rounds kept all seven stable built-in wire fields identical;
 the aggregate speed ratio was 1.0767x and the weakest control row was 0.9942x.
 The runtime libbrotli 1.1.0 differential independently decodes the retained
 extended-dictionary stream (`planned_extended_dictionary_cases=1`).
+The planned encode benchmark now accepts an explicit dictionary-probe budget
+for direct measurement of this opt-in path. Static-dictionary indexing was
+audited against the locally available upstream Brotli matcher. The current
+146,560-byte base-word index does not discover every omit-first, short
+omit-last-plus-suffix, or non-ASCII uppercase transform shape. Complete
+supplemental-index prototypes were rejected because they increased memory to
+roughly 0.5--0.7 MiB and slowed the 64-probe aggregate by about 15% to 21%. An
+exact four-byte Hash15 collision prefilter was also rejected: filtering every
+collision lost existing omit-transform matches, while retaining those matches
+made a same-binary fixed-CPU matcher microbenchmark neutral (`0.9998x`). Keep
+complete transform coverage as a future compact-index design target rather
+than trading memory, latency, or existing deterministic choices for nominal
+coverage.
 
 ## Milestone 0: repository and validation spine
 
