@@ -9851,3 +9851,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   the 500-sequence version keep every wire size and improve JSON levels 1/3/9
   by `1.231x`/`1.325x`/`1.322x`; the incremental geometric mean is `1.050x`,
   with every control at or above `0.991x`.
+  A post-change fixed-CPU profile moved the next encoder bottleneck to the
+  repeat-aware beam parser: it accounts for about 25% of JSON level-3 cycles
+  and 54% of binary level-3 cycles. Hoisting the parser's normalized minimum
+  and maximum match bounds out of its position/state loops was nevertheless
+  rejected. Focused oracles retained the exact 508-sequence, 8,600-byte binary
+  stage result, but fifteen alternating fixed-CPU-30 pairs regressed primary
+  text/JSON/binary beam throughput to `0.876x`/`0.960x`/`0.975x`, with 0/15
+  wins in every row and a `0.936x` geometric mean. Splitting the bounds into
+  additional hot-call arguments increased register pressure enough to outweigh
+  the repeated clamping work, so the production parser remains unchanged.
