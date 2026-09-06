@@ -4,7 +4,7 @@ const command_plan = @import("command_plan.zig");
 pub const min_distance: usize = (@as(usize, 1) << 16) - 16 + 1;
 pub const max_distance: usize = (@as(usize, 1) << 17) - 16;
 const max_dense_distance: usize = (@as(usize, 1) << 20) - 16;
-pub const max_configurable_distance: usize = (@as(usize, 1) << 22) - 16;
+pub const max_configurable_distance: usize = (@as(usize, 1) << 23) - 16;
 const chain_limit = 512;
 const min_match = 16;
 const max_match = 258;
@@ -31,7 +31,9 @@ pub fn augmentAllocWithMaxDistance(allocator: std.mem.Allocator, input: []const 
         return augmentAllocWithStride(1, allocator, input, commands, max_backward_distance);
     if (max_backward_distance <= (@as(usize, 1) << 21) - 16)
         return augmentAllocWithStride(2, allocator, input, commands, max_backward_distance);
-    return augmentAllocWithStride(4, allocator, input, commands, max_backward_distance);
+    if (max_backward_distance <= (@as(usize, 1) << 22) - 16)
+        return augmentAllocWithStride(4, allocator, input, commands, max_backward_distance);
+    return augmentAllocWithStride(8, allocator, input, commands, max_backward_distance);
 }
 
 fn augmentAllocWithStride(comptime stride: usize, allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, max_backward_distance: usize) !?[]command_plan.Command {
@@ -186,8 +188,8 @@ test "near hash collisions do not hide eligible long matches" {
     try std.testing.expect(found);
 }
 
-test "configurable matcher covers exact 18 through 22-bit distance limits" {
-    inline for (.{ (@as(usize, 1) << 18) - 16, (@as(usize, 1) << 19) - 16, (@as(usize, 1) << 20) - 16, (@as(usize, 1) << 21) - 16, max_configurable_distance }) |match_position| {
+test "configurable matcher covers exact 18 through 23-bit distance limits" {
+    inline for (.{ (@as(usize, 1) << 18) - 16, (@as(usize, 1) << 19) - 16, (@as(usize, 1) << 20) - 16, (@as(usize, 1) << 21) - 16, (@as(usize, 1) << 22) - 16, max_configurable_distance }) |match_position| {
         try expectConfigurableDistanceMatch(match_position, match_position);
     }
     const original = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = min_distance + 1 }};
@@ -236,6 +238,29 @@ test "stride-four matcher advances through the worst source phase" {
     var found = false;
     for (augmented) |command|
         if (command.has_copy and command.distance == match_position - 1 and command.copy_len == phrase.len - 3) {
+            found = true;
+        };
+    try std.testing.expect(found);
+}
+
+test "stride-eight matcher advances through the worst source phase" {
+    const match_position = 5 * 1024 * 1024 + 7;
+    const phrase = "1234567configurable-long-distance-match";
+    const input = try std.testing.allocator.alloc(u8, match_position + phrase.len);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x5238_1eaf;
+    for (input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[1..][0..phrase.len], phrase);
+    @memcpy(input[match_position..], phrase);
+    const original = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
+    const augmented = try augmentAllocWithMaxDistance(std.testing.allocator, input, &original, (@as(usize, 1) << 23) - 16) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(augmented);
+    var found = false;
+    for (augmented) |command|
+        if (command.has_copy and command.distance == match_position - 1 and command.copy_len == phrase.len - 7) {
             found = true;
         };
     try std.testing.expect(found);

@@ -63,7 +63,7 @@ features and ratio work. Performance work should then resume on the profiled
 DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
 
 One-shot planned Brotli encoding now accepts an explicit 10...16-bit window at
-all fast/balanced/ratio levels, plus 17...22-bit windows at ratio level. The
+all fast/balanced/ratio levels, plus 17...23-bit windows at ratio level. The
 advertised window, matcher distance bound,
 optimal-parser proposal, static-dictionary candidate, stored fallback, size
 bound, reusable encoder, and caller-buffer path use one policy. Tests cover all
@@ -72,11 +72,11 @@ the 1,008/1,009-byte WBITS=10 distance boundary. The runtime libbrotli 1.1.0
 differential independently decodes those combinations, six 10/11-bit boundary
 frames, one 80 KiB-distance 17-bit frame, one 160 KiB-distance 18-bit frame,
 one 320 KiB-distance 19-bit frame, one 640 KiB-distance 20-bit frame, and one
-1.25 MiB-distance 21-bit frame, and one 2.5 MiB-distance 22-bit frame
-(`planned_window_cases=33`).
+1.25 MiB-distance 21-bit frame, one 2.5 MiB-distance 22-bit frame, and one
+5 MiB-distance 23-bit frame (`planned_window_cases=34`).
 Omitting the option remains byte-identical for all
 three levels, and the existing eight-row planned encode gate stays green. Full
-23...24-bit planned matching remains future work; stored encoding and decoding
+24-bit planned matching remains future work; stored encoding and decoding
 continue to support the complete RFC 10...24 range.
 The Brotli-only long-distance matcher now accepts an explicit maximum distance
 through 1,048,560 bytes and sizes its predecessor ring to the active distance
@@ -91,7 +91,8 @@ keeping its ring at 1,048,576 entries/about 4 MiB while covering the complete
 memory cap and covers distances through 4,194,288 bytes. Non-zero source phases
 retain at most `stride-1` leading literals before using the sampled phase;
 focused oracles cover the stride-two and worst stride-four cases. Windows
-23...24 require stride 8/16 validation rather than larger dense scratch. Fifteen
+WBITS=23 uses stride eight with the same 4 MiB ring cap and has exact-limit and
+worst-seven-byte-phase oracles. WBITS=24 still requires stride-16 validation. Fifteen
 alternating fixed-CPU-30 default-path pairs preserved the 20,788-byte wire and
 checksum 1,446,304; median ratio time was 133.43 ms versus 133.06 ms baseline
 (`0.9973x`), within the retained non-target floor.
