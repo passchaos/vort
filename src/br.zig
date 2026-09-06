@@ -966,6 +966,7 @@ pub const StoredStreamOptions = struct {
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
 };
+pub const PlannedStreamChunksOptions = StoredStreamOptions;
 
 pub fn encodedStoredStreamBound(input_len: usize) Error!usize {
     return try encodedStoredStreamBoundWithOptions(input_len, .{});
@@ -1762,7 +1763,13 @@ pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEn
 /// planned meta-block per non-empty chunk. Oversized chunks are split into
 /// 32 KiB blocks so parser memory remains bounded.
 pub fn encodedPlannedStreamChunksBound(chunks: []const []const u8) Error!usize {
-    var bit_count: usize = 1; // Default WBITS=16 prefix.
+    return encodedPlannedStreamChunksBoundWithOptions(chunks, .{});
+}
+
+pub fn encodedPlannedStreamChunksBoundWithOptions(chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!usize {
+    var bit_count = try storedWindowBitsLen(options.window_bits);
+    if (options.metadata.len != 0)
+        bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     for (chunks) |chunk| {
         var offset: usize = 0;
         while (offset < chunk.len) {
@@ -1776,23 +1783,35 @@ pub fn encodedPlannedStreamChunksBound(chunks: []const []const u8) Error!usize {
 }
 
 pub fn encodePlannedStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) Error![]u8 {
+    return encodePlannedStreamChunksWithOptionsAlloc(allocator, chunks, .{});
+}
+
+pub fn encodePlannedStreamChunksWithOptionsAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
     var encoder = PlannedStreamEncoder.init(allocator);
     defer encoder.deinit();
-    return encoder.encodeChunksAlloc(allocator, chunks);
+    return encoder.encodeChunksWithOptionsAlloc(allocator, chunks, options);
 }
 
 pub fn encodePlannedStreamChunksInto(chunks: []const []const u8, output: []u8) Error!usize {
-    const needed = try encodedPlannedStreamChunksBound(chunks);
+    return encodePlannedStreamChunksWithOptionsInto(chunks, output, .{});
+}
+
+pub fn encodePlannedStreamChunksWithOptionsInto(chunks: []const []const u8, output: []u8, options: PlannedStreamChunksOptions) Error!usize {
+    const needed = try encodedPlannedStreamChunksBoundWithOptions(chunks, options);
     if (output.len < needed) return error.OutOfMemory;
     var encoder = PlannedStreamEncoder.init(std.heap.smp_allocator);
     defer encoder.deinit();
-    return encoder.encodeChunksInto(chunks, output);
+    return encoder.encodeChunksWithOptionsInto(chunks, output, options);
 }
 
 pub fn encodePlannedStreamChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) Error!void {
+    return encodePlannedStreamChunksWithOptionsAppend(allocator, out, chunks, .{});
+}
+
+pub fn encodePlannedStreamChunksWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!void {
     var encoder = PlannedStreamEncoder.init(allocator);
     defer encoder.deinit();
-    try encoder.encodeChunksAppend(out, chunks);
+    try encoder.encodeChunksWithOptionsAppend(out, chunks, options);
 }
 
 pub fn encodePlannedStreamInto(input: []const u8, output: []u8) Error!usize {
@@ -2239,19 +2258,31 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn encodeChunksAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, chunks: []const []const u8) Error![]u8 {
-        return allocator.dupe(u8, try self.encodeChunksScratch(chunks));
+        return self.encodeChunksWithOptionsAlloc(allocator, chunks, .{});
+    }
+
+    pub fn encodeChunksWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+        return allocator.dupe(u8, try self.encodeChunksScratchWithOptions(chunks, options));
     }
 
     pub fn encodeChunksInto(self: *PlannedStreamEncoder, chunks: []const []const u8, output: []u8) Error!usize {
-        const needed = try encodedPlannedStreamChunksBound(chunks);
+        return self.encodeChunksWithOptionsInto(chunks, output, .{});
+    }
+
+    pub fn encodeChunksWithOptionsInto(self: *PlannedStreamEncoder, chunks: []const []const u8, output: []u8, options: PlannedStreamChunksOptions) Error!usize {
+        const needed = try encodedPlannedStreamChunksBoundWithOptions(chunks, options);
         if (output.len < needed) return error.OutOfMemory;
-        const encoded = try self.encodeChunksScratch(chunks);
+        const encoded = try self.encodeChunksScratchWithOptions(chunks, options);
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
     }
 
     pub fn encodeChunksAppend(self: *PlannedStreamEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) Error!void {
-        try out.appendSlice(self.allocator, try self.encodeChunksScratch(chunks));
+        return self.encodeChunksWithOptionsAppend(out, chunks, .{});
+    }
+
+    pub fn encodeChunksWithOptionsAppend(self: *PlannedStreamEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!void {
+        try out.appendSlice(self.allocator, try self.encodeChunksScratchWithOptions(chunks, options));
     }
 
     /// Encode through the stable level API while retaining token and command
@@ -2315,16 +2346,22 @@ pub const PlannedStreamEncoder = struct {
     /// to keep parser state bounded. The returned slice is invalidated by the
     /// next call or by `deinit`.
     pub fn encodeChunksScratch(self: *PlannedStreamEncoder, chunks: []const []const u8) Error![]const u8 {
+        return self.encodeChunksScratchWithOptions(chunks, .{});
+    }
+
+    pub fn encodeChunksScratchWithOptions(self: *PlannedStreamEncoder, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]const u8 {
         self.output.clearRetainingCapacity();
         var writer = BitWriter{ .out = &self.output };
-        try writeWindowBits(self.allocator, &writer, default_window_bits);
-        var stored_ceiling_bits: usize = 1;
+        try writeWindowBits(self.allocator, &writer, options.window_bits);
+        if (options.metadata.len != 0) try writeMetadataMetaBlock(self.allocator, &writer, options.metadata);
+        const window_len = (@as(usize, 1) << options.window_bits) - 16;
+        var stored_ceiling_bits = writer.bitPosition();
         for (chunks) |chunk| {
             var offset: usize = 0;
             while (offset < chunk.len) {
                 const block_len = @min(chunk.len - offset, planned_chunk_max_input_len);
                 stored_ceiling_bits = try addStoredUncompressedMetaBlockBitsLen(stored_ceiling_bits, block_len);
-                try self.encodeFastMetaBlock(&writer, chunk[offset..][0..block_len], stored_ceiling_bits);
+                try self.encodeFastMetaBlock(&writer, chunk[offset..][0..block_len], stored_ceiling_bits, window_len);
                 offset += block_len;
             }
         }
@@ -2333,13 +2370,13 @@ pub const PlannedStreamEncoder = struct {
         return self.output.items;
     }
 
-    fn encodeFastMetaBlock(self: *PlannedStreamEncoder, writer: *BitWriter, input: []const u8, stored_ceiling_bits: usize) Error!void {
+    fn encodeFastMetaBlock(self: *PlannedStreamEncoder, writer: *BitWriter, input: []const u8, stored_ceiling_bits: usize, window_len: usize) Error!void {
         std.debug.assert(input.len != 0 and input.len <= planned_chunk_max_input_len);
         const start_len = self.output.items.len;
         const start_bit_index = writer.bit_index;
         const start_byte = self.output.items[start_len - 1];
         const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
-            .window_len = input.len,
+            .window_len = @min(input.len, window_len),
             .max_chain = 64,
             .nice_len = 64,
             .max_candidates = 8,
@@ -9956,6 +9993,67 @@ test "br planned chunked encoder emits one multi-meta-block stream" {
     };
     encoder.allocator = std.testing.allocator;
     try std.testing.expectEqualSlices(u8, encoded_copy, allocation_free);
+}
+
+test "br planned chunked options honor windows metadata and output forms" {
+    const first = "chunked Brotli window option repeated payload 0123456789.\n" ** 24;
+    const second = "second independently planned meta-block with repeated text.\n" ** 20;
+    const chunks = [_][]const u8{ first, "", second };
+    const expected = first ++ second;
+    const metadata = "planned chunked metadata";
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+
+    for (10..25) |window_bits_usize| {
+        const window_bits: u5 = @intCast(window_bits_usize);
+        const options = PlannedStreamChunksOptions{ .window_bits = window_bits, .metadata = metadata };
+        const encoded = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, options);
+        defer std.testing.allocator.free(encoded);
+        const summary = try summarizeStream(encoded);
+        try std.testing.expectEqual(window_bits, summary.window_bits);
+        try std.testing.expectEqual(@as(usize, 1), summary.metadata_meta_block_count);
+        try std.testing.expectEqual(metadata.len, summary.metadata_bytes);
+        const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, expected.len);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected, decoded);
+
+        const bound = try encodedPlannedStreamChunksBoundWithOptions(&chunks, options);
+        const output = try std.testing.allocator.alloc(u8, bound);
+        defer std.testing.allocator.free(output);
+        const written = try encodePlannedStreamChunksWithOptionsInto(&chunks, output, options);
+        try std.testing.expectEqualSlices(u8, encoded, output[0..written]);
+
+        var appended: std.ArrayList(u8) = .empty;
+        defer appended.deinit(std.testing.allocator);
+        try encodePlannedStreamChunksWithOptionsAppend(std.testing.allocator, &appended, &chunks, options);
+        try std.testing.expectEqualSlices(u8, encoded, appended.items);
+        try std.testing.expectEqualSlices(u8, encoded, try encoder.encodeChunksScratchWithOptions(&chunks, options));
+    }
+
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamChunksBoundWithOptions(&chunks, .{ .window_bits = 9 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, .{ .window_bits = 25 }));
+}
+
+test "br planned chunked window bounds intra-block matches" {
+    const prefix_len = (@as(usize, 1) << 10) - 15;
+    var payload: [prefix_len + 256]u8 = undefined;
+    var state: u32 = 0x2c1b_3a49;
+    for (payload[0..prefix_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[prefix_len..], payload[0..256]);
+    const chunks = [_][]const u8{&payload};
+    const narrow = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, .{ .window_bits = 10 });
+    defer std.testing.allocator.free(narrow);
+    const wider = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, .{ .window_bits = 11 });
+    defer std.testing.allocator.free(wider);
+    try std.testing.expect(wider.len + 128 < narrow.len);
+    for ([_][]const u8{ narrow, wider }) |encoded| {
+        const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, &payload, decoded);
+    }
 }
 
 test "br planned chunked encoder handles empty and generated mixed blocks" {

@@ -73,6 +73,14 @@ differential independently decodes those combinations plus six boundary frames
 three levels, and the existing eight-row planned encode gate stays green. Full
 17...24-bit planned matching remains future work; stored encoding and decoding
 continue to support the complete RFC 10...24 range.
+The one-shot chunked planned surface now matches the stored and incremental
+stream option model: bound/alloc/append/into and reusable-scratch APIs accept
+10...24-bit windows plus an initial metadata meta-block. Each independently
+planned block caps matcher distance at `2^WBITS-16`; all 15 windows, metadata
+accounting, output forms, invalid windows, and the 1,008/1,009-byte boundary
+have direct tests. Four representative window/metadata streams also decode
+byte-exactly through libbrotli (`planned_chunked_window_cases=4`), while the
+default chunked size/performance gate remains unchanged.
 
 ## Milestone 0: repository and validation spine
 
