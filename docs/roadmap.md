@@ -9885,3 +9885,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `1.036x`/`1.033x`/`1.033x` and binary by
   `1.013x`/`1.028x`/`1.024x`; the row-median geometric mean is `1.014x` and
   every row is at least `0.999x`.
+  Expanding the repeat-beam's 4,096-entry hash head was rejected after a two-
+  point sweep. An 8,192-entry table preserved all focused stage counters/wires
+  and improved binary by `1.087x` with 15/15 wins, while text/JSON were
+  `1.000x`/`1.004x`; however, fifteen complete encode-matrix pairs improved
+  only `1.0055x` geometrically and consistently regressed text levels 1/3/9 to
+  `0.988x`/`0.986x`/`0.989x`. At 16,384 entries the added zeroing/cache footprint
+  was clearer: eleven focused pairs left binary at `1.066x` but text/JSON fell
+  to `0.829x`/`0.968x`, for a `0.950x` geometric mean. The compact 4,096-entry
+  head remains the general default; any wider follow-up must be isolated behind
+  a collision-density classifier rather than taxing every repeat-beam input.
