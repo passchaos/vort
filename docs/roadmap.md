@@ -9938,3 +9938,18 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   stronger section/module-isolation layouts could not preserve both the target
   and short ratio controls: the fully private module left the target at
   `0.957x`. Production retains the exact 256-chain/128-candidate `usize` DP.
+  A fresh Brotli ratio profile on the first 32 KiB of `src/br.zig` attributes
+  about 71% of total encode cycles to that exact-wire optimal proposal (roughly
+  40% core DP, 14% suffix-length minima, and 12% prefix validation), while wire
+  construction is only about 6%. A five-file parameter sweep confirmed that
+  reducing 128 valid candidates to 112/120/124 grows real outputs; 126 restores
+  those wires but can save less than 1.6% of candidate work. A four-byte chain
+  accelerated the five files by roughly 25--34% but grew `src/br.zig` by one
+  byte. Caching the current four-byte prefix preserved wires but improved only
+  `1.005x`; staged fourth-byte/full-prefix validation regressed to `0.977x`.
+  Reusing caller-owned optimal scratch to avoid the final token copy reached
+  only `1.006x`. A Brotli-only `u32` DP improved five source rows by `1.068x`
+  while embedded in the shared module, but short controls fell below `0.98x`;
+  after function and module isolation, either controls still regressed or the
+  target itself fell to `0.957x`. All implementations were removed rather than
+  weakening ratio output or the established non-target floor.
