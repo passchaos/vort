@@ -68,8 +68,8 @@ const max_bootstrap_sequence_count = 128;
 const max_native_sequence_count = 512;
 // Keep the large fixed-capacity table plans borrowed only where their copy cost
 // dominates. The locked text/JSON stage rows stay below this boundary, while
-// the 508-sequence binary rows exercise the isolated wide emitter.
-const wide_borrowed_sequence_plan_min = 500;
+// the 471/508-sequence JSON/binary rows exercise the isolated wide emitter.
+const wide_borrowed_sequence_plan_min = 450;
 // A Zstd block is bounded to 128 KiB and every LZ77 sequence consumes at least
 // one minimum-length match. Keep the large hash-parser path bounded by that
 // format-derived maximum instead of raising the small-path stack arrays.
