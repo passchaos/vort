@@ -3,7 +3,7 @@ const command_plan = @import("command_plan.zig");
 
 pub const min_distance: usize = (@as(usize, 1) << 16) - 16 + 1;
 pub const max_distance: usize = (@as(usize, 1) << 17) - 16;
-pub const max_configurable_distance: usize = (@as(usize, 1) << 19) - 16;
+pub const max_configurable_distance: usize = (@as(usize, 1) << 20) - 16;
 const chain_limit = 512;
 const min_match = 16;
 const max_match = 258;
@@ -176,8 +176,8 @@ test "near hash collisions do not hide eligible long matches" {
     try std.testing.expect(found);
 }
 
-test "configurable matcher covers exact 18 and 19-bit distance limits" {
-    inline for (.{ (@as(usize, 1) << 18) - 16, max_configurable_distance }) |match_position| {
+test "configurable matcher covers exact 18 through 20-bit distance limits" {
+    inline for (.{ (@as(usize, 1) << 18) - 16, (@as(usize, 1) << 19) - 16, max_configurable_distance }) |match_position| {
         try expectConfigurableDistanceMatch(match_position);
     }
     const original = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = min_distance + 1 }};
