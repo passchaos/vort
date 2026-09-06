@@ -63,15 +63,17 @@ features and ratio work. Performance work should then resume on the profiled
 DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
 
 One-shot planned Brotli encoding now accepts an explicit 10...16-bit window at
-all fast/balanced/ratio levels. The advertised window, matcher distance bound,
+all fast/balanced/ratio levels, plus 17-bit windows at ratio level. The
+advertised window, matcher distance bound,
 optimal-parser proposal, static-dictionary candidate, stored fallback, size
 bound, reusable encoder, and caller-buffer path use one policy. Tests cover all
 21 level/window combinations, stored fallback, invalid 9/17-bit requests, and
 the 1,008/1,009-byte WBITS=10 distance boundary. The runtime libbrotli 1.1.0
-differential independently decodes those combinations plus six boundary frames
-(`planned_window_cases=27`). Omitting the option remains byte-identical for all
+differential independently decodes those combinations, six 10/11-bit boundary
+frames, and one 80 KiB-distance 17-bit frame (`planned_window_cases=28`).
+Omitting the option remains byte-identical for all
 three levels, and the existing eight-row planned encode gate stays green. Full
-17...24-bit planned matching remains future work; stored encoding and decoding
+18...24-bit planned matching remains future work; stored encoding and decoding
 continue to support the complete RFC 10...24 range.
 The one-shot chunked planned surface now matches the stored and incremental
 stream option model: bound/alloc/append/into and reusable-scratch APIs accept

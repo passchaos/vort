@@ -38,9 +38,9 @@ pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
 pub const PlannedEncodeOptions = struct {
     level: PlannedCompressionLevel = .fast,
     /// Explicit Brotli window for one-shot planned encoding. The current
-    /// planned matcher can fully honor RFC window bits 10...16; leaving this
-    /// null preserves the established level policy, including ratio mode's
-    /// automatic 17-bit long-distance candidate.
+    /// planned matcher can fully honor RFC window bits 10...16 at every level
+    /// and 17 in ratio mode; leaving this null preserves the established level
+    /// policy, including ratio mode's automatic 17-bit long-distance candidate.
     window_bits: ?u5 = null,
 };
 /// Search budget for the ratio-oriented planner. These knobs affect token
@@ -957,8 +957,9 @@ const planned_chunk_max_input_len: usize = 32 * 1024;
 // multi-block logic without a measured throughput benefit.
 const direct_stored_stream_max_input_len: usize = 16 * 1024;
 
-fn plannedWindowLen(window_bits: u5) Error!usize {
-    if (window_bits < 10 or window_bits > default_window_bits) return error.InvalidBlockPlan;
+fn plannedWindowLen(level: PlannedCompressionLevel, window_bits: u5) Error!usize {
+    if (window_bits < 10 or window_bits > 17 or (window_bits == 17 and level != .ratio))
+        return error.InvalidBlockPlan;
     return (@as(usize, 1) << window_bits) - 16;
 }
 
@@ -1740,7 +1741,7 @@ pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8)
 }
 
 pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
-    if (options.window_bits) |window_bits| _ = try plannedWindowLen(window_bits);
+    if (options.window_bits) |window_bits| _ = try plannedWindowLen(options.level, window_bits);
     return switch (options.level) {
         .fast, .balanced => encodePlannedStreamOrStoredAlloc(allocator, input, options),
         .ratio => encodePlannedStreamRatioWithWindowAlloc(allocator, input, options.window_bits),
@@ -1755,7 +1756,7 @@ pub fn encodedPlannedStreamBound(input_len: usize) Error!usize {
 
 pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEncodeOptions) Error!usize {
     const window_bits = options.window_bits orelse default_window_bits;
-    _ = try plannedWindowLen(window_bits);
+    _ = try plannedWindowLen(options.level, window_bits);
     return encodedStoredStreamBoundWithOptions(input_len, .{ .window_bits = window_bits });
 }
 
@@ -1826,7 +1827,7 @@ pub fn encodePlannedStreamWithOptionsInto(input: []const u8, output: []u8, optio
 
 fn encodePlannedStreamOrStoredAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
     const window_bits = options.window_bits orelse default_window_bits;
-    const advertised_window_len = try plannedWindowLen(window_bits);
+    const advertised_window_len = try plannedWindowLen(options.level, window_bits);
     const window_len = if (options.window_bits == null) lz77.default_window_len else advertised_window_len;
     const compressed = switch (options.level) {
         .fast => encodePlannedStreamAllocForWindow(allocator, input, window_bits, window_len),
@@ -1866,7 +1867,8 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
 
 fn encodePlannedStreamRatioWithWindowAlloc(allocator: std.mem.Allocator, input: []const u8, explicit_window_bits: ?u5) Error![]u8 {
     const window_bits = explicit_window_bits orelse default_window_bits;
-    const window_len = try plannedWindowLen(window_bits);
+    const window_len = try plannedWindowLen(.ratio, window_bits);
+    const primary_window_len = @min(window_len, planner_max_backward_distance);
     if (input.len > max_uncompressed_meta_block_len) {
         if (explicit_window_bits != null)
             return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .window_bits = window_bits });
@@ -1879,7 +1881,7 @@ fn encodePlannedStreamRatioWithWindowAlloc(allocator: std.mem.Allocator, input: 
     }
     if (input.len < 5) return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .window_bits = window_bits });
     const parser_options = PlannedParserOptions{
-        .window_len = window_len,
+        .window_len = primary_window_len,
         .max_chain = 512,
         .nice_len = lz77.max_match_len,
     };
@@ -1913,7 +1915,8 @@ fn encodePlannedStreamRatioWithWindowAlloc(allocator: std.mem.Allocator, input: 
     if (input.len >= 4 * 1024 and input.len <= 64 * 1024)
         try selectOptimalRatioCandidates(allocator, input, parser_options, window_bits, &stats, &baseline);
     if (input.len <= ratio_static_dictionary_max_input_len) return selectRatioStaticDictionaryAlloc(allocator, input, plan.commands, baseline, window_bits);
-    if (explicit_window_bits != null or input.len <= long_distance.min_distance) return chooseStoredIfSmallerWithWindow(allocator, input, baseline, window_bits);
+    if ((explicit_window_bits != null and window_bits < 17) or input.len <= long_distance.min_distance)
+        return chooseStoredIfSmallerWithWindow(allocator, input, baseline, window_bits);
 
     const commands = try long_distance.augmentAlloc(allocator, input, plan.commands) orelse return chooseStoredIfSmallerWithWindow(allocator, input, baseline, window_bits);
     defer allocator.free(commands);
@@ -9347,9 +9350,13 @@ test "br stable planner levels honor explicit 10 through 16 bit windows" {
         }
     }
     try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .window_bits = 9 }));
-    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .window_bits = 17 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .fast, .window_bits = 17 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .balanced, .window_bits = 17 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .ratio, .window_bits = 18 }));
     try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(payload.len, .{ .window_bits = 9 }));
-    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(payload.len, .{ .window_bits = 17 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(payload.len, .{ .level = .fast, .window_bits = 17 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(payload.len, .{ .level = .balanced, .window_bits = 17 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(payload.len, .{ .level = .ratio, .window_bits = 18 }));
 
     for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
         const options = PlannedEncodeOptions{ .level = level, .window_bits = 10 };
@@ -9360,6 +9367,11 @@ test "br stable planner levels honor explicit 10 through 16 bit windows" {
         try std.testing.expect(summary.stored_only);
         try std.testing.expectEqual(try encodedStoredStreamBoundWithOptions(4, .{ .window_bits = 10 }), try encodedPlannedStreamBoundWithOptions(4, options));
     }
+    const ratio_17_stored = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, "abcd", .{ .level = .ratio, .window_bits = 17 });
+    defer std.testing.allocator.free(ratio_17_stored);
+    const ratio_17_summary = try summarizeStream(ratio_17_stored);
+    try std.testing.expectEqual(@as(u5, 17), ratio_17_summary.window_bits);
+    try std.testing.expect(ratio_17_summary.stored_only);
 }
 
 test "br omitted planned window preserves legacy level wires" {
@@ -9515,10 +9527,23 @@ test "br ratio planner adds matches beyond the 16-bit stream window" {
     defer std.testing.allocator.free(balanced);
     const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(ratio);
+    const explicit = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .ratio, .window_bits = 17 });
+    defer std.testing.allocator.free(explicit);
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(ratio.len + repeated_len / 2 < balanced.len);
+    try std.testing.expectEqualSlices(u8, ratio, explicit);
+    try std.testing.expectEqual(@as(u5, 17), (try summarizeStream(explicit)).window_bits);
+
+    const options = PlannedEncodeOptions{ .level = .ratio, .window_bits = 17 };
+    const bound = try encodedPlannedStreamBoundWithOptions(payload.len, options);
+    const output = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(output);
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const written = try encoder.encodeIntoWithOptions(payload, output, options);
+    try std.testing.expectEqualSlices(u8, explicit, output[0..written]);
 }
 
 test "br balanced planner prunes a dense tiny-copy prefix" {
