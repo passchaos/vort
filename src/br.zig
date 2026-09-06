@@ -35,6 +35,7 @@ pub const Error = core.Error || std.mem.Allocator.Error;
 pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
 pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
+pub const max_extended_dictionary_probes: u16 = 4096;
 pub const PlannedEncodeOptions = struct {
     level: PlannedCompressionLevel = .fast,
     /// Explicit Brotli window for one-shot planned encoding. The current
@@ -44,6 +45,13 @@ pub const PlannedEncodeOptions = struct {
     window_bits: ?u5 = null,
     /// Optional metadata emitted before the payload meta-block.
     metadata: []const u8 = "",
+    /// For ratio inputs above the automatic 256-byte dictionary gate, examine
+    /// at most this many literal positions for RFC static-dictionary matches.
+    /// Zero preserves the default latency policy. Non-zero values are valid
+    /// only at ratio level and for inputs no larger than 4096 bytes. Values
+    /// above `max_extended_dictionary_probes` are rejected. Inputs at or below
+    /// the automatic gate retain their existing complete search.
+    extended_dictionary_probes: u16 = 0,
 };
 /// Search budget for the ratio-oriented planner. These knobs affect token
 /// selection only; the resulting stream still uses the same Brotli command
@@ -1743,7 +1751,7 @@ pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8)
 }
 
 pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
-    if (options.window_bits) |window_bits| _ = try plannedWindowLen(options.level, window_bits);
+    try validatePlannedEncodeOptions(input.len, options);
     return switch (options.level) {
         .fast, .balanced => encodePlannedStreamOrStoredAlloc(allocator, input, options),
         .ratio => encodePlannedStreamRatioWithOptionsAlloc(allocator, input, options),
@@ -1757,8 +1765,8 @@ pub fn encodedPlannedStreamBound(input_len: usize) Error!usize {
 }
 
 pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEncodeOptions) Error!usize {
+    try validatePlannedEncodeOptions(input_len, options);
     const window_bits = options.window_bits orelse default_window_bits;
-    _ = try plannedWindowLen(options.level, window_bits);
     return encodedStoredStreamBoundWithOptions(input_len, .{ .window_bits = window_bits, .metadata = options.metadata });
 }
 
@@ -1900,7 +1908,16 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
         if (input.len <= ratio_static_dictionary_max_input_len) {
             return encodeRatioStaticDictionaryOrStoredAlloc(allocator, input, window_bits, options.metadata);
         }
-        return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .window_bits = window_bits, .metadata = options.metadata });
+        var baseline = try encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .window_bits = window_bits, .metadata = options.metadata });
+        errdefer allocator.free(baseline);
+        if (options.extended_dictionary_probes != 0) {
+            const literal_plan = [_]command_plan.Command{.{
+                .insert_start = 0,
+                .insert_len = input.len,
+            }};
+            try selectExtendedRatioStaticDictionary(allocator, input, &literal_plan, window_bits, options.metadata, options.extended_dictionary_probes, &baseline);
+        }
+        return baseline;
     }
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer plan.deinit(allocator);
@@ -1916,6 +1933,8 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     if (input.len >= 4 * 1024 and input.len <= 64 * 1024)
         try selectOptimalRatioCandidates(allocator, input, parser_options, window_bits, options.metadata, &stats, &baseline);
     if (input.len <= ratio_static_dictionary_max_input_len) return selectRatioStaticDictionaryAlloc(allocator, input, plan.commands, baseline, window_bits, options.metadata);
+    if (options.extended_dictionary_probes != 0)
+        try selectExtendedRatioStaticDictionary(allocator, input, plan.commands, window_bits, options.metadata, options.extended_dictionary_probes, &baseline);
     if ((explicit_window_bits != null and window_bits < 17) or input.len <= long_distance.min_distance)
         return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .window_bits = window_bits, .metadata = options.metadata });
 
@@ -1994,7 +2013,37 @@ fn chooseStoredIfSmallerWithOptions(allocator: std.mem.Allocator, input: []const
 // words can dominate the complete stream. Exact final-byte arbitration keeps
 // ordinary short JSON/source data from regressing in size.
 const ratio_static_dictionary_max_input_len: usize = 256;
+const ratio_extended_static_dictionary_max_input_len: usize = 4096;
 const ratio_static_dictionary_candidate_capacity: usize = encodedStoredStreamBoundWithOptions(ratio_static_dictionary_max_input_len, .{ .window_bits = 10 }) catch unreachable;
+
+fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions) Error!void {
+    const window_bits = options.window_bits orelse default_window_bits;
+    _ = try plannedWindowLen(options.level, window_bits);
+    if (options.extended_dictionary_probes == 0) return;
+    if (options.level != .ratio or
+        options.extended_dictionary_probes > max_extended_dictionary_probes or
+        input_len > ratio_extended_static_dictionary_max_input_len)
+        return error.InvalidBlockPlan;
+}
+
+fn selectExtendedRatioStaticDictionary(allocator: std.mem.Allocator, input: []const u8, lz_commands: []const command_plan.Command, window_bits: u5, metadata: []const u8, probe_limit: usize, baseline: *[]u8) Error!void {
+    std.debug.assert(input.len > ratio_static_dictionary_max_input_len);
+    std.debug.assert(input.len <= ratio_extended_static_dictionary_max_input_len);
+    std.debug.assert(probe_limit != 0 and probe_limit <= max_extended_dictionary_probes);
+    const mixed_plan = try command_plan.mixStaticDictionaryWithCacheProbeLimitAlloc(allocator, input, lz_commands, null, probe_limit);
+    defer mixed_plan.deinit(allocator);
+    if (mixed_plan.match_count == 0) return;
+
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, mixed_plan.commands, null, &stats, .{
+        .window_bits = window_bits,
+        .metadata = metadata,
+    });
+    if (candidate.len < baseline.*.len) {
+        allocator.free(baseline.*);
+        baseline.* = candidate;
+    } else allocator.free(candidate);
+}
 
 fn encodeRatioStaticDictionaryOrStoredAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8) Error![]u8 {
     const plan = try command_plan.buildStaticDictionaryAlloc(allocator, input);
@@ -2336,6 +2385,7 @@ pub const PlannedStreamEncoder = struct {
     /// capacity for the fast and balanced small-block planners. Ratio and large
     /// inputs retain their one-shot paths because they need wider search state.
     pub fn encodeWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
+        try validatePlannedEncodeOptions(input.len, options);
         if (options.window_bits != null or options.metadata.len != 0)
             return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
         if (options.level == .fast and input.len <= 32 * 1024)
@@ -2463,6 +2513,7 @@ pub const PlannedStreamEncoder = struct {
     /// stable one-shot candidate selection and copies only its final winner.
     /// The returned slice is invalidated by the next call or by `deinit`.
     pub fn encodeScratchWithOptions(self: *PlannedStreamEncoder, input: []const u8, options: PlannedEncodeOptions) Error![]const u8 {
+        try validatePlannedEncodeOptions(input.len, options);
         if (options.window_bits != null or options.metadata.len != 0 or options.level == .ratio or input.len > 32 * 1024) {
             const encoded = try encodePlannedStreamWithOptionsAlloc(self.allocator, input, options);
             defer self.allocator.free(encoded);
@@ -9928,6 +9979,105 @@ test "br ratio planner selects short static dictionary streams by final size" {
     const outside_gate_selected = try encodePlannedStreamRatioAlloc(std.testing.allocator, outside_gate_payload);
     defer std.testing.allocator.free(outside_gate_selected);
     try std.testing.expectEqualSlices(u8, outside_gate_baseline, outside_gate_selected);
+
+    const explicitly_disabled = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, outside_gate_payload, .{
+        .level = .ratio,
+        .extended_dictionary_probes = 0,
+    });
+    defer std.testing.allocator.free(explicitly_disabled);
+    try std.testing.expectEqualSlices(u8, outside_gate_selected, explicitly_disabled);
+
+    const extended = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, outside_gate_payload, .{
+        .level = .ratio,
+        .extended_dictionary_probes = 64,
+    });
+    defer std.testing.allocator.free(extended);
+    try std.testing.expect(extended.len < outside_gate_selected.len);
+    try std.testing.expect((try summarizeStream(extended)).static_dictionary_copy_count > 0);
+    const extended_decoded = try decodeStreamAlloc(std.testing.allocator, extended);
+    defer std.testing.allocator.free(extended_decoded);
+    try std.testing.expectEqualSlices(u8, outside_gate_payload, extended_decoded);
+}
+
+test "br ratio extended dictionary probes are bounded and size monotonic" {
+    var incompressible: [ratio_extended_static_dictionary_max_input_len]u8 = undefined;
+    var state: u32 = 0xa531_9f27;
+    for (&incompressible) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    const baseline = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &incompressible, .{ .level = .ratio });
+    defer std.testing.allocator.free(baseline);
+    const extended = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &incompressible, .{
+        .level = .ratio,
+        .extended_dictionary_probes = 64,
+    });
+    defer std.testing.allocator.free(extended);
+    try std.testing.expectEqualSlices(u8, baseline, extended);
+
+    const short_payload = "Information about compression performance and dictionary support.";
+    const short_default = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, short_payload, .{ .level = .ratio });
+    defer std.testing.allocator.free(short_default);
+    const short_extended = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, short_payload, .{
+        .level = .ratio,
+        .extended_dictionary_probes = max_extended_dictionary_probes,
+    });
+    defer std.testing.allocator.free(short_extended);
+    try std.testing.expectEqualSlices(u8, short_default, short_extended);
+
+    const oversized_input = "x" ** (ratio_extended_static_dictionary_max_input_len + 1);
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(oversized_input.len, .{
+        .level = .ratio,
+        .extended_dictionary_probes = 1,
+    }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(std.testing.allocator, oversized_input, .{
+        .level = .ratio,
+        .extended_dictionary_probes = 1,
+    }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(std.testing.allocator, short_payload, .{
+        .level = .ratio,
+        .extended_dictionary_probes = max_extended_dictionary_probes + 1,
+    }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(std.testing.allocator, short_payload, .{
+        .level = .balanced,
+        .extended_dictionary_probes = 1,
+    }));
+}
+
+test "br ratio extended dictionary probes can start from a literal-only plan" {
+    var input: [300]u8 = undefined;
+    var state: u32 = 0x71c9_3a5d;
+    for (&input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast(32 + state % 95);
+    }
+    @memcpy(input[0.."information".len], "information");
+
+    const lz_plan = try lz77.lazyGreedyPlanAlloc(std.testing.allocator, &input, .{
+        .window_len = input.len,
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+        .max_candidates = 1,
+        .lazy_min_gain = 1,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    });
+    defer lz_plan.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 0), lz_plan.stats.matches);
+
+    const baseline = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &input, .{ .level = .ratio });
+    defer std.testing.allocator.free(baseline);
+    try std.testing.expect((try summarizeStream(baseline)).stored_only);
+    const extended = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &input, .{
+        .level = .ratio,
+        .extended_dictionary_probes = 1,
+    });
+    defer std.testing.allocator.free(extended);
+    try std.testing.expect(extended.len < baseline.len);
+    try std.testing.expect((try summarizeStream(extended)).static_dictionary_copy_count > 0);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, extended, input.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &input, decoded);
 }
 
 test "br ratio planner encodes a dictionary word without LZ77 matches" {

@@ -353,6 +353,12 @@ pub fn mixStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8,
 }
 
 pub fn mixStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []const u8, baseline: []const Command, cache: ?*StaticDictionaryMatchCache) !Plan {
+    return mixStaticDictionaryWithCacheProbeLimitAlloc(allocator, input, baseline, cache, std.math.maxInt(usize));
+}
+
+/// Replace dictionary matches in at most `probe_limit` literal positions. This
+/// lets high-ratio callers bound dictionary search independently of input size.
+pub fn mixStaticDictionaryWithCacheProbeLimitAlloc(allocator: std.mem.Allocator, input: []const u8, baseline: []const Command, cache: ?*StaticDictionaryMatchCache, probe_limit: usize) !Plan {
     const matcher = try static_dictionary_matcher.Index.sharedIndex();
     var commands: std.ArrayList(Command) = .empty;
     errdefer commands.deinit(allocator);
@@ -360,6 +366,7 @@ pub fn mixStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []
     var pending_start: usize = 0;
     var pending_len: usize = 0;
     var match_count: usize = 0;
+    var probes: usize = 0;
 
     for (baseline) |command| {
         if (command.insert_start != cursor or command.insert_len > input.len - cursor) return error.InvalidBlockPlan;
@@ -367,7 +374,13 @@ pub fn mixStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []
         var position = cursor;
         while (position < literal_end) {
             const remaining = literal_end - position;
-            const match = if (remaining < 4) null else if (cache) |active| blk: {
+            if (remaining < 4 or probes == probe_limit) {
+                pending_len += remaining;
+                position = literal_end;
+                break;
+            }
+            probes += 1;
+            const match = if (cache) |active| blk: {
                 const full_match = active.findLongest(matcher, input, position);
                 if (full_match == null or full_match.?.output_len <= remaining) break :blk full_match;
                 // The longest full-input word crosses the preserved LZ copy. A
@@ -696,6 +709,27 @@ test "static dictionary mixes only inside literal runs" {
     try std.testing.expect(mixed.commands.len >= baseline.len);
     try std.testing.expect(mixed.commands[0].dictionary_output_len > 0);
     try std.testing.expectEqual(@as(usize, 11), mixed.commands[mixed.commands.len - 1].distance);
+}
+
+test "static dictionary mixed planner honors literal probe limit" {
+    const input = "qzinformation tail";
+    const baseline = [_]Command{.{ .insert_start = 0, .insert_len = input.len }};
+
+    const zero = try mixStaticDictionaryWithCacheProbeLimitAlloc(std.testing.allocator, input, &baseline, null, 0);
+    defer zero.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 0), zero.match_count);
+    try std.testing.expectEqualSlices(Command, &baseline, zero.commands);
+
+    const before_match = try mixStaticDictionaryWithCacheProbeLimitAlloc(std.testing.allocator, input, &baseline, null, 2);
+    defer before_match.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 0), before_match.match_count);
+    try std.testing.expectEqualSlices(Command, &baseline, before_match.commands);
+
+    const reaches_match = try mixStaticDictionaryWithCacheProbeLimitAlloc(std.testing.allocator, input, &baseline, null, 3);
+    defer reaches_match.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 1), reaches_match.match_count);
+    try std.testing.expectEqual(@as(usize, 2), reaches_match.commands[0].insert_len);
+    try std.testing.expect(reaches_match.commands[0].dictionary_output_len >= "information".len);
 }
 
 test "static dictionary cache preserves mixed and dictionary-only plans" {

@@ -122,6 +122,26 @@ static-dictionary candidate, an automatic 17-bit long-distance winner, and the
 65,536-byte metadata limit. libbrotli 1.1.0 independently decodes all five
 generated payloads (`planned_metadata_cases=5`); omitting metadata preserves established wire
 bytes and the existing performance gates.
+Ratio one-shot encoding now also exposes an opt-in
+`extended_dictionary_probes` budget for 257-byte through 4 KiB inputs. The
+default remains zero and therefore preserves the established 256-byte
+automatic dictionary gate byte-for-byte; non-zero budgets are accepted only
+for ratio mode, are capped by `max_extended_dictionary_probes` (4096), and
+reject larger inputs rather than silently skipping the requested work. Both
+existing LZ plans and literal-only plans can be augmented, but the search
+examines at most the requested number of literal positions and the resulting
+candidate is retained only when its complete metadata-inclusive Brotli wire is
+strictly smaller. Full dictionary scans through 4 KiB were rejected after
+raising ratio latency by roughly 3x to 23x. A 64-probe experiment instead
+reduced seven of eight real 4 KiB source/HTML/XML/JSON prefixes (representative
+changes include 1166 to 1156, 1752 to 1729, and 357 to 350 bytes), left the
+eighth unchanged after final arbitration, and preserved WOFF2/OTF/PNG control
+wires. The option remains explicitly opt-in because even bounded probing adds
+material ratio latency on some small text shapes. Three fixed-CPU interleaved
+default-path A/B rounds kept all seven stable built-in wire fields identical;
+the aggregate speed ratio was 1.0767x and the weakest control row was 0.9942x.
+The runtime libbrotli 1.1.0 differential independently decodes the retained
+extended-dictionary stream (`planned_extended_dictionary_cases=1`).
 
 ## Milestone 0: repository and validation spine
 

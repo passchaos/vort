@@ -896,6 +896,20 @@ pub fn main(init: std.process.Init) !void {
     try reference.decode(planned_metadata_long, planned_metadata_long_decoded);
     if (!std.mem.eql(u8, long_window_payload, planned_metadata_long_decoded)) return error.ReferenceDecodeFailed;
     planned_metadata_cases += 1;
+    var planned_extended_dictionary_cases: usize = 0;
+    const planned_extended_dictionary_payload = "Information about compression performance and dictionary support." ** 5;
+    const planned_extended_dictionary = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, planned_extended_dictionary_payload, .{
+        .level = .ratio,
+        .extended_dictionary_probes = 64,
+    });
+    defer init.gpa.free(planned_extended_dictionary);
+    if ((try vort.brSummarizeStream(planned_extended_dictionary)).static_dictionary_copy_count == 0)
+        return error.ReferenceEncodeFailed;
+    var planned_extended_dictionary_decoded: [planned_extended_dictionary_payload.len]u8 = undefined;
+    try reference.decode(planned_extended_dictionary, &planned_extended_dictionary_decoded);
+    if (!std.mem.eql(u8, planned_extended_dictionary_payload, &planned_extended_dictionary_decoded))
+        return error.ReferenceDecodeFailed;
+    planned_extended_dictionary_cases += 1;
     const boundary_prefix_len = (@as(usize, 1) << 10) - 15;
     var boundary_payload: [boundary_prefix_len + 256]u8 = undefined;
     var boundary_state: u32 = 0x2c1b_3a49;
@@ -925,8 +939,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} planned_window_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} planned_metadata_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ cases_run, one_shot_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, planned_window_cases, planned_chunked_window_cases, planned_large_window_cases, planned_metadata_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} planned_window_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ cases_run, one_shot_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, planned_window_cases, planned_chunked_window_cases, planned_large_window_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }

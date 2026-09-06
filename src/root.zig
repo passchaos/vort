@@ -68,6 +68,7 @@ pub const brEncodePlannedStreamAllocWithStatsTimed = br.encodePlannedStreamAlloc
 pub const BrotliPlannedEncodeStats = br.PlannedEncodeStats;
 pub const BrotliPlannedCompressionLevel = br.PlannedCompressionLevel;
 pub const BrotliPlannedEncodeOptions = br.PlannedEncodeOptions;
+pub const brotliMaxExtendedDictionaryProbes = br.max_extended_dictionary_probes;
 pub const BrotliPlannedStreamChunksOptions = br.PlannedStreamChunksOptions;
 pub const BrotliPlannedParserOptions = br.PlannedParserOptions;
 pub const brEncodePlannedStreamWithOptionsAlloc = br.encodePlannedStreamWithOptionsAlloc;
