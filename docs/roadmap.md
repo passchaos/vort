@@ -9541,6 +9541,218 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   but nine fixed-CPU-30 trainer pairs improved text/JSON/binary by only
   1.0039x/1.0035x/1.0005x. The generic private table layout remains because the
   aggregate change is well below the 1% retention bar.
+  The production optimal LZ77 parser now stores its hash-chain head and
+  predecessor positions as absolute `u32` indexes, with `0xffffffff` as the
+  empty sentinel. Inputs beyond the compact index range retain the existing
+  `isize` fallback, while the reference path remains available for exact
+  token comparison. This halves both hot index arrays on 64-bit targets: for a
+  128 KiB input the combined head/previous capacity falls from about 1.25 MiB
+  to 640 KiB. A 64-shape min-match-3/4 oracle compares complete token streams,
+  and an independent 70 KiB index oracle checks every initialized head and
+  predecessor beyond the 16-bit position boundary. Twelve 128 KiB Silesia
+  cases retained identical best-compressed sizes; five alternating fixed-CPU-30
+  pairs improved all twelve, with representative medians of about 1.018x for
+  `nci`, 1.010x for `mozilla`, 1.043x for `dickens`, 1.047x for
+  `reymont`, and 1.057x for `xml`.
+  Three related optimal-parser experiments were rejected. Extending the
+  existing four-byte prefix-cost bound to the three-byte DEFLATE best path
+  improved `mozilla` but regressed `dickens`/`reymont` by roughly 3--4%; a
+  long-match-only variant regressed them by about 10%. Packing an exact
+  three-byte tag beside each predecessor recovered `nci`/`mozilla` gains
+  but remained mixed across Silesia. A `u16` relative-distance chain reduced
+  memory further yet added a dependency subtraction to every chain step,
+  reaching only about 0.79x/0.83x on `nci`/`mozilla`. Finally, an
+  eight-byte-first match-length probe preserved exact lengths but reached only
+  about 0.91x on `nci`; the existing 32-byte vector-first comparator remains.
+  The native Zstd sequence emitter now reuses the exact serialized literal-section
+  length it has already materialized when scoring FSE table plans, instead of
+  rebuilding the same Huffman histogram and plan through
+  `sequenceLiteralsPayloadSectionLen`. A focused oracle compares the complete
+  emitted block against the former rescanned path byte-for-byte. Nine alternating
+  fixed-CPU-8 A/B rounds across all 15 encode-benchmark case/level rows retained
+  identical output sizes and improved every median (about 1.074x geometric mean):
+  the 129 KiB multi-block row improved by about 1.098x/1.071x/1.041x at levels
+  1/3/9, while the small text row improved by about 1.21x. The runtime libzstd
+  1.5.5 compatibility matrix still accepts all 273 cases. An adjacent experiment
+  that passed the large FSE/Huffman decoder state to its specialized loop by
+  pointer removed two entry copies and reduced its stack frame, but consistently
+  slowed `huffman80k` to about 0.895x across eight fixed-CPU pairs; it was
+  reverted because the alias/code-generation penalty outweighed the saved copies.
+  A follow-up score-first sequence selector was also rejected. It computed exact
+  RLE/predefined/FSE payload sizes and emitted only the winning representation; a
+  64-shape oracle matched the former emit-all selector byte-for-byte. Nine
+  alternating fixed-CPU-8 rounds improved the 15-row encode matrix by about
+  1.013x geometrically, but `multiblock` level 9 regressed to about 0.991x and
+  the three text rows were effectively flat/mixed. Production therefore keeps
+  the simpler emit-all arbitration while retaining only the broader, consistently
+  positive literal-section length reuse above.
+  Directly Huffman-encoding discontiguous sequence literal runs without first
+  materializing their logical byte stream was also rejected. Single-stream and
+  non-divisible four-stream byte oracles matched the existing wire, and the
+  wide Repeat_Mode fixture removed one allocation plus 46,203 cumulatively
+  requested bytes. However, nine fixed-CPU-8 rounds regressed 12 of 15 encode
+  rows; text fell to roughly 0.90--0.91x and the geometric mean was 0.973x. The
+  simple contiguous materialization remains faster than repeated run-boundary
+  traversal.
+  Exact token-stream deduplication across greedy, lazy, rep-beam, and optimal
+  candidates was likewise rejected in the shared selector. The 8 KiB text
+  oracle proved lazy/optimal/rep-beam stats, tokens, and emitted wire identical,
+  and nine fixed-CPU-8 rounds improved the 129 KiB multi-block row by about
+  1.112x/1.059x/1.016x at levels 1/3/9. However, text regressed consistently
+  to roughly 0.84x and binary/tradeoff rows were mildly negative, leaving the
+  15-row geometric mean at only 0.975x. Any future candidate deduplication should
+  live in an isolated large-block path instead of perturbing the shared small
+  selector's code layout.
+  Restricting that deduplication to blocks of at least 33 KiB and moving token
+  equality plus optimal parsing out of line still did not produce a robust win.
+  Fifteen fixed-CPU-8 rounds left the 15-row matrix at about 0.998x geometrically:
+  `multiblock` level 9 improved about 1.013x, but level 1 fell to about 0.987x and
+  the text controls remained 0.986--0.993x. The isolated variant was removed.
+  Reusing `LargeSequenceScratch.literals_prefix` for the small-sequence emitter
+  was rejected as neutral/mixed. Nine fixed-CPU-8 rounds kept all 15 output
+  sizes identical but produced a 1.000x geometric mean; `multiblock` level 9
+  improved about 1.040x while `level3_tradeoff` level 3 regressed to about
+  0.973x. Per-candidate allocation reuse is therefore not a general throughput
+  win on the current allocator/code layout.
+  Emitting generic table-plan payloads directly into the destination and
+  backfilling their three-byte block header was rejected as below threshold. A
+  buffered-reference oracle and exhaustive allocation-failure injection proved
+  byte identity plus transactional prefix rollback, but fifteen fixed-CPU-8
+  medians produced only a 1.004x geometric gain and JSON level 9 regressed to
+  about 0.996x. The temporary payload/bitstream buffers remain for their simpler
+  ownership behavior.
+  Returning the large `SequenceTablePlanAlternatives` union by value was also
+  audited after assembly showed a roughly 10.4 KiB clear plus whole-result copy
+  per table family. A caller-owned fill API removed both operations and reduced
+  the helper stack frame from about 18 KiB to 7.5 KiB. Fifteen fixed-CPU-8 rows
+  nevertheless reached only a 0.977x geometric mean: multiblock and most
+  structured rows improved, but all three text levels fell consistently to
+  about 0.814--0.816x. The original return-by-value layout remains because it
+  produces materially better surrounding code on the text path.
+  The retained narrower alternative keeps that return ABI but leaves inactive
+  `SequenceTablePlanAlternatives` union slots undefined, initializing only
+  `len` and every slot exposed through `items[0..len]`. This removes the helper's
+  roughly 10.4 KiB entry clear without changing candidate construction or the
+  whole-result return. Fifteen alternating fixed-CPU-8 rounds retained every
+  encoded size and improved the 15-row geometric mean by about 1.012x; the
+  129 KiB multi-block levels 1/3/9 improved about 1.061x/1.046x/1.036x with
+  15/15, 14/15, and 13/15 wins. Text/JSON controls stayed within 0.3% of
+  baseline at worst. Because the short 100-iteration decode reference gate
+  intermittently crossed its `huffman80k` floor, a separate before/after
+  ReleaseFast audit used independently built binaries and 15 alternating
+  fixed-CPU-8 rounds. Decoder medians were 1.008x/1.001x/0.998x/0.999x/0.999x
+  for numbered JSON, `huffman80k`, `ascii64k`, large JSON, and mixed binary
+  respectively (1.001x geometric mean), with identical checksums; the gate
+  fluctuation is not an encoder-layout decode regression.
+  Caching one finalized sequence-literal Huffman plan in `LargeSequenceScratch`
+  by its exact 256-entry frequency vector was rejected as mixed and below the
+  retention threshold. A focused oracle covered first-use misses, equal-frequency
+  literals in a different byte order, changed-frequency misses, scratch reset,
+  complete plan equality, byte-identical emitted frames, and both native/libzstd
+  decoding. Fifteen alternating fixed-CPU-8 rounds retained all 15 encoded sizes
+  but improved the geometric mean by only 1.0013x: text levels reached about
+  0.9944x/0.9945x/0.9953x and multi-block level 1 reached about 0.9941x, while
+  the best isolated row was multi-block level 9 at about 1.0244x. The cache and
+  its emitter plumbing were removed; future work should avoid perturbing every
+  small-sequence emission for such sparse cross-candidate reuse.
+  The indexed duplicate scorer's old raw-literal shortcut was audited against
+  the now-supported full 256-symbol Huffman/FSE-weight path. A constructed
+  127-symbol all-high-byte block proved a real scoring gap (`2012` exact bytes
+  versus `7947` from the raw shortcut), but four production corrections were
+  rejected after fixed-CPU-8, 15-round end-to-end A/B. Unconditional exact
+  scoring fell to `0.955x` geometrically, a cardinality/skew filter reached
+  `0.998x`, an all-high-byte split reached `1.004x` but retained a roughly 1%
+  level-3 tradeoff regression, and moving that split out of cancellable mixed
+  search reached only `1.003x` with a roughly 1.2% ratio-level regression. A
+  companion attempt to derive `max_symbol` from the already ascending active
+  list reached `0.998x`. All variants were removed rather than slowing common
+  data for a narrow scoring correction; this case remains a future ratio-mode
+  target once scoring can be isolated without perturbing hot selector layout.
+  Reducing `planRepeatSequenceCodes`' fixed 32 KiB viability-mask clear was
+  explored in four byte-exact layouts and rejected. Full initialized, poisoned,
+  and sparse implementations matched selected states across LL/OF/ML, 1--512
+  sequences, predefined tables, and a synthetic 128-state compressed table.
+  Clearing each used row improved the multi-block level 1/3 rows by about
+  1.044x/1.037x but reached only 1.006x geometrically and regressed binary level
+  3 plus ratio-level tradeoff by about 0.9--1.2%. Specializing 1/2/4/8-word row
+  widths bloated code and dropped text to roughly 0.82x. One contiguous used-row
+  prefix clear and a runtime compact-row stride also remained mixed at only
+  1.002x/1.004x geometric means, with important binary/tradeoff regressions.
+  The fixed layout remains; future work should isolate table reuse at a broader
+  call-site boundary instead of changing this deeply inlined small planner.
+  Reusing a freshly computed predefined state path as the equivalent
+  `Repeat_Mode` plan when the previous table was predefined was also rejected.
+  A 1--512-sequence LL/ML/OF oracle proved every state and emitted symbol
+  identical, but the additional large-plan construction/copy changed small-path
+  code generation: fifteen fixed-CPU-8 rounds reached only `0.955x` geometrically,
+  with all three text levels near `0.80x`. Omitting the dominated repeat
+  alternative entirely was byte-exact and improved the multi-block rows by
+  about 1.2--1.6%, but still reached only `1.004x` geometrically. The independent
+  repeat planner and complete candidate set remain.
+  Swapping `ArrayList` backing stores instead of copying each newly selected
+  encoded candidate was rejected after splitting both arbitration layers. The
+  combined top-level plus RLE/predefined/FSE variant reached `1.010x` across
+  fifteen fixed-CPU-8 rounds, but binary level 9 regressed to `0.985x`. Either
+  half alone exposed severe code-layout/capacity effects: block-internal-only
+  and match-family-only swaps dropped all three text levels to roughly
+  `0.81--0.82x`, with geometric means of `0.962x` and `0.959x`. Candidate
+  A final variant swapped only candidates of at least 16 KiB. It isolated
+  multi-block gains of about 1.025x/1.030x/1.015x at levels 1/3/9, but the
+  aggregate remained just `1.009x` and binary level 3 regressed to `0.994x`.
+  Candidate buffers therefore retain copy-based winner ownership; a future
+  attempt must live in a dedicated large-block selector without adding a
+  branch or changing capacity reuse in the shared path.
+  A libzstd-inspired stable four-pass radix sort for package-merge's initial
+  `(frequency, creation-order)` leaf indexes was rejected at the focused gate.
+  Ninety-six randomized DEFLATE shapes and every Zstd active count from 65
+  through 256 matched the comparison-sort code lengths exactly. Dense 286-symbol
+  DEFLATE construction improved about 1.058x, but the important Zstd 128- and
+  256-active kernels fell to roughly 0.955x/0.958x; the larger 4 KiB count/offset
+  scratch outweighed avoided comparisons for these bounded alphabets.
+  Replacing the same stable block sort with Zig's unstable PDQ sort was worse.
+  The comparator already defines a unique `(weight, serial)` order and a
+  65--256-active oracle matched every code length, but focused dense/128/256
+  throughput fell to roughly `0.79x/0.73x/0.74x`; block sort remains preferable.
+  Removing the finalized Huffman stream lookup and reading the plan's compact
+  `u16` codes directly was rejected despite eliminating a 2.25 KiB temporary,
+  its zero-fill, two compiler copies, and reducing the stream emitter's stack
+  frame from roughly 7 KiB to 88 bytes. Fifteen fixed-CPU-8 rounds improved
+  binary and multi-block rows by roughly 1--4%, but all three tiny-text rows
+  fell to about `0.74--0.75x` (`0.975x` geometric mean). Building one lookup
+  for all four Huffman streams while keeping the original `usize` hot loop was
+  similarly rejected: multi-block improved up to `1.046x`, but text stayed near
+  `0.81--0.84x` (`0.966x` geometric mean). Per-stream lookup construction is
+  retained because it produces much better code for the decisive small-text path.
+  The retained Huffman stream emitter instead keeps that proven `usize` lookup
+  and original byte loop, but reserves the strict
+  `ceil((literal_count * max_bit_count + 1) / 8)` output bound once and then
+  appends bytes without repeated capacity checks. A checked-append reference
+  covers 64/65/1,023/1,024/8,192-byte boundaries byte-for-byte. Fifteen
+  alternating fixed-CPU-8 end-to-end rounds retained all 15 encoded sizes and
+  improved the geometric mean by `1.039x`: JSON gained roughly 5.8--6.4%,
+  binary gained 3.1--9.6%, tradeoff gained 2.5--8.3%, and multi-block levels
+  3/9 gained 1.7%/4.4%; text stayed within about 0.1% of baseline at worst.
+  Two follow-ups that changed only lookup ownership/layout were rejected. Filling
+  the 2.25 KiB lookup in caller-owned storage removed two return-value copies
+  and reduced the emitter stack frame to roughly 2.3 KiB, but fifteen fixed-CPU-8
+  rounds reached only `1.007x` geometrically and binary level 1 fell to `0.990x`.
+  Narrowing its canonical-code table from `usize[256]` to `u16[256]` likewise
+  reached only `1.003x`, with binary level 1 at `0.990x`. The existing `usize`
+  return shape remains because it generates a better hot byte loop. Leaving
+  only the inactive `usize` code slots uninitialized also failed the retention
+  bar: a poisoned-reference oracle proved active codes and the complete stream
+  identical, but fifteen fixed-CPU-8 rounds reached only `1.001x` geometrically
+  and multi-block level 1 fell to `0.993x`.
+  Keeping the reserved capacity but writing through a local output pointer/index
+  before one final `items.len` commit was rejected too. It removed repeated
+  ArrayList length updates in assembly, but fifteen fixed-CPU-8 rounds reached
+  only `0.995x` geometrically; text and multi-block levels regressed, so the
+  compiler-friendly `appendAssumeCapacity` loop remains.
+  Deferring direct Huffman-tree serialization until its exact size beat the FSE
+  alternative was also rejected. A complete tree-byte oracle covered direct and
+  FSE winners, but fifteen fixed-CPU-8 rounds reached only `0.998x` geometrically;
+  all tradeoff levels and multi-block level 9 regressed. Both candidates remain
+  materialized before the strict shortest-tree choice.
   Replacing the back-reference node's stored creation serial with its identical
   arena index was rejected. Keeping the node layout unchanged and changing only
   the equal-weight comparator improved dense/128-active focused construction by
@@ -9549,3 +9761,19 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   but still left the full-table case at 0.996x (2/9 wins). The explicit serial
   remains because its load produces better code for the important dense Zstd
   shape despite being mathematically equivalent to the node index.
+  Applying libzstd's 192-entry `HUF_sort` bucket layout to package-merge leaves
+  was also rejected after both focused and end-to-end measurement. Exact-count
+  buckets below 166 plus logarithmic buckets above it matched comparison-sort
+  code lengths on 128 randomized dense DEFLATE histograms and every Zstd active
+  count from 65 through 256. Fifteen alternating fixed-CPU-8 focused pairs
+  improved the production known-active 128/256-symbol kernels by about
+  `1.073x`/`1.106x` (14/15 wins each). Nine end-to-end Zstd encode pairs kept
+  all 15 frame sizes identical and improved the 129 KiB multi-block levels
+  1/3/9 by about `1.122x`/`1.038x`/`1.070x`, but regressed the tiny text
+  levels 3/9 to `0.969x`/`0.981x`. Marking only the bucket helper `noinline`
+  retained a `0.975x` text level-3 result, while moving the whole package-merge
+  instance out of line or adding an active-count threshold made text fall as
+  low as roughly `0.82x`. The implementation, temporary public benchmark API,
+  and three extra CSV rows were removed; the established 27-row gate schema and
+  comparison sort remain. A future dense-only attempt must isolate codegen at a
+  higher Zstd planner boundary without perturbing the shared small-text path.
