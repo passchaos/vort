@@ -173,7 +173,10 @@ const RepBeamIndex = struct {
         @memset(&self.head, rep_beam_index_empty);
         self.input_len = input.len;
         for (0..input.len) |position| {
-            const hash = hashAtInput(input, position, self.head.len, .four) orelse continue;
+            const hash = hashAtInput(input, position, self.head.len, .four) orelse {
+                self.prev.items[position] = rep_beam_index_empty;
+                continue;
+            };
             self.prev.items[position] = self.head[hash];
             self.head[hash] = @intCast(position);
         }
@@ -1425,6 +1428,24 @@ test "rep beam compact index matches reference beyond u16 positions" {
         try std.testing.expectEqual(expected_len, actual_len);
         try std.testing.expectEqualSlices(Token.Match, expected[0..expected_len], actual[0..actual_len]);
     }
+}
+
+test "rep beam compact index initializes the four-byte tail" {
+    var index: RepBeamIndex = .{};
+    defer index.deinit(std.testing.allocator);
+    try index.prev.resize(std.testing.allocator, 8);
+    @memset(index.prev.items, 0);
+    try index.build(std.testing.allocator, "abcabc");
+    try std.testing.expectEqualSlices(u16, &.{
+        rep_beam_index_empty,
+        rep_beam_index_empty,
+        rep_beam_index_empty,
+    }, index.prev.items[3..]);
+    var matches: [rep_beam_match_candidates]Token.Match = undefined;
+    try std.testing.expectEqual(
+        @as(usize, 0),
+        try index.matchesAt("abcabc", 3, .{ .min_match = 3 }, &matches),
+    );
 }
 
 test "rep beam emits literal tail shorter than minimum match" {
