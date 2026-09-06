@@ -9809,3 +9809,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   visible selector: the prefilter and depth probe are now confined behind the
   already profitable dense Zstd dispatch and cannot perturb the shared
   small-alphabet call graph.
+  A matching attempt to isolate caller-owned sequence-table alternatives only
+  for 500--512-sequence blocks was rejected as too small. A threshold oracle
+  compared 499/500/512-sequence payload lengths, table payloads, and complete
+  read-field streams against the established by-value selector. Fifteen
+  alternating fixed-CPU-30 end-to-end pairs retained all frame sizes but
+  improved only `1.0077x` geometrically; the target multi-block levels gained
+  roughly `1.006x`--`1.014x`, while text level 3 reached `0.992x`. The extra
+  wide-only section and duplicate fill plumbing were removed rather than
+  retaining more than 100 lines for a sub-threshold gain.
