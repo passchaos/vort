@@ -102,16 +102,43 @@ pub const OptimalScratch = struct {
     costs: std.ArrayList(usize) = .empty,
     steps: std.ArrayList(Token) = .empty,
     index: HashIndex = .{},
+    compact_head: std.ArrayList(u32) = .empty,
+    compact_prev: std.ArrayList(u32) = .empty,
     tokens: std.ArrayList(Token) = .empty,
 
     pub fn deinit(self: *OptimalScratch, allocator: std.mem.Allocator) void {
         self.costs.deinit(allocator);
         self.steps.deinit(allocator);
         self.index.deinit(allocator);
+        self.compact_head.deinit(allocator);
+        self.compact_prev.deinit(allocator);
         self.tokens.deinit(allocator);
         self.* = .{};
     }
 };
+
+const optimal_compact_index_empty = std.math.maxInt(u32);
+
+fn buildOptimalCompactHashIndex(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    head: *std.ArrayList(u32),
+    prev: *std.ArrayList(u32),
+    head_initialized: *[hash_head_init_words]u64,
+) !void {
+    if (input.len > optimal_compact_index_empty) return error.InvalidBlockPlan;
+    try head.resize(allocator, hash_head_table_size);
+    try prev.resize(allocator, input.len);
+    @memset(head_initialized, 0);
+    for (0..input.len) |position| {
+        const hash = hashAtInput(input, position, head.items.len, .three) orelse continue;
+        const mask = @as(u64, 1) << @intCast(hash & 63);
+        const word = &head_initialized[hash / 64];
+        prev.items[position] = if (word.* & mask == 0) optimal_compact_index_empty else head.items[hash];
+        head.items[hash] = @intCast(position);
+        word.* |= mask;
+    }
+}
 
 pub const RepBeamScratch = struct {
     states: std.ArrayList(RepBeamState) = .empty,
@@ -994,17 +1021,34 @@ fn optimalPlanReuseInternal(
     const n = input.len;
     try scratch.costs.resize(allocator, n + 1);
     try scratch.steps.resize(allocator, n);
-    try scratch.index.build(allocator, input);
     scratch.tokens.clearRetainingCapacity();
+    if (enable_prefix_bound and input.len <= optimal_compact_index_empty) {
+        try buildOptimalCompactHashIndex(
+            allocator,
+            input,
+            &scratch.compact_head,
+            &scratch.compact_prev,
+            &scratch.index.head_initialized,
+        );
+        return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound);
+    }
+    try scratch.index.build(allocator, input);
+    return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound);
+}
+
+inline fn optimalPlanReuseWithIndex(
+    scratch: *OptimalScratch,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    prev: anytype,
+    comptime empty: @TypeOf(prev[0]),
+    comptime enable_prefix_bound: bool,
+) !PlanStats {
+    const n = input.len;
     const costs = scratch.costs.items;
     const steps = scratch.steps.items;
 
-    // Build hash chain for fast match discovery.
-    const prev = scratch.index.prev.items;
-    // `prev` entries are written by the pre-population pass below before the
-    // reverse dynamic-programming search reads any insertable position.
-
-    // Pre-populate hash chain for all positions.
     costs[n] = 0;
     var rev_i: usize = n;
     const minimum = minMatch(options);
@@ -1024,13 +1068,11 @@ fn optimalPlanReuseInternal(
         var checked: usize = 0;
         var candidates_seen: usize = 0;
 
-        while (chain_i >= 0 and checked < options.max_chain) : (checked += 1) {
+        while (chain_i != empty and checked < options.max_chain) : (checked += 1) {
             const candidate: usize = @intCast(chain_i);
             std.debug.assert(candidate < rev_i);
             const distance = rev_i - candidate;
             if (distance == 0 or distance > options.window_len) break;
-            // The hash is truncated, so verify the full required four-byte
-            // anchor before relying on any prefix-length bound.
             if (minimum >= 4 and
                 std.mem.readInt(u32, input[candidate..][0..4], .little) !=
                     std.mem.readInt(u32, input[rev_i..][0..4], .little))
@@ -1047,10 +1089,6 @@ fn optimalPlanReuseInternal(
                 input[candidate + choices_built_through] != input[rev_i + choices_built_through] and
                 scratch.index.best_length_costs[choices_built_through] + distance_cost >= costs[rev_i])
             {
-                // The mismatch proves this candidate cannot extend the range
-                // of reachable lengths. The cached prefix minimum is an
-                // optimistic lower bound for every length it can have, so a
-                // non-improving bound makes exact extension unnecessary.
                 candidates_seen += 1;
                 if (candidates_seen >= candidate_limit) break;
                 chain_i = prev[candidate];
@@ -2317,15 +2355,17 @@ test "reusable optimal parser preserves tokens and capacities" {
     const stats = try optimalPlanReuse(&scratch, std.testing.allocator, input, options);
     try expectEqualTokenSlices(reference.tokens, scratch.tokens.items);
     try std.testing.expectEqual(reference.stats, stats);
-    const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity };
+    const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.compact_head.capacity, scratch.compact_prev.capacity, scratch.tokens.capacity };
     _ = try optimalPlanReuse(&scratch, std.testing.allocator, input, options);
-    try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity });
+    try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.compact_head.capacity, scratch.compact_prev.capacity, scratch.tokens.capacity });
 }
 
 test "optimal prefix bound preserves reference tokens" {
     var input: [4096]u8 = undefined;
     var state: u32 = 0x243f_6a88;
-    for (0..32) |seed| {
+    for (0..64) |case_index| {
+        const minimum: usize = 3 + case_index % 2;
+        const seed = case_index / 2;
         for (&input, 0..) |*byte, i| {
             state = state *% 1_664_525 +% 1_013_904_223;
             byte.* = switch (seed % 4) {
@@ -2340,7 +2380,7 @@ test "optimal prefix bound preserves reference tokens" {
             .max_chain = 128,
             .nice_len = max_match_len,
             .max_candidates = 8,
-            .min_match = 4,
+            .min_match = minimum,
             .max_match = max_match_len,
         };
         var reference: OptimalScratch = .{};
@@ -2352,6 +2392,70 @@ test "optimal prefix bound preserves reference tokens" {
         try std.testing.expectEqual(reference_stats, bounded_stats);
         try std.testing.expectEqualSlices(Token, reference.tokens.items, bounded.tokens.items);
     }
+}
+
+test "compact optimal hash index matches reference beyond u16 positions" {
+    var input: [70 * 1024]u8 = undefined;
+    var state: u32 = 0x517c_c1b7;
+    for (&input, 0..) |*byte, position| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (position >= default_window_len and position % 19 < 13)
+            input[position - default_window_len]
+        else
+            @truncate(state >> 24);
+    }
+
+    var reference: HashIndex = .{};
+    defer reference.deinit(std.testing.allocator);
+    try reference.build(std.testing.allocator, &input);
+    var compact_head: std.ArrayList(u32) = .empty;
+    defer compact_head.deinit(std.testing.allocator);
+    var compact_prev: std.ArrayList(u32) = .empty;
+    defer compact_prev.deinit(std.testing.allocator);
+    var compact_initialized: [hash_head_init_words]u64 = @splat(0);
+    try buildOptimalCompactHashIndex(std.testing.allocator, &input, &compact_head, &compact_prev, &compact_initialized);
+
+    try std.testing.expectEqualSlices(u64, &reference.head_initialized, &compact_initialized);
+    for (0..hash_head_table_size) |hash| {
+        const mask = @as(u64, 1) << @intCast(hash & 63);
+        if (reference.head_initialized[hash / 64] & mask != 0)
+            try std.testing.expectEqual(@as(u32, @intCast(reference.head.items[hash])), compact_head.items[hash]);
+    }
+    for (0..input.len - 2) |position| {
+        const expected = reference.prev.items[position];
+        const actual = compact_prev.items[position];
+        if (expected < 0) {
+            try std.testing.expectEqual(optimal_compact_index_empty, actual);
+        } else {
+            try std.testing.expectEqual(@as(u32, @intCast(expected)), actual);
+        }
+    }
+}
+
+test "reusable optimal parser recovers after compact-index allocation failure" {
+    const input = "abcabcXabcabcYabcabcZabcabcX" ** 16;
+    const options: GreedyOptions = .{
+        .window_len = input.len,
+        .max_chain = 64,
+        .nice_len = max_match_len,
+        .max_candidates = 8,
+        .min_match = 3,
+    };
+    var scratch: OptimalScratch = .{};
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 3 });
+    {
+        const allocator = failing.allocator();
+        try std.testing.expectError(error.OutOfMemory, optimalPlanReuse(&scratch, allocator, input, options));
+        failing.fail_index = std.math.maxInt(usize);
+        _ = try optimalPlanReuse(&scratch, allocator, input, options);
+        const replayed = try replayAlloc(allocator, scratch.tokens.items);
+        defer allocator.free(replayed);
+        try std.testing.expectEqualSlices(u8, input, replayed);
+        try std.testing.expectEqual(@as(usize, hash_head_table_size), scratch.compact_head.items.len);
+        try std.testing.expectEqual(input.len, scratch.compact_prev.items.len);
+    }
+    scratch.deinit(failing.allocator());
+    try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
 }
 
 test "optimal fourth-byte rejection preserves exact four-byte matches" {
