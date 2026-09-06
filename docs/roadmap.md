@@ -63,18 +63,28 @@ features and ratio work. Performance work should then resume on the profiled
 DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
 
 One-shot planned Brotli encoding now accepts an explicit 10...16-bit window at
-all fast/balanced/ratio levels, plus 17-bit windows at ratio level. The
+all fast/balanced/ratio levels, plus 17...18-bit windows at ratio level. The
 advertised window, matcher distance bound,
 optimal-parser proposal, static-dictionary candidate, stored fallback, size
 bound, reusable encoder, and caller-buffer path use one policy. Tests cover all
 21 level/window combinations, stored fallback, invalid 9/17-bit requests, and
 the 1,008/1,009-byte WBITS=10 distance boundary. The runtime libbrotli 1.1.0
 differential independently decodes those combinations, six 10/11-bit boundary
-frames, and one 80 KiB-distance 17-bit frame (`planned_window_cases=28`).
+frames, one 80 KiB-distance 17-bit frame, and one 160 KiB-distance 18-bit frame
+(`planned_window_cases=29`).
 Omitting the option remains byte-identical for all
 three levels, and the existing eight-row planned encode gate stays green. Full
-18...24-bit planned matching remains future work; stored encoding and decoding
+19...24-bit planned matching remains future work; stored encoding and decoding
 continue to support the complete RFC 10...24 range.
+The Brotli-only long-distance matcher now accepts an explicit maximum distance
+through 262,128 bytes and sizes its predecessor ring to the active distance
+band: the default 17-bit path retains its 65,536-entry/256 KiB ring, while an
+18-bit request uses 262,144 entries/about 1 MiB. The exact 18-bit maximum has a
+matcher oracle, and the 160 KiB whole-frame fixture is substantially smaller
+than its 17-bit counterpart and decodes through both Vort and libbrotli. Fifteen
+alternating fixed-CPU-30 default-path pairs preserved the 20,788-byte wire and
+checksum 1,446,304; median ratio time was 133.43 ms versus 133.06 ms baseline
+(`0.9973x`), within the retained non-target floor.
 The one-shot chunked planned surface now matches the stored and incremental
 stream option model: bound/alloc/append/into and reusable-scratch APIs accept
 10...24-bit windows plus an initial metadata meta-block. Each independently

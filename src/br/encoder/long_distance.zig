@@ -3,25 +3,38 @@ const command_plan = @import("command_plan.zig");
 
 pub const min_distance: usize = (@as(usize, 1) << 16) - 16 + 1;
 pub const max_distance: usize = (@as(usize, 1) << 17) - 16;
+pub const max_configurable_distance: usize = (@as(usize, 1) << 18) - 16;
 const chain_limit = 512;
 const min_match = 16;
 const max_match = 258;
 const hash_size = 1 << 15;
-// Only distances in [min_distance, max_distance] are eligible. Delaying each
-// hash insertion until it reaches min_distance means this ring needs to cover
-// exactly that 64 KiB band rather than the full 128 KiB Brotli window.
-const history_size = 1 << 16;
+// Delaying each hash insertion until it reaches min_distance lets the
+// predecessor ring cover only the requested long-distance band rather than the
+// complete Brotli window.
 
 /// Insert Brotli-only long matches into literal runs left by the shared 16-bit
 /// LZ77 planner. Existing copies are preserved verbatim; rebuilding absolute
 /// insert offsets keeps the command stream independently verifiable.
 pub fn augmentAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !?[]command_plan.Command {
+    return augmentAllocWithMaxDistance(allocator, input, commands, max_distance);
+}
+
+/// Extend the shared 16-bit command plan with matches up to
+/// `max_backward_distance`. The predecessor ring covers the exact active
+/// distance band rounded to a power of two, retaining the compact 64 KiB ring
+/// for the default 17-bit path while allowing explicitly larger Brotli windows.
+pub fn augmentAllocWithMaxDistance(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, max_backward_distance: usize) !?[]command_plan.Command {
+    if (max_backward_distance < min_distance or max_backward_distance > max_configurable_distance)
+        return error.InvalidBlockPlan;
     if (input.len <= min_distance or commands.len == 0) return null;
     const head = try allocator.alloc(i32, hash_size);
     defer allocator.free(head);
     @memset(head, -1);
-    const prev = try allocator.alloc(i32, history_size);
+    const active_distance_count = max_backward_distance - min_distance + 1;
+    const prev_len = std.math.ceilPowerOfTwo(usize, active_distance_count) catch return error.InvalidBlockPlan;
+    const prev = try allocator.alloc(i32, prev_len);
     defer allocator.free(prev);
+    const prev_mask = prev.len - 1;
 
     var output: std.ArrayList(command_plan.Command) = .empty;
     errdefer output.deinit(allocator);
@@ -39,8 +52,8 @@ pub fn augmentAlloc(allocator: std.mem.Allocator, input: []const u8, commands: [
             // distance band, so near hash collisions cannot consume its chain
             // budget before a useful long-distance candidate is reached.
             while (indexed_through + min_distance <= position) : (indexed_through += 1)
-                insert(input, indexed_through, head, prev);
-            const match = find(input, position, literal_end - position, head, prev);
+                insert(input, indexed_through, head, prev, prev_mask);
+            const match = find(input, position, literal_end - position, head, prev, prev_mask, max_backward_distance);
             if (match.length >= min_match) {
                 try appendCopy(&output, allocator, insert_start, insert_len, match.length, match.distance);
                 found = true;
@@ -69,7 +82,7 @@ pub fn augmentAlloc(allocator: std.mem.Allocator, input: []const u8, commands: [
 
 const Match = struct { length: usize = 0, distance: usize = 0 };
 
-fn find(input: []const u8, position: usize, available: usize, head: []const i32, prev: []const i32) Match {
+fn find(input: []const u8, position: usize, available: usize, head: []const i32, prev: []const i32, prev_mask: usize, max_backward_distance: usize) Match {
     if (available < min_match or position + 4 > input.len) return .{};
     var candidate_i = head[hash(input[position..][0..4])];
     var checked: usize = 0;
@@ -78,22 +91,22 @@ fn find(input: []const u8, position: usize, available: usize, head: []const i32,
     while (candidate_i >= 0 and checked < chain_limit) : (checked += 1) {
         const candidate: usize = @intCast(candidate_i);
         const distance = position - candidate;
-        if (distance > max_distance) break;
+        if (distance > max_backward_distance) break;
         if (input[candidate + best.length] == input[position + best.length]) {
             var length: usize = 0;
             while (length < limit and input[candidate + length] == input[position + length]) : (length += 1) {}
             if (length > best.length) best = .{ .length = length, .distance = distance };
             if (length == limit) break;
         }
-        candidate_i = prev[candidate & (history_size - 1)];
+        candidate_i = prev[candidate & prev_mask];
     }
     return best;
 }
 
-fn insert(input: []const u8, position: usize, head: []i32, prev: []i32) void {
+fn insert(input: []const u8, position: usize, head: []i32, prev: []i32, prev_mask: usize) void {
     if (position + 4 > input.len) return;
     const slot = hash(input[position..][0..4]);
-    prev[position & (history_size - 1)] = head[slot];
+    prev[position & prev_mask] = head[slot];
     head[slot] = @intCast(position);
 }
 
@@ -161,4 +174,29 @@ test "near hash collisions do not hide eligible long matches" {
         if (command.has_copy and command.distance == match_position and command.copy_len == phrase.len) found = true;
     }
     try std.testing.expect(found);
+}
+
+test "configurable matcher covers the 18-bit distance band" {
+    const match_position = max_configurable_distance;
+    const phrase = "eighteen-bit-long-distance-match";
+    const input = try std.testing.allocator.alloc(u8, match_position + phrase.len);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x8bad_f00d;
+    for (input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[0..phrase.len], phrase);
+    @memcpy(input[match_position..], phrase);
+    const original = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
+    try std.testing.expect((try augmentAlloc(std.testing.allocator, input, &original)) == null);
+    const augmented = try augmentAllocWithMaxDistance(std.testing.allocator, input, &original, max_configurable_distance) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(augmented);
+    var found = false;
+    for (augmented) |command|
+        if (command.has_copy and command.distance == match_position and command.copy_len == phrase.len) {
+            found = true;
+        };
+    try std.testing.expect(found);
+    try std.testing.expectError(error.InvalidBlockPlan, augmentAllocWithMaxDistance(std.testing.allocator, input, &original, max_configurable_distance + 1));
 }
