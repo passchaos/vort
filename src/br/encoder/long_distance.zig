@@ -3,7 +3,8 @@ const command_plan = @import("command_plan.zig");
 
 pub const min_distance: usize = (@as(usize, 1) << 16) - 16 + 1;
 pub const max_distance: usize = (@as(usize, 1) << 17) - 16;
-pub const max_configurable_distance: usize = (@as(usize, 1) << 20) - 16;
+const max_dense_distance: usize = (@as(usize, 1) << 20) - 16;
+pub const max_configurable_distance: usize = (@as(usize, 1) << 21) - 16;
 const chain_limit = 512;
 const min_match = 16;
 const max_match = 258;
@@ -16,7 +17,7 @@ const hash_size = 1 << 15;
 /// LZ77 planner. Existing copies are preserved verbatim; rebuilding absolute
 /// insert offsets keeps the command stream independently verifiable.
 pub fn augmentAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !?[]command_plan.Command {
-    return augmentAllocWithMaxDistance(allocator, input, commands, max_distance);
+    return augmentAllocWithStride(1, allocator, input, commands, max_distance);
 }
 
 /// Extend the shared 16-bit command plan with matches up to
@@ -26,12 +27,19 @@ pub fn augmentAlloc(allocator: std.mem.Allocator, input: []const u8, commands: [
 pub fn augmentAllocWithMaxDistance(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, max_backward_distance: usize) !?[]command_plan.Command {
     if (max_backward_distance < min_distance or max_backward_distance > max_configurable_distance)
         return error.InvalidBlockPlan;
+    if (max_backward_distance <= max_dense_distance)
+        return augmentAllocWithStride(1, allocator, input, commands, max_backward_distance);
+    return augmentAllocWithStride(2, allocator, input, commands, max_backward_distance);
+}
+
+fn augmentAllocWithStride(comptime stride: usize, allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, max_backward_distance: usize) !?[]command_plan.Command {
     if (input.len <= min_distance or commands.len == 0) return null;
     const head = try allocator.alloc(i32, hash_size);
     defer allocator.free(head);
     @memset(head, -1);
     const active_distance_count = max_backward_distance - min_distance + 1;
-    const prev_len = std.math.ceilPowerOfTwo(usize, active_distance_count) catch return error.InvalidBlockPlan;
+    const sampled_distance_count = (active_distance_count + stride - 1) / stride;
+    const prev_len = std.math.ceilPowerOfTwo(usize, sampled_distance_count) catch return error.InvalidBlockPlan;
     const prev = try allocator.alloc(i32, prev_len);
     defer allocator.free(prev);
     const prev_mask = prev.len - 1;
@@ -51,9 +59,9 @@ pub fn augmentAllocWithMaxDistance(allocator: std.mem.Allocator, input: []const 
             // positions that have just entered this pass's non-overlapping
             // distance band, so near hash collisions cannot consume its chain
             // budget before a useful long-distance candidate is reached.
-            while (indexed_through + min_distance <= position) : (indexed_through += 1)
-                insert(input, indexed_through, head, prev, prev_mask);
-            const match = find(input, position, literal_end - position, head, prev, prev_mask, max_backward_distance);
+            while (indexed_through + min_distance <= position) : (indexed_through += stride)
+                insert(stride, input, indexed_through, head, prev, prev_mask);
+            const match = find(stride, input, position, literal_end - position, head, prev, prev_mask, max_backward_distance);
             if (match.length >= min_match) {
                 try appendCopy(&output, allocator, insert_start, insert_len, match.length, match.distance);
                 found = true;
@@ -82,7 +90,7 @@ pub fn augmentAllocWithMaxDistance(allocator: std.mem.Allocator, input: []const 
 
 const Match = struct { length: usize = 0, distance: usize = 0 };
 
-fn find(input: []const u8, position: usize, available: usize, head: []const i32, prev: []const i32, prev_mask: usize, max_backward_distance: usize) Match {
+fn find(comptime stride: usize, input: []const u8, position: usize, available: usize, head: []const i32, prev: []const i32, prev_mask: usize, max_backward_distance: usize) Match {
     if (available < min_match or position + 4 > input.len) return .{};
     var candidate_i = head[hash(input[position..][0..4])];
     var checked: usize = 0;
@@ -98,15 +106,15 @@ fn find(input: []const u8, position: usize, available: usize, head: []const i32,
             if (length > best.length) best = .{ .length = length, .distance = distance };
             if (length == limit) break;
         }
-        candidate_i = prev[candidate & prev_mask];
+        candidate_i = prev[(candidate / stride) & prev_mask];
     }
     return best;
 }
 
-fn insert(input: []const u8, position: usize, head: []i32, prev: []i32, prev_mask: usize) void {
+fn insert(comptime stride: usize, input: []const u8, position: usize, head: []i32, prev: []i32, prev_mask: usize) void {
     if (position + 4 > input.len) return;
     const slot = hash(input[position..][0..4]);
-    prev[position & prev_mask] = head[slot];
+    prev[(position / stride) & prev_mask] = head[slot];
     head[slot] = @intCast(position);
 }
 
@@ -176,16 +184,39 @@ test "near hash collisions do not hide eligible long matches" {
     try std.testing.expect(found);
 }
 
-test "configurable matcher covers exact 18 through 20-bit distance limits" {
-    inline for (.{ (@as(usize, 1) << 18) - 16, (@as(usize, 1) << 19) - 16, max_configurable_distance }) |match_position| {
-        try expectConfigurableDistanceMatch(match_position);
+test "configurable matcher covers exact 18 through 21-bit distance limits" {
+    inline for (.{ (@as(usize, 1) << 18) - 16, (@as(usize, 1) << 19) - 16, (@as(usize, 1) << 20) - 16, max_configurable_distance }) |match_position| {
+        try expectConfigurableDistanceMatch(match_position, match_position);
     }
     const original = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = min_distance + 1 }};
     const input = [_]u8{0} ** (min_distance + 1);
     try std.testing.expectError(error.InvalidBlockPlan, augmentAllocWithMaxDistance(std.testing.allocator, &input, &original, max_configurable_distance + 1));
 }
 
-fn expectConfigurableDistanceMatch(match_position: usize) !void {
+test "sparse matcher advances to the sampled source phase" {
+    const match_position = 1280 * 1024 + 1;
+    const phrase = "xconfigurable-long-distance-match";
+    const input = try std.testing.allocator.alloc(u8, match_position + phrase.len);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x51a7_21b5;
+    for (input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[1..][0..phrase.len], phrase);
+    @memcpy(input[match_position..], phrase);
+    const original = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
+    const augmented = try augmentAllocWithMaxDistance(std.testing.allocator, input, &original, (@as(usize, 1) << 21) - 16) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(augmented);
+    var found = false;
+    for (augmented) |command|
+        if (command.has_copy and command.distance == match_position - 1 and command.copy_len == phrase.len - 1) {
+            found = true;
+        };
+    try std.testing.expect(found);
+}
+
+fn expectConfigurableDistanceMatch(match_position: usize, max_backward_distance: usize) !void {
     const phrase = "configurable-long-distance-match";
     const input = try std.testing.allocator.alloc(u8, match_position + phrase.len);
     defer std.testing.allocator.free(input);
@@ -198,7 +229,7 @@ fn expectConfigurableDistanceMatch(match_position: usize) !void {
     @memcpy(input[match_position..], phrase);
     const original = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
     try std.testing.expect((try augmentAlloc(std.testing.allocator, input, &original)) == null);
-    const augmented = try augmentAllocWithMaxDistance(std.testing.allocator, input, &original, max_configurable_distance) orelse return error.TestUnexpectedResult;
+    const augmented = try augmentAllocWithMaxDistance(std.testing.allocator, input, &original, max_backward_distance) orelse return error.TestUnexpectedResult;
     defer std.testing.allocator.free(augmented);
     var found = false;
     for (augmented) |command|
