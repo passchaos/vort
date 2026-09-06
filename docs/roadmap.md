@@ -9868,3 +9868,20 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   measured primary text/JSON/binary at `0.923x`/`0.968x`/`0.975x`, again with
   0/15 wins in each row and a `0.953x` geometric mean. The shared out-of-line
   vectorized matcher remains the better code layout.
+  Repeat-beam initialization now materializes the complete first state instead
+  of assigning only its cost into resized, uninitialized storage. This pins the
+  intended initial recent offset of one in Debug, ReleaseSafe, and ReleaseFast;
+  a four-byte distance-one oracle exposes the former optimized-build distance
+  zero and protects the invariant. With every reachable state's distance now
+  proven non-zero, the two transition sites pass only already length/distance-
+  validated matches and the shared helper retains debug assertions instead of
+  repeating runtime guards for both beam slots. A focused reference oracle
+  covers minimum lengths three/four and repeat/new-distance costs. Fifteen
+  alternating fixed-CPU-30 stage pairs against an initialization-fixed baseline
+  preserve all counters and bytes while improving primary text by `1.151x`;
+  JSON is neutral at `0.999x`, binary stays within noise at `0.993x`, and the
+  three-row geometric mean is `1.045x`. Fifteen full encode-matrix pairs keep
+  every frame size/checksum, improve JSON levels 1/3/9 by
+  `1.036x`/`1.033x`/`1.033x` and binary by
+  `1.013x`/`1.028x`/`1.024x`; the row-median geometric mean is `1.014x` and
+  every row is at least `0.999x`.

@@ -905,7 +905,7 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
     const states = scratch.states.items;
     const lengths = scratch.lengths.items;
     @memset(lengths, 0);
-    states[0].cost = 0;
+    states[0] = .{ .cost = 0 };
     lengths[0] = 1;
 
     var matches: [rep_beam_match_candidates]Token.Match = undefined;
@@ -923,13 +923,13 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
             });
 
             for (matches[0..match_count]) |match| {
-                extendRepBeamMatch(states, lengths, input, options, position, slot, state, match);
+                extendRepBeamMatchKnownValid(states, lengths, options, position, slot, state, match);
             }
             const indexed_rep0 = match_count != 0 and matches[0].distance == state.rep0;
             if (can_match and state.rep0 <= position and !indexed_rep0) {
                 const length = matchLength(input, position - state.rep0, position, @min(maxMatch(options), input.len - position));
                 if (length >= minMatch(options)) {
-                    extendRepBeamMatch(states, lengths, input, options, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
+                    extendRepBeamMatchKnownValid(states, lengths, options, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
                 }
             }
         }
@@ -963,8 +963,12 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
     return stats;
 }
 
-inline fn extendRepBeamMatch(states: []RepBeamState, lengths: []u8, _: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) void {
-    if (match.length < minMatch(options) or match.distance == 0 or match.distance > position) return;
+inline fn extendRepBeamMatchKnownValid(states: []RepBeamState, lengths: []u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) void {
+    // Both callers have already established the match-length bound and a
+    // non-zero distance no greater than position. Do not repeat those checks
+    // for every active state in the beam.
+    std.debug.assert(match.length >= minMatch(options));
+    std.debug.assert(match.distance != 0 and match.distance <= position);
     const distance_cost: u32 = @intCast(if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance) + options.new_distance_penalty_bits);
     const match_cost: u32 = @as(u32, fixed_length_costs[match.length]) + distance_cost;
     const cost = state.cost + match_cost;
@@ -1333,6 +1337,51 @@ test "rep beam keeps near-cost alternate recent-offset state" {
     try std.testing.expectEqual(@as(u8, 2), lengths[1]);
     try std.testing.expectEqual(@as(u16, 16), states[rep_beam_width + 1].rep0);
     try std.testing.expectEqual(@as(u32, 12), states[rep_beam_width + 1].cost);
+}
+
+test "rep beam known-valid transition matches guarded reference" {
+    const Reference = struct {
+        fn extend(states: []RepBeamState, lengths: []u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) void {
+            if (match.length < minMatch(options) or match.distance == 0 or match.distance > position) return;
+            const distance_cost: u32 = @intCast(if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance) + options.new_distance_penalty_bits);
+            insertRepBeamState(states, lengths, position + match.length, .{
+                .cost = state.cost + @as(u32, fixed_length_costs[match.length]) + distance_cost,
+                .rep0 = match.distance,
+                .previous_position = @intCast(position),
+                .previous_slot = @intCast(slot),
+                .token = .{ .match = match },
+            });
+        }
+    };
+
+    for ([_]struct { minimum: usize, state_rep0: u16, match: Token.Match }{
+        .{ .minimum = 3, .state_rep0 = 1, .match = .{ .length = 3, .distance = 1 } },
+        .{ .minimum = 4, .state_rep0 = 4, .match = .{ .length = 4, .distance = 8 } },
+    }) |case| {
+        const options: GreedyOptions = .{ .min_match = case.minimum, .new_distance_penalty_bits = 4 };
+        const state: RepBeamState = .{ .cost = 37, .rep0 = case.state_rep0 };
+        var expected_states: [32]RepBeamState = @splat(.{});
+        var expected_lengths: [16]u8 = @splat(0);
+        Reference.extend(&expected_states, &expected_lengths, options, 8, 1, state, case.match);
+        var actual_states: [32]RepBeamState = @splat(.{});
+        var actual_lengths: [16]u8 = @splat(0);
+        extendRepBeamMatchKnownValid(&actual_states, &actual_lengths, options, 8, 1, state, case.match);
+        try std.testing.expectEqualSlices(u8, &expected_lengths, &actual_lengths);
+        for (expected_states, actual_states) |expected, actual| try std.testing.expect(std.meta.eql(expected, actual));
+    }
+}
+
+test "rep beam materializes the initial recent offset" {
+    const input = "aaaa";
+    const plan = try optimalRepBeamPlanAlloc(std.testing.allocator, input, .{
+        .max_chain = 0,
+        .min_match = 3,
+    });
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(Token, &.{
+        .{ .literal = 'a' },
+        .{ .match = .{ .length = 3, .distance = 1 } },
+    }, plan.tokens);
 }
 
 test "rep beam reusable scratch preserves tokens and capacity" {
