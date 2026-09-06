@@ -9818,3 +9818,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   roughly `1.006x`--`1.014x`, while text level 3 reached `0.992x`. The extra
   wide-only section and duplicate fill plumbing were removed rather than
   retaining more than 100 lines for a sub-threshold gain.
+  Narrowing the optimal LZ77 dynamic-programming costs and cached per-length
+  minima from `usize` to `u32` for inputs through the 128 KiB Zstd block limit
+  was likewise rejected. The all-literal upper bound is below 1.2 million bits,
+  and 11 focused optimal tests covered min-match 3/4 token identity, the exact
+  128 KiB/128 KiB+1 storage boundary, compact-index retention above that
+  boundary, OOM recovery, and replay. Fifteen fixed-CPU-30 focused binary
+  optimal pairs improved by `1.0107x` with 15/15 wins and identical 508-sequence
+  output, but the full 15-row encode matrix improved only `1.0041x`
+  geometrically and JSON level 3 reached `0.9884x`. The extra scratch array and
+  generic cost-width path were removed because the isolated kernel gain did not
+  survive whole-encoder measurement.
