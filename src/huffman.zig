@@ -995,8 +995,33 @@ pub fn treeCodeLengthsKnownActive(
         return compactPackageMergeCodeLengthsKnownActive(n, freqs, max_bits, active_symbols, 32);
     if (active_symbols.len <= 64 and n > 64)
         return compactPackageMergeCodeLengthsKnownActive(n, freqs, max_bits, active_symbols, 64);
-    if (n > 64) return backrefPackageMergeCodeLengths(n, freqs, max_bits, active_symbols.len);
+    if (n > 64) {
+        if (comptime n == 256) if (max_bits == 11 and active_symbols.len >= 128)
+            return treeCodeLengthsDenseKnownActive(n, freqs, max_bits, active_symbols);
+        return backrefPackageMergeCodeLengths(n, freqs, max_bits, active_symbols.len);
+    }
     return packageMergeCodeLengths(n, freqs, max_bits, active_symbols.len);
+}
+
+// Keep the larger bucket workspace and package-merge instance out of the shared
+// known-active caller. This preserves the compact path's code layout while
+// specializing the dense Zstd alphabet.
+noinline fn treeCodeLengthsDenseKnownActive(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active_symbols: anytype,
+) [n]u4 {
+    std.debug.assert(n > 64 and active_symbols.len >= 128);
+    if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+        std.debug.assert(active_symbols.len <= n);
+        for (active_symbols, 0..) |symbol_value, index| {
+            const symbol: usize = @intCast(symbol_value);
+            std.debug.assert(symbol < n and freqs[symbol] != 0);
+            if (index != 0) std.debug.assert(active_symbols[index - 1] < symbol_value);
+        }
+    }
+    return backrefPackageMergeCodeLengthsDense(n, freqs, max_bits, active_symbols.len);
 }
 
 fn compactPackageMergeCodeLengthsKnownActive(
@@ -1064,11 +1089,15 @@ fn compactPackageMergeCodeLengths(
 }
 
 fn backrefPackageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
-    return backrefPackageMergeCodeLengthsWithRecovery(n, freqs, max_bits, active, true);
+    return backrefPackageMergeCodeLengthsWithRecovery(n, freqs, max_bits, active, true, false);
 }
 
 fn backrefPackageMergeCodeLengthsReference(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
-    return backrefPackageMergeCodeLengthsWithRecovery(n, freqs, max_bits, active, false);
+    return backrefPackageMergeCodeLengthsWithRecovery(n, freqs, max_bits, active, false, false);
+}
+
+fn backrefPackageMergeCodeLengthsDense(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
+    return backrefPackageMergeCodeLengthsWithRecovery(n, freqs, max_bits, active, true, true);
 }
 
 fn backrefPackageMergeCodeLengthsWithRecovery(
@@ -1077,6 +1106,7 @@ fn backrefPackageMergeCodeLengthsWithRecovery(
     max_bits: u4,
     active: usize,
     comptime linear_recovery: bool,
+    comptime bucket_leaves: bool,
 ) [n]u4 {
     comptime std.debug.assert(n * max_code_bits <= std.math.maxInt(u16));
     const invalid = std.math.maxInt(u16);
@@ -1115,7 +1145,10 @@ fn backrefPackageMergeCodeLengthsWithRecovery(
         node_len += 1;
     }
     std.debug.assert(node_len == active);
-    std.mem.sort(u16, leaves[0..active], Less{ .nodes = nodes[0..node_len] }, Less.less);
+    if (bucket_leaves)
+        bucketSortNodeIndexes(n, leaves[0..active], nodes[0..node_len], Less{ .nodes = nodes[0..node_len] }, Less.less)
+    else
+        std.mem.sort(u16, leaves[0..active], Less{ .nodes = nodes[0..node_len] }, Less.less);
 
     var current: [2 * n]u16 = undefined;
     var next: [n]u16 = undefined;
@@ -1176,6 +1209,48 @@ fn backrefPackageMergeCodeLengthsWithRecovery(
             accumulateBackrefLengths(Node, n, nodes[0..node_len], index, &lengths);
     }
     return lengths;
+}
+
+const leaf_exact_count_cutoff = 166;
+const leaf_bucket_count = 192;
+
+fn leafFrequencyBucket(weight: u64) u8 {
+    std.debug.assert(weight != 0 and weight <= std.math.maxInt(u32));
+    if (weight < leaf_exact_count_cutoff) return @intCast(weight);
+    return @intCast(leaf_exact_count_cutoff - 1 + @as(usize, std.math.log2_int(u64, weight)) - 7);
+}
+
+fn bucketSortNodeIndexes(
+    comptime n: usize,
+    indexes: []u16,
+    nodes: anytype,
+    context: anytype,
+    comptime lessThanFn: fn (@TypeOf(context), u16, u16) bool,
+) void {
+    var counts: [leaf_bucket_count]u16 = @splat(0);
+    for (indexes) |index| counts[leafFrequencyBucket(nodes[index].weight)] += 1;
+
+    var offsets: [leaf_bucket_count]u16 = undefined;
+    var next: u16 = 0;
+    for (counts, 0..) |count, bucket| {
+        offsets[bucket] = next;
+        next += count;
+    }
+    var ordered: [n]u16 = undefined;
+    for (indexes) |index| {
+        const bucket = leafFrequencyBucket(nodes[index].weight);
+        ordered[offsets[bucket]] = index;
+        offsets[bucket] += 1;
+    }
+
+    var start: usize = 0;
+    for (counts, 0..) |count, bucket| {
+        const end = start + count;
+        if (bucket >= leaf_exact_count_cutoff - 1 and count > 1)
+            std.mem.sort(u16, ordered[start..end], context, lessThanFn);
+        start = end;
+    }
+    @memcpy(indexes, ordered[0..indexes.len]);
 }
 
 fn nodeIndexesAreSorted(comptime Node: type, indexes: []const u16, less: anytype) bool {
@@ -2146,6 +2221,30 @@ test "linear back-reference recovery matches root traversal" {
                 backrefPackageMergeCodeLengths(freqs.len, &freqs, 11, active),
             );
         }
+    }
+}
+
+test "dense known-active bucket ordering matches comparison sort" {
+    var state: u32 = 0x3c6e_f372;
+    var freqs: [256]u32 = undefined;
+    var active_symbols: [256]u16 = undefined;
+    for (65..257) |active_target| {
+        @memset(&freqs, 0);
+        for (0..active_target) |index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            freqs[(index * 149 + active_target * 37) % freqs.len] = 1 + ((state >> 16) % 4096);
+        }
+        var active_count: usize = 0;
+        for (freqs, 0..) |frequency, symbol| {
+            if (frequency == 0) continue;
+            active_symbols[active_count] = @intCast(symbol);
+            active_count += 1;
+        }
+        try std.testing.expectEqual(active_target, active_count);
+        try std.testing.expectEqual(
+            treeCodeLengths(freqs.len, &freqs, 11),
+            treeCodeLengthsKnownActive(freqs.len, &freqs, 11, active_symbols[0..active_count]),
+        );
     }
 }
 

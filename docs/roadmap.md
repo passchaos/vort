@@ -9777,3 +9777,17 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   and three extra CSV rows were removed; the established 27-row gate schema and
   comparison sort remain. A future dense-only attempt must isolate codegen at a
   higher Zstd planner boundary without perturbing the shared small-text path.
+  A subsequent combined isolation keeps the useful bucket algorithm without
+  those code-layout regressions. The existing known-active entry now selects it
+  only for the compile-time Zstd shape (`n == 256`, `max_bits == 11`) with at
+  least 128 active symbols, and the entire dense package-merge instance is
+  `noinline`; DEFLATE and smaller Zstd alphabets retain their exact previous
+  call graph. The 65--256-active exact-length oracle covers the dispatch
+  boundary. Fifteen alternating fixed-CPU-30 end-to-end pairs retained all 15
+  encoded sizes and improved geometric-mean throughput by about `1.033x`;
+  binary levels 1/3/9 gained `1.069x`/`1.031x`/`1.029x`, and the 129 KiB
+  multi-block rows gained `1.129x`/`1.115x`/`1.064x`. Every control row stayed
+  above `0.99x`, including text at `1.006x`/`0.996x`/`0.995x`. The unchanged
+  27-row Huffman gate reports dense known-active 128/256 speedups around
+  `1.08x`/`1.11x` on the same CPU, while the 273-case libzstd 1.5.5 matrix has
+  zero unsupported frames.
