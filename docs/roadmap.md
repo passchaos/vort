@@ -9829,3 +9829,30 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   geometrically and JSON level 3 reached `0.9884x`. The extra scratch array and
   generic cost-width path were removed because the isolated kernel gain did not
   survive whole-encoder measurement.
+  Final bit-field emission for 500--512-sequence blocks now borrows the selected
+  combined sequence-table plan instead of passing its three embedded fixed-size
+  state arrays by value. Dispatch happens at the two production call sites that
+  already own the selected plan; the complete borrowed emitter is isolated in a
+  dedicated object-format-aware text section, while 0--499-sequence blocks keep
+  the original emitter and code layout. A boundary oracle rejects 499 entries,
+  compares every 500/512-entry bit field against the by-value reference, and
+  requires a legal 500-sequence compressed block to be byte-identical and
+  round-trip through the full frame decoder. Fifteen fixed-CPU-30 focused
+  optimal-stage pairs preserve 508 sequences, 8,839 encoded bytes, and checksum
+  while improving `1.084x` with 15/15 wins. Fifteen full encode-matrix pairs
+  preserve all frame sizes and improve `1.050x` geometrically: binary levels
+  1/3/9 gain `1.523x`/`1.148x`/`1.157x`, multi-block gains about
+  `1.010x`/`1.010x`/`1.007x`, and every control stays above `0.99x`.
+  Final sequence bit-field emission now borrows the selected combined table plan
+  for 500--512-sequence blocks instead of passing its three embedded fixed-size
+  state arrays by value. The complete borrowed emitter and its inlined helpers
+  live in a dedicated object-format-aware text section; the ordinary 0--499
+  sequence emitter retains its original code layout. A 499/500/512 boundary
+  oracle compares every generated read field with the by-value reference, and a
+  legal 500-sequence distance-four block is byte-identical and round-trips as a
+  complete Zstd frame. Fifteen fixed-CPU-30 focused optimal-stage pairs preserve
+  508 sequences, 8,839 encoded bytes, and the checksum while improving by
+  `1.084x` with 15/15 wins. Fifteen full encode-matrix pairs retain all frame
+  sizes and improve `1.050x` geometrically: binary levels 1/3/9 gain
+  `1.523x`/`1.148x`/`1.157x`, multi-block gains `1.010x`/`1.010x`/`1.007x`,
+  and every non-target control remains above `0.99x`.

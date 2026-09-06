@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const core = @import("core.zig");
 const lz77 = @import("lz77.zig");
 const checksum_mod = @import("checksum.zig");
@@ -22,6 +23,13 @@ const incremental_history_index = @import("zstd/incremental/encoder/history_inde
 const double_fast_match = @import("zstd/match/double_fast.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
+
+const wide_sequence_emit_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_wide_sequence",
+    .macho => "__TEXT,__vort_zstd_seq",
+    .coff => ".text$vort_zstd_wide_sequence",
+    else => ".text",
+};
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -58,6 +66,10 @@ const max_bootstrap_sequence_count = 128;
 // capacity separate so a complete linear/DP plan is not discarded solely due
 // to the recursion-oriented stack bound.
 const max_native_sequence_count = 512;
+// Keep the large fixed-capacity table plans borrowed only where their copy cost
+// dominates. The locked text/JSON stage rows stay below this boundary, while
+// the 508-sequence binary rows exercise the isolated wide emitter.
+const wide_borrowed_sequence_plan_min = 500;
 // A Zstd block is bounded to 128 KiB and every LZ77 sequence consumes at least
 // one minimum-length match. Keep the large hash-parser path bounded by that
 // format-derived maximum instead of raising the small-path stack arrays.
@@ -13547,6 +13559,24 @@ fn emitTablePlanSequenceCompressedBlockWithLiterals(
         literals_prefix.len,
     )) orelse return false;
 
+    if (literal_lens.len >= wide_borrowed_sequence_plan_min) {
+        @branchHint(.unlikely);
+        return try emitSequenceCompressedBlockWithTablePlansAndOffsetsBorrowed(
+            allocator,
+            out,
+            block,
+            last,
+            literal_lens,
+            offsets,
+            match_lens,
+            literal_ends,
+            tail_start,
+            &best.plan,
+            literals_prefix,
+            null,
+            initial_repeated_offsets,
+        );
+    }
     return try emitSequenceCompressedBlockWithTablePlans(
         allocator,
         out,
@@ -13624,6 +13654,59 @@ fn emitSequenceCompressedBlockWithTablePlansAndOffsets(
     var read_fields: [max_native_sequence_count * 6]BitField = undefined;
     const selected_read_fields = if (prebuilt_read_fields) |fields| fields else blk: {
         const read_field_count = try sequenceReadFieldsWithTablePlansAndOffsets(
+            read_fields[0..],
+            literal_lens,
+            offsets,
+            match_lens,
+            plan,
+            initial_offsets,
+        );
+        break :blk read_fields[0..read_field_count];
+    };
+
+    var sequence_bits: std.ArrayList(u8) = .empty;
+    defer sequence_bits.deinit(allocator);
+    try emitReverseBitstreamFromReadOrder(allocator, &sequence_bits, selected_read_fields);
+    try payload.appendSlice(allocator, sequence_bits.items);
+
+    const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_block_len) return false;
+    try emitBlockHeader(allocator, out, 2, payload.items.len, last);
+    try out.appendSlice(allocator, payload.items);
+    return true;
+}
+
+noinline fn emitSequenceCompressedBlockWithTablePlansAndOffsetsBorrowed(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    plan: *const SequenceCombinedEmitPlan,
+    prebuilt_literals: ?[]const u8,
+    prebuilt_read_fields: ?[]const BitField,
+    initial_offsets: [3]usize,
+) linksection(wide_sequence_emit_text_section) Error!bool {
+    if (literal_lens.len < wide_borrowed_sequence_plan_min or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    if (prebuilt_literals) |prefix|
+        try payload.appendSlice(allocator, prefix)
+    else
+        _ = try emitSequenceLiteralsSection(allocator, &payload, block, literal_lens, literal_ends, tail_start);
+    try emitSequenceCount(allocator, &payload, literal_lens.len);
+    try payload.append(allocator, sequenceModeByteBorrowed(plan));
+    try appendSequenceTablePayloadBorrowed(allocator, &payload, &plan.literal);
+    try appendSequenceTablePayloadBorrowed(allocator, &payload, &plan.offset);
+    try appendSequenceTablePayloadBorrowed(allocator, &payload, &plan.match);
+
+    var read_fields: [max_native_sequence_count * 6]BitField = undefined;
+    const selected_read_fields = if (prebuilt_read_fields) |fields| fields else blk: {
+        const read_field_count = try sequenceReadFieldsWithTablePlansAndOffsetsBorrowed(
             read_fields[0..],
             literal_lens,
             offsets,
@@ -13871,7 +13954,24 @@ fn replaceSequenceCandidateWithFrameState(
 
     var replacement: std.ArrayList(u8) = .empty;
     defer replacement.deinit(allocator);
-    if (!try emitSequenceCompressedBlockWithTablePlansAndOffsets(
+    const replacement_ok = if (count >= wide_borrowed_sequence_plan_min) blk: {
+        @branchHint(.unlikely);
+        break :blk try emitSequenceCompressedBlockWithTablePlansAndOffsetsBorrowed(
+            allocator,
+            &replacement,
+            block,
+            last,
+            literal_lens[0..count],
+            offsets[0..count],
+            match_lens[0..count],
+            literal_ends[0..count],
+            tail_start,
+            &plan.plan,
+            null,
+            null,
+            current.repeated_offsets,
+        );
+    } else try emitSequenceCompressedBlockWithTablePlansAndOffsets(
         allocator,
         &replacement,
         block,
@@ -13885,7 +13985,8 @@ fn replaceSequenceCandidateWithFrameState(
         null,
         null,
         current.repeated_offsets,
-    )) return false;
+    );
+    if (!replacement_ok) return false;
     try candidate.ensureTotalCapacity(allocator, replacement.items.len);
     candidate.clearRetainingCapacity();
     candidate.appendSliceAssumeCapacity(replacement.items);
@@ -15971,6 +16072,45 @@ fn sequenceReadFieldsWithTablePlansAndOffsets(
     return count;
 }
 
+noinline fn sequenceReadFieldsWithTablePlansAndOffsetsBorrowed(
+    out: []BitField,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    plan: *const SequenceCombinedEmitPlan,
+    initial_offsets: [3]usize,
+) linksection(wide_sequence_emit_text_section) Error!usize {
+    if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
+    if (literal_lens.len < wide_borrowed_sequence_plan_min or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
+    try validateSequenceTablePlanLenBorrowed(&plan.literal, literal_lens.len);
+    try validateSequenceTablePlanLenBorrowed(&plan.offset, offsets.len);
+    try validateSequenceTablePlanLenBorrowed(&plan.match, match_lens.len);
+
+    var count: usize = 0;
+    try appendInitialSequenceStateFieldBorrowed(out, &count, &plan.literal, .literal);
+    try appendInitialSequenceStateFieldBorrowed(out, &count, &plan.offset, .offset);
+    try appendInitialSequenceStateFieldBorrowed(out, &count, &plan.match, .match);
+
+    var repeated_offsets = initial_offsets;
+    for (0..literal_lens.len) |i| {
+        const literal_symbol = try sequenceTableSymbolBorrowed(&plan.literal, .literal, i);
+        const offset_symbol = try sequenceTableSymbolBorrowed(&plan.offset, .offset, i);
+        const match_symbol = try sequenceTableSymbolBorrowed(&plan.match, .match, i);
+
+        const offset_extra = try sequenceOffsetExtraForEncodedOffset(offset_symbol, literal_lens[i], offsets[i], &repeated_offsets);
+        try appendBitField(out, &count, offset_extra, offset_symbol.additional_bits);
+        try appendBitField(out, &count, match_lens[i] - match_symbol.base, match_symbol.additional_bits);
+        try appendBitField(out, &count, literal_lens[i] - literal_symbol.base, literal_symbol.additional_bits);
+
+        if (i + 1 < literal_lens.len) {
+            try appendSequenceTransitionFieldBorrowed(out, &count, &plan.literal, .literal, i);
+            try appendSequenceTransitionFieldBorrowed(out, &count, &plan.match, .match, i);
+            try appendSequenceTransitionFieldBorrowed(out, &count, &plan.offset, .offset, i);
+        }
+    }
+    return count;
+}
+
 fn sequenceOffsetExtraForEncodedOffset(
     symbol: SequenceSymbol,
     literal_len: usize,
@@ -16026,6 +16166,25 @@ fn appendInitialSequenceStateField(out: []BitField, count: *usize, plan: Sequenc
     }
 }
 
+inline fn appendInitialSequenceStateFieldBorrowed(out: []BitField, count: *usize, plan: *const SequenceTableEmitPlan, kind: SequenceTableKind) Error!void {
+    switch (plan.*) {
+        .rle => {},
+        .predefined => |*predefined| {
+            if (predefined.len == 0) return error.CorruptFrame;
+            try appendBitField(out, count, predefined.states[0], predefinedInitialStateBits(kind));
+        },
+        .compressed => |*compressed| {
+            if (compressed.len == 0) return error.CorruptFrame;
+            try appendBitField(out, count, compressed.initial_state, compressed.accuracy_log);
+        },
+        .repeat => |*repeat| {
+            if (repeat.len == 0) return error.CorruptFrame;
+            if (repeat.source.mode != .rle)
+                try appendBitField(out, count, repeat.states[0], repeatSequenceInitialStateBits(repeat.source));
+        },
+    }
+}
+
 fn appendSequenceTransitionField(out: []BitField, count: *usize, plan: SequenceTableEmitPlan, kind: SequenceTableKind, index: usize) Error!void {
     switch (plan) {
         .rle => {},
@@ -16049,12 +16208,44 @@ fn appendSequenceTransitionField(out: []BitField, count: *usize, plan: SequenceT
     }
 }
 
+inline fn appendSequenceTransitionFieldBorrowed(out: []BitField, count: *usize, plan: *const SequenceTableEmitPlan, kind: SequenceTableKind, index: usize) Error!void {
+    switch (plan.*) {
+        .rle => {},
+        .predefined => |*predefined| {
+            if (index + 1 >= predefined.len) return error.CorruptFrame;
+            const symbol = try sequenceTableSymbolBorrowed(plan, kind, index);
+            if (predefined.states[index + 1] < symbol.next_state) return error.CorruptFrame;
+            try appendBitField(out, count, predefined.states[index + 1] - symbol.next_state, symbol.state_bits);
+        },
+        .compressed => |*compressed| {
+            if (index + 1 >= compressed.len) return error.CorruptFrame;
+            try appendBitField(out, count, compressed.transition_values[index], compressed.transition_bits[index]);
+        },
+        .repeat => |*repeat| {
+            if (index + 1 >= repeat.len) return error.CorruptFrame;
+            if (repeat.source.mode == .rle) return;
+            const symbol = try sequenceTableSymbolBorrowed(plan, kind, index);
+            if (repeat.states[index + 1] < symbol.next_state) return error.CorruptFrame;
+            try appendBitField(out, count, repeat.states[index + 1] - symbol.next_state, symbol.state_bits);
+        },
+    }
+}
+
 fn validateSequenceTablePlanLen(plan: SequenceTableEmitPlan, len: usize) Error!void {
     switch (plan) {
         .rle => {},
         .predefined => |predefined| if (predefined.len != len) return error.CorruptFrame,
         .compressed => |compressed| if (compressed.len != len) return error.CorruptFrame,
         .repeat => |repeat| if (repeat.len != len) return error.CorruptFrame,
+    }
+}
+
+inline fn validateSequenceTablePlanLenBorrowed(plan: *const SequenceTableEmitPlan, len: usize) Error!void {
+    switch (plan.*) {
+        .rle => {},
+        .predefined => |*predefined| if (predefined.len != len) return error.CorruptFrame,
+        .compressed => |*compressed| if (compressed.len != len) return error.CorruptFrame,
+        .repeat => |*repeat| if (repeat.len != len) return error.CorruptFrame,
     }
 }
 
@@ -16087,6 +16278,35 @@ fn sequenceTableSymbol(plan: SequenceTableEmitPlan, kind: SequenceTableKind, ind
     };
 }
 
+inline fn sequenceTableSymbolBorrowed(plan: *const SequenceTableEmitPlan, kind: SequenceTableKind, index: usize) Error!SequenceSymbol {
+    return switch (plan.*) {
+        .rle => |code| sequenceRleSymbol(kind, code),
+        .predefined => |*predefined| blk: {
+            if (index >= predefined.len) return error.CorruptFrame;
+            const state = predefined.states[index];
+            const symbols = sequenceTablePredefinedSymbols(kind);
+            if (state >= symbols.len) return error.CorruptFrame;
+            break :blk symbols[state];
+        },
+        .compressed => |*compressed| blk: {
+            if (index >= compressed.len) return error.CorruptFrame;
+            var symbol = try sequenceRleSymbol(kind, compressed.codes[index]);
+            symbol.next_state = @intCast(compressed.next_states[index]);
+            symbol.state_bits = compressed.state_bits[index];
+            break :blk symbol;
+        },
+        .repeat => |*repeat| blk: {
+            if (index >= repeat.len) return error.CorruptFrame;
+            const state = repeat.states[index];
+            break :blk switch (repeat.source.mode) {
+                .predefined, .compressed => if (state < repeat.source.symbols.len) repeat.source.symbols[state] else return error.CorruptFrame,
+                .rle => repeat.source.rle orelse return error.CorruptFrame,
+                .repeat => unreachable,
+            };
+        },
+    };
+}
+
 fn sequenceRleSymbol(kind: SequenceTableKind, code: u8) Error!SequenceSymbol {
     const bases = sequenceTableBases(kind);
     const bits = sequenceTableBits(kind);
@@ -16105,6 +16325,12 @@ fn sequenceModeByte(plan: SequenceCombinedEmitPlan) u8 {
         (@as(u8, @intFromEnum(sequenceTableMode(plan.match))) << 2);
 }
 
+fn sequenceModeByteBorrowed(plan: *const SequenceCombinedEmitPlan) u8 {
+    return (@as(u8, @intFromEnum(sequenceTableModeBorrowed(&plan.literal))) << 6) |
+        (@as(u8, @intFromEnum(sequenceTableModeBorrowed(&plan.offset))) << 4) |
+        (@as(u8, @intFromEnum(sequenceTableModeBorrowed(&plan.match))) << 2);
+}
+
 fn largeSequenceModeByte(plan: LargeSequenceCombinedEmitPlan) u8 {
     return (@as(u8, @intFromEnum(largeSequenceTableMode(plan.literal))) << 6) |
         (@as(u8, @intFromEnum(largeSequenceTableMode(plan.offset))) << 4) |
@@ -16113,6 +16339,15 @@ fn largeSequenceModeByte(plan: LargeSequenceCombinedEmitPlan) u8 {
 
 fn sequenceTableMode(plan: SequenceTableEmitPlan) SymbolMode {
     return switch (plan) {
+        .rle => .rle,
+        .predefined => .predefined,
+        .compressed => .compressed,
+        .repeat => .repeat,
+    };
+}
+
+fn sequenceTableModeBorrowed(plan: *const SequenceTableEmitPlan) SymbolMode {
+    return switch (plan.*) {
         .rle => .rle,
         .predefined => .predefined,
         .compressed => .compressed,
@@ -16134,6 +16369,15 @@ fn appendSequenceTablePayload(allocator: std.mem.Allocator, out: *std.ArrayList(
         .rle => |code| try out.append(allocator, code),
         .predefined => {},
         .compressed => |compressed| try out.appendSlice(allocator, compressed.table_payload[0..compressed.table_payload_len]),
+        .repeat => {},
+    }
+}
+
+fn appendSequenceTablePayloadBorrowed(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: *const SequenceTableEmitPlan) Error!void {
+    switch (plan.*) {
+        .rle => |code| try out.append(allocator, code),
+        .predefined => {},
+        .compressed => |*compressed| try out.appendSlice(allocator, compressed.table_payload[0..compressed.table_payload_len]),
         .repeat => {},
     }
 }
@@ -23873,6 +24117,138 @@ test "zstd specialized sequence table cost matches generic symbol lookup" {
             );
         }
     }
+}
+
+test "zstd wide borrowed sequence fields match by-value reference" {
+    var literal_lens: [max_native_sequence_count]usize = undefined;
+    var offsets: [max_native_sequence_count]usize = undefined;
+    var match_lens: [max_native_sequence_count]usize = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&literal_lens, &offsets, &match_lens, 0..) |*literal_len, *offset, *match_len, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        literal_len.* = if (index % 17 == 0) 0 else (state >> 28) % 9;
+        state = state *% 1_664_525 +% 1_013_904_223;
+        offset.* = 4 + state % 4092;
+        state = state *% 1_664_525 +% 1_013_904_223;
+        match_len.* = 3 + (state >> 25) % 96;
+    }
+
+    const narrow_plan = (try bestTablePlanSequenceWithLiteralsLen(
+        literal_lens[0 .. wide_borrowed_sequence_plan_min - 1],
+        offsets[0 .. wide_borrowed_sequence_plan_min - 1],
+        match_lens[0 .. wide_borrowed_sequence_plan_min - 1],
+        1234,
+    )) orelse return error.CorruptFrame;
+    var fields: [max_native_sequence_count * 6]BitField = undefined;
+    try std.testing.expectError(
+        error.CorruptFrame,
+        sequenceReadFieldsWithTablePlansAndOffsetsBorrowed(
+            &fields,
+            literal_lens[0 .. wide_borrowed_sequence_plan_min - 1],
+            offsets[0 .. wide_borrowed_sequence_plan_min - 1],
+            match_lens[0 .. wide_borrowed_sequence_plan_min - 1],
+            &narrow_plan.plan,
+            initial_repeated_offsets,
+        ),
+    );
+
+    for ([_]usize{ wide_borrowed_sequence_plan_min, max_native_sequence_count }) |len| {
+        const plan = (try bestTablePlanSequenceWithLiteralsLen(
+            literal_lens[0..len],
+            offsets[0..len],
+            match_lens[0..len],
+            1234,
+        )) orelse return error.CorruptFrame;
+        var expected: [max_native_sequence_count * 6]BitField = undefined;
+        const expected_count = try sequenceReadFieldsWithTablePlansAndOffsets(
+            &expected,
+            literal_lens[0..len],
+            offsets[0..len],
+            match_lens[0..len],
+            plan.plan,
+            initial_repeated_offsets,
+        );
+        var actual: [max_native_sequence_count * 6]BitField = undefined;
+        const actual_count = try sequenceReadFieldsWithTablePlansAndOffsetsBorrowed(
+            &actual,
+            literal_lens[0..len],
+            offsets[0..len],
+            match_lens[0..len],
+            &plan.plan,
+            initial_repeated_offsets,
+        );
+        try std.testing.expectEqualSlices(BitField, expected[0..expected_count], actual[0..actual_count]);
+    }
+
+    const sequence_count = wide_borrowed_sequence_plan_min;
+    var payload: [sequence_count * 5]u8 = undefined;
+    for (&payload, 0..) |*byte, index| byte.* = "abcd"[index & 3];
+    var block_literal_lens: [sequence_count]usize = undefined;
+    var block_offsets: [sequence_count]usize = @splat(4);
+    var block_match_lens: [sequence_count]usize = undefined;
+    var literal_ends: [sequence_count]usize = undefined;
+    var position: usize = 0;
+    for (0..sequence_count) |index| {
+        const literal_len: usize = if (index == 0) 4 else if (index % 5 == 0) 1 else 0;
+        const match_len: usize = if (index % 7 == 0) 3 else 4;
+        block_literal_lens[index] = literal_len;
+        block_match_lens[index] = match_len;
+        position += literal_len + match_len;
+        literal_ends[index] = position;
+    }
+    const block = payload[0..position];
+    var literals_prefix: std.ArrayList(u8) = .empty;
+    defer literals_prefix.deinit(std.testing.allocator);
+    _ = try emitSequenceLiteralsSection(std.testing.allocator, &literals_prefix, block, &block_literal_lens, &literal_ends, position);
+    const block_plan = (try bestTablePlanSequenceWithLiteralsLen(
+        &block_literal_lens,
+        &block_offsets,
+        &block_match_lens,
+        literals_prefix.items.len,
+    )) orelse return error.CorruptFrame;
+    var expected_block: std.ArrayList(u8) = .empty;
+    defer expected_block.deinit(std.testing.allocator);
+    try std.testing.expect(try emitSequenceCompressedBlockWithTablePlansAndOffsets(
+        std.testing.allocator,
+        &expected_block,
+        block,
+        true,
+        &block_literal_lens,
+        &block_offsets,
+        &block_match_lens,
+        &literal_ends,
+        position,
+        block_plan.plan,
+        literals_prefix.items,
+        null,
+        initial_repeated_offsets,
+    ));
+    var actual_block: std.ArrayList(u8) = .empty;
+    defer actual_block.deinit(std.testing.allocator);
+    try std.testing.expect(try emitSequenceCompressedBlockWithTablePlansAndOffsetsBorrowed(
+        std.testing.allocator,
+        &actual_block,
+        block,
+        true,
+        &block_literal_lens,
+        &block_offsets,
+        &block_match_lens,
+        &literal_ends,
+        position,
+        &block_plan.plan,
+        literals_prefix.items,
+        null,
+        initial_repeated_offsets,
+    ));
+    try std.testing.expectEqualSlices(u8, expected_block.items, actual_block.items);
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, block.len, .{ .content_checksum = false });
+    try frame.appendSlice(std.testing.allocator, actual_block.items);
+    const decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, block, decoded);
 }
 
 test "zstd sparse sequence alternatives match initialized reference" {
