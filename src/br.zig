@@ -4925,20 +4925,44 @@ fn skipMinimalCompressedMetaBlock(
         s.max_distance_block_types = header.distance_block.block_type_count;
         s.max_distance_context_trees = header.distance_tree_count;
     }
+    if (header.literal_tree_count >= clustered_literal_tree_threshold and prepareLiteralTailLookups(&header)) {
+        const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(&header);
+        if (auxiliary_tail_lookups)
+            return skipDecodedCompressedPayload(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
+        return skipDecodedCompressedPayload(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
+    }
+    return skipDecodedCompressedPayload(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
+}
+
+noinline fn skipDecodedCompressedPayload(
+    comptime literal_tail_lookup: bool,
+    comptime auxiliary_tail_lookups: bool,
+    reader: *bitstream.BitReader,
+    start_written: usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    literal_history: *LiteralHistory,
+    stats: ?*StreamSummaryMetaBlockStats,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+) SummaryError!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     var written = start_written;
     while (written < meta_block_end) {
-        const command_symbol = try readCommandSymbol(&header, reader);
+        const command_symbol = if (auxiliary_tail_lookups)
+            try readCommandSymbolTailLookup(header, reader)
+        else
+            try readCommandSymbol(header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
         if (lengths.insert_len > meta_block_end - written) return error.CorruptFrame;
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
-            try ensureLiteralBlock(&header, reader);
-            const context = try literal_history.context(&header);
+            try ensureLiteralBlock(header, reader);
+            const context = try literal_history.context(header);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
-            const tree = try literalPrefixForDecode(&header, tree_index);
-            const literal = try tree.decode(reader);
+            const tree = try literalPrefixForDecode(header, tree_index);
+            const literal = if (literal_tail_lookup) try tree.decodeTailLookup(reader) else try tree.decode(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             literal_history.push(@intCast(literal));
             written += 1;
@@ -4947,7 +4971,10 @@ fn skipMinimalCompressedMetaBlock(
         if (written == meta_block_end) {
             return;
         }
-        const decoded_distance = try readMinimalDistance(&header, reader, lengths, last_distances);
+        const decoded_distance = if (auxiliary_tail_lookups)
+            try readMinimalDistanceTailLookup(header, reader, lengths, last_distances)
+        else
+            try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written);
