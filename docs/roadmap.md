@@ -38,6 +38,15 @@ major gaps before Vort can claim broad industry-best parity:
 - Cross-platform optimized kernels and reproducible competitor measurements are
   not yet comprehensive enough for a blanket performance-leadership claim.
 
+The libbrotli-generated compatibility matrix now also includes 7,056 one-shot
+frames spanning four deterministic entropy shapes, seven payload sizes from one
+byte through 64 KiB, all qualities 0...11, generic/text/font modes, and window
+bits 10/12/16/18/20/22/24. Every frame decodes byte-exactly through Vort's
+public allocating decoder. This broad sweep complements the deeper flushed,
+metadata, context-tree, 256-block-type, large-header, and progressive-chunk
+fixtures; it strengthens decoder evidence without implying equivalent encoder
+quality or speed.
+
 The next highest-value deliverable is broader byte-progressive decoding against
 upstream-produced multi-meta-block corpora, followed by the remaining general
 Brotli encoder features. Performance work should then resume on the profiled
