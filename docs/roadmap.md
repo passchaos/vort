@@ -9895,3 +9895,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   to `0.829x`/`0.968x`, for a `0.950x` geometric mean. The compact 4,096-entry
   head remains the general default; any wider follow-up must be isolated behind
   a collision-density classifier rather than taxing every repeat-beam input.
+  A first adaptive 8,192-entry follow-up was also rejected. It sampled four
+  distributed 256-byte windows and stored the wide head in reusable predecessor
+  scratch only for inputs with more than 40 distinct sampled bytes, so the
+  intended text/JSON path retained the 4,096-entry table and all stage wires.
+  Even so, the added classifier and dynamic-head code layout reduced focused
+  text/JSON throughput to `0.836x`/`0.951x`; binary improved only `1.030x`, for
+  a `0.936x` geometric mean. Any future adaptive width must isolate the entire
+  wide implementation at a higher boundary so ordinary beam codegen is intact.
