@@ -703,6 +703,23 @@ pub fn main(init: std.process.Init) !void {
     try reference.decode(wider_window_encoded, wider_window_decoded);
     if (!std.mem.eql(u8, wider_window_payload, wider_window_decoded)) return error.ReferenceDecodeFailed;
     planned_window_cases += 1;
+    const window_19_gap = 320 * 1024;
+    const window_19_repeat = 12 * 1024;
+    const window_19_payload = try init.gpa.alloc(u8, window_19_gap + window_19_repeat);
+    defer init.gpa.free(window_19_payload);
+    var window_19_state: u32 = 0x1976_0421;
+    for (window_19_payload[0..window_19_gap]) |*byte| {
+        window_19_state = window_19_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(window_19_state >> 24);
+    }
+    @memcpy(window_19_payload[window_19_gap..], window_19_payload[0..window_19_repeat]);
+    const window_19_encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, window_19_payload, .{ .level = .ratio, .window_bits = 19 });
+    defer init.gpa.free(window_19_encoded);
+    const window_19_decoded = try init.gpa.alloc(u8, window_19_payload.len);
+    defer init.gpa.free(window_19_decoded);
+    try reference.decode(window_19_encoded, window_19_decoded);
+    if (!std.mem.eql(u8, window_19_payload, window_19_decoded)) return error.ReferenceDecodeFailed;
+    planned_window_cases += 1;
     var planned_chunked_window_cases: usize = 0;
     const planned_chunks = [_][]const u8{
         planned_window_payload[0 .. planned_window_payload.len / 2],

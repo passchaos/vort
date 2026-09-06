@@ -3,7 +3,7 @@ const command_plan = @import("command_plan.zig");
 
 pub const min_distance: usize = (@as(usize, 1) << 16) - 16 + 1;
 pub const max_distance: usize = (@as(usize, 1) << 17) - 16;
-pub const max_configurable_distance: usize = (@as(usize, 1) << 18) - 16;
+pub const max_configurable_distance: usize = (@as(usize, 1) << 19) - 16;
 const chain_limit = 512;
 const min_match = 16;
 const max_match = 258;
@@ -176,9 +176,17 @@ test "near hash collisions do not hide eligible long matches" {
     try std.testing.expect(found);
 }
 
-test "configurable matcher covers the 18-bit distance band" {
-    const match_position = max_configurable_distance;
-    const phrase = "eighteen-bit-long-distance-match";
+test "configurable matcher covers exact 18 and 19-bit distance limits" {
+    inline for (.{ (@as(usize, 1) << 18) - 16, max_configurable_distance }) |match_position| {
+        try expectConfigurableDistanceMatch(match_position);
+    }
+    const original = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = min_distance + 1 }};
+    const input = [_]u8{0} ** (min_distance + 1);
+    try std.testing.expectError(error.InvalidBlockPlan, augmentAllocWithMaxDistance(std.testing.allocator, &input, &original, max_configurable_distance + 1));
+}
+
+fn expectConfigurableDistanceMatch(match_position: usize) !void {
+    const phrase = "configurable-long-distance-match";
     const input = try std.testing.allocator.alloc(u8, match_position + phrase.len);
     defer std.testing.allocator.free(input);
     var state: u32 = 0x8bad_f00d;
@@ -198,5 +206,4 @@ test "configurable matcher covers the 18-bit distance band" {
             found = true;
         };
     try std.testing.expect(found);
-    try std.testing.expectError(error.InvalidBlockPlan, augmentAllocWithMaxDistance(std.testing.allocator, input, &original, max_configurable_distance + 1));
 }
