@@ -1,5 +1,12 @@
 const std = @import("std");
 const builtin = @import("builtin");
+
+const zstd_dense_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_dense_huffman",
+    .macho => "__TEXT,__vort_zstd_huf",
+    .coff => ".text$vort_zstd_dense_huffman",
+    else => ".text",
+};
 const bitstream = @import("bitstream.zig");
 const core = @import("core.zig");
 
@@ -1011,7 +1018,7 @@ noinline fn treeCodeLengthsDenseKnownActive(
     freqs: *const [n]u32,
     max_bits: u4,
     active_symbols: anytype,
-) [n]u4 {
+) linksection(zstd_dense_text_section) [n]u4 {
     std.debug.assert(n > 64 and active_symbols.len >= 128);
     if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
         std.debug.assert(active_symbols.len <= n);
@@ -1021,7 +1028,124 @@ noinline fn treeCodeLengthsDenseKnownActive(
             if (index != 0) std.debug.assert(active_symbols[index - 1] < symbol_value);
         }
     }
-    return backrefPackageMergeCodeLengthsDense(n, freqs, max_bits, active_symbols.len);
+    return unboundedDenseCodeLengths(n, freqs, max_bits, active_symbols.len) orelse
+        backrefPackageMergeCodeLengthsDense(n, freqs, max_bits, active_symbols.len);
+}
+
+noinline fn unboundedDenseCodeLengths(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active: usize,
+) linksection(zstd_dense_text_section) ?[n]u4 {
+    return unboundedDenseCodeLengthsWithSpreadPolicy(n, freqs, max_bits, active, true);
+}
+
+fn unboundedDenseCodeLengthsWithSpreadPolicy(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active: usize,
+    comptime reject_wide_spread: bool,
+) ?[n]u4 {
+    const invalid = std.math.maxInt(u16);
+    const Node = struct {
+        weight: u64,
+        symbol: u16 = invalid,
+        serial: u16,
+    };
+    const Less = struct {
+        nodes: []const Node,
+
+        fn less(context: @This(), lhs: u16, rhs: u16) bool {
+            const left = context.nodes[lhs];
+            const right = context.nodes[rhs];
+            return left.weight < right.weight or
+                (left.weight == right.weight and left.serial < right.serial);
+        }
+    };
+
+    var nodes: [2 * n - 1]Node = undefined;
+    var parents: [2 * n - 1]u16 = undefined;
+    var leaves: [n]u16 = undefined;
+    var node_len: usize = 0;
+    var min_frequency: u32 = std.math.maxInt(u32);
+    var max_frequency: u32 = 0;
+    for (freqs.*, 0..) |frequency, symbol| {
+        if (frequency == 0) continue;
+        min_frequency = @min(min_frequency, frequency);
+        max_frequency = @max(max_frequency, frequency);
+        const index: u16 = @intCast(node_len);
+        nodes[node_len] = .{ .weight = frequency, .symbol = @intCast(symbol), .serial = index };
+        leaves[node_len] = index;
+        node_len += 1;
+    }
+    std.debug.assert(node_len == active);
+    // Very uneven histograms are the only measured source of >11-bit natural
+    // trees. Reject them before sorting/building so the bounded package-merge
+    // fallback does not pay for a failed full-tree probe. The tree depth check
+    // below remains authoritative for every admitted distribution.
+    if (reject_wide_spread and @as(u64, max_frequency) > @as(u64, min_frequency) * 16) return null;
+    bucketSortNodeIndexes(n, leaves[0..active], nodes[0..active], Less{ .nodes = nodes[0..active] }, Less.less);
+
+    var leaf_i: usize = 0;
+    var parent_i: usize = active;
+    while (node_len < 2 * active - 1) {
+        const first = popHuffmanNode(Node, nodes[0..node_len], leaves[0..active], &leaf_i, &parent_i);
+        const second = popHuffmanNode(Node, nodes[0..node_len], leaves[0..active], &leaf_i, &parent_i);
+        const parent: u16 = @intCast(node_len);
+        nodes[node_len] = .{
+            .weight = nodes[first].weight + nodes[second].weight,
+            .serial = parent,
+        };
+        parents[first] = parent;
+        parents[second] = parent;
+        node_len += 1;
+    }
+
+    var depths: [2 * n - 1]u16 = undefined;
+    depths[node_len - 1] = 0;
+    var index = node_len - 1;
+    while (index != 0) {
+        index -= 1;
+        depths[index] = depths[parents[index]] + 1;
+    }
+    var lengths: [n]u4 = @splat(0);
+    for (nodes[0..active], depths[0..active]) |node, depth| {
+        if (depth == 0 or depth > max_bits) return null;
+        lengths[node.symbol] = @intCast(depth);
+    }
+    return lengths;
+}
+
+inline fn popHuffmanNode(
+    comptime Node: type,
+    nodes: []const Node,
+    leaves: []const u16,
+    leaf_i: *usize,
+    parent_i: *usize,
+) u16 {
+    if (leaf_i.* >= leaves.len) {
+        const result: u16 = @intCast(parent_i.*);
+        parent_i.* += 1;
+        return result;
+    }
+    const leaf = leaves[leaf_i.*];
+    if (parent_i.* >= nodes.len) {
+        leaf_i.* += 1;
+        return leaf;
+    }
+    const parent: u16 = @intCast(parent_i.*);
+    const leaf_node = nodes[leaf];
+    const parent_node = nodes[parent];
+    if (leaf_node.weight < parent_node.weight or
+        (leaf_node.weight == parent_node.weight and leaf_node.serial < parent_node.serial))
+    {
+        leaf_i.* += 1;
+        return leaf;
+    }
+    parent_i.* += 1;
+    return parent;
 }
 
 fn compactPackageMergeCodeLengthsKnownActive(
@@ -2224,7 +2348,7 @@ test "linear back-reference recovery matches root traversal" {
     }
 }
 
-test "dense known-active bucket ordering matches comparison sort" {
+test "dense known-active fast paths match comparison sort" {
     var state: u32 = 0x3c6e_f372;
     var freqs: [256]u32 = undefined;
     var active_symbols: [256]u16 = undefined;
@@ -2246,6 +2370,37 @@ test "dense known-active bucket ordering matches comparison sort" {
             treeCodeLengthsKnownActive(freqs.len, &freqs, 11, active_symbols[0..active_count]),
         );
     }
+
+    for (0..128) |seed| {
+        const active = 128 + (seed * 37) % 129;
+        var balanced: [256]u32 = @splat(0);
+        for (0..active) |index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            balanced[(index * 149 + seed * 53) % balanced.len] = 64 + (state >> 24);
+        }
+        const balanced_fast = unboundedDenseCodeLengths(balanced.len, &balanced, 11, active) orelse
+            return error.CorruptFrame;
+        try std.testing.expectEqual(treeCodeLengths(balanced.len, &balanced, 11), balanced_fast);
+    }
+
+    var spread_boundary: [256]u32 = @splat(0);
+    @memset(spread_boundary[0..128], 1);
+    spread_boundary[127] = 16;
+    try std.testing.expect(unboundedDenseCodeLengths(spread_boundary.len, &spread_boundary, 11, 128) != null);
+    spread_boundary[127] = 17;
+    try std.testing.expect(unboundedDenseCodeLengths(spread_boundary.len, &spread_boundary, 11, 128) == null);
+
+    var skewed: [256]u32 = @splat(0);
+    var active_skewed: [128]u16 = undefined;
+    for (&active_skewed, 0..) |*symbol, index| {
+        symbol.* = @intCast(index);
+        skewed[index] = if (index < 96) 1 else @as(u32, 1) << @intCast(@min(index - 96, 30));
+    }
+    try std.testing.expect(unboundedDenseCodeLengthsWithSpreadPolicy(skewed.len, &skewed, 11, active_skewed.len, false) == null);
+    try std.testing.expectEqual(
+        backrefPackageMergeCodeLengths(skewed.len, &skewed, 11, active_skewed.len),
+        treeCodeLengthsKnownActive(skewed.len, &skewed, 11, &active_skewed),
+    );
 }
 
 test "package-merge Huffman lengths match small optimal costs" {

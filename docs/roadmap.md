@@ -9791,3 +9791,21 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   27-row Huffman gate reports dense known-active 128/256 speedups around
   `1.08x`/`1.11x` on the same CPU, while the 273-case libzstd 1.5.5 matrix has
   zero unsupported frames.
+  That isolated dense path now first builds an ordinary Huffman tree with two
+  sorted queues, returning its exact depths when the natural maximum is within
+  Zstd's 11-bit limit and falling back to the bucketed package-merge path
+  otherwise. A `max_frequency <= 16 * min_frequency` prefilter rejects the
+  measured high-spread failure family before sorting/building; the computed
+  depth remains the authoritative check for every admitted distribution. Both
+  dense helpers live in a dedicated object-format-aware text section, so adding
+  the linear builder does not reorder ordinary Zstd/DEFLATE code. The
+  65--256-active dispatch oracle, 128 balanced fast-path shapes, the exact 16/17
+  spread boundary, and a skewed 128-symbol natural-depth failure all compare
+  against package merge. Fifteen alternating fixed-CPU-30 end-to-end pairs
+  retained every encoded size and improved geometric-mean throughput by about
+  `1.044x`. Binary levels 1/3/9 improved `1.035x`/`1.025x`/`1.024x`, while the
+  129 KiB multi-block rows improved `1.302x`/`1.134x`/`1.065x`; every control
+  remained above `0.997x`. This supersedes the earlier rejected globally
+  visible selector: the prefilter and depth probe are now confined behind the
+  already profitable dense Zstd dispatch and cannot perturb the shared
+  small-alphabet call graph.
