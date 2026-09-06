@@ -42,14 +42,15 @@ The libbrotli-generated compatibility matrix now also includes 7,056 one-shot
 frames spanning four deterministic entropy shapes, seven payload sizes from one
 byte through 64 KiB, all qualities 0...11, generic/text/font modes, and window
 bits 10/12/16/18/20/22/24. Every frame decodes byte-exactly through Vort's
-public allocating decoder. This broad sweep complements the deeper flushed,
-metadata, context-tree, 256-block-type, large-header, and progressive-chunk
-fixtures; it strengthens decoder evidence without implying equivalent encoder
-quality or speed.
+public allocating decoder and through the byte-progressive decoder with
+17-byte input and 31-byte output chunks. This broad sweep complements the
+deeper flushed, metadata, context-tree, 256-block-type, large-header, and full
+chunk-matrix fixtures; it strengthens decoder evidence without implying
+equivalent encoder quality or speed.
 
-The next highest-value deliverable is broader byte-progressive decoding against
-upstream-produced multi-meta-block corpora, followed by the remaining general
-Brotli encoder features. Performance work should then resume on the profiled
+The next highest-value deliverable is broader real-corpus and cross-platform
+Brotli decoder evidence, followed by the remaining general Brotli encoder
+features and ratio work. Performance work should then resume on the profiled
 DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
 
 ## Milestone 0: repository and validation spine
@@ -9953,3 +9954,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   after function and module isolation, either controls still regressed or the
   target itself fell to `0.957x`. All implementations were removed rather than
   weakening ratio output or the established non-target floor.
+  A fresh fixed-CPU profile of the 1 MiB libbrotli quality-8 clustered decoder
+  put about 31% of cycles in the high-tree payload loop, 18.5% in distance
+  decode, 10.6% in copy/dictionary materialization, and 9.2% in generic bit
+  reads. The command distribution contains 11,928 zero-extra commands out of
+  16,818 total (70.9%), but a high-tree-only direct-length fast path improved
+  the isolated target only `1.021x` and the complete 13-row run only `1.002x`.
+  Forcing the full distance helper inline likewise reached only `1.005x`;
+  narrowing the two decoded lengths from `usize` to RFC-bounded `u32` reached
+  only `1.003x`. All three decoder candidates were removed. Distance profiling
+  also shows 14,527/16,818 commands use regular distance codes, dominated by
+  9--15 extra bits, confirming that future gains need a different bit-reader
+  strategy rather than more small branches around the existing helper.

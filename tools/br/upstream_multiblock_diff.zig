@@ -543,6 +543,7 @@ pub fn main(init: std.process.Init) !void {
     // cases above target deep structural boundaries; this broader matrix makes
     // sure ordinary encoder decisions between them remain accepted too.
     var broad_generated_cases: usize = 0;
+    var broad_progressive_cases: usize = 0;
     const broad_sizes = [_]usize{ 1, 7, 31, 257, 4096, 16 * 1024, 64 * 1024 };
     const broad_windows = [_]c_int{ 10, 12, 16, 18, 20, 22, 24 };
     for (0..4) |shape| {
@@ -577,7 +578,12 @@ pub fn main(init: std.process.Init) !void {
                             std.debug.print("broad mismatch shape={d} size={d} quality={d} mode={d} lgwin={d} encoded={d}\n", .{ shape, size, quality, mode, lgwin, encoded.len });
                             return error.SizeMismatch;
                         }
+                        decodeProgressChunks(init.gpa, encoded, payload, @intCast(lgwin), 17, 31) catch |err| {
+                            std.debug.print("broad progressive shape={d} size={d} quality={d} mode={d} lgwin={d} encoded={d}: {s}\n", .{ shape, size, quality, mode, lgwin, encoded.len, @errorName(err) });
+                            return err;
+                        };
                         broad_generated_cases += 1;
+                        broad_progressive_cases += 1;
                     }
                 }
             }
@@ -587,8 +593,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} broad_generated_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ cases_run, one_shot_cases, broad_generated_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} broad_generated_cases={d} broad_progressive_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ cases_run, one_shot_cases, broad_generated_cases, broad_progressive_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }
