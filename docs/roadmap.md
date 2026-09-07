@@ -10318,3 +10318,22 @@ coverage.
   also shows 14,527/16,818 commands use regular distance codes, dominated by
   9--15 extra bits, confirming that future gains need a different bit-reader
   strategy rather than more small branches around the existing helper.
+  The high-tree payload decoder now uses a dedicated 64-bit Brotli reservoir
+  modeled on the local upstream decoder's 7/6/4-byte refill policy. Header
+  parsing remains on the compact scalar reader; only a fully parsed high-tree
+  payload switches readers, and the logical bit cursor is synchronized back on
+  both success and error. Unlike the previously rejected generic buffered-reader
+  substitution, the dedicated reader makes staged-bit availability authoritative
+  after refill and advances lookup hits without repeating whole-stream bounds
+  calculations. Random mixed-width tests cover all starting bit alignments,
+  exact bit-length truncation, and 1--24-bit short tails. Direct Huffman oracles
+  cover eight-bit literal lookups, nine-bit command/distance lookups, ten-bit
+  fallback codes, non-byte-aligned starts, and truncated symbols. Twenty
+  alternating fixed-CPU-2 ReleaseFast pairs against the clean parent improve the
+  1 MiB `clustered_q8` median by `1.0461x` with 20/20 wins and identical
+  checksums. Across all 13 reference rows, every non-target median remains at
+  or above `0.9948x`; the format/size/checksum fields are unchanged. The formal
+  libbrotli 1.1.0 gate remains green, and the upstream differential now includes
+  64 systematically truncated high-tree prefixes in addition to its 100 format
+  cases, 7,056 broad one-shot cases, 7,056 progressive cases, and 1,401 chunk
+  matrix runs.

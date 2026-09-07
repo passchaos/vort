@@ -390,15 +390,15 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
         }
 
         /// Decode through a lookup previously installed by `buildTailLookup8`.
-        pub inline fn decodeValueTailLookup8(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+        pub inline fn decodeValueTailLookup8(self: *const Self, reader: anytype) Error!u16 {
             return self.decodeValueTailLookup(reader, 8);
         }
 
-        pub inline fn decodeValueTailLookup9(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+        pub inline fn decodeValueTailLookup9(self: *const Self, reader: anytype) Error!u16 {
             return self.decodeValueTailLookup(reader, 9);
         }
 
-        inline fn decodeValueTailLookup(self: *const Self, reader: *bitstream.BitReader, comptime lookup_bits: u4) Error!u16 {
+        inline fn decodeValueTailLookup(self: *const Self, reader: anytype, comptime lookup_bits: u4) Error!u16 {
             const lookup_len = 1 << lookup_bits;
             const lookup_bytes = lookup_len * @sizeOf(u16);
             const entry_count = (lookup_bytes + @sizeOf(Entry) - 1) / @sizeOf(Entry);
@@ -407,8 +407,8 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             const packed_entry = lookup[reader.peekBitsPadded(u16, lookup_bits)];
             if (packed_entry == 0) return self.decodeValue(reader);
             const bits: u4 = @truncate(packed_entry);
-            if (!reader.hasBits(bits)) return error.TruncatedFrame;
-            reader.advanceBitsAssumeAvailable(bits);
+            if (!hasDecodedBits(reader, bits)) return error.TruncatedFrame;
+            reader.advanceBitsStagedAssumeAvailable(bits);
             return (packed_entry >> 4) - 1;
         }
 

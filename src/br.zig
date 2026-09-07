@@ -30,6 +30,7 @@ const incremental_stored = @import("br/incremental/stored/decoder.zig");
 const incremental_stored_encoder = @import("br/incremental/stored/encoder.zig");
 const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
 const incremental_planned_encoder_tests = @import("br/incremental/planned_encoder_tests.zig");
+const fast_bit_reader = @import("br/fast_bit_reader.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
@@ -518,6 +519,7 @@ test {
     _ = incremental_rle_tests;
     _ = incremental_stored_tests;
     _ = incremental_planned_encoder_tests;
+    _ = fast_bit_reader;
     _ = pattern;
     _ = command_plan;
     _ = literal_context;
@@ -1233,12 +1235,12 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
             return self.single_symbol != null or self.table.canBuildTailLookup8();
         }
 
-        pub inline fn decodeTailLookup(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+        pub inline fn decodeTailLookup(self: *const Self, reader: anytype) Error!u16 {
             if (self.single_symbol) |symbol| return symbol;
             return self.table.decodeValueTailLookup8(reader);
         }
 
-        pub inline fn decodeTailLookup9(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+        pub inline fn decodeTailLookup9(self: *const Self, reader: anytype) Error!u16 {
             if (self.single_symbol) |symbol| return symbol;
             return self.table.decodeValueTailLookup9(reader);
         }
@@ -4885,7 +4887,7 @@ fn applyInverseMoveToFront(context_map: []u8) void {
     }
 }
 
-fn readInsertCopyLengths(symbol: u16, reader: *bitstream.BitReader) Error!InsertCopyLengths {
+fn readInsertCopyLengths(symbol: u16, reader: anytype) Error!InsertCopyLengths {
     if (symbol >= 704) return error.InvalidHuffmanCode;
     const entry = command_lut.entries[symbol];
     const insert_extra = if (entry.insert_extra_bits == 0) 0 else try reader.readBits(u32, entry.insert_extra_bits);
@@ -4962,9 +4964,11 @@ fn processLargeCompressedMetaBlock(
     if (header.literal_tree_count < clustered_literal_tree_threshold or !prepareLiteralTailLookups(&header))
         return processDecodedCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, &header);
     const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(&header);
+    var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
+    defer fast_reader.syncTo(reader);
     if (auxiliary_tail_lookups)
-        return processTailLookupCompressedPayload(true, reader, output, written, meta_block_end, last_distances, window_bits, &header);
-    return processTailLookupCompressedPayload(false, reader, output, written, meta_block_end, last_distances, window_bits, &header);
+        return processTailLookupCompressedPayload(true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, &header);
+    return processTailLookupCompressedPayload(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, &header);
 }
 
 const clustered_literal_tree_threshold: u16 = 16;
@@ -5039,7 +5043,7 @@ noinline fn processDecodedCompressedPayload(
 
 noinline fn processTailLookupCompressedPayload(
     comptime auxiliary_tail_lookups: bool,
-    reader: *bitstream.BitReader,
+    reader: anytype,
     output: []u8,
     written: *usize,
     meta_block_end: usize,
@@ -5049,15 +5053,15 @@ noinline fn processTailLookupCompressedPayload(
 ) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     while (written.* < meta_block_end) {
-        const command_symbol = if (auxiliary_tail_lookups)
+        const command_symbol = if (comptime auxiliary_tail_lookups)
             try readCommandSymbolTailLookup(header, reader)
         else
-            try readCommandSymbol(header, reader);
+            try readCommandSymbolAny(header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
         if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
-            try ensureLiteralBlock(header, reader);
+            try ensureLiteralBlockAny(header, reader);
             const previous = if (written.* == 0) 0 else output[written.* - 1];
             const second_previous = if (written.* < 2) 0 else output[written.* - 2];
             const context = literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
@@ -5071,7 +5075,7 @@ noinline fn processTailLookupCompressedPayload(
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
         if (written.* == meta_block_end) return;
-        const decoded_distance = if (auxiliary_tail_lookups)
+        const decoded_distance = if (comptime auxiliary_tail_lookups)
             try readMinimalDistanceTailLookup(header, reader, lengths, last_distances)
         else
             try readMinimalDistance(header, reader, lengths, last_distances);
@@ -7947,7 +7951,7 @@ fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitRea
     return readCommandSymbolAny(header, reader);
 }
 
-fn readCommandSymbolTailLookup(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!u16 {
+fn readCommandSymbolTailLookup(header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
     if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0)
         try switchBlockAny(max_command_block_types, &header.command_block, reader);
     if (header.command_block.current_type >= inline_command_tree_count) return error.UnsupportedBrotliFeature;
@@ -8043,7 +8047,7 @@ const DecodedBrotliDistance = struct { distance: usize, update_ring: bool };
 
 fn readMinimalDistance(
     header: *MinimalCompressedHeader,
-    reader: *bitstream.BitReader,
+    reader: anytype,
     lengths: InsertCopyLengths,
     last_distances: *[4]usize,
 ) Error!DecodedBrotliDistance {
@@ -8073,7 +8077,7 @@ fn readMinimalDistance(
 
 fn readMinimalDistanceTailLookup(
     header: *MinimalCompressedHeader,
-    reader: *bitstream.BitReader,
+    reader: anytype,
     lengths: InsertCopyLengths,
     last_distances: *[4]usize,
 ) Error!DecodedBrotliDistance {
@@ -8098,9 +8102,9 @@ fn readMinimalDistanceTailLookup(
         try readRegularDistance(header, reader, symbol), .update_ring = true };
 }
 
-fn ensureDistanceBlock(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!void {
+fn ensureDistanceBlock(header: *MinimalCompressedHeader, reader: anytype) Error!void {
     if (header.distance_block.block_type_count > 1 and header.distance_block.remaining == 0) {
-        try switchBlock(max_distance_block_types, &header.distance_block, reader);
+        try switchBlockAny(max_distance_block_types, &header.distance_block, reader);
     }
 }
 
@@ -8109,7 +8113,7 @@ fn distanceContext(copy_len: usize) usize {
     return 3;
 }
 
-fn readRegularDistance(header: *const MinimalCompressedHeader, reader: *bitstream.BitReader, symbol: u16) Error!usize {
+fn readRegularDistance(header: *const MinimalCompressedHeader, reader: anytype, symbol: u16) Error!usize {
     const xcode = @as(usize, symbol) - @as(usize, header.ndirect) - 16;
     const npostfix: usize = header.npostfix;
     const ndistbits_value = 1 + (xcode >> @intCast(npostfix + 1));
@@ -17524,6 +17528,53 @@ test "br auxiliary tail lookup preparation is atomic and decodes both families" 
     var distance_reader = bitstream.BitReader.init(&.{ 1, 0 });
     try std.testing.expectEqual(@as(u16, 0), try header.insert_copy_trees[0].decodeTailLookup9(&command_reader));
     try std.testing.expectEqual(@as(u16, 1), try header.distance_trees[0].decodeTailLookup9(&distance_reader));
+}
+
+test "br fast bit reader preserves tail lookup symbols and positions" {
+    // A dense literal table deliberately cannot host the in-tail lookup, so
+    // use the same sparse high-tree shape exercised by production.
+    var literal_frequencies: [256]u32 = @splat(0);
+    for (0..64) |symbol| literal_frequencies[symbol] = @intCast(65 - symbol);
+    const sparse_literal_lengths = huffman.treeCodeLengths(256, &literal_frequencies, huffman.max_code_bits);
+    var saw_long_literal = false;
+    for (sparse_literal_lengths) |bits| saw_long_literal = saw_long_literal or bits > 8;
+    try std.testing.expect(saw_long_literal);
+    var literal_table = try huffman.HuffmanTable(256).init(&sparse_literal_lengths);
+    try std.testing.expect(literal_table.buildTailLookup8());
+    const literal_encoder = try huffman.HuffmanTable(256).Encoder.init(&sparse_literal_lengths);
+
+    const auxiliary_lengths = [_]u4{8} ** 192 ++ [_]u4{9} ** 64 ++ [_]u4{10} ** 128 ++ [_]u4{0} ** 320;
+    var auxiliary_table = try huffman.HuffmanTable(704).init(&auxiliary_lengths);
+    try std.testing.expect(auxiliary_table.buildTailLookup9());
+    const auxiliary_encoder = try huffman.HuffmanTable(704).Encoder.init(&auxiliary_lengths);
+
+    var writer: bitstream.BitWriter = .{};
+    defer writer.deinit(std.testing.allocator);
+    try writer.writeBits(std.testing.allocator, 0b101, 3);
+    for (0..64) |symbol| try literal_encoder.writeSymbol(&writer, std.testing.allocator, symbol);
+    for (0..384) |symbol| try auxiliary_encoder.writeSymbol(&writer, std.testing.allocator, symbol);
+    const encoded = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+
+    var scalar = bitstream.BitReader.init(encoded);
+    try scalar.skipBits(3);
+    var fast = fast_bit_reader.Reader.initFrom(scalar);
+    for (0..64) |_|
+        try std.testing.expectEqual(try literal_table.decodeValueTailLookup8(&scalar), try literal_table.decodeValueTailLookup8(&fast));
+    for (0..384) |_|
+        try std.testing.expectEqual(try auxiliary_table.decodeValueTailLookup9(&scalar), try auxiliary_table.decodeValueTailLookup9(&fast));
+    try std.testing.expectEqual(scalar.bitPosition(), fast.bitPosition());
+    fast.syncTo(&scalar);
+    try std.testing.expectEqual(fast.bitPosition(), scalar.bitPosition());
+
+    const short = try huffman.HuffmanTable(704).init(&([_]u4{9} ++ [_]u4{0} ** 703));
+    var short_lookup = short;
+    try std.testing.expect(short_lookup.buildTailLookup9());
+    var short_scalar = bitstream.BitReader.initBitLength(&.{0}, 8);
+    var short_fast = fast_bit_reader.Reader.initFrom(short_scalar);
+    try std.testing.expectError(error.TruncatedFrame, short_lookup.decodeValueTailLookup9(&short_scalar));
+    try std.testing.expectError(error.TruncatedFrame, short_lookup.decodeValueTailLookup9(&short_fast));
+    try std.testing.expectEqual(short_scalar.bitPosition(), short_fast.bitPosition());
 }
 
 test "br zero context map reader accepts plain and RLE all-zero maps" {
