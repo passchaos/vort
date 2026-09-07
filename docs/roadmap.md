@@ -9792,6 +9792,12 @@ coverage.
   `1.052x`/`1.034x`/`1.007x`, and multi-block by
   `1.007x`/`1.013x`/`1.017x`. The weakest row was JSON level 9 at `0.9987x`.
   The formal encode gate and 273-case bidirectional libzstd 1.5.5 probe pass.
+  Replacing the rolling-history index's 1 MiB sentinel clear with one byte of
+  valid length per four-entry bucket was rejected. Focused tests proved that
+  reset hides stale entries and reinsertion exposes only initialized positions,
+  but the extra length load/store on every history insertion and query outweighed
+  the smaller 32 KiB clear: twelve fixed-CPU-2 multi-block pairs regressed all
+  three levels by roughly 1--2%. The sentinel layout remains.
   Caching one finalized sequence-literal Huffman plan in `LargeSequenceScratch`
   by its exact 256-entry frequency vector was rejected as mixed and below the
   retention threshold. A focused oracle covered first-use misses, equal-frequency
