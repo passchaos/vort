@@ -9934,6 +9934,21 @@ coverage.
   dispatch form regressed at least one adjacent large FSE path by about 1--7%;
   it was also fully removed rather than trading general throughput for the
   narrow win.
+- Rejected replacing Zig std's Zstd Huffman canonical-tree sort with a local
+  rank-count/rank-start builder modeled on upstream `HUF_readDTableX1_wksp`.
+  The prototype decoded both direct and FSE-compressed weight headers, matched
+  Zig std's active nodes field-for-field, and passed all 510 focused Zstd tests.
+  Fixed-CPU counters showed the intended reductions (`numbered_json` about
+  31% fewer instructions, `ascii64k` about 2%, and `large_json` about 2.7%),
+  with wall-clock wins around 25--40%, 1--3%, and 5--8% respectively. However,
+  every tested placement (inline, noinline, a dedicated object-format section,
+  and 32-byte or 4 KiB alignment of the existing FSE loops) moved the unchanged
+  raw-literal `huffman80k` path to a consistently worse front-end layout,
+  regressing it by roughly 5--9%; some layouts also regressed `binary_mixed`.
+  The parser, module, tests, and alignment changes were fully removed. Future
+  tree-build work must preserve the established FSE loop addresses/call graph
+  or move the whole decoder into a deliberately laid-out unit before retrying
+  the rank-count algorithm.
   That isolated dense path now first builds an ordinary Huffman tree with two
   sorted queues, returning its exact depths when the natural maximum is within
   Zstd's 11-bit limit and falling back to the bucketed package-merge path
