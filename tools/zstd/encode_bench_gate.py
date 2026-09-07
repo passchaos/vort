@@ -6,7 +6,7 @@ from pathlib import Path
 
 COLUMNS = ["case", "reference_version", "level", "input_bytes", "vort_bytes", "reference_bytes", "size_over_reference", "iterations", "rounds", "vort_ns", "reference_ns", "vort_mib_s", "reference_mib_s", "vort_over_reference", "checksum"]
 CASES = {"text", "json", "binary", "level3_tradeoff", "multiblock"}
-LEVELS = {1, 3, 9}
+LEVELS = {1, 3, 9, 22}
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -62,6 +62,7 @@ def main() -> int:
     # over libzstd 1.5.5 on this locked corpus. Keep lower-level ceilings
     # independent because they intentionally omit that ratio-oriented parser.
     assert int(json_rows[9]["vort_bytes"]) <= 640, json_rows
+    assert int(json_rows[22]["vort_bytes"]) <= 640, json_rows
     # A one-block result below 1/32 of this low-alphabet corpus is decisive at
     # levels 3 and 9. Keep both early returns visible rather than allowing them
     # to regress to the former full adaptive split search. Level 1 is the
@@ -73,10 +74,12 @@ def main() -> int:
     # Selecting compressed Huffman weights for low-byte alphabets closes all
     # but one byte of the repetitive-text gap to the locked libzstd row.
     assert int(text_rows[9]["vort_bytes"]) <= 80, text_rows
+    assert int(text_rows[22]["vort_bytes"]) <= 80, text_rows
     binary_rows = {int(row["level"]): row for row in rows if row["case"] == "binary"}
     assert int(binary_rows[1]["vort_bytes"]) <= 8_607, binary_rows
     assert int(binary_rows[3]["vort_bytes"]) <= 8_607, binary_rows
     assert int(binary_rows[9]["vort_bytes"]) <= 8_607, binary_rows
+    assert int(binary_rows[22]["vort_bytes"]) <= 8_607, binary_rows
     # Wide-alphabet level 3 returns its already-computed primary frame instead
     # of evaluating the adaptive split ladder. Keep the former roughly 5.8x
     # level-1 latency cliff from returning while leaving ample CI headroom.
@@ -97,6 +100,7 @@ def main() -> int:
     # ratio, while level 9 retains exhaustive arbitration and its smaller wire.
     assert int(tradeoff_rows[3]["vort_bytes"]) == 2_038, tradeoff_rows
     assert int(tradeoff_rows[9]["vort_bytes"]) == 2_037, tradeoff_rows
+    assert int(tradeoff_rows[22]["vort_bytes"]) == 2_037, tradeoff_rows
     assert int(tradeoff_rows[3]["vort_ns"]) * 3 < int(tradeoff_rows[9]["vort_ns"]), tradeoff_rows
     multiblock_rows = {int(row["level"]): row for row in rows if row["case"] == "multiblock"}
     # Cross-block sequence-table reuse removes repeated FSE descriptions while
@@ -104,6 +108,8 @@ def main() -> int:
     assert int(multiblock_rows[1]["vort_bytes"]) == 27_363, multiblock_rows
     assert int(multiblock_rows[3]["vort_bytes"]) == 27_517, multiblock_rows
     assert int(multiblock_rows[9]["vort_bytes"]) == 27_363, multiblock_rows
+    assert int(multiblock_rows[22]["vort_bytes"]) == 26_679, multiblock_rows
+    assert int(multiblock_rows[22]["vort_bytes"]) < int(multiblock_rows[9]["vort_bytes"]), multiblock_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 

@@ -9863,6 +9863,15 @@ coverage.
   full-matrix rounds against the 2 KiB preflight improve the geometric mean by
   `1.022x`; level-1 multi-block improves `1.304x` and shrinks from 27,863 to
   27,363 bytes, while the weakest unchanged control remains about `0.993x`.
+  Highest ratio levels 19--22 now evaluate a 32 KiB preflight beside the prior
+  8 KiB larger split and keep the shorter frame. A 8/12/16/24/32 KiB sweep
+  places 32 KiB on a ratio-oriented Pareto point: the level-22 multi-block frame
+  shrinks from 27,363 to 26,679 bytes (from `1.0687x` to `1.0420x` libzstd
+  1.5.5 size) while encoding in about 16.2 ms versus libzstd's 23.8--26.7 ms on
+  the fixed CPU. Twelve level-22 A/B rounds leave text/JSON/binary/tradeoff
+  wires unchanged; the multi-block row deliberately trades roughly 4.1x of
+  Vort speed for 684 bytes. The formal encode matrix now includes level 22,
+  expanding from 15 to 20 rows and locking all five ratio-level outputs.
   Replacing the rolling-history matcher's scalar extension with the shared
   32-byte-vector/8-byte-tail shape was rejected. An exhaustive mismatch and
   maximum-length boundary test preserved exact lengths, but twelve fixed-CPU-2

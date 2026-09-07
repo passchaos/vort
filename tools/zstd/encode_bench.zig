@@ -60,7 +60,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "level3_tradeoff", .payload = level3_tradeoff },
         .{ .name = "multiblock", .payload = multiblock },
     };
-    const levels = [_]c_int{ 1, 3, 9 };
+    const levels = [_]c_int{ 1, 3, 9, 22 };
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();

@@ -5978,18 +5978,37 @@ noinline fn probeDecisiveLargerAdaptiveFrame(
     if (level <= 0 or preferSerialMixedSearch(input) or !hasQuarterTailHistoryEvidence(input)) return null;
     const larger_block_size = preflightAdaptiveBlockSize(level);
     if (larger_block_size >= input.len or larger_block_size == primary_options.block_size_max) return null;
-    const larger = try encodeNativeFrameWithOptionsAlloc(
+    var larger = try encodeNativeFrameWithOptionsAlloc(
         allocator,
         input,
         adaptiveLevelCandidateOptions(primary_options, larger_block_size),
     );
+    if (level >= 19) {
+        const fallback_block_size = adaptiveLevelBlockSizes(level)[1];
+        if (fallback_block_size < input.len and fallback_block_size != larger_block_size) {
+            const fallback = try encodeNativeFrameWithOptionsAlloc(
+                allocator,
+                input,
+                adaptiveLevelCandidateOptions(primary_options, fallback_block_size),
+            );
+            if (fallback.frame.len < larger.frame.len) {
+                allocator.free(larger.frame);
+                larger = fallback;
+            } else allocator.free(fallback.frame);
+        }
+    }
     if (larger.frame.len <= input.len / 4) return larger;
     allocator.free(larger.frame);
     return null;
 }
 
 fn preflightAdaptiveBlockSize(level: c_int) usize {
-    return if (level <= 2) 8 * 1024 else adaptiveLevelBlockSizes(level)[1];
+    return if (level <= 2)
+        8 * 1024
+    else if (level >= 19)
+        32 * 1024
+    else
+        adaptiveLevelBlockSizes(level)[1];
 }
 
 fn hasQuarterTailHistoryEvidence(input: []const u8) bool {
@@ -22009,18 +22028,22 @@ test "zstd decisive larger adaptive candidate matches exhaustive generated arbit
                     adaptiveLevelCandidateOptions(policy.primary_options, preflightAdaptiveBlockSize(level)),
                 );
                 defer std.testing.allocator.free(preflight.frame);
+                const preflight_frame = if (level >= 19 and larger.frame.len < preflight.frame.len)
+                    larger.frame
+                else
+                    preflight.frame;
                 if (largerAdaptiveCandidateIsDecisive(payload, larger.frame.len, primary.frame.len)) {
                     decisive_cases += 1;
                     try std.testing.expect(larger.frame.len <= smaller.frame.len);
                 }
                 const preflight_hit = !preferSerialMixedSearch(payload) and
                     hasQuarterTailHistoryEvidence(payload) and
-                    preflight.frame.len <= payload.len / 4;
+                    preflight_frame.len <= payload.len / 4;
                 if (preflight_hit) {
                     preflight_cases += 1;
-                    try std.testing.expect(preflight.frame.len <= primary.frame.len);
-                    try std.testing.expect(preflight.frame.len <= larger.frame.len);
-                    try std.testing.expect(preflight.frame.len <= smaller.frame.len);
+                    try std.testing.expect(preflight_frame.len <= primary.frame.len);
+                    try std.testing.expect(preflight_frame.len <= larger.frame.len);
+                    try std.testing.expect(preflight_frame.len <= smaller.frame.len);
                 }
 
                 const fast = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, level, .{});
@@ -22028,7 +22051,7 @@ test "zstd decisive larger adaptive candidate matches exhaustive generated arbit
                 const exhaustive = try encodeFrameWithLevelAndOptionsAllocImpl(false, std.testing.allocator, payload, level, .{});
                 defer std.testing.allocator.free(exhaustive);
                 if (preflight_hit)
-                    try std.testing.expectEqualSlices(u8, preflight.frame, fast)
+                    try std.testing.expectEqualSlices(u8, preflight_frame, fast)
                 else
                     try std.testing.expectEqualSlices(u8, exhaustive, fast);
             }
