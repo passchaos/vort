@@ -9905,6 +9905,35 @@ coverage.
   27-row Huffman gate reports dense known-active 128/256 speedups around
   `1.08x`/`1.11x` on the same CPU, while the 273-case libzstd 1.5.5 matrix has
   zero unsupported frames.
+- Optimized the shared Zstd Huffman lookup builder for valid complete canonical
+  trees. The new caller-owned `buildComplete` path proves that canonical prefix
+  ranges are adjacent and cover all 2,048 table entries while writing them, so
+  the large literal-only decoder no longer clears its 4 KiB lookup before
+  immediately overwriting every slot. The builder remains out of line so the
+  large decode loop does not absorb its uncommon validation branches. Nine
+  completed alternating fixed-CPU-2 same-process pairs on the 64 KiB
+  printable-ASCII frame reduced the median Vort decode time from about 159.1 ms
+  to 158.5 ms per 20,000 decodes (about 0.4%; 9/9 wins); hardware counters on
+  the final path showed roughly 1.5% fewer instructions, 1.6% fewer branches,
+  and 1.6% fewer cycles. Applying the same builder to sequence-interleaved
+  literals also removes about 13% of instructions from `numbered_json` and 2%
+  from `large_json`, leaving the raw-literal FSE control rows essentially
+  unchanged. A final fixed-CPU counter pass after the safety fallback measured
+  per-row instruction ratios of `1.152/1.000/1.015/1.021/1.000x`; the
+  five-row geometric mean improves by about 3.6%,
+  clearing the aggregate retention threshold even though the isolated
+  `ascii64k` wall-clock gain is modest. The libzstd 1.5.5 reference floor for `ascii64k` is raised from
+  0.50x to 0.60x. If completeness cannot be proven, decoding falls back to the
+  original initialized table builder. Focused complete, mixed-width, incomplete,
+  and overlapping prefix-table tests accompany the change, and the 273-case
+  libzstd matrix plus all six upstream `decodecorpus` campaigns remain
+  byte-exact (5,400 frames, all 64 LL/OF/ML mode tuples). An inlined variant
+  regressed `huffman80k` by about 14% and was removed. A terminal
+  LL=Predefined/OF=FSE/ML=Predefined specialization
+  improved `numbered_json` by roughly 40--70%, but every tested placement or
+  dispatch form regressed at least one adjacent large FSE path by about 1--7%;
+  it was also fully removed rather than trading general throughput for the
+  narrow win.
   That isolated dense path now first builds an ordinary Huffman tree with two
   sorted queues, returning its exact depths when the natural maximum is within
   Zstd's 11-bit limit and falling back to the bucketed package-merge path

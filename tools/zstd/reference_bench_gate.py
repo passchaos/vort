@@ -90,7 +90,7 @@ def main() -> int:
         "tiny": 0.10, "text": 0.60, "structured": 0.25,
         "repetitive": 0.28, "incompressible": 5.0, "rle64k": 0.75,
         "raw256k": 0.85,
-        "numbered_json": 0.24, "huffman80k": 0.44, "ascii64k": 0.50,
+        "numbered_json": 0.24, "huffman80k": 0.44, "ascii64k": 0.60,
         "large_text": 0.85, "large_json": 0.32, "binary_mixed": 0.36,
     }
     for name, floor in floors.items():

@@ -7148,7 +7148,9 @@ fn copyHuffmanLiteralsFromSection(
     const end = std.math.add(usize, literal_offset, dest.len) catch return error.IntegerOverflow;
     var decoded_index: usize = 0;
     var output_index: usize = 0;
-    const lookup = HuffmanLiteralLookup.build(&huffman_tree);
+    var lookup: HuffmanLiteralLookup = undefined;
+    if (!lookup.buildComplete(&huffman_tree))
+        lookup = HuffmanLiteralLookup.build(&huffman_tree);
     if (section.sequence_count == 0 and
         section.regenerated_size >= 16 * 1024 and
         section.huffman_streams == .four and
@@ -7266,10 +7268,13 @@ const HuffmanLiteralDecodeState = struct {
 fn initHuffmanLiteralDecodeState(block: []const u8, section: LiteralOnlySection) Error!?HuffmanLiteralDecodeState {
     if (section.kind != .compressed and section.kind != .treeless) return null;
     const tree = section.huffman_tree orelse return error.CorruptFrame;
+    var lookup: HuffmanLiteralLookup = undefined;
+    if (!lookup.buildComplete(&tree))
+        lookup = HuffmanLiteralLookup.build(&tree);
     return .{
         .cursor = try initHuffmanLiteralCursor(block, section),
         .tree = tree,
-        .lookup = HuffmanLiteralLookup.build(&tree),
+        .lookup = lookup,
     };
 }
 
