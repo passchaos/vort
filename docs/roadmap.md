@@ -10257,6 +10257,18 @@ coverage.
   after function and module isolation, either controls still regressed or the
   target itself fell to `0.957x`. All implementations were removed rather than
   weakening ratio output or the established non-target floor.
+  Sharing one prebuilt three-byte predecessor graph between the ratio lazy and
+  optimal candidates was also rejected. An exact token/stat oracle covered
+  random, structured, and repetitive inputs, three parser configurations, and
+  lengths 31, 1,024, 4,096, 32,768, and 32,769; it also exposed that the
+  existing small lazy parser intentionally uses 4,096 hash buckets while the
+  optimal parser normally uses 32,768. The shared 4,096-bucket implementation
+  kept the primary 32 KiB `src/br.zig` wire at 6,307 bytes and passed the
+  complete eight-row encode gate, but fifteen alternating fixed-CPU-2 pairs of
+  30 encodes measured 244.194 ms for the existing path versus 245.169 ms for
+  the shared path (`0.9961x`). The read-only generic chain and shared-scratch
+  plumbing erased the avoided index build, so all production and experimental
+  code was removed.
   A fresh fixed-CPU profile of the 1 MiB libbrotli quality-8 clustered decoder
   put about 31% of cycles in the high-tree payload loop, 18.5% in distance
   decode, 10.6% in copy/dictionary materialization, and 9.2% in generic bit
