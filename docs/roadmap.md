@@ -9777,6 +9777,11 @@ coverage.
   `0.937x`, several other controls were negative, and the 15-row geometric mean
   was `0.985x`. The narrower helper was removed; direct history emission retains
   the existing planner/emitter layout.
+  Moving the same prefix reuse into a `noinline` history-only helper removed
+  those severe layout losses and improved multi-block levels 1/3/9 by about
+  `1.023x`/`1.020x`/`1.027x`. It was still rejected: nine full-matrix rounds
+  reached only `1.0076x` geometrically, below the 1% retention bar, while binary
+  levels 3/9 remained mildly negative at about `0.994x`/`0.996x`.
   Caching one finalized sequence-literal Huffman plan in `LargeSequenceScratch`
   by its exact 256-entry frequency vector was rejected as mixed and below the
   retention threshold. A focused oracle covered first-use misses, equal-frequency
