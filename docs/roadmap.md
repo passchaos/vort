@@ -10345,3 +10345,8 @@ coverage.
   code-layout regressions in non-target text/structured/structured-q4 rows
   around `0.979x`--`0.982x`. The generic lookup call and its packed-tree
   fallback therefore remain in production.
+  Forcing the dedicated reader's checked `readBits` wrapper inline was rejected
+  independently. It improved `clustered_q8` by `1.0167x` with 15/15 wins, but
+  expanded the high-tree loop enough to regress ordinary text, structured, and
+  repetitive rows to roughly `0.978x`--`0.982x`. The smaller out-of-line checked
+  reader retains better whole-decoder code layout.
