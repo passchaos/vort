@@ -9770,6 +9770,13 @@ coverage.
   by about `1.064x`. The 129 KiB multi-block levels 1/3/9 improved by about
   `1.102x`/`1.062x`/`1.048x`, with all 27 target pairs winning; the formal
   encode gate and all 273 bidirectional libzstd 1.5.5 compatibility cases pass.
+  Reusing one materialized literal-section prefix inside only that direct
+  history path was rejected despite improving the three multi-block rows by
+  about `1.018x`/`1.016x`/`1.018x`. Nine alternating fixed-CPU-2 full-matrix
+  runs exposed release-layout regressions: binary levels 3/9 fell to about
+  `0.937x`, several other controls were negative, and the 15-row geometric mean
+  was `0.985x`. The narrower helper was removed; direct history emission retains
+  the existing planner/emitter layout.
   Caching one finalized sequence-literal Huffman plan in `LargeSequenceScratch`
   by its exact 256-entry frequency vector was rejected as mixed and below the
   retention threshold. A focused oracle covered first-use misses, equal-frequency
