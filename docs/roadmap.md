@@ -9831,6 +9831,27 @@ coverage.
   improved multi-block levels 1/3/9 by `2.005x`/`1.289x`/`1.248x` with 36/36
   target wins; the weakest control was about `0.992x`. The level-schedule gate,
   encode gate, and all 273 bidirectional libzstd 1.5.5 cases pass.
+  The same larger adaptive candidate is now evaluated as an out-of-line
+  preflight before primary/split worker launch on inputs above the 128 KiB
+  primary block size. Wide-alphabet frames whose larger split is already at
+  most one quarter of the source return it directly; other shapes fall through
+  to the unchanged complete scheduler. The 64-case, eight-level oracle now
+  explicitly verifies every preflight hit against both primary and smallest
+  split as well as comparing the final production/exhaustive bytes. Twelve
+  alternating fixed-CPU-2 full-matrix runs retain every size/checksum and
+  improve the 180-pair geometric mean by about `1.257x`; multi-block levels
+  1/3/9 improve by `1.452x`/`4.359x`/`4.710x` with 36/36 wins, while the
+  weakest control remains about `0.993x`. The out-of-line entry placement is
+  intentional: placing the same preflight inside the large scheduler regressed
+  short text controls by 3--5%.
+  The preflight is additionally gated by direct 64-byte evidence that the final
+  quarter starts with content already present earlier in the input. Without
+  that screen, a 129 KiB wide/no-copy control missed the 1/4 return threshold
+  and redundantly rebuilt the larger split, regressing level 1 from about 44 ms
+  to 66 ms. Twelve alternating fixed-CPU-2 pairs with the retained evidence
+  check keep that miss control near 39.1 ms on both sides, while the copied-tail
+  target still improves from about 6.7 ms to 4.6 ms (`~1.46x`). A focused test
+  pins copied, random, and short-input classifier behavior.
   Replacing the rolling-history matcher's scalar extension with the shared
   32-byte-vector/8-byte-tail shape was rejected. An exhaustive mismatch and
   maximum-length boundary test preserved exact lengths, but twelve fixed-CPU-2

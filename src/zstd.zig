@@ -5559,6 +5559,9 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     level: c_int,
     options: FrameOptions,
 ) Error![]u8 {
+    if (input.len > std.compress.zstd.block_size_max)
+        if (try probeDecisiveLargerAdaptiveFrame(allocator, input, level, options)) |larger|
+            return larger.frame;
     return try encodeFrameWithLevelAndOptionsAllocImpl(true, allocator, input, level, options);
 }
 
@@ -5963,6 +5966,34 @@ fn adaptiveCandidateCanTriggerDeferred(candidate_len: usize, best_len: usize) bo
 noinline fn largerAdaptiveCandidateIsDecisive(input: []const u8, larger_len: usize, primary_len: usize) bool {
     return !preferSerialMixedSearch(input) and
         larger_len <= primary_len - primary_len / 8;
+}
+
+noinline fn probeDecisiveLargerAdaptiveFrame(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    level: c_int,
+    options: FrameOptions,
+) Error!?NativeFrameEncodeResult {
+    const primary_options = try nativeFrameOptionsForLevel(level, options);
+    if (level <= 0 or preferSerialMixedSearch(input) or !hasQuarterTailHistoryEvidence(input)) return null;
+    const larger_block_size = adaptiveLevelBlockSizes(level)[1];
+    if (larger_block_size >= input.len or larger_block_size == primary_options.block_size_max) return null;
+    const larger = try encodeNativeFrameWithOptionsAlloc(
+        allocator,
+        input,
+        adaptiveLevelCandidateOptions(primary_options, larger_block_size),
+    );
+    if (larger.frame.len <= input.len / 4) return larger;
+    allocator.free(larger.frame);
+    return null;
+}
+
+fn hasQuarterTailHistoryEvidence(input: []const u8) bool {
+    if (input.len < 256) return false;
+    const tail_start = input.len - input.len / 4;
+    const probe_len: usize = 64;
+    if (tail_start + probe_len > input.len) return false;
+    return std.mem.indexOf(u8, input[0..tail_start], input[tail_start..][0..probe_len]) != null;
 }
 
 fn adaptiveLevelCandidateOptions(primary: NativeFrameOptions, block_size: usize) NativeFrameOptions {
@@ -21921,6 +21952,7 @@ test "zstd speed levels overlap multiblock primary and adaptive candidates" {
 
 test "zstd decisive larger adaptive candidate matches exhaustive generated arbitration" {
     var decisive_cases: usize = 0;
+    var preflight_cases: usize = 0;
     const levels = [_]c_int{ 1, 2, 3, 4, 5, 6, 9, 22 };
     for (levels) |level| {
         for ([_]usize{ 129 * 1024, 192 * 1024 }) |input_len| {
@@ -21960,8 +21992,16 @@ test "zstd decisive larger adaptive candidate matches exhaustive generated arbit
                     decisive_cases += 1;
                     try std.testing.expect(larger.frame.len <= smaller.frame.len);
                 }
+                if (!preferSerialMixedSearch(payload) and
+                    hasQuarterTailHistoryEvidence(payload) and
+                    larger.frame.len <= payload.len / 4)
+                {
+                    preflight_cases += 1;
+                    try std.testing.expect(larger.frame.len <= primary.frame.len);
+                    try std.testing.expect(larger.frame.len <= smaller.frame.len);
+                }
 
-                const fast = try encodeFrameWithLevelAndOptionsAllocImpl(true, std.testing.allocator, payload, level, .{});
+                const fast = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, level, .{});
                 defer std.testing.allocator.free(fast);
                 const exhaustive = try encodeFrameWithLevelAndOptionsAllocImpl(false, std.testing.allocator, payload, level, .{});
                 defer std.testing.allocator.free(exhaustive);
@@ -21970,6 +22010,21 @@ test "zstd decisive larger adaptive candidate matches exhaustive generated arbit
         }
     }
     try std.testing.expect(decisive_cases != 0);
+    try std.testing.expect(preflight_cases != 0);
+}
+
+test "zstd larger adaptive preflight requires quarter-tail history evidence" {
+    var payload: [4096]u8 = undefined;
+    var state: u32 = 0x6a09_e667;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    try std.testing.expect(!hasQuarterTailHistoryEvidence(&payload));
+    const copy_len = payload.len / 4;
+    @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+    try std.testing.expect(hasQuarterTailHistoryEvidence(&payload));
+    try std.testing.expect(!hasQuarterTailHistoryEvidence(payload[0..255]));
 }
 
 test "zstd overlapping level candidates release initial allocation failures" {
