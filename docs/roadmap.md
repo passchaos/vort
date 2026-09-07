@@ -10355,3 +10355,7 @@ coverage.
   13-row matrix put structured and structured-q4 controls near
   `0.977x`--`0.979x`. Keeping refill/peek out of line is therefore the better
   whole-decoder tradeoff despite its visible profile entry.
+  Marking the common inline-literal-tree branch as likely was rejected as well.
+  It improved `clustered_q8` by `1.0195x` with 15/15 wins, but structured
+  control decode fell to `0.9862x`; production keeps the compiler's existing
+  branch layout.
