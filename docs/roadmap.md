@@ -9798,6 +9798,11 @@ coverage.
   but the extra length load/store on every history insertion and query outweighed
   the smaller 32 KiB clear: twelve fixed-CPU-2 multi-block pairs regressed all
   three levels by roughly 1--2%. The sentinel layout remains.
+  Forcing the large frame-state sequence replacement helper out of line was
+  also rejected. Nine fixed-CPU-2 full-matrix rounds were byte-identical and
+  had no meaningful control regression, but improved only `1.0029x`
+  geometrically; the multi-block levels measured `1.002x`/`0.998x`/`1.002x`.
+  The compiler's existing inlining decision remains.
   Caching one finalized sequence-literal Huffman plan in `LargeSequenceScratch`
   by its exact 256-entry frequency vector was rejected as mixed and below the
   retention threshold. A focused oracle covered first-use misses, equal-frequency
