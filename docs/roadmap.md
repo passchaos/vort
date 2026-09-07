@@ -9818,6 +9818,12 @@ coverage.
   `3.605x`/`2.414x`/`2.310x`, all 36 target pairs win, and the weakest control
   is about `0.995x`. Incremental and dictionary-backed paths retain exhaustive
   arbitration.
+  A single-sequence `Repeat_Mode` specialization was also rejected. It replaced
+  the generic viability matrix with a linear lowest-state scan and matched
+  predefined/compressed-table state selection exactly, but twelve fixed-CPU-2
+  full-matrix rounds reached only `0.9982x` geometrically; binary level 9 fell
+  to `0.9896x` and all three multi-block rows were neutral-to-negative. The
+  generic planner remains intact.
   Replacing the rolling-history index's 1 MiB sentinel clear with one byte of
   valid length per four-entry bucket was rejected. Focused tests proved that
   reset hides stale entries and reinsertion exposes only initialized positions,
