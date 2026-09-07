@@ -101,7 +101,7 @@ def main() -> int:
     multiblock_rows = {int(row["level"]): row for row in rows if row["case"] == "multiblock"}
     # Cross-block sequence-table reuse removes repeated FSE descriptions while
     # preserving exact candidate arbitration at every level.
-    assert int(multiblock_rows[1]["vort_bytes"]) == 27_863, multiblock_rows
+    assert int(multiblock_rows[1]["vort_bytes"]) == 27_363, multiblock_rows
     assert int(multiblock_rows[3]["vort_bytes"]) == 27_517, multiblock_rows
     assert int(multiblock_rows[9]["vort_bytes"]) == 27_363, multiblock_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")

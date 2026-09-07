@@ -9852,6 +9852,17 @@ coverage.
   check keep that miss control near 39.1 ms on both sides, while the copied-tail
   target still improves from about 6.7 ms to 4.6 ms (`~1.46x`). A focused test
   pins copied, random, and short-input classifier behavior.
+  For evidence-qualified level-1/2 frames, the preflight now evaluates an 8 KiB
+  block size instead of reusing the ordinary 2 KiB larger split. A direct
+  1/2/4/8/16/128 KiB sweep found 8 KiB to be the local speed/ratio optimum on
+  the retained 129 KiB shape: 27,363 bytes in about 4.1 ms, versus 27,863 bytes
+  in 5.2 ms at 2 KiB; 16 KiB reached 27,013 bytes but cost about 11.9 ms. The
+  eight-level oracle treats this preflight as an explicit fourth candidate and
+  requires every hit to be no larger than primary and both legacy splits; miss
+  cases still match exhaustive output byte-for-byte. Twelve fixed-CPU-2
+  full-matrix rounds against the 2 KiB preflight improve the geometric mean by
+  `1.022x`; level-1 multi-block improves `1.304x` and shrinks from 27,863 to
+  27,363 bytes, while the weakest unchanged control remains about `0.993x`.
   Replacing the rolling-history matcher's scalar extension with the shared
   32-byte-vector/8-byte-tail shape was rejected. An exhaustive mismatch and
   maximum-length boundary test preserved exact lengths, but twelve fixed-CPU-2

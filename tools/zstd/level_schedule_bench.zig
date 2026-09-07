@@ -60,6 +60,17 @@ fn encodeSerial(allocator: std.mem.Allocator, input: []const u8, level: c_int) !
     const policy = try vort.zstd.nativeEncodeLevelDiagnostics(level, .{});
     var best = try vort.zstd.encodeNativeFrameWithOptionsAlloc(allocator, input, policy.primary_options);
     errdefer allocator.free(best.frame);
+    if (level <= 2) {
+        var preflight_options = policy.primary_options;
+        preflight_options.block_size_max = 8 * 1024;
+        preflight_options.match_search_budget = policy.adaptive_match_search_budget;
+        preflight_options.rep_beam_search = false;
+        const preflight = try vort.zstd.encodeNativeFrameWithOptionsAlloc(allocator, input, preflight_options);
+        if (preflight.frame.len < best.frame.len) {
+            allocator.free(best.frame);
+            best = preflight;
+        } else allocator.free(preflight.frame);
+    }
     const larger_block_size = policy.adaptive_block_sizes[1];
     var adaptive_competitive = false;
     if (larger_block_size < input.len and larger_block_size != policy.primary_options.block_size_max) {

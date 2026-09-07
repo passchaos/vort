@@ -5976,7 +5976,7 @@ noinline fn probeDecisiveLargerAdaptiveFrame(
 ) Error!?NativeFrameEncodeResult {
     const primary_options = try nativeFrameOptionsForLevel(level, options);
     if (level <= 0 or preferSerialMixedSearch(input) or !hasQuarterTailHistoryEvidence(input)) return null;
-    const larger_block_size = adaptiveLevelBlockSizes(level)[1];
+    const larger_block_size = preflightAdaptiveBlockSize(level);
     if (larger_block_size >= input.len or larger_block_size == primary_options.block_size_max) return null;
     const larger = try encodeNativeFrameWithOptionsAlloc(
         allocator,
@@ -5986,6 +5986,10 @@ noinline fn probeDecisiveLargerAdaptiveFrame(
     if (larger.frame.len <= input.len / 4) return larger;
     allocator.free(larger.frame);
     return null;
+}
+
+fn preflightAdaptiveBlockSize(level: c_int) usize {
+    return if (level <= 2) 8 * 1024 else adaptiveLevelBlockSizes(level)[1];
 }
 
 fn hasQuarterTailHistoryEvidence(input: []const u8) bool {
@@ -21929,6 +21933,17 @@ test "zstd speed levels overlap multiblock primary and adaptive candidates" {
         const primary_options = try nativeFrameOptionsForLevel(level, .{});
         var expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, primary_options);
         defer std.testing.allocator.free(expected.frame);
+        if (level <= 2) {
+            const preflight = try encodeNativeFrameWithOptionsAlloc(
+                std.testing.allocator,
+                &payload,
+                adaptiveLevelCandidateOptions(primary_options, preflightAdaptiveBlockSize(level)),
+            );
+            if (preflight.frame.len < expected.frame.len) {
+                std.testing.allocator.free(expected.frame);
+                expected = preflight;
+            } else std.testing.allocator.free(preflight.frame);
+        }
         for (adaptiveLevelBlockSizes(level)) |block_size| {
             const candidate = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, adaptiveLevelCandidateOptions(primary_options, block_size));
             if (candidate.frame.len < expected.frame.len) {
@@ -21939,7 +21954,7 @@ test "zstd speed levels overlap multiblock primary and adaptive candidates" {
 
         const actual = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, level);
         defer std.testing.allocator.free(actual);
-        try std.testing.expectEqual(if (level <= 2) @as(usize, 27_863) else 27_517, actual.len);
+        try std.testing.expectEqual(if (level <= 2) @as(usize, 27_363) else 27_517, actual.len);
         try std.testing.expectEqualSlices(u8, expected.frame, actual);
         var reusable = LevelFrameEncoder.init(std.testing.allocator);
         defer reusable.deinit();
@@ -21988,24 +22003,34 @@ test "zstd decisive larger adaptive candidate matches exhaustive generated arbit
                     adaptiveLevelCandidateOptions(policy.primary_options, policy.adaptive_block_sizes[0]),
                 );
                 defer std.testing.allocator.free(smaller.frame);
+                const preflight = try encodeNativeFrameWithOptionsAlloc(
+                    std.testing.allocator,
+                    payload,
+                    adaptiveLevelCandidateOptions(policy.primary_options, preflightAdaptiveBlockSize(level)),
+                );
+                defer std.testing.allocator.free(preflight.frame);
                 if (largerAdaptiveCandidateIsDecisive(payload, larger.frame.len, primary.frame.len)) {
                     decisive_cases += 1;
                     try std.testing.expect(larger.frame.len <= smaller.frame.len);
                 }
-                if (!preferSerialMixedSearch(payload) and
+                const preflight_hit = !preferSerialMixedSearch(payload) and
                     hasQuarterTailHistoryEvidence(payload) and
-                    larger.frame.len <= payload.len / 4)
-                {
+                    preflight.frame.len <= payload.len / 4;
+                if (preflight_hit) {
                     preflight_cases += 1;
-                    try std.testing.expect(larger.frame.len <= primary.frame.len);
-                    try std.testing.expect(larger.frame.len <= smaller.frame.len);
+                    try std.testing.expect(preflight.frame.len <= primary.frame.len);
+                    try std.testing.expect(preflight.frame.len <= larger.frame.len);
+                    try std.testing.expect(preflight.frame.len <= smaller.frame.len);
                 }
 
                 const fast = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, level, .{});
                 defer std.testing.allocator.free(fast);
                 const exhaustive = try encodeFrameWithLevelAndOptionsAllocImpl(false, std.testing.allocator, payload, level, .{});
                 defer std.testing.allocator.free(exhaustive);
-                try std.testing.expectEqualSlices(u8, exhaustive, fast);
+                if (preflight_hit)
+                    try std.testing.expectEqualSlices(u8, preflight.frame, fast)
+                else
+                    try std.testing.expectEqualSlices(u8, exhaustive, fast);
             }
         }
     }
