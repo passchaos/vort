@@ -109,6 +109,8 @@ const multi_duplicate_min_input_len = duplicate_exact_hash_input_max + 1;
 // generated corpus. This conservative margin permits deterministic worker
 // cancellation without weakening the ordinary exact best-of-family path.
 const decisive_mixed_dominance_ratio = 24;
+const decisive_history_ratio = 128;
+const decisive_wide_history_ratio = 3;
 const serial_mixed_input_min = 16 * 1024;
 const serial_mixed_sample_window_len = 256;
 const serial_mixed_distinct_symbol_max = 40;
@@ -253,7 +255,7 @@ const IncrementalEncoderCodec = struct {
         try emitBlock(allocator, out, block, last);
     }
     pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: usize, match_search_budget: usize) zstd.Error!void {
-        try emitLiteralOnlyCompressedBlockWithHistoryAndScratch(allocator, out, block, last, state, dictionary, frame_history, frame_offset, match_search_budget, false, null, null);
+        try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(false, allocator, out, block, last, state, dictionary, frame_history, frame_offset, match_search_budget, false, null, null);
     }
     pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash64) zstd.Error!void {
         if (!options.content_checksum) return;
@@ -10080,11 +10082,18 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(
         best.clearRetainingCapacity();
         try best.appendSlice(allocator, candidate.items);
         best_kind = .history;
-        // A cross-block candidate this small represents an almost complete
-        // history copy. Keep the conservative ratio threshold well below the
-        // ordinary 1-bit-per-literal lower bound before skipping independent
-        // local-match and Huffman searches.
+        // An almost-complete history copy is decisive without further shape
+        // checks. A broader speed shortcut is restricted to wide alphabets
+        // without a long periodic segment; narrow/periodic blocks can still be
+        // improved materially by the local repeated-match family.
         if (enable_decisive_history and dictionary == null and decisiveHistoryCandidate(block, candidate.items.len)) {
+            state.previous_huffman_plan = null;
+            try appendSequenceCandidateAndCommit(allocator, out, candidate.items, last, &state.sequence_state);
+            return;
+        }
+        if (enable_decisive_history and dictionary == null and
+            candidate.items.len <= block.len / decisive_wide_history_ratio and decisiveWideHistoryBlock(block))
+        {
             state.previous_huffman_plan = null;
             try appendSequenceCandidateAndCommit(allocator, out, candidate.items, last, &state.sequence_state);
             return;
@@ -10193,7 +10202,14 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(
 }
 
 inline fn decisiveHistoryCandidate(block: []const u8, encoded_len: usize) bool {
-    return rleByte(block) == null and encoded_len <= block.len / 128;
+    return rleByte(block) == null and encoded_len <= block.len / decisive_history_ratio;
+}
+
+noinline fn decisiveWideHistoryBlock(block: []const u8) bool {
+    if (rleByte(block) != null or preferSerialMixedSearch(block)) return false;
+    if (findRepeatedPatternSegment(block)) |pattern|
+        return pattern.match_len < 16;
+    return true;
 }
 
 fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, rep_beam_search: bool, rep_beam_scratch: ?*lz77.RepBeamScratch) Error!bool {
@@ -25140,7 +25156,7 @@ test "zstd decisive frame history matches exhaustive generated arbitration" {
             break :blk value;
         };
         for (0..8) |seed| {
-            for (0..5) |variant| {
+            for (0..8) |variant| {
                 const payload = try std.testing.allocator.alloc(u8, block_size * 2);
                 defer std.testing.allocator.free(payload);
                 var random_state: u32 = @truncate(0x9e37_79b9 +% seed *% 0x0100_0193 +% block_size);
@@ -25169,6 +25185,22 @@ test "zstd decisive frame history matches exhaustive generated arbitration" {
                     },
                     4 => {
                         for (payload, 0..) |*byte, i| byte.* = "the quick brown fox jumps over the lazy dog. "[i % 45];
+                    },
+                    5 => {
+                        const copied = block_size * 3 / 4;
+                        @memcpy(second[0..copied], payload[block_size - copied .. block_size]);
+                        for (second[copied..], 0..) |*byte, i| byte.* = "abcd"[i & 3];
+                    },
+                    6 => {
+                        const period: usize = 64;
+                        var start: usize = 0;
+                        while (start < second.len) : (start += period)
+                            @memcpy(second[start..][0..period], payload[0..period]);
+                    },
+                    7 => {
+                        @memcpy(second, payload[0..block_size]);
+                        var i: usize = 31;
+                        while (i < second.len) : (i += 127) second[i] +%= @truncate(i + seed + 1);
                     },
                     else => unreachable,
                 }
@@ -25235,7 +25267,9 @@ test "zstd decisive frame history matches exhaustive generated arbitration" {
                     history.view(),
                     &sequence_state,
                 );
-                threshold_cases += @intFromBool(history_ready and decisiveHistoryCandidate(second, history_candidate.items.len));
+                threshold_cases += @intFromBool(history_ready and
+                    (decisiveHistoryCandidate(second, history_candidate.items.len) or
+                        (history_candidate.items.len <= second.len / decisive_wide_history_ratio and decisiveWideHistoryBlock(second))));
                 const decoded = try decodeFrameAlloc(std.testing.allocator, fast.items);
                 defer std.testing.allocator.free(decoded);
                 try std.testing.expectEqualSlices(u8, payload, decoded);
@@ -25245,11 +25279,12 @@ test "zstd decisive frame history matches exhaustive generated arbitration" {
     try std.testing.expect(threshold_cases >= levels.len * 8);
 }
 
-test "zstd decisive frame history threshold excludes RLE blocks" {
-    const block = "abcd" ** 512;
-    try std.testing.expect(decisiveHistoryCandidate(block, block.len / 128));
-    try std.testing.expect(!decisiveHistoryCandidate(block, block.len / 128 + 1));
-    try std.testing.expect(!decisiveHistoryCandidate("z" ** 2048, 4));
+test "zstd decisive frame history threshold excludes narrow blocks" {
+    var block: [2048]u8 = undefined;
+    for (&block, 0..) |*byte, i| byte.* = @truncate(i);
+    try std.testing.expect(decisiveWideHistoryBlock(&block));
+    try std.testing.expect(!decisiveWideHistoryBlock("abcd" ** 512));
+    try std.testing.expect(!decisiveWideHistoryBlock("z" ** 2048));
 }
 
 test "zstd sequence emitter reuses standard dictionary FSE tables" {

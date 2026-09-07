@@ -9804,6 +9804,20 @@ coverage.
   improved the 180-pair geometric mean by about `1.086x`; multi-block levels
   1/3/9 improved by `1.064x`/`1.158x`/`1.135x`. The encode gate and all 273
   bidirectional libzstd 1.5.5 compatibility cases pass.
+  A wider history shortcut was audited rather than assuming compression ratio
+  alone was sufficient. Raising the cutoff to 1/3 immediately found a periodic
+  counterexample: local arbitration produced 819 bytes while history-only
+  returned 875 bytes. The retained extension therefore requires both the
+  existing distributed wide-alphabet classifier and absence of a >=16-byte
+  periodic segment, and keeps the original 1/128 path as an independent first
+  branch. The fast-vs-exhaustive oracle now covers 192 combinations by adding
+  periodic tails, within-block 64-byte repetition, and sparse mutations; all
+  outputs are byte-identical. Twelve fixed-CPU-2 full-matrix runs against the
+  committed 1/128 baseline retain every size/checksum and improve the 180-pair
+  geometric mean by about `1.224x`; the multi-block levels improve by about
+  `3.605x`/`2.414x`/`2.310x`, all 36 target pairs win, and the weakest control
+  is about `0.995x`. Incremental and dictionary-backed paths retain exhaustive
+  arbitration.
   Replacing the rolling-history index's 1 MiB sentinel clear with one byte of
   valid length per four-entry bucket was rejected. Focused tests proved that
   reset hides stale entries and reinsertion exposes only initialized positions,
