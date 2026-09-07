@@ -10359,3 +10359,6 @@ coverage.
   It improved `clustered_q8` by `1.0195x` with 15/15 wins, but structured
   control decode fell to `0.9862x`; production keeps the compiler's existing
   branch layout.
+  Mirroring upstream's cold hint for non-zero insert-length extra bits was
+  neutral here: twenty focused pairs reached only `1.0025x` with 11/20 wins,
+  so the hint was removed without spending a full-matrix run.
