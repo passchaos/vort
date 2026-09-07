@@ -9868,6 +9868,11 @@ coverage.
   maximum-length boundary test preserved exact lengths, but twelve fixed-CPU-2
   target pairs improved multi-block levels 1/3/9 by only
   `1.006x`/`1.002x`/`1.002x`, below the 1% retention bar.
+  Breaking the four-way rolling-history bucket scan at its first sentinel was
+  exact and improved the isolated multi-block levels by about
+  `1.032x`/`1.026x`/`1.029x`, but twelve full-matrix rounds reached only
+  `1.003x` geometrically and regressed text level 9 to `0.989x`. The branch was
+  removed rather than perturbing the shared single-block layout.
   Raising the bounded rolling-history plan from 128 to 256 matches was rejected
   too. The retained multi-block wire did not shrink, and twelve fixed-CPU-2
   target pairs measured `0.994x`/`1.001x`/`1.000x` at levels 1/3/9 while
