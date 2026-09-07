@@ -29,6 +29,10 @@ pub const Plan = struct {
 /// block, so planner work stays bounded even with the full advertised window.
 pub fn findPlan(history: history_mod.View, block: []const u8) Plan {
     var plan: Plan = .{};
+    // No indexed match can contain the required eight-byte anchor when the
+    // retained history is shorter than one anchor. In particular, this avoids
+    // walking every byte of the first frame block against an empty index.
+    if (history.bytes.len < 8 or block.len < 8) return plan;
     var literal_start: usize = 0;
     while (plan.len < max_matches and literal_start + 8 <= block.len) {
         const found = findNext(history, block, literal_start) orelse break;
@@ -78,4 +82,11 @@ test "Zstd incremental history matcher finds multiple non-prefix matches" {
     try std.testing.expectEqual(@as(usize, 3), plan.matches[0].block_start);
     try std.testing.expectEqual(@as(usize, 12), plan.matches[0].len);
     try std.testing.expectEqual(@as(usize, 18), plan.matches[1].block_start);
+}
+
+test "Zstd incremental history matcher skips an empty history" {
+    var rolling: history_mod.Rolling = .{};
+    defer rolling.deinit(std.testing.allocator);
+    const plan = findPlan(rolling.view(), "a block long enough to scan");
+    try std.testing.expectEqual(@as(usize, 0), plan.len);
 }

@@ -9782,6 +9782,16 @@ coverage.
   `1.023x`/`1.020x`/`1.027x`. It was still rejected: nine full-matrix rounds
   reached only `1.0076x` geometrically, below the 1% retention bar, while binary
   levels 3/9 remained mildly negative at about `0.994x`/`0.996x`.
+  The rolling-history matcher now returns immediately when fewer than its
+  required eight history bytes exist. This removes a full byte-by-byte scan and
+  empty-index lookup pass from every first frame block without changing any
+  candidate or wire decision. A focused empty-history test covers the boundary.
+  Twelve alternating fixed-CPU-2 full-matrix runs retained all 15 encoded sizes
+  and checksums and improved the 180-pair geometric mean by about `1.092x`; text
+  levels 1/3/9 improved by about `1.486x`/`1.475x`/`1.406x`, binary by
+  `1.052x`/`1.034x`/`1.007x`, and multi-block by
+  `1.007x`/`1.013x`/`1.017x`. The weakest row was JSON level 9 at `0.9987x`.
+  The formal encode gate and 273-case bidirectional libzstd 1.5.5 probe pass.
   Caching one finalized sequence-literal Huffman plan in `LargeSequenceScratch`
   by its exact 256-entry frequency vector was rejected as mixed and below the
   retention threshold. A focused oracle covered first-use misses, equal-frequency
