@@ -9824,6 +9824,11 @@ coverage.
   full-matrix rounds reached only `0.9982x` geometrically; binary level 9 fell
   to `0.9896x` and all three multi-block rows were neutral-to-negative. The
   generic planner remains intact.
+  Moving the retained-history winner copy after both decisive checks was also
+  rejected. It is semantically safe and removes one copy only on early-return
+  blocks, but twelve fixed-CPU-2 full-matrix rounds reached just `1.0018x`
+  geometrically; multi-block level 1 was `0.998x` and the weakest control was
+  `0.991x`. The original candidate ownership order remains.
   Replacing the rolling-history index's 1 MiB sentinel clear with one byte of
   valid length per four-entry bucket was rejected. Focused tests proved that
   reset hides stale entries and reinsertion exposes only initialized positions,
