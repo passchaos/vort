@@ -6123,6 +6123,28 @@ fn encodeLiteralOnlyFrameAppendWithDictionaryInternal(
     rep_beam_scratch: *lz77.RepBeamScratch,
     large_sequence_scratch: ?*LargeSequenceScratch,
 ) Error!void {
+    return try encodeLiteralOnlyFrameAppendWithDictionaryInternalImpl(
+        true,
+        allocator,
+        out,
+        input,
+        options,
+        dictionary,
+        rep_beam_scratch,
+        large_sequence_scratch,
+    );
+}
+
+fn encodeLiteralOnlyFrameAppendWithDictionaryInternalImpl(
+    comptime enable_decisive_history: bool,
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: NativeFrameOptions,
+    dictionary: ?NativeDictionary,
+    rep_beam_scratch: *lz77.RepBeamScratch,
+    large_sequence_scratch: ?*LargeSequenceScratch,
+) Error!void {
     const frame_options = optionsWithNativeDictionary(options, dictionary);
     const match_search_budget = try nativeMatchSearchBudget(frame_options);
     try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), frame_options);
@@ -6146,7 +6168,7 @@ fn encodeLiteralOnlyFrameAppendWithDictionaryInternal(
             // appendCompletedBlock can index them for the following block.
             if (!last)
                 try frame_history.prepareCompletedBlock(allocator, block, native_dictionary_window_len);
-            try emitLiteralOnlyCompressedBlockWithHistoryAndScratch(allocator, out, block, last, &encoder_state, dictionary, frame_history.view(), offset, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch, large_sequence_scratch);
+            try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(enable_decisive_history, allocator, out, block, last, &encoder_state, dictionary, frame_history.view(), offset, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch, large_sequence_scratch);
             if (!last) frame_history.appendCompletedBlock(block, native_dictionary_window_len);
             offset = block_end;
         }
@@ -9990,6 +10012,38 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratch(
     rep_beam_scratch: ?*lz77.RepBeamScratch,
     large_sequence_scratch: ?*LargeSequenceScratch,
 ) Error!void {
+    return try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(
+        true,
+        allocator,
+        out,
+        block,
+        last,
+        state,
+        dictionary,
+        frame_history,
+        frame_offset,
+        match_search_budget,
+        rep_beam_search,
+        rep_beam_scratch,
+        large_sequence_scratch,
+    );
+}
+
+fn emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(
+    comptime enable_decisive_history: bool,
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    state: *LiteralOnlyEncoderState,
+    dictionary: ?NativeDictionary,
+    frame_history: incremental_history.View,
+    frame_offset: usize,
+    match_search_budget: usize,
+    rep_beam_search: bool,
+    rep_beam_scratch: ?*lz77.RepBeamScratch,
+    large_sequence_scratch: ?*LargeSequenceScratch,
+) Error!void {
     try ensureEncoderSequenceState(state, dictionary);
     const CandidateKind = enum { dictionary, history, huffman, match };
     var candidate: std.ArrayList(u8) = .empty;
@@ -10026,6 +10080,15 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratch(
         best.clearRetainingCapacity();
         try best.appendSlice(allocator, candidate.items);
         best_kind = .history;
+        // A cross-block candidate this small represents an almost complete
+        // history copy. Keep the conservative ratio threshold well below the
+        // ordinary 1-bit-per-literal lower bound before skipping independent
+        // local-match and Huffman searches.
+        if (enable_decisive_history and dictionary == null and decisiveHistoryCandidate(block, candidate.items.len)) {
+            state.previous_huffman_plan = null;
+            try appendSequenceCandidateAndCommit(allocator, out, candidate.items, last, &state.sequence_state);
+            return;
+        }
     }
 
     if (best_kind == null and rep_beam_search and rleByte(block) == null) {
@@ -10127,6 +10190,10 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratch(
     try payload.append(allocator, 0); // sequence_count=0: the compressed block is literals-only.
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
+}
+
+inline fn decisiveHistoryCandidate(block: []const u8, encoded_len: usize) bool {
+    return rleByte(block) == null and encoded_len <= block.len / 128;
 }
 
 fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, rep_beam_search: bool, rep_beam_scratch: ?*lz77.RepBeamScratch) Error!bool {
@@ -25060,6 +25127,129 @@ test "zstd frame history emits current sequence state without wire replay" {
         Test.run,
         .{ block, history.view(), state },
     );
+}
+
+test "zstd decisive frame history matches exhaustive generated arbitration" {
+    const levels = [_]c_int{ 1, 3, 9 };
+    const block_sizes = [_]usize{ 2 * 1024, 4 * 1024, 8 * 1024 };
+    var threshold_cases: usize = 0;
+    for (levels, block_sizes) |level, block_size| {
+        const options = blk: {
+            var value = try nativeFrameOptionsForLevel(level, .{});
+            value.block_size_max = block_size;
+            break :blk value;
+        };
+        for (0..8) |seed| {
+            for (0..5) |variant| {
+                const payload = try std.testing.allocator.alloc(u8, block_size * 2);
+                defer std.testing.allocator.free(payload);
+                var random_state: u32 = @truncate(0x9e37_79b9 +% seed *% 0x0100_0193 +% block_size);
+                for (payload[0..block_size], 0..) |*byte, i| {
+                    random_state = random_state *% 1_664_525 +% 1_013_904_223;
+                    const structured_len: usize = if (seed & 1 == 0) 48 else 56;
+                    byte.* = if (i % 64 < structured_len)
+                        @truncate(i * 17 + seed * 13)
+                    else
+                        @truncate(random_state >> 16);
+                }
+                const second = payload[block_size..];
+                switch (variant) {
+                    0 => @memcpy(second, payload[0..block_size]),
+                    1 => {
+                        @memcpy(second, payload[0..block_size]);
+                        second[block_size / 2] +%= 1;
+                    },
+                    2 => {
+                        const split = block_size / 4;
+                        @memcpy(second[0 .. block_size - split], payload[split..block_size]);
+                        @memcpy(second[block_size - split ..], payload[0..split]);
+                    },
+                    3 => {
+                        for (payload, 0..) |*byte, i| byte.* = "abcd"[i & 3];
+                    },
+                    4 => {
+                        for (payload, 0..) |*byte, i| byte.* = "the quick brown fox jumps over the lazy dog. "[i % 45];
+                    },
+                    else => unreachable,
+                }
+
+                var fast: std.ArrayList(u8) = .empty;
+                defer fast.deinit(std.testing.allocator);
+                var fast_beam: lz77.RepBeamScratch = .{};
+                defer fast_beam.deinit(std.testing.allocator);
+                var fast_sequences: LargeSequenceScratch = .{};
+                defer fast_sequences.deinit(std.testing.allocator);
+                try encodeLiteralOnlyFrameAppendWithDictionaryInternalImpl(
+                    true,
+                    std.testing.allocator,
+                    &fast,
+                    payload,
+                    options,
+                    null,
+                    &fast_beam,
+                    &fast_sequences,
+                );
+
+                var exhaustive: std.ArrayList(u8) = .empty;
+                defer exhaustive.deinit(std.testing.allocator);
+                var exhaustive_beam: lz77.RepBeamScratch = .{};
+                defer exhaustive_beam.deinit(std.testing.allocator);
+                var exhaustive_sequences: LargeSequenceScratch = .{};
+                defer exhaustive_sequences.deinit(std.testing.allocator);
+                try encodeLiteralOnlyFrameAppendWithDictionaryInternalImpl(
+                    false,
+                    std.testing.allocator,
+                    &exhaustive,
+                    payload,
+                    options,
+                    null,
+                    &exhaustive_beam,
+                    &exhaustive_sequences,
+                );
+                try std.testing.expectEqualSlices(u8, exhaustive.items, fast.items);
+                const first_block = try inspectNativeFrameFirstBlock(fast.items);
+                const second_block = try inspectNativeFrameBlockAt(fast.items, first_block.next_header_offset);
+                try std.testing.expectEqual(NativeBlockType.compressed, second_block.block_type);
+
+                var sequence_state: SequenceEncoderState = .{};
+                var committed: std.ArrayList(u8) = .empty;
+                defer committed.deinit(std.testing.allocator);
+                try appendSequenceCandidateAndCommit(
+                    std.testing.allocator,
+                    &committed,
+                    fast.items[first_block.header_offset..first_block.next_header_offset],
+                    false,
+                    &sequence_state,
+                );
+                var history: incremental_history.Rolling = .{};
+                defer history.deinit(std.testing.allocator);
+                try history.prepareCompletedBlock(std.testing.allocator, payload[0..block_size], native_dictionary_window_len);
+                history.appendCompletedBlock(payload[0..block_size], native_dictionary_window_len);
+                var history_candidate: std.ArrayList(u8) = .empty;
+                defer history_candidate.deinit(std.testing.allocator);
+                const history_ready = try emitFrameHistoryMatchCompressedBlock(
+                    std.testing.allocator,
+                    &history_candidate,
+                    second,
+                    true,
+                    history.view(),
+                    &sequence_state,
+                );
+                threshold_cases += @intFromBool(history_ready and decisiveHistoryCandidate(second, history_candidate.items.len));
+                const decoded = try decodeFrameAlloc(std.testing.allocator, fast.items);
+                defer std.testing.allocator.free(decoded);
+                try std.testing.expectEqualSlices(u8, payload, decoded);
+            }
+        }
+    }
+    try std.testing.expect(threshold_cases >= levels.len * 8);
+}
+
+test "zstd decisive frame history threshold excludes RLE blocks" {
+    const block = "abcd" ** 512;
+    try std.testing.expect(decisiveHistoryCandidate(block, block.len / 128));
+    try std.testing.expect(!decisiveHistoryCandidate(block, block.len / 128 + 1));
+    try std.testing.expect(!decisiveHistoryCandidate("z" ** 2048, 4));
 }
 
 test "zstd sequence emitter reuses standard dictionary FSE tables" {

@@ -9792,6 +9792,18 @@ coverage.
   `1.052x`/`1.034x`/`1.007x`, and multi-block by
   `1.007x`/`1.013x`/`1.017x`. The weakest row was JSON level 9 at `0.9987x`.
   The formal encode gate and 273-case bidirectional libzstd 1.5.5 probe pass.
+  Cross-block history candidates at or below 1/128 of their source block now
+  terminate block arbitration before the independent Huffman and local-match
+  families. RLE blocks remain excluded, and the threshold is deliberately far
+  below the one-bit-per-literal lower bound used by the existing decisive-match
+  proof. A retained fast-vs-exhaustive oracle covers 120 multi-block inputs
+  across 2/4/8 KiB blocks, levels 1/3/9, eight seeds, exact copies, one-byte
+  mutations, rotated quarters, and two low-entropy periodic shapes; at least 24
+  cases exercise the shortcut and every frame is byte-identical. Twelve
+  alternating fixed-CPU-2 full-matrix runs retained all 15 sizes/checksums and
+  improved the 180-pair geometric mean by about `1.086x`; multi-block levels
+  1/3/9 improved by `1.064x`/`1.158x`/`1.135x`. The encode gate and all 273
+  bidirectional libzstd 1.5.5 compatibility cases pass.
   Replacing the rolling-history index's 1 MiB sentinel clear with one byte of
   valid length per four-entry bucket was rejected. Focused tests proved that
   reset hides stale entries and reinsertion exposes only initialized positions,
