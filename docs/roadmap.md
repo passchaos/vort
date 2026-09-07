@@ -9836,6 +9836,11 @@ coverage.
   maximum-length boundary test preserved exact lengths, but twelve fixed-CPU-2
   target pairs improved multi-block levels 1/3/9 by only
   `1.006x`/`1.002x`/`1.002x`, below the 1% retention bar.
+  Stopping each four-way history bucket after its first full-tail match was also
+  rejected. The optimization is exact under the existing newest-first bucket
+  order and strict-length tie rule, but twelve fixed-CPU-2 full-matrix rounds
+  reached only `1.0008x` geometrically; multi-block levels 3/9 were about
+  `0.997x`, so the clearer complete bucket scan remains.
   A single-sequence `Repeat_Mode` specialization was also rejected. It replaced
   the generic viability matrix with a linear lowest-state scan and matched
   predefined/compressed-table state selection exactly, but twelve fixed-CPU-2
