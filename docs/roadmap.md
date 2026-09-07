@@ -9818,6 +9818,19 @@ coverage.
   `3.605x`/`2.414x`/`2.310x`, all 36 target pairs win, and the weakest control
   is about `0.995x`. Incremental and dictionary-backed paths retain exhaustive
   arbitration.
+  The deferred-smallest frame scheduler now treats the larger adaptive split as
+  decisive on wide-alphabet inputs when it beats the completed primary frame by
+  at least 12.5%. This skips a final serial 1/2/4 KiB candidate only after the
+  primary and larger split are both known, while narrow structured inputs keep
+  the complete ladder. A production-vs-exhaustive oracle covers 64 generated
+  129/192 KiB inputs across levels 1/2/3/4/5/6/9/22, four seeds, varying noise density, and
+  copied/non-copied tails; every selected frame is byte-identical, and every
+  triggered larger split is no larger than the explicitly encoded smallest
+  split. Twelve alternating fixed-CPU-2 full-matrix runs retained all 15 sizes
+  and checksums, improved the 180-pair geometric mean by about `1.079x`, and
+  improved multi-block levels 1/3/9 by `2.005x`/`1.289x`/`1.248x` with 36/36
+  target wins; the weakest control was about `0.992x`. The level-schedule gate,
+  encode gate, and all 273 bidirectional libzstd 1.5.5 cases pass.
   A single-sequence `Repeat_Mode` specialization was also rejected. It replaced
   the generic viability matrix with a linear lowest-state scan and matched
   predefined/compressed-table state selection exactly, but twelve fixed-CPU-2

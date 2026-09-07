@@ -5559,6 +5559,16 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     level: c_int,
     options: FrameOptions,
 ) Error![]u8 {
+    return try encodeFrameWithLevelAndOptionsAllocImpl(true, allocator, input, level, options);
+}
+
+fn encodeFrameWithLevelAndOptionsAllocImpl(
+    comptime enable_decisive_larger_adaptive: bool,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    level: c_int,
+    options: FrameOptions,
+) Error![]u8 {
     const primary_options = try nativeFrameOptionsForLevel(level, options);
     var precomputed_primary: ?NativeFrameEncodeResult = null;
     errdefer if (precomputed_primary) |result| allocator.free(result.frame);
@@ -5662,7 +5672,9 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
                 for (candidates[0..candidate_count]) |candidate| if (candidate.result) |result| parallel_allocator.free(result.frame);
                 return err;
             };
+            const primary_len = best.frame.len;
             var adaptive_competitive = false;
+            var larger_adaptive_len: ?usize = null;
             for (candidates[adaptive_start..candidate_count]) |*candidate| {
                 if (candidate.err) |err| {
                     parallel_allocator.free(best.frame);
@@ -5670,6 +5682,7 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
                     return err;
                 }
                 const result = candidate.result.?;
+                larger_adaptive_len = result.frame.len;
                 adaptive_competitive = adaptive_competitive or if (level >= 2 and level <= 5)
                     adaptiveCandidateCanTriggerDeferred(result.frame.len, best.frame.len)
                 else
@@ -5680,7 +5693,14 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
                 } else parallel_allocator.free(result.frame);
                 candidate.result = null;
             }
-            if (defer_smallest_candidate and adaptive_competitive and block_sizes[0] < input.len and block_sizes[0] != primary_options.block_size_max) {
+            const larger_is_decisive = if (larger_adaptive_len) |larger_len|
+                largerAdaptiveCandidateIsDecisive(input, larger_len, primary_len)
+            else
+                false;
+            if (defer_smallest_candidate and adaptive_competitive and
+                (!enable_decisive_larger_adaptive or !larger_is_decisive) and
+                block_sizes[0] < input.len and block_sizes[0] != primary_options.block_size_max)
+            {
                 const split_options = adaptiveLevelCandidateOptions(primary_options, block_sizes[0]);
                 const candidate = encodeNativeFrameWithOptionsAlloc(parallel_allocator, input, split_options) catch |err| {
                     parallel_allocator.free(best.frame);
@@ -5938,6 +5958,11 @@ fn adaptiveLevelBlockSizes(level: c_int) [2]usize {
 fn adaptiveCandidateCanTriggerDeferred(candidate_len: usize, best_len: usize) bool {
     return candidate_len <= std.math.add(usize, best_len, deferred_adaptive_candidate_size_slack) catch
         std.math.maxInt(usize);
+}
+
+noinline fn largerAdaptiveCandidateIsDecisive(input: []const u8, larger_len: usize, primary_len: usize) bool {
+    return !preferSerialMixedSearch(input) and
+        larger_len <= primary_len - primary_len / 8;
 }
 
 fn adaptiveLevelCandidateOptions(primary: NativeFrameOptions, block_size: usize) NativeFrameOptions {
@@ -21892,6 +21917,59 @@ test "zstd speed levels overlap multiblock primary and adaptive candidates" {
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, &payload, decoded);
     }
+}
+
+test "zstd decisive larger adaptive candidate matches exhaustive generated arbitration" {
+    var decisive_cases: usize = 0;
+    const levels = [_]c_int{ 1, 2, 3, 4, 5, 6, 9, 22 };
+    for (levels) |level| {
+        for ([_]usize{ 129 * 1024, 192 * 1024 }) |input_len| {
+            for (0..4) |seed| {
+                const payload = try std.testing.allocator.alloc(u8, input_len);
+                defer std.testing.allocator.free(payload);
+                var random_state: u32 = @truncate(0x243f_6a88 +% seed *% 0x0100_0193 +% input_len);
+                for (payload, 0..) |*byte, i| {
+                    random_state = random_state *% 1_664_525 +% 1_013_904_223;
+                    const structured_len: usize = 40 + (seed % 4) * 4;
+                    byte.* = if (i % 64 < structured_len)
+                        @truncate(i * 17 + seed * 13)
+                    else
+                        @truncate(random_state >> 16);
+                }
+                if (seed & 1 != 0) {
+                    const copy_len = payload.len / 4;
+                    @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+                }
+
+                const policy = try nativeEncodeLevelDiagnostics(level, .{});
+                const primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, policy.primary_options);
+                defer std.testing.allocator.free(primary.frame);
+                const larger = try encodeNativeFrameWithOptionsAlloc(
+                    std.testing.allocator,
+                    payload,
+                    adaptiveLevelCandidateOptions(policy.primary_options, policy.adaptive_block_sizes[1]),
+                );
+                defer std.testing.allocator.free(larger.frame);
+                const smaller = try encodeNativeFrameWithOptionsAlloc(
+                    std.testing.allocator,
+                    payload,
+                    adaptiveLevelCandidateOptions(policy.primary_options, policy.adaptive_block_sizes[0]),
+                );
+                defer std.testing.allocator.free(smaller.frame);
+                if (largerAdaptiveCandidateIsDecisive(payload, larger.frame.len, primary.frame.len)) {
+                    decisive_cases += 1;
+                    try std.testing.expect(larger.frame.len <= smaller.frame.len);
+                }
+
+                const fast = try encodeFrameWithLevelAndOptionsAllocImpl(true, std.testing.allocator, payload, level, .{});
+                defer std.testing.allocator.free(fast);
+                const exhaustive = try encodeFrameWithLevelAndOptionsAllocImpl(false, std.testing.allocator, payload, level, .{});
+                defer std.testing.allocator.free(exhaustive);
+                try std.testing.expectEqualSlices(u8, exhaustive, fast);
+            }
+        }
+    }
+    try std.testing.expect(decisive_cases != 0);
 }
 
 test "zstd overlapping level candidates release initial allocation failures" {
