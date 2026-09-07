@@ -9868,6 +9868,10 @@ coverage.
   maximum-length boundary test preserved exact lengths, but twelve fixed-CPU-2
   target pairs improved multi-block levels 1/3/9 by only
   `1.006x`/`1.002x`/`1.002x`, below the 1% retention bar.
+  Raising the bounded rolling-history plan from 128 to 256 matches was rejected
+  too. The retained multi-block wire did not shrink, and twelve fixed-CPU-2
+  target pairs measured `0.994x`/`1.001x`/`1.000x` at levels 1/3/9 while
+  doubling the plan's stack storage. The existing 128-match bound remains.
   Stopping each four-way history bucket after its first full-tail match was also
   rejected. The optimization is exact under the existing newest-first bucket
   order and strict-length tie rule, but twelve fixed-CPU-2 full-matrix rounds
