@@ -9831,6 +9831,11 @@ coverage.
   improved multi-block levels 1/3/9 by `2.005x`/`1.289x`/`1.248x` with 36/36
   target wins; the weakest control was about `0.992x`. The level-schedule gate,
   encode gate, and all 273 bidirectional libzstd 1.5.5 cases pass.
+  Replacing the rolling-history matcher's scalar extension with the shared
+  32-byte-vector/8-byte-tail shape was rejected. An exhaustive mismatch and
+  maximum-length boundary test preserved exact lengths, but twelve fixed-CPU-2
+  target pairs improved multi-block levels 1/3/9 by only
+  `1.006x`/`1.002x`/`1.002x`, below the 1% retention bar.
   A single-sequence `Repeat_Mode` specialization was also rejected. It replaced
   the generic viability matrix with a linear lowest-state scan and matched
   predefined/compressed-table state selection exactly, but twelve fixed-CPU-2
