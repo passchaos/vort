@@ -10337,3 +10337,11 @@ coverage.
   64 systematically truncated high-tree prefixes in addition to its 100 format
   cases, 7,056 broad one-shot cases, 7,056 progressive cases, and 1,401 chunk
   matrix runs.
+  Directly indexing `literal_trees[tree_index]` inside that prepared high-tree
+  loop was then rejected. The precondition is valid and a boundary oracle
+  covered the first/last inline tree plus an out-of-range context index. Twenty
+  fixed-CPU-2 focused pairs improved `clustered_q8` by `1.0198x` with 20/20
+  wins and identical checksums, but the complete 13-row matrix exposed stable
+  code-layout regressions in non-target text/structured/structured-q4 rows
+  around `0.979x`--`0.982x`. The generic lookup call and its packed-tree
+  fallback therefore remain in production.
