@@ -10269,6 +10269,29 @@ coverage.
   the shared path (`0.9961x`). The read-only generic chain and shared-scratch
   plumbing erased the avoided index build, so all production and experimental
   code was removed.
+  An optimal-first ratio shortcut was rejected after exact-wire corpus probing.
+  Across 101 generated 4--32 KiB random, periodic, quarter-copy, sparse-copy,
+  and structured cases, the lazy wire beat the optimal proposal 61 times. Even
+  overwhelmingly compressed proposals were unsafe: valid counterexamples
+  measured 78 versus 40 bytes and 44 versus 40 bytes. Appending such a local
+  counterexample to an independently repetitive body can drive its whole-input
+  ratio arbitrarily low, so no output/input percentage alone proves that lazy
+  arbitration is dominated. The temporary probe and candidate split were
+  removed.
+  Simplifying optimal length-prefix tie selection from a redundant compound
+  comparison to `cost <= best_cost` was semantically exact: lengths are visited
+  in strictly increasing order, and the existing randomized prefix oracle plus
+  full token oracle remained exact. In an address-matched, noinline micro-layout
+  it improved the 32 KiB source ratio row by about `1.073x`; 500-iteration
+  control medians were geometrically `1.0017x` with a `0.9977x` floor. It was
+  nevertheless rejected in production form. Against the real preceding HEAD,
+  the smallest noinline implementation improved the target by about `1.178x`
+  but consistently reduced the JSON/source controls to roughly `0.93x`, because
+  moving the helper out of the approximately 25 KiB inlined ratio function
+  changed the surrounding code layout. Dedicated-section and 64-byte alignment
+  variants confirmed the same confounder and were removed. A future retry must
+  isolate the entire optimal-range dispatcher without changing short-input
+  code placement.
   A fresh fixed-CPU profile of the 1 MiB libbrotli quality-8 clustered decoder
   put about 31% of cycles in the high-tree payload loop, 18.5% in distance
   decode, 10.6% in copy/dictionary materialization, and 9.2% in generic bit
