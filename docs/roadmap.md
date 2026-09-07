@@ -9758,6 +9758,18 @@ coverage.
   for numbered JSON, `huffman80k`, `ascii64k`, large JSON, and mixed binary
   respectively (1.001x geometric mean), with identical checksums; the gate
   fluctuation is not an encoder-layout decode regression.
+  Cross-block history candidates now emit their already-known sequence values
+  directly against the current frame's FSE tables and repeated-offset state.
+  Previously the history path first built a complete block with initial state,
+  parsed that temporary wire back into sequence values, planned the current
+  state, emitted a replacement, and copied it over the first block. A focused
+  oracle compares the direct result byte-for-byte with that legacy replay path,
+  verifies lower allocation count and bytes, and exhaustively checks allocation-
+  failure rollback. Nine alternating fixed-CPU-2 runs across all 15 encode rows
+  retained every encoded size and checksum while improving the geometric mean
+  by about `1.064x`. The 129 KiB multi-block levels 1/3/9 improved by about
+  `1.102x`/`1.062x`/`1.048x`, with all 27 target pairs winning; the formal
+  encode gate and all 273 bidirectional libzstd 1.5.5 compatibility cases pass.
   Caching one finalized sequence-literal Huffman plan in `LargeSequenceScratch`
   by its exact 256-entry frequency vector was rejected as mixed and below the
   retention threshold. A focused oracle covered first-use misses, equal-frequency

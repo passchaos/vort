@@ -10010,8 +10010,18 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratch(
     }
 
     candidate.clearRetainingCapacity();
-    const history_ok = try emitFrameHistoryMatchCompressedBlock(allocator, &candidate, block, last, frame_history);
-    const history_ready = history_ok and try prepareSequenceCandidateForFrameWithScratch(allocator, &candidate, block, last, &state.sequence_state, large_sequence_scratch);
+    // The history planner already owns the decoded sequence values. Emit them
+    // against the current frame state directly instead of first serializing
+    // with the initial tables/repcodes and then decoding that temporary block
+    // only to serialize the same sequence list again.
+    const history_ready = try emitFrameHistoryMatchCompressedBlock(
+        allocator,
+        &candidate,
+        block,
+        last,
+        frame_history,
+        &state.sequence_state,
+    );
     if (history_ready and (best_kind == null or candidate.items.len < best.items.len)) {
         best.clearRetainingCapacity();
         try best.appendSlice(allocator, candidate.items);
@@ -12442,6 +12452,7 @@ fn emitFrameHistoryMatchCompressedBlock(
     block: []const u8,
     last: bool,
     history: incremental_history.View,
+    current: ?*const SequenceEncoderState,
 ) Error!bool {
     const plan = incremental_history_match.findPlan(history, block);
     if (plan.len == 0) return false;
@@ -12456,6 +12467,27 @@ fn emitFrameHistoryMatchCompressedBlock(
         match_lens[i] = match.len;
         literal_ends[i] = match.block_start + match.len;
         literal_start = literal_ends[i];
+    }
+    if (current) |sequence_state| {
+        // Match prepareSequenceCandidateForFrame's initial-state fast path so
+        // frames whose earlier blocks did not establish sequence state retain
+        // their existing RLE/predefined tie behavior.
+        if (sequence_state.previous_tables != null or
+            !std.meta.eql(sequence_state.repeated_offsets, initial_repeated_offsets))
+        {
+            return try replaceSequenceCandidateWithFrameState(
+                allocator,
+                out,
+                block,
+                last,
+                literal_lens[0..plan.len],
+                offsets[0..plan.len],
+                match_lens[0..plan.len],
+                literal_ends[0..plan.len],
+                literal_start,
+                sequence_state,
+            );
+        }
     }
     return try emitBestSequenceCompressedBlock(
         allocator,
@@ -24920,6 +24952,114 @@ test "zstd sequence emitter reuses RLE tables across blocks" {
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(std_decoded);
     try std.testing.expectEqualSlices(u8, decoded, std_decoded);
+}
+
+test "zstd frame history emits current sequence state without wire replay" {
+    const history_bytes =
+        "alpha-0123456789-omega-ABCDEFGHIJK-tail" ** 8;
+    const block =
+        "prefix-0123456789-middle-ABCDEFGHIJK-suffix" ** 4;
+
+    var history: incremental_history.Rolling = .{};
+    defer history.deinit(std.testing.allocator);
+    try history.prepareCompletedBlock(std.testing.allocator, history_bytes, native_dictionary_window_len);
+    history.appendCompletedBlock(history_bytes, native_dictionary_window_len);
+
+    const state: SequenceEncoderState = .{
+        .previous_tables = predefinedSequenceTables(),
+        .repeated_offsets = .{ 4, 8, 16 },
+    };
+    var replayed: std.ArrayList(u8) = .empty;
+    defer replayed.deinit(std.testing.allocator);
+    try std.testing.expect(try emitFrameHistoryMatchCompressedBlock(
+        std.testing.allocator,
+        &replayed,
+        block,
+        true,
+        history.view(),
+        null,
+    ));
+    try std.testing.expect(try prepareSequenceCandidateForFrame(
+        std.testing.allocator,
+        &replayed,
+        block,
+        true,
+        &state,
+    ));
+
+    var direct: std.ArrayList(u8) = .empty;
+    defer direct.deinit(std.testing.allocator);
+    try std.testing.expect(try emitFrameHistoryMatchCompressedBlock(
+        std.testing.allocator,
+        &direct,
+        block,
+        true,
+        history.view(),
+        &state,
+    ));
+    try std.testing.expectEqualSlices(u8, replayed.items, direct.items);
+
+    var reference_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var measured_replayed: std.ArrayList(u8) = .empty;
+    defer measured_replayed.deinit(reference_allocator.allocator());
+    try std.testing.expect(try emitFrameHistoryMatchCompressedBlock(
+        reference_allocator.allocator(),
+        &measured_replayed,
+        block,
+        true,
+        history.view(),
+        null,
+    ));
+    try std.testing.expect(try prepareSequenceCandidateForFrame(
+        reference_allocator.allocator(),
+        &measured_replayed,
+        block,
+        true,
+        &state,
+    ));
+    var direct_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var measured_direct: std.ArrayList(u8) = .empty;
+    defer measured_direct.deinit(direct_allocator.allocator());
+    try std.testing.expect(try emitFrameHistoryMatchCompressedBlock(
+        direct_allocator.allocator(),
+        &measured_direct,
+        block,
+        true,
+        history.view(),
+        &state,
+    ));
+    try std.testing.expectEqualSlices(u8, measured_replayed.items, measured_direct.items);
+    try std.testing.expect(direct_allocator.allocations < reference_allocator.allocations);
+    try std.testing.expect(direct_allocator.allocated_bytes < reference_allocator.allocated_bytes);
+
+    const Test = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            input: []const u8,
+            history_view: incremental_history.View,
+            current: SequenceEncoderState,
+        ) !void {
+            var candidate: std.ArrayList(u8) = .empty;
+            defer candidate.deinit(allocator);
+            try candidate.appendSlice(allocator, "prefix");
+            _ = emitFrameHistoryMatchCompressedBlock(
+                allocator,
+                &candidate,
+                input,
+                true,
+                history_view,
+                &current,
+            ) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix", candidate.items);
+                return err;
+            };
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ block, history.view(), state },
+    );
 }
 
 test "zstd sequence emitter reuses standard dictionary FSE tables" {
