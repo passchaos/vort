@@ -10350,3 +10350,8 @@ coverage.
   expanded the high-tree loop enough to regress ordinary text, structured, and
   repetitive rows to roughly `0.978x`--`0.982x`. The smaller out-of-line checked
   reader retains better whole-decoder code layout.
+  Forcing only `fast_bit_reader.Reader.peekBitsPadded` inline was rejected too.
+  It improved `clustered_q8` by `1.0277x` with 15/15 wins, but the complete
+  13-row matrix put structured and structured-q4 controls near
+  `0.977x`--`0.979x`. Keeping refill/peek out of line is therefore the better
+  whole-decoder tradeoff despite its visible profile entry.
