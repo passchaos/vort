@@ -10292,6 +10292,20 @@ coverage.
   variants confirmed the same confounder and were removed. A future retry must
   isolate the entire optimal-range dispatcher without changing short-input
   code placement.
+  That full-dispatch isolation was then audited and rejected too. A retained
+  test-only `.original` instance proved byte-exact output across below-range,
+  4 KiB, 32 KiB, 64 KiB, and above-range source inputs. Splitting ordinary and
+  optimal instances let the equivalent `cost <= best_cost` loop improve the
+  32 KiB source row by `1.1006x` with 15/15 wins in an address-matched A/B.
+  However, every production routing shape added a fixed cost to short ratio
+  calls: separate ordinary/optimal instances, an ordinary inline plus optimal
+  noinline hybrid, and a final unlikely-branch dispatcher all preserved wires
+  but regressed the 38-byte incompressible control in repeated high-iteration
+  real-HEAD comparisons. The final 200-encode pairs were all slower, ranging
+  from roughly `0.90x` to `0.97x`, despite ordinary JSON/source rows returning
+  near neutral. The dispatcher, specialized LZ77 API, and oracle were removed;
+  future work must optimize or cold-layout the existing dynamic branch without
+  adding a new call/branch to every ratio invocation.
   A fresh fixed-CPU profile of the 1 MiB libbrotli quality-8 clustered decoder
   put about 31% of cycles in the high-tree payload loop, 18.5% in distance
   decode, 10.6% in copy/dictionary materialization, and 9.2% in generic bit
