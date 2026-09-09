@@ -10594,3 +10594,12 @@ coverage.
   keeps its 640-byte JSON frame; an isolated fixed-CPU production run reported
   about 24.0 MiB/s versus the prior 20.6 MiB/s baseline. All 20 encode rows,
   91 stage rows, and 273 bidirectional libzstd 1.5.5 cases pass.
+  Compacting the repeat-aware beam state was rejected after testing both natural
+  layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
+  bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
+  but a 30-pair 20-row end-to-end matrix regressed the level-1/3 tradeoff corpus
+  by about `1.4%`/`1.1%`. Packing the 1--258-byte backtrack length and prior
+  two-state slot into one `u16` reduced each state to eight bytes, but the same
+  isolated beam fell to `0.962x` with only 1/30 wins. The original 16-byte state
+  remains; its power-of-two stride is evidently preferable to the saved traffic
+  on the current x86-64 code generation.
