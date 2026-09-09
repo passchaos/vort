@@ -8254,8 +8254,12 @@ fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {
         const single_state_count = probability - double_state_count;
         const share_size_log = std.math.log2_int(u16, share_size);
 
+        var state_mask: u32 = 0;
         for (0..probability) |i| {
-            temp_states[i] = @intCast(position);
+            if (entries.len == 32)
+                state_mask |= @as(u32, 1) << @intCast(position)
+            else
+                temp_states[i] = @intCast(position);
             position += (entries.len >> 1) + (entries.len >> 3) + 3;
             position &= entries.len - 1;
             while (position >= entries.len - less_than_one_count) {
@@ -8263,9 +8267,15 @@ fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {
                 position &= entries.len - 1;
             }
         }
-        std.mem.sort(u16, temp_states[0..probability], {}, std.sort.asc(u16));
+        if (entries.len != 32) std.mem.sort(u16, temp_states[0..probability], {}, std.sort.asc(u16));
         for (0..probability) |i| {
-            entries[temp_states[i]] = if (i < double_state_count) .{
+            const state = if (entries.len == 32) blk: {
+                std.debug.assert(state_mask != 0);
+                const next: u16 = @intCast(@ctz(state_mask));
+                state_mask &= state_mask - 1;
+                break :blk next;
+            } else temp_states[i];
+            entries[state] = if (i < double_state_count) .{
                 .symbol = @intCast(symbol),
                 .bits = @intCast(share_size_log + 1),
                 .baseline = @intCast(single_state_count * share_size + @as(u16, @intCast(i)) * 2 * share_size),
@@ -24302,6 +24312,40 @@ test "zstd FSE decode table builder rejects oversized inputs as corrupt" {
     const too_large_table_log = std.math.log2_int(usize, max_sequence_fse_table_size) + 1;
     try std.testing.expectError(error.CorruptFrame, buildFseDecodeTableFromNormalized(normalized[0..2], too_large_table_log, &entries));
     try std.testing.expectError(error.CorruptFrame, buildFseDecodeTableFromNormalized(&normalized, 5, &entries));
+}
+
+test "zstd 32-state FSE bitset ordering matches linear builder" {
+    var random_state: u32 = 0x243f_6a88;
+    var cases: usize = 0;
+    for (2..sequence_table_symbol_count_max.match + 1) |symbol_count| {
+        for (0..64) |_| {
+            var probabilities: [sequence_table_symbol_count_max.match]u16 = @splat(0);
+            probabilities[0] = 1;
+            probabilities[1] = 1;
+            for (0..30) |_| {
+                random_state = random_state *% 1_664_525 +% 1_013_904_223;
+                probabilities[(random_state >> 16) % symbol_count] += 1;
+            }
+            var values: [sequence_table_symbol_count_max.match]u16 = undefined;
+            for (probabilities[0..symbol_count], 0..) |probability, i| {
+                random_state = random_state *% 1_664_525 +% 1_013_904_223;
+                values[i] = if (probability == 0)
+                    1
+                else if (probability == 1 and (random_state & 1) != 0)
+                    0
+                else
+                    probability + 1;
+            }
+
+            var expected: [32]FseTableEntry = undefined;
+            var actual: [32]FseTableEntry = undefined;
+            try sequence_fse_builder.build(values[0..symbol_count], &expected);
+            try buildFseTable(values[0..symbol_count], &actual);
+            try std.testing.expectEqualSlices(FseTableEntry, &expected, &actual);
+            cases += 1;
+        }
+    }
+    try std.testing.expectEqual(@as(usize, (sequence_table_symbol_count_max.match - 1) * 64), cases);
 }
 
 test "zstd literal-only writer emits FSE Huffman tree for high-byte binary literals" {

@@ -10529,3 +10529,16 @@ coverage.
   Thirty fixed-CPU-8 complete-matrix pairs put `huffman80k` at `0.9920x` with
   only 4/30 wins and left `numbered_json` neutral at `0.9992x`; the checked
   generic path remains the better measured layout.
+  The compact FSE builder now replaces per-symbol stable sorting with a 32-bit
+  state mask for tableLog-5 tables. Spread positions are unique, so clearing
+  the least-significant set bit enumerates the exact ascending order without a
+  general sort; 64/128-state tables retain the original sorted construction and
+  256/512-state tables retain the established linear builder. A deterministic
+  oracle compares 3,328 valid randomized 32-state distributions entry-for-entry
+  against the independent linear implementation. Thirty alternating fixed-CPU-8
+  complete-matrix pairs improve `numbered_json` by a median `1.0206x` with
+  21/30 wins; `huffman80k`, 512 KiB JSON, mixed binary, and the zero-sequence
+  ASCII control remain neutral to positive at their medians. Twenty longer
+  target pairs confirm `numbered_json` at `1.0263x` with 17/20 wins, while the
+  `huffman80k` control remains neutral at `0.9996x`. A fixed-counter run also
+  reduces target instructions by about 2.0% and cycles by about 1.5%.
