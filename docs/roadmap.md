@@ -10449,3 +10449,8 @@ coverage.
   structured q4/q11 to `0.9626x`/`0.9388x`. The temporary shared API and
   Brotli routing were removed rather than optimizing a proxy stage at the cost
   of end-to-end decode.
+  Writing high-tree static-dictionary transforms directly into the final output
+  when at least 64 bytes remained was rejected too. Although it removed the
+  subsequent 5--37-byte copy, twenty fixed-CPU-2 focused pairs measured about
+  `0.984x` with 0/20 wins; growing the hot payload branch cost more than the
+  tiny avoided copy. The stack scratch path remains unchanged.
