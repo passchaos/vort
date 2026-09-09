@@ -10655,3 +10655,11 @@ coverage.
   isolated JSON stage to `0.9822x` with only 8/30 fixed-CPU-8 wins. The simple
   contiguous head clear remains cheaper than making the hot index-build loop
   conditional.
+  Converting LL/ML values to canonical sequence codes once and sharing those
+  codes across RLE, predefined, compressed, and Repeat_Mode alternatives was
+  rejected. The existing value-based predefined planner already uses precomputed
+  code-to-state masks; after giving the codes path the same masks, all plan
+  payloads, bit costs, and per-sequence symbols matched the independent reference.
+  Even so, thirty fixed-CPU-8 primary JSON beam-stage pairs fell to `0.8892x`
+  with only 1/30 wins. The added shared 512-byte scratch/function shape costs
+  more than the currently inlined canonical conversions.
