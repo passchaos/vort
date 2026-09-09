@@ -10437,3 +10437,7 @@ coverage.
   reduced `clustered_q8` to about `0.939x` in twelve same-layout pairs (0/12
   wins). The smaller single-loop runtime dispatch remains the better I-cache
   tradeoff.
+  Caching the current literal block type and 64-entry context-map slice inside
+  that single loop was rejected too. The existing per-byte block-switch check
+  already optimizes well; twenty fixed-CPU-2 focused pairs measured about
+  `0.996x` with only 1/20 wins, so the extra live state was removed.
