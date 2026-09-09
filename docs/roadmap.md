@@ -10554,3 +10554,9 @@ coverage.
   caller grew by 208 bytes and thirty fixed-CPU-8 complete-matrix pairs reduced
   `huffman80k` to `0.9748x`, `binary_mixed` to `0.9888x`, and `numbered_json`
   to `0.9884x`. Eager cursor construction remains.
+  Skipping the otherwise unused Huffman-tree state commit on a terminal block
+  was rejected. A retention-aware parser preserved multi-block treeless reuse
+  and left the inlined `decodeFrameInto` size unchanged, but thirty fixed-CPU-8
+  complete-matrix pairs reduced `huffman80k` to `0.9208x` and `binary_mixed` to
+  `0.9426x`, both with 0/30 wins; the additional parser entry disturbed the
+  surrounding hot layout more than the roughly 1 KiB saved copy.
