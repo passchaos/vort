@@ -8151,7 +8151,16 @@ inline fn resolveRegularDistanceParts(npostfix: u2, ndirect: u16, xcode: usize, 
 }
 
 fn resolveShortDistance(symbol: u16, last_distances: *const [4]usize) Error!usize {
-    return switch (symbol) {
+    var distance: usize = undefined;
+    try resolveShortDistanceInto(symbol, last_distances, &distance);
+    return distance;
+}
+
+/// Write the decoded distance separately from the error result. This preserves
+/// every malformed-distance check while avoiding a 16-byte error-union return
+/// and copy in each inlined decoder caller.
+noinline fn resolveShortDistanceInto(symbol: u16, last_distances: *const [4]usize, distance: *usize) Error!void {
+    distance.* = switch (symbol) {
         0 => last_distances[3],
         1 => last_distances[2],
         2 => last_distances[1],
@@ -8168,7 +8177,7 @@ fn resolveShortDistance(symbol: u16, last_distances: *const [4]usize) Error!usiz
         13 => try distanceWithDelta(last_distances[2], 2),
         14 => try distanceWithDelta(last_distances[2], -3),
         15 => try distanceWithDelta(last_distances[2], 3),
-        else => error.InvalidHuffmanCode,
+        else => return error.InvalidHuffmanCode,
     };
 }
 
@@ -17748,6 +17757,7 @@ test "br short distance resolver covers RFC table" {
     const small_last = [_]usize{ 16, 15, 2, 1 };
     try std.testing.expectError(error.InvalidMatch, resolveShortDistance(4, &small_last));
     try std.testing.expectError(error.InvalidMatch, resolveShortDistance(12, &small_last));
+    try std.testing.expectError(error.InvalidHuffmanCode, resolveShortDistance(16, &small_last));
 }
 
 test "br regular distance resolver covers postfix and extra bits" {

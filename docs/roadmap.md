@@ -10381,3 +10381,12 @@ coverage.
   NDIRECT, regular symbol, and maximum extra-bit value. The tables and hot-path
   changes were removed; future distance work must preserve the established text
   layout or win enough to offset it.
+  Short-distance resolution now writes its scalar result through a caller-owned
+  pointer while retaining the existing 16-way switch and exact invalid-match /
+  overflow errors. This avoids the generated 16-byte error-union copy that held
+  about 70% of the helper's sampled cycles; the helper shrinks from 652 to 409
+  bytes and its thin wrapper disappears into all three callers. Twenty
+  fixed-CPU-2 complete-matrix pairs preserve every checksum, improve the
+  1 MiB `clustered_q8` row by `1.0236x` with 20/20 wins, and improve the
+  row-median geometric mean by `1.0103x`. Every non-tiny row is at or above
+  `1.0019x`; the intrinsically noisy 12-byte row is neutral at `0.9992x`.
