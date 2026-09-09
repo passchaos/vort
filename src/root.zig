@@ -3438,6 +3438,8 @@ test "root brotli stream summary exposes capability flags" {
     try std.testing.expect(!stored_summary.uses_static_dictionary);
     try std.testing.expectEqual(@as(usize, 0), stored_summary.static_dictionary_copy_count);
     try std.testing.expectEqual(@as(usize, 0), stored_summary.static_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.lz77_copy_count);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.lz77_copy_bytes);
 
     const static_dictionary_frame = [_]u8{
         0xa1, 0xc0, 0x00, 0x00, 0x20, 0xe0, 0x38, 0xbc,

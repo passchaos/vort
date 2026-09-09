@@ -1041,6 +1041,12 @@ pub const StreamSummary = struct {
     uses_static_dictionary: bool = false,
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    lz77_copy_count: usize = 0,
+    lz77_copy_bytes: usize = 0,
+    non_overlapping_lz77_copy_count: usize = 0,
+    non_overlapping_lz77_copy_bytes: usize = 0,
+    short_non_overlapping_lz77_copy_count: usize = 0,
+    short_non_overlapping_lz77_copy_bytes: usize = 0,
     max_literal_block_types: usize = 0,
     max_literal_context_trees: usize = 0,
     max_command_block_types: usize = 0,
@@ -1076,6 +1082,12 @@ pub const StreamProbeResult = struct {
 const StreamSummaryMetaBlockStats = struct {
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    lz77_copy_count: usize = 0,
+    lz77_copy_bytes: usize = 0,
+    non_overlapping_lz77_copy_count: usize = 0,
+    non_overlapping_lz77_copy_bytes: usize = 0,
+    short_non_overlapping_lz77_copy_count: usize = 0,
+    short_non_overlapping_lz77_copy_bytes: usize = 0,
     max_literal_block_types: usize = 0,
     max_literal_context_trees: usize = 0,
     max_command_block_types: usize = 0,
@@ -4121,11 +4133,35 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
         summary.static_dictionary_copy_count = std.math.add(usize, summary.static_dictionary_copy_count, stats.static_dictionary_copy_count) catch return error.IntegerOverflow;
         summary.static_dictionary_bytes = std.math.add(usize, summary.static_dictionary_bytes, stats.static_dictionary_bytes) catch return error.IntegerOverflow;
     }
+    summary.lz77_copy_count = std.math.add(usize, summary.lz77_copy_count, stats.lz77_copy_count) catch return error.IntegerOverflow;
+    summary.lz77_copy_bytes = std.math.add(usize, summary.lz77_copy_bytes, stats.lz77_copy_bytes) catch return error.IntegerOverflow;
+    summary.non_overlapping_lz77_copy_count = std.math.add(usize, summary.non_overlapping_lz77_copy_count, stats.non_overlapping_lz77_copy_count) catch return error.IntegerOverflow;
+    summary.non_overlapping_lz77_copy_bytes = std.math.add(usize, summary.non_overlapping_lz77_copy_bytes, stats.non_overlapping_lz77_copy_bytes) catch return error.IntegerOverflow;
+    summary.short_non_overlapping_lz77_copy_count = std.math.add(usize, summary.short_non_overlapping_lz77_copy_count, stats.short_non_overlapping_lz77_copy_count) catch return error.IntegerOverflow;
+    summary.short_non_overlapping_lz77_copy_bytes = std.math.add(usize, summary.short_non_overlapping_lz77_copy_bytes, stats.short_non_overlapping_lz77_copy_bytes) catch return error.IntegerOverflow;
     summary.max_literal_block_types = @max(summary.max_literal_block_types, stats.max_literal_block_types);
     summary.max_literal_context_trees = @max(summary.max_literal_context_trees, stats.max_literal_context_trees);
     summary.max_command_block_types = @max(summary.max_command_block_types, stats.max_command_block_types);
     summary.max_distance_block_types = @max(summary.max_distance_block_types, stats.max_distance_block_types);
     summary.max_distance_context_trees = @max(summary.max_distance_context_trees, stats.max_distance_context_trees);
+}
+
+test "br stream summary aggregates LZ77 copy shapes" {
+    var summary = StreamSummary{ .window_bits = 16, .input_bytes = 17 };
+    try applySummaryMetaBlockStats(&summary, .{
+        .lz77_copy_count = 7,
+        .lz77_copy_bytes = 91,
+        .non_overlapping_lz77_copy_count = 5,
+        .non_overlapping_lz77_copy_bytes = 63,
+        .short_non_overlapping_lz77_copy_count = 3,
+        .short_non_overlapping_lz77_copy_bytes = 27,
+    });
+    try std.testing.expectEqual(@as(usize, 7), summary.lz77_copy_count);
+    try std.testing.expectEqual(@as(usize, 91), summary.lz77_copy_bytes);
+    try std.testing.expectEqual(@as(usize, 5), summary.non_overlapping_lz77_copy_count);
+    try std.testing.expectEqual(@as(usize, 63), summary.non_overlapping_lz77_copy_bytes);
+    try std.testing.expectEqual(@as(usize, 3), summary.short_non_overlapping_lz77_copy_count);
+    try std.testing.expectEqual(@as(usize, 27), summary.short_non_overlapping_lz77_copy_bytes);
 }
 
 pub const StoredStreamEncoder = struct {
@@ -5180,6 +5216,18 @@ noinline fn skipDecodedCompressedPayload(
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - written) return error.CorruptFrame;
+        if (stats) |s| {
+            s.lz77_copy_count = std.math.add(usize, s.lz77_copy_count, 1) catch return error.IntegerOverflow;
+            s.lz77_copy_bytes = std.math.add(usize, s.lz77_copy_bytes, lengths.copy_len) catch return error.IntegerOverflow;
+            if (lengths.copy_len <= distance) {
+                s.non_overlapping_lz77_copy_count = std.math.add(usize, s.non_overlapping_lz77_copy_count, 1) catch return error.IntegerOverflow;
+                s.non_overlapping_lz77_copy_bytes = std.math.add(usize, s.non_overlapping_lz77_copy_bytes, lengths.copy_len) catch return error.IntegerOverflow;
+                if (lengths.copy_len <= 16) {
+                    s.short_non_overlapping_lz77_copy_count = std.math.add(usize, s.short_non_overlapping_lz77_copy_count, 1) catch return error.IntegerOverflow;
+                    s.short_non_overlapping_lz77_copy_bytes = std.math.add(usize, s.short_non_overlapping_lz77_copy_bytes, lengths.copy_len) catch return error.IntegerOverflow;
+                }
+            }
+        }
         literal_history.copy(distance, lengths.copy_len);
         written += lengths.copy_len;
     }

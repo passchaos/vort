@@ -11,6 +11,10 @@ COLUMNS = [
     "reference_mib_s", "vort_over_reference", "checksum", "size_ns",
     "alloc_ns", "exact_alloc_ns", "dictionary_cases",
     "static_dictionary_copies", "static_dictionary_bytes",
+    "lz77_copies", "lz77_bytes",
+    "non_overlapping_lz77_copies", "non_overlapping_lz77_bytes",
+    "short_non_overlapping_lz77_copies",
+    "short_non_overlapping_lz77_bytes",
     "max_literal_context_trees", "max_command_block_types",
     "max_distance_context_trees",
 ]
@@ -88,6 +92,17 @@ def main() -> int:
         raise AssertionError(f"clustered header coverage regression: {clustered}")
     if int(clustered["static_dictionary_copies"]) <= 1000 or int(clustered["static_dictionary_bytes"]) <= 4096:
         raise AssertionError(f"clustered dictionary workload regression: {clustered}")
+    if int(clustered["lz77_copies"]) <= 12000 or int(clustered["lz77_bytes"]) <= 900000:
+        raise AssertionError(f"clustered LZ77 workload regression: {clustered}")
+    if int(clustered["non_overlapping_lz77_copies"]) <= 12000 or int(clustered["non_overlapping_lz77_bytes"]) <= 900000:
+        raise AssertionError(f"clustered non-overlapping LZ77 coverage regression: {clustered}")
+    if int(clustered["short_non_overlapping_lz77_copies"]) <= 10000 or int(clustered["short_non_overlapping_lz77_bytes"]) <= 70000:
+        raise AssertionError(f"clustered short LZ77 coverage regression: {clustered}")
+    for row in rows:
+        if int(row["non_overlapping_lz77_copies"]) > int(row["lz77_copies"]) or int(row["non_overlapping_lz77_bytes"]) > int(row["lz77_bytes"]):
+            raise AssertionError(f"bad non-overlapping LZ77 subset: {row}")
+        if int(row["short_non_overlapping_lz77_copies"]) > int(row["non_overlapping_lz77_copies"]) or int(row["short_non_overlapping_lz77_bytes"]) > int(row["non_overlapping_lz77_bytes"]):
+            raise AssertionError(f"bad short LZ77 subset: {row}")
     print(f"br_reference_bench_gate=ok rows={len(rows)} reference_version={next(iter(versions))}")
     return 0
 

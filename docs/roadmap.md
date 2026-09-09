@@ -10390,3 +10390,12 @@ coverage.
   1 MiB `clustered_q8` row by `1.0236x` with 20/20 wins, and improve the
   row-median geometric mean by `1.0103x`. Every non-tiny row is at or above
   `1.0019x`; the intrinsically noisy 12-byte row is neutral at `0.9992x`.
+  Brotli summaries now expose LZ77 copy counts/bytes, the non-overlapping
+  subset, and its at-most-16-byte subset without instrumenting the production
+  decoder. The reference CSV and gate lock these dimensions for `clustered_q8`:
+  the current frame has 12,563 LZ77 copies covering 1,001,486 bytes, including
+  12,539 non-overlapping copies and 10,533 short non-overlapping copies covering
+  73,221 bytes. A fixed-width 1...16-byte copy helper was then rejected despite
+  exhaustive length/distance equivalence tests: twenty fixed-CPU-2 focused pairs
+  fell to about `0.920x` with 0/20 wins. Production retains compiler-rt `memcpy`;
+  future work should target the longer-copy bulk or surrounding dispatch cost.
