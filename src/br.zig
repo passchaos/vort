@@ -1047,6 +1047,7 @@ pub const StreamSummary = struct {
     non_overlapping_lz77_copy_bytes: usize = 0,
     short_non_overlapping_lz77_copy_count: usize = 0,
     short_non_overlapping_lz77_copy_bytes: usize = 0,
+    literal_context_mode_bytes: [4]usize = @splat(0),
     max_literal_block_types: usize = 0,
     max_literal_context_trees: usize = 0,
     max_command_block_types: usize = 0,
@@ -1088,6 +1089,7 @@ const StreamSummaryMetaBlockStats = struct {
     non_overlapping_lz77_copy_bytes: usize = 0,
     short_non_overlapping_lz77_copy_count: usize = 0,
     short_non_overlapping_lz77_copy_bytes: usize = 0,
+    literal_context_mode_bytes: [4]usize = @splat(0),
     max_literal_block_types: usize = 0,
     max_literal_context_trees: usize = 0,
     max_command_block_types: usize = 0,
@@ -4139,6 +4141,8 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
     summary.non_overlapping_lz77_copy_bytes = std.math.add(usize, summary.non_overlapping_lz77_copy_bytes, stats.non_overlapping_lz77_copy_bytes) catch return error.IntegerOverflow;
     summary.short_non_overlapping_lz77_copy_count = std.math.add(usize, summary.short_non_overlapping_lz77_copy_count, stats.short_non_overlapping_lz77_copy_count) catch return error.IntegerOverflow;
     summary.short_non_overlapping_lz77_copy_bytes = std.math.add(usize, summary.short_non_overlapping_lz77_copy_bytes, stats.short_non_overlapping_lz77_copy_bytes) catch return error.IntegerOverflow;
+    for (&summary.literal_context_mode_bytes, stats.literal_context_mode_bytes) |*total, count|
+        total.* = std.math.add(usize, total.*, count) catch return error.IntegerOverflow;
     summary.max_literal_block_types = @max(summary.max_literal_block_types, stats.max_literal_block_types);
     summary.max_literal_context_trees = @max(summary.max_literal_context_trees, stats.max_literal_context_trees);
     summary.max_command_block_types = @max(summary.max_command_block_types, stats.max_command_block_types);
@@ -4155,6 +4159,7 @@ test "br stream summary aggregates LZ77 copy shapes" {
         .non_overlapping_lz77_copy_bytes = 63,
         .short_non_overlapping_lz77_copy_count = 3,
         .short_non_overlapping_lz77_copy_bytes = 27,
+        .literal_context_mode_bytes = .{ 4, 3, 2, 1 },
     });
     try std.testing.expectEqual(@as(usize, 7), summary.lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 91), summary.lz77_copy_bytes);
@@ -4162,6 +4167,7 @@ test "br stream summary aggregates LZ77 copy shapes" {
     try std.testing.expectEqual(@as(usize, 63), summary.non_overlapping_lz77_copy_bytes);
     try std.testing.expectEqual(@as(usize, 3), summary.short_non_overlapping_lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 27), summary.short_non_overlapping_lz77_copy_bytes);
+    try std.testing.expectEqual([_]usize{ 4, 3, 2, 1 }, summary.literal_context_mode_bytes);
 }
 
 pub const StoredStreamEncoder = struct {
@@ -5032,6 +5038,20 @@ fn prepareAuxiliaryTailLookups(header: *MinimalCompressedHeader) bool {
     return true;
 }
 
+fn allLiteralContextModesAreUtf8(modes: []const u2) bool {
+    for (modes) |mode|
+        if (mode != literal_context.mode_utf8) return false;
+    return true;
+}
+
+test "br all-UTF8 literal context classifier covers mixed modes" {
+    try std.testing.expect(allLiteralContextModesAreUtf8(&.{literal_context.mode_utf8}));
+    try std.testing.expect(allLiteralContextModesAreUtf8(&.{ literal_context.mode_utf8, literal_context.mode_utf8, literal_context.mode_utf8 }));
+    try std.testing.expect(!allLiteralContextModesAreUtf8(&.{ 0, literal_context.mode_utf8 }));
+    try std.testing.expect(!allLiteralContextModesAreUtf8(&.{ literal_context.mode_utf8, 1 }));
+    try std.testing.expect(!allLiteralContextModesAreUtf8(&.{ literal_context.mode_utf8, 3 }));
+}
+
 noinline fn processDecodedCompressedPayload(
     reader: *bitstream.BitReader,
     output: []u8,
@@ -5088,6 +5108,7 @@ noinline fn processTailLookupCompressedPayload(
     header: *MinimalCompressedHeader,
 ) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
+    const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     while (written.* < meta_block_end) {
         const command_symbol = if (comptime auxiliary_tail_lookups)
             try readCommandSymbolTailLookup(header, reader)
@@ -5100,7 +5121,10 @@ noinline fn processTailLookupCompressedPayload(
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
             try ensureLiteralBlockAny(header, reader);
-            const context = literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
+            const context = if (utf8_context_only)
+                literal_context.valueUtf8Clustered(previous, second_previous)
+            else
+                literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
             const tree = try literalPrefixForDecode(header, tree_index);
@@ -5185,6 +5209,7 @@ noinline fn skipDecodedCompressedPayload(
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
             try ensureLiteralBlock(header, reader);
+            const literal_mode = header.literal_context_modes[header.literal_block.current_type];
             const context = try literal_history.context(header);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
@@ -5193,6 +5218,7 @@ noinline fn skipDecodedCompressedPayload(
             if (literal > 0xff) return error.InvalidHuffmanCode;
             literal_history.push(@intCast(literal));
             written += 1;
+            if (stats) |s| s.literal_context_mode_bytes[literal_mode] = std.math.add(usize, s.literal_context_mode_bytes[literal_mode], 1) catch return error.IntegerOverflow;
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
         if (written == meta_block_end) {

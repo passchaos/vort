@@ -15,6 +15,8 @@ COLUMNS = [
     "non_overlapping_lz77_copies", "non_overlapping_lz77_bytes",
     "short_non_overlapping_lz77_copies",
     "short_non_overlapping_lz77_bytes",
+    "literal_lsb6_bytes", "literal_msb6_bytes",
+    "literal_utf8_bytes", "literal_signed_bytes",
     "max_literal_context_trees", "max_command_block_types",
     "max_distance_context_trees",
 ]
@@ -103,6 +105,12 @@ def main() -> int:
             raise AssertionError(f"bad non-overlapping LZ77 subset: {row}")
         if int(row["short_non_overlapping_lz77_copies"]) > int(row["non_overlapping_lz77_copies"]) or int(row["short_non_overlapping_lz77_bytes"]) > int(row["non_overlapping_lz77_bytes"]):
             raise AssertionError(f"bad short LZ77 subset: {row}")
+        literal_bytes = sum(int(row[key]) for key in ("literal_lsb6_bytes", "literal_msb6_bytes", "literal_utf8_bytes", "literal_signed_bytes"))
+        token_bytes = literal_bytes + int(row["lz77_bytes"]) + int(row["static_dictionary_bytes"])
+        if token_bytes != 0 and token_bytes != int(row["input_bytes"]):
+            raise AssertionError(f"bad Brotli payload accounting: {row}")
+    if int(clustered["literal_utf8_bytes"]) <= 16000:
+        raise AssertionError(f"clustered UTF-8 context workload regression: {clustered}")
     print(f"br_reference_bench_gate=ok rows={len(rows)} reference_version={next(iter(versions))}")
     return 0
 

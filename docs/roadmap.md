@@ -10420,3 +10420,15 @@ coverage.
   outer chunk loop to predominantly short insert runs; twelve fixed-CPU-2 pairs
   all lost on `clustered_q8`, with a median near `0.987x`. The simpler per-byte
   block-boundary check remains faster.
+  Summary instrumentation now also accounts decoded literal bytes by all four
+  RFC context modes, and the reference gate checks that literal, LZ77, and
+  static-dictionary bytes exactly cover each compressed benchmark payload. The
+  locked `clustered_q8` stream has 16,741 literal bytes, all in UTF-8 mode. The
+  high-tree decoder therefore preflights whether every declared literal block
+  uses UTF-8 mode and, when true, bypasses the per-literal four-way mode switch
+  while retaining the same two lookup tables. An exhaustive 65,536-byte-pair
+  oracle pins the specialized context value against the generic implementation,
+  and a classifier test covers homogeneous and mixed modes. Twenty fixed-CPU-2
+  same-layout full-matrix pairs preserve all checksums, improve `clustered_q8`
+  by `1.0138x` with 20/20 wins, and improve the row-median geometric mean by
+  `1.0040x`; every non-target median remains at or above `0.9975x`.

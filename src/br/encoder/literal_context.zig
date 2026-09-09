@@ -22,6 +22,10 @@ pub inline fn valueClustered(mode: u2, previous: u8, second_previous: u8) usize 
     };
 }
 
+pub inline fn valueUtf8Clustered(previous: u8, second_previous: u8) usize {
+    return utf8_last_byte_table[previous] | utf8_second_last_byte_table[second_previous];
+}
+
 /// A two-tree UTF-8 split that isolates the letter-heavy final context bucket.
 /// Context 56 represents a previous lowercase vowel; contexts 60...63 cover
 /// lowercase consonants with the second-last-byte class in the low two bits.
@@ -133,4 +137,16 @@ test "clustered context lookup matches every byte pair and mode" {
         }
     }
 }
+
+test "dedicated clustered UTF8 lookup matches every byte pair" {
+    for (0..256) |previous| {
+        for (0..256) |second_previous| {
+            try std.testing.expectEqual(
+                valueClustered(mode_utf8, @intCast(previous), @intCast(second_previous)),
+                valueUtf8Clustered(@intCast(previous), @intCast(second_previous)),
+            );
+        }
+    }
+}
+
 const std = @import("std");
