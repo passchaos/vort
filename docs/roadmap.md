@@ -10467,3 +10467,20 @@ coverage.
   to `0.9790x` with 0/20 wins while `numbered_json` gained only `1.0076x`.
   The experiment was removed: a future ownership redesign must isolate the FSE
   execution layout instead of shifting every downstream hot function.
+  Zstd sequence-table parsing now builds each compressed FSE table directly in
+  `parseSequenceModeSpec`'s final local storage. This removes the three possible
+  4 KiB builder-return copies while preserving the existing full-spec return and
+  sequence-execution layout. A dirty-destination regression compares every
+  reachable entry from two independently initialized caller-owned tables for the
+  fixed libzstd `numbered_json` offset-FSE frame. Thirty alternating fixed-CPU-8
+  five-row ReleaseFast pairs improve median decode time by `1.0301x` for
+  `numbered_json`, `1.0083x` for `huffman80k`, `1.0115x` for 512 KiB JSON, and
+  `1.0091x` for mixed binary; the zero-sequence ASCII control is neutral at
+  `0.9988x`, for a `1.0139x` row-median geometric mean. A separate twenty-pair,
+  100,000-decode run confirms `numbered_json` at `1.0251x` and `huffman80k` at
+  `1.0079x`. Broader variants that also returned the whole 12 KiB mode spec
+  through caller storage or made the generic cursor borrow its tables were
+  rejected: despite roughly `1.36x` target gains, they regressed the 5,161-
+  sequence `huffman80k` row to `0.944x`--`0.965x`. A dedicated mode-`0x20`
+  execution branch was rejected too because unrelated `huffman80k` and mixed-
+  binary rows fell to about `0.978x` and `0.991x`.

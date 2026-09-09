@@ -8035,17 +8035,17 @@ fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usiz
     // mode blocks such as LL=FSE, OF=FSE, ML=RLE.
     switch (ll_mode) {
         .rle => literal_rle = try readRleSymbolCode(block, offset, &ll_base, &ll_bits),
-        .compressed => literal_fse = try readFseSequenceTable(block, offset, &ll_base, &ll_bits, sequence_table_symbol_count_max.literal, sequence_table_accuracy_log_max.literal),
+        .compressed => try readFseSequenceTableInto(&literal_fse, block, offset, &ll_base, &ll_bits, sequence_table_symbol_count_max.literal, sequence_table_accuracy_log_max.literal),
         .predefined, .repeat => {},
     }
     switch (of_mode) {
         .rle => offset_rle = try readRleSymbolCode(block, offset, &of_base, &of_bits),
-        .compressed => offset_fse = try readFseSequenceTable(block, offset, &of_base, &of_bits, sequence_table_symbol_count_max.offset, sequence_table_accuracy_log_max.offset),
+        .compressed => try readFseSequenceTableInto(&offset_fse, block, offset, &of_base, &of_bits, sequence_table_symbol_count_max.offset, sequence_table_accuracy_log_max.offset),
         .predefined, .repeat => {},
     }
     switch (ml_mode) {
         .rle => match_rle = try readRleSymbolCode(block, offset, &ml_base, &ml_bits),
-        .compressed => match_fse = try readFseSequenceTable(block, offset, &ml_base, &ml_bits, sequence_table_symbol_count_max.match, sequence_table_accuracy_log_max.match),
+        .compressed => try readFseSequenceTableInto(&match_fse, block, offset, &ml_base, &ml_bits, sequence_table_symbol_count_max.match, sequence_table_accuracy_log_max.match),
         .predefined, .repeat => {},
     }
 
@@ -8126,6 +8126,24 @@ fn readFseSequenceTable(
     expected_symbol_count: usize,
     max_accuracy_log: u4,
 ) Error!SequenceFseTable {
+    var table: SequenceFseTable = undefined;
+    try readFseSequenceTableInto(&table, block, offset, bases, bits, expected_symbol_count, max_accuracy_log);
+    return table;
+}
+
+fn readFseSequenceTableInto(
+    table: *SequenceFseTable,
+    block: []const u8,
+    offset: *usize,
+    bases: []const usize,
+    bits: []const u8,
+    expected_symbol_count: usize,
+    max_accuracy_log: u4,
+) Error!void {
+    // Parse directly into the owning mode spec. Returning this 4 KiB table
+    // from each LL/OF/ML branch makes the generated parser copy it once before
+    // assembling the final spec, even though every reachable entry is freshly
+    // written below.
     if (offset.* >= block.len) return error.TruncatedFrame;
     var reader: ForwardBitReader = .{ .bytes = block[offset.*..] };
     var raw_entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
@@ -8133,10 +8151,8 @@ fn readFseSequenceTable(
     offset.* = std.math.add(usize, offset.*, reader.byteIndex()) catch return error.IntegerOverflow;
     if (offset.* > block.len) return error.TruncatedFrame;
 
-    var table: SequenceFseTable = .{
-        .len = table_len,
-        .accuracy_log = @intCast(std.math.log2_int(usize, table_len)),
-    };
+    table.len = table_len;
+    table.accuracy_log = @intCast(std.math.log2_int(usize, table_len));
     for (raw_entries[0..table_len], 0..) |entry, i| {
         const code = entry.symbol;
         if (code >= bases.len or code >= bits.len) return error.CorruptFrame;
@@ -8147,7 +8163,6 @@ fn readFseSequenceTable(
             .state_bits = entry.bits,
         };
     }
-    return table;
 }
 
 const FseTableEntry = sequence_fse_builder.Entry;
@@ -21395,6 +21410,39 @@ test "zstd native decoder accepts FSE compressed sequence tables" {
         "b11ec1ae0ec3a4e70833602852141ad6cc48";
     var offset_fse_frame: [offset_fse_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&offset_fse_frame, offset_fse_hex);
+
+    const first_block = try inspectNativeFrameFirstBlock(&offset_fse_frame);
+    const block = offset_fse_frame[first_block.payload_offset..][0..first_block.payload_len];
+    var parse_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &parse_state);
+    var first: SequenceFseTable = undefined;
+    @memset(std.mem.asBytes(&first), 0x5a);
+    var first_offset = section.sequence_payload_offset + 1;
+    try readFseSequenceTableInto(
+        &first,
+        block,
+        &first_offset,
+        &of_base,
+        &of_bits,
+        sequence_table_symbol_count_max.offset,
+        sequence_table_accuracy_log_max.offset,
+    );
+    var second: SequenceFseTable = undefined;
+    @memset(std.mem.asBytes(&second), 0xa5);
+    var second_offset = section.sequence_payload_offset + 1;
+    try readFseSequenceTableInto(
+        &second,
+        block,
+        &second_offset,
+        &of_base,
+        &of_bits,
+        sequence_table_symbol_count_max.offset,
+        sequence_table_accuracy_log_max.offset,
+    );
+    try std.testing.expectEqual(first_offset, second_offset);
+    try std.testing.expectEqual(first.len, second.len);
+    try std.testing.expectEqual(first.accuracy_log, second.accuracy_log);
+    try std.testing.expectEqualSlices(SequenceSymbol, first.entries[0..first.len], second.entries[0..second.len]);
 
     const all_fse_hex =
         "28b52ffd0458bd04006286161d404fd4010c12709f71cdcb65012b8aa20c2b" ++
