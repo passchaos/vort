@@ -10500,3 +10500,11 @@ coverage.
   by-value copy evidently gives the long FSE loop materially better table
   locality/code generation than repeatedly reaching through the embedded
   cursor state, so the helper contract remains unchanged.
+  Compacting only `SequenceModeSpec.offset_fse` from 512 entries to the
+  specification's 256-state OF maximum was rejected too. The cross-block table
+  state stayed full-width and conversions were bounded to Repeat_Mode restore
+  and continuation commit, but twenty fixed-CPU-8 complete-matrix pairs still
+  put the all-FSE `huffman80k` row at `0.9749x` with 0/20 wins. The target
+  `numbered_json` row improved to `1.0735x` and large JSON to `1.0407x`, but
+  those gains do not justify a stable regression in the main sequence-heavy
+  control; the uniform decode-table layout remains.
