@@ -10441,3 +10441,11 @@ coverage.
   that single loop was rejected too. The existing per-byte block-switch check
   already optimizes well; twenty fixed-CPU-2 focused pairs measured about
   `0.996x` with only 1/20 wins, so the extra live state was removed.
+  Building complex inline literal Huffman tables directly into their final
+  header slots was rejected despite a real header-only gain. A caller-owned
+  `initSparseTrustedInto` prototype preserved dense/sparse table oracles and
+  improved twenty clustered header pairs by roughly 5--8%, but twenty complete
+  decode-matrix pairs left `clustered_q8` neutral at `0.9987x` and regressed
+  structured q4/q11 to `0.9626x`/`0.9388x`. The temporary shared API and
+  Brotli routing were removed rather than optimizing a proxy stage at the cost
+  of end-to-end decode.
