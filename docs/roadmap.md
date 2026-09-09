@@ -10615,3 +10615,11 @@ coverage.
   30-pair 20-row frame matrix preserves every size/checksum, improves level-1
   JSON by `1.0267x` with 26/30 wins, and keeps the other nineteen medians within
   about 0.35% of control.
+  Fusing repeat-beam's complete predecessor-index build into its forward DP was
+  rejected. Because the DP visits positions monotonically, an online insert/
+  lookup produced identical matches at every position across sixteen 32 KiB
+  structured/copied inputs and all repeat-beam tests retained exact tokens.
+  Nevertheless, thirty fixed-CPU-8 isolated JSON stage pairs measured only
+  `0.9991x` with 13/30 wins; interleaving hash-table mutation into the hotter DP
+  loop outweighed removing the separate linear prepass. The compact offline
+  index remains.
