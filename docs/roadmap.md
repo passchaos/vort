@@ -10649,3 +10649,9 @@ coverage.
   remains valid only for skipping the more expensive optimal parser after
   greedy has established its candidate; it is not a proof that beam dominates
   every linear parser.
+  Replacing repeat-beam's 8 KiB head-table sentinel clear with a 512-byte
+  initialized bitmap was rejected. All eight beam tests preserved exact tokens,
+  but the extra bitmap load/branch/write at every indexed position reduced the
+  isolated JSON stage to `0.9822x` with only 8/30 fixed-CPU-8 wins. The simple
+  contiguous head clear remains cheaper than making the hot index-build loop
+  conditional.
