@@ -10613,6 +10613,13 @@ coverage.
   same-binary 30-pair 20-row matrix preserved every wire/checksum but reduced
   level-1 JSON to `0.9898x` with only 4/30 wins, so eager bounded construction
   remains.
+  Expanding repeat-beam's indexed collision guard from its existing fourth-byte
+  check to a complete four-byte prefix was rejected. The minimum-three path
+  retained the old guard, a mismatch-position oracle covered all four prefix
+  bytes, and thirty fixed-CPU-8 primary-stage pairs preserved every counter and
+  wire. Text/JSON were neutral at about `0.9994x`, while binary consistently
+  fell to `0.9886x` with 0/30 wins: the 4,096-bucket four-byte hash already
+  correlates the other prefix bytes, so the wider load did not pay for itself.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
