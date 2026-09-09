@@ -10663,3 +10663,17 @@ coverage.
   Even so, thirty fixed-CPU-8 primary JSON beam-stage pairs fell to `0.8892x`
   with only 1/30 wins. The added shared 512-byte scratch/function shape costs
   more than the currently inlined canonical conversions.
+  Compressed sequence transition planning now uses the inverse FSE compression
+  table to map each `(symbol, next_state)` directly to its lowest predecessor
+  state and emitted bits, replacing the per-symbol linked-state walk. The
+  existing decode table still supplies the exact baseline/state width recorded
+  in emitted plans. A randomized oracle spanning ten sequence lengths from 12
+  through 512, 32/128-state tables, and up to 64 symbols compares initial state,
+  every baseline/state width, and every transition value/width against both the
+  original chain builder and an independent full-table scan for more than 250
+  valid distributions. Thirty fixed-CPU-8 isolated JSON rep-beam pairs improve
+  by `1.195x` with 30/30 wins. A same-binary 30-pair 20-row frame matrix keeps
+  every output size/checksum and improves JSON by `1.170x`/`1.151x`/`1.159x`/
+  `1.160x` at levels 1/3/9/22, binary by `1.265x`/`1.081x`/`1.081x`/`1.082x`,
+  and the level-1/3 tradeoff rows by `1.252x`/`1.245x`; the weakest control is
+  `0.9979x` and the row-median geometric mean is `1.0925x`.
