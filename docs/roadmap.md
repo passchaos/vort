@@ -10508,3 +10508,10 @@ coverage.
   `numbered_json` row improved to `1.0735x` and large JSON to `1.0407x`, but
   those gains do not justify a stable regression in the main sequence-heavy
   control; the uniform decode-table layout remains.
+  Shrinking `decodeFseTable`'s normalized-count scratch from 256 entries to the
+  53-symbol maximum of sequence alphabets was rejected despite preserving all
+  downstream hot-function addresses and sizes. The helper's stack frame fell by
+  400 bytes, but thirty fixed-CPU-8 complete-matrix pairs improved the row-
+  median geometric mean by only `1.0012x`; a longer 100,000-decode target run
+  put `numbered_json` at `0.9956x` with only 7/20 wins. The generic scratch stays
+  in place because the change is below the retention threshold.
