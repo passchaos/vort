@@ -10636,3 +10636,8 @@ coverage.
   lengths, but thirty fixed-CPU-8 isolated JSON stage pairs fell to `0.9785x`
   with only 12/30 wins. The extra live value/helper path costs more than the
   duplicated small integer `log2` calculation on this target.
+  Hoisting repeat-beam's per-position fixed literal cost out of its two-state
+  loop was rejected as well. Although the value is identical for both active
+  states and all token tests stayed exact, thirty fixed-CPU-8 isolated JSON
+  stage pairs fell to `0.9863x` with only 11/30 wins. The existing inlined
+  expression gives LLVM the better hot-loop schedule.
