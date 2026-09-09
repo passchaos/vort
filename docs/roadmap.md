@@ -10542,3 +10542,9 @@ coverage.
   target pairs confirm `numbered_json` at `1.0263x` with 17/20 wins, while the
   `huffman80k` control remains neutral at `0.9996x`. A fixed-counter run also
   reduces target instructions by about 2.0% and cycles by about 1.5%.
+  Replacing only the all-FSE/Huffman helper's embedded-table cursor with the
+  small streaming cursor was rejected as well. The helper still received its
+  by-value local table copy, but changing cursor field offsets and caller layout
+  reduced `huffman80k` to `0.9460x` and the unchanged FSE/FSE/RLE
+  `binary_mixed` row to `0.9301x`, both with 0/30 wins. The specialized helpers
+  therefore keep the established full `SequenceDecodeState` layout.
