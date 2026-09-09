@@ -10491,3 +10491,12 @@ coverage.
   a `1.0019x` median (`0.9974x` geometric mean), while `huffman80k` had 6/20
   wins at `0.9984x`. The compact sorted constructor remains preferable for
   small tables; the linear implementation stays limited to 256/512 states.
+  Removing the apparently redundant by-value `SequenceModeSpec` argument from
+  the two existing large-sequence helpers was rejected after inspecting the
+  generated `0x3060`-byte entry copy. Although the candidate reduced both helper
+  stack frames by roughly 12 KiB and improved `numbered_json`/large JSON by
+  about `1.051x`/`1.026x`, twenty fixed-CPU-8 complete-matrix pairs reduced the
+  5,161-sequence `huffman80k` median to `0.9095x` with only 2/20 wins. The local
+  by-value copy evidently gives the long FSE loop materially better table
+  locality/code generation than repeatedly reaching through the embedded
+  cursor state, so the helper contract remains unchanged.
