@@ -10415,3 +10415,8 @@ coverage.
   every checksum, improve `clustered_q8` by `1.0104x` with 20/20 wins, and
   improve the row-median geometric mean by `1.0044x`; every non-target median
   remains at or above `0.9942x`.
+  Hoisting literal block state and context-map selection once per block-local
+  insert chunk was rejected. It preserved the context-mode tests but added an
+  outer chunk loop to predominantly short insert runs; twelve fixed-CPU-2 pairs
+  all lost on `clustered_q8`, with a median near `0.987x`. The simpler per-byte
+  block-boundary check remains faster.
