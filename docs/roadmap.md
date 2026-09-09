@@ -10449,6 +10449,12 @@ coverage.
   structured q4/q11 to `0.9626x`/`0.9388x`. The temporary shared API and
   Brotli routing were removed rather than optimizing a proxy stage at the cost
   of end-to-end decode.
+  Returning embedded dictionary bytes directly for identity transforms was
+  rejected as well. It removed one short scratch-to-output copy for transform
+  zero and passed representative addresses across all word lengths, but twenty
+  fixed-CPU-2 `clustered_q8` pairs fell to about `0.990x` with 0/20 wins. The
+  extra transform branch/aliasing cost outweighed the avoided copy, so the
+  decoder retains one uniform scratch contract for all 121 transforms.
   Writing high-tree static-dictionary transforms directly into the final output
   when at least 64 bytes remained was rejected too. Although it removed the
   subsequent 5--37-byte copy, twenty fixed-CPU-2 focused pairs measured about
