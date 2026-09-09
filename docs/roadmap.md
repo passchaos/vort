@@ -10641,3 +10641,11 @@ coverage.
   states and all token tests stayed exact, thirty fixed-CPU-8 isolated JSON
   stage pairs fell to `0.9863x` with only 11/30 wins. The existing inlined
   expression gives LLVM the better hot-loop schedule.
+  Running the level-1 repeat beam before greedy and skipping greedy for an
+  absolute 1/32 beam result was rejected on correctness/ratio evidence before
+  benchmarking. A generated 512-block audit found a deterministic 26,626-byte
+  low-alphabet case where the 379-byte beam satisfied the threshold but the
+  existing greedy-first arbitration emitted 375 bytes. The 1/32 rule therefore
+  remains valid only for skipping the more expensive optimal parser after
+  greedy has established its candidate; it is not a proof that beam dominates
+  every linear parser.
