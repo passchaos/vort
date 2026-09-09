@@ -10460,3 +10460,10 @@ coverage.
   subsequent 5--37-byte copy, twenty fixed-CPU-2 focused pairs measured about
   `0.984x` with 0/20 wins; growing the hot payload branch cost more than the
   tiny avoided copy. The stack scratch path remains unchanged.
+  A Zstd `LiteralOnlySection` caller-owned return prototype was rejected after
+  the `numbered_json` profile attributed roughly 31% of cycles to its 1,152-byte
+  return copy. The copy disappeared and twenty five-row profile pairs improved
+  geometrically by `1.0034x`, but the 5,161-sequence `huffman80k` control fell
+  to `0.9790x` with 0/20 wins while `numbered_json` gained only `1.0076x`.
+  The experiment was removed: a future ownership redesign must isolate the FSE
+  execution layout instead of shifting every downstream hot function.
