@@ -10432,3 +10432,8 @@ coverage.
   same-layout full-matrix pairs preserve all checksums, improve `clustered_q8`
   by `1.0138x` with 20/20 wins, and improve the row-median geometric mean by
   `1.0040x`; every non-target median remains at or above `0.9975x`.
+  A compile-time UTF-8 dispatch was rejected: specializing a third copy of the
+  roughly 1.5 KiB high-tree payload loop removed the per-literal mode branch but
+  reduced `clustered_q8` to about `0.939x` in twelve same-layout pairs (0/12
+  wins). The smaller single-loop runtime dispatch remains the better I-cache
+  tradeoff.
