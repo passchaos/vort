@@ -10515,3 +10515,10 @@ coverage.
   median geometric mean by only `1.0012x`; a longer 100,000-decode target run
   put `numbered_json` at `0.9956x` with only 7/20 wins. The generic scratch stays
   in place because the change is below the retention threshold.
+  Extending `resolveSequenceModeSpec`'s early return from all-predefined tables
+  to every mode tuple without Repeat_Mode was rejected. The shortcut is
+  semantically valid and a direct mixed-mode test preserved the missing-prior-
+  table error for Repeat_Mode, but it grew the inlined decode body by 48 bytes.
+  Thirty fixed-CPU-8 complete-matrix pairs left `numbered_json` at only
+  `1.0055x` and reduced `binary_mixed` to `0.9887x` with 5/30 wins. The narrower
+  all-predefined early return retains the better overall layout.
