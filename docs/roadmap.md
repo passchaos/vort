@@ -10522,3 +10522,10 @@ coverage.
   Thirty fixed-CPU-8 complete-matrix pairs left `numbered_json` at only
   `1.0055x` and reduced `binary_mixed` to `0.9887x` with 5/30 wins. The narrower
   all-predefined early return retains the better overall layout.
+  Extending unchecked FSE state lookup from the two specialized large-sequence
+  loops into the generic sequence dispatcher was rejected. Initial states and
+  transitions are already range-proven, but removing the three cold checks
+  shortened the inlined decode body by 80 bytes and shifted downstream helpers.
+  Thirty fixed-CPU-8 complete-matrix pairs put `huffman80k` at `0.9920x` with
+  only 4/30 wins and left `numbered_json` neutral at `0.9992x`; the checked
+  generic path remains the better measured layout.
