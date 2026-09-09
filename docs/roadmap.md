@@ -10407,3 +10407,11 @@ coverage.
   twenty focused pairs split evenly around `1.000x`. This confirms that the
   current short-copy cost is not its standalone memcpy call, so the experiment
   and exhaustive temporary boundary test were removed.
+  The high-tree literal loop now loads the two context bytes once per insert run
+  and advances them in registers as literals are emitted, matching upstream's
+  stateful context shape without changing block-switch or tree-selection rules.
+  Existing LSB6/MSB6/UTF-8/signed context tests and the full upstream matrix pin
+  behavior across context modes. Twenty fixed-CPU-2 complete-matrix pairs keep
+  every checksum, improve `clustered_q8` by `1.0104x` with 20/20 wins, and
+  improve the row-median geometric mean by `1.0044x`; every non-target median
+  remains at or above `0.9942x`.

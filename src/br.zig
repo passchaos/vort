@@ -5095,11 +5095,11 @@ noinline fn processTailLookupCompressedPayload(
             try readCommandSymbolAny(header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
         if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
+        var previous: u8 = if (written.* == 0) 0 else output[written.* - 1];
+        var second_previous: u8 = if (written.* < 2) 0 else output[written.* - 2];
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
             try ensureLiteralBlockAny(header, reader);
-            const previous = if (written.* == 0) 0 else output[written.* - 1];
-            const second_previous = if (written.* < 2) 0 else output[written.* - 2];
             const context = literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
@@ -5108,6 +5108,8 @@ noinline fn processTailLookupCompressedPayload(
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;
+            second_previous = previous;
+            previous = @intCast(literal);
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
         if (written.* == meta_block_end) return;
