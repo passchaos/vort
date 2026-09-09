@@ -10372,3 +10372,12 @@ coverage.
   13-row libbrotli gate and the 100-case / 7,056-one-shot / 7,056-progressive /
   1,401-chunk-run upstream differential remain green, including all 64 high-tree
   truncation probes.
+  Mirroring upstream's precomputed regular-distance offsets was rejected after
+  three layouts. A full per-header table improved `clustered_q8` by about
+  `1.0167x` but regressed ordinary text/structured rows to `0.9620x`/`0.9726x`;
+  a static four-NPOSTFIX table and a compact 48-base table still moved the ELF
+  text segment and left ordinary rows around 2% slower, while the target gained
+  only about `1.009x`. An exhaustive temporary oracle covered every NPOSTFIX,
+  NDIRECT, regular symbol, and maximum extra-bit value. The tables and hot-path
+  changes were removed; future distance work must preserve the established text
+  layout or win enough to offset it.
