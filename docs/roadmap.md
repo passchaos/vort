@@ -10603,3 +10603,15 @@ coverage.
   isolated beam fell to `0.962x` with only 1/30 wins. The original 16-byte state
   remains; its power-of-two stride is evidently preferable to the saved traffic
   on the current x86-64 code generation.
+  Level-1 duplicate arbitration now builds only the bounded newest-four
+  predecessor ring consumed by its single-match search and Huffman lower bound.
+  The full per-position hash chain is reserved for budgets that can enter mixed
+  lookahead; writing it and clearing its 64 KiB latest-position table was dead
+  work at level 1. A 16-shape oracle compares every bounded predecessor/count/
+  lazy-length field and selected match against the full builder. The stage tool
+  now receives the candidate's actual search budget so its `duplicate_index` row
+  mirrors this production choice. Thirty alternating fixed-CPU-8 stage pairs
+  improve index construction by a median `1.259x` with 30/30 wins. A same-binary
+  30-pair 20-row frame matrix preserves every size/checksum, improves level-1
+  JSON by `1.0267x` with 26/30 wins, and keeps the other nineteen medians within
+  about 0.35% of control.

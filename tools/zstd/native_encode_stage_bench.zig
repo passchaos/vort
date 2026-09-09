@@ -117,7 +117,7 @@ fn benchmarkCandidate(
     var selected_rows: usize = 0;
 
     if (!case.primary_double_fast_only and stageSelected(options.only_stage, "duplicate_index")) {
-        const indexed_block_count = try prepareAllBlocks(allocator, case.payload, candidate.block_size, &scratch);
+        const indexed_block_count = try prepareAllBlocks(allocator, case.payload, candidate.block_size, search_budget, &scratch);
         vort.zstd.benchmarkInvalidateNativeMatchStageScratch(&scratch);
         try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .index, indexed_block_count, 0, 0, 0, 0, &scratch);
         selected_rows += 1;
@@ -225,7 +225,7 @@ fn measureStagePass(
         switch (stage) {
             .index => {
                 const start = std.Io.Clock.awake.now(io);
-                const available = try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, block, scratch);
+                const available = try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, block, search_budget, scratch);
                 sample.ns +%= elapsed(start, io);
                 sample.mix +%= @intFromBool(available);
                 vort.zstd.benchmarkInvalidateNativeMatchStageScratch(scratch);
@@ -233,7 +233,7 @@ fn measureStagePass(
             .candidate => |candidate_stage| {
                 // Production shares this setup across mixed/multi/single. Keep
                 // it outside each family timer and report it as its own row.
-                _ = try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, block, scratch);
+                _ = try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, block, search_budget, scratch);
                 const start = std.Io.Clock.awake.now(io);
                 const result = try vort.zstd.benchmarkNativeMatchStage(allocator, block, end == payload.len, search_budget, candidate_stage, scratch);
                 sample.ns +%= elapsed(start, io);
@@ -245,12 +245,12 @@ fn measureStagePass(
     return sample;
 }
 
-fn prepareAllBlocks(allocator: std.mem.Allocator, payload: []const u8, block_size: usize, scratch: *vort.zstd.NativeMatchStageScratch) !usize {
+fn prepareAllBlocks(allocator: std.mem.Allocator, payload: []const u8, block_size: usize, search_budget: usize, scratch: *vort.zstd.NativeMatchStageScratch) !usize {
     var mix: usize = 0;
     var offset: usize = 0;
     while (offset < payload.len) {
         const end = @min(payload.len, offset + block_size);
-        mix +%= @intFromBool(try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, payload[offset..end], scratch));
+        mix +%= @intFromBool(try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, payload[offset..end], search_budget, scratch));
         offset = end;
     }
     return mix;
@@ -273,7 +273,7 @@ fn evaluateAllBlocks(
     while (offset < payload.len) {
         const end = @min(payload.len, offset + block_size);
         const block = payload[offset..end];
-        _ = try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, block, scratch);
+        _ = try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, block, search_budget, scratch);
         const result = try vort.zstd.benchmarkNativeMatchStage(allocator, block, end == payload.len, search_budget, stage, scratch);
         available_blocks += @intFromBool(result.available);
         encoded_len +%= result.encoded_len;

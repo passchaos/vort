@@ -10716,7 +10716,10 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     const sequence_scratch = large_sequence_scratch orelse &local_large_sequence_scratch;
     var duplicate_index: DuplicateMatchIndex = undefined;
     const duplicate_index_ptr: ?*DuplicateMatchIndex = if (block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len) blk: {
-        duplicate_index.build(block);
+        if (match_search_budget < multi_duplicate_min_search_budget)
+            duplicate_index.buildBounded(block)
+        else
+            duplicate_index.build(block);
         break :blk &duplicate_index;
     } else null;
     // Level 1 skips multi-duplicate search, so its final single candidate has
@@ -10970,6 +10973,7 @@ pub const NativeMatchStageScratch = struct {
 pub fn benchmarkPrepareNativeMatchStageScratch(
     allocator: std.mem.Allocator,
     block: []const u8,
+    match_search_budget: usize,
     scratch: *NativeMatchStageScratch,
 ) Error!bool {
     scratch.duplicate_index_input_ptr = null;
@@ -10981,7 +10985,10 @@ pub fn benchmarkPrepareNativeMatchStageScratch(
         scratch.duplicate_index = allocated;
         break :blk allocated;
     };
-    index.build(block);
+    if (match_search_budget < multi_duplicate_min_search_budget)
+        index.buildBounded(block)
+    else
+        index.build(block);
     scratch.duplicate_index_input_ptr = block.ptr;
     scratch.duplicate_index_input_len = block.len;
     scratch.duplicate_index_fingerprint = duplicateIndexInputFingerprint(block);
@@ -11650,7 +11657,7 @@ test "zstd wide generated parser candidates exceed native stack capacity" {
     var scratch: NativeMatchStageScratch = .{};
     defer scratch.deinit(std.testing.allocator);
     inline for (.{ NativeMatchStage.double_fast, .greedy, .lazy, .optimal }) |stage| {
-        _ = try benchmarkPrepareNativeMatchStageScratch(std.testing.allocator, payload, &scratch);
+        _ = try benchmarkPrepareNativeMatchStageScratch(std.testing.allocator, payload, 96, &scratch);
         const result = try benchmarkNativeMatchStage(std.testing.allocator, payload, true, 96, stage, &scratch);
         try std.testing.expect(result.sequence_count > max_native_sequence_count);
         try std.testing.expect(result.available);
@@ -11684,7 +11691,7 @@ test "zstd native match stage benchmark mirrors production emitters" {
     const payload = ("{\"service\":\"vort\",\"message\":\"native stage benchmark\"}\n" ** 96) ++ ("abcdefghijklmnop" ** 32);
     var scratch: NativeMatchStageScratch = .{};
     defer scratch.deinit(std.testing.allocator);
-    try std.testing.expect(try benchmarkPrepareNativeMatchStageScratch(std.testing.allocator, payload, &scratch));
+    try std.testing.expect(try benchmarkPrepareNativeMatchStageScratch(std.testing.allocator, payload, 192, &scratch));
 
     inline for (std.meta.tags(NativeMatchStage)) |stage| {
         var expected: std.ArrayList(u8) = .empty;
@@ -12176,7 +12183,7 @@ test "zstd native match stage benchmark rejects stale duplicate index" {
     second[second.len / 2] = 'b';
     var scratch: NativeMatchStageScratch = .{};
     defer scratch.deinit(std.testing.allocator);
-    try std.testing.expect(try benchmarkPrepareNativeMatchStageScratch(std.testing.allocator, &first, &scratch));
+    try std.testing.expect(try benchmarkPrepareNativeMatchStageScratch(std.testing.allocator, &first, 192, &scratch));
     try std.testing.expectError(
         error.InvalidBlockPlan,
         benchmarkNativeMatchStage(std.testing.allocator, &second, true, 192, .single_duplicate, &scratch),
@@ -18365,6 +18372,44 @@ const DuplicateMatchIndex = struct {
             index.next_candidate_position[position] = next_position;
         }
     }
+
+    noinline fn buildBounded(index: *DuplicateMatchIndex, block: []const u8) linksection(fast_encode_helper_text_section) void {
+        std.debug.assert(block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len);
+        index.high_byte_count = 0;
+        index.max_byte_frequency = 0;
+        var byte_frequencies: [256]u16 = @splat(0);
+        var table: [duplicate_hash_table_len][duplicate_hash_candidates]u16 = undefined;
+        var states: [duplicate_hash_table_len]u8 = @splat(0);
+        for (0..block.len) |position| {
+            const byte = block[position];
+            byte_frequencies[byte] += 1;
+            index.max_byte_frequency = @max(index.max_byte_frequency, byte_frequencies[byte]);
+            index.high_byte_count += @intFromBool(byte > native_max_direct_huffman_symbol);
+            index.predecessor_counts[position] = 0;
+            if (position + 8 > block.len) continue;
+            const hash = duplicateHash8(block[position..][0..8]);
+            const state = states[hash];
+            const count: usize = state >> duplicate_hash_candidate_slot_bits;
+            const next_slot: usize = state & (duplicate_hash_candidates - 1);
+            index.predecessor_counts[position] = @intCast(count);
+            for (0..count) |age| {
+                const slot = (next_slot + duplicate_hash_candidates - 1 - age) & (duplicate_hash_candidates - 1);
+                index.predecessors[position][age] = table[hash][slot];
+                index.match_lengths[position][age] = duplicate_index_invalid;
+            }
+            table[hash][next_slot] = @intCast(position);
+            const updated_len = @min(count + 1, duplicate_hash_candidates);
+            const updated_next = (next_slot + 1) & (duplicate_hash_candidates - 1);
+            states[hash] = @intCast((updated_len << duplicate_hash_candidate_slot_bits) | updated_next);
+        }
+        var next_position: u16 = duplicate_index_invalid;
+        var position = block.len;
+        while (position != 0) {
+            position -= 1;
+            if (index.predecessor_counts[position] != 0) next_position = @intCast(position);
+            index.next_candidate_position[position] = next_position;
+        }
+    }
 };
 
 const DictionaryMatch = struct {
@@ -18949,6 +18994,44 @@ test "zstd reusable duplicate index matches rebuilt search" {
     try std.testing.expectEqual(repeated.len - 17, full_tail_match.match_len);
     try std.testing.expectEqual(@as(usize, 8), full_tail_match.offset);
     try std.testing.expectEqual(try duplicateMixedMatchCandidateAtCursorScan(repeated, 17), full_tail_match);
+}
+
+test "zstd bounded duplicate index preserves large-block search" {
+    var payload: [32 * 1024]u8 = undefined;
+    for (0..16) |seed| {
+        var state: u32 = @truncate(0xa409_3822 +% seed *% 0x0100_0193);
+        for (&payload, 0..) |*byte, i| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @intCast('a' + (i + seed) % 23),
+                1 => if (i % 64 < 52) @intCast('A' + (i + seed) % 26) else @truncate(state >> 24),
+                2 => @intCast((i * 17 + seed * 13) & 127),
+                else => @truncate(state >> 24),
+            };
+        }
+        const copy_len = payload.len / 4;
+        @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+
+        var full: DuplicateMatchIndex = undefined;
+        full.build(&payload);
+        var bounded: DuplicateMatchIndex = undefined;
+        bounded.buildBounded(&payload);
+        try std.testing.expectEqual(full.high_byte_count, bounded.high_byte_count);
+        try std.testing.expectEqual(full.max_byte_frequency, bounded.max_byte_frequency);
+        try std.testing.expectEqualSlices(u8, full.predecessor_counts[0..payload.len], bounded.predecessor_counts[0..payload.len]);
+        try std.testing.expectEqualSlices(u16, full.next_candidate_position[0..payload.len], bounded.next_candidate_position[0..payload.len]);
+        for (0..payload.len) |position| {
+            const count = full.predecessor_counts[position];
+            try std.testing.expectEqualSlices(u16, full.predecessors[position][0..count], bounded.predecessors[position][0..count]);
+            try std.testing.expectEqualSlices(u16, full.match_lengths[position][0..count], bounded.match_lengths[position][0..count]);
+        }
+        for ([_]usize{ 0, 257, 4096, 16 * 1024 }) |start_min| {
+            try std.testing.expectEqual(
+                try findBestDuplicateMatchIndexed(&payload, start_min, &full),
+                try findBestDuplicateMatchIndexed(&payload, start_min, &bounded),
+            );
+        }
+    }
 }
 
 test "zstd indexed duplicate lower bound preserves competitive winners" {
