@@ -10603,6 +10603,16 @@ coverage.
   same-binary 30-pair 20-row matrix preserves every size/checksum and improves
   level-1 JSON by `1.0773x` with 30/30 wins; non-level-1 rows remain within
   about 0.7% noise.
+  Deferring the complete level-1 duplicate index behind a smaller exact-key
+  threshold prefilter was rejected. The prefilter retained the bounded index's
+  newest-four candidates and conservatively fell back on high-byte, capacity,
+  or uncertain cases; its oracle proved every prefilter prune was also pruned
+  by the complete indexed scan. A production profile removed the former
+  `DuplicateMatchIndex.buildBounded` entry (about 12% of sampled cycles), but
+  the prefilter plus long-match extension consumed about 14% instead. A
+  same-binary 30-pair 20-row matrix preserved every wire/checksum but reduced
+  level-1 JSON to `0.9898x` with only 4/30 wins, so eager bounded construction
+  remains.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
