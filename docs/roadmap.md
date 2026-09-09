@@ -10579,8 +10579,7 @@ coverage.
   the decoder can be partitioned without changing their cache placement.
   Zstd level-1 large-block arbitration now screens the legacy single-duplicate
   fallback with a conservative Huffman lower bound before rebuilding a complete
-  literal tree for every indexed match candidate. The shared predecessor index
-  first finds only the maximum removable match span; when the remaining low-byte
+  literal tree for every indexed match candidate. When the remaining low-byte
   literals need at least as many one-bit code bytes as the current winner, the
   one-sequence candidate cannot win even before its omitted headers and sequence
   bits. Inputs containing high bytes retain the exact former path because their
@@ -10594,6 +10593,16 @@ coverage.
   keeps its 640-byte JSON frame; an isolated fixed-CPU production run reported
   about 24.0 MiB/s versus the prior 20.6 MiB/s baseline. All 20 encode rows,
   91 stage rows, and 273 bidirectional libzstd 1.5.5 cases pass.
+  The lower-bound scan now derives the minimum match length needed to beat the
+  current winner and stops once later source positions cannot reach it. It
+  returns to exact scoring as soon as any predecessor can meet that threshold,
+  while high-byte inputs retain the existing conservative fallback. Sixteen
+  generated 8 KiB blocks compare the threshold result against the previous
+  full maximum-match scan across eight winner limits, and the existing 64-case
+  selector oracle remains byte-exact against disabling the bound entirely. A
+  same-binary 30-pair 20-row matrix preserves every size/checksum and improves
+  level-1 JSON by `1.0773x` with 30/30 wins; non-level-1 rows remain within
+  about 0.7% noise.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,

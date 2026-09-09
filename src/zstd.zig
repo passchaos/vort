@@ -10736,20 +10736,17 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     // original final arbitration position, preserving tie behavior.
     var early_single_tested = false;
     var early_single_match: ?DuplicateMatch = null;
-    var indexed_single_min_regenerated: ?usize = null;
     var skip_level_one_single = false;
     if (match_search_budget < multi_duplicate_min_search_budget and block.len > duplicate_exact_hash_input_max) {
         const decisive_total_len = block.len / 256;
         if (duplicate_index_ptr != null) {
             const index = duplicate_index_ptr.?;
-            // First compute only the maximum removable match span. If even
-            // one bit per remaining non-RLE literal cannot meet the decisive
-            // wire bound, defer the expensive exact Huffman scoring pass.
-            if (index.high_byte_count == 0)
-                indexed_single_min_regenerated = minimumIndexedDuplicateRegeneratedLen(block, 0, index);
+            // Derive the shortest match that could beat the decisive wire
+            // bound, then stop once no later position can still reach it.
+            // Only a competitive match needs the exact Huffman scoring pass.
             skip_level_one_single = indexedSingleMatchCannotBeat(
+                block,
                 index,
-                indexed_single_min_regenerated,
                 decisive_total_len + 1,
             );
             if (!skip_level_one_single) {
@@ -10844,7 +10841,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
         duplicate_index_ptr != null and rleByte(block) == null)
     {
         const index = duplicate_index_ptr.?;
-        skip_level_one_single = indexedSingleMatchCannotBeat(index, indexed_single_min_regenerated, best.items.len);
+        skip_level_one_single = indexedSingleMatchCannotBeat(block, index, best.items.len);
         if (!skip_level_one_single) early_single_match = try findBestDuplicateMatchIndexed(block, 0, index);
         early_single_tested = true;
     } else if (shouldQueryDecisiveSingleDuplicate(early_single_tested, beam_is_decisive, rleByte(block) != null)) {
@@ -18585,45 +18582,68 @@ fn findBestDuplicateMatchIndexedCancellable(block: []const u8, start_min: usize,
     return best;
 }
 
-noinline fn minimumIndexedDuplicateRegeneratedLen(block: []const u8, start_min: usize, index: *DuplicateMatchIndex) linksection(fast_encode_helper_text_section) ?usize {
-    if (block.len <= duplicate_exact_hash_input_max or block.len > duplicate_index_max_input_len or
-        block.len < 24 or start_min + 16 > block.len) return null;
-    var maximum_len: usize = 0;
-    var second: usize = index.next_candidate_position[start_min];
+noinline fn indexedSingleMatchCannotBeat(
+    block: []const u8,
+    index: *DuplicateMatchIndex,
+    total_len_limit: usize,
+) linksection(fast_encode_helper_text_section) bool {
+    if (comptime builtin.is_test) if (test_disable_indexed_single_lower_bound) return false;
+    if (total_len_limit == 0) return false;
+    if (block.len <= duplicate_exact_hash_input_max or block.len > duplicate_index_max_input_len or block.len < 24) return false;
+    if (index.high_byte_count != 0) return false;
+    // A one-sequence compressed block has a three-byte block header. If its
+    // literals are not RLE, every symbol needs at least one Huffman bit. Keep
+    // the whole-block maximum frequency as the conservative RLE escape hatch.
+    const huffman_literal_limit = if (total_len_limit <= 3)
+        0
+    else
+        std.math.mul(usize, total_len_limit - 4, 8) catch std.math.maxInt(usize);
+    const maximum_regenerated = @max(@as(usize, index.max_byte_frequency), huffman_literal_limit);
+    if (maximum_regenerated >= block.len) return false;
+    const required_match_len = block.len - maximum_regenerated;
+
+    var second: usize = index.next_candidate_position[0];
     while (second != duplicate_index_invalid and second + 8 <= block.len) {
         defer second = if (second + 1 < block.len) index.next_candidate_position[second + 1] else duplicate_index_invalid;
-        if (block.len - second <= maximum_len) break;
+        if (block.len - second < required_match_len) break;
         for (index.predecessors[second][0..index.predecessor_counts[second]], 0..) |candidate_index, age| {
             const first: usize = candidate_index;
-            if (first < start_min or block.len - second <= maximum_len) continue;
             const cached_len = index.match_lengths[second][age];
             const len: usize = if (cached_len == duplicate_index_invalid) blk: {
                 const computed = duplicateMatchLength(block, first, second);
                 index.match_lengths[second][age] = @intCast(computed);
                 break :blk computed;
             } else cached_len;
+            if (len >= required_match_len) return false;
+        }
+    }
+    return true;
+}
+
+noinline fn indexedSingleMatchCannotBeatFullScan(
+    block: []const u8,
+    index: *DuplicateMatchIndex,
+    total_len_limit: usize,
+) linksection(fast_encode_helper_text_section) bool {
+    if (total_len_limit == 0 or index.high_byte_count != 0) return false;
+    var maximum_len: usize = 0;
+    var second: usize = index.next_candidate_position[0];
+    while (second != duplicate_index_invalid and second + 8 <= block.len) {
+        defer second = if (second + 1 < block.len) index.next_candidate_position[second + 1] else duplicate_index_invalid;
+        if (block.len - second <= maximum_len) break;
+        for (index.predecessors[second][0..index.predecessor_counts[second]], 0..) |candidate_index, age| {
+            if (block.len - second <= maximum_len) continue;
+            const cached_len = index.match_lengths[second][age];
+            const len: usize = if (cached_len == duplicate_index_invalid) blk: {
+                const computed = duplicateMatchLength(block, candidate_index, second);
+                index.match_lengths[second][age] = @intCast(computed);
+                break :blk computed;
+            } else cached_len;
             if (len >= 8) maximum_len = @max(maximum_len, len);
         }
     }
-    return if (maximum_len == 0) null else block.len - start_min - maximum_len;
-}
-
-noinline fn indexedSingleMatchCannotBeat(
-    index: *const DuplicateMatchIndex,
-    minimum_regenerated: ?usize,
-    total_len_limit: usize,
-) linksection(fast_encode_helper_text_section) bool {
-    if (comptime builtin.is_test) if (test_disable_indexed_single_lower_bound) return false;
-    if (total_len_limit == 0) return false;
-    // The indexed scorer has a conservative raw-literal shortcut for high-byte
-    // inputs. Keep those blocks on the established exact materialization path
-    // rather than using a score that can intentionally overestimate Huffman.
-    if (index.high_byte_count != 0) return false;
-    const regenerated_len = minimum_regenerated orelse return true;
-    // A non-RLE literal alphabet needs at least one bit per regenerated byte.
-    // The exact full-block maximum frequency proves the regenerated literals
-    // cannot all be one symbol when it is below their count. Ignoring every
-    // header and sequence bit leaves a conservative lower bound.
+    if (maximum_len == 0) return true;
+    const regenerated_len = block.len - maximum_len;
     return index.max_byte_frequency < regenerated_len and (regenerated_len + 7) / 8 + 3 >= total_len_limit;
 }
 
@@ -19091,33 +19111,38 @@ test "zstd bounded duplicate index preserves large-block search" {
 }
 
 test "zstd indexed duplicate lower bound preserves competitive winners" {
-    var empty_index: DuplicateMatchIndex = undefined;
-    empty_index.high_byte_count = 0;
-    empty_index.max_byte_frequency = 1;
-    try std.testing.expect(!indexedSingleMatchCannotBeat(&empty_index, 1024, 0));
-
     var payload: [8192]u8 = undefined;
+    var pruned_cases: usize = 0;
+    var retained_cases: usize = 0;
     for (0..16) |seed| {
         var state: u32 = @truncate(0x9e37_79b9 +% seed *% 0x0100_0193);
         for (&payload, 0..) |*byte, i| {
             state = state *% 1_664_525 +% 1_013_904_223;
-            byte.* = if (i % 64 < 52) @intCast('a' + (i + seed) % 23) else @truncate(state >> 24);
+            byte.* = if (i % 64 < 52) @intCast('a' + (i + seed) % 23) else @intCast((state >> 24) & native_max_direct_huffman_symbol);
         }
         @memcpy(payload[4096..5120], payload[1024..2048]);
         @memcpy(payload[7168..7680], payload[2560..3072]);
 
         var index: DuplicateMatchIndex = undefined;
-        index.build(&payload);
-        for ([_]usize{ 0, 257, 2048 }) |start_min| {
-            const expected = (try findBestDuplicateMatchIndexed(&payload, start_min, &index)) orelse continue;
-            try std.testing.expect(expected.payload_len != 0);
-            const minimum_regenerated = minimumIndexedDuplicateRegeneratedLen(&payload, start_min, &index);
-            try std.testing.expect(minimum_regenerated != null);
-            try std.testing.expect(minimum_regenerated.? <= payload.len - start_min - expected.len);
-            if (start_min == 0)
-                try std.testing.expect(!indexedSingleMatchCannotBeat(&index, minimum_regenerated, expected.payload_len + 4));
+        index.buildBounded(&payload);
+        try std.testing.expect(!indexedSingleMatchCannotBeat(&payload, &index, 0));
+        const expected = (try findBestDuplicateMatchIndexed(&payload, 0, &index)) orelse continue;
+        try std.testing.expect(expected.payload_len != 0);
+        // If the exact selected single candidate beats a limit, the cheaper
+        // threshold scan must conservatively retain the full search.
+        try std.testing.expect(!indexedSingleMatchCannotBeat(&payload, &index, expected.payload_len + 4));
+        for ([_]usize{ 4, 8, 16, 32, 64, 128, 512, 2048 }) |limit| {
+            index.buildBounded(&payload);
+            const actual = indexedSingleMatchCannotBeat(&payload, &index, limit);
+            index.buildBounded(&payload);
+            const reference = indexedSingleMatchCannotBeatFullScan(&payload, &index, limit);
+            try std.testing.expectEqual(reference, actual);
+            pruned_cases += @intFromBool(actual);
+            retained_cases += @intFromBool(!actual);
         }
     }
+    try std.testing.expect(pruned_cases != 0);
+    try std.testing.expect(retained_cases != 0);
 }
 
 test "zstd level one indexed single lower bound preserves generated block winners" {
@@ -19178,9 +19203,8 @@ test "zstd level one indexed single lower bound preserves generated block winner
         try std.testing.expectEqualSlices(u8, exact.items, fast.items);
 
         var index: DuplicateMatchIndex = undefined;
-        index.build(payload);
-        const minimum_regenerated = if (index.high_byte_count == 0) minimumIndexedDuplicateRegeneratedLen(payload, 0, &index) else null;
-        if (fast_ok) bypassed += @intFromBool(indexedSingleMatchCannotBeat(&index, minimum_regenerated, fast.items.len));
+        index.buildBounded(payload);
+        if (fast_ok) bypassed += @intFromBool(indexedSingleMatchCannotBeat(payload, &index, fast.items.len));
     }
     try std.testing.expect(bypassed != 0);
 }
