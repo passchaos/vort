@@ -10630,3 +10630,9 @@ coverage.
   geometric mean and `1.0022x` on the target level-1 JSON row. All wires were
   identical and the weakest control was `0.9989x`; the marginal result does not
   justify another global lookup in the beam loop.
+  Hoisting the indexed match's direct-distance cost out of repeat-beam's two-
+  state loop was rejected too. A focused transition oracle matched the existing
+  helper for repeat and direct offsets at minimum, typical, and maximum match
+  lengths, but thirty fixed-CPU-8 isolated JSON stage pairs fell to `0.9785x`
+  with only 12/30 wins. The extra live value/helper path costs more than the
+  duplicated small integer `log2` calculation on this target.
