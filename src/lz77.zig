@@ -930,8 +930,9 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
             }
             const indexed_rep0 = match_count != 0 and matches[0].distance == state.rep0;
             if (can_match and state.rep0 <= position and !indexed_rep0) {
-                const length = matchLength(input, position - state.rep0, position, @min(maxMatch(options), input.len - position));
-                if (length >= minMatch(options)) {
+                const candidate = position - state.rep0;
+                const length = repBeamMatchLength(input, candidate, position, @min(maxMatch(options), input.len - position), minMatch(options));
+                if (length != 0) {
                     extendRepBeamMatchKnownValid(states, lengths, options, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
                 }
             }
@@ -964,6 +965,13 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
         },
     };
     return stats;
+}
+
+inline fn repBeamMatchLength(input: []const u8, candidate: usize, position: usize, maximum: usize, minimum: usize) usize {
+    if (minimum >= 4 and std.mem.readInt(u32, input[candidate..][0..4], .little) !=
+        std.mem.readInt(u32, input[position..][0..4], .little)) return 0;
+    const length = matchLength(input, candidate, position, maximum);
+    return if (length >= minimum) length else 0;
 }
 
 inline fn extendRepBeamMatchKnownValid(states: []RepBeamState, lengths: []u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) void {
@@ -1371,6 +1379,25 @@ test "rep beam known-valid transition matches guarded reference" {
         extendRepBeamMatchKnownValid(&actual_states, &actual_lengths, options, 8, 1, state, case.match);
         try std.testing.expectEqualSlices(u8, &expected_lengths, &actual_lengths);
         for (expected_states, actual_states) |expected, actual| try std.testing.expect(std.meta.eql(expected, actual));
+    }
+}
+
+test "rep beam recent-offset prefix guard matches scalar acceptance" {
+    var input: [674]u8 = undefined;
+    var state: u32 = 0x510e_527f;
+    for (&input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[337..][0..258], input[0..258]);
+    for (0..259) |mismatch| {
+        var probe = input;
+        if (mismatch < 258) probe[337 + mismatch] = probe[mismatch] ^ 0xff;
+        for ([_]usize{ 3, 4 }) |minimum| {
+            const scalar = matchLength(&probe, 0, 337, 258);
+            const expected = if (scalar >= minimum) scalar else 0;
+            try std.testing.expectEqual(expected, repBeamMatchLength(&probe, 0, 337, 258, minimum));
+        }
     }
 }
 

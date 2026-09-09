@@ -10655,6 +10655,17 @@ coverage.
   isolated JSON stage to `0.9822x` with only 8/30 fixed-CPU-8 wins. The simple
   contiguous head clear remains cheaper than making the hot index-build loop
   conditional.
+  Repeat-beam's explicit recent-offset probe now checks its four-byte minimum
+  match prefix before entering the shared 32-byte vector extension loop. The
+  indexed candidate already has its own hash-chain guard; this change covers
+  only the per-state rep0 fallback, and generic three-byte matching retains the
+  original path. An exhaustive mismatch-position oracle through the 258-byte
+  maximum proves identical accepted lengths at minimum lengths three and four,
+  and all repeat-beam token tests remain exact. Thirty fixed-CPU-8 isolated JSON
+  stage pairs improve by `1.0630x` with 30/30 wins. A same-binary 30-pair 20-row
+  frame matrix retains every size/checksum, improves JSON by `1.0382x`/`1.0244x`/
+  `1.0244x`/`1.0236x` at levels 1/3/9/22, and keeps the weakest control at
+  `0.9940x`.
   Converting LL/ML values to canonical sequence codes once and sharing those
   codes across RLE, predefined, compressed, and Repeat_Mode alternatives was
   rejected. The existing value-based predefined planner already uses precomputed
