@@ -7984,6 +7984,11 @@ fn commandPrefixForDecode(header: *MinimalCompressedHeader) Error!*const PrefixC
 fn literalPrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(256) {
     if (index >= header.literal_tree_count) return error.CorruptFrame;
     if (index < inline_literal_tree_count) return &header.literal_trees[index];
+    return expandPackedLiteralPrefixForDecode(header, index);
+}
+
+noinline fn expandPackedLiteralPrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(256) {
+    std.debug.assert(index >= inline_literal_tree_count and index < header.literal_tree_count);
     if (header.active_packed_literal_tree_index != index) {
         header.active_packed_literal_tree = try header.packed_literal_trees[index - inline_literal_tree_count].expand();
         header.active_packed_literal_tree_index = index;
@@ -17003,6 +17008,25 @@ test "br packed prefix preserves literal command and distance trees" {
         const expanded_single = try PackedPrefixCode(alphabet_size).init(&single).expand();
         try std.testing.expectEqual(single.single_symbol, expanded_single.single_symbol);
     }
+}
+
+test "br packed literal lookup expands and caches the cold tree" {
+    var header: MinimalCompressedHeader = undefined;
+    header.literal_tree_count = inline_literal_tree_count + 1;
+    header.literal_trees[inline_literal_tree_count - 1] = .{ .single_symbol = 7 };
+    const packed_source: PrefixCode(256) = .{ .single_symbol = 211 };
+    header.packed_literal_trees[0] = PackedPrefixCode(256).init(&packed_source);
+    header.active_packed_literal_tree_index = std.math.maxInt(u16);
+
+    try std.testing.expectEqual(@as(?u16, 7), (try literalPrefixForDecode(&header, inline_literal_tree_count - 1)).single_symbol);
+    const first = try literalPrefixForDecode(&header, inline_literal_tree_count);
+    try std.testing.expectEqual(@as(?u16, 211), first.single_symbol);
+    try std.testing.expectEqual(@as(u16, inline_literal_tree_count), header.active_packed_literal_tree_index);
+    try std.testing.expect((try literalPrefixForDecode(&header, inline_literal_tree_count)) == first);
+
+    var invalid_index: u16 = inline_literal_tree_count + 1;
+    std.mem.doNotOptimizeAway(&invalid_index);
+    try std.testing.expectError(error.CorruptFrame, literalPrefixForDecode(&header, invalid_index));
 }
 
 test "br minimal compressed stream switches literal block tree" {

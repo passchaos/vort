@@ -10362,3 +10362,13 @@ coverage.
   Mirroring upstream's cold hint for non-zero insert-length extra bits was
   neutral here: twenty focused pairs reached only `1.0025x` with 11/20 wins,
   so the hint was removed without spending a full-matrix run.
+  The packed-literal-tree expansion and cache path is now isolated behind a
+  `noinline` helper. The public lookup still validates every index and returns
+  inline trees exactly as before; only indexes 64...255 enter the cold helper.
+  A direct oracle pins the last inline tree, first packed tree, repeated packed
+  cache hits, and out-of-range rejection. Twenty fixed-CPU-2 complete-matrix
+  pairs improve `clustered_q8` by `1.0131x` with 20/20 wins and identical
+  checksums; every non-target median remains at or above `0.9949x`. The formal
+  13-row libbrotli gate and the 100-case / 7,056-one-shot / 7,056-progressive /
+  1,401-chunk-run upstream differential remain green, including all 64 high-tree
+  truncation probes.
