@@ -10560,3 +10560,10 @@ coverage.
   complete-matrix pairs reduced `huffman80k` to `0.9208x` and `binary_mixed` to
   `0.9426x`, both with 0/30 wins; the additional parser entry disturbed the
   surrounding hot layout more than the roughly 1 KiB saved copy.
+  Moving the complete compressed-block decoder behind a `noinline` boundary
+  was not worthwhile by itself. It reduced the caller's generated body from
+  roughly 14.6 KiB to 2 KiB and improved 512 KiB JSON by `1.0203x`, but thirty
+  fixed-CPU-8 complete-matrix pairs left `numbered_json` at `0.9939x` and the
+  row-median geometric mean at only `1.0018x`. The standalone boundary was
+  removed; it remains useful only as a controlled isolation mechanism for a
+  future tree-builder experiment with a substantially larger local gain.
