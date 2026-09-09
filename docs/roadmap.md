@@ -10577,3 +10577,20 @@ coverage.
   and mixed binary to `0.9379x`; the section placement cost dominates those raw-
   literal sequence kernels. The prototype and isolation remain rejected until
   the decoder can be partitioned without changing their cache placement.
+  Zstd level-1 large-block arbitration now screens the legacy single-duplicate
+  fallback with a conservative Huffman lower bound before rebuilding a complete
+  literal tree for every indexed match candidate. The shared predecessor index
+  first finds only the maximum removable match span; when the remaining low-byte
+  literals need at least as many one-bit code bytes as the current winner, the
+  one-sequence candidate cannot win even before its omitted headers and sequence
+  bits. Inputs containing high bytes retain the exact former path because their
+  indexed score has a deliberately conservative raw-literal shortcut. A
+  64-shape, 8--32 KiB low/mixed/high-entropy oracle compares the production
+  selector with the forced complete search byte-for-byte, and a separate score
+  oracle checks competitive indexed winners. In a same-binary, alternating
+  fixed-CPU-8 30-pair matrix, all 20 case/level rows retained their output sizes
+  and checksums; level-1 JSON improved by a median `1.1548x` with 29/30 wins,
+  while the weakest non-target row was `0.9964x`. The final ReleaseFast gate
+  keeps its 640-byte JSON frame; an isolated fixed-CPU production run reported
+  about 24.0 MiB/s versus the prior 20.6 MiB/s baseline. All 20 encode rows,
+  91 stage rows, and 273 bidirectional libzstd 1.5.5 cases pass.
