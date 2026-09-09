@@ -10399,3 +10399,11 @@ coverage.
   exhaustive length/distance equivalence tests: twenty fixed-CPU-2 focused pairs
   fell to about `0.920x` with 0/20 wins. Production retains compiler-rt `memcpy`;
   future work should target the longer-copy bulk or surrounding dispatch cost.
+  An x86-64 ERMS `rep movsb` follow-up for non-overlapping copies was also
+  rejected. Thresholds of 256 and 512 bytes were consistently about `0.996x`
+  on the focused row; 1,024 bytes was near neutral with high run noise. The
+  compiler-rt vector loop therefore remains preferable for this workload.
+  Inlining compiler-rt's own exact less-than-16-byte strategy was neutral too:
+  twenty focused pairs split evenly around `1.000x`. This confirms that the
+  current short-copy cost is not its standalone memcpy call, so the experiment
+  and exhaustive temporary boundary test were removed.
