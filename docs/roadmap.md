@@ -10623,3 +10623,10 @@ coverage.
   `0.9991x` with 13/30 wins; interleaving hash-table mutation into the hotter DP
   loop outweighed removing the separate linear prepass. The compact offline
   index remains.
+  Reusing optimal's compile-time 32 KiB fixed-distance cost table in the repeat
+  beam was rejected as below threshold. It exactly replaces the scalar `log2`
+  formula and improved thirty isolated JSON stage pairs by `1.0248x` with 21/30
+  wins, but a same-binary 30-pair 20-row frame matrix showed only `1.0033x`
+  geometric mean and `1.0022x` on the target level-1 JSON row. All wires were
+  identical and the weakest control was `0.9989x`; the marginal result does not
+  justify another global lookup in the beam loop.
