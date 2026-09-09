@@ -10484,3 +10484,10 @@ coverage.
   sequence `huffman80k` row to `0.944x`--`0.965x`. A dedicated mode-`0x20`
   execution branch was rejected too because unrelated `huffman80k` and mixed-
   binary rows fell to about `0.978x` and `0.991x`.
+  Extending the existing linear FSE-table builder from 256/512-state tables to
+  the 32/64/128-state tiers was also rejected. Exact table oracles covered all
+  added widths and the first twenty-pair matrix looked mildly positive, but the
+  longer fixed-CPU rerun was neutral: `numbered_json` had only 10/20 wins with
+  a `1.0019x` median (`0.9974x` geometric mean), while `huffman80k` had 6/20
+  wins at `0.9984x`. The compact sorted constructor remains preferable for
+  small tables; the linear implementation stays limited to 256/512 states.
