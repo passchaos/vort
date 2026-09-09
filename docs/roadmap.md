@@ -10567,3 +10567,13 @@ coverage.
   row-median geometric mean at only `1.0018x`. The standalone boundary was
   removed; it remains useful only as a controlled isolation mechanism for a
   future tree-builder experiment with a substantially larger local gain.
+  Combining that full compressed-block isolation with the previously rejected
+  rank-count/rank-start Huffman decoder was measured under matched 4 KiB-aligned
+  dispatcher and sequence-helper sections. Against an equivalently isolated
+  baseline, thirty fixed-CPU-8 pairs improved `numbered_json` by `1.4898x`,
+  `ascii64k` by `1.0340x`, and 512 KiB JSON by `1.0269x`, while `huffman80k`
+  and mixed binary stayed slightly positive. However, the actual production
+  combination versus unisolated `HEAD` still reduced `huffman80k` to `0.8976x`
+  and mixed binary to `0.9379x`; the section placement cost dominates those raw-
+  literal sequence kernels. The prototype and isolation remain rejected until
+  the decoder can be partitioned without changing their cache placement.
