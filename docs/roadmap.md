@@ -10548,3 +10548,9 @@ coverage.
   reduced `huffman80k` to `0.9460x` and the unchanged FSE/FSE/RLE
   `binary_mixed` row to `0.9301x`, both with 0/30 wins. The specialized helpers
   therefore keep the established full `SequenceDecodeState` layout.
+  Keeping that layout but delaying its embedded-spec assignment until after the
+  two specialized sequence branches was rejected too. The specialized helpers
+  retained their original local table copy and stack layout, yet the changed
+  caller grew by 208 bytes and thirty fixed-CPU-8 complete-matrix pairs reduced
+  `huffman80k` to `0.9748x`, `binary_mixed` to `0.9888x`, and `numbered_json`
+  to `0.9884x`. Eager cursor construction remains.
