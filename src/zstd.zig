@@ -6118,9 +6118,26 @@ const RawOrRleFrameShape = struct {
     all_raw: bool = true,
 };
 
+const RawOrRleFrameShapeInspection = union(enum) {
+    exact: RawOrRleFrameShape,
+    exceeds_limit,
+};
+
 fn inspectRawOrRleFrameShape(input: []const u8, options: NativeFrameOptions) Error!RawOrRleFrameShape {
+    return switch (try inspectRawOrRleFrameShapeLimited(input, options, null)) {
+        .exact => |shape| shape,
+        .exceeds_limit => unreachable,
+    };
+}
+
+fn inspectRawOrRleFrameShapeLimited(
+    input: []const u8,
+    options: NativeFrameOptions,
+    encoded_len_limit: ?usize,
+) Error!RawOrRleFrameShapeInspection {
     _ = try nativeMatchSearchBudget(options);
     var shape: RawOrRleFrameShape = .{ .encoded_len = try nativeFrameHeaderLen(try checkedUsizeToU64(input.len), options) };
+    const trailing_len: usize = if (options.content_checksum) 4 else 0;
     const block_size_max = try nativeBlockSizeMax(options);
     if (input.len == 0) {
         shape.encoded_len = std.math.add(usize, shape.encoded_len, 3) catch return error.IntegerOverflow;
@@ -6128,22 +6145,57 @@ fn inspectRawOrRleFrameShape(input: []const u8, options: NativeFrameOptions) Err
         var offset: usize = 0;
         while (offset < input.len) {
             const search_end = @min(input.len, offset + block_size_max);
-            if (findRleRun(input[offset..search_end])) |run| {
+            const block = input[offset..search_end];
+            const run = switch (findRleRunForShape(block, shape.encoded_len, trailing_len, encoded_len_limit)) {
+                .exceeds_limit => return .exceeds_limit,
+                .found => |run| run,
+                .none => null,
+            };
+            if (run) |value| {
                 shape.all_raw = false;
-                const run_start = offset + run.start;
+                const run_start = offset + value.start;
                 if (run_start > offset)
                     shape.encoded_len = try addRawOrRleBlockLen(shape.encoded_len, input[offset..run_start], &shape.all_raw);
                 shape.encoded_len = std.math.add(usize, shape.encoded_len, 4) catch return error.IntegerOverflow;
-                offset = run_start + run.len;
+                if (encoded_len_limit) |limit|
+                    if (shape.encoded_len +| trailing_len > limit) return .exceeds_limit;
+                offset = run_start + value.len;
             } else {
-                shape.encoded_len = try addRawOrRleBlockLen(shape.encoded_len, input[offset..search_end], &shape.all_raw);
+                shape.encoded_len = try addRawOrRleBlockLen(shape.encoded_len, block, &shape.all_raw);
                 offset = search_end;
             }
         }
     }
-    if (options.content_checksum)
-        shape.encoded_len = std.math.add(usize, shape.encoded_len, 4) catch return error.IntegerOverflow;
-    return shape;
+    shape.encoded_len = std.math.add(usize, shape.encoded_len, trailing_len) catch return error.IntegerOverflow;
+    return .{ .exact = shape };
+}
+
+const RleRunShapeSearch = union(enum) {
+    found: RleRun,
+    none,
+    exceeds_limit,
+};
+
+fn findRleRunForShape(block: []const u8, encoded_prefix_len: usize, trailing_len: usize, encoded_len_limit: ?usize) RleRunShapeSearch {
+    var i: usize = 0;
+    var scanned_run_count: usize = 0;
+    while (i < block.len) {
+        const len = sameByteRunLen(block, i);
+        if (len >= min_rle_split_len) return .{ .found = .{ .start = i, .len = len } };
+        i += @max(len, 1);
+        scanned_run_count += 1;
+        if (encoded_len_limit) |limit| {
+            // No qualifying run starts before `i`, so those bytes require at
+            // least one block header. A lone short equal-byte prefix can still
+            // use a one-byte RLE payload; after a second run the whole prefix
+            // is necessarily raw. Ignore all future block costs to keep this
+            // a conservative lower bound.
+            const prefix_payload_len = if (scanned_run_count == 1) @min(i, 1) else i;
+            const lower_bound = encoded_prefix_len +| trailing_len +| 3 +| prefix_payload_len;
+            if (lower_bound > limit) return .exceeds_limit;
+        }
+    }
+    return .none;
 }
 
 fn addRawOrRleBlockLen(total: usize, block: []const u8, all_raw: *bool) Error!usize {
@@ -6625,7 +6677,13 @@ pub const NativeFrameEncoder = struct {
         // segmentation without copying input or hashing it a second time.
         // Materialize it only when it can win; strict `<` preserves the
         // historical raw-on-equal mode and bytes.
-        const raw_shape = try inspectRawOrRleFrameShape(input, frame_options);
+        const raw_shape = switch (try inspectRawOrRleFrameShapeLimited(input, frame_options, self.literal_scratch.items.len)) {
+            .exceeds_limit => {
+                try out.appendSlice(self.allocator, self.literal_scratch.items);
+                return .literal_only;
+            },
+            .exact => |shape| shape,
+        };
         if (self.literal_scratch.items.len < raw_shape.encoded_len) {
             try out.appendSlice(self.allocator, self.literal_scratch.items);
             return .literal_only;
@@ -22040,6 +22098,52 @@ test "zstd auto selection uses exact uncompressed-frame bound" {
     const rle_shape = try inspectRawOrRleFrameShape(short_rle, rle_options);
     try std.testing.expect(!rle_shape.all_raw);
     try std.testing.expectEqual(rle.len, rle_shape.encoded_len);
+}
+
+test "zstd bounded raw shape inspection preserves exact arbitration" {
+    var payload: [16 * 1024]u8 = undefined;
+    var early_exits: usize = 0;
+    var exact_results: usize = 0;
+    for (0..24) |seed| {
+        var random_state: u32 = @truncate(0x9e37_79b9 +% seed *% 0x0100_0193);
+        for (&payload, 0..) |*byte, position| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @truncate(random_state >> 24),
+                1 => @truncate(position * 17 + seed * 13),
+                2 => @intCast('a' + (position + seed) % 23),
+                else => if (position % 64 < 52) @intCast('a' + (position + seed) % 23) else @truncate(random_state >> 24),
+            };
+        }
+        if (seed % 3 == 0) @memset(payload[4096 .. 4096 + 17 + seed], @intCast(seed));
+        const options: NativeFrameOptions = .{
+            .content_checksum = seed & 1 != 0,
+            .block_size_max = 4096,
+        };
+        const exact = try inspectRawOrRleFrameShape(&payload, options);
+        const limits = [_]usize{ 8, 64, 512, 4096, 8192, 16384, exact.encoded_len - 1, exact.encoded_len, 32768 };
+        for (limits) |limit| {
+            const bounded = try inspectRawOrRleFrameShapeLimited(&payload, options, limit);
+            switch (bounded) {
+                .exact => |shape| {
+                    try std.testing.expectEqual(exact, shape);
+                    exact_results += 1;
+                },
+                .exceeds_limit => {
+                    try std.testing.expect(exact.encoded_len > limit);
+                    early_exits += 1;
+                },
+            }
+        }
+    }
+    try std.testing.expect(early_exits != 0);
+    try std.testing.expect(exact_results != 0);
+
+    const short_rle_prefix = "aaaaaaaaabbbbbbbbbbbb";
+    const prefix_options: NativeFrameOptions = .{ .content_checksum = false };
+    const prefix_exact = try inspectRawOrRleFrameShape(short_rle_prefix, prefix_options);
+    const prefix_bounded = try inspectRawOrRleFrameShapeLimited(short_rle_prefix, prefix_options, prefix_exact.encoded_len);
+    try std.testing.expectEqual(prefix_exact, prefix_bounded.exact);
 }
 
 test "zstd compression levels map to increasing search budgets" {

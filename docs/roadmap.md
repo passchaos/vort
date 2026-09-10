@@ -10628,6 +10628,19 @@ coverage.
   code-layout cost: the best of three cost-comparison formulations reduced JSON
   to `0.987x` with 0/30 wins, while earlier forms fell to about `0.960x`. The
   original duplicate update remains faster once benchmark branching is removed.
+  Automatic native-frame arbitration now bounds the delayed raw/RLE shape scan
+  by the already-materialized compressed-frame length. Before the first
+  qualifying 12-byte run, every consumed byte is irrevocably raw; once the
+  frame header, checksum trailer, one raw-block header, and that prefix exceed
+  the compressed candidate, the raw/RLE contender cannot win and scanning stops.
+  Equal lengths still complete exact inspection and preserve raw-on-equal ties.
+  A 24-shape oracle covering random, structured, narrow-alphabet, mixed, RLE,
+  four block boundaries, checksum on/off, and nine winner limits verifies that
+  every early exit corresponds to a strictly larger exact raw/RLE frame. Thirty
+  alternating fixed-CPU-8 pairs against an independent `HEAD` binary preserve
+  all 20 frame sizes/checksums and improve text by `4.62x`, level-1 JSON/binary/
+  tradeoff/multiblock by `1.029x`/`1.042x`/`1.102x`/`1.019x`; every row median
+  is positive.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
