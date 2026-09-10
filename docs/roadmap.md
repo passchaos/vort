@@ -11140,6 +11140,13 @@ coverage.
   improved text/JSON/binary by `1.0141x`/`1.0214x`/`1.1068x`, but the 20-row
   matrix fell broadly to `0.9922x` geometrically, with JSON level 22 at `0.9852x`
   and multiblock level 22 at `0.9766x`. The unified loop remains.
+  Reusing the large index's inactive `hash_predecessors` prefix as bounded-build
+  paired-position scratch was rejected. It removed a 64 KiB stack array without
+  changing persistent layout or the field oracle, and improved index construction
+  by `1.0428x`/`1.0406x`/`1.0286x` on text/JSON/binary. The complete 20-row
+  matrix was exactly neutral at `1.0000x` geometrically, though, and every binary
+  level was slightly negative (`0.9939x`--`0.9989x`). The explicit local array
+  remains to avoid aliasing the later exact-search state.
   A fixed-parameter Zstd-only double-fast instance was rejected too. It folded
   the constant four-byte minimum and 258-byte maximum while retaining only the
   block-dependent 32 KiB window; a 16-shape oracle matched generic tokens and
