@@ -11082,3 +11082,16 @@ coverage.
   matrix preserves every size/checksum, reaches a `1.0060x` row-median geometric
   mean, improves binary level 1 by `1.0184x` and JSON level 1 by `1.0128x`, and
   keeps the weakest row effectively neutral at `0.9993x`.
+  Extending each double-fast literal run and following match as one ArrayList
+  slice was rejected after the retained literal-only batching change. All 11
+  double-fast tests and stage outputs remained exact, and thirty primary-stage
+  pairs improved JSON/binary/wide by `1.0093x`/`1.0075x`/`1.0215x`. The 20-row
+  matrix reached only `0.9989x` geometrically, however, with JSON level 9 at
+  `0.9919x`, tradeoff level 1 at `0.9898x`, and text level 22 at `0.9904x`.
+  Match tokens keep their separate append so the common call layout stays small.
+  Open-coding match emission inside double-fast's zero-literal immediate-rep
+  loop was rejected. Its `anchor == position` invariant makes the omitted empty
+  literal append semantically redundant, and all 11 focused tests plus stage
+  outputs stayed exact. Thirty primary-stage pairs nevertheless measured only
+  `0.9977x`/`1.0004x`/`0.9977x`/`0.9960x` for text/JSON/binary/wide; the shared
+  `storeMatch` helper remains better optimized.
