@@ -1,19 +1,6 @@
 const std = @import("std");
 const vort = @import("vort");
-
-const SnappyStatus = enum(c_int) {
-    ok = 0,
-    invalid_input = 1,
-    buffer_too_small = 2,
-    _,
-};
-
-const UncompressFn = *const fn (
-    [*]const u8,
-    usize,
-    [*]u8,
-    *usize,
-) callconv(.c) SnappyStatus;
+const libsnappy = @import("libsnappy_runtime.zig");
 
 const Case = struct {
     name: []const u8,
@@ -40,40 +27,6 @@ const Row = struct {
     copy4_count: usize,
 };
 
-const Runtime = struct {
-    library: std.DynLib,
-    uncompress: UncompressFn,
-
-    fn open() !Runtime {
-        const names = [_][:0]const u8{
-            "libsnappy.so.1",
-            "/lib/x86_64-linux-gnu/libsnappy.so.1",
-            "/usr/lib/x86_64-linux-gnu/libsnappy.so.1",
-            "libsnappy.dylib",
-        };
-        for (names) |name| {
-            var library = std.DynLib.openZ(name.ptr) catch continue;
-            const uncompress = library.lookup(
-                UncompressFn,
-                "snappy_uncompress",
-            ) orelse {
-                library.close();
-                continue;
-            };
-            return .{
-                .library = library,
-                .uncompress = uncompress,
-            };
-        }
-        return error.ReferenceUnavailable;
-    }
-
-    fn deinit(self: *Runtime) void {
-        self.library.close();
-        self.* = undefined;
-    }
-};
-
 const Options = struct {
     iterations: usize = 1000,
     csv_path: ?[]const u8 = null,
@@ -92,7 +45,7 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const options = try parseOptions(&args);
-    var runtime = try Runtime.open();
+    var runtime = try libsnappy.Runtime.open();
     defer runtime.deinit();
 
     const cases = [_]Case{
@@ -185,7 +138,7 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
 
 fn measureCase(
     init: std.process.Init,
-    runtime: *const Runtime,
+    runtime: *const libsnappy.Runtime,
     case: Case,
     iterations: usize,
     only_codec: ?[]const u8,
@@ -277,7 +230,7 @@ const Sample = struct {
 fn measureRepeated(
     io: std.Io,
     codec: Codec,
-    runtime: *const Runtime,
+    runtime: *const libsnappy.Runtime,
     encoded: []const u8,
     output: []u8,
     iterations: usize,
@@ -312,19 +265,11 @@ fn measureRepeated(
 }
 
 fn referenceDecode(
-    runtime: *const Runtime,
+    runtime: *const libsnappy.Runtime,
     encoded: []const u8,
     output: []u8,
 ) !void {
-    var output_len = output.len;
-    const status = runtime.uncompress(
-        encoded.ptr,
-        encoded.len,
-        output.ptr,
-        &output_len,
-    );
-    if (status != .ok) return error.ReferenceDecodeFailed;
-    if (output_len != output.len) return error.SizeMismatch;
+    try runtime.decode(encoded, output);
 }
 
 fn elapsedNs(io: std.Io, start: std.Io.Timestamp) u64 {

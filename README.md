@@ -295,6 +295,7 @@ zig build run -- encode-snappy-frame-file README.md /tmp/vort-readme.sz
 zig build run -- summary-snappy-frame-file /tmp/vort-readme.sz
 zig build run -- decode-snappy-frame-file-to /tmp/vort-readme.sz /tmp/vort-readme-snappy-frame.out 1048576
 zig build run-snappy-block-cli-probe
+zig build run-snappy-interop-probe
 zig build run-snappy-report-gate
 # Snappy encoded-bound, summary, split-input, and exact-size helpers are available from the library APIs:
 # snappyEncodedBlockBound / snappySummarizeBlock / snappyDecodedBlockChunksSize / snappyDecodeBlockChunksIntoExactSize and
@@ -1175,6 +1176,20 @@ matching dictionary exposes the underlying `ChecksumMismatch`, `SizeMismatch`,
 `InvalidMatch`, or `CorruptFrame`.
 
 `run-lz4-native-probe` also dynamically calls liblz4's `LZ4F_compressFrame` for 120 frame option/level/payload combinations spanning all four block-size IDs, linked and independent modes, checksums, omitted content size, and a 300 KiB multi-block payload. It decodes those frames through Vort's one-shot, incremental, reusable, and chunked public APIs, and independently decodes matching Vort-generated frames through `LZ4F_decompress`, so LZ4 interoperability coverage is bidirectional and is not limited to CLI routing.
+
+`run-snappy-interop-probe` dynamically calls the complete libsnappy raw-block C
+API. Eight libsnappy-generated blocks, from empty and tiny data through a 64 KiB
+incompressible block and a 160 KiB multi-chunk payload, are decoded through
+Vort's one-shot, exact-size caller-buffer, and split-input APIs. Matching
+Vort-generated raw blocks are validated and decoded by libsnappy; the fixed
+matrix requires copy-bearing output from both encoders. The same
+libsnappy blocks are wrapped in standard checksummed framed-stream chunks and
+decoded through Vort's one-shot, caller-buffer, split-input, and incremental
+APIs, while every compressed block in Vort-generated frames is independently
+validated and decoded by libsnappy (currently seven compressed chunks across
+nine data chunks). The runtime dependency exists only in the probe; truncating
+every libsnappy block must also be rejected by both implementations. The
+production Snappy implementation remains pure Zig.
 
 The focused library benchmark/gate tracks these public surfaces directly:
 

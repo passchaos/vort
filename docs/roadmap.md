@@ -11278,3 +11278,18 @@ coverage.
   incremental APIs, and each matching Vort-produced frame is independently
   decoded by liblz4. The probe reports the runtime liblz4 version; CI installs
   `liblz4-dev` explicitly so missing reference coverage cannot silently pass.
+  The equivalent Snappy audit found that the existing runtime comparison was
+  performance-oriented and one-way: both decoders consumed only Vort-generated
+  raw blocks, with no libsnappy-generated input and no framed-stream coverage.
+  A shared test-only runtime facade now loads `snappy_compress`,
+  `snappy_uncompress`, `snappy_max_compressed_length`,
+  `snappy_uncompressed_length`, and `snappy_validate_compressed_buffer`. The new
+  required probe covers eight payload shapes in both raw-block directions,
+  including empty, 64 KiB incompressible, and 160 KiB multi-chunk data. Copy
+  tokens must occur in both encoders' outputs, and both decoders must reject a
+  truncated form of every reference block. Genuine libsnappy blocks are
+  wrapped in standard masked-CRC-32C framed chunks and
+  decoded through Vort's one-shot, exact-size caller-buffer, split-input, and
+  incremental APIs; every compressed block in matching Vort frames is also
+  validated and decoded by libsnappy. CI installs `libsnappy-dev`, while the
+  production library remains dependency-free.

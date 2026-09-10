@@ -1,13 +1,15 @@
 # External differential validation
 
-Vort currently has black-box differential smoke coverage against Python `zlib`
-and the system `gzip` CLI.
+Vort has black-box differential smoke coverage against Python `zlib` and the
+system `gzip` CLI, plus library-level interoperability probes against other
+system codecs including libsnappy, liblz4, libbrotli, and libzstd.
 
 ```sh
 zig build run-checksum-zlib-diff
 zig build run-python-zlib-diff
 zig build run-gzip-cli-diff
 zig build run-rust-deflate-diff
+zig build run-snappy-interop-probe
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
 
@@ -48,6 +50,21 @@ step. Skip output must not be counted as compatibility evidence for that impleme
 The hosted GitHub Actions smoke workflow builds the zlib-rs `compress` example
 under `~/Work/zlib-rs` and reruns `run-zlib-family-diff`, so zlib-rs binary
 coverage is a required CI signal rather than only an optional local probe.
+
+The Snappy interoperability probe dynamically loads libsnappy's C ABI and is
+also required by `ci-smoke`. It exercises both directions for raw blocks:
+libsnappy compression followed by Vort one-shot/caller-buffer/split-input
+decode, and Vort compression followed by libsnappy validation/size preflight/
+decode. The matrix requires both encoders to produce copy-bearing blocks rather
+than proving only literal compatibility, and requires both implementations to
+reject every truncated reference block. Because libsnappy does not expose a
+framed-stream API, the probe also uses genuine libsnappy-compressed blocks
+inside standard checksummed Snappy framing and exercises Vort's one-shot,
+caller-buffer, split-input, and incremental frame decoders. Conversely, it
+parses every Vort-generated frame and asks libsnappy to validate and decode each
+compressed data chunk while checking framing CRC-32C independently. CI installs
+`libsnappy-dev` explicitly, so a missing reference library cannot turn this
+required evidence into a skip.
 
 Additional Rust deflate baselines are expected under `~/Work/fdeflate` and
 `~/Work/miniz_oxide` when available. They are tracked by `run-external-probe`

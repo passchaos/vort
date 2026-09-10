@@ -2060,6 +2060,25 @@ pub fn build(b: *std.Build) void {
     const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks and framed streams");
     snappy_block_cli_probe_step.dependOn(&snappy_block_cli_probe.step);
 
+    const snappy_interop_probe_exe = b.addExecutable(.{
+        .name = "snappy-interop-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/snappy_interop_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_snappy_interop_probe = b.addRunArtifact(snappy_interop_probe_exe);
+    const snappy_interop_probe_step = b.step(
+        "run-snappy-interop-probe",
+        "Run bidirectional raw-block and framed-stream interoperability against libsnappy",
+    );
+    snappy_interop_probe_step.dependOn(&run_snappy_interop_probe.step);
+
     const zstd_native_cli_diff = b.addSystemCommand(&.{ "python3", "tools/zstd_native_cli_diff.py" });
     zstd_native_cli_diff.addArtifactArg(cli_exe);
     const zstd_native_cli_diff_step = b.step("run-zstd-native-cli-diff", "Run black-box smoke for native-subset zstd frames against system zstd CLI");
@@ -3983,6 +4002,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&native_library_bench_exe.step);
     check_step.dependOn(&snappy_report_exe.step);
     check_step.dependOn(&snappy_reference_bench_exe.step);
+    check_step.dependOn(&snappy_interop_probe_exe.step);
     check_step.dependOn(&lz4_reference_bench_exe.step);
     check_step.dependOn(&lz4_decode_profile_exe.step);
     check_step.dependOn(&br_compressed_header_profile_exe.step);
@@ -4060,6 +4080,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_static_dictionary_candidate_upstream_smoke_step);
     ci_smoke_step.dependOn(br_static_dictionary_node_probe_step);
     ci_smoke_step.dependOn(snappy_block_cli_probe_step);
+    ci_smoke_step.dependOn(snappy_interop_probe_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(lz4_native_summary_cli_probe_step);
     ci_smoke_step.dependOn(lz4_native_summary_dashboard_step);
