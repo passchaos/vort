@@ -11039,3 +11039,9 @@ coverage.
   and JSON levels positive by `1.0068x`--`1.0133x`, yet reached only `1.0008x`
   geometrically and reduced text level 9 to `0.9876x`. The original copy plus
   compact common writer remains because code placement dominates the saved walk.
+  Deriving `SmallHuffmanLiteralPlan.max_symbol` from the last active symbol was
+  rejected despite the builder's strict ascending-symbol invariant and all 65
+  focused Huffman tests passing. It removes a redundant active-alphabet maximum
+  scan, but thirty independent primary-stage pairs reduced JSON to `0.9777x`
+  with only 9/30 wins; binary was neutral at `0.9984x`. The explicit scan stays
+  because its generated layout is better for the surrounding Huffman planner.
