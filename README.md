@@ -398,7 +398,7 @@ zig build run-zstd-compat-probe  # optional system-libzstd decode matrix
 zig build -Doptimize=ReleaseFast run-zstd-compat-probe -- \
   --decodecorpus /tmp/zstd-frames /tmp/zstd-plain --decodecorpus-count 1000
 # Add --decodecorpus-dictionary /tmp/zstd-frames/dictionary for dictionary corpora.
-# Reproduce the complete six-seed/5,400-frame suite and clean each temporary corpus:
+# Reproduce the complete nine-campaign/9,900-frame suite and clean each temporary corpus:
 zig build -Doptimize=ReleaseFast run-zstd-decodecorpus-gate -j1
 # Override discovery with -- --decodecorpus /path/to/zstd/tests/decodecorpus.
 zig build bench-deflate-decode -Doptimize=ReleaseFast

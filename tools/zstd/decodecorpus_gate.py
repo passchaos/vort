@@ -24,6 +24,10 @@ class Campaign:
     seed: int
     count: int
     dictionary_size: int | None = None
+    generator_args: tuple[str, ...] = ()
+    require_block_stream: bool = True
+    expected_mode_mask: int | None = None
+    min_max_block_count: int = 0
 
 
 CAMPAIGNS = (
@@ -33,6 +37,33 @@ CAMPAIGNS = (
     Campaign("dict-4242-1m", 4_242, 1_000, 1024 * 1024),
     Campaign("dict-31337-64k", 31_337, 1_000, 64 * 1024),
     Campaign("dict-65521-256k", 65_521, 2_000, 256 * 1024),
+    Campaign(
+        "rle-content-32452843",
+        32_452_843,
+        2_000,
+        generator_args=("--content-size", "--block-type=1", "--max-content-size-log=20"),
+        require_block_stream=False,
+        expected_mode_mask=0,
+        min_max_block_count=2,
+    ),
+    Campaign(
+        "raw-8b-49979693",
+        49_979_693,
+        2_000,
+        generator_args=("--block-type=0", "--max-block-size-log=3", "--max-content-size-log=14"),
+        require_block_stream=False,
+        expected_mode_mask=0,
+        min_max_block_count=2,
+    ),
+    Campaign(
+        "compressed-16b-67867979",
+        67_867_979,
+        500,
+        generator_args=("--block-type=2", "--max-block-size-log=4", "--max-content-size-log=13"),
+        require_block_stream=False,
+        expected_mode_mask=COMPLETE_MODE_MASK,
+        min_max_block_count=2,
+    ),
 )
 CAMPAIGNS_BY_NAME = {campaign.name: campaign for campaign in CAMPAIGNS}
 
@@ -153,8 +184,13 @@ def validate_campaign_summary(
         max_block_stream_decoded_buffered = int(fields["decodecorpus_max_block_stream_decoded_buffered"], 0)
         max_block_stream_decoded_capacity = int(fields["decodecorpus_max_block_stream_decoded_capacity"], 0)
         unsupported = int(fields["unsupported"], 0)
-        mode_mask = int(fields["sequence_mode_mask"], 0)
-        combined_mask = int(fields["combined_mode_mask"], 0)
+        max_sequence_count = int(fields["decodecorpus_max_sequence_count"], 0)
+        max_block_count = int(fields["decodecorpus_max_block_count"], 0)
+        sequence_count_tiers = int(fields["decodecorpus_sequence_count_tiers"], 0)
+        mode_combinations = int(fields["decodecorpus_sequence_mode_combinations"], 0)
+        mode_mask = int(fields["decodecorpus_sequence_mode_mask"], 0)
+        combined_combinations = int(fields["decodecorpus_combined_mode_combinations"], 0)
+        combined_mask = int(fields["decodecorpus_combined_mode_mask"], 0)
     except (KeyError, ValueError) as error:
         raise RuntimeError(f"malformed compat summary for {campaign.name}: {fields}") from error
     if decoded_cases != campaign.count:
@@ -166,7 +202,7 @@ def validate_campaign_summary(
             f"{campaign.name} incrementally decoded {incremental_cases} generated cases; "
             f"expected {campaign.count}"
         )
-    if block_stream_cases == 0:
+    if campaign.require_block_stream and block_stream_cases == 0:
         raise RuntimeError(f"{campaign.name} did not exercise bounded block streaming")
     if not 0 < max_compressed_buffered <= BLOCK_STREAM_COMPRESSED_LIMIT:
         raise RuntimeError(
@@ -180,6 +216,28 @@ def validate_campaign_summary(
         )
     if unsupported != 0:
         raise RuntimeError(f"{campaign.name} reported {unsupported} unsupported frames")
+    if mode_combinations != mode_mask.bit_count():
+        raise RuntimeError(
+            f"{campaign.name} reported {mode_combinations} mode combinations for "
+            f"mask {mode_mask:#018x}"
+        )
+    if combined_combinations != combined_mask.bit_count():
+        raise RuntimeError(
+            f"{campaign.name} reported {combined_combinations} cumulative mode combinations "
+            f"for mask {combined_mask:#018x}"
+        )
+    if campaign.expected_mode_mask is not None and mode_mask != campaign.expected_mode_mask:
+        raise RuntimeError(
+            f"{campaign.name} mode mask {mode_mask:#018x} does not match required "
+            f"{campaign.expected_mode_mask:#018x}"
+        )
+    if max_block_count < campaign.min_max_block_count:
+        raise RuntimeError(
+            f"{campaign.name} maximum block count {max_block_count} is below required "
+            f"{campaign.min_max_block_count}"
+        )
+    if mode_mask != 0 and (max_sequence_count == 0 or sequence_count_tiers == 0):
+        raise RuntimeError(f"{campaign.name} reported sequence modes without sequence coverage")
     if max_block_stream_decoded_buffered != 0 or max_block_stream_decoded_capacity != 0:
         raise RuntimeError(
             f"{campaign.name} retained decoded block scratch while block streaming: "
@@ -208,6 +266,7 @@ def run_campaign(
         ]
         if campaign.dictionary_size is not None:
             generator_command.append(f"--use-dict={campaign.dictionary_size}")
+        generator_command.extend(campaign.generator_args)
         run_command(generator_command, f"decodecorpus campaign {campaign.name}")
         validate_generated_files(root, campaign)
 
@@ -230,7 +289,10 @@ def run_campaign(
         )
         max_decoded_buffered = int(fields["decodecorpus_max_block_stream_decoded_buffered"], 0)
         max_decoded_capacity = int(fields["decodecorpus_max_block_stream_decoded_capacity"], 0)
-        mode_mask = int(fields["sequence_mode_mask"], 0)
+        mode_mask = int(fields["decodecorpus_sequence_mode_mask"], 0)
+        max_block_count = int(fields["decodecorpus_max_block_count"], 0)
+        max_sequence_count = int(fields["decodecorpus_max_sequence_count"], 0)
+        sequence_count_tiers = int(fields["decodecorpus_sequence_count_tiers"], 0)
         print(
             f"zstd_decodecorpus_campaign=ok name={campaign.name} seed={campaign.seed} "
             f"cases={campaign.count} dictionary_bytes={campaign.dictionary_size or 0} "
@@ -239,6 +301,8 @@ def run_campaign(
             f"streamed_sequence_blocks={streamed_sequence_blocks} "
             f"max_block_stream_decoded_buffered={max_decoded_buffered} "
             f"max_block_stream_decoded_capacity={max_decoded_capacity} "
+            f"max_sequence_count={max_sequence_count} max_block_count={max_block_count} "
+            f"sequence_count_tiers={sequence_count_tiers:#x} "
             f"mode_mask={mode_mask:#018x} combined_mode_mask={combined_mask:#018x}",
             flush=True,
         )

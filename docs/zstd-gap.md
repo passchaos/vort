@@ -424,29 +424,33 @@ Recommended next comparison steps:
   zstd's `tests/decodecorpus`. Seeds 17 and 919 covered 200 and 1,000
   dictionary-free random frames; seeds 2,027, 4,242, 31,337, and 65,521 covered
   200, 1,000, 1,000, and 2,000 random dictionary-backed frames with 64 KiB,
-  1 MiB, 64 KiB, and 256 KiB dictionaries. All 5,400 decoded byte-exactly.
-  Their cumulative observed sequence-mode mask is `0xffffffffffffffff`,
+  1 MiB, 64 KiB, and 256 KiB dictionaries. Three focused campaigns add 2,000
+  forced RLE frames with content size, 2,000 raw frames with blocks capped at
+  eight bytes, and 500 compressed frames with blocks capped at 16 bytes, for
+  9,900 total byte-exact frames. Their corpus-only cumulative observed
+  sequence-mode mask is `0xffffffffffffffff`,
   covering all 64 LL/OF/ML mode tuples; seed 17's first frame also exposed and
   now pins legal zero-length RLE blocks, including their required one-byte
-  payload. `run-zstd-decodecorpus-gate` reproduces all six campaigns directly
+  payload. `run-zstd-decodecorpus-gate` reproduces all nine campaigns directly
   from upstream `tests/decodecorpus`, carries the observed mode mask between
   runs, requires the final 64/64 mask, and deletes each temporary corpus before
   moving to the next one. Its self-contained smoke step validates argument
   orchestration, summary parsing, failure propagation, and cleanup without
-  requiring the optional upstream checkout. Every generated frame is now also
-  decoded incrementally with a 128 KiB-plus-header compressed-input limit; all
-  All 5,400 pass; 714 frames enter block streaming because they exceed that
-  limit, and 2,699 frames exercise the state after including direct-path
-  small-output switches.
+  requiring the optional upstream checkout. The compatibility probe reports
+  separate `decodecorpus_*` coverage fields so fixed built-in cases cannot
+  inflate the upstream corpus's mode mask. Every generated frame is now also
+  decoded incrementally with a 128 KiB-plus-header compressed-input limit. All
+  9,900 pass; 2,699 frames from the broad/dictionary campaigns exercise block
+  streaming after including direct-path small-output switches.
   Sequence-free raw/RLE/Huffman literal sections inside compressed blocks now
   retain a persistent literal/Huffman cursor and write directly into tiny caller
-  buffers without `decoded_scratch`; the same suite exercises 197 such blocks
+  buffers without `decoded_scratch`; the broad suite exercises 197 such blocks
   after including complete-frame direct-path switches.
   On the bounded block-stream path, sequence-bearing compressed blocks now also
   retain their reverse-bitstream/FSE cursor, repeated offsets, Huffman cursor,
   and pending literal/match lengths across `step()` calls. Matches read from the
   bounded rolling history plus the current caller slice, so even one-byte output
-  slices need no decoded-block scratch. The 5,400-frame suite exercises 76,578
+  slices need no decoded-block scratch. The broad/dictionary campaigns exercise 76,578
   of these blocks across all 64 LL/OF/ML mode tuples, dictionaries up to 1 MiB,
   and blocks with up to 43,690
   sequences; its streamed decoded-scratch length and capacity peaks are both

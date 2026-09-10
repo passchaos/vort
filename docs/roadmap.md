@@ -11293,3 +11293,15 @@ coverage.
   incremental APIs; every compressed block in matching Vort frames is also
   validated and decoded by libsnappy. CI installs `libsnappy-dev`, while the
   production library remains dependency-free.
+  A follow-up audit found that `run-zstd-decodecorpus-gate` accumulated the
+  compat probe's global sequence-mode mask, which also included its fixed 273
+  built-in cases, rather than a mask attributable solely to the generated
+  corpus. The probe now tracks and reports separate `decodecorpus_*` maximums,
+  sequence-count tiers, and LL/OF/ML mode masks; the gate carries only that
+  corpus-specific mask between campaigns. Three new deterministic campaigns add
+  2,000 forced content-sized RLE frames (seed `32452843`), 2,000 raw frames with
+  blocks capped at eight bytes (seed `49979693`), and 500 compressed frames with
+  blocks capped at 16 bytes (seed `67867979`). The last campaign independently
+  reaches all 64 sequence-mode tuples in 500 frames, with up to 1,045 blocks per
+  frame. Together with the prior six campaigns, the reproducible upstream suite
+  now contains 9,900 byte-exact one-shot and incremental decode cases.

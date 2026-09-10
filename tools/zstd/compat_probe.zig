@@ -61,6 +61,7 @@ pub fn main(init: std.process.Init) !void {
     var decodecorpus_max_block_stream_decoded_buffered: usize = 0;
     var decodecorpus_max_block_stream_decoded_capacity: usize = 0;
     var coverage = Coverage{};
+    var decodecorpus_coverage = Coverage{};
     for (std.meta.tags(Shape)) |shape| {
         for (sizes) |size| {
             const payload = try init.gpa.alloc(u8, size);
@@ -382,7 +383,7 @@ pub fn main(init: std.process.Init) !void {
             defer init.gpa.free(encoded);
             const expected = try std.Io.Dir.cwd().readFileAlloc(init.io, plain_path, init.gpa, .limited(2 * 1024 * 1024));
             defer init.gpa.free(expected);
-            observeFrameWithDictionary(encoded, decodecorpus_dictionary, &coverage) catch |err| {
+            observeFrameWithDictionary(encoded, decodecorpus_dictionary, &decodecorpus_coverage) catch |err| {
                 std.debug.print("zstd_decodecorpus_inspect_fail case={d} input={d} encoded={d} error={s}\n", .{ index, expected.len, encoded.len, @errorName(err) });
                 return err;
             };
@@ -420,16 +421,29 @@ pub fn main(init: std.process.Init) !void {
             decodecorpus_cases += 1;
         }
     }
+    mergeCoverage(&coverage, decodecorpus_coverage);
     if (unsupported != 0) return error.UnsupportedZstdFeature;
     if (coverage.max_sequence_count < 43_690 or coverage.sequence_count_tiers != 0b111)
         return error.ReferenceEncodeFailed;
-    const combined_mode_mask = coverage.sequence_mode_combinations | prior_mode_mask;
-    if (require_complete_mode_mask and combined_mode_mask != std.math.maxInt(u64))
+    const decodecorpus_combined_mode_mask = decodecorpus_coverage.sequence_mode_combinations | prior_mode_mask;
+    if (require_complete_mode_mask and decodecorpus_combined_mode_mask != std.math.maxInt(u64))
         return error.ReferenceEncodeFailed;
+    const combined_mode_mask = coverage.sequence_mode_combinations | prior_mode_mask;
     std.debug.print(
-        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} sequence_mode_mask=0x{x} combined_mode_combinations={d} combined_mode_mask=0x{x} version={s}\n",
-        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), coverage.sequence_mode_combinations, @popCount(combined_mode_mask), combined_mode_mask, runtime.version() },
+        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} ",
+        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity },
     );
+    std.debug.print(
+        "decodecorpus_max_sequence_count={d} decodecorpus_max_block_count={d} decodecorpus_sequence_count_tiers=0x{x} decodecorpus_sequence_mode_combinations={d} decodecorpus_sequence_mode_mask=0x{x} decodecorpus_combined_mode_combinations={d} decodecorpus_combined_mode_mask=0x{x} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} sequence_mode_mask=0x{x} combined_mode_combinations={d} combined_mode_mask=0x{x} version={s}\n",
+        .{ decodecorpus_coverage.max_sequence_count, decodecorpus_coverage.max_block_count, decodecorpus_coverage.sequence_count_tiers, @popCount(decodecorpus_coverage.sequence_mode_combinations), decodecorpus_coverage.sequence_mode_combinations, @popCount(decodecorpus_combined_mode_mask), decodecorpus_combined_mode_mask, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), coverage.sequence_mode_combinations, @popCount(combined_mode_mask), combined_mode_mask, runtime.version() },
+    );
+}
+
+fn mergeCoverage(target: *Coverage, source: Coverage) void {
+    target.max_sequence_count = @max(target.max_sequence_count, source.max_sequence_count);
+    target.max_block_count = @max(target.max_block_count, source.max_block_count);
+    target.sequence_count_tiers |= source.sequence_count_tiers;
+    target.sequence_mode_combinations |= source.sequence_mode_combinations;
 }
 
 const IncrementalCorpusResult = struct {

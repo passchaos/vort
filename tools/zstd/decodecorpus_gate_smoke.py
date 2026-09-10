@@ -28,6 +28,10 @@ import sys
 
 count = int(next(arg[2:] for arg in sys.argv[1:] if arg.startswith('-n')))
 root = pathlib.Path(next(arg[2:] for arg in sys.argv[1:] if arg.startswith('-p')))
+if '--block-type=2' in sys.argv:
+    required = {'--max-block-size-log=4', '--max-content-size-log=13'}
+    if not required.issubset(sys.argv):
+        raise SystemExit(f'missing compressed stress arguments: {sys.argv!r}')
 root.mkdir(parents=True, exist_ok=True)
 for index in range(count):
     stem = f'z{index:06d}'
@@ -42,7 +46,7 @@ import sys
 
 count = int(sys.argv[sys.argv.index('--decodecorpus-count') + 1])
 prior = int(sys.argv[sys.argv.index('--prior-mode-mask') + 1], 0)
-mode = 0xa if '--decodecorpus-dictionary' in sys.argv else 0x5
+mode = (1 << 64) - 1 if count == 500 else (0xa if '--decodecorpus-dictionary' in sys.argv else 0x5)
 combined = prior | mode
 print(
     f'zstd_compat_probe checked={count} unsupported=0 decodecorpus_cases={count} '
@@ -53,7 +57,14 @@ print(
     f'decodecorpus_streamed_sequence_blocks=7 '
     f'decodecorpus_max_block_stream_decoded_buffered=0 '
     f'decodecorpus_max_block_stream_decoded_capacity=0 '
-    f'sequence_mode_mask={mode:#x} combined_mode_mask={combined:#x}',
+    f'decodecorpus_max_sequence_count=5 '
+    f'decodecorpus_max_block_count=3 '
+    f'decodecorpus_sequence_count_tiers=0x1 '
+    f'decodecorpus_sequence_mode_combinations={mode.bit_count()} '
+    f'decodecorpus_sequence_mode_mask={mode:#x} '
+    f'decodecorpus_combined_mode_combinations={combined.bit_count()} '
+    f'decodecorpus_combined_mode_mask={combined:#x} '
+    f'sequence_mode_mask=0xffffffffffffffff combined_mode_mask=0xffffffffffffffff',
     file=sys.stderr,
 )
 """
@@ -81,6 +92,34 @@ class DecodeCorpusGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate campaign"):
             gate.select_campaigns(["plain-17", "plain-17"])
 
+    def test_stress_campaigns_pin_generator_arguments(self) -> None:
+        rle = gate.CAMPAIGNS_BY_NAME["rle-content-32452843"]
+        self.assertEqual(
+            rle.generator_args,
+            ("--content-size", "--block-type=1", "--max-content-size-log=20"),
+        )
+        self.assertFalse(rle.require_block_stream)
+        self.assertEqual(rle.expected_mode_mask, 0)
+        self.assertEqual(rle.min_max_block_count, 2)
+
+        raw = gate.CAMPAIGNS_BY_NAME["raw-8b-49979693"]
+        self.assertEqual(
+            raw.generator_args,
+            ("--block-type=0", "--max-block-size-log=3", "--max-content-size-log=14"),
+        )
+        self.assertFalse(raw.require_block_stream)
+        self.assertEqual(raw.expected_mode_mask, 0)
+        self.assertEqual(raw.min_max_block_count, 2)
+
+        compressed = gate.CAMPAIGNS_BY_NAME["compressed-16b-67867979"]
+        self.assertEqual(
+            compressed.generator_args,
+            ("--block-type=2", "--max-block-size-log=4", "--max-content-size-log=13"),
+        )
+        self.assertFalse(compressed.require_block_stream)
+        self.assertEqual(compressed.expected_mode_mask, gate.COMPLETE_MODE_MASK)
+        self.assertEqual(compressed.min_max_block_count, 2)
+
     def test_full_suite_requires_complete_mode_coverage(self) -> None:
         gate.validate_final_coverage((gate.CAMPAIGNS[0],), 0)
         gate.validate_final_coverage(gate.CAMPAIGNS, gate.COMPLETE_MODE_MASK)
@@ -98,6 +137,13 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_streamed_sequence_blocks": "1",
             "decodecorpus_max_block_stream_decoded_buffered": "0",
             "decodecorpus_max_block_stream_decoded_capacity": "0",
+            "decodecorpus_max_sequence_count": "1",
+            "decodecorpus_max_block_count": "2",
+            "decodecorpus_sequence_count_tiers": "0x1",
+            "decodecorpus_sequence_mode_combinations": "2",
+            "decodecorpus_sequence_mode_mask": "0x5",
+            "decodecorpus_combined_mode_combinations": "2",
+            "decodecorpus_combined_mode_mask": "0x5",
             "unsupported": "0",
             "sequence_mode_mask": "0x5",
             "combined_mode_mask": "0x5",
@@ -116,12 +162,49 @@ class DecodeCorpusGateTests(unittest.TestCase):
             "decodecorpus_streamed_sequence_blocks": "1",
             "decodecorpus_max_block_stream_decoded_buffered": "1",
             "decodecorpus_max_block_stream_decoded_capacity": "8",
+            "decodecorpus_max_sequence_count": "1",
+            "decodecorpus_max_block_count": "2",
+            "decodecorpus_sequence_count_tiers": "0x1",
+            "decodecorpus_sequence_mode_combinations": "2",
+            "decodecorpus_sequence_mode_mask": "0x5",
+            "decodecorpus_combined_mode_combinations": "2",
+            "decodecorpus_combined_mode_mask": "0x5",
             "unsupported": "0",
             "sequence_mode_mask": "0x5",
             "combined_mode_mask": "0x5",
         }
         with self.assertRaisesRegex(RuntimeError, "retained decoded block scratch"):
             gate.validate_campaign_summary(fields, gate.CAMPAIGNS[0], 0)
+
+    def test_small_block_campaign_allows_no_block_stream_switch(self) -> None:
+        fields = {
+            "decodecorpus_cases": "500",
+            "decodecorpus_incremental_cases": "500",
+            "decodecorpus_block_stream_cases": "0",
+            "decodecorpus_max_compressed_buffered": "32",
+            "decodecorpus_max_compressed_capacity": "64",
+            "decodecorpus_streamed_literal_blocks": "0",
+            "decodecorpus_streamed_sequence_blocks": "0",
+            "decodecorpus_max_block_stream_decoded_buffered": "0",
+            "decodecorpus_max_block_stream_decoded_capacity": "0",
+            "decodecorpus_max_sequence_count": "5",
+            "decodecorpus_max_block_count": "3",
+            "decodecorpus_sequence_count_tiers": "0x1",
+            "decodecorpus_sequence_mode_combinations": "64",
+            "decodecorpus_sequence_mode_mask": hex(gate.COMPLETE_MODE_MASK),
+            "decodecorpus_combined_mode_combinations": "64",
+            "decodecorpus_combined_mode_mask": hex(gate.COMPLETE_MODE_MASK),
+            "unsupported": "0",
+            "sequence_mode_mask": hex(gate.COMPLETE_MODE_MASK),
+            "combined_mode_mask": hex(gate.COMPLETE_MODE_MASK),
+        }
+        combined, block_stream_cases, *_ = gate.validate_campaign_summary(
+            fields,
+            gate.CAMPAIGNS_BY_NAME["compressed-16b-67867979"],
+            0,
+        )
+        self.assertEqual(combined, gate.COMPLETE_MODE_MASK)
+        self.assertEqual(block_stream_cases, 0)
 
     def test_driver_runs_and_cleans_success_and_failure_corpora(self) -> None:
         with tempfile.TemporaryDirectory(prefix="vort-zstd-gate-smoke-") as temp:
@@ -157,6 +240,20 @@ class DecodeCorpusGateTests(unittest.TestCase):
             self.assertIn("max_block_stream_decoded_buffered=0", success.stdout)
             self.assertIn("max_block_stream_decoded_capacity=0", success.stdout)
             self.assertIn("sequence_mode_mask=0x000000000000000f", success.stdout)
+            self.assertEqual(list(scratch.iterdir()), [])
+
+            stress_command = [
+                sys.executable,
+                str(SCRIPT),
+                str(probe),
+                "--decodecorpus",
+                str(generator),
+                "--campaign",
+                "compressed-16b-67867979",
+            ]
+            stress = subprocess.run(stress_command, text=True, capture_output=True, env=environment, check=False)
+            self.assertEqual(stress.returncode, 0, stress.stdout + stress.stderr)
+            self.assertIn("zstd_decodecorpus_gate=ok campaigns=1 cases=500", stress.stdout)
             self.assertEqual(list(scratch.iterdir()), [])
 
             command[2] = str(bad_probe)
