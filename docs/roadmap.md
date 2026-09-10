@@ -10647,6 +10647,11 @@ coverage.
   but walking full collision chains and validating long matches cost more than
   the 1.3 MiB bounded-index write it removed: a same-binary 100-encode JSON
   sample fell to `0.743x`. The prototype was stopped before a full matrix.
+  Splitting repeat-beam index construction into a branch-free four-byte-anchor
+  body plus a three-slot sentinel tail was rejected as compiler-neutral. The
+  existing compact-index/reference oracle remained exact, but thirty independent
+  `HEAD` stage pairs measured text/JSON/binary at `0.995x`/`0.999x`/`1.000x`.
+  LLVM already makes the optional tail check effectively free in this loop.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
