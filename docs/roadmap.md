@@ -11209,3 +11209,18 @@ coverage.
   statistics exactly, and all 12 focused tests passed. Thirty primary-stage
   pairs nevertheless measured JSON/binary at `0.9909x`/`0.9955x`, with text
   neutral and only wide input at `1.0025x`. The generic options path remains.
+  The large sequence-free four-stream Huffman decoder now carries the existing
+  `buildComplete` proof into its bulk loop and reads the proven-initialized
+  lookup entries directly. Incomplete or hostile trees still use the checked
+  lookup path, while the common valid path avoids constructing an optional and
+  testing its validity bit for every symbol. Nine alternating fixed-CPU-2
+  independent-binary pairs on the 64 KiB printable-ASCII frame improved median
+  caller-buffer decode from `794.69` to `831.65` MiB/s (`1.0465x`, 9/9 wins).
+  Hardware counters over five repeats reported about 10.2% fewer instructions,
+  55.6% fewer branches, and 4.6% fewer cycles. A five-pair 13-row matrix improved
+  `1.0051x` geometrically; its weakest control was the raw-literal/FSE
+  `huffman80k` row at `0.9924x`, while `large_json` improved `1.0081x`. All 65
+  focused Huffman tests, the full root test/check builds, 237-case native frame
+  probe, 273-case libzstd 1.5.5 compatibility matrix, and all six upstream
+  decodecorpus campaigns remained green (5,400 frames and all 64 LL/OF/ML mode
+  tuples).

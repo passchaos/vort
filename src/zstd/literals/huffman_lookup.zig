@@ -73,6 +73,17 @@ pub fn Table(comptime max_bits: u4) type {
             const entry = self.entries[bits];
             return if (entry.valid) entry else null;
         }
+
+        /// Read an entry after `buildComplete` proved that every table slot was
+        /// initialized. Callers must also provide an in-range prefix. Keeping
+        /// this contract separate from `lookup` preserves checked decoding for
+        /// incomplete or hostile trees while removing the per-symbol validity
+        /// branch from prevalidated bulk loops.
+        pub inline fn lookupAssumeComplete(self: *const @This(), bits: usize) Entry {
+            std.debug.assert(bits < len);
+            std.debug.assert(self.entries[bits].valid);
+            return self.entries[bits];
+        }
     };
 }
 
@@ -115,6 +126,8 @@ test "complete Huffman lookup overwrites every entry" {
     };
     var table: Table(3) = undefined;
     try std.testing.expect(table.buildComplete(tree));
+    try std.testing.expectEqual(@as(u8, 'a'), table.lookupAssumeComplete(0).symbol);
+    try std.testing.expectEqual(@as(u8, 'b'), table.lookupAssumeComplete(7).symbol);
     for (0..4) |index|
         try std.testing.expectEqual(@as(u8, 'a'), table.lookup(index).?.symbol);
     for (4..8) |index|
