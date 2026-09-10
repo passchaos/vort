@@ -11171,6 +11171,20 @@ coverage.
   pairs reduced text/JSON/binary to `0.9808x`/`0.9608x`/`0.9787x`. The target
   state is already cache-resident often enough that the extra prefetch traffic is
   pure overhead on this CPU.
+  Removing only repeat-beam's impossible zero-distance check in place was also
+  rejected, separately from the earlier unchecked-helper experiment. The compact
+  index oracle and all 19 beam tests remained exact, and thirty beam-stage pairs
+  improved text/JSON/binary by `1.0084x`/`1.0070x`/`1.0118x`. The 20-row matrix
+  fell to `0.9987x` geometrically, however, with text level 1 and JSON level 3 at
+  `0.9920x`/`0.9919x`. The explicit defensive condition remains for better
+  whole-encoder layout.
+  Combining a full four-byte repeat-beam collision check with match extension
+  starting after that verified prefix was rejected. This avoids rereading the
+  prefix on true matches while filtering collisions earlier; a 259-boundary
+  mismatch oracle, compact-index oracle, and all 20 beam tests stayed exact.
+  Thirty primary-stage pairs nevertheless reduced text/JSON/binary to
+  `0.9248x`/`0.9825x`/`0.9799x`. The cheap fourth-byte filter plus shared
+  full-range matcher remains substantially better on current code generation.
   A fixed-parameter Zstd-only double-fast instance was rejected too. It folded
   the constant four-byte minimum and 258-byte maximum while retaining only the
   block-dependent 32 KiB window; a 16-shape oracle matched generic tokens and
