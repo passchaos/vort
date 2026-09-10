@@ -10995,3 +10995,10 @@ coverage.
   `1.0469x` on text/JSON/binary. Yet the 30-pair frame matrix moved all text
   levels to `0.9758x`--`0.9892x`; an earlier branch-expanded form had the same
   layout problem. The smaller decoder-backed selector remains.
+  Restricting the compact encoder-side offset resolver to the already isolated
+  450--512-sequence borrowed emitter was rejected as below the retention bar.
+  The exhaustive resolver oracle and borrowed-vs-by-value field oracle remained
+  exact; thirty independent primary stage pairs improved binary by `1.0559x`
+  and JSON by `1.0058x`, with text neutral at `0.9982x`. However, the complete
+  20-row matrix reached only `1.0012x` geometrically and reduced binary levels
+  3/9 to `0.9917x`/`0.9906x`. The shared resolver remains authoritative.
