@@ -10689,6 +10689,11 @@ coverage.
   every negative proof against the complete scan. Even so, a same-binary
   100-encode JSON sample measured only `0.9756x`. Maintaining the rolling hash
   and open-addressed table still cost more than eager bounded-index construction.
+  Replacing repeat-beam's one-element `matchesAt` output with a dedicated
+  optional-return `firstMatchAt` helper was also rejected. A per-position oracle
+  matched the old result, but thirty independent stage pairs reduced text/JSON/
+  binary to `0.960x`/`0.941x`/`0.977x`; the generic slice/count form produces
+  substantially better optimized code on the current compiler.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
