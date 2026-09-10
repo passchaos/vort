@@ -17462,7 +17462,7 @@ test "zstd Huffman tree size estimator matches selected wire" {
 test "zstd reserved Huffman stream matches checked append reference" {
     var payload: [8192]u8 = undefined;
     for (&payload, 0..) |*byte, i| byte.* = @intCast((i * 37 + i / 11) % 193);
-    for ([_]usize{ 64, 65, 1023, 1024, payload.len }) |len| {
+    for ([_]usize{ 64, 65, 66, 67, 1023, 1024, payload.len }) |len| {
         const plan = smallHuffmanLiteralPlan(payload[0..len]) orelse return error.CorruptFrame;
         var expected: std.ArrayList(u8) = .empty;
         defer expected.deinit(std.testing.allocator);
@@ -17482,6 +17482,21 @@ test "zstd reserved Huffman stream matches checked append reference" {
             try std.testing.expectEqual(@as(usize, 0), invalid.items.len);
         }
     }
+
+    var max_width_plan: SmallHuffmanLiteralPlan = .{};
+    max_width_plan.symbols[0] = 0;
+    max_width_plan.bit_counts[0] = 11;
+    max_width_plan.codes[0] = (1 << 11) - 1;
+    max_width_plan.len = 1;
+    max_width_plan.max_bit_count = 11;
+    const max_width_payload: [67]u8 = @splat(0);
+    var max_width_expected: std.ArrayList(u8) = .empty;
+    defer max_width_expected.deinit(std.testing.allocator);
+    try emitSmallHuffmanStreamCheckedAppendReference(std.testing.allocator, &max_width_expected, &max_width_payload, &max_width_plan);
+    var max_width_actual: std.ArrayList(u8) = .empty;
+    defer max_width_actual.deinit(std.testing.allocator);
+    try emitSmallHuffmanStream(std.testing.allocator, &max_width_actual, &max_width_payload, &max_width_plan);
+    try std.testing.expectEqualSlices(u8, max_width_expected.items, max_width_actual.items);
 
     const plan = smallHuffmanLiteralPlan(&payload) orelse return error.CorruptFrame;
     var prefixed: std.ArrayList(u8) = .empty;
@@ -18351,14 +18366,64 @@ fn emitSmallHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8),
     const max_stream_bytes = std.math.add(usize, max_stream_bits, 7) catch return error.IntegerOverflow;
     try out.ensureUnusedCapacity(allocator, max_stream_bytes / 8);
     var accumulator: usize = 0;
-    var bit_count: u6 = 0;
+    var bit_count: std.math.Log2Int(usize) = 0;
     var i = block.len;
+    if (comptime @bitSizeOf(usize) >= 64) {
+        comptime std.debug.assert(7 + 4 * 11 <= @bitSizeOf(usize));
+        while (i >= 4) {
+            const first_symbol = block[i - 1];
+            const second_symbol = block[i - 2];
+            const third_symbol = block[i - 3];
+            const fourth_symbol = block[i - 4];
+            const first_bits = lookup.bit_counts[first_symbol];
+            const second_bits = lookup.bit_counts[second_symbol];
+            const third_bits = lookup.bit_counts[third_symbol];
+            const fourth_bits = lookup.bit_counts[fourth_symbol];
+            if (first_bits == 0 or second_bits == 0 or third_bits == 0 or fourth_bits == 0) return error.CorruptFrame;
+            const first_code: usize = lookup.codes[first_symbol];
+            const second_code: usize = lookup.codes[second_symbol];
+            const third_code: usize = lookup.codes[third_symbol];
+            const fourth_code: usize = lookup.codes[fourth_symbol];
+            const second_shift: std.math.Log2Int(usize) = bit_count + @as(std.math.Log2Int(usize), @intCast(first_bits));
+            const third_shift: std.math.Log2Int(usize) = second_shift + @as(std.math.Log2Int(usize), @intCast(second_bits));
+            const fourth_shift: std.math.Log2Int(usize) = third_shift + @as(std.math.Log2Int(usize), @intCast(third_bits));
+            accumulator |= first_code << bit_count;
+            accumulator |= second_code << second_shift;
+            accumulator |= third_code << third_shift;
+            accumulator |= fourth_code << fourth_shift;
+            bit_count = fourth_shift + @as(u6, @intCast(fourth_bits));
+            while (bit_count >= 8) {
+                out.appendAssumeCapacity(@truncate(accumulator));
+                accumulator >>= 8;
+                bit_count -= 8;
+            }
+            i -= 4;
+        }
+    } else {
+        comptime std.debug.assert(7 + 2 * 11 <= @bitSizeOf(usize));
+        while (i >= 2) {
+            const first_symbol = block[i - 1];
+            const second_symbol = block[i - 2];
+            const first_bits = lookup.bit_counts[first_symbol];
+            const second_bits = lookup.bit_counts[second_symbol];
+            if (first_bits == 0 or second_bits == 0) return error.CorruptFrame;
+            const second_shift: std.math.Log2Int(usize) = bit_count + @as(std.math.Log2Int(usize), @intCast(first_bits));
+            accumulator |= @as(usize, lookup.codes[first_symbol]) << bit_count;
+            accumulator |= @as(usize, lookup.codes[second_symbol]) << second_shift;
+            bit_count = second_shift + @as(std.math.Log2Int(usize), @intCast(second_bits));
+            while (bit_count >= 8) {
+                out.appendAssumeCapacity(@truncate(accumulator));
+                accumulator >>= 8;
+                bit_count -= 8;
+            }
+            i -= 2;
+        }
+    }
     while (i > 0) {
         i -= 1;
         const bits = lookup.bit_counts[block[i]];
         if (bits == 0) return error.CorruptFrame;
-        const code: usize = lookup.codes[block[i]];
-        accumulator |= code << bit_count;
+        accumulator |= lookup.codes[block[i]] << bit_count;
         bit_count += @intCast(bits);
         while (bit_count >= 8) {
             out.appendAssumeCapacity(@truncate(accumulator));
@@ -18377,15 +18442,14 @@ fn emitSmallHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8),
 }
 
 fn emitSmallHuffmanStreamCheckedAppendReference(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: *const SmallHuffmanLiteralPlan) Error!void {
-    const lookup = try smallHuffmanLiteralLookup(plan);
     var accumulator: usize = 0;
-    var bit_count: u6 = 0;
+    var bit_count: std.math.Log2Int(usize) = 0;
     var i = block.len;
     while (i > 0) {
         i -= 1;
-        const bits = lookup.bit_counts[block[i]];
+        const bits = plan.bit_counts[block[i]];
         if (bits == 0) return error.CorruptFrame;
-        const code: usize = lookup.codes[block[i]];
+        const code: usize = plan.codes[block[i]];
         accumulator |= code << bit_count;
         bit_count += @intCast(bits);
         while (bit_count >= 8) {

@@ -10897,3 +10897,23 @@ coverage.
   matrix preserves every size/checksum, improves level-1 JSON by `1.0250x` with
   27/30 wins and binary level 1 by `1.0038x`, reaches a `1.0009x` row-median
   geometric mean, and keeps the weakest control at `0.9952x`.
+  Packing each small-Huffman lookup entry as one native-width `(code, bit
+  count)` word, following upstream zstd's `HUF_CElt` principle, was rejected.
+  The independent plan-backed reference retained byte-identical streams and the
+  hot loop used one indexed table load instead of two while keeping the same
+  machine-code size. Nevertheless, thirty independent 20-row frame pairs
+  reduced binary level 1 to `0.9848x` and reached only `0.9972x` by row-median
+  geometric mean. Separate compact width and native-width code tables remain.
+  The retained small-Huffman stream loop instead batches four reverse-order
+  symbols on 64-bit targets while preserving those separate lookup tables. Its
+  maximum live payload is statically bounded to seven residual bits plus four
+  11-bit codes (51 bits); 32-bit targets use the analogous safe two-symbol
+  batch. The independent scalar writer now covers input lengths modulo four,
+  the maximum 11-bit width, invalid symbols, and allocation rollback. Thirty
+  independent fixed-CPU-8 frame pairs against the scalar loop preserve every
+  size/checksum and improve binary levels 1/3/9/22 by `1.0401x`/`1.0134x`/
+  `1.0144x`/`1.0096x`; the row-median geometric mean is `1.0078x` and the
+  weakest row is `0.9940x`. A two-symbol precursor reached only `1.0027x`
+  geometrically. A direct 30-pair four-versus-two-symbol matrix confirms the
+  four-symbol loop adds another `1.0075x` geometrically and `1.0324x` on binary
+  level 1 with 30/30 wins, while its weakest row remains `0.9988x`.
