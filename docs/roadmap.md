@@ -10664,6 +10664,12 @@ coverage.
   `1.033x`, but text/JSON builds fell to `0.994x`/`0.993x`; more importantly,
   thirty independent stage pairs reduced actual text/JSON/binary single-match
   evaluation to `0.985x`/`0.980x`/`0.963x`. The simple u16 sentinel stays.
+  Moving `max_byte_frequency` from the duplicate-index input loop to a final
+  256-counter reduction was rejected despite improving isolated bounded-index
+  construction by `1.076x`/`1.053x`/`1.030x` on text/JSON/binary. The actual
+  single-match stage was mixed, and thirty independent full-matrix pairs reached
+  only `1.0015x` geometrically: level-1 JSON was `1.0039x`, while text and the
+  tradeoff corpus fell to `0.9908x`/`0.9979x`. The incremental maximum remains.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
