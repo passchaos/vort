@@ -11235,3 +11235,11 @@ coverage.
   `0.9677x`/`0.9644x`. The extra decoder instance and dispatch were removed;
   future compact-table work needs whole-decoder layout control rather than
   another local helper placement.
+  Replacing exact `memcpy` for non-overlapping Zstd matches of at most 16 bytes
+  with explicit first/tail 8/4/2-byte loads and stores was rejected as well. A
+  generated oracle covered every match length 1...16 and every legal distance
+  through 32 after first exposing and correcting a 15-byte tail bug in an
+  earlier additive implementation. Despite exact output and 81 focused sequence
+  tests, nine fixed-CPU-2 `numbered_json` pairs reduced median caller-buffer
+  decode from about `179.2` to `159.8` MiB/s (`0.892x`). The compiler/runtime
+  `memcpy` path remains preferable for exact bounded copies.
