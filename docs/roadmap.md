@@ -7827,8 +7827,12 @@ coverage.
   equality test had exposed the stale zero-valued field; a focused assertion
   now independently recomputes and pins the returned score before this oracle
   is used to validate future matcher performance changes.
-  The bounded duplicate index now retains four recent predecessors per hash
-  instead of eight, halving both its predecessor and lazy match-length tables.
+  The bounded duplicate index was configured for four recent predecessors per
+  hash instead of eight, halving both its predecessor and lazy match-length
+  tables. A later Zig 0.16 integer-width audit (documented below) found that
+  this packed-state version actually sampled one predecessor from alternating
+  pairs; the historical performance and output evidence therefore describes
+  that effective policy rather than a true four-deep search.
   The repaired sentinel oracle, exact/indexed comparisons, a 512-case frame
   hash audit, and a separate 1,024-case split-policy audit all preserve their
   prior results. Twenty-four alternating ReleaseFast CPU-8 pairs retain the
@@ -10605,7 +10609,7 @@ coverage.
   about 0.7% noise.
   Deferring the complete level-1 duplicate index behind a smaller exact-key
   threshold prefilter was rejected. The prefilter retained the bounded index's
-  newest-four candidates and conservatively fell back on high-byte, capacity,
+  sampled candidates and conservatively fell back on high-byte, capacity,
   or uncertain cases; its oracle proved every prefilter prune was also pruned
   by the complete indexed scan. A production profile removed the former
   `DuplicateMatchIndex.buildBounded` entry (about 12% of sampled cycles), but
@@ -10682,6 +10686,23 @@ coverage.
   20-row frame matrix preserves every size/checksum, improves level-1 JSON by
   `1.0138x` with 26/30 wins, has a `1.0012x` row-median geometric mean, and
   keeps the weakest control at `0.9956x`.
+  The same index now stores each sampled predecessor and lazy match length in
+  that dense row, replacing its sparse four-wide per-position tables. This also
+  makes the established pair-sampling policy explicit instead of depending on
+  a narrow inferred integer in the former packed state: each hash's first
+  occurrence is retained, its second emits one row, and the process repeats. A
+  16-shape oracle independently reconstructs every pair and keeps full/bounded
+  queries equal; a 64-frame public-API audit is byte-identical to the prior
+  implementation. `DuplicateMatchIndex` falls from about 1.32 MiB to less than
+  384 KiB. Thirty fixed-CPU-8 stage pairs improve index construction by
+  `1.428x`/`1.413x`/`1.347x` and single-match evaluation by `1.005x`/`1.049x`/
+  `1.080x` on text/JSON/binary. A 30-pair 20-row independent-binary matrix
+  preserves every size/checksum, improves level-1 JSON by `1.037x` with 29/30
+  wins, and reaches a `1.0182x` row-median geometric mean with the weakest row
+  at `0.9962x`. A true
+  four-deep repair was not selected as the default: it improved 7/64 generated
+  level-1 frames by only nine bytes total but reduced JSON level 1 to `0.892x`
+  and levels 3/9/22 to about `0.629x`/`0.628x`/`0.627x`.
   A second attempt to defer level-1's duplicate index used a fixed-length
   64-bit rolling fingerprint rather than extending matches. Equal windows must
   share a fingerprint, while hash collisions, high bytes, and table saturation
@@ -10709,12 +10730,13 @@ coverage.
   isolated beam fell to `0.962x` with only 1/30 wins. The original 16-byte state
   remains; its power-of-two stride is evidently preferable to the saved traffic
   on the current x86-64 code generation.
-  Level-1 duplicate arbitration now builds only the bounded newest-four
-  predecessor ring consumed by its single-match search and Huffman lower bound.
+  Level-1 duplicate arbitration now builds only the bounded pair-sampled
+  predecessor rows consumed by its single-match search and Huffman lower bound.
   The full per-position hash chain is reserved for budgets that can enter mixed
   lookahead; writing it and clearing its 64 KiB latest-position table was dead
-  work at level 1. A 16-shape oracle compares every bounded predecessor/count/
-  lazy-length field and selected match against the full builder. The stage tool
+  work at level 1. A 16-shape oracle compares every bounded candidate position,
+  predecessor, lazy-length field, and selected match against the full builder.
+  The stage tool
   now receives the candidate's actual search budget so its `duplicate_index` row
   mirrors this production choice. Thirty alternating fixed-CPU-8 stage pairs
   improve index construction by a median `1.259x` with 30/30 wins. A same-binary

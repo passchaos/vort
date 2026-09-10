@@ -62,16 +62,18 @@ const duplicate_hash_bits = 15;
 const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
 const duplicate_index_invalid = std.math.maxInt(u16);
-// Four recent candidates per hash retain the current generated-corpus winners
-// while halving the predecessor and lazy match-length tables. This reduces the
-// index build's memory traffic for every duplicate-aware block.
-const duplicate_hash_candidates = 4;
-const duplicate_hash_candidate_slot_bits = std.math.log2_int(usize, duplicate_hash_candidates);
 const duplicate_index_max_input_len = std.math.maxInt(u16);
 const duplicate_exact_hash_table_len = duplicate_hash_table_len;
 const duplicate_exact_hash_input_max = 4096;
 const duplicate_exact_key_table_len = 1 << 13;
+const duplicate_hash_reference_candidates = 4;
+const duplicate_pair_row_capacity = (duplicate_index_max_input_len - 7) / 2;
 const mixed_candidates_per_position = 4;
+
+comptime {
+    // Pair sampling can emit at most one row for every two valid anchors.
+    std.debug.assert(duplicate_pair_row_capacity <= std.math.maxInt(u16));
+}
 // The mixed planner's current search budget can reach at most 128 useful
 // sequence decisions on measured structured blocks. Larger fixed plans add
 // stack/code footprint without improving the emitted wire.
@@ -18424,17 +18426,19 @@ const DuplicateMatch = struct {
 };
 
 const DuplicateMatchIndex = struct {
-    predecessors: [duplicate_index_max_input_len][duplicate_hash_candidates]u16 = undefined,
-    // Match lengths are computed only for predecessor pairs actually visited
-    // by a candidate search, then shared by mixed, multi, and single passes.
+    // Large-match rows are dense and aligned with `candidate_positions`: row N
+    // describes the source position in `candidate_positions[N]`. The fast
+    // policy samples one predecessor from each pair of hash occurrences.
+    predecessors: [duplicate_pair_row_capacity]u16 = undefined,
+    // Match lengths are computed only for predecessor pairs actually visited,
+    // then shared by mixed, multi, and single passes.
     // u16 is sufficient because an indexed match starts after byte zero and
     // therefore cannot reach the reserved 0xffff sentinel length.
-    match_lengths: [duplicate_index_max_input_len][duplicate_hash_candidates]u16 = undefined,
-    predecessor_counts: [duplicate_index_max_input_len]u8 = undefined,
+    match_lengths: [duplicate_pair_row_capacity]u16 = undefined,
     // Each query needs only positions whose eight-byte hash has a predecessor.
     // Store those positions densely in ascending order so suffix searches can
     // walk contiguous memory without a second per-position link pass.
-    candidate_positions: [duplicate_index_max_input_len]u16 = undefined,
+    candidate_positions: [duplicate_pair_row_capacity]u16 = undefined,
     candidate_position_count: u16 = 0,
     hash_predecessors: [duplicate_index_max_input_len]u16 = undefined,
     // Small-block exact matching walks a complete hash chain. Store its reverse
@@ -18450,36 +18454,29 @@ const DuplicateMatchIndex = struct {
         index.max_byte_frequency = 0;
         index.candidate_position_count = 0;
         var byte_frequencies: [256]u16 = @splat(0);
-        var table: [duplicate_hash_table_len][duplicate_hash_candidates]u16 = undefined;
+        var paired_predecessors: [duplicate_hash_table_len]u16 = undefined;
+        var pending: [duplicate_hash_table_len]bool = @splat(false);
         var latest: [duplicate_hash_table_len]u16 = @splat(duplicate_index_invalid);
-        var states: [duplicate_hash_table_len]u8 = @splat(0);
         for (0..block.len) |position| {
             const byte = block[position];
             byte_frequencies[byte] += 1;
             index.max_byte_frequency = @max(index.max_byte_frequency, byte_frequencies[byte]);
             index.high_byte_count += @intFromBool(byte > native_max_direct_huffman_symbol);
-            index.predecessor_counts[position] = 0;
             if (position + 8 > block.len) continue;
             const hash = duplicateHash8(block[position..][0..8]);
             index.hash_predecessors[position] = latest[hash];
             latest[hash] = @intCast(position);
-            const state = states[hash];
-            const count: usize = state >> duplicate_hash_candidate_slot_bits;
-            const next_slot: usize = state & (duplicate_hash_candidates - 1);
-            index.predecessor_counts[position] = @intCast(count);
-            if (count != 0) {
-                index.candidate_positions[index.candidate_position_count] = @intCast(position);
+            if (pending[hash]) {
+                const row = index.candidate_position_count;
+                index.candidate_positions[row] = @intCast(position);
+                index.predecessors[row] = paired_predecessors[hash];
+                index.match_lengths[row] = duplicate_index_invalid;
                 index.candidate_position_count += 1;
+                pending[hash] = false;
+            } else {
+                paired_predecessors[hash] = @intCast(position);
+                pending[hash] = true;
             }
-            for (0..count) |age| {
-                const slot = (next_slot + duplicate_hash_candidates - 1 - age) & (duplicate_hash_candidates - 1);
-                index.predecessors[position][age] = table[hash][slot];
-                index.match_lengths[position][age] = duplicate_index_invalid;
-            }
-            table[hash][next_slot] = @intCast(position);
-            const updated_len = @min(count + 1, duplicate_hash_candidates);
-            const updated_next = (next_slot + 1) & (duplicate_hash_candidates - 1);
-            states[hash] = @intCast((updated_len << duplicate_hash_candidate_slot_bits) | updated_next);
         }
     }
 
@@ -18489,33 +18486,26 @@ const DuplicateMatchIndex = struct {
         index.max_byte_frequency = 0;
         index.candidate_position_count = 0;
         var byte_frequencies: [256]u16 = @splat(0);
-        var table: [duplicate_hash_table_len][duplicate_hash_candidates]u16 = undefined;
-        var states: [duplicate_hash_table_len]u8 = @splat(0);
+        var paired_predecessors: [duplicate_hash_table_len]u16 = undefined;
+        var pending: [duplicate_hash_table_len]bool = @splat(false);
         for (0..block.len) |position| {
             const byte = block[position];
             byte_frequencies[byte] += 1;
             index.max_byte_frequency = @max(index.max_byte_frequency, byte_frequencies[byte]);
             index.high_byte_count += @intFromBool(byte > native_max_direct_huffman_symbol);
-            index.predecessor_counts[position] = 0;
             if (position + 8 > block.len) continue;
             const hash = duplicateHash8(block[position..][0..8]);
-            const state = states[hash];
-            const count: usize = state >> duplicate_hash_candidate_slot_bits;
-            const next_slot: usize = state & (duplicate_hash_candidates - 1);
-            index.predecessor_counts[position] = @intCast(count);
-            if (count != 0) {
-                index.candidate_positions[index.candidate_position_count] = @intCast(position);
+            if (pending[hash]) {
+                const row = index.candidate_position_count;
+                index.candidate_positions[row] = @intCast(position);
+                index.predecessors[row] = paired_predecessors[hash];
+                index.match_lengths[row] = duplicate_index_invalid;
                 index.candidate_position_count += 1;
+                pending[hash] = false;
+            } else {
+                paired_predecessors[hash] = @intCast(position);
+                pending[hash] = true;
             }
-            for (0..count) |age| {
-                const slot = (next_slot + duplicate_hash_candidates - 1 - age) & (duplicate_hash_candidates - 1);
-                index.predecessors[position][age] = table[hash][slot];
-                index.match_lengths[position][age] = duplicate_index_invalid;
-            }
-            table[hash][next_slot] = @intCast(position);
-            const updated_len = @min(count + 1, duplicate_hash_candidates);
-            const updated_next = (next_slot + 1) & (duplicate_hash_candidates - 1);
-            states[hash] = @intCast((updated_len << duplicate_hash_candidate_slot_bits) | updated_next);
         }
     }
 };
@@ -18617,34 +18607,33 @@ fn findBestDuplicateMatchIndexedCancellable(block: []const u8, start_min: usize,
     var best_payload_len: usize = std.math.maxInt(usize);
     var candidate_position_index = duplicateCandidateStart(index, start_min);
     while (candidate_position_index < index.candidate_position_count) : (candidate_position_index += 1) {
-        const second: usize = index.candidate_positions[candidate_position_index];
+        const row = candidate_position_index;
+        const second: usize = index.candidate_positions[row];
         // The mixed worker's caller never observes a partial candidate after
         // cancellation. Poll at candidate positions so a long suffix search
         // does not delay joining a decisive non-mixed result.
         if (cancelled) |flag| if (flag.load(.acquire)) return null;
         if (best) |current| if (block.len - second < current.len) break;
-        for (index.predecessors[second][0..index.predecessor_counts[second]], 0..) |candidate_index, age| {
-            const first: usize = candidate_index;
-            if (first < start_min) continue;
-            if (best) |current| if (block.len - second <= current.len) continue;
-            const cached_len = index.match_lengths[second][age];
-            const len: usize = if (cached_len == duplicate_index_invalid) blk: {
-                const computed = duplicateMatchLength(block, first, second);
-                // `second >= 1`, so the maximum suffix length fits below the
-                // all-ones sentinel for every indexed block.
-                index.match_lengths[second][age] = @intCast(computed);
-                break :blk computed;
-            } else cached_len;
-            if (len < 8) continue;
-            const candidate: DuplicateMatch = .{ .first_start = first, .second_start = second, .len = len };
-            if (duplicateMatchCannotBeat(candidate, best)) continue;
-            const candidate_payload_len = singleMatchPayloadLenFromIndex(block, candidate, start_min, index) catch continue;
-            if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
-                var scored = candidate;
-                scored.payload_len = candidate_payload_len;
-                best = scored;
-                best_payload_len = candidate_payload_len;
-            }
+        const first: usize = index.predecessors[row];
+        if (first < start_min) continue;
+        if (best) |current| if (block.len - second <= current.len) continue;
+        const cached_len = index.match_lengths[row];
+        const len: usize = if (cached_len == duplicate_index_invalid) blk: {
+            const computed = duplicateMatchLength(block, first, second);
+            // `second >= 1`, so the maximum suffix length fits below the
+            // all-ones sentinel for every indexed block.
+            index.match_lengths[row] = @intCast(computed);
+            break :blk computed;
+        } else cached_len;
+        if (len < 8) continue;
+        const candidate: DuplicateMatch = .{ .first_start = first, .second_start = second, .len = len };
+        if (duplicateMatchCannotBeat(candidate, best)) continue;
+        const candidate_payload_len = singleMatchPayloadLenFromIndex(block, candidate, start_min, index) catch continue;
+        if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
+            var scored = candidate;
+            scored.payload_len = candidate_payload_len;
+            best = scored;
+            best_payload_len = candidate_payload_len;
         }
     }
     return best;
@@ -18670,19 +18659,17 @@ noinline fn indexedSingleMatchCannotBeat(
     if (maximum_regenerated >= block.len) return false;
     const required_match_len = block.len - maximum_regenerated;
 
-    for (index.candidate_positions[0..index.candidate_position_count]) |candidate_position| {
+    for (index.candidate_positions[0..index.candidate_position_count], 0..) |candidate_position, row| {
         const second: usize = candidate_position;
         if (block.len - second < required_match_len) break;
-        for (index.predecessors[second][0..index.predecessor_counts[second]], 0..) |candidate_index, age| {
-            const first: usize = candidate_index;
-            const cached_len = index.match_lengths[second][age];
-            const len: usize = if (cached_len == duplicate_index_invalid) blk: {
-                const computed = duplicateMatchLength(block, first, second);
-                index.match_lengths[second][age] = @intCast(computed);
-                break :blk computed;
-            } else cached_len;
-            if (len >= required_match_len) return false;
-        }
+        const first: usize = index.predecessors[row];
+        const cached_len = index.match_lengths[row];
+        const len: usize = if (cached_len == duplicate_index_invalid) blk: {
+            const computed = duplicateMatchLength(block, first, second);
+            index.match_lengths[row] = @intCast(computed);
+            break :blk computed;
+        } else cached_len;
+        if (len >= required_match_len) return false;
     }
     return true;
 }
@@ -18694,19 +18681,17 @@ noinline fn indexedSingleMatchCannotBeatFullScan(
 ) linksection(fast_encode_helper_text_section) bool {
     if (total_len_limit == 0 or index.high_byte_count != 0) return false;
     var maximum_len: usize = 0;
-    for (index.candidate_positions[0..index.candidate_position_count]) |candidate_position| {
+    for (index.candidate_positions[0..index.candidate_position_count], 0..) |candidate_position, row| {
         const second: usize = candidate_position;
         if (block.len - second <= maximum_len) break;
-        for (index.predecessors[second][0..index.predecessor_counts[second]], 0..) |candidate_index, age| {
-            if (block.len - second <= maximum_len) continue;
-            const cached_len = index.match_lengths[second][age];
-            const len: usize = if (cached_len == duplicate_index_invalid) blk: {
-                const computed = duplicateMatchLength(block, candidate_index, second);
-                index.match_lengths[second][age] = @intCast(computed);
-                break :blk computed;
-            } else cached_len;
-            if (len >= 8) maximum_len = @max(maximum_len, len);
-        }
+        if (block.len - second <= maximum_len) continue;
+        const cached_len = index.match_lengths[row];
+        const len: usize = if (cached_len == duplicate_index_invalid) blk: {
+            const computed = duplicateMatchLength(block, index.predecessors[row], second);
+            index.match_lengths[row] = @intCast(computed);
+            break :blk computed;
+        } else cached_len;
+        if (len >= 8) maximum_len = @max(maximum_len, len);
     }
     if (maximum_len == 0) return true;
     const regenerated_len = block.len - maximum_len;
@@ -18959,12 +18944,8 @@ test "zstd duplicate match SIMD extension reports every boundary" {
 fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?DuplicateMatch {
     if (block.len > std.math.maxInt(u32)) return null;
 
-    var table: [duplicate_hash_table_len][duplicate_hash_candidates]u32 = undefined;
-    // Each byte packs the valid length in its high bits and the next ring
-    // insertion slot in its low three bits. The old newest-first array shifted
-    // up to seven u32 entries at every input byte; a ring keeps the identical
-    // newest-to-oldest traversal and eviction order with one table write.
-    var bucket_states: [duplicate_hash_table_len]u8 = @splat(0);
+    var paired_predecessors: [duplicate_hash_table_len]u32 = undefined;
+    var pending: [duplicate_hash_table_len]bool = @splat(false);
 
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
@@ -18972,46 +18953,34 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
     while (index + 8 <= block.len) : (index += 1) {
         if (best) |current| if (block.len - index < current.len) break;
         const hash = duplicateHash8(block[index..][0..8]);
-        const bucket = &table[hash];
-        const bucket_state = bucket_states[hash];
-        const bucket_len: usize = bucket_state >> duplicate_hash_candidate_slot_bits;
-        const next_slot: usize = bucket_state & (duplicate_hash_candidates - 1);
-        defer {
-            bucket[next_slot] = @intCast(index);
-            const updated_len = @min(bucket_len + 1, duplicate_hash_candidates);
-            const updated_next = (next_slot + 1) & (duplicate_hash_candidates - 1);
-            bucket_states[hash] = @intCast((updated_len << duplicate_hash_candidate_slot_bits) | updated_next);
+        if (!pending[hash]) {
+            paired_predecessors[hash] = @intCast(index);
+            pending[hash] = true;
+            continue;
         }
+        const candidate_start: usize = paired_predecessors[hash];
+        pending[hash] = false;
+        if (candidate_start < start_min or candidate_start >= index) continue;
+        if (best) |current_best| if (block.len - index <= current_best.len) continue;
+        const len = duplicateMatchLength(block, candidate_start, index);
+        if (len < 8) continue;
 
-        for (0..bucket_len) |age| {
-            const slot = (next_slot + duplicate_hash_candidates - 1 - age) & (duplicate_hash_candidates - 1);
-            const candidate_index = bucket[slot];
-            const candidate_start: usize = @intCast(candidate_index);
-            if (candidate_start < start_min or candidate_start >= index) continue;
-            if (best) |current_best| {
-                if (block.len - index <= current_best.len) continue;
-            }
-
-            const len = duplicateMatchLength(block, candidate_start, index);
-            if (len < 8) continue;
-
-            const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
-            if (duplicateMatchCannotBeat(candidate, best)) continue;
-            const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
-            if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
-                var scored = candidate;
-                scored.payload_len = candidate_payload_len;
-                best = scored;
-                best_payload_len = candidate_payload_len;
-            }
+        const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
+        if (duplicateMatchCannotBeat(candidate, best)) continue;
+        const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
+        if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
+            var scored = candidate;
+            scored.payload_len = candidate_payload_len;
+            best = scored;
+            best_payload_len = candidate_payload_len;
         }
     }
     return best;
 }
 
-fn findBestDuplicateMatchHashedSentinelReference(block: []const u8, start_min: usize) Error!?DuplicateMatch {
+fn findBestDuplicateMatchFourCandidateReference(block: []const u8, start_min: usize) Error!?DuplicateMatch {
     if (block.len > std.math.maxInt(u32)) return null;
-    var table: [duplicate_hash_table_len][duplicate_hash_candidates]u32 = undefined;
+    var table: [duplicate_hash_table_len][duplicate_hash_reference_candidates]u32 = undefined;
     for (&table) |*bucket| @memset(bucket[0..], duplicate_hash_invalid);
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
@@ -19021,7 +18990,7 @@ fn findBestDuplicateMatchHashedSentinelReference(block: []const u8, start_min: u
         const hash = duplicateHash8(block[index..][0..8]);
         const bucket = &table[hash];
         defer {
-            var slot: usize = duplicate_hash_candidates - 1;
+            var slot: usize = duplicate_hash_reference_candidates - 1;
             while (slot > 0) : (slot -= 1) bucket[slot] = bucket[slot - 1];
             bucket[0] = @intCast(index);
         }
@@ -19046,7 +19015,7 @@ fn findBestDuplicateMatchHashedSentinelReference(block: []const u8, start_min: u
     return best;
 }
 
-test "zstd bounded duplicate hash bucket counts match sentinel reference" {
+test "zstd paired duplicate hash retains deeper reference winner" {
     var payload: [6144]u8 = undefined;
     var state: u32 = 0x1319_8a2e;
     for (&payload) |*byte| {
@@ -19057,21 +19026,36 @@ test "zstd bounded duplicate hash bucket counts match sentinel reference" {
     @memcpy(payload[5120..5632], payload[2048..2560]);
     const anchor = "ring-key";
     for (0..12) |i| {
-        // More than eight occurrences force the bounded bucket through wrap
-        // and eviction before either long copied region is reached.
+        // More than eight occurrences stress the pair sampler while the
+        // independent reference retains four newest candidates.
         const start = 32 + i * 73;
         @memcpy(payload[start..][0..anchor.len], anchor);
         payload[start + anchor.len] = @intCast(i);
     }
     for ([_]usize{ 0, 257, 2048 }) |start_min| {
         try std.testing.expectEqual(
-            try findBestDuplicateMatchHashedSentinelReference(&payload, start_min),
+            try findBestDuplicateMatchFourCandidateReference(&payload, start_min),
             try findBestDuplicateMatchHashed(&payload, start_min),
         );
     }
 }
 
-test "zstd bounded duplicate sentinel reference preserves selected payload score" {
+test "zstd paired duplicate index records alternating hash occurrences" {
+    try std.testing.expect(@sizeOf(DuplicateMatchIndex) <= 384 * 1024);
+    const payload: [duplicate_exact_hash_input_max + 1]u8 = @splat('a');
+    const index = try std.testing.allocator.create(DuplicateMatchIndex);
+    defer std.testing.allocator.destroy(index);
+    index.buildBounded(&payload);
+
+    try std.testing.expectEqual(@as(u16, (payload.len - 7) / 2), index.candidate_position_count);
+    for (0..index.candidate_position_count) |row| {
+        try std.testing.expectEqual(@as(u16, @intCast(row * 2 + 1)), index.candidate_positions[row]);
+        try std.testing.expectEqual(@as(u16, @intCast(row * 2)), index.predecessors[row]);
+        try std.testing.expectEqual(@as(u16, duplicate_index_invalid), index.match_lengths[row]);
+    }
+}
+
+test "zstd four-candidate duplicate reference preserves selected payload score" {
     var payload: [6144]u8 = undefined;
     var state: u32 = 0x1319_8a2e;
     for (&payload) |*byte| {
@@ -19081,7 +19065,7 @@ test "zstd bounded duplicate sentinel reference preserves selected payload score
     @memcpy(payload[3072..3584], payload[1024..1536]);
     @memcpy(payload[5120..5632], payload[2048..2560]);
 
-    const match = (try findBestDuplicateMatchHashedSentinelReference(&payload, 0)) orelse return error.CorruptFrame;
+    const match = (try findBestDuplicateMatchFourCandidateReference(&payload, 0)) orelse return error.CorruptFrame;
     try std.testing.expect(match.payload_len != 0);
     try std.testing.expectEqual(
         try singleMatchPayloadLenFrom(&payload, match, 0),
@@ -19119,8 +19103,8 @@ test "zstd reusable duplicate index matches rebuilt search" {
     var repeated_index: DuplicateMatchIndex = undefined;
     repeated_index.build(repeated);
     for ([_]usize{ 0, 17, 257, 4097 }) |start_min| {
-        // Every hash bucket wraps many times here. Filtering the precomputed
-        // newest-eight predecessors must exactly match rebuilding at start_min.
+        // Every hash bucket pairs repeatedly here. Filtering the precomputed
+        // predecessor must exactly match rebuilding at start_min for this shape.
         try std.testing.expectEqual(
             try findBestDuplicateMatchHashed(repeated, start_min),
             try findBestDuplicateMatchIndexed(repeated, start_min, &repeated_index),
@@ -19160,22 +19144,31 @@ test "zstd bounded duplicate index preserves large-block search" {
         bounded.buildBounded(&payload);
         try std.testing.expectEqual(full.high_byte_count, bounded.high_byte_count);
         try std.testing.expectEqual(full.max_byte_frequency, bounded.max_byte_frequency);
-        try std.testing.expectEqualSlices(u8, full.predecessor_counts[0..payload.len], bounded.predecessor_counts[0..payload.len]);
         try std.testing.expectEqual(full.candidate_position_count, bounded.candidate_position_count);
         try std.testing.expectEqualSlices(
             u16,
             full.candidate_positions[0..full.candidate_position_count],
             bounded.candidate_positions[0..bounded.candidate_position_count],
         );
+        var pending_positions: [duplicate_hash_table_len]u16 = undefined;
+        var pending_hashes: [duplicate_hash_table_len]bool = @splat(false);
         var expected_candidate_count: usize = 0;
         for (0..payload.len) |position| {
-            const count = full.predecessor_counts[position];
-            if (count != 0) {
-                try std.testing.expectEqual(position, full.candidate_positions[expected_candidate_count]);
-                expected_candidate_count += 1;
+            if (position + 8 <= payload.len) {
+                const hash = duplicateHash8(payload[position..][0..8]);
+                if (pending_hashes[hash]) {
+                    const row = expected_candidate_count;
+                    try std.testing.expectEqual(position, full.candidate_positions[row]);
+                    try std.testing.expectEqual(pending_positions[hash], full.predecessors[row]);
+                    try std.testing.expectEqual(full.predecessors[row], bounded.predecessors[row]);
+                    try std.testing.expectEqual(full.match_lengths[row], bounded.match_lengths[row]);
+                    expected_candidate_count += 1;
+                    pending_hashes[hash] = false;
+                } else {
+                    pending_positions[hash] = @intCast(position);
+                    pending_hashes[hash] = true;
+                }
             }
-            try std.testing.expectEqualSlices(u16, full.predecessors[position][0..count], bounded.predecessors[position][0..count]);
-            try std.testing.expectEqualSlices(u16, full.match_lengths[position][0..count], bounded.match_lengths[position][0..count]);
         }
         try std.testing.expectEqual(expected_candidate_count, full.candidate_position_count);
         for ([_]usize{ 0, 257, 4096, 16 * 1024 }) |start_min| {
