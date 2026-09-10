@@ -205,8 +205,8 @@ fn appendLiterals(
     literals: []const u8,
     stats: *lz77.PlanStats,
 ) !void {
-    try tokens.ensureUnusedCapacity(allocator, literals.len);
-    for (literals) |literal| tokens.appendAssumeCapacity(.{ .literal = literal });
+    const appended = try tokens.addManyAsSlice(allocator, literals.len);
+    for (literals, appended) |literal, *token| token.* = .{ .literal = literal };
     stats.literals += literals.len;
 }
 

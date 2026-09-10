@@ -11073,3 +11073,12 @@ coverage.
   stage pairs improved binary by `1.0278x`, but text/JSON fell to `0.9880x`/
   `0.9940x`; the established native-width lookup remains worthwhile even for
   long streams on this target.
+  Double-fast literal runs now extend the token array once with
+  `addManyAsSlice` and initialize that returned slice directly, replacing one
+  `appendAssumeCapacity` length update per literal while preserving allocation
+  failure and token ordering. All double-fast tests remain exact, and thirty
+  independent fixed-CPU-8 primary-stage pairs improve text/JSON/binary/wide by
+  `1.0087x`/`1.0160x`/`1.0228x`/`1.0146x`. The matching 30-pair 20-row frame
+  matrix preserves every size/checksum, reaches a `1.0060x` row-median geometric
+  mean, improves binary level 1 by `1.0184x` and JSON level 1 by `1.0128x`, and
+  keeps the weakest row effectively neutral at `0.9993x`.
