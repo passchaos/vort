@@ -10657,6 +10657,13 @@ coverage.
   stage counters and wires stayed equal, but thirty independent `HEAD` pairs
   measured text/JSON/binary at `0.976x`/`0.994x`/`1.004x`; the upstream hash's
   small binary gain did not offset regressions on narrow structured inputs.
+  Packing four lazy match-length validity bits into each duplicate predecessor
+  count was rejected. It removed per-candidate sentinel writes without growing
+  `DuplicateMatchIndex`, and the bounded/full index oracle preserved all
+  predecessors and selected matches. Binary index construction improved
+  `1.033x`, but text/JSON builds fell to `0.994x`/`0.993x`; more importantly,
+  thirty independent stage pairs reduced actual text/JSON/binary single-match
+  evaluation to `0.985x`/`0.980x`/`0.963x`. The simple u16 sentinel stays.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
