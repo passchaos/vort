@@ -11165,6 +11165,12 @@ coverage.
   beam-stage pairs were only `0.9964x`/`1.0044x`/`1.0067x` on text/JSON/binary,
   and the 20-row matrix reached `0.9998x` geometrically with text level 22 at
   `0.9881x`. The explicit comparison plus guarded subtraction remains.
+  Prefetching the repeat-beam indexed match's future state and occupancy targets
+  was rejected. The target is known before expanding the two current states and
+  all 19 beam tests plus output fields remained exact, but thirty primary-stage
+  pairs reduced text/JSON/binary to `0.9808x`/`0.9608x`/`0.9787x`. The target
+  state is already cache-resident often enough that the extra prefetch traffic is
+  pure overhead on this CPU.
   A fixed-parameter Zstd-only double-fast instance was rejected too. It folded
   the constant four-byte minimum and 258-byte maximum while retaining only the
   block-dependent 32 KiB window; a 16-shape oracle matched generic tokens and
