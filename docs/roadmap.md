@@ -10961,6 +10961,12 @@ coverage.
   `1.0172x`/`1.0108x`/`1.0160x`, but the 20-row frame matrix moved text levels
   1/9 to `0.9836x`/`0.9841x` and reached only `1.0006x` geometrically. The
   original unified reverse loop remains.
+  Removing the small predefined planner's replay-time state range check was
+  rejected even though every stored next choice is derived from a symbol-
+  bounded viable mask and the independent LL/OF/ML oracle matched all states.
+  LLVM grew the planner from 504 to 700 bytes; thirty primary-stage pairs put
+  JSON at `0.9901x`, while text/binary were noisy around `1.0063x`/`1.0071x`.
+  The seemingly redundant check remains because it enables better codegen.
   Reusing the wide predefined planner's per-position viability masks in the
   small planner was rejected. It reduced temporary stack from roughly 32 KiB
   to 4 KiB and the existing LL/OF/ML oracle matched every chosen state through
@@ -11008,6 +11014,13 @@ coverage.
   `1.0469x` on text/JSON/binary. Yet the 30-pair frame matrix moved all text
   levels to `0.9758x`--`0.9892x`; an earlier branch-expanded form had the same
   layout problem. The smaller decoder-backed selector remains.
+  Hoisting that predefined mask table identity check out of the per-value loop
+  was rejected too. The once-selected enum path preserved all LL/OF/ML states
+  and improved primary text/JSON/binary stages by `1.0180x`/`1.0313x`/
+  `1.0190x`, but inlined all three specialized conversions into the planner.
+  The 20-row frame matrix reached only `1.0013x` geometrically, with text level
+  9 at `0.9944x` and several multiblock rows below one. The smaller out-of-line
+  pointer dispatcher remains.
   Restricting the compact encoder-side offset resolver to the already isolated
   450--512-sequence borrowed emitter was rejected as below the retention bar.
   The exhaustive resolver oracle and borrowed-vs-by-value field oracle remained
