@@ -10620,6 +10620,14 @@ coverage.
   wire. Text/JSON were neutral at about `0.9994x`, while binary consistently
   fell to `0.9886x` with 0/30 wins: the 4,096-bucket four-byte hash already
   correlates the other prefix bytes, so the wider load did not pay for itself.
+  Pruning repeat-beam's second indexed transition when it targeted the same
+  `(position, rep0, token)` at an equal-or-higher modeled cost was rejected. A
+  16-shape, minimum-match-3/4 oracle showed byte-identical tokens and statistics.
+  A runtime-switch 30-pair stage matrix appeared positive (`1.031x` text,
+  `1.021x` JSON, `1.015x` binary), but independent final binaries exposed the
+  code-layout cost: the best of three cost-comparison formulations reduced JSON
+  to `0.987x` with 0/30 wins, while earlier forms fell to about `0.960x`. The
+  original duplicate update remains faster once benchmark branching is removed.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
