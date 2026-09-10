@@ -10954,6 +10954,19 @@ coverage.
   oracle on 64/32-bit targets, but thirty independent frame pairs reached only
   `1.0003x` geometrically and reduced text level 3 to `0.9926x`. Directly
   inserting all four codes remains the better dependency/layout balance.
+  Initializing the small predefined planner's terminal viable-state mask before
+  its reverse DP was rejected. It removed the per-position terminal branch,
+  shrank the function by 19 bytes, and the independent LL/OF/ML matrix oracle
+  matched every state. Thirty primary-stage pairs improved text/JSON/binary by
+  `1.0172x`/`1.0108x`/`1.0160x`, but the 20-row frame matrix moved text levels
+  1/9 to `0.9836x`/`0.9841x` and reached only `1.0006x` geometrically. The
+  original unified reverse loop remains.
+  Reusing the wide predefined planner's per-position viability masks in the
+  small planner was rejected. It reduced temporary stack from roughly 32 KiB
+  to 4 KiB and the existing LL/OF/ML oracle matched every chosen state through
+  128-value plans, but replay had to recompute transition ranges. Thirty
+  independent primary-stage pairs reduced text/JSON/binary to `0.9801x`/
+  `0.9265x`/`0.9532x`; the direct u8 next-choice matrix remains much faster.
   Large 64-bit Huffman streams now batch the byte drain as well as symbol
   insertion. Streams of at least 1,024 literals enter a separately placed
   emitter that writes four little-endian bytes whenever its four-symbol batch
