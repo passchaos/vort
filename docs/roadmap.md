@@ -10682,6 +10682,13 @@ coverage.
   20-row frame matrix preserves every size/checksum, improves level-1 JSON by
   `1.0138x` with 26/30 wins, has a `1.0012x` row-median geometric mean, and
   keeps the weakest control at `0.9956x`.
+  A second attempt to defer level-1's duplicate index used a fixed-length
+  64-bit rolling fingerprint rather than extending matches. Equal windows must
+  share a fingerprint, while hash collisions, high bytes, and table saturation
+  conservatively fell back to the indexed scorer; a generated oracle confirmed
+  every negative proof against the complete scan. Even so, a same-binary
+  100-encode JSON sample measured only `0.9756x`. Maintaining the rolling hash
+  and open-addressed table still cost more than eager bounded-index construction.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
