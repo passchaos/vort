@@ -10628,7 +10628,7 @@ noinline fn emitDecisiveWideMatchCompressedBlockInternal(
         return true;
     }
 
-    const rep_beam_stats = lz77.optimalRepBeamPlanReuse(rep_beam, allocator, block, parser_options) catch |err| switch (err) {
+    const rep_beam_stats = lz77.optimalRepBeamPlanZstdReuse(rep_beam, allocator, block) catch |err| switch (err) {
         error.InvalidBlockPlan => {
             out.items.len = output_start;
             return false;
@@ -10858,7 +10858,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     else if (has_precomputed_rep_beam)
         precomputed_rep_beam_stats
     else
-        lz77.optimalRepBeamPlanReuse(rep_beam_scratch, allocator, block, zstdHashParserOptions(block.len)) catch |err| switch (err) {
+        lz77.optimalRepBeamPlanZstdReuse(rep_beam_scratch, allocator, block) catch |err| switch (err) {
             error.InvalidBlockPlan => null,
             else => return err,
         };
@@ -11151,7 +11151,7 @@ pub fn benchmarkNativeMatchStage(
             break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, scratch.optimal.tokens.items, stats, &scratch.large_sequences);
         },
         .rep_beam => blk: {
-            const stats = lz77.optimalRepBeamPlanReuse(&scratch.rep_beam, allocator, block, zstdHashParserOptions(block.len)) catch |err| switch (err) {
+            const stats = lz77.optimalRepBeamPlanZstdReuse(&scratch.rep_beam, allocator, block) catch |err| switch (err) {
                 error.InvalidBlockPlan => break :blk false,
                 else => return err,
             };

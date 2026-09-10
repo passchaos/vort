@@ -204,6 +204,29 @@ const RepBeamIndex = struct {
         }
         return count;
     }
+
+    inline fn matchesAtZstd(self: *const RepBeamIndex, input: []const u8, position: usize, out: []Token.Match) usize {
+        std.debug.assert(input.len == self.input_len and position + 4 <= input.len and out.len != 0);
+        var candidate_i = self.prev.items[position];
+        var checked: usize = 0;
+        var count: usize = 0;
+        const maximum = @min(max_match_len, input.len - position);
+        const window_len = @min(input.len, default_window_len);
+        while (candidate_i != rep_beam_index_empty and checked < 128 and count < out.len) : (checked += 1) {
+            const candidate: usize = candidate_i;
+            const distance = position - candidate;
+            if (distance == 0 or distance > window_len) break;
+            if (input[candidate + 3] == input[position + 3]) {
+                const length = matchLength(input, candidate, position, maximum);
+                if (length >= 4) {
+                    out[count] = .{ .length = @intCast(length), .distance = @intCast(distance) };
+                    count += 1;
+                }
+            }
+            candidate_i = self.prev.items[candidate];
+        }
+        return count;
+    }
 };
 
 pub const HashIndex = struct {
@@ -939,14 +962,18 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
         }
     }
 
-    const final_states = states[input.len * rep_beam_width ..][0..lengths[input.len]];
+    return finishRepBeamPlan(scratch, allocator, input.len, states, lengths);
+}
+
+fn finishRepBeamPlan(scratch: *RepBeamScratch, allocator: std.mem.Allocator, input_len: usize, states: []const RepBeamState, lengths: []const u8) !PlanStats {
+    const final_states = states[input_len * rep_beam_width ..][0..lengths[input_len]];
     var best_slot: ?usize = null;
     for (final_states, 0..) |state, slot| {
         if (best_slot == null or state.cost < final_states[best_slot.?].cost) best_slot = slot;
     }
     scratch.reversed.clearRetainingCapacity();
-    try scratch.reversed.ensureTotalCapacity(allocator, @min(input.len, 4096));
-    var position = input.len;
+    try scratch.reversed.ensureTotalCapacity(allocator, @min(input_len, 4096));
+    var position = input_len;
     var slot = best_slot orelse return error.InvalidBlockPlan;
     while (position != 0) {
         const state = states[position * rep_beam_width + slot];
@@ -965,6 +992,67 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
         },
     };
     return stats;
+}
+
+/// Zstd's repeat-aware parser uses fixed match and cost limits. Keeping those
+/// invariants inside one specialized loop lets the optimizer remove generic
+/// option normalization without changing the reusable LZ77 API above.
+pub fn optimalRepBeamPlanZstdReuse(scratch: *RepBeamScratch, allocator: std.mem.Allocator, input: []const u8) !PlanStats {
+    if (input.len == 0 or input.len > rep_beam_input_max) return error.InvalidBlockPlan;
+    try scratch.index.build(allocator, input);
+
+    const state_count = std.math.mul(usize, input.len + 1, rep_beam_width) catch return error.IntegerOverflow;
+    try scratch.states.resize(allocator, state_count);
+    try scratch.lengths.resize(allocator, input.len + 1);
+    const states = scratch.states.items;
+    const lengths = scratch.lengths.items;
+    @memset(lengths, 0);
+    states[0] = .{ .cost = 0 };
+    lengths[0] = 1;
+
+    var matches: [rep_beam_match_candidates]Token.Match = undefined;
+    for (0..input.len) |position| {
+        const can_match = position + 4 <= input.len;
+        const match_count = if (can_match) scratch.index.matchesAtZstd(input, position, &matches) else 0;
+        const current = states[position * rep_beam_width ..][0..lengths[position]];
+        for (current, 0..) |state, slot| {
+            insertRepBeamState(states, lengths, position + 1, .{
+                .cost = state.cost + @as(u32, @intCast(fixedLiteralCost(input[position]))),
+                .rep0 = state.rep0,
+                .previous_position = @intCast(position),
+                .previous_slot = @intCast(slot),
+                .token = .{ .literal = input[position] },
+            });
+
+            for (matches[0..match_count]) |match| {
+                extendRepBeamMatchZstd(states, lengths, position, slot, state, match);
+            }
+            const indexed_rep0 = match_count != 0 and matches[0].distance == state.rep0;
+            if (can_match and state.rep0 <= position and !indexed_rep0) {
+                const candidate = position - state.rep0;
+                const length = repBeamMatchLength(input, candidate, position, @min(max_match_len, input.len - position), 4);
+                if (length != 0) {
+                    extendRepBeamMatchZstd(states, lengths, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
+                }
+            }
+        }
+    }
+
+    return finishRepBeamPlan(scratch, allocator, input.len, states, lengths);
+}
+
+inline fn extendRepBeamMatchZstd(states: []RepBeamState, lengths: []u8, position: usize, slot: usize, state: RepBeamState, match: Token.Match) void {
+    std.debug.assert(match.length >= 4);
+    std.debug.assert(match.distance != 0 and match.distance <= position);
+    const distance_cost: u32 = @intCast(if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance) + 4);
+    const cost = state.cost + @as(u32, fixed_length_costs[match.length]) + distance_cost;
+    insertRepBeamState(states, lengths, position + match.length, .{
+        .cost = cost,
+        .rep0 = match.distance,
+        .previous_position = @intCast(position),
+        .previous_slot = @intCast(slot),
+        .token = .{ .match = match },
+    });
 }
 
 inline fn repBeamMatchLength(input: []const u8, candidate: usize, position: usize, maximum: usize, minimum: usize) usize {
@@ -1435,6 +1523,43 @@ test "rep beam reusable scratch preserves tokens and capacity" {
     try std.testing.expectEqual(states_capacity, scratch.states.capacity);
     try std.testing.expectEqual(lengths_capacity, scratch.lengths.capacity);
     try std.testing.expectEqual(tokens_capacity, scratch.reversed.capacity);
+}
+
+test "Zstd-specialized rep beam matches generic plans" {
+    var payload: [8192]u8 = undefined;
+    for (0..16) |seed| {
+        var random_state: u32 = @truncate(0xa409_3822 +% seed *% 0x0100_0193);
+        for (&payload, 0..) |*byte, position| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @truncate(position * 17 + seed * 13),
+                1 => if (position % 64 < 52) @intCast('a' + (position + seed) % 23) else @truncate(random_state >> 24),
+                2 => @truncate((random_state >> 16) ^ (position / 31)),
+                else => @truncate((position * 37 + (position / 7) * 13) ^ (position >> 3)),
+            };
+        }
+        @memcpy(payload[4096..5120], payload[1024..2048]);
+        @memcpy(payload[7168..7680], payload[2560..3072]);
+        const options: GreedyOptions = .{
+            .window_len = @min(payload.len, default_window_len),
+            .max_chain = 128,
+            .nice_len = 258,
+            .max_candidates = 8,
+            .min_match = 4,
+            .max_match = max_match_len,
+            .new_distance_penalty_bits = 4,
+            .lazy_min_gain = 1,
+        };
+
+        var generic: RepBeamScratch = .{};
+        defer generic.deinit(std.testing.allocator);
+        const generic_stats = try optimalRepBeamPlanReuse(&generic, std.testing.allocator, &payload, options);
+        var specialized: RepBeamScratch = .{};
+        defer specialized.deinit(std.testing.allocator);
+        const specialized_stats = try optimalRepBeamPlanZstdReuse(&specialized, std.testing.allocator, &payload);
+        try std.testing.expectEqual(generic_stats, specialized_stats);
+        try std.testing.expectEqualSlices(Token, generic.reversed.items, specialized.reversed.items);
+    }
 }
 
 test "rep beam compact index matches reference beyond u16 positions" {

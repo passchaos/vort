@@ -10832,3 +10832,14 @@ coverage.
   `1.160x` at levels 1/3/9/22, binary by `1.265x`/`1.081x`/`1.081x`/`1.082x`,
   and the level-1/3 tradeoff rows by `1.252x`/`1.245x`; the weakest control is
   `0.9979x` and the row-median geometric mean is `1.0925x`.
+  Zstd's repeat-aware beam now enters a fixed-parameter hot loop instead of
+  repeatedly normalizing the generic LZ77 options. The specialized path keeps
+  the established 32 KiB window, 128-link chain, 4--258-byte matches, one
+  indexed candidate, and four-bit new-distance penalty; the generic parser
+  remains available to other callers. Sixteen generated 8 KiB inputs compare
+  every output token and `PlanStats` field with the generic implementation.
+  Thirty independent-binary fixed-CPU-8 stage pairs improve text/JSON/binary
+  by median `1.0748x`/`1.0552x`/`1.0248x`, with 30/30, 27/30, and 28/30 wins.
+  The corresponding 30-pair 20-row frame matrix preserves every size/checksum,
+  improves level-1 JSON by `1.1483x` with 30/30 wins, and reaches a `1.0413x`
+  row-median geometric mean; the weakest row is `0.9986x`.
