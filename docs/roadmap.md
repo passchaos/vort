@@ -10727,6 +10727,11 @@ coverage.
   binary), but an independent-binary 30-pair 20-row matrix reached only
   `0.9995x` geometrically, improved level-1 JSON by just `1.0024x`, and reduced
   multiblock level 22 to `0.9798x`. The compact dynamic slice loop remains.
+  Splitting repeat-beam's checked one-candidate lookup into a separate unchecked
+  hot-loop helper was rejected. A per-position oracle preserved every returned
+  match, but thirty independent primary-stage pairs reduced text/JSON/binary to
+  `0.984x`/`0.952x`/`0.986x`; the extra helper boundary outweighed eliminating
+  two already-predictable range checks.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
