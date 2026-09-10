@@ -24,6 +24,7 @@ pub fn main(init: std.process.Init) !void {
     var decodecorpus_dictionary_path: ?[]const u8 = null;
     var prior_mode_mask: u64 = 0;
     var require_complete_mode_mask = false;
+    var reference_library_path: ?[]const u8 = null;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--decodecorpus")) {
             decodecorpus_frames = args.next() orelse return error.MissingCorpusPath;
@@ -36,11 +37,16 @@ pub fn main(init: std.process.Init) !void {
             prior_mode_mask = try std.fmt.parseInt(u64, args.next() orelse return error.MissingLimit, 0);
         } else if (std.mem.eql(u8, arg, "--require-complete-mode-mask")) {
             require_complete_mode_mask = true;
+        } else if (std.mem.eql(u8, arg, "--libzstd")) {
+            reference_library_path = args.next() orelse return error.MissingCorpusPath;
         } else return error.UnknownArgument;
     }
     if ((decodecorpus_frames == null) != (decodecorpus_plain == null)) return error.MissingCorpusPath;
 
-    var runtime = try libzstd.Runtime.open();
+    var runtime = if (reference_library_path) |path|
+        try libzstd.Runtime.openPath(path)
+    else
+        try libzstd.Runtime.open();
     defer runtime.deinit();
     var checked: usize = 0;
     var unsupported: usize = 0;

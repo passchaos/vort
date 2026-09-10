@@ -42,10 +42,13 @@ if any(arg.startswith('--use-dict=') for arg in sys.argv[1:]):
 """
 
 PROBE = """#!/usr/bin/env python3
+import pathlib
 import sys
 
 count = int(sys.argv[sys.argv.index('--decodecorpus-count') + 1])
 prior = int(sys.argv[sys.argv.index('--prior-mode-mask') + 1], 0)
+if '--libzstd' in sys.argv and not pathlib.Path(sys.argv[sys.argv.index('--libzstd') + 1]).is_file():
+    raise SystemExit('explicit libzstd path was not forwarded')
 mode = (1 << 64) - 1 if count == 500 else (0xa if '--decodecorpus-dictionary' in sys.argv else 0x5)
 combined = prior | mode
 print(
@@ -64,7 +67,8 @@ print(
     f'decodecorpus_sequence_mode_mask={mode:#x} '
     f'decodecorpus_combined_mode_combinations={combined.bit_count()} '
     f'decodecorpus_combined_mode_mask={combined:#x} '
-    f'sequence_mode_mask=0xffffffffffffffff combined_mode_mask=0xffffffffffffffff',
+    f'sequence_mode_mask=0xffffffffffffffff combined_mode_mask=0xffffffffffffffff '
+    f'version=1.6.0-test',
     file=sys.stderr,
 )
 """
@@ -212,6 +216,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
             generator = root / "decodecorpus"
             probe = root / "probe"
             bad_probe = root / "bad-probe"
+            reference_library = root / "libzstd-test.so"
+            reference_library.write_bytes(b"fixture")
             scratch = root / "scratch"
             scratch.mkdir()
             write_executable(generator, GENERATOR)
@@ -230,6 +236,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
                 "plain-17",
                 "--campaign",
                 "dict-2027-64k",
+                "--libzstd",
+                str(reference_library),
             ]
             success = subprocess.run(command, text=True, capture_output=True, env=environment, check=False)
             self.assertEqual(success.returncode, 0, success.stdout + success.stderr)
@@ -240,6 +248,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
             self.assertIn("max_block_stream_decoded_buffered=0", success.stdout)
             self.assertIn("max_block_stream_decoded_capacity=0", success.stdout)
             self.assertIn("sequence_mode_mask=0x000000000000000f", success.stdout)
+            self.assertIn(f"reference_library={reference_library}", success.stdout)
+            self.assertIn("reference_version=1.6.0-test", success.stdout)
             self.assertEqual(list(scratch.iterdir()), [])
 
             stress_command = [

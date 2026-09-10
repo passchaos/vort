@@ -419,7 +419,11 @@ Recommended next comparison steps:
   matrix additionally trains 256/1,024/4,096-byte dictionaries and decodes level
   1/9/19 single- and multi-block payloads through size, allocating, caller-owned,
   single-dictionary, and dictionary-set paths, bringing the local matrix to 273
-  cases.
+  cases. The compatibility probe accepts `--libzstd PATH`, bypassing dynamic
+  loader search order for reproducible cross-version checks. The same 273-case
+  matrix passes with zero unsupported frames against both the system libzstd
+  1.5.5 and an explicitly built `~/Work/zstd` libzstd 1.6.0 at commit
+  `5233c58e`.
   The same probe optionally consumes paired directories emitted by upstream
   zstd's `tests/decodecorpus`. Seeds 17 and 919 covered 200 and 1,000
   dictionary-free random frames; seeds 2,027, 4,242, 31,337, and 65,521 covered
@@ -438,7 +442,9 @@ Recommended next comparison steps:
   orchestration, summary parsing, failure propagation, and cleanup without
   requiring the optional upstream checkout. The compatibility probe reports
   separate `decodecorpus_*` coverage fields so fixed built-in cases cannot
-  inflate the upstream corpus's mode mask. Every generated frame is now also
+  inflate the upstream corpus's mode mask. It also records the explicitly loaded
+  reference-library path and `ZSTD_versionString`, and rejects a version change
+  between campaigns. Every generated frame is now also
   decoded incrementally with a 128 KiB-plus-header compressed-input limit. All
   9,900 pass; 2,699 frames from the broad/dictionary campaigns exercise block
   streaming after including direct-path small-output switches.

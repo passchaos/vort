@@ -253,8 +253,12 @@ def validate_campaign_summary(
 
 
 def run_campaign(
-    probe: Path, decodecorpus: Path, campaign: Campaign, prior_mask: int
-) -> tuple[int, int, int, int, int]:
+    probe: Path,
+    decodecorpus: Path,
+    campaign: Campaign,
+    prior_mask: int,
+    reference_library: Path | None,
+) -> tuple[int, int, int, int, int, str]:
     with tempfile.TemporaryDirectory(prefix=f"vort-zstd-{campaign.name}-") as temp:
         root = Path(temp)
         generator_command = [
@@ -282,6 +286,8 @@ def run_campaign(
         ]
         if campaign.dictionary_size is not None:
             probe_command.extend(("--decodecorpus-dictionary", str(root / "dictionary")))
+        if reference_library is not None:
+            probe_command.extend(("--libzstd", str(reference_library)))
         output = run_command(probe_command, f"Vort compat probe for {campaign.name}")
         fields = parse_summary(output)
         combined_mask, block_stream_cases, max_compressed_buffered, streamed_literal_blocks, streamed_sequence_blocks = validate_campaign_summary(
@@ -293,6 +299,9 @@ def run_campaign(
         max_block_count = int(fields["decodecorpus_max_block_count"], 0)
         max_sequence_count = int(fields["decodecorpus_max_sequence_count"], 0)
         sequence_count_tiers = int(fields["decodecorpus_sequence_count_tiers"], 0)
+        reference_version = fields["version"]
+        if not reference_version:
+            raise RuntimeError(f"{campaign.name} reported an empty reference version")
         print(
             f"zstd_decodecorpus_campaign=ok name={campaign.name} seed={campaign.seed} "
             f"cases={campaign.count} dictionary_bytes={campaign.dictionary_size or 0} "
@@ -303,10 +312,11 @@ def run_campaign(
             f"max_block_stream_decoded_capacity={max_decoded_capacity} "
             f"max_sequence_count={max_sequence_count} max_block_count={max_block_count} "
             f"sequence_count_tiers={sequence_count_tiers:#x} "
-            f"mode_mask={mode_mask:#018x} combined_mode_mask={combined_mask:#018x}",
+            f"mode_mask={mode_mask:#018x} combined_mode_mask={combined_mask:#018x} "
+            f"reference_version={reference_version}",
             flush=True,
         )
-        return combined_mask, block_stream_cases, max_compressed_buffered, streamed_literal_blocks, streamed_sequence_blocks
+        return combined_mask, block_stream_cases, max_compressed_buffered, streamed_literal_blocks, streamed_sequence_blocks, reference_version
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -314,10 +324,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("probe", type=Path, help="built Vort zstd compatibility probe")
     parser.add_argument("--decodecorpus", help="upstream tests/decodecorpus executable")
     parser.add_argument(
+        "--libzstd",
+        type=Path,
+        help="explicit libzstd shared library used by the compatibility probe",
+    )
+    parser.add_argument(
         "--campaign",
         action="append",
         choices=tuple(CAMPAIGNS_BY_NAME),
-        help="run only a named campaign; may be repeated (default: all six)",
+        help="run only a named campaign; may be repeated (default: all nine)",
     )
     return parser.parse_args(argv)
 
@@ -329,6 +344,9 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"Vort compatibility probe is not executable: {probe}")
     try:
         decodecorpus = resolve_decodecorpus(args.decodecorpus)
+        reference_library = args.libzstd.expanduser().resolve() if args.libzstd else None
+        if reference_library is not None and not reference_library.is_file():
+            raise FileNotFoundError(f"libzstd shared library is not a file: {reference_library}")
         campaigns = select_campaigns(args.campaign)
         combined_mask = 0
         total_cases = 0
@@ -336,10 +354,18 @@ def main(argv: list[str] | None = None) -> int:
         max_compressed_buffered = 0
         total_streamed_literal_blocks = 0
         total_streamed_sequence_blocks = 0
+        reference_version: str | None = None
         for campaign in campaigns:
-            combined_mask, block_stream_cases, campaign_max_buffered, streamed_literal_blocks, streamed_sequence_blocks = run_campaign(
-                probe, decodecorpus, campaign, combined_mask
+            combined_mask, block_stream_cases, campaign_max_buffered, streamed_literal_blocks, streamed_sequence_blocks, campaign_reference_version = run_campaign(
+                probe, decodecorpus, campaign, combined_mask, reference_library
             )
+            if reference_version is None:
+                reference_version = campaign_reference_version
+            elif reference_version != campaign_reference_version:
+                raise RuntimeError(
+                    f"reference library version changed from {reference_version} to "
+                    f"{campaign_reference_version}"
+                )
             total_cases += campaign.count
             total_block_stream_cases += block_stream_cases
             max_compressed_buffered = max(max_compressed_buffered, campaign_max_buffered)
@@ -363,7 +389,9 @@ def main(argv: list[str] | None = None) -> int:
         f"max_block_stream_decoded_capacity=0 "
         f"sequence_mode_combinations={combined_mask.bit_count()} "
         f"sequence_mode_mask={combined_mask:#018x} generator={decodecorpus} "
-        f"generator_version={generator_version(decodecorpus)}"
+        f"generator_version={generator_version(decodecorpus)} "
+        f"reference_library={reference_library or 'system'} "
+        f"reference_version={reference_version}"
     )
     return 0
 

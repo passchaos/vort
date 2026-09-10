@@ -394,12 +394,19 @@ zig build -Doptimize=ReleaseFast run-zstd-encode-bench-gate  # libzstd encode co
 zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate  # parallel-vs-serial multi-block scheduling
 zig build run-zstd-large-sequence-probe  # >512-sequence single/cross-block encode plus Vort/libzstd decode
 zig build run-zstd-compat-probe  # optional system-libzstd decode matrix
+# Build and select the current local upstream reference explicitly:
+make -C ~/Work/zstd/lib -j4 libzstd-release
+zig build -Doptimize=ReleaseFast run-zstd-compat-probe -- \
+  --libzstd ~/Work/zstd/lib/libzstd.so
 # Optional deep zstd upstream decodecorpus differential (paired z*.zst / z* files):
 zig build -Doptimize=ReleaseFast run-zstd-compat-probe -- \
   --decodecorpus /tmp/zstd-frames /tmp/zstd-plain --decodecorpus-count 1000
 # Add --decodecorpus-dictionary /tmp/zstd-frames/dictionary for dictionary corpora.
 # Reproduce the complete nine-campaign/9,900-frame suite and clean each temporary corpus:
 zig build -Doptimize=ReleaseFast run-zstd-decodecorpus-gate -j1
+# The same corpus can use an explicitly selected upstream shared library:
+zig build -Doptimize=ReleaseFast run-zstd-decodecorpus-gate -j1 -- \
+  --libzstd ~/Work/zstd/lib/libzstd.so
 # Override discovery with -- --decodecorpus /path/to/zstd/tests/decodecorpus.
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build bench-deflate-incremental-encode -Doptimize=ReleaseFast -- 8

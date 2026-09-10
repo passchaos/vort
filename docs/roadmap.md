@@ -11305,3 +11305,11 @@ coverage.
   reaches all 64 sequence-mode tuples in 500 frames, with up to 1,045 blocks per
   frame. Together with the prior six campaigns, the reproducible upstream suite
   now contains 9,900 byte-exact one-shot and incremental decode cases.
+  The test-only libzstd loader now also accepts an explicit shared-library path,
+  and the compat/decodecorpus drivers expose `--libzstd PATH` so cross-version
+  evidence cannot be redirected silently by the platform loader. After building
+  `~/Work/zstd/lib/libzstd.so` from commit `5233c58e`, the complete 273-case
+  compatibility matrix passes with zero unsupported frames against upstream
+  libzstd 1.6.0 as well as the system libzstd 1.5.5. The corpus gate records
+  both the explicit path and actual `ZSTD_versionString`, and requires one
+  stable version across all campaigns.

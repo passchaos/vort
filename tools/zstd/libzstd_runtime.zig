@@ -62,117 +62,74 @@ pub const Runtime = struct {
             "libzstd.dylib",
         };
         for (names) |name| {
-            var library = std.DynLib.openZ(name.ptr) catch continue;
-            const compress_bound = library.lookup(
-                CompressBoundFn,
-                "ZSTD_compressBound",
-            ) orelse {
-                library.close();
-                continue;
-            };
-            const compress = library.lookup(
-                CompressFn,
-                "ZSTD_compress",
-            ) orelse {
-                library.close();
-                continue;
-            };
-            const decompress = library.lookup(
-                DecompressFn,
-                "ZSTD_decompress",
-            ) orelse {
-                library.close();
-                continue;
-            };
-            const is_error = library.lookup(
-                IsErrorFn,
-                "ZSTD_isError",
-            ) orelse {
-                library.close();
-                continue;
-            };
-            const version_string = library.lookup(
-                VersionStringFn,
-                "ZSTD_versionString",
-            ) orelse {
-                library.close();
-                continue;
-            };
-            const create_cctx = library.lookup(CreateCCtxFn, "ZSTD_createCCtx") orelse {
-                library.close();
-                continue;
-            };
-            const free_cctx = library.lookup(FreeCCtxFn, "ZSTD_freeCCtx") orelse {
-                library.close();
-                continue;
-            };
-            const cctx_set_parameter = library.lookup(CCtxSetParameterFn, "ZSTD_CCtx_setParameter") orelse {
-                library.close();
-                continue;
-            };
-            const compress2 = library.lookup(Compress2Fn, "ZSTD_compress2") orelse {
-                library.close();
-                continue;
-            };
-            const compress_stream2 = library.lookup(CompressStream2Fn, "ZSTD_compressStream2") orelse {
-                library.close();
-                continue;
-            };
-            const compress_sequences = library.lookup(CompressSequencesFn, "ZSTD_compressSequences") orelse {
-                library.close();
-                continue;
-            };
-            const compress_using_dict = library.lookup(CompressUsingDictFn, "ZSTD_compress_usingDict") orelse {
-                library.close();
-                continue;
-            };
-            const create_dctx = library.lookup(CreateDCtxFn, "ZSTD_createDCtx") orelse {
-                library.close();
-                continue;
-            };
-            const free_dctx = library.lookup(FreeDCtxFn, "ZSTD_freeDCtx") orelse {
-                library.close();
-                continue;
-            };
-            const decompress_using_dict = library.lookup(DecompressUsingDictFn, "ZSTD_decompress_usingDict") orelse {
-                library.close();
-                continue;
-            };
-            const train_dictionary = library.lookup(TrainDictionaryFn, "ZDICT_trainFromBuffer") orelse {
-                library.close();
-                continue;
-            };
-            const dictionary_is_error = library.lookup(DictionaryIsErrorFn, "ZDICT_isError") orelse {
-                library.close();
-                continue;
-            };
-            const dictionary_id = library.lookup(DictionaryIdFn, "ZDICT_getDictID") orelse {
-                library.close();
-                continue;
-            };
-            return .{
-                .library = library,
-                .compress_bound = compress_bound,
-                .compress = compress,
-                .decompress = decompress,
-                .is_error = is_error,
-                .version_string = version_string,
-                .create_cctx = create_cctx,
-                .free_cctx = free_cctx,
-                .cctx_set_parameter = cctx_set_parameter,
-                .compress2 = compress2,
-                .compress_stream2 = compress_stream2,
-                .compress_sequences = compress_sequences,
-                .compress_using_dict = compress_using_dict,
-                .create_dctx = create_dctx,
-                .free_dctx = free_dctx,
-                .decompress_using_dict = decompress_using_dict,
-                .train_dictionary = train_dictionary,
-                .dictionary_is_error = dictionary_is_error,
-                .dictionary_id = dictionary_id,
-            };
+            if (openPath(name)) |runtime| return runtime else |_| {}
         }
         return error.ReferenceUnavailable;
+    }
+
+    /// Open one explicit reference library. This keeps cross-version probes
+    /// auditable instead of relying on the platform loader's search order.
+    pub fn openPath(path: []const u8) !Runtime {
+        var library = std.DynLib.open(path) catch return error.ReferenceUnavailable;
+        errdefer library.close();
+        return load(&library);
+    }
+
+    fn load(library: *std.DynLib) !Runtime {
+        const compress_bound = library.lookup(
+            CompressBoundFn,
+            "ZSTD_compressBound",
+        ) orelse return error.ReferenceUnavailable;
+        const compress = library.lookup(
+            CompressFn,
+            "ZSTD_compress",
+        ) orelse return error.ReferenceUnavailable;
+        const decompress = library.lookup(
+            DecompressFn,
+            "ZSTD_decompress",
+        ) orelse return error.ReferenceUnavailable;
+        const is_error = library.lookup(
+            IsErrorFn,
+            "ZSTD_isError",
+        ) orelse return error.ReferenceUnavailable;
+        const version_string = library.lookup(
+            VersionStringFn,
+            "ZSTD_versionString",
+        ) orelse return error.ReferenceUnavailable;
+        const create_cctx = library.lookup(CreateCCtxFn, "ZSTD_createCCtx") orelse return error.ReferenceUnavailable;
+        const free_cctx = library.lookup(FreeCCtxFn, "ZSTD_freeCCtx") orelse return error.ReferenceUnavailable;
+        const cctx_set_parameter = library.lookup(CCtxSetParameterFn, "ZSTD_CCtx_setParameter") orelse return error.ReferenceUnavailable;
+        const compress2 = library.lookup(Compress2Fn, "ZSTD_compress2") orelse return error.ReferenceUnavailable;
+        const compress_stream2 = library.lookup(CompressStream2Fn, "ZSTD_compressStream2") orelse return error.ReferenceUnavailable;
+        const compress_sequences = library.lookup(CompressSequencesFn, "ZSTD_compressSequences") orelse return error.ReferenceUnavailable;
+        const compress_using_dict = library.lookup(CompressUsingDictFn, "ZSTD_compress_usingDict") orelse return error.ReferenceUnavailable;
+        const create_dctx = library.lookup(CreateDCtxFn, "ZSTD_createDCtx") orelse return error.ReferenceUnavailable;
+        const free_dctx = library.lookup(FreeDCtxFn, "ZSTD_freeDCtx") orelse return error.ReferenceUnavailable;
+        const decompress_using_dict = library.lookup(DecompressUsingDictFn, "ZSTD_decompress_usingDict") orelse return error.ReferenceUnavailable;
+        const train_dictionary = library.lookup(TrainDictionaryFn, "ZDICT_trainFromBuffer") orelse return error.ReferenceUnavailable;
+        const dictionary_is_error = library.lookup(DictionaryIsErrorFn, "ZDICT_isError") orelse return error.ReferenceUnavailable;
+        const dictionary_id = library.lookup(DictionaryIdFn, "ZDICT_getDictID") orelse return error.ReferenceUnavailable;
+        return .{
+            .library = library.*,
+            .compress_bound = compress_bound,
+            .compress = compress,
+            .decompress = decompress,
+            .is_error = is_error,
+            .version_string = version_string,
+            .create_cctx = create_cctx,
+            .free_cctx = free_cctx,
+            .cctx_set_parameter = cctx_set_parameter,
+            .compress2 = compress2,
+            .compress_stream2 = compress_stream2,
+            .compress_sequences = compress_sequences,
+            .compress_using_dict = compress_using_dict,
+            .create_dctx = create_dctx,
+            .free_dctx = free_dctx,
+            .decompress_using_dict = decompress_using_dict,
+            .train_dictionary = train_dictionary,
+            .dictionary_is_error = dictionary_is_error,
+            .dictionary_id = dictionary_id,
+        };
     }
 
     pub fn deinit(self: *Runtime) void {
