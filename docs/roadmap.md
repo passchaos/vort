@@ -11147,6 +11147,17 @@ coverage.
   matrix was exactly neutral at `1.0000x` geometrically, though, and every binary
   level was slightly negative (`0.9939x`--`0.9989x`). The explicit local array
   remains to avoid aliasing the later exact-search state.
+  Three attempts to isolate direct finalized-plan reads for full-alphabet long
+  Huffman streams were rejected. A shared lookup-builder branch improved binary
+  stage by `1.0262x` but reduced JSON to `0.9800x`; a separate long emitter kept
+  the binary gain around `1.024x`--`1.035x` but shifted the existing wide helper
+  section and reduced JSON. Moving the decision to the literal-only block caller,
+  placing both new helpers in a dedicated section, and marking the branch cold
+  kept all original stage-helper addresses stable and improved binary level 1 by
+  `1.0378x` (30/30 wins), yet the 20-row matrix reached only `1.0022x` while
+  JSON levels stayed at `0.9921x`--`0.9970x` and text level 3 at `0.9917x`. The
+  common native-width lookup remains; a larger gain is required before adding a
+  second four-stream assembly path.
   A fixed-parameter Zstd-only double-fast instance was rejected too. It folded
   the constant four-byte minimum and 258-byte maximum while retaining only the
   block-dependent 32 KiB window; a 16-shape oracle matched generic tokens and
