@@ -11095,3 +11095,29 @@ coverage.
   outputs stayed exact. Thirty primary-stage pairs nevertheless measured only
   `0.9977x`/`1.0004x`/`0.9977x`/`0.9960x` for text/JSON/binary/wide; the shared
   `storeMatch` helper remains better optimized.
+  Specializing the double-fast parser around Zstd's fixed four-byte minimum,
+  258-byte maximum, and block-bounded 32 KiB window was rejected. A 16-shape
+  oracle matched the generic token stream and statistics exactly and all 12
+  focused tests passed, but thirty primary-stage pairs put JSON/binary at
+  `0.9909x`/`0.9955x`; only the wide input was slightly positive at `1.0025x`.
+  The generic options entry remains the better generated implementation.
+  Accumulating only `high_byte_count` locally inside the bounded duplicate index
+  was rejected independently from the earlier three-scalar experiment. It
+  improved index construction by `1.0534x`/`1.0413x`/`1.0370x` on text/JSON/
+  binary, and actual single-match stages stayed within about 0.3% of neutral.
+  The 30-pair 20-row matrix nevertheless reached only `1.0010x` geometrically;
+  binary level 1 was `0.9970x` and JSON level 3 `0.9953x`. Direct field updates
+  remain because the isolated builder win did not survive complete encoding.
+  Replacing the bounded duplicate index's 32 KiB per-hash pending-byte table
+  with a 4 KiB parity bitmap was rejected. The full/bounded field and selected-
+  match oracle stayed exact; index construction improved text/JSON/binary by
+  `1.0453x`/`1.0440x`/`1.0326x`, and binary single-match by `1.0224x`. But the
+  30-pair complete matrix fell to `0.9917x` geometrically, including binary and
+  JSON level 1 at `0.9898x`/`0.9907x` and text level 9 at `0.9775x`. The byte
+  table's simpler indexed access remains faster end to end.
+  A fixed-parameter Zstd-only double-fast instance was rejected too. It folded
+  the constant four-byte minimum and 258-byte maximum while retaining only the
+  block-dependent 32 KiB window; a 16-shape oracle matched generic tokens and
+  statistics exactly, and all 12 focused tests passed. Thirty primary-stage
+  pairs nevertheless measured JSON/binary at `0.9909x`/`0.9955x`, with text
+  neutral and only wide input at `1.0025x`. The generic options path remains.
