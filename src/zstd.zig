@@ -15482,8 +15482,11 @@ fn bestTablePlanSequenceWithLiteralsLenInternal(
     for (literal_alternatives.items[0..literal_alternatives.len], 0..) |plan, i| {
         literal_costs[i] = try sequenceTablePlanBitCostWithOffsets(plan, .literal, literal_lens, literal_lens, offsets, initial_offsets);
     }
-    for (offset_alternatives.items[0..offset_alternatives.len], 0..) |plan, i| {
-        offset_costs[i] = try sequenceTablePlanBitCostWithOffsets(plan, .offset, offsets, literal_lens, offsets, initial_offsets);
+    for (offset_alternatives.items[0..offset_alternatives.len], 0..) |*plan, i| {
+        offset_costs[i] = switch (plan.*) {
+            .compressed => |*compressed| try compressedOffsetSequenceTablePlanBitCostKnownValid(compressed),
+            else => try sequenceTablePlanBitCostWithOffsets(plan.*, .offset, offsets, literal_lens, offsets, initial_offsets),
+        };
     }
     for (match_alternatives.items[0..match_alternatives.len], 0..) |plan, i| {
         match_costs[i] = try sequenceTablePlanBitCostWithOffsets(plan, .match, match_lens, literal_lens, offsets, initial_offsets);
@@ -15602,6 +15605,18 @@ fn sequenceTablePlanBitCostWithOffsets(
         },
     }
     return .{ .payload_len = sequenceTablePayloadLen(plan), .bit_count = bit_count };
+}
+
+fn compressedOffsetSequenceTablePlanBitCostKnownValid(plan: *const CompressedSequencePlan) Error!SequenceTableBitCost {
+    if (plan.len == 0 or plan.len > max_native_sequence_count) return error.CorruptFrame;
+    var bit_count: usize = plan.accuracy_log;
+    for (plan.codes[0..plan.len], 0..) |code, i| {
+        if (code >= of_bits.len) return error.CorruptFrame;
+        bit_count = std.math.add(usize, bit_count, of_bits[code]) catch return error.IntegerOverflow;
+        if (i + 1 < plan.len)
+            bit_count = std.math.add(usize, bit_count, plan.transition_bits[i]) catch return error.IntegerOverflow;
+    }
+    return .{ .payload_len = plan.table_payload_len, .bit_count = bit_count };
 }
 
 fn sequenceTablePlanBitCostReference(
@@ -25145,6 +25160,42 @@ test "zstd specialized sequence table cost matches generic symbol lookup" {
             );
         }
     }
+}
+
+test "zstd known-valid compressed offset cost matches stateful scorer" {
+    var literal_lens: [64]usize = undefined;
+    var offsets: [64]usize = undefined;
+    var state: u32 = 0x6a09_e667;
+    for (&literal_lens, &offsets, 0..) |*literal_len, *offset, i| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        literal_len.* = if (i % 7 == 0) 0 else (state >> 29) + 1;
+        offset.* = switch (i % 5) {
+            0 => 1,
+            1 => 4,
+            2 => 8,
+            else => 9 + (state & 2047),
+        };
+    }
+
+    var compared: usize = 0;
+    for ([_][3]usize{ initial_repeated_offsets, .{ 9, 5, 2 } }) |initial_offsets| {
+        const plan = (try planCompressedOffsetSequenceValuesWithOffsets(
+            &literal_lens,
+            &offsets,
+            initial_offsets,
+        )) orelse continue;
+        const expected = (try sequenceTablePlanBitCostWithOffsets(
+            .{ .compressed = plan },
+            .offset,
+            &offsets,
+            &literal_lens,
+            &offsets,
+            initial_offsets,
+        )) orelse return error.CorruptFrame;
+        try std.testing.expectEqual(expected, try compressedOffsetSequenceTablePlanBitCostKnownValid(&plan));
+        compared += 1;
+    }
+    try std.testing.expect(compared != 0);
 }
 
 test "zstd wide borrowed sequence fields match by-value reference" {

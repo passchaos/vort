@@ -10969,3 +10969,17 @@ coverage.
   rejected because it reduced short text/JSON streams by about 1%--1.5% despite
   an `1.0869x` binary-level-1 gain; the isolated helper raises that target to
   `1.1111x` while restoring JSON to positive medians.
+  Compressed offset-table alternatives now reuse their already validated
+  repcode-aware codes when computing table-plan bit cost. The alternative
+  builder has already replayed every requested raw offset against the caller's
+  initial history; the narrow scorer therefore adds the stored code widths and
+  transition widths directly, while RLE, predefined, Repeat_Mode, legacy
+  selection, and final bit emission retain the authoritative state machine. A
+  mixed repeat/direct-offset oracle with default and non-default initial
+  histories compares the new compressed cost exactly with the stateful scorer.
+  Thirty independent primary double-fast stage pairs improve text/JSON/binary
+  by `1.0188x`/`1.0496x`/`1.0136x`, preserving every output field. The matching
+  30-pair 20-row frame matrix preserves every size/checksum, reaches a `1.0088x`
+  row-median geometric mean, improves binary levels by `1.0029x`--`1.0069x`,
+  tradeoff levels by `1.0068x`--`1.0230x`, and keeps the weakest row at
+  `0.9950x`.
