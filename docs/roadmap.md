@@ -10721,6 +10721,12 @@ coverage.
   `0.993x`; actual JSON/binary single-match stages measured `0.991x`/`0.994x`.
   The extra four-lane merge and stack footprint outweigh the shorter dependency
   chains at this scale.
+  Expanding repeat-beam's fixed two-state loop into separate slot-zero and
+  optional slot-one calls was rejected. A 16-shape token/statistics oracle and
+  same-binary stage pairs were positive (`1.014x` text, `1.020x` JSON, `1.031x`
+  binary), but an independent-binary 30-pair 20-row matrix reached only
+  `0.9995x` geometrically, improved level-1 JSON by just `1.0024x`, and reduced
+  multiblock level 22 to `0.9798x`. The compact dynamic slice loop remains.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
