@@ -11158,6 +11158,13 @@ coverage.
   JSON levels stayed at `0.9921x`--`0.9970x` and text level 3 at `0.9917x`. The
   common native-width lookup remains; a larger gain is required before adding a
   second four-stream assembly path.
+  Collapsing repeat-beam's two-part near-cost replacement predicate into the
+  equivalent bounded comparison `candidate <= replacement + 2` was rejected.
+  The path-cost bound and a 1,048,576-pair predicate oracle covered overflow and
+  tie behavior; all 20 beam tests and output fields stayed exact. Thirty primary
+  beam-stage pairs were only `0.9964x`/`1.0044x`/`1.0067x` on text/JSON/binary,
+  and the 20-row matrix reached `0.9998x` geometrically with text level 22 at
+  `0.9881x`. The explicit comparison plus guarded subtraction remains.
   A fixed-parameter Zstd-only double-fast instance was rejected too. It folded
   the constant four-byte minimum and 258-byte maximum while retaining only the
   block-dependent 32 KiB window; a 16-shape oracle matched generic tokens and
