@@ -11134,6 +11134,12 @@ coverage.
   geometrically, however: every JSON level was slightly negative and multiblock
   level 22 fell to `0.9918x`. The single u32 implementation avoids the extra
   template instance and length dispatch.
+  Splitting the bounded duplicate-index loop into a hashable prefix and fixed
+  seven-byte statistics tail was rejected despite eliminating the per-byte
+  hash-bound check. The field oracle stayed exact and index construction
+  improved text/JSON/binary by `1.0141x`/`1.0214x`/`1.1068x`, but the 20-row
+  matrix fell broadly to `0.9922x` geometrically, with JSON level 22 at `0.9852x`
+  and multiblock level 22 at `0.9766x`. The unified loop remains.
   A fixed-parameter Zstd-only double-fast instance was rejected too. It folded
   the constant four-byte minimum and 258-byte maximum while retaining only the
   block-dependent 32 KiB window; a 16-shape oracle matched generic tokens and
