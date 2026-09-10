@@ -1526,6 +1526,27 @@ test "rep beam reusable scratch preserves tokens and capacity" {
 }
 
 test "Zstd-specialized rep beam matches generic plans" {
+    for ([_][]const u8{ "a", "aa", "aaa", "aaaa", "abcabc", "aaaaaaaa" }) |input| {
+        const options: GreedyOptions = .{
+            .window_len = @min(input.len, default_window_len),
+            .max_chain = 128,
+            .nice_len = 258,
+            .max_candidates = 8,
+            .min_match = 4,
+            .max_match = max_match_len,
+            .new_distance_penalty_bits = 4,
+            .lazy_min_gain = 1,
+        };
+        var generic: RepBeamScratch = .{};
+        defer generic.deinit(std.testing.allocator);
+        const generic_stats = try optimalRepBeamPlanReuse(&generic, std.testing.allocator, input, options);
+        var specialized: RepBeamScratch = .{};
+        defer specialized.deinit(std.testing.allocator);
+        const specialized_stats = try optimalRepBeamPlanZstdReuse(&specialized, std.testing.allocator, input);
+        try std.testing.expectEqual(generic_stats, specialized_stats);
+        try std.testing.expectEqualSlices(Token, generic.reversed.items, specialized.reversed.items);
+    }
+
     var payload: [8192]u8 = undefined;
     for (0..16) |seed| {
         var random_state: u32 = @truncate(0xa409_3822 +% seed *% 0x0100_0193);

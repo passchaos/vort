@@ -10843,3 +10843,57 @@ coverage.
   The corresponding 30-pair 20-row frame matrix preserves every size/checksum,
   improves level-1 JSON by `1.1483x` with 30/30 wins, and reaches a `1.0413x`
   row-median geometric mean; the weakest row is `0.9986x`.
+  Splitting that specialized loop into a match-capable body and a final three-
+  byte literal tail was rejected. The direct version preserved every focused
+  token, stage counter, frame size, and checksum and improved primary text/JSON/
+  binary beam medians by `1.0293x`/`1.0278x`/`1.0164x`. However, thirty
+  independent-binary 20-row frame pairs reduced JSON levels 1/3/9/22 to
+  `0.9731x`/`0.9885x`/`0.9861x`/`0.9831x`, with a `0.9937x` row-median
+  geometric mean. Moving the at-most-three-byte tail behind a cold non-inlined
+  helper also reduced focused JSON/binary beam throughput to `0.9748x`/
+  `0.9780x`. The single loop keeps the better complete-encoder layout.
+  Replacing the specialized predecessor loop's distance/window checks with an
+  upstream-style `candidate >= windowLow` comparison was rejected. The compact
+  chain guarantees strictly decreasing positions, so the formulation was
+  equivalent and the token/window-boundary oracles remained exact, but thirty
+  independent stage pairs reduced text/JSON/binary to `0.9965x`/`0.9962x`/
+  `0.9885x`. The existing distance form generates the faster loop here.
+  Starting the specialized recent-offset match extension after its already
+  verified four-byte prefix, as upstream zstd commonly does, was also rejected
+  as neutral. An exhaustive mismatch-position oracle and the complete generic/
+  specialized token oracle stayed exact, but thirty independent stage pairs
+  measured text/JSON/binary at only `1.0013x`/`0.9984x`/`1.0026x`. Re-entering
+  the shared vectorized matcher at byte zero retains the simpler common path.
+  Removing the specialized recent-offset `rep0 <= position` check was rejected
+  despite a valid reachability proof: position zero cannot probe offset one, and
+  every later literal or match transition retains a non-zero offset no greater
+  than its destination. Short-input and generated token oracles stayed exact,
+  but thirty independent stage pairs reduced text/JSON/binary to `0.9596x`/
+  `0.9442x`/`0.9551x`, with zero JSON/binary wins. The explicit state-local
+  guard preserves substantially better optimized code.
+  Accumulating bounded duplicate-index byte statistics and dense-row count in
+  local `u16` scalars before one final object write was rejected in its direct
+  form. The field-level full/bounded oracle stayed exact and thirty independent
+  index-build pairs improved text/JSON/binary by about `1.40x`, all with 30/30
+  wins. Actual single-match evaluation was mixed, however, and the 30-pair
+  20-row frame matrix reached only `0.9973x` geometrically: JSON level 1 gained
+  `1.0245x`, but binary level 1 and tradeoff levels 1/3 fell to `0.9743x` and
+  about `0.988x`. The local arithmetic is worth revisiting only with downstream
+  helper layout held constant.
+  Isolating the complete local-accumulator builder in its own final text section
+  kept the established FSE, dense-Huffman, and wide-sequence section addresses
+  byte-for-byte stable. Index construction still improved `1.29x`--`1.34x`, but
+  the 30-pair frame matrix remained negative at `0.9946x` geometrically, with
+  binary level 1 at `0.9769x`. The direct three-scalar combination therefore
+  remains rejected; narrower contributors must be measured independently.
+  The retained narrow variant keeps only `candidate_position_count` in a local
+  scalar while the bounded pair-sampled index is built, committing it once at
+  completion. This removes a load/store dependency from every emitted dense row
+  and shrinks the builder by seven bytes without adding another text section.
+  The full/bounded field oracle remains exact. Thirty independent
+  fixed-CPU-8 stage pairs improve index construction by `1.2005x`/`1.1943x`/
+  `1.1630x` on text/JSON/binary; actual single-match evaluation stays within
+  about 0.5% of neutral at each median. The corresponding 30-pair 20-row frame
+  matrix preserves every size/checksum, improves level-1 JSON by `1.0250x` with
+  27/30 wins and binary level 1 by `1.0038x`, reaches a `1.0009x` row-median
+  geometric mean, and keeps the weakest control at `0.9952x`.

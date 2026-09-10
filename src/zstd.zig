@@ -18484,7 +18484,7 @@ const DuplicateMatchIndex = struct {
         std.debug.assert(block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len);
         index.high_byte_count = 0;
         index.max_byte_frequency = 0;
-        index.candidate_position_count = 0;
+        var candidate_position_count: u16 = 0;
         var byte_frequencies: [256]u16 = @splat(0);
         var paired_predecessors: [duplicate_hash_table_len]u16 = undefined;
         var pending: [duplicate_hash_table_len]bool = @splat(false);
@@ -18496,17 +18496,18 @@ const DuplicateMatchIndex = struct {
             if (position + 8 > block.len) continue;
             const hash = duplicateHash8(block[position..][0..8]);
             if (pending[hash]) {
-                const row = index.candidate_position_count;
+                const row = candidate_position_count;
                 index.candidate_positions[row] = @intCast(position);
                 index.predecessors[row] = paired_predecessors[hash];
                 index.match_lengths[row] = duplicate_index_invalid;
-                index.candidate_position_count += 1;
+                candidate_position_count += 1;
                 pending[hash] = false;
             } else {
                 paired_predecessors[hash] = @intCast(position);
                 pending[hash] = true;
             }
         }
+        index.candidate_position_count = candidate_position_count;
     }
 };
 
