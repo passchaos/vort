@@ -291,6 +291,7 @@ const zstd = @This();
 pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec, IncrementalBlockEmitter);
 
 test {
+    _ = double_fast_match;
     _ = incremental_tests;
     _ = incremental_history;
     _ = incremental_history_index;
@@ -17462,7 +17463,7 @@ test "zstd Huffman tree size estimator matches selected wire" {
 test "zstd reserved Huffman stream matches checked append reference" {
     var payload: [8192]u8 = undefined;
     for (&payload, 0..) |*byte, i| byte.* = @intCast((i * 37 + i / 11) % 193);
-    for ([_]usize{ 64, 65, 66, 67, 1023, 1024, payload.len }) |len| {
+    for ([_]usize{ 64, 65, 66, 67, 1023, 1024, 1025, 1026, 1027, payload.len }) |len| {
         const plan = smallHuffmanLiteralPlan(payload[0..len]) orelse return error.CorruptFrame;
         var expected: std.ArrayList(u8) = .empty;
         defer expected.deinit(std.testing.allocator);
@@ -17471,6 +17472,12 @@ test "zstd reserved Huffman stream matches checked append reference" {
         defer actual.deinit(std.testing.allocator);
         try emitSmallHuffmanStream(std.testing.allocator, &actual, payload[0..len], &plan);
         try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+        if (len >= 1024) {
+            var long_actual: std.ArrayList(u8) = .empty;
+            defer long_actual.deinit(std.testing.allocator);
+            try emitLongHuffmanStream(std.testing.allocator, &long_actual, payload[0..len], &plan);
+            try std.testing.expectEqualSlices(u8, expected.items, long_actual.items);
+        }
 
         if (plan.bit_counts[255] == 0) {
             var invalid: std.ArrayList(u8) = .empty;
@@ -17489,7 +17496,7 @@ test "zstd reserved Huffman stream matches checked append reference" {
     max_width_plan.codes[0] = (1 << 11) - 1;
     max_width_plan.len = 1;
     max_width_plan.max_bit_count = 11;
-    const max_width_payload: [67]u8 = @splat(0);
+    const max_width_payload: [1027]u8 = @splat(0);
     var max_width_expected: std.ArrayList(u8) = .empty;
     defer max_width_expected.deinit(std.testing.allocator);
     try emitSmallHuffmanStreamCheckedAppendReference(std.testing.allocator, &max_width_expected, &max_width_payload, &max_width_plan);
@@ -17570,9 +17577,7 @@ fn emitHuffmanLiteralsSectionWithPlan(
             literals[segment_2_end..segment_3_end],
             literals[segment_3_end..],
         };
-        for (&streams, segments) |*stream, segment| {
-            try emitSmallHuffmanStream(allocator, stream, segment, plan);
-        }
+        for (&streams, segments) |*stream, segment| try emitSmallHuffmanStream(allocator, stream, segment, plan);
         const compressed_size = huffman_tree.len + 6 +
             streams[0].items.len + streams[1].items.len + streams[2].items.len + streams[3].items.len;
         if (streams[0].items.len > std.math.maxInt(u16) or
@@ -18360,6 +18365,8 @@ fn smallHuffmanBitCount(plan: *const SmallHuffmanLiteralPlan, symbol: u8) ?u8 {
 }
 
 fn emitSmallHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: *const SmallHuffmanLiteralPlan) Error!void {
+    if (comptime @bitSizeOf(usize) >= 64)
+        if (block.len >= 1024) return emitLongHuffmanStream(allocator, out, block, plan);
     const lookup = try smallHuffmanLiteralLookup(plan);
     const max_payload_bits = std.math.mul(usize, block.len, @as(usize, plan.max_bit_count)) catch return error.IntegerOverflow;
     const max_stream_bits = std.math.add(usize, max_payload_bits, 1) catch return error.IntegerOverflow;
@@ -18418,6 +18425,77 @@ fn emitSmallHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8),
             }
             i -= 2;
         }
+    }
+    while (i > 0) {
+        i -= 1;
+        const bits = lookup.bit_counts[block[i]];
+        if (bits == 0) return error.CorruptFrame;
+        accumulator |= lookup.codes[block[i]] << bit_count;
+        bit_count += @intCast(bits);
+        while (bit_count >= 8) {
+            out.appendAssumeCapacity(@truncate(accumulator));
+            accumulator >>= 8;
+            bit_count -= 8;
+        }
+    }
+    accumulator |= @as(usize, 1) << bit_count;
+    bit_count += 1;
+    while (bit_count > 0) {
+        out.appendAssumeCapacity(@truncate(accumulator));
+        if (bit_count <= 8) break;
+        accumulator >>= 8;
+        bit_count -= 8;
+    }
+}
+
+noinline fn emitLongHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: *const SmallHuffmanLiteralPlan) linksection(wide_sequence_emit_text_section) Error!void {
+    if (comptime @bitSizeOf(usize) < 64) return emitSmallHuffmanStream(allocator, out, block, plan);
+
+    std.debug.assert(block.len >= 1024);
+    const lookup = try smallHuffmanLiteralLookup(plan);
+    const max_payload_bits = std.math.mul(usize, block.len, @as(usize, plan.max_bit_count)) catch return error.IntegerOverflow;
+    const max_stream_bits = std.math.add(usize, max_payload_bits, 1) catch return error.IntegerOverflow;
+    const max_stream_bytes = std.math.add(usize, max_stream_bits, 7) catch return error.IntegerOverflow;
+    try out.ensureUnusedCapacity(allocator, max_stream_bytes / 8);
+    comptime std.debug.assert(7 + 4 * 11 <= @bitSizeOf(usize));
+    var accumulator: usize = 0;
+    var bit_count: u6 = 0;
+    var i = block.len;
+    while (i >= 4) {
+        const first_symbol = block[i - 1];
+        const second_symbol = block[i - 2];
+        const third_symbol = block[i - 3];
+        const fourth_symbol = block[i - 4];
+        const first_bits = lookup.bit_counts[first_symbol];
+        const second_bits = lookup.bit_counts[second_symbol];
+        const third_bits = lookup.bit_counts[third_symbol];
+        const fourth_bits = lookup.bit_counts[fourth_symbol];
+        if (first_bits == 0 or second_bits == 0 or third_bits == 0 or fourth_bits == 0) return error.CorruptFrame;
+        const first_code: usize = lookup.codes[first_symbol];
+        const second_code: usize = lookup.codes[second_symbol];
+        const third_code: usize = lookup.codes[third_symbol];
+        const fourth_code: usize = lookup.codes[fourth_symbol];
+        const second_shift: u6 = bit_count + @as(u6, @intCast(first_bits));
+        const third_shift: u6 = second_shift + @as(u6, @intCast(second_bits));
+        const fourth_shift: u6 = third_shift + @as(u6, @intCast(third_bits));
+        accumulator |= first_code << bit_count;
+        accumulator |= second_code << second_shift;
+        accumulator |= third_code << third_shift;
+        accumulator |= fourth_code << fourth_shift;
+        bit_count = fourth_shift + @as(u6, @intCast(fourth_bits));
+        if (bit_count >= 32) {
+            var bytes: [4]u8 = undefined;
+            std.mem.writeInt(u32, &bytes, @truncate(accumulator), .little);
+            out.appendSliceAssumeCapacity(&bytes);
+            accumulator >>= 32;
+            bit_count -= 32;
+        }
+        while (bit_count >= 8) {
+            out.appendAssumeCapacity(@truncate(accumulator));
+            accumulator >>= 8;
+            bit_count -= 8;
+        }
+        i -= 4;
     }
     while (i > 0) {
         i -= 1;

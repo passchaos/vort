@@ -340,3 +340,31 @@ fn matchLength(input: []const u8, a: usize, b: usize, maximum: usize) usize {
     while (len < maximum and input[a + len] == input[b + len]) len += 1;
     return len;
 }
+
+test "double-fast verified prefixes preserve complete match lengths" {
+    var input: [674]u8 = undefined;
+    var state: u32 = 0x510e_527f;
+    for (&input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[337..][0..258], input[0..258]);
+    const options: lz77.GreedyOptions = .{ .window_len = 512, .max_match = 258 };
+
+    for (0..259) |mismatch| {
+        var probe = input;
+        if (mismatch < 258) probe[337 + mismatch] = probe[mismatch] ^ 0xff;
+        const expected_length = matchLength(&probe, 0, 337, 258);
+        const expected = Match{
+            .position = 337,
+            .length = expected_length,
+            .distance = 337,
+        };
+        const distance_match = matchAtDistance(&probe, 337, 337, options);
+        const short_match = candidateMatch(&probe, 337, 0, options, 4);
+        const long_match = candidateMatch(&probe, 337, 0, options, 8);
+        try std.testing.expectEqual(if (expected_length >= 4) expected else Match{}, distance_match);
+        try std.testing.expectEqual(if (expected_length >= 4) expected else Match{}, short_match);
+        try std.testing.expectEqual(if (expected_length >= 8) expected else Match{}, long_match);
+    }
+}

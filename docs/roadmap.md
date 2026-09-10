@@ -10917,3 +10917,55 @@ coverage.
   geometrically. A direct 30-pair four-versus-two-symbol matrix confirms the
   four-symbol loop adds another `1.0075x` geometrically and `1.0324x` on binary
   level 1 with 30/30 wins, while its weakest row remains `0.9988x`.
+  Starting double-fast match extension after its already verified prefix was
+  rejected after splitting the two consumers. Applying it to both 4/8-byte hash
+  candidates and 4-byte recent offsets improved JSON stage throughput but
+  reduced text/binary to about `0.991x`. Restricting it to recent offsets alone
+  improved focused JSON/text by `1.0217x`/`1.0067x`, with binary at `0.9968x`,
+  but the 30-pair frame matrix reached only `1.0007x` geometrically and reduced
+  binary level 1 to `0.9942x`. The existing full extension remains. A new
+  mismatch-position oracle covers complete 4/8-byte helper results, and the
+  Zstd test root now explicitly includes the double-fast module so its tests
+  are executed rather than merely compiled.
+  Caching the first complete recent-offset match when it reached the exact
+  258-byte limit was rejected too. Reusing that `Match` avoids immediately
+  rescanning the same position and distance on long runs, and an old-control-
+  flow oracle retained every token and statistic. But the extra live aggregate
+  perturbed the ordinary loop: thirty independent stage pairs reduced binary
+  to `0.9713x` with 0/30 wins and left JSON at `0.9974x`. The uncommon maximum-
+  length continuation keeps its duplicate scan.
+  Expanding the retained 64-bit Huffman batch from four to the maximum safe five
+  11-bit symbols was rejected. The 62-bit accumulator bound and scalar oracle
+  remained exact, but thirty independent four-versus-five-symbol frame pairs
+  reached only `0.9979x` geometrically; binary levels were `0.9943x`--`0.9981x`
+  and multiblock level 22 fell to `0.9874x`. Four symbols remain the measured
+  code-size/throughput optimum for the single-accumulator loop.
+  Adding the shared matcher's 32-byte vector front end to double-fast's private
+  match extender was rejected at the focused gate. The exhaustive mismatch
+  oracle remained exact, but LLVM outlined the formerly inlined helper; thirty
+  independent stage pairs improved JSON by `1.0159x` while reducing binary to
+  `0.9924x`. The full-width variant was removed before an end-to-end matrix.
+  A 16-byte vector retry stayed inline but was substantially worse: thirty
+  independent stage pairs reduced JSON to `0.9794x` and binary to `0.7832x`.
+  A final two-word scalar unroll was worse again at `0.9519x` JSON and
+  `0.7198x` binary. Double-fast therefore keeps its compact single-word loop.
+  Grouping the retained four Huffman codes into two temporary pairs before a
+  single accumulator merge was rejected as neutral. It preserved the scalar
+  oracle on 64/32-bit targets, but thirty independent frame pairs reached only
+  `1.0003x` geometrically and reduced text level 3 to `0.9926x`. Directly
+  inserting all four codes remains the better dependency/layout balance.
+  Large 64-bit Huffman streams now batch the byte drain as well as symbol
+  insertion. Streams of at least 1,024 literals enter a separately placed
+  emitter that writes four little-endian bytes whenever its four-symbol batch
+  accumulates at least 32 bits, then uses the established byte tail. Shorter
+  streams retain the original hot function, and 32-bit targets retain the safe
+  two-symbol path. The scalar reference covers 1,023--1,027-byte dispatch and
+  modulo-four boundaries plus a 1,027-symbol maximum-11-bit stream. Thirty
+  independent fixed-CPU-8 frame pairs preserve every size/checksum, improve
+  binary levels 1/3/9/22 by `1.1111x`/`1.0279x`/`1.0279x`/`1.0252x`, and
+  improve every JSON level by `1.0045x`--`1.0073x`. Multiblock levels gain
+  `1.0024x`--`1.0145x`; the row-median geometric mean is `1.0114x` and the
+  weakest row is text level 1 at `0.9923x`. A loop-internal length check was
+  rejected because it reduced short text/JSON streams by about 1%--1.5% despite
+  an `1.0869x` binary-level-1 gain; the isolated helper raises that target to
+  `1.1111x` while restoring JSON to positive medians.
