@@ -10983,3 +10983,15 @@ coverage.
   row-median geometric mean, improves binary levels by `1.0029x`--`1.0069x`,
   tradeoff levels by `1.0068x`--`1.0230x`, and keeps the weakest row at
   `0.9950x`.
+  Replacing the 32-bucket absolute-offset scan with the equivalent upstream-
+  style `floor(log2(offset + 3))` formula was rejected. An exhaustive oracle
+  covered all 65,536 u16 distances, every bucket boundary, and overflow, but
+  thirty independent primary-stage pairs reduced text/JSON to about `0.987x`
+  and left binary neutral at `0.9983x`. The compiler-friendly bucket scan stays.
+  Replacing the encoder's code-0/code-1 repcode probes with a direct three-entry
+  history state machine was rejected. An exhaustive 273-case oracle matched the
+  resolver-driven code, full successor history, and error type, and the compact
+  implementation improved primary double-fast stages by `1.0255x`/`1.0536x`/
+  `1.0469x` on text/JSON/binary. Yet the 30-pair frame matrix moved all text
+  levels to `0.9758x`--`0.9892x`; an earlier branch-expanded form had the same
+  layout problem. The smaller decoder-backed selector remains.
