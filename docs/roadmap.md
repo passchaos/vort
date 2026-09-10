@@ -10732,6 +10732,11 @@ coverage.
   match, but thirty independent primary-stage pairs reduced text/JSON/binary to
   `0.984x`/`0.952x`/`0.986x`; the extra helper boundary outweighed eliminating
   two already-predictable range checks.
+  Caching each repeat-beam predecessor's complete four-byte hash key alongside
+  its compact `u16` link was rejected. It avoided reloading candidate prefix
+  bytes after hash collisions and preserved all locked stage outputs, but doubled
+  predecessor-entry traffic; thirty independent stage pairs reduced text/JSON/
+  binary to `0.953x`/`0.985x`/`0.967x`. The compact link-only index remains.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
