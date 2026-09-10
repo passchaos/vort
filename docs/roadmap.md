@@ -11045,3 +11045,31 @@ coverage.
   scan, but thirty independent primary-stage pairs reduced JSON to `0.9777x`
   with only 9/30 wins; binary was neutral at `0.9984x`. The explicit scan stays
   because its generated layout is better for the surrounding Huffman planner.
+  Skipping the first LL/OF/ML code validation after the RLE payload scorer had
+  just derived those three codes was rejected. The exact literal-section scorer
+  test and all stage output fields remained identical, and thirty primary-stage
+  pairs improved JSON by `1.0470x` and binary by `1.0098x`. The independent-
+  binary 20-row matrix instead fell to `0.9943x` geometrically, with JSON levels
+  3/9/22 around `0.992x` and text level 9 at `0.9823x`. The shared scorer keeps
+  validating index zero to preserve the better complete-encoder layout.
+  Calling `literalLengthCode`, `offsetCode`, and `matchLengthCode` directly once
+  `predefinedEncodableStateMask` had already identified its canonical table was
+  rejected too. The compact predefined oracle and 16 focused tests remained
+  exact, and thirty primary-stage pairs improved text/JSON/binary by `1.0070x`/
+  `1.0779x`/`1.0362x`. The 20-row matrix improved binary level 1 by `1.0237x`
+  and every tradeoff level by `1.0066x`--`1.0178x`, but reached only `1.0012x`
+  geometrically while reducing text levels 1/9 to `0.9745x`/`0.9849x` and
+  multiblock level 22 to `0.9794x`. The generic dispatch remains for layout.
+  Moving the literal-only candidate's existing long-repeat rejection before its
+  Huffman plan build was rejected at the focused gate. The selected stage output
+  stayed exact, but thirty primary-stage pairs measured text/JSON/binary/wide at
+  only `0.9843x`/`0.9969x`/`0.9964x`/`0.9965x`. Even the apparently wasted plan
+  build currently gives the surrounding candidate selector better generated
+  code, so the established ordering remains.
+  Reading finalized `u16` codes and byte-indexed widths directly only inside the
+  isolated >=1,024-symbol Huffman emitter was also rejected. Unlike the earlier
+  global experiment it left the compact short-stream loop untouched, and the
+  checked reference plus 19 focused Huffman tests stayed exact. Thirty primary-
+  stage pairs improved binary by `1.0278x`, but text/JSON fell to `0.9880x`/
+  `0.9940x`; the established native-width lookup remains worthwhile even for
+  long streams on this target.
