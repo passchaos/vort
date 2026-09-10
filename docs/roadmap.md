@@ -11115,6 +11115,25 @@ coverage.
   30-pair complete matrix fell to `0.9917x` geometrically, including binary and
   JSON level 1 at `0.9898x`/`0.9907x` and text level 9 at `0.9775x`. The byte
   table's simpler indexed access remains faster end to end.
+  Keeping only `max_byte_frequency` in a local bounded-index scalar was also
+  rejected. It avoided a field load/store dependency without adding a reduction
+  pass, and the full/bounded field oracle stayed exact, but thirty stage pairs
+  put binary index construction at `0.9944x` and JSON single-match at `0.9944x`.
+  The existing incremental structure-field maximum remains.
+  Guarding double-fast's speculative full `max_match` rep0 scan with equality
+  of the final candidate byte was rejected. Exhaustive mismatch positions and
+  boundary cases proved the condition equivalent before the existing scan, and
+  all 12 focused tests passed, but thirty primary-stage pairs left text neutral,
+  improved JSON only `1.0090x`, and reduced binary to `0.9962x`. The simpler
+  unconditional probe remains.
+  Compacting double-fast's short/long position tables from `u32` to `u16` only
+  for inputs through 65,536 bytes was rejected. A forced-u32 oracle matched all
+  tokens and statistics across 16 generated shapes plus the exact boundary, and
+  thirty stage pairs improved text/JSON/binary/wide by `1.0032x`/`1.0078x`/
+  `1.0087x`/`1.0077x`. The complete 20-row matrix reached only `1.0020x`
+  geometrically, however: every JSON level was slightly negative and multiblock
+  level 22 fell to `0.9918x`. The single u32 implementation avoids the extra
+  template instance and length dispatch.
   A fixed-parameter Zstd-only double-fast instance was rejected too. It folded
   the constant four-byte minimum and 258-byte maximum while retaining only the
   block-dependent 32 KiB window; a 16-shape oracle matched generic tokens and
