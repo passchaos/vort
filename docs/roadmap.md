@@ -10652,6 +10652,11 @@ coverage.
   existing compact-index/reference oracle remained exact, but thirty independent
   `HEAD` stage pairs measured text/JSON/binary at `0.995x`/`0.999x`/`1.000x`.
   LLVM already makes the optional tail check effectively free in this loop.
+  Switching only repeat-beam's 4-byte hash from Vort's current middle product
+  bits to upstream zstd's high-product-bit formula was rejected. All locked
+  stage counters and wires stayed equal, but thirty independent `HEAD` pairs
+  measured text/JSON/binary at `0.976x`/`0.994x`/`1.004x`; the upstream hash's
+  small binary gain did not offset regressions on narrow structured inputs.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
