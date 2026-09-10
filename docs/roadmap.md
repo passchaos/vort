@@ -11185,6 +11185,18 @@ coverage.
   Thirty primary-stage pairs nevertheless reduced text/JSON/binary to
   `0.9248x`/`0.9825x`/`0.9799x`. The cheap fourth-byte filter plus shared
   full-range matcher remains substantially better on current code generation.
+  Returning immediately from `matchesAtZstd` after filling its fixed one-element
+  output was rejected without changing the public/internal slice-and-count API.
+  The compact-vs-generic index oracle and all 19 beam tests stayed exact, but
+  thirty primary-stage pairs reduced text/JSON/binary to `0.9931x`/`0.9789x`/
+  `0.9903x`; keeping the ordinary count increment and loop exit gives LLVM the
+  better inlined beam body.
+  Expanding only repeat-beam's indexed collision guard from the fourth byte to
+  bytes two and three was rejected. Unlike the earlier full-u32-plus-tail
+  experiment it retained the shared match extender from byte zero; an exhaustive
+  mismatch oracle and all 20 beam tests stayed exact. Thirty primary-stage pairs
+  were nevertheless `0.9991x`/`1.0032x`/`0.9958x` on text/JSON/binary, so even
+  the extra 16-bit comparison does not repay its load on this hash distribution.
   A fixed-parameter Zstd-only double-fast instance was rejected too. It folded
   the constant four-byte minimum and 258-byte maximum while retaining only the
   block-dependent 32 KiB window; a 16-shape oracle matched generic tokens and
