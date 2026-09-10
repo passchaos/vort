@@ -10641,6 +10641,12 @@ coverage.
   all 20 frame sizes/checksums and improve text by `4.62x`, level-1 JSON/binary/
   tradeoff/multiblock by `1.029x`/`1.042x`/`1.102x`/`1.019x`; every row median
   is positive.
+  Reusing repeat-beam's existing four-byte predecessor chain to replace level
+  one's separate single-match index was rejected. A generated oracle proved its
+  negative result conservatively implied the complete eight-byte index bound,
+  but walking full collision chains and validating long matches cost more than
+  the 1.3 MiB bounded-index write it removed: a same-binary 100-encode JSON
+  sample fell to `0.743x`. The prototype was stopped before a full matrix.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
