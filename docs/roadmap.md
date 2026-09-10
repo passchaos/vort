@@ -11028,3 +11028,14 @@ coverage.
   and JSON by `1.0058x`, with text neutral at `0.9982x`. However, the complete
   20-row matrix reached only `1.0012x` geometrically and reduced binary levels
   3/9 to `0.9917x`/`0.9906x`. The shared resolver remains authoritative.
+  Three ways of avoiding the reverse-bitstream field-array copy were rejected.
+  Direct reverse traversal plus one exact capacity reservation improved primary
+  text/JSON/binary stages by about `1.0145x`/`1.0208x`/`1.0137x`, but rescanning
+  field widths reduced the complete 20-row matrix to `0.9795x` geometrically,
+  with every tradeoff level at only `0.879x`--`0.947x`. Removing the prepass
+  retained `1.0313x`/`1.0272x` JSON/binary stage gains but reached just `0.9744x`
+  overall. Finally, routing only the existing 450--512-sequence borrowed emitter
+  through an out-of-line direct traversal kept all wire sizes/checksums exact
+  and JSON levels positive by `1.0068x`--`1.0133x`, yet reached only `1.0008x`
+  geometrically and reduced text level 9 to `0.9876x`. The original copy plus
+  compact common writer remains because code placement dominates the saved walk.
