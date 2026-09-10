@@ -11197,6 +11197,12 @@ coverage.
   mismatch oracle and all 20 beam tests stayed exact. Thirty primary-stage pairs
   were nevertheless `0.9991x`/`1.0032x`/`0.9958x` on text/JSON/binary, so even
   the extra 16-bit comparison does not repay its load on this hash distribution.
+  Raising the already-16-byte `RepBeamState` size from natural four-byte to
+  explicit 16-byte alignment was rejected. The benchmark hot function retained
+  exactly the same address, size, and instruction count; only four allocator
+  alignment immediates changed. Thirty primary beam-stage pairs were correspondingly
+  neutral-to-negative at `0.9989x`/`0.9995x`/`0.9996x` for text/JSON/binary, so
+  the natural alignment remains.
   A fixed-parameter Zstd-only double-fast instance was rejected too. It folded
   the constant four-byte minimum and 258-byte maximum while retaining only the
   block-dependent 32 KiB window; a 16-shape oracle matched generic tokens and
