@@ -18432,9 +18432,10 @@ const DuplicateMatchIndex = struct {
     match_lengths: [duplicate_index_max_input_len][duplicate_hash_candidates]u16 = undefined,
     predecessor_counts: [duplicate_index_max_input_len]u8 = undefined,
     // Each query needs only positions whose eight-byte hash has a predecessor.
-    // Link those positions once during construction so repeated mixed-plan
-    // suffix searches do not walk empty buckets byte by byte.
-    next_candidate_position: [duplicate_index_max_input_len]u16 = undefined,
+    // Store those positions densely in ascending order so suffix searches can
+    // walk contiguous memory without a second per-position link pass.
+    candidate_positions: [duplicate_index_max_input_len]u16 = undefined,
+    candidate_position_count: u16 = 0,
     hash_predecessors: [duplicate_index_max_input_len]u16 = undefined,
     // Small-block exact matching walks a complete hash chain. Store its reverse
     // traversal here so candidates retain the old earliest-first tie order
@@ -18447,6 +18448,7 @@ const DuplicateMatchIndex = struct {
         std.debug.assert(block.len <= duplicate_index_max_input_len);
         index.high_byte_count = 0;
         index.max_byte_frequency = 0;
+        index.candidate_position_count = 0;
         var byte_frequencies: [256]u16 = @splat(0);
         var table: [duplicate_hash_table_len][duplicate_hash_candidates]u16 = undefined;
         var latest: [duplicate_hash_table_len]u16 = @splat(duplicate_index_invalid);
@@ -18465,6 +18467,10 @@ const DuplicateMatchIndex = struct {
             const count: usize = state >> duplicate_hash_candidate_slot_bits;
             const next_slot: usize = state & (duplicate_hash_candidates - 1);
             index.predecessor_counts[position] = @intCast(count);
+            if (count != 0) {
+                index.candidate_positions[index.candidate_position_count] = @intCast(position);
+                index.candidate_position_count += 1;
+            }
             for (0..count) |age| {
                 const slot = (next_slot + duplicate_hash_candidates - 1 - age) & (duplicate_hash_candidates - 1);
                 index.predecessors[position][age] = table[hash][slot];
@@ -18475,19 +18481,13 @@ const DuplicateMatchIndex = struct {
             const updated_next = (next_slot + 1) & (duplicate_hash_candidates - 1);
             states[hash] = @intCast((updated_len << duplicate_hash_candidate_slot_bits) | updated_next);
         }
-        var next_position: u16 = duplicate_index_invalid;
-        var position = block.len;
-        while (position != 0) {
-            position -= 1;
-            if (index.predecessor_counts[position] != 0) next_position = @intCast(position);
-            index.next_candidate_position[position] = next_position;
-        }
     }
 
     noinline fn buildBounded(index: *DuplicateMatchIndex, block: []const u8) linksection(fast_encode_helper_text_section) void {
         std.debug.assert(block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len);
         index.high_byte_count = 0;
         index.max_byte_frequency = 0;
+        index.candidate_position_count = 0;
         var byte_frequencies: [256]u16 = @splat(0);
         var table: [duplicate_hash_table_len][duplicate_hash_candidates]u16 = undefined;
         var states: [duplicate_hash_table_len]u8 = @splat(0);
@@ -18503,6 +18503,10 @@ const DuplicateMatchIndex = struct {
             const count: usize = state >> duplicate_hash_candidate_slot_bits;
             const next_slot: usize = state & (duplicate_hash_candidates - 1);
             index.predecessor_counts[position] = @intCast(count);
+            if (count != 0) {
+                index.candidate_positions[index.candidate_position_count] = @intCast(position);
+                index.candidate_position_count += 1;
+            }
             for (0..count) |age| {
                 const slot = (next_slot + duplicate_hash_candidates - 1 - age) & (duplicate_hash_candidates - 1);
                 index.predecessors[position][age] = table[hash][slot];
@@ -18513,15 +18517,21 @@ const DuplicateMatchIndex = struct {
             const updated_next = (next_slot + 1) & (duplicate_hash_candidates - 1);
             states[hash] = @intCast((updated_len << duplicate_hash_candidate_slot_bits) | updated_next);
         }
-        var next_position: u16 = duplicate_index_invalid;
-        var position = block.len;
-        while (position != 0) {
-            position -= 1;
-            if (index.predecessor_counts[position] != 0) next_position = @intCast(position);
-            index.next_candidate_position[position] = next_position;
-        }
     }
 };
+
+fn duplicateCandidateStart(index: *const DuplicateMatchIndex, start_min: usize) usize {
+    var lo: usize = 0;
+    var hi: usize = index.candidate_position_count;
+    while (lo < hi) {
+        const middle = lo + (hi - lo) / 2;
+        if (index.candidate_positions[middle] < start_min)
+            lo = middle + 1
+        else
+            hi = middle;
+    }
+    return lo;
+}
 
 const DictionaryMatch = struct {
     dictionary_start: usize,
@@ -18605,13 +18615,13 @@ fn findBestDuplicateMatchIndexedCancellable(block: []const u8, start_min: usize,
         return try findBestDuplicateMatchIndexedExact(block, start_min, index, cancelled);
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
-    var second: usize = index.next_candidate_position[start_min];
-    while (second != duplicate_index_invalid and second + 8 <= block.len) {
+    var candidate_position_index = duplicateCandidateStart(index, start_min);
+    while (candidate_position_index < index.candidate_position_count) : (candidate_position_index += 1) {
+        const second: usize = index.candidate_positions[candidate_position_index];
         // The mixed worker's caller never observes a partial candidate after
         // cancellation. Poll at candidate positions so a long suffix search
         // does not delay joining a decisive non-mixed result.
         if (cancelled) |flag| if (flag.load(.acquire)) return null;
-        defer second = if (second + 1 < block.len) index.next_candidate_position[second + 1] else duplicate_index_invalid;
         if (best) |current| if (block.len - second < current.len) break;
         for (index.predecessors[second][0..index.predecessor_counts[second]], 0..) |candidate_index, age| {
             const first: usize = candidate_index;
@@ -18660,9 +18670,8 @@ noinline fn indexedSingleMatchCannotBeat(
     if (maximum_regenerated >= block.len) return false;
     const required_match_len = block.len - maximum_regenerated;
 
-    var second: usize = index.next_candidate_position[0];
-    while (second != duplicate_index_invalid and second + 8 <= block.len) {
-        defer second = if (second + 1 < block.len) index.next_candidate_position[second + 1] else duplicate_index_invalid;
+    for (index.candidate_positions[0..index.candidate_position_count]) |candidate_position| {
+        const second: usize = candidate_position;
         if (block.len - second < required_match_len) break;
         for (index.predecessors[second][0..index.predecessor_counts[second]], 0..) |candidate_index, age| {
             const first: usize = candidate_index;
@@ -18685,9 +18694,8 @@ noinline fn indexedSingleMatchCannotBeatFullScan(
 ) linksection(fast_encode_helper_text_section) bool {
     if (total_len_limit == 0 or index.high_byte_count != 0) return false;
     var maximum_len: usize = 0;
-    var second: usize = index.next_candidate_position[0];
-    while (second != duplicate_index_invalid and second + 8 <= block.len) {
-        defer second = if (second + 1 < block.len) index.next_candidate_position[second + 1] else duplicate_index_invalid;
+    for (index.candidate_positions[0..index.candidate_position_count]) |candidate_position| {
+        const second: usize = candidate_position;
         if (block.len - second <= maximum_len) break;
         for (index.predecessors[second][0..index.predecessor_counts[second]], 0..) |candidate_index, age| {
             if (block.len - second <= maximum_len) continue;
@@ -19153,13 +19161,29 @@ test "zstd bounded duplicate index preserves large-block search" {
         try std.testing.expectEqual(full.high_byte_count, bounded.high_byte_count);
         try std.testing.expectEqual(full.max_byte_frequency, bounded.max_byte_frequency);
         try std.testing.expectEqualSlices(u8, full.predecessor_counts[0..payload.len], bounded.predecessor_counts[0..payload.len]);
-        try std.testing.expectEqualSlices(u16, full.next_candidate_position[0..payload.len], bounded.next_candidate_position[0..payload.len]);
+        try std.testing.expectEqual(full.candidate_position_count, bounded.candidate_position_count);
+        try std.testing.expectEqualSlices(
+            u16,
+            full.candidate_positions[0..full.candidate_position_count],
+            bounded.candidate_positions[0..bounded.candidate_position_count],
+        );
+        var expected_candidate_count: usize = 0;
         for (0..payload.len) |position| {
             const count = full.predecessor_counts[position];
+            if (count != 0) {
+                try std.testing.expectEqual(position, full.candidate_positions[expected_candidate_count]);
+                expected_candidate_count += 1;
+            }
             try std.testing.expectEqualSlices(u16, full.predecessors[position][0..count], bounded.predecessors[position][0..count]);
             try std.testing.expectEqualSlices(u16, full.match_lengths[position][0..count], bounded.match_lengths[position][0..count]);
         }
+        try std.testing.expectEqual(expected_candidate_count, full.candidate_position_count);
         for ([_]usize{ 0, 257, 4096, 16 * 1024 }) |start_min| {
+            var expected_start: usize = 0;
+            while (expected_start < full.candidate_position_count and
+                full.candidate_positions[expected_start] < start_min) : (expected_start += 1)
+            {}
+            try std.testing.expectEqual(expected_start, duplicateCandidateStart(&full, start_min));
             try std.testing.expectEqual(
                 try findBestDuplicateMatchIndexed(&payload, start_min, &full),
                 try findBestDuplicateMatchIndexed(&payload, start_min, &bounded),

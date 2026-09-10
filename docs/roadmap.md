@@ -10670,6 +10670,18 @@ coverage.
   single-match stage was mixed, and thirty independent full-matrix pairs reached
   only `1.0015x` geometrically: level-1 JSON was `1.0039x`, while text and the
   tradeoff corpus fell to `0.9908x`/`0.9979x`. The incremental maximum remains.
+  The duplicate index now stores positions with non-empty predecessor buckets
+  as one dense ascending array instead of writing a reverse-linked next-position
+  entry for every source byte. Suffix queries binary-search their first legal
+  position and then read the dense list sequentially, preserving candidate order
+  and all match-score ties without increasing `DuplicateMatchIndex`. A 16-shape
+  oracle independently reconstructs the dense list, checks lower-bound starts,
+  compares full/bounded fields, and preserves selected matches at four suffixes.
+  Thirty independent fixed-CPU-8 stage pairs improve bounded-index construction
+  by `1.027x`/`1.011x`/`1.026x` on text/JSON/binary. The corresponding 30-pair
+  20-row frame matrix preserves every size/checksum, improves level-1 JSON by
+  `1.0138x` with 26/30 wins, has a `1.0012x` row-median geometric mean, and
+  keeps the weakest control at `0.9956x`.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
