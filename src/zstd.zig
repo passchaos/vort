@@ -3400,7 +3400,9 @@ pub const NativeIncrementalFrameDecoder = struct {
                 },
                 .direct_output => {
                     if (self.direct_payload_read == self.direct_payload_len) {
-                        if (self.direct_decoded_read != self.direct_decoded_len) {
+                        if (self.direct_sequence_continuation.retainsState() or
+                            self.direct_decoded_read != self.direct_decoded_len)
+                        {
                             try self.advanceDirectOutputBlock();
                             continue;
                         }
@@ -3425,7 +3427,12 @@ pub const NativeIncrementalFrameDecoder = struct {
                             .status = .done,
                         };
                     }
-                    if (output_written_step == output.len) {
+                    // A compressed block may legitimately regenerate zero
+                    // bytes while still carrying entropy payload that must be
+                    // parsed and validated. It needs no caller output space.
+                    if (output_written_step == output.len and
+                        (!self.direct_block_compressed or self.direct_block_decoded_len != 0))
+                    {
                         return .{
                             .progress = .{ .input_read = input_read, .output_written = output_written_step },
                             .status = .need_output,
@@ -9474,6 +9481,11 @@ fn inspectNativeFrameBlockSequenceModesWithState(
     var offset = section.sequence_payload_offset;
     if (offset >= payload.len) return error.TruncatedFrame;
     if (sequence_predefined.isModeByte(payload[offset])) {
+        // A predefined table is still the active table for a later block's
+        // Repeat_Mode. The decoder commits this state after executing the
+        // block; inspection must mirror that transition while replaying prior
+        // blocks even though no table payload needs parsing here.
+        frame_state.previous_tables = predefinedSequenceTables();
         return .{
             .literals_kind = nativeLiteralsKind(section.kind),
             .regenerated_literals_size = section.regenerated_size,
@@ -21124,6 +21136,77 @@ test "zstd native decoder accepts zero-length RLE blocks" {
     try std.testing.expectEqualSlices(u8, &expected, &into);
 }
 
+test "zstd native incremental decoder advances zero-output compressed blocks" {
+    // Upstream zstd tests/decodecorpus seed 130363, case 4. The frame contains
+    // six compressed blocks that all regenerate zero bytes. A caller therefore
+    // supplies an empty output slice, but the direct path must still consume
+    // and validate each block before accepting the final checksum.
+    const frame = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd, 0xa4, 0x00, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x14, 0x00,
+        0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x01, 0xdc, 0x00, 0x1c, 0x00,
+        0x00, 0x01, 0xe5, 0x00, 0x1d, 0x00, 0x00, 0x01, 0xd3, 0x00, 0x99, 0xe9, 0xd8, 0x51,
+    };
+    const summary = try summarizeNativeFrameBlocks(&frame);
+    try std.testing.expectEqual(@as(usize, 6), summary.block_count);
+    try std.testing.expectEqual(@as(usize, 6), summary.compressed_block_count);
+    try std.testing.expectEqual(@as(usize, 0), try decodeNativeFrameInto(&frame, &.{}));
+
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer decoder.deinit();
+    try decoder.frame_scratch.appendSlice(std.testing.allocator, &frame);
+    try std.testing.expect(try decoder.beginDirectOutputIfSupported(frame.len));
+    try std.testing.expect(decoder.direct_sequence_continuation.retainsState());
+    try std.testing.expectEqual(@as(usize, 0), decoder.direct_block_decoded_len);
+    decoder.phase = .direct_output;
+    const result = try decoder.step(&.{}, &.{});
+    try std.testing.expectEqual(core.StepResult.Status.done, result.status);
+    try std.testing.expectEqual(@as(usize, 0), result.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), result.progress.output_written);
+    try std.testing.expectEqual(@as(usize, 0), decoder.frame_scratch.items.len);
+    try decoder.finish();
+
+    var corrupt = frame;
+    const first = try inspectNativeFrameFirstBlock(&corrupt);
+    const second = try inspectNativeFrameBlockAt(&corrupt, first.next_header_offset);
+    var corrupt_decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer corrupt_decoder.deinit();
+    try corrupt_decoder.frame_scratch.appendSlice(std.testing.allocator, &corrupt);
+    try std.testing.expect(try corrupt_decoder.beginDirectOutputIfSupported(corrupt.len));
+    // Change the second block from zero sequences to one sequence after the
+    // complete-frame preflight. Visiting it must now detect its missing mode
+    // byte instead of accepting the frame after the first zero-output block.
+    corrupt_decoder.frame_scratch.items[second.payload_offset + 1] = 1;
+    corrupt_decoder.phase = .direct_output;
+    try std.testing.expectError(error.TruncatedFrame, corrupt_decoder.step(&.{}, &.{}));
+
+    var streamed = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_compressed_buffer_len = 16,
+        .max_decoded_buffer_len = 0,
+    });
+    defer streamed.deinit();
+    var input_offset: usize = 0;
+    var saw_block_stream = false;
+    while (streamed.snapshot().phase != .done) {
+        const input_end = @min(frame.len, input_offset + 3);
+        const step_result = try streamed.step(frame[input_offset..input_end], &.{});
+        input_offset += step_result.progress.input_read;
+        try std.testing.expectEqual(@as(usize, 0), step_result.progress.output_written);
+        saw_block_stream = saw_block_stream or streamed.isBlockStreaming();
+        if (step_result.status == .need_input) try std.testing.expect(input_offset < frame.len);
+        try std.testing.expect(step_result.status != .need_output);
+    }
+    try streamed.finish();
+    try std.testing.expect(saw_block_stream);
+    try std.testing.expectEqual(frame.len, input_offset);
+}
+
 test "zstd native decoder accepts descriptor unused bit" {
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
@@ -21532,6 +21615,89 @@ test "zstd native decoder accepts minimal predefined sequence block" {
 
     const decoded_len = try decodedRawOrRleFrameSize(frame.items);
     try std.testing.expectEqual(payload.len, decoded_len);
+}
+
+test "zstd sequence inspector replays predefined tables for a repeat block" {
+    const payload = "a" ** 264;
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{ .content_checksum = false });
+
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 8, false);
+    try frame.append(std.testing.allocator, (1 << 3) | 1);
+    try frame.append(std.testing.allocator, 'a');
+    try frame.append(std.testing.allocator, 1);
+    try frame.append(std.testing.allocator, 0); // LL, OF, and ML use Predefined_Mode.
+    try frame.appendSlice(std.testing.allocator, &.{ 0x00, 0x0a, 0x08, 0x01 });
+
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 8, true);
+    try frame.append(std.testing.allocator, (1 << 3) | 1);
+    try frame.append(std.testing.allocator, 'a');
+    try frame.append(std.testing.allocator, 1);
+    try frame.append(std.testing.allocator, 0xfc); // Repeat all three predefined tables.
+    try frame.appendSlice(std.testing.allocator, &.{ 0x00, 0x0a, 0x08, 0x01 });
+
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    const first_modes = try inspectNativeFrameBlockSequenceModes(frame.items, first_block);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, first_modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, first_modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, first_modes.match_length_mode);
+
+    const second_block = try inspectNativeFrameBlockAt(frame.items, first_block.next_header_offset);
+    const second_modes = try inspectNativeFrameBlockSequenceModes(frame.items, second_block);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, second_modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, second_modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, second_modes.match_length_mode);
+
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try decodeNativeFrameInto(frame.items, &output));
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "zstd sequence inspector accepts upstream predefined then repeat fixture" {
+    // Generated by upstream zstd tests/decodecorpus v1.4.7-3025-g5233c58e
+    // with seed 3157610632. The old inspector decoded the frame correctly but
+    // rejected its second compressed block because it forgot the first block's
+    // predefined sequence tables while replaying state.
+    const frame_hex = std.mem.trim(
+        u8,
+        @embedFile("zstd/testdata/decodecorpus-predefined-repeat.frame.hex"),
+        " \r\n\t",
+    );
+    const frame = try std.testing.allocator.alloc(u8, frame_hex.len / 2);
+    defer std.testing.allocator.free(frame);
+    _ = try std.fmt.hexToBytes(frame, frame_hex);
+
+    const summary = try summarizeNativeFrameBlocks(frame);
+    try std.testing.expectEqual(@as(usize, 7), summary.block_count);
+    try std.testing.expectEqual(@as(usize, 3), summary.compressed_block_count);
+
+    const first = try inspectNativeFrameFirstBlock(frame);
+    const first_modes = try inspectNativeFrameBlockSequenceModes(frame, first);
+    try std.testing.expectEqual(@as(usize, 26), first_modes.sequence_count);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, first_modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, first_modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, first_modes.match_length_mode);
+
+    const second = try inspectNativeFrameBlockAt(frame, first.next_header_offset);
+    const second_modes = try inspectNativeFrameBlockSequenceModes(frame, second);
+    try std.testing.expectEqual(@as(usize, 3), second_modes.sequence_count);
+    try std.testing.expectEqual(NativeSequenceTableMode.repeat, second_modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, second_modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, second_modes.match_length_mode);
+
+    const third = try inspectNativeFrameBlockAt(frame, second.next_header_offset);
+    const third_modes = try inspectNativeFrameBlockSequenceModes(frame, third);
+    try std.testing.expectEqual(NativeLiteralsKind.treeless, third_modes.literals_kind);
+    try std.testing.expectEqual(@as(usize, 16), third_modes.sequence_count);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, third_modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, third_modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, third_modes.match_length_mode);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqual(@as(usize, 3047), decoded.len);
+    try std.testing.expectEqual(@as(u32, 0xdf86_6e7a), checksum_mod.crc32(decoded));
 }
 
 test "zstd native decoder accepts multiple predefined sequences" {

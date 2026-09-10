@@ -11243,3 +11243,26 @@ coverage.
   tests, nine fixed-CPU-2 `numbered_json` pairs reduced median caller-buffer
   decode from about `179.2` to `159.8` MiB/s (`0.892x`). The compiler/runtime
   `memcpy` path remains preferable for exact bounded copies.
+  A fresh upstream `decodecorpus` campaign (seed `104729`, 2,000 frames) exposed
+  a public sequence-inspector state bug that did not affect actual decode:
+  replay stopped after reporting an all-Predefined sequence block without
+  retaining those active tables, so a later block using Repeat_Mode was rejected
+  as corrupt. Inspection now commits predefined tables before returning its
+  summary. A compact two-block regression pins Predefined-to-Repeat replay, and
+  the exact 925-byte upstream seed `3157610632` frame is retained as a fixture;
+  it checks seven-block structure, the Predefined/Repeat/compressed transitions,
+  3,047 decoded bytes, and CRC-32 `0xdf866e7a`. Two further fresh plain/dictionary
+  campaigns (seeds `1618033` and `271828`, 3,000 frames total) also pass.
+  A forced-compressed 1 KiB-block campaign (seed `130363`, 1,000 frames) then
+  exposed an incremental direct-output boundary: a 46-byte frame containing six
+  compressed blocks that regenerate zero bytes returned `need_output` for the
+  caller's necessarily empty output slice and could accept the frame after its
+  first block. The direct path now allows zero-output compressed blocks to run
+  without output capacity and advances whenever the current block is non-final,
+  independently of cumulative decoded length. A regression generated from the
+  exact standalone seed `1066298653` covers complete direct decoding, deliberate
+  corruption of the second block after preflight, and 3-byte-input block
+  streaming under a 16-byte compressed-buffer limit. The complete 1,000-frame
+  forced campaign now passes one-shot and incremental decoding. The established
+  273-case libzstd 1.5.5 matrix, 237-case native frame probe, and six-campaign
+  5,400-frame suite remain green.
