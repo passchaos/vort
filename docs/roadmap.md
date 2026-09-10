@@ -10694,6 +10694,12 @@ coverage.
   matched the old result, but thirty independent stage pairs reduced text/JSON/
   binary to `0.960x`/`0.941x`/`0.977x`; the generic slice/count form produces
   substantially better optimized code on the current compiler.
+  Four-way striped byte-frequency collection inside `DuplicateMatchIndex` was
+  rejected too. It preserved the full/bounded index oracle and improved isolated
+  text/JSON index construction by only `1.007x`/`1.005x`, while binary fell to
+  `0.993x`; actual JSON/binary single-match stages measured `0.991x`/`0.994x`.
+  The extra four-lane merge and stack footprint outweigh the shorter dependency
+  chains at this scale.
   Compacting the repeat-aware beam state was rejected after testing both natural
   layouts. Removing its reconstructible `Token` reduced the state from 16 to 12
   bytes and improved the isolated level-1 JSON beam by `1.026x` with 29/30 wins,
