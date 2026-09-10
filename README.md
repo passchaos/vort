@@ -1174,7 +1174,7 @@ malformed compressed sequence-table conflicts. In those cases callers see
 matching dictionary exposes the underlying `ChecksumMismatch`, `SizeMismatch`,
 `InvalidMatch`, or `CorruptFrame`.
 
-`run-lz4-native-probe` also runs pure library-level liblz4-generated frame differentials across multiple frame option/level combinations and decodes them through Vort native public APIs, including incremental split-input/caller-output drains and chunked split-input helpers, so LZ4 interoperability coverage is not limited to CLI routing.
+`run-lz4-native-probe` also dynamically calls liblz4's `LZ4F_compressFrame` for 120 frame option/level/payload combinations spanning all four block-size IDs, linked and independent modes, checksums, omitted content size, and a 300 KiB multi-block payload. It decodes those frames through Vort's one-shot, incremental, reusable, and chunked public APIs, and independently decodes matching Vort-generated frames through `LZ4F_decompress`, so LZ4 interoperability coverage is bidirectional and is not limited to CLI routing.
 
 The focused library benchmark/gate tracks these public surfaces directly:
 

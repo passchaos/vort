@@ -1,5 +1,6 @@
 const std = @import("std");
 const vort = @import("vort");
+const liblz4 = @import("lz4/liblz4_runtime.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
@@ -53,7 +54,7 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkPayloadSkippableThenEmptyFrame(init.gpa);
     checked += 1;
-    const lib_generated_cases = try checkLibLz4GeneratedLibraryFrames(init.gpa);
+    const lib_generated_cases = try checkLibLz4GeneratedLibraryFrames(init.gpa, stdout);
     checked += lib_generated_cases;
     checked += try checkSkippableMalformedStreams(init.gpa);
     checked += try checkSkippableChecksumAndTrailingStreams(init.gpa);
@@ -1928,7 +1929,9 @@ fn checkPayloadSkippableThenEmptyFrame(allocator: std.mem.Allocator) !void {
     try incremental.finish();
 }
 
-fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
+fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !usize {
+    var runtime = try liblz4.Runtime.open();
+    defer runtime.deinit();
     var sequential: [2048]u8 = undefined;
     for (&sequential, 0..) |*byte, i| byte.* = @intCast(i % 251);
 
@@ -1953,6 +1956,12 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         if (i % 97 == 0) byte.* = @intCast((i * 17 + 3) & 0xff);
     }
 
+    const linked_large = try allocator.alloc(u8, 300 * 1024);
+    defer allocator.free(linked_large);
+    rng.random().bytes(linked_large[0 .. 60 * 1024]);
+    for (60 * 1024..linked_large.len) |index|
+        linked_large[index] = linked_large[index - 60 * 1024];
+
     const json_unit = "{\"service\":\"vort\",\"codec\":\"lz4\",\"native\":true,\"value\":12345}\n";
     const cases = [_]Case{
         .{ .name = "liblz4-small", .payload = @constCast("lz4-small-reference-payload") },
@@ -1962,6 +1971,7 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         .{ .name = "liblz4-binary-mix", .payload = &binary_mix },
         .{ .name = "liblz4-sparse-zero", .payload = &sparse_zero },
         .{ .name = "liblz4-randomish", .payload = &randomish },
+        .{ .name = "liblz4-linked-large", .payload = linked_large },
     };
     const levels = [_]c_int{ 0, 3, 10 };
     const option_sets = [_]vort.Lz4FrameOptions{
@@ -1980,31 +1990,57 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
             .block_size_id = .max64kb,
             .block_mode = .linked,
         },
+        .{
+            .include_content_size = true,
+            .content_checksum = false,
+            .block_checksum = true,
+            .block_size_id = .max256kb,
+            .block_mode = .independent,
+        },
+        .{
+            .include_content_size = false,
+            .content_checksum = true,
+            .block_checksum = false,
+            .block_size_id = .max1mb,
+            .block_mode = .linked,
+        },
     };
 
     var checked: usize = 0;
     for (cases) |case| {
         for (levels) |level| {
             for (option_sets) |options| {
-                try checkLibLz4GeneratedLibraryFrame(allocator, case, level, options);
+                try checkLibLz4GeneratedLibraryFrame(allocator, runtime, case, level, options);
                 checked += 1;
             }
         }
     }
+    try stdout.print(
+        "lz4_native_probe_reference library=liblz4 version={s} frame_cases={d}\n",
+        .{ runtime.version(), checked },
+    );
     return checked;
 }
 
 fn checkLibLz4GeneratedLibraryFrame(
     allocator: std.mem.Allocator,
+    runtime: liblz4.Runtime,
     case: Case,
     level: c_int,
     options: vort.Lz4FrameOptions,
 ) !void {
-    const frame = try vort.lz4EncodeFrameWithLevelAndOptionsAlloc(allocator, case.payload, level, options);
+    const frame = try runtime.encodeFrameAlloc(allocator, case.payload, .{
+        .include_content_size = options.include_content_size,
+        .content_checksum = options.content_checksum,
+        .block_checksum = options.block_checksum,
+        .block_size_id = @intFromEnum(options.block_size_id),
+        .block_independent = options.block_mode == .independent,
+        .compression_level = level,
+    });
     defer allocator.free(frame);
 
-    // Pure library differential: liblz4 writes the compatibility frame through
-    // Vort's library wrapper, then the dependency-free native decoder must
+    // Pure library differential: the runtime-loaded LZ4F_compressFrame writes
+    // the compatibility frame, then the dependency-free native decoder must
     // agree across one-shot, caller-buffer, reusable, append, incremental, and
     // bounded-size public APIs. This avoids routing the oracle through the CLI.
     const lib_decoded = try vort.lz4DecodeFrameAlloc(allocator, frame);
@@ -2017,10 +2053,28 @@ fn checkLibLz4GeneratedLibraryFrame(
     if (lib_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
     try expectPayload(case, lib_into[0..lib_written]);
 
+    const vort_frame = try vort.lz4EncodeFrameWithLevelAndOptionsAlloc(allocator, case.payload, level, options);
+    defer allocator.free(vort_frame);
+    try runtime.decodeFrame(vort_frame, lib_into);
+    try expectPayload(case, lib_into);
+
     const header = try vort.lz4InspectNativeFrameHeader(frame);
     if (header.block_checksum != options.block_checksum) return error.Lz4ProbeMismatch;
     if (header.content_checksum != options.content_checksum) return error.Lz4ProbeMismatch;
-    if (options.include_content_size) {
+    const expected_block_size: usize = switch (options.block_size_id) {
+        .max64kb => 64 * 1024,
+        .max256kb => 256 * 1024,
+        .max1mb => 1024 * 1024,
+        .max4mb => 4 * 1024 * 1024,
+    };
+    if (header.block_size_max > expected_block_size) {
+        std.debug.print(
+            "lz4_lib_frame_block_size_mismatch case={s} level={d} requested={d} actual={d} payload={d}\n",
+            .{ case.name, level, expected_block_size, header.block_size_max, case.payload.len },
+        );
+        return error.Lz4ProbeSizeMismatch;
+    }
+    if (options.include_content_size and case.payload.len != 0) {
         if (header.expected_content_size == null or header.expected_content_size.? != case.payload.len) return error.Lz4ProbeSizeMismatch;
     } else if (header.expected_content_size != null) {
         return error.Lz4ProbeMismatch;
@@ -2032,17 +2086,28 @@ fn checkLibLz4GeneratedLibraryFrame(
     } else if (summary.block_count == 0) {
         return error.Lz4ProbeSizeMismatch;
     }
+    if (options.block_mode == .independent and !header.block_independent) return error.Lz4ProbeMismatch;
+    // LZ4F_compressFrame normalizes a semantically irrelevant linked request
+    // to independent for one-block frames. A multi-block frame must preserve
+    // the requested linked history mode.
+    if (options.block_mode == .linked and summary.block_count > 1 and header.block_independent) return error.Lz4ProbeMismatch;
+    if (std.mem.eql(u8, case.name, "liblz4-linked-large")) {
+        const expected_blocks = (case.payload.len + header.block_size_max - 1) / header.block_size_max;
+        if (summary.block_count != expected_blocks) return error.Lz4ProbeSizeMismatch;
+    }
     const stream_summary = try vort.lz4SummarizeNativeStream(frame);
     if (stream_summary.frame_count != 1 or stream_summary.skippable_frame_count != 0) return error.Lz4ProbeMismatch;
     if (stream_summary.block_count != summary.block_count) return error.Lz4ProbeSizeMismatch;
 
     if (try vort.lz4DecodedNativeFrameSizeLimited(frame, case.payload.len) != case.payload.len) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.OutputLimitExceeded, vort.lz4DecodedNativeFrameSizeLimited(frame, case.payload.len - 1));
+    if (case.payload.len != 0)
+        try expectError(error.OutputLimitExceeded, vort.lz4DecodedNativeFrameSizeLimited(frame, case.payload.len - 1));
 
     const native_decoded = try vort.lz4DecodeNativeFrameAllocLimited(allocator, frame, case.payload.len);
     defer allocator.free(native_decoded);
     try expectPayload(case, native_decoded);
-    try expectAllocError(allocator, error.OutputLimitExceeded, vort.lz4DecodeNativeFrameAllocLimited(allocator, frame, case.payload.len - 1));
+    if (case.payload.len != 0)
+        try expectAllocError(allocator, error.OutputLimitExceeded, vort.lz4DecodeNativeFrameAllocLimited(allocator, frame, case.payload.len - 1));
 
     const native_into = try allocator.alloc(u8, case.payload.len);
     defer allocator.free(native_into);
@@ -2052,9 +2117,11 @@ fn checkLibLz4GeneratedLibraryFrame(
     const exact_written = try vort.lz4DecodeNativeFrameIntoExactSize(frame, native_into, case.payload.len);
     if (exact_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
     try expectPayload(case, native_into[0..exact_written]);
-    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameInto(frame, native_into[0 .. native_into.len - 1]));
-    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameIntoExactSize(frame, native_into[0 .. native_into.len - 1], case.payload.len));
-    if (case.payload.len != 0) try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameIntoExactSize(frame, native_into, case.payload.len - 1));
+    if (case.payload.len != 0) {
+        try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameInto(frame, native_into[0 .. native_into.len - 1]));
+        try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameIntoExactSize(frame, native_into[0 .. native_into.len - 1], case.payload.len));
+        try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameIntoExactSize(frame, native_into, case.payload.len - 1));
+    }
     const oversized_into = try allocator.alloc(u8, case.payload.len + 1);
     defer allocator.free(oversized_into);
     try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameIntoExactSize(frame, oversized_into, case.payload.len + 1));
@@ -2063,7 +2130,8 @@ fn checkLibLz4GeneratedLibraryFrame(
     defer decoder.deinit();
     const scratch = try decoder.decodeScratchLimited(frame, case.payload.len);
     try expectPayload(case, scratch);
-    try expectError(error.OutputLimitExceeded, decoder.decodeScratchLimited(frame, case.payload.len - 1));
+    if (case.payload.len != 0)
+        try expectError(error.OutputLimitExceeded, decoder.decodeScratchLimited(frame, case.payload.len - 1));
     const reusable_into_written = try decoder.decodeIntoSliceExactSize(frame, native_into, case.payload.len);
     if (reusable_into_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
     try expectPayload(case, native_into[0..reusable_into_written]);
@@ -2137,12 +2205,14 @@ fn checkLibLz4GeneratedChunkedFrame(allocator: std.mem.Allocator, case: Case, fr
 
     if (try vort.lz4DecodedNativeFrameChunksSize(&chunks, join) != case.payload.len) return error.Lz4ProbeSizeMismatch;
     if (try vort.lz4DecodedNativeFrameChunksSizeLimited(&chunks, join, case.payload.len) != case.payload.len) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.OutputLimitExceeded, vort.lz4DecodedNativeFrameChunksSizeLimited(&chunks, join, case.payload.len - 1));
+    if (case.payload.len != 0)
+        try expectError(error.OutputLimitExceeded, vort.lz4DecodedNativeFrameChunksSizeLimited(&chunks, join, case.payload.len - 1));
 
     const decoded = try vort.lz4DecodeNativeFrameChunksAllocLimited(allocator, &chunks, join, case.payload.len);
     defer allocator.free(decoded);
     try expectPayload(case, decoded);
-    try expectAllocError(allocator, error.OutputLimitExceeded, vort.lz4DecodeNativeFrameChunksAllocLimited(allocator, &chunks, join, case.payload.len - 1));
+    if (case.payload.len != 0)
+        try expectAllocError(allocator, error.OutputLimitExceeded, vort.lz4DecodeNativeFrameChunksAllocLimited(allocator, &chunks, join, case.payload.len - 1));
 
     const into = try allocator.alloc(u8, case.payload.len);
     defer allocator.free(into);
@@ -2152,9 +2222,11 @@ fn checkLibLz4GeneratedChunkedFrame(allocator: std.mem.Allocator, case: Case, fr
     const exact_written = try vort.lz4DecodeNativeFrameChunksIntoExactSize(&chunks, join, into, case.payload.len);
     if (exact_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
     try expectPayload(case, into[0..exact_written]);
-    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameChunksInto(&chunks, join, into[0 .. into.len - 1]));
-    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameChunksIntoExactSize(&chunks, join, into[0 .. into.len - 1], case.payload.len));
-    if (case.payload.len != 0) try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameChunksIntoExactSize(&chunks, join, into, case.payload.len - 1));
+    if (case.payload.len != 0) {
+        try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameChunksInto(&chunks, join, into[0 .. into.len - 1]));
+        try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameChunksIntoExactSize(&chunks, join, into[0 .. into.len - 1], case.payload.len));
+        try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameChunksIntoExactSize(&chunks, join, into, case.payload.len - 1));
+    }
     const oversized_into = try allocator.alloc(u8, case.payload.len + 1);
     defer allocator.free(oversized_into);
     try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameChunksIntoExactSize(&chunks, join, oversized_into, case.payload.len + 1));
@@ -2173,16 +2245,19 @@ fn checkLibLz4GeneratedChunkedFrame(allocator: std.mem.Allocator, case: Case, fr
     defer decoder.deinit();
     if (try decoder.decodedChunksSize(&chunks, join) != case.payload.len) return error.Lz4ProbeSizeMismatch;
     if (try decoder.decodedChunksSizeLimited(&chunks, join, case.payload.len) != case.payload.len) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.OutputLimitExceeded, decoder.decodedChunksSizeLimited(&chunks, join, case.payload.len - 1));
+    if (case.payload.len != 0)
+        try expectError(error.OutputLimitExceeded, decoder.decodedChunksSizeLimited(&chunks, join, case.payload.len - 1));
 
     const reusable_decoded = try decoder.decodeChunksAllocLimited(&chunks, join, case.payload.len);
     defer allocator.free(reusable_decoded);
     try expectPayload(case, reusable_decoded);
-    try expectAllocError(allocator, error.OutputLimitExceeded, decoder.decodeChunksAllocLimited(&chunks, join, case.payload.len - 1));
+    if (case.payload.len != 0)
+        try expectAllocError(allocator, error.OutputLimitExceeded, decoder.decodeChunksAllocLimited(&chunks, join, case.payload.len - 1));
 
     const scratch = try decoder.decodeChunksScratchLimited(&chunks, join, case.payload.len);
     try expectPayload(case, scratch);
-    try expectError(error.OutputLimitExceeded, decoder.decodeChunksScratchLimited(&chunks, join, case.payload.len - 1));
+    if (case.payload.len != 0)
+        try expectError(error.OutputLimitExceeded, decoder.decodeChunksScratchLimited(&chunks, join, case.payload.len - 1));
     const reusable_exact_written = try decoder.decodeChunksIntoSliceExactSize(&chunks, join, into, case.payload.len);
     if (reusable_exact_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
     try expectPayload(case, into[0..reusable_exact_written]);
@@ -2192,7 +2267,8 @@ fn checkLibLz4GeneratedChunkedFrame(allocator: std.mem.Allocator, case: Case, fr
     const reusable_written = try decoder.decodeChunksIntoSlice(&chunks, join, reusable_into);
     if (reusable_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
     try expectPayload(case, reusable_into[0..reusable_written]);
-    try expectError(error.OutputTooSmall, decoder.decodeChunksIntoSlice(&chunks, join, reusable_into[0 .. reusable_into.len - 1]));
+    if (case.payload.len != 0)
+        try expectError(error.OutputTooSmall, decoder.decodeChunksIntoSlice(&chunks, join, reusable_into[0 .. reusable_into.len - 1]));
 
     var reusable_appended: std.ArrayList(u8) = .empty;
     defer reusable_appended.deinit(allocator);
@@ -2202,7 +2278,8 @@ fn checkLibLz4GeneratedChunkedFrame(allocator: std.mem.Allocator, case: Case, fr
     if (!std.mem.eql(u8, reusable_appended.items[0.."prefix:".len], "prefix:")) return error.Lz4ProbeMismatch;
     if (!std.mem.eql(u8, reusable_appended.items["prefix:".len..], case.payload)) return error.Lz4ProbeMismatch;
     reusable_appended.clearRetainingCapacity();
-    try expectError(error.SizeMismatch, decoder.decodeChunksAppendExactSize(&reusable_appended, &chunks, join, case.payload.len - 1));
+    if (case.payload.len != 0)
+        try expectError(error.SizeMismatch, decoder.decodeChunksAppendExactSize(&reusable_appended, &chunks, join, case.payload.len - 1));
 }
 
 fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {

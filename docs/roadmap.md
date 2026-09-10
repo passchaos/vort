@@ -11266,3 +11266,15 @@ coverage.
   forced campaign now passes one-shot and incremental decoding. The established
   273-case libzstd 1.5.5 matrix, 237-case native frame probe, and six-campaign
   5,400-frame suite remain green.
+  Auditing the LZ4 probe found that its 63 cases labeled `lib-generated` still
+  called Vort's dependency-free frame encoder after the runtime system-codec
+  facade had been removed. The test-only liblz4 wrapper now dynamically loads
+  `LZ4F_compressFrameBound`, `LZ4F_compressFrame`, and `LZ4F_decompress`; no
+  system dependency is added to the Vort library. The public probe now covers
+  120 real liblz4-generated frames across levels 0/3/10, all four block-size
+  IDs, linked/independent modes, content/block checksums, omitted content size,
+  empty and generated payloads, and a 300 KiB multi-block case. Every frame is
+  decoded through Vort's one-shot, caller-buffer, reusable, chunked, and
+  incremental APIs, and each matching Vort-produced frame is independently
+  decoded by liblz4. The probe reports the runtime liblz4 version; CI installs
+  `liblz4-dev` explicitly so missing reference coverage cannot silently pass.
