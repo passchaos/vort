@@ -11224,3 +11224,14 @@ coverage.
   probe, 273-case libzstd 1.5.5 compatibility matrix, and all six upstream
   decodecorpus campaigns remained green (5,400 frames and all 64 LL/OF/ML mode
   tuples).
+  A follow-up compact X1 lookup indexed at the tree's actual width was rejected
+  after three placements. It consistently improved the same `ascii64k` target
+  by roughly `1.068x`--`1.087x` over the validated direct-entry baseline, but
+  embedding the path reduced `numbered_json` to `0.8965x`; isolating the helper
+  and then isolating both Huffman decode bodies still left `numbered_json` near
+  `0.901x`. The narrowest call-site dispatch retained `1.0680x` on `ascii64k`
+  but produced a `0.9888x` 13-row geometric mean, with `numbered_json`,
+  `huffman80k`, `large_json`, and `large_text` at `0.8945x`/`0.9643x`/
+  `0.9677x`/`0.9644x`. The extra decoder instance and dispatch were removed;
+  future compact-table work needs whole-decoder layout control rather than
+  another local helper placement.
