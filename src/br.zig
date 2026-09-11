@@ -3041,7 +3041,7 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     return .{ .encoded = baseline, .use_recent_distances = false };
 }
 
-/// Evaluate literal and command entropy splits once, after the bounded
+/// Evaluate literal, command, and distance entropy splits once, after the bounded
 /// short-match alternatives have selected their exact-wire winner. This avoids
 /// rescanning transient command plans and emits at most one combined full-wire
 /// candidate before strict size arbitration against the chosen unsplit stream.
@@ -3050,14 +3050,9 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
         literal_block_split.choose(input, commands, if (baseline.use_recent_distances) 56 else null)
     else
         null;
-    const command_split = if (options.try_command_split)
-        try chooseCommandSplitAlloc(allocator, commands, baseline.use_recent_distances)
-    else
-        null;
-    const distance_split = if (options.try_distance_split)
-        try chooseDistanceSplitAlloc(allocator, commands, baseline.use_recent_distances)
-    else
-        null;
+    const symbol_splits = try chooseCommandAndDistanceSplitsAlloc(allocator, commands, baseline.use_recent_distances, options.try_command_split, options.try_distance_split);
+    const command_split = symbol_splits.command;
+    const distance_split = symbol_splits.distance;
     if (literal_split == null and command_split == null and distance_split == null) return null;
     const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, stats, .{
         // The ordinary-vs-UTF8 decision is made first. A literal block split
@@ -3076,41 +3071,40 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     return null;
 }
 
-fn chooseCommandSplitAlloc(allocator: std.mem.Allocator, commands: []const command_plan.Command, use_recent_distances: bool) Error!?command_block_split.Result {
-    if (!command_block_split.eligible(commands.len)) return null;
-    const symbols = try allocator.alloc(u16, commands.len);
-    defer allocator.free(symbols);
-    var last_distances = initial_last_distances;
-    for (commands, 0..) |command, index| {
-        const recent_symbol = if (use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
-        const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, recent_symbol == 0) orelse
-            commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
-        symbols[index] = encoding.symbol;
-        if (command.has_copy and command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
-    }
-    return command_block_split.choose(symbols);
-}
+const EntropySymbolSplits = struct {
+    command: ?command_block_split.Result = null,
+    distance: ?distance_block_split.Result = null,
+};
 
-fn chooseDistanceSplitAlloc(allocator: std.mem.Allocator, commands: []const command_plan.Command, use_recent_distances: bool) Error!?distance_block_split.Result {
+/// Command and distance splitting consume the same derived command encoding
+/// and recent-distance state. Collect both in one pass so ratio mode does not
+/// allocate and parse the complete command stream twice.
+fn chooseCommandAndDistanceSplitsAlloc(allocator: std.mem.Allocator, commands: []const command_plan.Command, use_recent_distances: bool, try_command_split: bool, try_distance_split: bool) Error!EntropySymbolSplits {
+    var command_accumulator = if (try_command_split) command_block_split.Accumulator.init(commands.len) else null;
     // There cannot be more explicit distance symbols than commands, so short
     // plans cannot qualify. Keep candidate discovery bounded on large plans.
-    if (commands.len < 1024 or commands.len > 32 * 1024) return null;
-    const symbols = try allocator.alloc(u16, commands.len);
-    defer allocator.free(symbols);
-    var symbol_count: usize = 0;
+    const collect_distances = try_distance_split and distance_block_split.eligible(commands.len);
+    if (command_accumulator == null and !collect_distances) return .{};
+    const distance_symbols = if (collect_distances) try allocator.alloc(u16, commands.len) else null;
+    defer if (distance_symbols) |symbols| allocator.free(symbols);
+    var distance_symbol_count: usize = 0;
     var last_distances = initial_last_distances;
     for (commands) |command| {
         const recent_symbol = if (use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
         const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, recent_symbol == 0) orelse
             commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
-        if (command.has_copy and encoding.command.distance_code == -1) {
+        if (command_accumulator) |*accumulator| if (!accumulator.add(encoding.symbol)) return error.InvalidBlockPlan;
+        if (collect_distances and command.has_copy and encoding.command.distance_code == -1) {
             const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), 15) orelse return error.InvalidBlockPlan;
-            symbols[symbol_count] = distance.symbol;
-            symbol_count += 1;
+            distance_symbols.?[distance_symbol_count] = distance.symbol;
+            distance_symbol_count += 1;
         }
         if (command.has_copy and command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
-    return distance_block_split.choose(symbols[0..symbol_count]);
+    return .{
+        .command = if (command_accumulator) |*accumulator| accumulator.finish() else null,
+        .distance = if (distance_symbols) |symbols| distance_block_split.choose(symbols[0..distance_symbol_count]) else null,
+    };
 }
 
 fn countReusableRecentDistances(commands: []const command_plan.Command) usize {

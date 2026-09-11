@@ -8557,6 +8557,18 @@ coverage.
   both command and distance block types, and the upstream differential reports
   `planned_distance_split_cases=1`; a direct regression combines all three
   split categories in one wire.
+  Command and distance split proposal collection now shares one traversal of
+  the selected command plan and one recent-distance state. The command scorer
+  consumes derived symbols through a bounded histogram accumulator instead of
+  allocating a second command-sized symbol buffer, while the distance scorer
+  retains its single bounded scratch because its explicit-symbol count is only
+  known after traversal. A 17-file same-input oracle against an independent
+  `085e850d` binary preserved every ratio size (759,476 aggregate bytes). Five
+  alternating fixed-CPU-2 process pairs preserved every tested size and
+  measured median speedups of 1.0246x / 1.0136x / 1.0009x / 1.0105x on the
+  dictionary / `dickens` / `mr` / tokenizer split winners; rejected
+  x-ray/XML/font rows improved by 1.0638x / 1.0129x / 1.0276x. Every row won
+  all five pairs.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-
