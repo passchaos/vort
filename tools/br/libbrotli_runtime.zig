@@ -34,6 +34,18 @@ const CompressStreamFn = *const fn (
 ) callconv(.c) c_int;
 const EncoderHasMoreOutputFn = *const fn (*EncoderState) callconv(.c) c_int;
 const EncoderIsFinishedFn = *const fn (*EncoderState) callconv(.c) c_int;
+const DecoderState = opaque {};
+const CreateDecoderFn = *const fn (?AllocFn, ?FreeFn, ?*anyopaque) callconv(.c) ?*DecoderState;
+const DestroyDecoderFn = *const fn (*DecoderState) callconv(.c) void;
+const SetDecoderParameterFn = *const fn (*DecoderState, c_int, u32) callconv(.c) c_int;
+const DecompressStreamFn = *const fn (
+    *DecoderState,
+    *usize,
+    *[*]const u8,
+    *usize,
+    *[*]u8,
+    ?*usize,
+) callconv(.c) c_int;
 const Dictionary = extern struct {
     size_bits_by_length: [32]u8,
     offsets_by_length: [32]u32,
@@ -72,6 +84,10 @@ pub const Runtime = struct {
     compress_stream: CompressStreamFn,
     encoder_has_more_output: EncoderHasMoreOutputFn,
     encoder_is_finished: EncoderIsFinishedFn,
+    create_decoder: CreateDecoderFn,
+    destroy_decoder: DestroyDecoderFn,
+    set_decoder_parameter: SetDecoderParameterFn,
+    decompress_stream: DecompressStreamFn,
     get_dictionary: GetDictionaryFn,
     get_transforms: GetTransformsFn,
     transform_dictionary_word: TransformDictionaryWordFn,
@@ -113,6 +129,10 @@ pub const Runtime = struct {
             .compress_stream = encoder.lookup(CompressStreamFn, "BrotliEncoderCompressStream") orelse return error.ReferenceUnavailable,
             .encoder_has_more_output = encoder.lookup(EncoderHasMoreOutputFn, "BrotliEncoderHasMoreOutput") orelse return error.ReferenceUnavailable,
             .encoder_is_finished = encoder.lookup(EncoderIsFinishedFn, "BrotliEncoderIsFinished") orelse return error.ReferenceUnavailable,
+            .create_decoder = decoder.lookup(CreateDecoderFn, "BrotliDecoderCreateInstance") orelse return error.ReferenceUnavailable,
+            .destroy_decoder = decoder.lookup(DestroyDecoderFn, "BrotliDecoderDestroyInstance") orelse return error.ReferenceUnavailable,
+            .set_decoder_parameter = decoder.lookup(SetDecoderParameterFn, "BrotliDecoderSetParameter") orelse return error.ReferenceUnavailable,
+            .decompress_stream = decoder.lookup(DecompressStreamFn, "BrotliDecoderDecompressStream") orelse return error.ReferenceUnavailable,
             .get_dictionary = common.lookup(GetDictionaryFn, "BrotliGetDictionary") orelse return error.ReferenceUnavailable,
             .get_transforms = common.lookup(GetTransformsFn, "BrotliGetTransforms") orelse return error.ReferenceUnavailable,
             .transform_dictionary_word = common.lookup(TransformDictionaryWordFn, "BrotliTransformDictionaryWord") orelse return error.ReferenceUnavailable,
@@ -303,6 +323,30 @@ pub const Runtime = struct {
             return error.ReferenceDecodeFailed;
         }
         if (written != output.len) return error.SizeMismatch;
+    }
+
+    /// Decode through libbrotli's stateful API so the non-RFC Large Window
+    /// extension can be enabled explicitly. The ordinary `decode` helper
+    /// intentionally remains strict.
+    pub fn decodeLargeWindow(self: Runtime, encoded: []const u8, output: []u8) !void {
+        const state = self.create_decoder(null, null, null) orelse return error.ReferenceDecodeFailed;
+        defer self.destroy_decoder(state);
+        if (self.set_decoder_parameter(state, 1, 1) == 0) return error.ReferenceDecodeFailed;
+
+        var available_in = encoded.len;
+        var next_in: [*]const u8 = encoded.ptr;
+        var available_out = output.len;
+        var next_out: [*]u8 = output.ptr;
+        const result = self.decompress_stream(
+            state,
+            &available_in,
+            &next_in,
+            &available_out,
+            &next_out,
+            null,
+        );
+        if (result != 1) return error.ReferenceDecodeFailed;
+        if (available_in != 0 or available_out != 0) return error.SizeMismatch;
     }
 
     pub fn transformDictionary(

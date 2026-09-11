@@ -221,6 +221,13 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
         pub fn initSparseTrusted(lengths: []const u4, active_symbols: []const u16) Error!Self {
             if (lengths.len > max_symbols or active_symbols.len > max_symbols) return error.CorruptFrame;
             if (active_symbols.len == 0) return Self{};
+            return initSparseTrustedNonEmpty(lengths, active_symbols);
+        }
+
+        // Keep the non-empty path separate so callers with a proven active set
+        // do not retain the large zero-value return as a cold copy path.
+        fn initSparseTrustedNonEmpty(lengths: []const u4, active_symbols: []const u16) Error!Self {
+            if (lengths.len > max_symbols or active_symbols.len == 0 or active_symbols.len > max_symbols) return error.CorruptFrame;
 
             var counts: [max_code_bits + 1]u16 = @splat(0);
             var max_bits_seen: u4 = 0;
@@ -243,13 +250,14 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             }
 
             var table = Self{ .len = active_symbols.len, .max_bits = max_bits_seen };
+            var write_offsets: [max_code_bits + 1]u16 = @splat(0);
             var offset: u16 = 0;
             for (1..max_code_bits + 1) |bits| {
                 table.first_by_bits[bits] = offset;
+                write_offsets[bits] = offset;
                 table.count_by_bits[bits] = counts[bits];
                 offset += counts[bits];
             }
-            var write_offsets = table.first_by_bits;
             for (active_symbols) |symbol| {
                 const bits = lengths[symbol];
                 const canonical = next_code[bits];

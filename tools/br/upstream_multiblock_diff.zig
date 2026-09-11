@@ -222,6 +222,7 @@ pub fn main(init: std.process.Init) !void {
 
     var cases_run: usize = 0;
     var one_shot_cases: usize = 0;
+    var large_window_decode_cases: usize = 0;
     var caller_history_summaries: usize = 0;
     var progress_matrix_runs: usize = 0;
     var progress_matrix_streams: usize = 0;
@@ -353,6 +354,107 @@ pub fn main(init: std.process.Init) !void {
         progress_matrix_streams += 1;
         one_shot_cases += 1;
     }
+
+    // Large Window Brotli occupies an RFC-reserved stream-header code and is
+    // intentionally rejected by Vort's default APIs. Exercise every window
+    // supported by libbrotli's 32-bit implementation through the explicit
+    // opt-in, including both buffered and true byte-progressive decoders.
+    const large_window_payload = "large window brotli compatibility payload 0123456789\n" ** 64;
+    const large_window_options = vort.BrotliDecodeOptions{ .allow_large_window = true };
+    for (25..31) |lgwin_usize| {
+        const lgwin: c_int = @intCast(lgwin_usize);
+        const encoded = try reference.encodeWithOptionsAlloc(init.gpa, large_window_payload, .{
+            .quality = 5,
+            .mode = 0,
+            .lgwin = lgwin,
+        });
+        defer init.gpa.free(encoded);
+
+        if (vort.brSummarizeStream(encoded)) |_| return error.ReferenceDecodeFailed else |err| if (err != error.CorruptFrame) return err;
+        if (vort.brDecodeStreamAlloc(init.gpa, encoded)) |decoded| {
+            init.gpa.free(decoded);
+            return error.ReferenceDecodeFailed;
+        } else |err| if (err != error.CorruptFrame) return err;
+        var strict_buffered = vort.BrotliIncrementalStreamDecoder.initExactCompressedSize(init.gpa, .{
+            .expected_output_len = large_window_payload.len,
+        }, encoded.len);
+        defer strict_buffered.deinit();
+        if (strict_buffered.step(encoded, &.{})) |_| return error.ReferenceDecodeFailed else |err| if (err != error.CorruptFrame) return err;
+        const strict_history = try init.gpa.alloc(u8, large_window_payload.len);
+        defer init.gpa.free(strict_history);
+        var strict_progressive = vort.BrotliIncrementalCopyStreamDecoder.initWithOptions(strict_history, .{
+            .expected_output_len = large_window_payload.len,
+        });
+        if (strict_progressive.step(encoded, &.{})) |_| return error.ReferenceDecodeFailed else |err| if (err != error.CorruptFrame) return err;
+
+        const summary = try vort.brSummarizeStreamAllocWithOptions(init.gpa, encoded, large_window_options);
+        if (summary.window_bits != lgwin_usize or !summary.large_window or summary.decoded_bytes != large_window_payload.len)
+            return error.SizeMismatch;
+        const decoded = try vort.brDecodeStreamAllocWithOptions(init.gpa, encoded, large_window_options);
+        defer init.gpa.free(decoded);
+        if (!std.mem.eql(u8, decoded, large_window_payload)) return error.SizeMismatch;
+
+        const split_a = @min(encoded.len, 1);
+        const split_b = @min(encoded.len, 17);
+        const chunks = [_][]const u8{ encoded[0..split_a], encoded[split_a..split_b], encoded[split_b..] };
+        const joined = try init.gpa.alloc(u8, encoded.len);
+        defer init.gpa.free(joined);
+        const chunked = try vort.brDecodeStreamChunksAllocExactSizeWithOptions(
+            init.gpa,
+            &chunks,
+            joined,
+            large_window_payload.len,
+            large_window_options,
+        );
+        defer init.gpa.free(chunked);
+        if (!std.mem.eql(u8, chunked, large_window_payload)) return error.SizeMismatch;
+
+        try decodeLargeWindowBuffered(init.gpa, encoded, large_window_payload);
+        try decodeLargeWindowProgressive(init.gpa, encoded, large_window_payload, @intCast(lgwin_usize));
+        try reference.decodeLargeWindow(encoded, decoded);
+        large_window_decode_cases += 1;
+    }
+
+    // Prove that support is not merely a header rewrite: this valid stream
+    // copies bytes from 16 MiB back, crossing the RFC 7932 window ceiling while
+    // using a regular distance code with 23 extra bits.
+    const far_prefix_len = @as(usize, 1) << 24;
+    const far_copy_len = 64;
+    const far_prefix = try init.gpa.alloc(u8, far_prefix_len);
+    defer init.gpa.free(far_prefix);
+    for (far_prefix, 0..) |*byte, index| byte.* = @intCast(index & 3);
+    const far_encoded = vort.br.IncrementalTestSupport.encodeLargeWindowFarCopy(init.gpa, far_prefix, far_copy_len, 25) catch |err| {
+        std.debug.print("large-window far fixture encode: {s}\n", .{@errorName(err)});
+        return err;
+    };
+    defer init.gpa.free(far_encoded);
+    if (vort.brDecodeStreamAlloc(init.gpa, far_encoded)) |decoded| {
+        init.gpa.free(decoded);
+        return error.ReferenceDecodeFailed;
+    } else |err| if (err != error.CorruptFrame) return err;
+    const far_expected = try init.gpa.alloc(u8, far_prefix_len + far_copy_len);
+    defer init.gpa.free(far_expected);
+    @memcpy(far_expected[0..far_prefix_len], far_prefix);
+    @memcpy(far_expected[far_prefix_len..], far_prefix[0..far_copy_len]);
+    const far_summary = vort.brSummarizeStreamAllocWithOptions(init.gpa, far_encoded, large_window_options) catch |err| {
+        std.debug.print("large-window far fixture summary: {s} encoded={d}\n", .{ @errorName(err), far_encoded.len });
+        return err;
+    };
+    if (!far_summary.large_window or
+        far_summary.window_bits != 25 or
+        far_summary.decoded_bytes != far_expected.len or
+        far_summary.max_lz77_distance != far_prefix_len) return error.ReferenceDecodeFailed;
+    const far_decoded = vort.brDecodeStreamAllocWithOptions(init.gpa, far_encoded, large_window_options) catch |err| {
+        std.debug.print("large-window far fixture Vort decode: {s} encoded={d}\n", .{ @errorName(err), far_encoded.len });
+        return err;
+    };
+    defer init.gpa.free(far_decoded);
+    if (!std.mem.eql(u8, far_decoded, far_expected)) return error.SizeMismatch;
+    reference.decodeLargeWindow(far_encoded, far_expected) catch |err| {
+        std.debug.print("large-window far fixture libbrotli decode: {s} encoded={d}\n", .{ @errorName(err), far_encoded.len });
+        return err;
+    };
+    large_window_decode_cases += 1;
     const diverse_encoded = try reference.encodeWithOptionsAlloc(init.gpa, diverse_source, .{
         .quality = 8,
         .mode = 0,
@@ -949,8 +1051,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} planned_window_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ cases_run, one_shot_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, planned_window_cases, planned_chunked_window_cases, planned_large_window_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} large_window_decode_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} planned_window_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, planned_window_cases, planned_chunked_window_cases, planned_large_window_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }
@@ -1055,6 +1157,52 @@ fn progressChunkMatrixCaseCount() usize {
 
 fn decodeProgressChunks(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, lgwin: u32, input_chunk_len: usize, output_chunk_len: usize) !void {
     return decodeProgressChunksWithHeaderScratch(allocator, encoded, expected, lgwin, input_chunk_len, output_chunk_len, &.{});
+}
+
+fn decodeLargeWindowBuffered(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8) !void {
+    var decoder = vort.BrotliIncrementalStreamDecoder.initExactCompressedSize(allocator, .{
+        .expected_output_len = expected.len,
+        .decode = .{ .allow_large_window = true },
+    }, encoded.len);
+    defer decoder.deinit();
+    const output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const output_end = @min(output.len, output_offset + 7);
+        const step = try decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]);
+        if (step.progress.input_read == 0 and step.progress.output_written == 0) return error.ReferenceDecodeFailed;
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    if (input_offset != encoded.len or output_offset != expected.len or !std.mem.eql(u8, output, expected))
+        return error.SizeMismatch;
+}
+
+fn decodeLargeWindowProgressive(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, lgwin: u5) !void {
+    const history = try allocator.alloc(u8, @min(expected.len, (@as(usize, 1) << lgwin) - 16));
+    defer allocator.free(history);
+    var decoder = vort.BrotliIncrementalCopyStreamDecoder.initWithOptions(history, .{
+        .expected_output_len = expected.len,
+        .decode = .{ .allow_large_window = true },
+    });
+    const output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const output_end = @min(output.len, output_offset + 7);
+        const step = try decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]);
+        if (step.progress.input_read == 0 and step.progress.output_written == 0) return error.ReferenceDecodeFailed;
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    if (input_offset != encoded.len or output_offset != expected.len or !std.mem.eql(u8, output, expected))
+        return error.SizeMismatch;
 }
 
 fn decodeProgressChunksWithHeaderScratch(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, lgwin: u32, input_chunk_len: usize, output_chunk_len: usize, header_scratch: []u8) !void {

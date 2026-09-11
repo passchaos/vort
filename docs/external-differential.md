@@ -3,6 +3,12 @@
 Vort has black-box differential smoke coverage against Python `zlib` and the
 system `gzip` CLI, plus library-level interoperability probes against other
 system codecs including libsnappy, liblz4, libbrotli, and libzstd.
+The required libbrotli probe also generates Large Window streams for every
+25...30-bit window. It requires strict Vort entrypoints to reject the reserved
+header and verifies explicit opt-in one-shot, split-input, buffered-incremental,
+and byte-progressive decoding against libbrotli's own Large Window decoder. A
+seventh generated stream performs an actual 16 MiB backward copy, just beyond
+RFC 7932's maximum window, and is independently decoded by libbrotli.
 
 ```sh
 zig build run-checksum-zlib-diff

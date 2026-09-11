@@ -13,6 +13,7 @@ pub fn Decoder(comptime Codec: type) type {
         phase: Phase = .window,
         window_state: WindowState = .first,
         window_bits: u5 = 16,
+        large_window: bool = false,
         header_bytes: [Codec.max_stream_header_bytes]u8 = undefined,
         header_len: usize = 0,
         header_bit_count: usize = 0,
@@ -53,6 +54,7 @@ pub fn Decoder(comptime Codec: type) type {
         pub const Options = struct {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
+            decode: Codec.DecodeOptions = .{},
             /// Optional caller-owned storage for compressed meta-block headers.
             /// The decoder uses it only when it is larger than the built-in
             /// bounded buffer. It must remain valid and must not alias input,
@@ -62,7 +64,7 @@ pub fn Decoder(comptime Codec: type) type {
             metadata_block_lengths: []usize = &.{},
         };
         pub const Phase = enum { window, compressed_header, command, literals, distance, copy, dictionary, trailer, stored, metadata, padding, done };
-        const WindowState = enum { first, low3, tail };
+        const WindowState = enum { first, low3, tail, large_marker, large_bits };
         const NextHeaderState = enum { is_last, last_empty, nibbles, metadata_reserved, metadata_count, metadata_len, block_len, uncompressed, alignment };
         pub const Snapshot = struct {
             phase: Phase,
@@ -189,8 +191,30 @@ pub fn Decoder(comptime Codec: type) type {
                                 error.TruncatedFrame => return result(input_read, output_written, .need_input),
                                 else => return self.fail(.window, err),
                             };
-                            if (tail == 1) return self.fail(.window, error.CorruptFrame);
-                            self.window_bits = if (tail == 0) 17 else @as(u5, tail) + 8;
+                            if (tail == 1) {
+                                if (!self.options.decode.allow_large_window) return self.fail(.window, error.CorruptFrame);
+                                self.window_state = .large_marker;
+                            } else {
+                                self.window_bits = if (tail == 0) 17 else @as(u5, tail) + 8;
+                                self.phase = .trailer;
+                            }
+                        },
+                        .large_marker => {
+                            const marker = reader.readBits(u1, 1) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.window, err),
+                            };
+                            if (marker != 0) return self.fail(.window, error.CorruptFrame);
+                            self.window_state = .large_bits;
+                        },
+                        .large_bits => {
+                            const bits = reader.readBits(u6, 6) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.window, err),
+                            };
+                            if (bits < 10 or bits > 30) return self.fail(.window, error.CorruptFrame);
+                            self.window_bits = @intCast(bits);
+                            self.large_window = true;
                             self.phase = .trailer;
                         },
                     };
@@ -208,6 +232,7 @@ pub fn Decoder(comptime Codec: type) type {
                                 self.header_bit_count,
                                 self.decoded_len,
                                 self.final_meta_block,
+                                self.large_window,
                             ) catch |err| switch (err) {
                                 error.TruncatedFrame => null,
                                 else => return self.fail(.compressed_header, err),

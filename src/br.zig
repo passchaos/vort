@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const core = @import("core.zig");
 const lz77 = @import("lz77.zig");
 const bitstream = @import("bitstream.zig");
@@ -32,6 +33,13 @@ const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
 const incremental_planned_encoder_tests = @import("br/incremental/planned_encoder_tests.zig");
 const fast_bit_reader = @import("br/fast_bit_reader.zig");
 
+const large_window_text_section = switch (builtin.object_format) {
+    .elf => ".vort_br_large_window",
+    .macho => "__TEXT,__vort_br_lgwin",
+    .coff => ".text$vort_br_large_window",
+    else => ".text",
+};
+
 pub const Error = core.Error || std.mem.Allocator.Error;
 pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
@@ -64,13 +72,21 @@ pub const PlannedParserOptions = struct {
     lazy_min_gain: usize = 1,
 };
 
+/// Decode policy for standard RFC 7932 streams and the opt-in Large Window
+/// Brotli extension. The extension reuses a reserved RFC window code, so it
+/// remains disabled by default for strict format validation.
+pub const DecodeOptions = struct {
+    allow_large_window: bool = false,
+};
+
 const IncrementalCodec = struct {
     pub const Error = br.Error;
-    pub fn decodedSizeLimited(stream: []const u8, limit: usize) br.Error!usize {
-        return br.decodedStreamSizeLimited(stream, limit);
+    pub const DecodeOptions = br.DecodeOptions;
+    pub fn decodedSizeLimited(stream: []const u8, limit: usize, options: br.DecodeOptions) br.Error!usize {
+        return br.decodedStreamSizeLimitedWithOptions(stream, limit, options);
     }
-    pub fn decodeInto(stream: []const u8, output: []u8) br.Error!usize {
-        return br.decodeStreamInto(stream, output);
+    pub fn decodeInto(stream: []const u8, output: []u8, options: br.DecodeOptions) br.Error!usize {
+        return br.decodeStreamIntoWithOptions(stream, output, options);
     }
 };
 
@@ -134,11 +150,13 @@ const IncrementalLiteralCodec = struct {
 
 const IncrementalCopyCodec = struct {
     pub const Error = br.Error;
+    pub const DecodeOptions = br.DecodeOptions;
     pub const max_stream_header_bytes: usize = default_incremental_compressed_header_bytes;
     pub const Header = struct {
         decoded_len: usize,
-        compressed: MinimalCompressedHeader,
+        compressed: LargeWindowCompressedHeader,
         final: bool,
+        large_window: bool = false,
     };
     pub const ParsedHeader = struct { header: Header, bits_read: usize };
     pub const Command = struct { insert_len: usize, copy_len: usize, implicit_last_distance: bool };
@@ -181,23 +199,23 @@ const IncrementalCopyCodec = struct {
         block.remaining = state.remaining;
     }
 
-    pub fn parseMetaBlockHeader(prefix: []const u8, bit_len: usize, decoded_len: usize, final: bool) IncrementalCopyCodec.Error!ParsedHeader {
+    pub fn parseMetaBlockHeader(prefix: []const u8, bit_len: usize, decoded_len: usize, final: bool, large_window: bool) IncrementalCopyCodec.Error!ParsedHeader {
         var reader = bitstream.BitReader.initBitLength(prefix, bit_len);
-        const compressed = try readMinimalCompressedHeader(&reader);
+        const compressed = try readMinimalCompressedHeaderWithOptions(&reader, large_window);
         return .{
-            .header = .{ .decoded_len = decoded_len, .compressed = compressed, .final = final },
+            .header = .{ .decoded_len = decoded_len, .compressed = compressed, .final = final, .large_window = large_window },
             .bits_read = reader.bitPosition(),
         };
     }
 
     pub fn readLiteral(header: *Header, reader: anytype, previous: u8, second_previous: u8) IncrementalCopyCodec.Error!u8 {
-        try ensureLiteralBlockAny(&header.compressed, reader);
+        try ensureLargeLiteralBlockAny(&header.compressed, reader);
         const block_type = header.compressed.literal_block.current_type;
         if (block_type >= max_literal_block_types) return error.UnsupportedBrotliFeature;
         const context = try literalContextFromMode(header.compressed.literal_context_modes[block_type], previous, second_previous);
         const tree_index = header.compressed.literal_context_map[@as(usize, block_type) * 64 + context];
         if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
-        const tree = try literalPrefixForDecode(&header.compressed, tree_index);
+        const tree = try largeLiteralPrefixForDecode(&header.compressed, tree_index);
         const symbol = try tree.decode(reader);
         if (symbol > 0xff) return error.InvalidHuffmanCode;
         if (header.compressed.literal_block.remaining != 0) header.compressed.literal_block.remaining -= 1;
@@ -205,7 +223,7 @@ const IncrementalCopyCodec = struct {
     }
 
     pub fn readCommand(header: *Header, reader: anytype) IncrementalCopyCodec.Error!Command {
-        const symbol = try readCommandSymbolAny(&header.compressed, reader);
+        const symbol = try readLargeCommandSymbolAny(&header.compressed, reader);
         if (symbol >= command_lut.entries.len) return error.InvalidHuffmanCode;
         const entry = command_lut.entries[symbol];
         const insert_extra = if (entry.insert_extra_bits == 0) 0 else try reader.readBits(usize, entry.insert_extra_bits);
@@ -218,12 +236,12 @@ const IncrementalCopyCodec = struct {
     }
 
     pub fn readDistance(header: *Header, reader: anytype, copy_len: usize, last_distances: *const [4]usize) IncrementalCopyCodec.Error!struct { distance: usize, update_ring: bool } {
-        try ensureDistanceBlockAny(&header.compressed, reader);
+        try ensureLargeDistanceBlockAny(&header.compressed, reader);
         const block_type = header.compressed.distance_block.current_type;
         if (block_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
         const tree_index = header.compressed.distance_context_map[@as(usize, block_type) * 4 + distanceContext(copy_len)];
         if (tree_index >= max_distance_context_trees) return error.UnsupportedBrotliFeature;
-        const tree = try distancePrefixForDecode(&header.compressed, tree_index);
+        const tree = try largeDistancePrefixForDecode(&header.compressed, tree_index);
         const symbol = try tree.decode(reader);
         if (header.compressed.distance_block.remaining != 0) header.compressed.distance_block.remaining -= 1;
         if (symbol < 16) return .{
@@ -235,8 +253,17 @@ const IncrementalCopyCodec = struct {
         const xcode = @as(usize, symbol) - @as(usize, header.compressed.ndirect) - 16;
         const npostfix: usize = header.compressed.npostfix;
         const extra_bits_value = 1 + (xcode >> @intCast(npostfix + 1));
+        if (header.large_window) {
+            @branchHint(.unlikely);
+            if (extra_bits_value > 30) return error.CorruptFrame;
+            const extra = try reader.readBits(u32, @intCast(extra_bits_value));
+            return .{
+                .distance = try resolveLargeWindowRegularDistanceParts(header.compressed.npostfix, header.compressed.ndirect, xcode, extra_bits_value, extra),
+                .update_ring = true,
+            };
+        }
         if (extra_bits_value > 24) return error.CorruptFrame;
-        const extra = try reader.readBits(usize, @intCast(extra_bits_value));
+        const extra = try reader.readBits(u32, @intCast(extra_bits_value));
         return .{
             .distance = resolveRegularDistanceParts(header.compressed.npostfix, header.compressed.ndirect, xcode, extra_bits_value, extra),
             .update_ring = true,
@@ -252,7 +279,7 @@ const IncrementalCopyCodec = struct {
     }
 };
 
-fn ensureDistanceBlockAny(header: *MinimalCompressedHeader, reader: anytype) Error!void {
+fn ensureLargeDistanceBlockAny(header: *LargeWindowCompressedHeader, reader: anytype) Error!void {
     if (header.distance_block.block_type_count > 1 and header.distance_block.remaining == 0)
         try switchBlockAny(max_distance_block_types, &header.distance_block, reader);
 }
@@ -537,6 +564,40 @@ test {
 pub const IncrementalTestSupport = struct {
     pub fn encodeStored(allocator: std.mem.Allocator, payload: []const u8) Error![]u8 {
         return encodeStoredStreamAlloc(allocator, payload);
+    }
+
+    /// Build a final Large Window stream with one explicit regular-distance
+    /// copy. This test-only fixture is used to prove that distance symbols and
+    /// extra bits beyond RFC 7932's 24-bit limit are actually consumed.
+    pub fn encodeLargeWindowFarCopy(allocator: std.mem.Allocator, prefix: []const u8, copy_len: usize, window_bits: u5) Error![]u8 {
+        if (window_bits < 25 or window_bits > 30 or copy_len < 2) return error.InvalidBlockPlan;
+        if (prefix.len > max_uncompressed_meta_block_len or prefix.len <= (@as(usize, 1) << 24) - 16) return error.InvalidBlockPlan;
+        const command = commandEntryForLengths(0, copy_len) orelse return error.InvalidBlockPlan;
+        if (command.command.distance_code != -1) return error.InvalidBlockPlan;
+        const distance = encoder_distance.encode(prefix.len, 0) orelse return error.InvalidBlockPlan;
+
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeLargeWindowBits(allocator, &writer, window_bits);
+        try writeUncompressedMetaBlock(allocator, &writer, prefix);
+        try writeLastCompressedMetaBlockHeader(allocator, &writer, copy_len);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+        try writer.writeBits(allocator, 0, 4); // NDIRECT
+        try writer.writeBits(allocator, 0, 2); // literal context mode
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeSimpleSingleSymbolPrefix(allocator, &writer, 256, 0);
+        try writeSimpleSingleSymbolPrefix(allocator, &writer, 704, command.symbol);
+        const distance_alphabet_size_max = 16 + (62 << 1); // NPOSTFIX=0, NDIRECT=0.
+        try writeSimpleSingleSymbolPrefixRuntime(allocator, &writer, distance_alphabet_size_max, distance.symbol);
+        try writeCommandLengthExtras(allocator, &writer, command, 0, copy_len);
+        try writer.writeBits(allocator, distance.extra, distance.extra_bits);
+        if (writer.bit_index != 0) writer.alignToByte();
+        return encoded.toOwnedSlice(allocator);
     }
 
     /// Build a valid final compressed stream that declares all 256 RFC literal
@@ -1027,6 +1088,10 @@ pub fn encodedStoredStreamChunksBoundWithOptions(chunks: []const []const u8, opt
 
 pub const StreamSummary = struct {
     window_bits: u5,
+    /// True only when the stream used the non-RFC Large Window marker. This
+    /// remains distinct from `window_bits`, because the extension can encode
+    /// values that also exist in RFC 7932.
+    large_window: bool = false,
     input_bytes: usize,
     decoded_bytes: usize = 0,
     meta_block_count: usize = 0,
@@ -1043,6 +1108,7 @@ pub const StreamSummary = struct {
     static_dictionary_bytes: usize = 0,
     lz77_copy_count: usize = 0,
     lz77_copy_bytes: usize = 0,
+    max_lz77_distance: usize = 0,
     non_overlapping_lz77_copy_count: usize = 0,
     non_overlapping_lz77_copy_bytes: usize = 0,
     short_non_overlapping_lz77_copy_count: usize = 0,
@@ -1085,6 +1151,7 @@ const StreamSummaryMetaBlockStats = struct {
     static_dictionary_bytes: usize = 0,
     lz77_copy_count: usize = 0,
     lz77_copy_bytes: usize = 0,
+    max_lz77_distance: usize = 0,
     non_overlapping_lz77_copy_count: usize = 0,
     non_overlapping_lz77_copy_bytes: usize = 0,
     short_non_overlapping_lz77_copy_count: usize = 0,
@@ -1305,35 +1372,14 @@ const inline_literal_tree_count = 64;
 const inline_command_tree_count = 32;
 const inline_distance_tree_count = 64;
 
-const MinimalCompressedHeader = struct {
-    npostfix: u2,
-    ndirect: u16,
-    literal_tree_count: u16 = 1,
-    distance_tree_count: u16 = 1,
-    literal_context_modes: [max_literal_block_types]u2,
-    literal_block: BlockSwitchState(max_literal_block_types),
-    literal_context_map: [max_literal_block_types * 64]u8,
-    literal_trees: [inline_literal_tree_count]PrefixCode(256),
-    packed_literal_trees: [max_literal_context_trees - inline_literal_tree_count]PackedPrefixCode(256) = @splat(.{}),
-    active_packed_literal_tree: PrefixCode(256) = .{},
-    active_packed_literal_tree_index: u16 = std.math.maxInt(u16),
-    command_block: BlockSwitchState(max_command_block_types),
-    insert_copy_trees: [inline_command_tree_count]PrefixCode(704),
-    packed_insert_copy_trees: [max_command_block_types - inline_command_tree_count]PackedPrefixCode(704) = @splat(.{}),
-    active_packed_insert_copy_tree: PrefixCode(704) = .{},
-    active_packed_insert_copy_tree_index: u16 = std.math.maxInt(u16),
-    distance_block: BlockSwitchState(max_distance_block_types),
-    distance_context_map: [max_distance_block_types * 4]u8,
-    distance_trees: [inline_distance_tree_count]PrefixCode(max_distance_alphabet_size),
-    packed_distance_trees: [max_distance_context_trees - inline_distance_tree_count]PackedPrefixCode(max_distance_alphabet_size) = @splat(.{}),
-    active_packed_distance_tree: PrefixCode(max_distance_alphabet_size) = .{},
-    active_packed_distance_tree_index: u16 = std.math.maxInt(u16),
-};
-
-pub const CompressedHeaderProfile = header_profile.Profile;
-pub const CompressedHeaderFamily = header_profile.Family;
-
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
+// Large Window Brotli deliberately advertises 62 distance-bit groups in its
+// wire alphabet. Unlike RFC 7932's 24 groups, each group has two halves, so
+// the maximum wire shape is 16 + 120 + (62 << (3 + 1)) = 1128 symbols. The
+// 32-bit-safe distance ceiling restricts the usable prefix to at most 544
+// symbols (NPOSTFIX=3, NDIRECT=120), so decoder tables need only that bound.
+const large_wire_max_distance_alphabet_size = 16 + 120 + (62 << (3 + 1));
+const large_max_distance_alphabet_size = 544;
 // Planned streams fix NPOSTFIX=0 and NDIRECT=15, so their distance alphabet is
 // exactly 79 symbols even though the decoder accepts the RFC-wide 520-symbol
 // maximum. Keep encoder scratch proportional to what its header advertises.
@@ -1360,6 +1406,69 @@ const max_command_block_types = 256;
 // keep the complete wire range rather than rejecting otherwise valid input.
 const max_distance_block_types = 256;
 const max_distance_context_trees = 256;
+
+fn MinimalCompressedHeaderType(comptime literal_alphabet_capacity: usize, comptime command_alphabet_capacity: usize, comptime distance_alphabet_capacity: usize) type {
+    return struct {
+        npostfix: u2,
+        ndirect: u16,
+        literal_tree_count: u16 = 1,
+        distance_tree_count: u16 = 1,
+        literal_context_modes: [max_literal_block_types]u2,
+        literal_block: BlockSwitchState(max_literal_block_types),
+        literal_context_map: [max_literal_block_types * 64]u8,
+        literal_trees: [inline_literal_tree_count]PrefixCode(literal_alphabet_capacity),
+        packed_literal_trees: [max_literal_context_trees - inline_literal_tree_count]PackedPrefixCode(literal_alphabet_capacity) = @splat(.{}),
+        active_packed_literal_tree: PrefixCode(literal_alphabet_capacity) = .{},
+        active_packed_literal_tree_index: u16 = std.math.maxInt(u16),
+        command_block: BlockSwitchState(max_command_block_types),
+        insert_copy_trees: [inline_command_tree_count]PrefixCode(command_alphabet_capacity),
+        packed_insert_copy_trees: [max_command_block_types - inline_command_tree_count]PackedPrefixCode(command_alphabet_capacity) = @splat(.{}),
+        active_packed_insert_copy_tree: PrefixCode(command_alphabet_capacity) = .{},
+        active_packed_insert_copy_tree_index: u16 = std.math.maxInt(u16),
+        distance_block: BlockSwitchState(max_distance_block_types),
+        distance_context_map: [max_distance_block_types * 4]u8,
+        distance_trees: [inline_distance_tree_count]PrefixCode(distance_alphabet_capacity),
+        packed_distance_trees: [max_distance_context_trees - inline_distance_tree_count]PackedPrefixCode(distance_alphabet_capacity) = @splat(.{}),
+        active_packed_distance_tree: PrefixCode(distance_alphabet_capacity) = .{},
+        active_packed_distance_tree_index: u16 = std.math.maxInt(u16),
+    };
+}
+
+const MinimalCompressedHeader = struct {
+    npostfix: u2,
+    ndirect: u16,
+    literal_tree_count: u16 = 1,
+    distance_tree_count: u16 = 1,
+    literal_context_modes: [max_literal_block_types]u2,
+    literal_block: BlockSwitchState(max_literal_block_types),
+    literal_context_map: [max_literal_block_types * 64]u8,
+    literal_trees: [inline_literal_tree_count]PrefixCode(256),
+    packed_literal_trees: [max_literal_context_trees - inline_literal_tree_count]PackedPrefixCode(256) = @splat(.{}),
+    active_packed_literal_tree: PrefixCode(256) = .{},
+    active_packed_literal_tree_index: u16 = std.math.maxInt(u16),
+    command_block: BlockSwitchState(max_command_block_types),
+    insert_copy_trees: [inline_command_tree_count]PrefixCode(704),
+    packed_insert_copy_trees: [max_command_block_types - inline_command_tree_count]PackedPrefixCode(704) = @splat(.{}),
+    active_packed_insert_copy_tree: PrefixCode(704) = .{},
+    active_packed_insert_copy_tree_index: u16 = std.math.maxInt(u16),
+    distance_block: BlockSwitchState(max_distance_block_types),
+    distance_context_map: [max_distance_block_types * 4]u8,
+    distance_trees: [inline_distance_tree_count]PrefixCode(max_distance_alphabet_size),
+    packed_distance_trees: [max_distance_context_trees - inline_distance_tree_count]PackedPrefixCode(max_distance_alphabet_size) = @splat(.{}),
+    active_packed_distance_tree: PrefixCode(max_distance_alphabet_size) = .{},
+    active_packed_distance_tree_index: u16 = std.math.maxInt(u16),
+};
+const large_literal_alphabet_capacity = 257;
+const large_command_alphabet_capacity = 705;
+const LargeWindowCompressedHeader = MinimalCompressedHeaderType(
+    large_literal_alphabet_capacity,
+    large_command_alphabet_capacity,
+    large_max_distance_alphabet_size,
+);
+
+pub const CompressedHeaderProfile = header_profile.Profile;
+pub const CompressedHeaderFamily = header_profile.Family;
+
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 const planner_max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
 const SummaryError = Error || error{SummaryHistoryExhausted};
@@ -1376,6 +1485,11 @@ pub const CompressedSupportLimits = struct {
 fn maxBackwardDistanceForWindow(window_bits: u5, output_len: usize) usize {
     return @min(output_len, (@as(usize, 1) << window_bits) - 16);
 }
+
+const WindowInfo = struct {
+    bits: u5,
+    large: bool = false,
+};
 
 pub fn compressedSupportLimits() CompressedSupportLimits {
     return .{
@@ -1430,6 +1544,17 @@ const LiteralHistory = struct {
         const mode = header.literal_context_modes[header.literal_block.current_type];
         const needed: u2 = if (mode <= 1) 1 else 2;
         if (self.known_suffix_len < needed) return contextIndependentLiteralContext(header) orelse error.SummaryHistoryExhausted;
+        return try literalContextFromMode(
+            mode,
+            self.previous[1],
+            self.previous[0],
+        );
+    }
+
+    fn contextLarge(self: *const LiteralHistory, header: *const LargeWindowCompressedHeader) SummaryError!usize {
+        const mode = header.literal_context_modes[header.literal_block.current_type];
+        const needed: u2 = if (mode <= 1) 1 else 2;
+        if (self.known_suffix_len < needed) return contextIndependentLargeLiteralContext(header) orelse error.SummaryHistoryExhausted;
         return try literalContextFromMode(
             mode,
             self.previous[1],
@@ -1549,6 +1674,17 @@ const LiteralHistory = struct {
 };
 
 fn contextIndependentLiteralContext(header: *const MinimalCompressedHeader) ?usize {
+    const block_type = header.literal_block.current_type;
+    if (block_type >= max_literal_block_types) return null;
+    const map_start = @as(usize, block_type) * 64;
+    const first_tree = header.literal_context_map[map_start];
+    for (header.literal_context_map[map_start..][0..64]) |tree_index| {
+        if (tree_index != first_tree) return null;
+    }
+    return 0;
+}
+
+fn contextIndependentLargeLiteralContext(header: *const LargeWindowCompressedHeader) ?usize {
     const block_type = header.literal_block.current_type;
     if (block_type >= max_literal_block_types) return null;
     const map_start = @as(usize, block_type) * 64;
@@ -3353,11 +3489,6 @@ pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
-    // Every non-metadata Brotli meta-block declares its exact decoded length
-    // before the payload. Grow the owned result at that boundary and decode it
-    // immediately, avoiding the former full summary pass plus second decode.
-    // Append APIs deliberately retain preflight because they promise not to
-    // change caller-owned output when validation fails.
     var reader = bitstream.BitReader.init(stream);
     const window_bits = try readWindowBitsValue(&reader);
     var written: usize = 0;
@@ -3394,10 +3525,70 @@ pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8
     }
 }
 
+pub fn decodeStreamAllocWithOptions(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions) Error![]u8 {
+    if (!options.allow_large_window) return decodeStreamAlloc(allocator, stream);
+    return try decodeStreamAllocLimitedWithOptions(allocator, stream, std.math.maxInt(usize), options);
+}
+
+pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions) Error![]u8 {
+    if (!options.allow_large_window) return decodeStreamAllocLimited(allocator, stream, max_output_len);
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+
+    // Every non-metadata Brotli meta-block declares its exact decoded length
+    // before the payload. Grow the owned result at that boundary and decode it
+    // immediately, avoiding the former full summary pass plus second decode.
+    // Append APIs deliberately retain preflight because they promise not to
+    // change caller-owned output when validation fails.
+    var reader = bitstream.BitReader.init(stream);
+    const window = try readWindowInfo(&reader, options);
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    while (true) {
+        switch (try readStreamMetaBlockHeader(&reader)) {
+            .end => {
+                try ensureZeroPaddingAndEnd(reader);
+                std.debug.assert(written == out.items.len);
+                return out.toOwnedSlice(allocator);
+            },
+            .metadata => try skipMetadataMetaBlock(&reader),
+            .compressed => |header| {
+                const meta_block_end = try checkedDecodedEnd(written, header.decoded_len, max_output_len);
+                try out.resize(allocator, meta_block_end);
+                if (stream.len >= large_stream_decode_threshold)
+                    try processLargeCompressedMetaBlockWithOptions(&reader, out.items, &written, header.decoded_len, &last_distances, window)
+                else
+                    try processMinimalCompressedMetaBlockWithOptions(&reader, out.items, &written, header.decoded_len, &last_distances, window);
+                if (written != meta_block_end) return error.SizeMismatch;
+                if (header.final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return out.toOwnedSlice(allocator);
+                }
+            },
+            .uncompressed => |meta_block_len| {
+                const meta_block_end = try checkedDecodedEnd(written, meta_block_len, max_output_len);
+                try out.resize(allocator, meta_block_end);
+                try consumeZeroPaddingToByte(&reader);
+                try reader.readAlignedBytes(out.items[written..meta_block_end]);
+                written = meta_block_end;
+            },
+        }
+    }
+}
+
 pub fn decodeStreamAllocExactSize(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize) Error![]u8 {
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = try decodeStreamIntoExactSize(stream, out, expected_output_len);
+    if (written != expected_output_len) return error.SizeMismatch;
+    return out;
+}
+
+pub fn decodeStreamAllocExactSizeWithOptions(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error![]u8 {
+    if (!options.allow_large_window) return decodeStreamAllocExactSize(allocator, stream, expected_output_len);
+    const out = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(out);
+    const written = try decodeStreamIntoExactSizeWithOptions(stream, out, expected_output_len, options);
     if (written != expected_output_len) return error.SizeMismatch;
     return out;
 }
@@ -3422,11 +3613,49 @@ pub fn decodeStreamAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayLi
     return written;
 }
 
+pub fn decodeStreamAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, options: DecodeOptions) Error!usize {
+    if (!options.allow_large_window) return decodeStreamAppend(allocator, out, stream);
+    return try decodeStreamAppendLimitedWithOptions(allocator, out, stream, std.math.maxInt(usize), options);
+}
+
+pub fn decodeStreamAppendLimitedWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!usize {
+    if (!options.allow_large_window) return decodeStreamAppendLimited(allocator, out, stream, max_output_len);
+    const decoded_len = try decodedStreamSizeAllocLimitedWithOptions(allocator, stream, max_output_len, options);
+    try out.ensureUnusedCapacity(allocator, decoded_len);
+    const start = out.items.len;
+    const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
+    const written = decodeStreamIntoWithOptions(stream, slot, options) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != decoded_len) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
 pub fn decodeStreamAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize) Error!usize {
     try out.ensureUnusedCapacity(allocator, expected_output_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
     const written = decodeStreamIntoExactSize(stream, slot, expected_output_len) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != expected_output_len) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn decodeStreamAppendExactSizeWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
+    if (!options.allow_large_window) return decodeStreamAppendExactSize(allocator, out, stream, expected_output_len);
+    try out.ensureUnusedCapacity(allocator, expected_output_len);
+    const start = out.items.len;
+    const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
+    const written = decodeStreamIntoExactSizeWithOptions(stream, slot, expected_output_len, options) catch |err| {
         out.items.len = start;
         return err;
     };
@@ -3475,9 +3704,6 @@ fn checkedDecodedEnd(written: usize, decoded_len: usize, max_output_len: usize) 
 }
 
 pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
-    // The direct stored encoder's common WBITS=16 wire is payload+4 bytes.
-    // Gate the colder shape validation on that exact-size relation so ordinary
-    // compressed frames enter their established hot path without another call.
     if (stream.len >= 4 and stream.len - 4 == output.len) {
         if (singleUncompressedStreamPayload(stream)) |payload| {
             std.debug.assert(payload.len == output.len);
@@ -3499,6 +3725,47 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
             .metadata => try skipMetadataMetaBlock(&reader),
             .compressed => |header| {
                 try processMinimalCompressedMetaBlock(&reader, output, &written, header.decoded_len, &last_distances, window_bits);
+                if (header.final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return written;
+                }
+            },
+            .uncompressed => |meta_block_len| {
+                try consumeZeroPaddingToByte(&reader);
+                if (output.len - written < meta_block_len) return error.OutputTooSmall;
+                try reader.readAlignedBytes(output[written..][0..meta_block_len]);
+                written += meta_block_len;
+            },
+        }
+    }
+}
+
+pub noinline fn decodeStreamIntoWithOptions(stream: []const u8, output: []u8, options: DecodeOptions) Error!usize {
+    if (!options.allow_large_window) return decodeStreamInto(stream, output);
+    // The direct stored encoder's common WBITS=16 wire is payload+4 bytes.
+    // Gate the colder shape validation on that exact-size relation so ordinary
+    // compressed frames enter their established hot path without another call.
+    if (stream.len >= 4 and stream.len - 4 == output.len) {
+        if (singleUncompressedStreamPayload(stream)) |payload| {
+            std.debug.assert(payload.len == output.len);
+            @memcpy(output, payload);
+            return payload.len;
+        }
+    }
+    if (stream.len >= large_stream_decode_threshold) return decodeLargeStreamIntoWithOptions(stream, output, options);
+    var reader = bitstream.BitReader.init(stream);
+    const window = try readWindowInfo(&reader, options);
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    while (true) {
+        switch (try readStreamMetaBlockHeader(&reader)) {
+            .end => {
+                try ensureZeroPaddingAndEnd(reader);
+                return written;
+            },
+            .metadata => try skipMetadataMetaBlock(&reader),
+            .compressed => |header| {
+                try processMinimalCompressedMetaBlockWithOptions(&reader, output, &written, header.decoded_len, &last_distances, window);
                 if (header.final) {
                     try ensureZeroPaddingAndEnd(reader);
                     return written;
@@ -3595,13 +3862,54 @@ noinline fn decodeLargeStreamInto(stream: []const u8, output: []u8) Error!usize 
     }
 }
 
+noinline fn decodeLargeStreamIntoWithOptions(stream: []const u8, output: []u8, options: DecodeOptions) Error!usize {
+    var reader = bitstream.BitReader.init(stream);
+    const window = try readWindowInfo(&reader, options);
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    while (true) {
+        switch (try readStreamMetaBlockHeader(&reader)) {
+            .end => {
+                try ensureZeroPaddingAndEnd(reader);
+                return written;
+            },
+            .metadata => try skipMetadataMetaBlock(&reader),
+            .compressed => |meta| {
+                try processLargeCompressedMetaBlockWithOptions(&reader, output, &written, meta.decoded_len, &last_distances, window);
+                if (meta.final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return written;
+                }
+            },
+            .uncompressed => |meta_block_len| {
+                try consumeZeroPaddingToByte(&reader);
+                if (output.len - written < meta_block_len) return error.OutputTooSmall;
+                try reader.readAlignedBytes(output[written..][0..meta_block_len]);
+                written += meta_block_len;
+            },
+        }
+    }
+}
+
 pub fn decodeStreamIntoLimited(stream: []const u8, output: []u8, max_output_len: usize) Error!usize {
-    // Match the allocator-returning and append limited APIs: perform the full
-    // Brotli preflight first so callers see `OutputLimitExceeded` before any
-    // mutation when the stream's declared/decoded size is outside policy.
     const decoded_len = try decodedStreamSizeLimited(stream, max_output_len);
     if (output.len < decoded_len) return error.OutputTooSmall;
     const written = decodeStreamInto(stream, output[0..decoded_len]) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != decoded_len) return error.SizeMismatch;
+    return written;
+}
+
+pub fn decodeStreamIntoLimitedWithOptions(stream: []const u8, output: []u8, max_output_len: usize, options: DecodeOptions) Error!usize {
+    if (!options.allow_large_window) return decodeStreamIntoLimited(stream, output, max_output_len);
+    // Match the allocator-returning and append limited APIs: perform the full
+    // Brotli preflight first so callers see `OutputLimitExceeded` before any
+    // mutation when the stream's declared/decoded size is outside policy.
+    const decoded_len = try decodedStreamSizeLimitedWithOptions(stream, max_output_len, options);
+    if (output.len < decoded_len) return error.OutputTooSmall;
+    const written = decodeStreamIntoWithOptions(stream, output[0..decoded_len], options) catch |err| switch (err) {
         error.OutputTooSmall => return error.SizeMismatch,
         else => return err,
     };
@@ -3619,12 +3927,33 @@ pub fn decodeStreamIntoExactSize(stream: []const u8, output: []u8, expected_outp
     return written;
 }
 
+pub fn decodeStreamIntoExactSizeWithOptions(stream: []const u8, output: []u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
+    if (!options.allow_large_window) return decodeStreamIntoExactSize(stream, output, expected_output_len);
+    if (output.len < expected_output_len) return error.OutputTooSmall;
+    const written = decodeStreamIntoWithOptions(stream, output[0..expected_output_len], options) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return written;
+}
+
 pub fn decodedStreamSize(stream: []const u8) Error!usize {
     return try decodedStreamSizeLimited(stream, std.math.maxInt(usize));
 }
 
 pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error!usize {
     return (try summarizeStreamLimited(stream, max_output_len)).decoded_bytes;
+}
+
+pub fn decodedStreamSizeWithOptions(stream: []const u8, options: DecodeOptions) Error!usize {
+    if (!options.allow_large_window) return decodedStreamSize(stream);
+    return try decodedStreamSizeLimitedWithOptions(stream, std.math.maxInt(usize), options);
+}
+
+pub fn decodedStreamSizeLimitedWithOptions(stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!usize {
+    if (!options.allow_large_window) return decodedStreamSizeLimited(stream, max_output_len);
+    return (try summarizeStreamLimitedWithOptions(stream, max_output_len, options)).decoded_bytes;
 }
 
 pub fn summarizeStream(stream: []const u8) Error!StreamSummary {
@@ -3636,12 +3965,35 @@ pub fn summarizeStreamLimited(stream: []const u8, max_output_len: usize) Error!S
     return try summarizeStreamLimitedWithDiagnostics(stream, max_output_len, &diagnostics);
 }
 
+pub fn summarizeStreamWithOptions(stream: []const u8, options: DecodeOptions) Error!StreamSummary {
+    if (!options.allow_large_window) return summarizeStream(stream);
+    return try summarizeStreamLimitedWithOptions(stream, std.math.maxInt(usize), options);
+}
+
+pub fn summarizeStreamLimitedWithOptions(stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
+    if (!options.allow_large_window) return summarizeStreamLimited(stream, max_output_len);
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    return try summarizeStreamLimitedWithOptionsAndDiagnostics(stream, max_output_len, options, &diagnostics);
+}
+
 pub fn summarizeStreamWithDiagnostics(stream: []const u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     return try summarizeStreamLimitedWithDiagnostics(stream, std.math.maxInt(usize), diagnostics);
 }
 
+pub fn summarizeStreamWithOptionsAndDiagnostics(stream: []const u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return try summarizeStreamLimitedWithOptionsAndDiagnostics(stream, std.math.maxInt(usize), options, diagnostics);
+}
+
 pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, null) catch |err| switch (err) {
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, .{}, diagnostics, null) catch |err| switch (err) {
+        error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
+        else => |public_err| public_err,
+    };
+}
+
+pub fn summarizeStreamLimitedWithOptionsAndDiagnostics(stream: []const u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    if (!options.allow_large_window) return summarizeStreamLimitedWithDiagnostics(stream, max_output_len, diagnostics);
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null) catch |err| switch (err) {
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
         else => |public_err| public_err,
     };
@@ -3652,20 +4004,36 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
 /// if a context-dependent literal does require discarded history, the public
 /// error remains `UnsupportedBrotliFeature` just like the fixed-scratch helper.
 pub fn summarizeStreamWithHistory(stream: []const u8, history: []u8) Error!StreamSummary {
-    return summarizeStreamLimitedWithHistory(stream, history, std.math.maxInt(usize));
+    return summarizeStreamWithHistoryAndOptions(stream, history, .{});
 }
 
 pub fn summarizeStreamLimitedWithHistory(stream: []const u8, history: []u8, max_output_len: usize) Error!StreamSummary {
+    return summarizeStreamLimitedWithHistoryAndOptions(stream, history, max_output_len, .{});
+}
+
+pub fn summarizeStreamWithHistoryAndOptions(stream: []const u8, history: []u8, options: DecodeOptions) Error!StreamSummary {
+    return summarizeStreamLimitedWithHistoryAndOptions(stream, history, std.math.maxInt(usize), options);
+}
+
+pub fn summarizeStreamLimitedWithHistoryAndOptions(stream: []const u8, history: []u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
     var diagnostics: StreamSummaryDiagnostics = .{};
-    return summarizeStreamLimitedWithHistoryAndDiagnostics(stream, history, max_output_len, &diagnostics);
+    return summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream, history, max_output_len, options, &diagnostics);
 }
 
 pub fn summarizeStreamWithHistoryAndDiagnostics(stream: []const u8, history: []u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     return summarizeStreamLimitedWithHistoryAndDiagnostics(stream, history, std.math.maxInt(usize), diagnostics);
 }
 
+pub fn summarizeStreamWithHistoryAndOptionsAndDiagnostics(stream: []const u8, history: []u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream, history, std.math.maxInt(usize), options, diagnostics);
+}
+
 pub fn summarizeStreamLimitedWithHistoryAndDiagnostics(stream: []const u8, history: []u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, history) catch |err| switch (err) {
+    return summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream, history, max_output_len, .{}, diagnostics);
+}
+
+pub fn summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream: []const u8, history: []u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history) catch |err| switch (err) {
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
         else => |public_err| public_err,
     };
@@ -3676,33 +4044,49 @@ pub fn summarizeStreamLimitedWithHistoryAndDiagnostics(stream: []const u8, histo
 /// scratch do not allocate; larger history is allocated only after that fast
 /// path proves it cannot resolve a literal context.
 pub fn summarizeStreamAlloc(allocator: std.mem.Allocator, stream: []const u8) Error!StreamSummary {
-    return try summarizeStreamAllocLimited(allocator, stream, std.math.maxInt(usize));
+    return try summarizeStreamAllocWithOptions(allocator, stream, .{});
 }
 
 pub fn summarizeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error!StreamSummary {
+    return try summarizeStreamAllocLimitedWithOptions(allocator, stream, max_output_len, .{});
+}
+
+pub fn summarizeStreamAllocWithOptions(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions) Error!StreamSummary {
+    return try summarizeStreamAllocLimitedWithOptions(allocator, stream, std.math.maxInt(usize), options);
+}
+
+pub fn summarizeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
     var diagnostics: StreamSummaryDiagnostics = .{};
-    return try summarizeStreamAllocLimitedWithDiagnostics(allocator, stream, max_output_len, &diagnostics);
+    return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, max_output_len, options, &diagnostics);
 }
 
 pub fn summarizeStreamAllocWithDiagnostics(allocator: std.mem.Allocator, stream: []const u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return try summarizeStreamAllocLimitedWithDiagnostics(allocator, stream, std.math.maxInt(usize), diagnostics);
+    return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, std.math.maxInt(usize), .{}, diagnostics);
 }
 
 pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    if (allocatingSummaryHistoryHint(stream, max_output_len)) |history_len| {
+    return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, max_output_len, .{}, diagnostics);
+}
+
+pub fn summarizeStreamAllocWithOptionsAndDiagnostics(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, std.math.maxInt(usize), options, diagnostics);
+}
+
+pub fn summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    if (allocatingSummaryHistoryHint(stream, max_output_len, options)) |history_len| {
         const history = allocator.alloc(u8, history_len) catch |alloc_err| {
             // The header-only hint is deliberately speculative. Preserve the
             // old error precedence when allocation fails: malformed streams
             // and streams that never need the larger history still complete
             // through the fixed in-state ring, while a genuine exhaustion
             // reports the original allocation failure.
-            return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, null) catch |summary_err| switch (summary_err) {
+            return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null) catch |summary_err| switch (summary_err) {
                 error.SummaryHistoryExhausted => return alloc_err,
                 else => |public_err| return public_err,
             };
         };
         defer allocator.free(history);
-        return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, history) catch |err| switch (err) {
+        return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history) catch |err| switch (err) {
             error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
             else => |public_err| public_err,
         };
@@ -3712,21 +4096,21 @@ pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, 
     // 16-bit window. Avoid reserving as much as 16 MiB merely because the wire
     // header advertises WBITS=24; retry with the declared window only when the
     // fixed summary actually loses context needed to select a literal tree.
-    const fixed_summary = summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, null) catch |err| switch (err) {
+    const fixed_summary = summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null) catch |err| switch (err) {
         error.SummaryHistoryExhausted => null,
         else => |public_err| return public_err,
     };
     if (fixed_summary) |summary| return summary;
 
     var reader = bitstream.BitReader.init(stream);
-    const window_bits = readWindowBitsValue(&reader) catch |err| {
+    const window_bits = (readWindowInfo(&reader, options) catch |err| {
         diagnostics.* = .{ .phase = .window_bits };
         return err;
-    };
+    }).bits;
     const history_len = @min(max_output_len, (@as(usize, 1) << window_bits) - 16);
     const history = try allocator.alloc(u8, history_len);
     defer allocator.free(history);
-    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, history) catch |err| switch (err) {
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history) catch |err| switch (err) {
         // A full RFC window can replay every legal backward copy. Preserve the
         // public error contract if a future decoder extension violates that
         // invariant rather than leaking this private retry signal.
@@ -3737,10 +4121,10 @@ pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, 
 
 const eager_summary_history_decoded_len_max = 2 * 1024 * 1024;
 
-fn allocatingSummaryHistoryHint(stream: []const u8, max_output_len: usize) ?usize {
+fn allocatingSummaryHistoryHint(stream: []const u8, max_output_len: usize, options: DecodeOptions) ?usize {
     if (stream.len < large_stream_decode_threshold) return null;
     var reader = bitstream.BitReader.init(stream);
-    const window_bits = readWindowBitsValue(&reader) catch return null;
+    const window_bits = (readWindowInfo(&reader, options) catch return null).bits;
     const header = readStreamMetaBlockHeader(&reader) catch return null;
     const compressed = switch (header) {
         .compressed => |value| value,
@@ -3762,10 +4146,10 @@ test "br allocating summary history hint is bounded and conservative" {
     try final_large.resize(std.testing.allocator, large_stream_decode_threshold);
     try std.testing.expectEqual(
         planner_max_backward_distance + 1,
-        allocatingSummaryHistoryHint(final_large.items, planner_max_backward_distance + 1).?,
+        allocatingSummaryHistoryHint(final_large.items, planner_max_backward_distance + 1, .{}).?,
     );
-    try std.testing.expect(allocatingSummaryHistoryHint(final_large.items, planner_max_backward_distance) == null);
-    try std.testing.expect(allocatingSummaryHistoryHint(final_large.items[0 .. large_stream_decode_threshold - 1], std.math.maxInt(usize)) == null);
+    try std.testing.expect(allocatingSummaryHistoryHint(final_large.items, planner_max_backward_distance, .{}) == null);
+    try std.testing.expect(allocatingSummaryHistoryHint(final_large.items[0 .. large_stream_decode_threshold - 1], std.math.maxInt(usize), .{}) == null);
     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     var diagnostics: StreamSummaryDiagnostics = undefined;
     const malformed_result = summarizeStreamAllocWithDiagnostics(failing.allocator(), final_large.items, &diagnostics);
@@ -3778,7 +4162,7 @@ test "br allocating summary history hint is bounded and conservative" {
     try writeWindowBits(std.testing.allocator, &non_final_writer, 20);
     try writeCompressedMetaBlockHeader(std.testing.allocator, &non_final_writer, planner_max_backward_distance + 1, false);
     try non_final.resize(std.testing.allocator, large_stream_decode_threshold);
-    try std.testing.expect(allocatingSummaryHistoryHint(non_final.items, std.math.maxInt(usize)) == null);
+    try std.testing.expect(allocatingSummaryHistoryHint(non_final.items, std.math.maxInt(usize), .{}) == null);
 
     var too_large: std.ArrayList(u8) = .empty;
     defer too_large.deinit(std.testing.allocator);
@@ -3786,7 +4170,7 @@ test "br allocating summary history hint is bounded and conservative" {
     try writeWindowBits(std.testing.allocator, &too_large_writer, 24);
     try writeLastCompressedMetaBlockHeader(std.testing.allocator, &too_large_writer, eager_summary_history_decoded_len_max + 1);
     try too_large.resize(std.testing.allocator, large_stream_decode_threshold);
-    try std.testing.expect(allocatingSummaryHistoryHint(too_large.items, std.math.maxInt(usize)) == null);
+    try std.testing.expect(allocatingSummaryHistoryHint(too_large.items, std.math.maxInt(usize), .{}) == null);
 
     var small_window: std.ArrayList(u8) = .empty;
     defer small_window.deinit(std.testing.allocator);
@@ -3794,25 +4178,27 @@ test "br allocating summary history hint is bounded and conservative" {
     try writeWindowBits(std.testing.allocator, &small_window_writer, 16);
     try writeLastCompressedMetaBlockHeader(std.testing.allocator, &small_window_writer, planner_max_backward_distance + 1);
     try small_window.resize(std.testing.allocator, large_stream_decode_threshold);
-    try std.testing.expect(allocatingSummaryHistoryHint(small_window.items, std.math.maxInt(usize)) == null);
+    try std.testing.expect(allocatingSummaryHistoryHint(small_window.items, std.math.maxInt(usize), .{}) == null);
 
     const stored = try std.testing.allocator.alloc(u8, planner_max_backward_distance + 1);
     defer std.testing.allocator.free(stored);
     @memset(stored, 0xa5);
     const stored_stream = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, stored, .{ .window_bits = 24 });
     defer std.testing.allocator.free(stored_stream);
-    try std.testing.expect(allocatingSummaryHistoryHint(stored_stream, std.math.maxInt(usize)) == null);
+    try std.testing.expect(allocatingSummaryHistoryHint(stored_stream, std.math.maxInt(usize), .{}) == null);
     try std.testing.expectEqual(stored.len, (try summarizeStreamAlloc(std.testing.failing_allocator, stored_stream)).decoded_bytes);
 }
 
-fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8) SummaryError!StreamSummary {
+fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8) SummaryError!StreamSummary {
     diagnostics.* = .{};
     var reader = bitstream.BitReader.init(stream);
+    const window = readWindowInfo(&reader, options) catch |err| {
+        recordSummaryError(diagnostics, .window_bits, reader, 0);
+        return err;
+    };
     var summary = StreamSummary{
-        .window_bits = readWindowBitsValue(&reader) catch |err| {
-            recordSummaryError(diagnostics, .window_bits, reader, 0);
-            return err;
-        },
+        .window_bits = window.bits,
+        .large_window = window.large,
         .input_bytes = stream.len,
     };
     var last_distances = initial_last_distances;
@@ -3884,7 +4270,7 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
-            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, summary.window_bits) catch |err| {
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, window) catch |err| {
                 recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
                 return err;
             };
@@ -3905,7 +4291,7 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
-            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, summary.window_bits) catch |err| {
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, window) catch |err| {
                 recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
                 return err;
             };
@@ -3928,118 +4314,206 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
 }
 
 fn decodedStreamSizeAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error!usize {
-    return (try summarizeStreamAllocLimited(allocator, stream, max_output_len)).decoded_bytes;
+    return try decodedStreamSizeAllocLimitedWithOptions(allocator, stream, max_output_len, .{});
+}
+
+fn decodedStreamSizeAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!usize {
+    return (try summarizeStreamAllocLimitedWithOptions(allocator, stream, max_output_len, options)).decoded_bytes;
 }
 
 pub fn decodeStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
+    return decodeStreamChunksAllocWithOptions(allocator, chunks, compressed_scratch, .{});
+}
+
+pub fn decodeStreamChunksAllocWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error![]u8 {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try decodeStreamAlloc(allocator, joined);
+    return try decodeStreamAllocWithOptions(allocator, joined, options);
 }
 
 pub fn decodeStreamChunksAllocExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error![]u8 {
+    return decodeStreamChunksAllocExactSizeWithOptions(allocator, chunks, compressed_scratch, expected_output_len, .{});
+}
+
+pub fn decodeStreamChunksAllocExactSizeWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error![]u8 {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try decodeStreamAllocExactSize(allocator, joined, expected_output_len);
+    return try decodeStreamAllocExactSizeWithOptions(allocator, joined, expected_output_len, options);
 }
 
 pub fn decodeStreamChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error![]u8 {
+    return decodeStreamChunksAllocLimitedWithOptions(allocator, chunks, compressed_scratch, max_output_len, .{});
+}
+
+pub fn decodeStreamChunksAllocLimitedWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error![]u8 {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try decodeStreamAllocLimited(allocator, joined, max_output_len);
+    return try decodeStreamAllocLimitedWithOptions(allocator, joined, max_output_len, options);
 }
 
 pub fn decodeStreamChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    return decodeStreamChunksAppendWithOptions(allocator, out, chunks, compressed_scratch, .{});
+}
+
+pub fn decodeStreamChunksAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try decodeStreamAppend(allocator, out, joined);
+    return try decodeStreamAppendWithOptions(allocator, out, joined, options);
 }
 
 pub fn decodeStreamChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error!usize {
+    return decodeStreamChunksAppendExactSizeWithOptions(allocator, out, chunks, compressed_scratch, expected_output_len, .{});
+}
+
+pub fn decodeStreamChunksAppendExactSizeWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try decodeStreamAppendExactSize(allocator, out, joined, expected_output_len);
+    return try decodeStreamAppendExactSizeWithOptions(allocator, out, joined, expected_output_len, options);
 }
 
 pub fn decodeStreamChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    return decodeStreamChunksAppendLimitedWithOptions(allocator, out, chunks, compressed_scratch, max_output_len, .{});
+}
+
+pub fn decodeStreamChunksAppendLimitedWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try decodeStreamAppendLimited(allocator, out, joined, max_output_len);
+    return try decodeStreamAppendLimitedWithOptions(allocator, out, joined, max_output_len, options);
 }
 
 pub fn decodeStreamChunksInto(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
+    return decodeStreamChunksIntoWithOptions(chunks, compressed_scratch, output, .{});
+}
+
+pub fn decodeStreamChunksIntoWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: DecodeOptions) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try decodeStreamInto(joined, output);
+    return try decodeStreamIntoWithOptions(joined, output, options);
 }
 
 pub fn decodeStreamChunksIntoLimited(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize) Error!usize {
+    return decodeStreamChunksIntoLimitedWithOptions(chunks, compressed_scratch, output, max_output_len, .{});
+}
+
+pub fn decodeStreamChunksIntoLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize, options: DecodeOptions) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try decodeStreamIntoLimited(joined, output, max_output_len);
+    return try decodeStreamIntoLimitedWithOptions(joined, output, max_output_len, options);
 }
 
 pub fn decodeStreamChunksIntoExactSize(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
+    return decodeStreamChunksIntoExactSizeWithOptions(chunks, compressed_scratch, output, expected_output_len, .{});
+}
+
+pub fn decodeStreamChunksIntoExactSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try decodeStreamIntoExactSize(joined, output, expected_output_len);
+    return try decodeStreamIntoExactSizeWithOptions(joined, output, expected_output_len, options);
 }
 
 pub fn decodedStreamChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    return decodedStreamChunksSizeWithOptions(chunks, compressed_scratch, .{});
+}
+
+pub fn decodedStreamChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try decodedStreamSize(joined);
+    return try decodedStreamSizeWithOptions(joined, options);
 }
 
 pub fn decodedStreamChunksSizeLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    return decodedStreamChunksSizeLimitedWithOptions(chunks, compressed_scratch, max_output_len, .{});
+}
+
+pub fn decodedStreamChunksSizeLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try decodedStreamSizeLimited(joined, max_output_len);
+    return try decodedStreamSizeLimitedWithOptions(joined, max_output_len, options);
 }
 
 pub fn summarizeStreamChunks(chunks: []const []const u8, compressed_scratch: []u8) Error!StreamSummary {
+    return summarizeStreamChunksWithOptions(chunks, compressed_scratch, .{});
+}
+
+pub fn summarizeStreamChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!StreamSummary {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try summarizeStream(joined);
+    return try summarizeStreamWithOptions(joined, options);
 }
 
 pub fn summarizeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!StreamSummary {
+    return summarizeStreamChunksLimitedWithOptions(chunks, compressed_scratch, max_output_len, .{});
+}
+
+pub fn summarizeStreamChunksLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
     const joined = try joinChunks(chunks, compressed_scratch);
-    return try summarizeStreamLimited(joined, max_output_len);
+    return try summarizeStreamLimitedWithOptions(joined, max_output_len, options);
 }
 
 pub fn summarizeStreamChunksWithDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamChunksWithOptionsAndDiagnostics(chunks, compressed_scratch, .{}, diagnostics);
+}
+
+pub fn summarizeStreamChunksWithOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     const joined = joinChunks(chunks, compressed_scratch) catch |err| {
         diagnostics.* = .{};
         return err;
     };
-    return try summarizeStreamWithDiagnostics(joined, diagnostics);
+    return try summarizeStreamLimitedWithOptionsAndDiagnostics(joined, std.math.maxInt(usize), options, diagnostics);
 }
 
 pub fn summarizeStreamChunksLimitedWithDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamChunksLimitedWithOptionsAndDiagnostics(chunks, compressed_scratch, max_output_len, .{}, diagnostics);
+}
+
+pub fn summarizeStreamChunksLimitedWithOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     const joined = joinChunks(chunks, compressed_scratch) catch |err| {
         diagnostics.* = .{};
         return err;
     };
-    return try summarizeStreamLimitedWithDiagnostics(joined, max_output_len, diagnostics);
+    return try summarizeStreamLimitedWithOptionsAndDiagnostics(joined, max_output_len, options, diagnostics);
 }
 
 pub fn summarizeStreamChunksWithHistory(chunks: []const []const u8, compressed_scratch: []u8, history: []u8) Error!StreamSummary {
-    return summarizeStreamChunksLimitedWithHistory(chunks, compressed_scratch, history, std.math.maxInt(usize));
+    return summarizeStreamChunksWithHistoryAndOptions(chunks, compressed_scratch, history, .{});
 }
 
 pub fn summarizeStreamChunksLimitedWithHistory(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize) Error!StreamSummary {
+    return summarizeStreamChunksLimitedWithHistoryAndOptions(chunks, compressed_scratch, history, max_output_len, .{});
+}
+
+pub fn summarizeStreamChunksWithHistoryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, options: DecodeOptions) Error!StreamSummary {
+    return summarizeStreamChunksLimitedWithHistoryAndOptions(chunks, compressed_scratch, history, std.math.maxInt(usize), options);
+}
+
+pub fn summarizeStreamChunksLimitedWithHistoryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
     var diagnostics: StreamSummaryDiagnostics = .{};
-    return summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks, compressed_scratch, history, max_output_len, &diagnostics);
+    return summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks, compressed_scratch, history, max_output_len, options, &diagnostics);
 }
 
 pub fn summarizeStreamChunksWithHistoryAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     return summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks, compressed_scratch, history, std.math.maxInt(usize), diagnostics);
 }
 
+pub fn summarizeStreamChunksWithHistoryAndOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks, compressed_scratch, history, std.math.maxInt(usize), options, diagnostics);
+}
+
 pub fn summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks, compressed_scratch, history, max_output_len, .{}, diagnostics);
+}
+
+pub fn summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     const joined = joinChunks(chunks, compressed_scratch) catch |err| {
         diagnostics.* = .{};
         return err;
     };
-    return try summarizeStreamLimitedWithHistoryAndDiagnostics(joined, history, max_output_len, diagnostics);
+    return try summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(joined, history, max_output_len, options, diagnostics);
 }
 
 pub fn probeStream(stream: []const u8) StreamProbeResult {
-    return probeStreamLimited(stream, std.math.maxInt(usize));
+    return probeStreamWithOptions(stream, .{});
 }
 
 pub fn probeStreamLimited(stream: []const u8, max_output_len: usize) StreamProbeResult {
+    return probeStreamLimitedWithOptions(stream, max_output_len, .{});
+}
+
+pub fn probeStreamWithOptions(stream: []const u8, options: DecodeOptions) StreamProbeResult {
+    return probeStreamLimitedWithOptions(stream, std.math.maxInt(usize), options);
+}
+
+pub fn probeStreamLimitedWithOptions(stream: []const u8, max_output_len: usize, options: DecodeOptions) StreamProbeResult {
     var diagnostics: StreamSummaryDiagnostics = .{};
-    const summary = summarizeStreamLimitedWithDiagnostics(stream, max_output_len, &diagnostics) catch |err| {
+    const summary = summarizeStreamLimitedWithOptionsAndDiagnostics(stream, max_output_len, options, &diagnostics) catch |err| {
         return .{
             .ok = false,
             .diagnostics = diagnostics,
@@ -4054,8 +4528,12 @@ pub fn probeStreamLimited(stream: []const u8, max_output_len: usize) StreamProbe
 }
 
 pub fn probeStreamExactSize(stream: []const u8, expected_output_len: usize) StreamProbeResult {
+    return probeStreamExactSizeWithOptions(stream, expected_output_len, .{});
+}
+
+pub fn probeStreamExactSizeWithOptions(stream: []const u8, expected_output_len: usize, options: DecodeOptions) StreamProbeResult {
     var diagnostics: StreamSummaryDiagnostics = .{};
-    const summary = summarizeStreamWithDiagnostics(stream, &diagnostics) catch |err| {
+    const summary = summarizeStreamLimitedWithOptionsAndDiagnostics(stream, std.math.maxInt(usize), options, &diagnostics) catch |err| {
         return .{
             .ok = false,
             .diagnostics = diagnostics,
@@ -4078,12 +4556,20 @@ pub fn probeStreamExactSize(stream: []const u8, expected_output_len: usize) Stre
 }
 
 pub fn probeStreamChunks(chunks: []const []const u8, compressed_scratch: []u8) StreamProbeResult {
-    return probeStreamChunksLimited(chunks, compressed_scratch, std.math.maxInt(usize));
+    return probeStreamChunksWithOptions(chunks, compressed_scratch, .{});
 }
 
 pub fn probeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) StreamProbeResult {
+    return probeStreamChunksLimitedWithOptions(chunks, compressed_scratch, max_output_len, .{});
+}
+
+pub fn probeStreamChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) StreamProbeResult {
+    return probeStreamChunksLimitedWithOptions(chunks, compressed_scratch, std.math.maxInt(usize), options);
+}
+
+pub fn probeStreamChunksLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) StreamProbeResult {
     var diagnostics: StreamSummaryDiagnostics = .{};
-    const summary = summarizeStreamChunksLimitedWithDiagnostics(chunks, compressed_scratch, max_output_len, &diagnostics) catch |err| {
+    const summary = summarizeStreamChunksLimitedWithOptionsAndDiagnostics(chunks, compressed_scratch, max_output_len, options, &diagnostics) catch |err| {
         return .{
             .ok = false,
             .diagnostics = diagnostics,
@@ -4098,8 +4584,12 @@ pub fn probeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: 
 }
 
 pub fn probeStreamChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) StreamProbeResult {
+    return probeStreamChunksExactSizeWithOptions(chunks, compressed_scratch, expected_output_len, .{});
+}
+
+pub fn probeStreamChunksExactSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize, options: DecodeOptions) StreamProbeResult {
     var diagnostics: StreamSummaryDiagnostics = .{};
-    const summary = summarizeStreamChunksWithDiagnostics(chunks, compressed_scratch, &diagnostics) catch |err| {
+    const summary = summarizeStreamChunksWithOptionsAndDiagnostics(chunks, compressed_scratch, options, &diagnostics) catch |err| {
         return .{
             .ok = false,
             .diagnostics = diagnostics,
@@ -4137,6 +4627,7 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
     }
     summary.lz77_copy_count = std.math.add(usize, summary.lz77_copy_count, stats.lz77_copy_count) catch return error.IntegerOverflow;
     summary.lz77_copy_bytes = std.math.add(usize, summary.lz77_copy_bytes, stats.lz77_copy_bytes) catch return error.IntegerOverflow;
+    summary.max_lz77_distance = @max(summary.max_lz77_distance, stats.max_lz77_distance);
     summary.non_overlapping_lz77_copy_count = std.math.add(usize, summary.non_overlapping_lz77_copy_count, stats.non_overlapping_lz77_copy_count) catch return error.IntegerOverflow;
     summary.non_overlapping_lz77_copy_bytes = std.math.add(usize, summary.non_overlapping_lz77_copy_bytes, stats.non_overlapping_lz77_copy_bytes) catch return error.IntegerOverflow;
     summary.short_non_overlapping_lz77_copy_count = std.math.add(usize, summary.short_non_overlapping_lz77_copy_count, stats.short_non_overlapping_lz77_copy_count) catch return error.IntegerOverflow;
@@ -4155,6 +4646,7 @@ test "br stream summary aggregates LZ77 copy shapes" {
     try applySummaryMetaBlockStats(&summary, .{
         .lz77_copy_count = 7,
         .lz77_copy_bytes = 91,
+        .max_lz77_distance = 4097,
         .non_overlapping_lz77_copy_count = 5,
         .non_overlapping_lz77_copy_bytes = 63,
         .short_non_overlapping_lz77_copy_count = 3,
@@ -4163,6 +4655,7 @@ test "br stream summary aggregates LZ77 copy shapes" {
     });
     try std.testing.expectEqual(@as(usize, 7), summary.lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 91), summary.lz77_copy_bytes);
+    try std.testing.expectEqual(@as(usize, 4097), summary.max_lz77_distance);
     try std.testing.expectEqual(@as(usize, 5), summary.non_overlapping_lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 63), summary.non_overlapping_lz77_copy_bytes);
     try std.testing.expectEqual(@as(usize, 3), summary.short_non_overlapping_lz77_copy_count);
@@ -4294,47 +4787,79 @@ pub const StreamDecoder = struct {
     };
 
     pub fn init(stream: []const u8, output_scratch: []u8) Error!StreamDecoder {
+        return initWithOptions(stream, output_scratch, .{});
+    }
+
+    pub fn initWithOptions(stream: []const u8, output_scratch: []u8, options: DecodeOptions) Error!StreamDecoder {
         var self = StreamDecoder{};
-        try self.reset(stream, output_scratch);
+        try self.resetWithOptions(stream, output_scratch, options);
         return self;
     }
 
     pub fn initExactSize(stream: []const u8, output_scratch: []u8, expected_output_len: usize) Error!StreamDecoder {
+        return initExactSizeWithOptions(stream, output_scratch, expected_output_len, .{});
+    }
+
+    pub fn initExactSizeWithOptions(stream: []const u8, output_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!StreamDecoder {
         var self = StreamDecoder{};
-        try self.resetExactSize(stream, output_scratch, expected_output_len);
+        try self.resetExactSizeWithOptions(stream, output_scratch, expected_output_len, options);
         return self;
     }
 
     pub fn initLimited(stream: []const u8, output_scratch: []u8, max_output_len: usize) Error!StreamDecoder {
+        return initLimitedWithOptions(stream, output_scratch, max_output_len, .{});
+    }
+
+    pub fn initLimitedWithOptions(stream: []const u8, output_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!StreamDecoder {
         var self = StreamDecoder{};
-        try self.resetLimited(stream, output_scratch, max_output_len);
+        try self.resetLimitedWithOptions(stream, output_scratch, max_output_len, options);
         return self;
     }
 
     pub fn initFromChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!StreamDecoder {
+        return initFromChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
+    }
+
+    pub fn initFromChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: DecodeOptions) Error!StreamDecoder {
         var self = StreamDecoder{};
-        try self.resetFromChunks(chunks, compressed_scratch, output_scratch);
+        try self.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
         return self;
     }
 
     pub fn initFromChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!StreamDecoder {
+        return initFromChunksExactSizeWithOptions(chunks, compressed_scratch, output_scratch, expected_output_len, .{});
+    }
+
+    pub fn initFromChunksExactSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!StreamDecoder {
         var self = StreamDecoder{};
-        try self.resetFromChunksExactSize(chunks, compressed_scratch, output_scratch, expected_output_len);
+        try self.resetFromChunksExactSizeWithOptions(chunks, compressed_scratch, output_scratch, expected_output_len, options);
         return self;
     }
 
     pub fn initFromChunksLimited(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, max_output_len: usize) Error!StreamDecoder {
+        return initFromChunksLimitedWithOptions(chunks, compressed_scratch, output_scratch, max_output_len, .{});
+    }
+
+    pub fn initFromChunksLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!StreamDecoder {
         var self = StreamDecoder{};
-        try self.resetFromChunksLimited(chunks, compressed_scratch, output_scratch, max_output_len);
+        try self.resetFromChunksLimitedWithOptions(chunks, compressed_scratch, output_scratch, max_output_len, options);
         return self;
     }
 
     pub fn reset(self: *StreamDecoder, stream: []const u8, output_scratch: []u8) Error!void {
-        return self.resetLimited(stream, output_scratch, std.math.maxInt(usize));
+        return self.resetWithOptions(stream, output_scratch, .{});
+    }
+
+    pub fn resetWithOptions(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, options: DecodeOptions) Error!void {
+        return self.resetLimitedWithOptions(stream, output_scratch, std.math.maxInt(usize), options);
     }
 
     pub fn resetExactSize(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, expected_output_len: usize) Error!void {
-        const decoded_len = decodedStreamSize(stream) catch |err| {
+        return self.resetExactSizeWithOptions(stream, output_scratch, expected_output_len, .{});
+    }
+
+    pub fn resetExactSizeWithOptions(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!void {
+        const decoded_len = decodedStreamSizeWithOptions(stream, options) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -4346,7 +4871,7 @@ pub const StreamDecoder = struct {
             self.recordError(error.OutputTooSmall);
             return error.OutputTooSmall;
         }
-        const written = decodeStreamIntoExactSize(stream, output_scratch[0..expected_output_len], expected_output_len) catch |err| {
+        const written = decodeStreamIntoExactSizeWithOptions(stream, output_scratch[0..expected_output_len], expected_output_len, options) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -4354,7 +4879,11 @@ pub const StreamDecoder = struct {
     }
 
     pub fn resetLimited(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, max_output_len: usize) Error!void {
-        const decoded_len = decodedStreamSizeLimited(stream, max_output_len) catch |err| {
+        return self.resetLimitedWithOptions(stream, output_scratch, max_output_len, .{});
+    }
+
+    pub fn resetLimitedWithOptions(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!void {
+        const decoded_len = decodedStreamSizeLimitedWithOptions(stream, max_output_len, options) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -4362,7 +4891,7 @@ pub const StreamDecoder = struct {
             self.recordError(error.OutputTooSmall);
             return error.OutputTooSmall;
         }
-        const written = decodeStreamInto(stream, output_scratch[0..decoded_len]) catch |err| {
+        const written = decodeStreamIntoWithOptions(stream, output_scratch[0..decoded_len], options) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -4374,27 +4903,39 @@ pub const StreamDecoder = struct {
     }
 
     pub fn resetFromChunks(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        return self.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
+    }
+
+    pub fn resetFromChunksWithOptions(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: DecodeOptions) Error!void {
         const joined = joinChunks(chunks, compressed_scratch) catch |err| {
             self.recordError(err);
             return err;
         };
-        return self.reset(joined, output_scratch);
+        return self.resetWithOptions(joined, output_scratch, options);
     }
 
     pub fn resetFromChunksExactSize(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetFromChunksExactSizeWithOptions(chunks, compressed_scratch, output_scratch, expected_output_len, .{});
+    }
+
+    pub fn resetFromChunksExactSizeWithOptions(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize, options: DecodeOptions) Error!void {
         const joined = joinChunks(chunks, compressed_scratch) catch |err| {
             self.recordError(err);
             return err;
         };
-        return self.resetExactSize(joined, output_scratch, expected_output_len);
+        return self.resetExactSizeWithOptions(joined, output_scratch, expected_output_len, options);
     }
 
     pub fn resetFromChunksLimited(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, max_output_len: usize) Error!void {
+        return self.resetFromChunksLimitedWithOptions(chunks, compressed_scratch, output_scratch, max_output_len, .{});
+    }
+
+    pub fn resetFromChunksLimitedWithOptions(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!void {
         const joined = joinChunks(chunks, compressed_scratch) catch |err| {
             self.recordError(err);
             return err;
         };
-        return self.resetLimited(joined, output_scratch, max_output_len);
+        return self.resetLimitedWithOptions(joined, output_scratch, max_output_len, options);
     }
 
     pub fn snapshot(self: *const StreamDecoder) Snapshot {
@@ -4495,6 +5036,12 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
     return header;
 }
 
+fn readMinimalCompressedHeaderWithOptions(reader: *bitstream.BitReader, large_window: bool) Error!LargeWindowCompressedHeader {
+    var header: LargeWindowCompressedHeader = undefined;
+    try readMinimalCompressedHeaderIntoWithOptions(reader, &header, large_window);
+    return header;
+}
+
 fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *MinimalCompressedHeader) Error!void {
     const shape = try readCompressedHeaderBlockSwitches(reader, header);
     const tree_counts = try readCompressedHeaderContextMaps(reader, header, shape);
@@ -4502,6 +5049,22 @@ fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *Minima
     try readCompressedHeaderCommandTrees(reader, header, shape.command_block_types);
     try readCompressedHeaderDistanceTrees(reader, header, tree_counts.distance, shape.distance_alphabet_size);
     finishCompressedHeader(header, shape, tree_counts);
+}
+
+noinline fn readMinimalCompressedHeaderIntoWithOptions(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, large_window: bool) linksection(large_window_text_section) Error!void {
+    const shape = try readLargeCompressedHeaderBlockSwitches(reader, header, large_window);
+    const tree_counts = try readLargeCompressedHeaderContextMaps(reader, header, shape);
+    try readLargeCompressedHeaderLiteralTrees(reader, header, tree_counts.literal);
+    try readLargeCompressedHeaderCommandTrees(reader, header, shape.command_block_types);
+    try readLargeCompressedHeaderDistanceTrees(
+        large_max_distance_alphabet_size,
+        reader,
+        header,
+        tree_counts.distance,
+        shape.distance_alphabet_size_max,
+        shape.distance_alphabet_size,
+    );
+    finishLargeCompressedHeader(header, shape, tree_counts);
 }
 
 const CompressedHeaderShape = struct {
@@ -4546,13 +5109,11 @@ inline fn readCompressedHeaderBlockSwitches(reader: *bitstream.BitReader, header
         header.distance_block.length_tree = try readPrefixCode(26, reader);
         header.distance_block.remaining = try readBlockLength(&header.distance_block.length_tree, reader);
     }
-
     const npostfix = try reader.readBits(u2, 2);
     const ndirect_high = try reader.readBits(u4, 4);
     const ndirect: u16 = @as(u16, ndirect_high) << npostfix;
     if (ndirect > 120) return error.CorruptFrame;
     const distance_alphabet_size: usize = 16 + @as(usize, ndirect) + (@as(usize, 48) << npostfix);
-
     for (0..nbltypes_l) |i| header.literal_context_modes[i] = try reader.readBits(u2, 2);
     return .{
         .literal_block_types = nbltypes_l,
@@ -4614,6 +5175,124 @@ inline fn readCompressedHeaderDistanceTrees(reader: *bitstream.BitReader, header
 }
 
 inline fn finishCompressedHeader(header: *MinimalCompressedHeader, shape: CompressedHeaderShape, tree_counts: CompressedHeaderTreeCounts) void {
+    header.npostfix = shape.npostfix;
+    header.ndirect = shape.ndirect;
+    header.literal_tree_count = tree_counts.literal;
+    header.distance_tree_count = tree_counts.distance;
+}
+
+const LargeCompressedHeaderShape = struct {
+    literal_block_types: u16,
+    command_block_types: u16,
+    distance_block_types: u16,
+    distance_alphabet_size_max: usize,
+    distance_alphabet_size: usize,
+    large_window: bool,
+    npostfix: u2,
+    ndirect: u16,
+};
+
+inline fn readLargeCompressedHeaderBlockSwitches(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, large_window: bool) Error!LargeCompressedHeaderShape {
+    const nbltypes_l = try readBlockTypeCount(reader);
+    if (nbltypes_l > max_literal_block_types) return error.UnsupportedBrotliFeature;
+    header.literal_block = .{ .block_type_count = nbltypes_l };
+    if (nbltypes_l >= 2) {
+        header.literal_block.type_tree = try readLargePrefixCodeRuntime(max_literal_block_types + 2, @as(usize, nbltypes_l) + 2, reader);
+        header.literal_block.length_tree = try readLargePrefixCode(26, reader);
+        header.literal_block.remaining = try readBlockLength(&header.literal_block.length_tree, reader);
+    }
+    const nbltypes_i = try readBlockTypeCount(reader);
+    if (nbltypes_i > max_command_block_types) return error.UnsupportedBrotliFeature;
+    header.command_block = .{ .block_type_count = nbltypes_i };
+    if (nbltypes_i >= 2) {
+        header.command_block.type_tree = try readLargePrefixCodeRuntime(max_command_block_types + 2, @as(usize, nbltypes_i) + 2, reader);
+        header.command_block.length_tree = try readLargePrefixCode(26, reader);
+        header.command_block.remaining = try readBlockLength(&header.command_block.length_tree, reader);
+    }
+    const nbltypes_d = try readBlockTypeCount(reader);
+    if (nbltypes_d > max_distance_block_types) return error.UnsupportedBrotliFeature;
+    header.distance_block = .{ .block_type_count = nbltypes_d };
+    if (nbltypes_d >= 2) {
+        header.distance_block.type_tree = try readLargePrefixCodeRuntime(max_distance_block_types + 2, @as(usize, nbltypes_d) + 2, reader);
+        header.distance_block.length_tree = try readLargePrefixCode(26, reader);
+        header.distance_block.remaining = try readBlockLength(&header.distance_block.length_tree, reader);
+    }
+
+    const npostfix = try reader.readBits(u2, 2);
+    const ndirect_high = try reader.readBits(u4, 4);
+    const ndirect: u16 = @as(u16, ndirect_high) << npostfix;
+    if (ndirect > 120) return error.CorruptFrame;
+    const distance_bits: usize = if (large_window) 62 else 24;
+    const distance_alphabet_size_max: usize = 16 + @as(usize, ndirect) +
+        (distance_bits << @intCast(@as(usize, npostfix) + 1));
+    const distance_alphabet_size = if (large_window)
+        largeWindowDistanceAlphabetLimit(npostfix, ndirect)
+    else
+        distance_alphabet_size_max;
+
+    for (0..nbltypes_l) |i| header.literal_context_modes[i] = try reader.readBits(u2, 2);
+    return .{
+        .literal_block_types = nbltypes_l,
+        .command_block_types = nbltypes_i,
+        .distance_block_types = nbltypes_d,
+        .distance_alphabet_size_max = distance_alphabet_size_max,
+        .distance_alphabet_size = distance_alphabet_size,
+        .large_window = large_window,
+        .npostfix = npostfix,
+        .ndirect = ndirect,
+    };
+}
+
+inline fn readLargeCompressedHeaderContextMaps(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, shape: LargeCompressedHeaderShape) Error!CompressedHeaderTreeCounts {
+    const ntrees_l = try readBlockTypeCount(reader);
+    if (ntrees_l > max_literal_context_trees) return error.UnsupportedBrotliFeature;
+    try readContextMap(reader, header.literal_context_map[0..(@as(usize, shape.literal_block_types) * 64)], ntrees_l);
+    const ntrees_d = try readBlockTypeCount(reader);
+    if (ntrees_d > max_distance_context_trees) return error.UnsupportedBrotliFeature;
+    try readContextMap(reader, header.distance_context_map[0..(@as(usize, shape.distance_block_types) * 4)], ntrees_d);
+    return .{ .literal = ntrees_l, .distance = ntrees_d };
+}
+
+inline fn readLargeCompressedHeaderLiteralTrees(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, tree_count: u16) Error!void {
+    var literal_tree_index: u16 = 0;
+    while (literal_tree_index < tree_count) : (literal_tree_index += 1) {
+        const tree = try readLargePrefixCodeRuntime(large_literal_alphabet_capacity, 256, reader);
+        if (literal_tree_index < inline_literal_tree_count) {
+            header.literal_trees[literal_tree_index] = tree;
+        } else {
+            header.packed_literal_trees[literal_tree_index - inline_literal_tree_count] = PackedPrefixCode(large_literal_alphabet_capacity).init(&tree);
+        }
+    }
+    header.active_packed_literal_tree_index = std.math.maxInt(u16);
+}
+
+inline fn readLargeCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, tree_count: u16) Error!void {
+    var command_tree_index: u16 = 0;
+    while (command_tree_index < tree_count) : (command_tree_index += 1) {
+        const tree = try readLargePrefixCodeRuntime(large_command_alphabet_capacity, 704, reader);
+        if (command_tree_index < inline_command_tree_count) {
+            header.insert_copy_trees[command_tree_index] = tree;
+        } else {
+            header.packed_insert_copy_trees[command_tree_index - inline_command_tree_count] = PackedPrefixCode(large_command_alphabet_capacity).init(&tree);
+        }
+    }
+    header.active_packed_insert_copy_tree_index = std.math.maxInt(u16);
+}
+
+inline fn readLargeCompressedHeaderDistanceTrees(comptime distance_capacity: usize, reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, tree_count: u16, alphabet_size_max: usize, alphabet_size: usize) Error!void {
+    var distance_tree_index: u16 = 0;
+    while (distance_tree_index < tree_count) : (distance_tree_index += 1) {
+        const tree = try readPrefixCodeRuntimeLimited(distance_capacity, alphabet_size_max, alphabet_size, reader);
+        if (distance_tree_index < inline_distance_tree_count) {
+            header.distance_trees[distance_tree_index] = tree;
+        } else {
+            header.packed_distance_trees[distance_tree_index - inline_distance_tree_count] = PackedPrefixCode(distance_capacity).init(&tree);
+        }
+    }
+    header.active_packed_distance_tree_index = std.math.maxInt(u16);
+}
+
+inline fn finishLargeCompressedHeader(header: *LargeWindowCompressedHeader, shape: LargeCompressedHeaderShape, tree_counts: CompressedHeaderTreeCounts) void {
     header.npostfix = shape.npostfix;
     header.ndirect = shape.ndirect;
     header.literal_tree_count = tree_counts.literal;
@@ -4971,9 +5650,7 @@ fn processMinimalCompressedMetaBlock(
             written.* += 1;
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
-        if (written.* == meta_block_end) {
-            return;
-        }
+        if (written.* == meta_block_end) return;
         const decoded_distance = try readMinimalDistance(&header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
@@ -4989,6 +5666,95 @@ fn processMinimalCompressedMetaBlock(
         if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
         match_copy.append(output, written, distance, lengths.copy_len);
     }
+}
+
+fn processMinimalCompressedMetaBlockWithOptions(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_len: usize,
+    last_distances: *[4]usize,
+    window: WindowInfo,
+) Error!void {
+    if (window.large) {
+        @branchHint(.unlikely);
+        return processMinimalCompressedMetaBlockLargeWindow(reader, output, written, meta_block_len, last_distances, window.bits);
+    }
+    return processMinimalCompressedMetaBlock(reader, output, written, meta_block_len, last_distances, window.bits);
+}
+
+noinline fn processMinimalCompressedMetaBlockLargeWindow(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_len: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+) linksection(large_window_text_section) Error!void {
+    return processMinimalCompressedMetaBlockLargeWindowImpl(reader, output, written, meta_block_len, last_distances, window_bits);
+}
+
+fn processMinimalCompressedMetaBlockLargeWindowImpl(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_len: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+) Error!void {
+    const meta_block_end = std.math.add(usize, written.*, meta_block_len) catch return error.IntegerOverflow;
+    if (meta_block_end > output.len) return error.OutputTooSmall;
+    var header: LargeWindowCompressedHeader = undefined;
+    try readMinimalCompressedHeaderIntoWithOptions(reader, &header, true);
+    var transformed_dictionary_word: [64]u8 = undefined;
+    while (written.* < meta_block_end) {
+        const command_symbol = try readLargeCommandSymbol(&header, reader);
+        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
+        var i: usize = 0;
+        while (i < lengths.insert_len) : (i += 1) {
+            try ensureLargeLiteralBlock(&header, reader);
+            const context = try largeLiteralContext(&header, output, written.*);
+            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
+            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+            const tree = try largeLiteralPrefixForDecode(&header, tree_index);
+            const literal = try tree.decode(reader);
+            if (literal > 0xff) return error.InvalidHuffmanCode;
+            output[written.*] = @intCast(literal);
+            written.* += 1;
+            if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
+        }
+        if (written.* == meta_block_end) return;
+        const decoded_distance = try readMinimalDistanceLargeWindow(&header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
+        if (distance == 0) return error.InvalidMatch;
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            continue;
+        }
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
+        if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
+        match_copy.append(output, written, distance, lengths.copy_len);
+    }
+}
+
+fn processLargeCompressedMetaBlockWithOptions(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_len: usize,
+    last_distances: *[4]usize,
+    window: WindowInfo,
+) Error!void {
+    if (window.large) {
+        @branchHint(.unlikely);
+        return processLargeCompressedMetaBlockLargeWindow(reader, output, written, meta_block_len, last_distances, window.bits);
+    }
+    return processLargeCompressedMetaBlock(reader, output, written, meta_block_len, last_distances, window.bits);
 }
 
 fn processLargeCompressedMetaBlock(
@@ -5013,6 +5779,28 @@ fn processLargeCompressedMetaBlock(
     return processTailLookupCompressedPayload(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, &header);
 }
 
+noinline fn processLargeCompressedMetaBlockLargeWindow(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_len: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+) linksection(large_window_text_section) Error!void {
+    const meta_block_end = std.math.add(usize, written.*, meta_block_len) catch return error.IntegerOverflow;
+    if (meta_block_end > output.len) return error.OutputTooSmall;
+    var header: LargeWindowCompressedHeader = undefined;
+    try readMinimalCompressedHeaderIntoWithOptions(reader, &header, true);
+    if (header.literal_tree_count < clustered_literal_tree_threshold or !prepareLargeLiteralTailLookups(&header))
+        return processDecodedCompressedPayloadLargeWindow(reader, output, written, meta_block_end, last_distances, window_bits, &header);
+    const auxiliary_tail_lookups = prepareLargeAuxiliaryTailLookups(&header);
+    var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
+    defer fast_reader.syncTo(reader);
+    if (auxiliary_tail_lookups)
+        return processTailLookupCompressedPayloadLargeWindow(true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, &header);
+    return processTailLookupCompressedPayloadLargeWindow(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, &header);
+}
+
 const clustered_literal_tree_threshold: u16 = 16;
 
 fn prepareLiteralTailLookups(header: *MinimalCompressedHeader) bool {
@@ -5025,6 +5813,29 @@ fn prepareLiteralTailLookups(header: *MinimalCompressedHeader) bool {
 }
 
 fn prepareAuxiliaryTailLookups(header: *MinimalCompressedHeader) bool {
+    if (header.command_block.block_type_count > inline_command_tree_count or
+        header.distance_tree_count > inline_distance_tree_count) return false;
+    for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree|
+        if (tree.single_symbol == null and !tree.table.canBuildTailLookup9()) return false;
+    for (header.distance_trees[0..header.distance_tree_count]) |*tree|
+        if (tree.single_symbol == null and !tree.table.canBuildTailLookup9()) return false;
+    for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree|
+        std.debug.assert(tree.single_symbol != null or tree.table.buildTailLookup9());
+    for (header.distance_trees[0..header.distance_tree_count]) |*tree|
+        std.debug.assert(tree.single_symbol != null or tree.table.buildTailLookup9());
+    return true;
+}
+
+fn prepareLargeLiteralTailLookups(header: *LargeWindowCompressedHeader) bool {
+    if (header.literal_tree_count > inline_literal_tree_count) return false;
+    for (header.literal_trees[0..header.literal_tree_count]) |*tree|
+        if (!tree.canPrepareTailLookup()) return false;
+    for (header.literal_trees[0..header.literal_tree_count]) |*tree|
+        std.debug.assert(tree.prepareTailLookup());
+    return true;
+}
+
+fn prepareLargeAuxiliaryTailLookups(header: *LargeWindowCompressedHeader) bool {
     if (header.command_block.block_type_count > inline_command_tree_count or
         header.distance_tree_count > inline_distance_tree_count) return false;
     for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree|
@@ -5157,6 +5968,111 @@ noinline fn processTailLookupCompressedPayload(
     }
 }
 
+noinline fn processDecodedCompressedPayloadLargeWindow(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *LargeWindowCompressedHeader,
+) linksection(large_window_text_section) Error!void {
+    var transformed_dictionary_word: [64]u8 = undefined;
+    while (written.* < meta_block_end) {
+        const command_symbol = try readLargeCommandSymbol(header, reader);
+        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
+        var i: usize = 0;
+        while (i < lengths.insert_len) : (i += 1) {
+            try ensureLargeLiteralBlock(header, reader);
+            const context = try largeLiteralContext(header, output, written.*);
+            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
+            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+            const tree = try largeLiteralPrefixForDecode(header, tree_index);
+            const literal = try tree.decode(reader);
+            if (literal > 0xff) return error.InvalidHuffmanCode;
+            output[written.*] = @intCast(literal);
+            written.* += 1;
+            if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
+        }
+        if (written.* == meta_block_end) return;
+        const decoded_distance = try readMinimalDistanceLargeWindow(header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
+        if (distance == 0) return error.InvalidMatch;
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            continue;
+        }
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
+        if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
+        match_copy.append(output, written, distance, lengths.copy_len);
+    }
+}
+
+noinline fn processTailLookupCompressedPayloadLargeWindow(
+    comptime auxiliary_tail_lookups: bool,
+    reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *LargeWindowCompressedHeader,
+) linksection(large_window_text_section) Error!void {
+    var transformed_dictionary_word: [64]u8 = undefined;
+    const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
+    while (written.* < meta_block_end) {
+        const command_symbol = if (comptime auxiliary_tail_lookups)
+            try readLargeCommandSymbolTailLookup(header, reader)
+        else
+            try readLargeCommandSymbolAny(header, reader);
+        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
+        var previous: u8 = if (written.* == 0) 0 else output[written.* - 1];
+        var second_previous: u8 = if (written.* < 2) 0 else output[written.* - 2];
+        var i: usize = 0;
+        while (i < lengths.insert_len) : (i += 1) {
+            try ensureLargeLiteralBlockAny(header, reader);
+            const context = if (utf8_context_only)
+                literal_context.valueUtf8Clustered(previous, second_previous)
+            else
+                literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
+            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
+            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+            const tree = try largeLiteralPrefixForDecode(header, tree_index);
+            const literal = try tree.decodeTailLookup(reader);
+            if (literal > 0xff) return error.InvalidHuffmanCode;
+            output[written.*] = @intCast(literal);
+            written.* += 1;
+            second_previous = previous;
+            previous = @intCast(literal);
+            if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
+        }
+        if (written.* == meta_block_end) return;
+        const decoded_distance = if (comptime auxiliary_tail_lookups)
+            try readMinimalDistanceTailLookupLargeWindow(header, reader, lengths, last_distances)
+        else
+            try readMinimalDistanceLargeWindow(header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
+        if (distance == 0) return error.InvalidMatch;
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            continue;
+        }
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
+        if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
+        match_copy.append(output, written, distance, lengths.copy_len);
+    }
+}
+
 fn skipMinimalCompressedMetaBlock(
     reader: *bitstream.BitReader,
     start_written: usize,
@@ -5164,9 +6080,10 @@ fn skipMinimalCompressedMetaBlock(
     last_distances: *[4]usize,
     literal_history: *LiteralHistory,
     stats: ?*StreamSummaryMetaBlockStats,
-    window_bits: u5,
+    window: WindowInfo,
 ) SummaryError!void {
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
+    if (window.large) return skipMinimalCompressedMetaBlockLargeWindow(reader, start_written, meta_block_len, last_distances, literal_history, stats, window.bits);
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
     if (stats) |s| {
@@ -5179,10 +6096,38 @@ fn skipMinimalCompressedMetaBlock(
     if (header.literal_tree_count >= clustered_literal_tree_threshold and prepareLiteralTailLookups(&header)) {
         const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(&header);
         if (auxiliary_tail_lookups)
-            return skipDecodedCompressedPayload(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
-        return skipDecodedCompressedPayload(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
+            return skipDecodedCompressedPayload(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header);
+        return skipDecodedCompressedPayload(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header);
     }
-    return skipDecodedCompressedPayload(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
+    return skipDecodedCompressedPayload(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header);
+}
+
+noinline fn skipMinimalCompressedMetaBlockLargeWindow(
+    reader: *bitstream.BitReader,
+    start_written: usize,
+    meta_block_len: usize,
+    last_distances: *[4]usize,
+    literal_history: *LiteralHistory,
+    stats: ?*StreamSummaryMetaBlockStats,
+    window_bits: u5,
+) linksection(large_window_text_section) SummaryError!void {
+    const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
+    var header: LargeWindowCompressedHeader = undefined;
+    try readMinimalCompressedHeaderIntoWithOptions(reader, &header, true);
+    if (stats) |s| {
+        s.max_literal_block_types = header.literal_block.block_type_count;
+        s.max_literal_context_trees = header.literal_tree_count;
+        s.max_command_block_types = header.command_block.block_type_count;
+        s.max_distance_block_types = header.distance_block.block_type_count;
+        s.max_distance_context_trees = header.distance_tree_count;
+    }
+    if (header.literal_tree_count >= clustered_literal_tree_threshold and prepareLargeLiteralTailLookups(&header)) {
+        const auxiliary_tail_lookups = prepareLargeAuxiliaryTailLookups(&header);
+        if (auxiliary_tail_lookups)
+            return skipDecodedCompressedPayloadLargeWindow(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
+        return skipDecodedCompressedPayloadLargeWindow(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
+    }
+    return skipDecodedCompressedPayloadLargeWindow(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
 }
 
 noinline fn skipDecodedCompressedPayload(
@@ -5247,6 +6192,7 @@ noinline fn skipDecodedCompressedPayload(
         if (stats) |s| {
             s.lz77_copy_count = std.math.add(usize, s.lz77_copy_count, 1) catch return error.IntegerOverflow;
             s.lz77_copy_bytes = std.math.add(usize, s.lz77_copy_bytes, lengths.copy_len) catch return error.IntegerOverflow;
+            s.max_lz77_distance = @max(s.max_lz77_distance, distance);
             if (lengths.copy_len <= distance) {
                 s.non_overlapping_lz77_copy_count = std.math.add(usize, s.non_overlapping_lz77_copy_count, 1) catch return error.IntegerOverflow;
                 s.non_overlapping_lz77_copy_bytes = std.math.add(usize, s.non_overlapping_lz77_copy_bytes, lengths.copy_len) catch return error.IntegerOverflow;
@@ -5255,6 +6201,73 @@ noinline fn skipDecodedCompressedPayload(
                     s.short_non_overlapping_lz77_copy_bytes = std.math.add(usize, s.short_non_overlapping_lz77_copy_bytes, lengths.copy_len) catch return error.IntegerOverflow;
                 }
             }
+        }
+        literal_history.copy(distance, lengths.copy_len);
+        written += lengths.copy_len;
+    }
+}
+
+noinline fn skipDecodedCompressedPayloadLargeWindow(
+    comptime literal_tail_lookup: bool,
+    comptime auxiliary_tail_lookups: bool,
+    reader: *bitstream.BitReader,
+    start_written: usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    literal_history: *LiteralHistory,
+    stats: ?*StreamSummaryMetaBlockStats,
+    window_bits: u5,
+    header: *LargeWindowCompressedHeader,
+) linksection(large_window_text_section) SummaryError!void {
+    var transformed_dictionary_word: [64]u8 = undefined;
+    var written = start_written;
+    while (written < meta_block_end) {
+        const command_symbol = if (auxiliary_tail_lookups)
+            try readLargeCommandSymbolTailLookup(header, reader)
+        else
+            try readLargeCommandSymbol(header, reader);
+        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_end - written) return error.CorruptFrame;
+        var i: usize = 0;
+        while (i < lengths.insert_len) : (i += 1) {
+            try ensureLargeLiteralBlock(header, reader);
+            const literal_mode = header.literal_context_modes[header.literal_block.current_type];
+            const context = try literal_history.contextLarge(header);
+            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
+            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+            const tree = try largeLiteralPrefixForDecode(header, tree_index);
+            const literal = if (literal_tail_lookup) try tree.decodeTailLookup(reader) else try tree.decode(reader);
+            if (literal > 0xff) return error.InvalidHuffmanCode;
+            literal_history.push(@intCast(literal));
+            written += 1;
+            if (stats) |s| s.literal_context_mode_bytes[literal_mode] = std.math.add(usize, s.literal_context_mode_bytes[literal_mode], 1) catch return error.IntegerOverflow;
+            if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
+        }
+        if (written == meta_block_end) return;
+        const decoded_distance = if (auxiliary_tail_lookups)
+            try readMinimalDistanceTailLookupLargeWindow(header, reader, lengths, last_distances)
+        else
+            try readMinimalDistanceLargeWindow(header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
+        if (distance == 0) return error.InvalidMatch;
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (word.len > meta_block_end - written) return error.CorruptFrame;
+            if (stats) |s| {
+                s.static_dictionary_copy_count = std.math.add(usize, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
+                s.static_dictionary_bytes = std.math.add(usize, s.static_dictionary_bytes, word.len) catch return error.IntegerOverflow;
+            }
+            literal_history.pushSlice(word);
+            written += word.len;
+            continue;
+        }
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
+        if (lengths.copy_len > meta_block_end - written) return error.CorruptFrame;
+        if (stats) |s| {
+            s.lz77_copy_count = std.math.add(usize, s.lz77_copy_count, 1) catch return error.IntegerOverflow;
+            s.lz77_copy_bytes = std.math.add(usize, s.lz77_copy_bytes, lengths.copy_len) catch return error.IntegerOverflow;
+            s.max_lz77_distance = @max(s.max_lz77_distance, distance);
         }
         literal_history.copy(distance, lengths.copy_len);
         written += lengths.copy_len;
@@ -8125,6 +9138,7 @@ fn literalContextFromMode(mode: u2, previous: u8, second_previous: u8) Error!usi
 }
 
 const DecodedBrotliDistance = struct { distance: usize, update_ring: bool };
+const max_allowed_large_window_distance: usize = 0x7fff_fffc;
 
 fn readMinimalDistance(
     header: *MinimalCompressedHeader,
@@ -8145,6 +9159,34 @@ fn readMinimalDistance(
     };
     if (symbol < 16) return .{
         .distance = try resolveShortDistance(symbol, last_distances),
+        .update_ring = symbol != 0,
+    };
+    const direct_index = symbol - 16;
+    return .{ .distance = if (direct_index < header.ndirect)
+        @as(usize, direct_index) + 1
+    else
+        try readRegularDistance(header, reader, symbol), .update_ring = true };
+}
+
+fn readMinimalDistanceLargeWindow(
+    header: *LargeWindowCompressedHeader,
+    reader: anytype,
+    lengths: InsertCopyLengths,
+    last_distances: *[4]usize,
+) Error!DecodedBrotliDistance {
+    const symbol = if (lengths.distance_symbol_zero) 0 else blk: {
+        try ensureLargeDistanceBlock(header, reader);
+        const context = distanceContext(lengths.copy_len);
+        if (header.distance_block.current_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
+        const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
+        if (tree_index >= max_distance_context_trees) return error.UnsupportedBrotliFeature;
+        const tree = try largeDistancePrefixForDecode(header, tree_index);
+        const decoded = try tree.decode(reader);
+        if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
+        break :blk decoded;
+    };
+    if (symbol < 16) return .{
+        .distance = try resolveShortDistance(symbol, last_distances),
         // RFC 7932 code zero reuses the newest distance without advancing the
         // ring; all other short codes are installed as a newly used distance.
         .update_ring = symbol != 0,
@@ -8153,7 +9195,7 @@ fn readMinimalDistance(
     return .{ .distance = if (direct_index < header.ndirect)
         @as(usize, direct_index) + 1
     else
-        try readRegularDistance(header, reader, symbol), .update_ring = true };
+        try readRegularDistanceWithOptions(true, header, reader, symbol), .update_ring = true };
 }
 
 fn readMinimalDistanceTailLookup(
@@ -8172,6 +9214,27 @@ fn readMinimalDistanceTailLookup(
         if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
         break :blk decoded;
     };
+    if (symbol < 16) return .{ .distance = try resolveShortDistance(symbol, last_distances), .update_ring = symbol != 0 };
+    const direct_index = symbol - 16;
+    return .{ .distance = if (direct_index < header.ndirect) @as(usize, direct_index) + 1 else try readRegularDistance(header, reader, symbol), .update_ring = true };
+}
+
+fn readMinimalDistanceTailLookupLargeWindow(
+    header: *LargeWindowCompressedHeader,
+    reader: anytype,
+    lengths: InsertCopyLengths,
+    last_distances: *[4]usize,
+) Error!DecodedBrotliDistance {
+    const symbol = if (lengths.distance_symbol_zero) 0 else blk: {
+        try ensureLargeDistanceBlock(header, reader);
+        const context = distanceContext(lengths.copy_len);
+        if (header.distance_block.current_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
+        const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
+        if (tree_index >= inline_distance_tree_count) return error.UnsupportedBrotliFeature;
+        const decoded = try header.distance_trees[tree_index].decodeTailLookup9(reader);
+        if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
+        break :blk decoded;
+    };
     if (symbol < 16) return .{
         .distance = try resolveShortDistance(symbol, last_distances),
         .update_ring = symbol != 0,
@@ -8180,13 +9243,91 @@ fn readMinimalDistanceTailLookup(
     return .{ .distance = if (direct_index < header.ndirect)
         @as(usize, direct_index) + 1
     else
-        try readRegularDistance(header, reader, symbol), .update_ring = true };
+        try readRegularDistanceWithOptions(true, header, reader, symbol), .update_ring = true };
 }
 
 fn ensureDistanceBlock(header: *MinimalCompressedHeader, reader: anytype) Error!void {
     if (header.distance_block.block_type_count > 1 and header.distance_block.remaining == 0) {
         try switchBlockAny(max_distance_block_types, &header.distance_block, reader);
     }
+}
+
+fn readLargeCommandSymbol(header: *LargeWindowCompressedHeader, reader: *bitstream.BitReader) Error!u16 {
+    return readLargeCommandSymbolAny(header, reader);
+}
+
+fn readLargeCommandSymbolTailLookup(header: *LargeWindowCompressedHeader, reader: anytype) Error!u16 {
+    if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0)
+        try switchBlockAny(max_command_block_types, &header.command_block, reader);
+    if (header.command_block.current_type >= inline_command_tree_count) return error.UnsupportedBrotliFeature;
+    const symbol = try header.insert_copy_trees[header.command_block.current_type].decodeTailLookup9(reader);
+    if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
+    return symbol;
+}
+
+fn readLargeCommandSymbolAny(header: *LargeWindowCompressedHeader, reader: anytype) Error!u16 {
+    if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0)
+        try switchBlockAny(max_command_block_types, &header.command_block, reader);
+    if (header.command_block.current_type >= max_command_block_types) return error.UnsupportedBrotliFeature;
+    const tree = try largeCommandPrefixForDecode(header);
+    const symbol = try tree.decode(reader);
+    if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
+    return symbol;
+}
+
+fn largeCommandPrefixForDecode(header: *LargeWindowCompressedHeader) Error!*const PrefixCode(large_command_alphabet_capacity) {
+    const index = header.command_block.current_type;
+    if (index < inline_command_tree_count) return &header.insert_copy_trees[index];
+    if (header.active_packed_insert_copy_tree_index != index) {
+        header.active_packed_insert_copy_tree = try header.packed_insert_copy_trees[index - inline_command_tree_count].expand();
+        header.active_packed_insert_copy_tree_index = index;
+    }
+    return &header.active_packed_insert_copy_tree;
+}
+
+fn largeLiteralPrefixForDecode(header: *LargeWindowCompressedHeader, index: u16) Error!*PrefixCode(large_literal_alphabet_capacity) {
+    if (index >= header.literal_tree_count) return error.CorruptFrame;
+    if (index < inline_literal_tree_count) return &header.literal_trees[index];
+    return expandPackedLargeLiteralPrefixForDecode(header, index);
+}
+
+noinline fn expandPackedLargeLiteralPrefixForDecode(header: *LargeWindowCompressedHeader, index: u16) Error!*PrefixCode(large_literal_alphabet_capacity) {
+    std.debug.assert(index >= inline_literal_tree_count and index < header.literal_tree_count);
+    if (header.active_packed_literal_tree_index != index) {
+        header.active_packed_literal_tree = try header.packed_literal_trees[index - inline_literal_tree_count].expand();
+        header.active_packed_literal_tree_index = index;
+    }
+    return &header.active_packed_literal_tree;
+}
+
+fn largeDistancePrefixForDecode(header: *LargeWindowCompressedHeader, index: u16) Error!*PrefixCode(large_max_distance_alphabet_size) {
+    if (index >= header.distance_tree_count) return error.CorruptFrame;
+    if (index < inline_distance_tree_count) return &header.distance_trees[index];
+    if (header.active_packed_distance_tree_index != index) {
+        header.active_packed_distance_tree = try header.packed_distance_trees[index - inline_distance_tree_count].expand();
+        header.active_packed_distance_tree_index = index;
+    }
+    return &header.active_packed_distance_tree;
+}
+
+fn ensureLargeLiteralBlock(header: *LargeWindowCompressedHeader, reader: *bitstream.BitReader) Error!void {
+    return ensureLargeLiteralBlockAny(header, reader);
+}
+
+fn ensureLargeLiteralBlockAny(header: *LargeWindowCompressedHeader, reader: anytype) Error!void {
+    if (header.literal_block.block_type_count > 1 and header.literal_block.remaining == 0)
+        try switchBlockAny(max_literal_block_types, &header.literal_block, reader);
+}
+
+fn ensureLargeDistanceBlock(header: *LargeWindowCompressedHeader, reader: anytype) Error!void {
+    if (header.distance_block.block_type_count > 1 and header.distance_block.remaining == 0)
+        try switchBlockAny(max_distance_block_types, &header.distance_block, reader);
+}
+
+fn largeLiteralContext(header: *const LargeWindowCompressedHeader, output: []const u8, written: usize) Error!usize {
+    const previous = if (written == 0) 0 else output[written - 1];
+    const second_previous = if (written < 2) 0 else output[written - 2];
+    return literalContextFromMode(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
 }
 
 fn distanceContext(copy_len: usize) usize {
@@ -8200,8 +9341,18 @@ fn readRegularDistance(header: *const MinimalCompressedHeader, reader: anytype, 
     const ndistbits_value = 1 + (xcode >> @intCast(npostfix + 1));
     if (ndistbits_value > 24) return error.CorruptFrame;
     const ndistbits: u5 = @intCast(ndistbits_value);
-    const dextra = if (ndistbits == 0) 0 else try reader.readBits(u32, ndistbits);
+    const dextra = try reader.readBits(u32, ndistbits);
     return resolveRegularDistanceParts(header.npostfix, header.ndirect, xcode, ndistbits_value, dextra);
+}
+
+fn readRegularDistanceWithOptions(comptime large_window: bool, header: *const LargeWindowCompressedHeader, reader: anytype, symbol: u16) Error!usize {
+    const xcode = @as(usize, symbol) - @as(usize, header.ndirect) - 16;
+    const npostfix: usize = header.npostfix;
+    const ndistbits_value = 1 + (xcode >> @intCast(npostfix + 1));
+    _ = large_window;
+    if (ndistbits_value > 30) return error.CorruptFrame;
+    const dextra = try reader.readBits(u32, @intCast(ndistbits_value));
+    return try resolveLargeWindowRegularDistanceParts(header.npostfix, header.ndirect, xcode, ndistbits_value, dextra);
 }
 
 fn resolveRegularDistance(npostfix: u2, ndirect: u16, symbol: u16, dextra: usize) Error!usize {
@@ -8224,6 +9375,16 @@ inline fn resolveRegularDistanceParts(npostfix: u2, ndirect: u16, xcode: usize, 
     const lcode: u32 = @intCast(xcode & postfix_mask);
     const offset = ((@as(u32, 2) + (hcode & 1)) << @intCast(ndistbits)) - 4;
     return @as(usize, ((offset + @as(u32, @intCast(dextra))) << npostfix) + lcode + ndirect + 1);
+}
+
+inline fn resolveLargeWindowRegularDistanceParts(npostfix: u2, ndirect: u16, xcode: usize, ndistbits: usize, dextra: usize) Error!usize {
+    const hcode: u64 = @intCast(xcode >> @intCast(@as(usize, npostfix)));
+    const postfix_mask = (@as(u64, 1) << npostfix) - 1;
+    const lcode: u64 = @intCast(xcode & postfix_mask);
+    const offset = ((@as(u64, 2) + (hcode & 1)) << @intCast(ndistbits)) - 4;
+    const distance = ((offset + @as(u64, @intCast(dextra))) << npostfix) + lcode + ndirect + 1;
+    if (distance > max_allowed_large_window_distance) return error.CorruptFrame;
+    return @intCast(distance);
 }
 
 fn resolveShortDistance(symbol: u16, last_distances: *const [4]usize) Error!usize {
@@ -8363,6 +9524,71 @@ fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize
     for (0..nsym) |i| {
         const symbol = try reader.readBits(u16, alphabet_bits);
         if (symbol >= alphabet_size) return error.InvalidHuffmanCode;
+        for (symbols[0..i]) |previous| {
+            if (previous == symbol) return error.InvalidHuffmanCode;
+        }
+        symbols[i] = symbol;
+    }
+
+    var lengths: [max_alphabet_size]u4 = undefined;
+    switch (nsym) {
+        1 => return .{ .single_symbol = symbols[0] },
+        2 => {
+            lengths[0] = 1;
+            lengths[1] = 1;
+        },
+        3 => {
+            lengths[0] = 1;
+            lengths[1] = 2;
+            lengths[2] = 2;
+        },
+        4 => {
+            const tree_select = try reader.readBits(u1, 1);
+            if (tree_select == 0) {
+                @memset(lengths[0..4], 2);
+            } else {
+                lengths[0] = 1;
+                lengths[1] = 2;
+                lengths[2] = 3;
+                lengths[3] = 3;
+            }
+        },
+        else => unreachable,
+    }
+
+    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..nsym], symbols[0..nsym]) };
+}
+
+// Keep Large Window header parsing on distinct generic instantiations. Sharing
+// the standard helpers with this opt-in path makes LLVM outline the RFC 7932
+// literal and command tree builders from the hot header parser.
+fn readLargePrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader) Error!PrefixCode(alphabet_size) {
+    return readPrefixCodeRuntimeLimited(alphabet_size, alphabet_size, alphabet_size, reader);
+}
+
+fn readLargePrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader) Error!PrefixCode(max_alphabet_size) {
+    return readPrefixCodeRuntimeLimited(max_alphabet_size, alphabet_size, alphabet_size, reader);
+}
+
+noinline fn readPrefixCodeRuntimeLimited(
+    comptime max_alphabet_size: usize,
+    alphabet_size_max: usize,
+    alphabet_size_limit: usize,
+    reader: *bitstream.BitReader,
+) linksection(large_window_text_section) Error!PrefixCode(max_alphabet_size) {
+    if (alphabet_size_max == 0 or
+        alphabet_size_limit == 0 or
+        alphabet_size_limit > max_alphabet_size or
+        alphabet_size_limit > alphabet_size_max) return error.CorruptFrame;
+    const kind = try reader.readBits(u2, 2);
+    if (kind != 1) return try readComplexPrefixCodeRuntime(max_alphabet_size, alphabet_size_limit, reader, kind);
+
+    const nsym = @as(usize, try reader.readBits(u2, 2)) + 1;
+    const alphabet_bits = alphabetBitsRuntime(alphabet_size_max);
+    var symbols: [4]u16 = undefined;
+    for (0..nsym) |i| {
+        const symbol = try reader.readBits(u16, alphabet_bits);
+        if (symbol >= alphabet_size_limit) return error.InvalidHuffmanCode;
         for (symbols[0..i]) |previous| {
             if (previous == symbol) return error.InvalidHuffmanCode;
         }
@@ -8787,6 +10013,142 @@ fn readWindowBitsValue(reader: *bitstream.BitReader) Error!u5 {
     };
 }
 
+fn readWindowInfo(reader: *bitstream.BitReader, options: DecodeOptions) Error!WindowInfo {
+    const first = try reader.readBits(u1, 1);
+    if (first == 0) return .{ .bits = 16 };
+    const low3 = try reader.readBits(u3, 3);
+    if (low3 != 0) return .{ .bits = @as(u5, low3) + 17 };
+
+    const tail = try reader.readBits(u3, 3);
+    return switch (tail) {
+        0 => .{ .bits = 17 },
+        1 => blk: {
+            if (!options.allow_large_window) return error.CorruptFrame;
+            if (try reader.readBits(u1, 1) != 0) return error.CorruptFrame;
+            const bits = try reader.readBits(u6, 6);
+            if (bits < 10 or bits > 30) return error.CorruptFrame;
+            break :blk .{ .bits = @intCast(bits), .large = true };
+        },
+        else => .{ .bits = @as(u5, tail) + 8 },
+    };
+}
+
+test "br large window decode is explicit and covers one-shot chunked and incremental APIs" {
+    // Generated by libbrotli 1.1.0 with quality=5, mode=generic, lgwin=25.
+    // The same payload encoding is used for lgwin 25...30; only byte 1, which
+    // carries the six-bit extended WBITS field, changes from 0x59 through 0x5e.
+    const fixture = [_]u8{
+        0x11, 0x59, 0xfc, 0x34, 0x00, 0x10, 0x73, 0x1b, 0xf5, 0x95, 0x74, 0x21,
+        0xee, 0xf1, 0x6d, 0x51, 0xb1, 0x08, 0x83, 0x81, 0xac, 0x08, 0x0e, 0x39,
+        0x70, 0xf8, 0xbe, 0x25, 0x21, 0x86, 0xc0, 0x81, 0x87, 0x6c, 0x2f, 0xe5,
+        0x2a, 0x19, 0xba, 0x2d, 0x35, 0xd8, 0x2f, 0xd2, 0x2f, 0x2e, 0x83, 0x35,
+        0x27, 0x32, 0xe0, 0x17, 0x13, 0x00, 0x7c, 0x8f, 0x75, 0xc0, 0xa2, 0x56,
+        0x6a, 0xeb, 0x63, 0x52, 0x10,
+    };
+    const unit = "large window brotli compatibility payload 0123456789\n";
+    const expected = unit ** 64;
+    const options = DecodeOptions{ .allow_large_window = true };
+
+    for (25..31) |window_bits_usize| {
+        const window_bits: u5 = @intCast(window_bits_usize);
+        var encoded = fixture;
+        encoded[1] = 0x40 + @as(u8, window_bits);
+
+        try std.testing.expectError(error.CorruptFrame, decodedStreamSize(&encoded));
+        try std.testing.expectError(error.CorruptFrame, decodeStreamAlloc(std.testing.allocator, &encoded));
+        try std.testing.expect(!probeStream(&encoded).ok);
+
+        const summary = try summarizeStreamWithOptions(&encoded, options);
+        try std.testing.expectEqual(window_bits, summary.window_bits);
+        try std.testing.expect(summary.large_window);
+        try std.testing.expectEqual(expected.len, summary.decoded_bytes);
+        try std.testing.expect(probeStreamWithOptions(&encoded, options).ok);
+        try std.testing.expectEqual(expected.len, try decodedStreamSizeWithOptions(&encoded, options));
+
+        const decoded = try decodeStreamAllocWithOptions(std.testing.allocator, &encoded, options);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected, decoded);
+
+        var direct: [expected.len]u8 = undefined;
+        try std.testing.expectEqual(
+            expected.len,
+            try decodeStreamIntoExactSizeWithOptions(&encoded, &direct, expected.len, options),
+        );
+        try std.testing.expectEqualSlices(u8, expected, &direct);
+
+        const chunks = [_][]const u8{ encoded[0..1], encoded[1..17], encoded[17..] };
+        var compressed_scratch: [fixture.len]u8 = undefined;
+        const chunked = try decodeStreamChunksAllocExactSizeWithOptions(
+            std.testing.allocator,
+            &chunks,
+            &compressed_scratch,
+            expected.len,
+            options,
+        );
+        defer std.testing.allocator.free(chunked);
+        try std.testing.expectEqualSlices(u8, expected, chunked);
+
+        var buffered = IncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{
+            .expected_output_len = expected.len,
+            .decode = options,
+        }, encoded.len);
+        defer buffered.deinit();
+        var buffered_output: [expected.len]u8 = undefined;
+        var buffered_input_offset: usize = 0;
+        var buffered_output_offset: usize = 0;
+        while (buffered.snapshot().phase != .done) {
+            const input_end = @min(encoded.len, buffered_input_offset + 1);
+            const output_end = @min(buffered_output.len, buffered_output_offset + 7);
+            const step = try buffered.step(
+                encoded[buffered_input_offset..input_end],
+                buffered_output[buffered_output_offset..output_end],
+            );
+            try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
+            buffered_input_offset += step.progress.input_read;
+            buffered_output_offset += step.progress.output_written;
+        }
+        try std.testing.expectEqualSlices(u8, expected, &buffered_output);
+
+        var history: [expected.len]u8 = undefined;
+        var progressive = IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+            .expected_output_len = expected.len,
+            .decode = options,
+        });
+        var progressive_output: [expected.len]u8 = undefined;
+        var progressive_input_offset: usize = 0;
+        var progressive_output_offset: usize = 0;
+        while (progressive.snapshot().phase != .done) {
+            const input_end = @min(encoded.len, progressive_input_offset + 1);
+            const output_end = @min(progressive_output.len, progressive_output_offset + 7);
+            const step = try progressive.step(
+                encoded[progressive_input_offset..input_end],
+                progressive_output[progressive_output_offset..output_end],
+            );
+            try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
+            progressive_input_offset += step.progress.input_read;
+            progressive_output_offset += step.progress.output_written;
+        }
+        try progressive.finish();
+        try std.testing.expectEqual(encoded.len, progressive_input_offset);
+        try std.testing.expectEqualSlices(u8, expected, &progressive_output);
+    }
+
+    try std.testing.expectError(error.CorruptFrame, decodedStreamSizeWithOptions(&.{0x91}, options));
+    try std.testing.expectError(error.CorruptFrame, decodedStreamSizeWithOptions(&.{ 0x11, 9 }, options));
+    try std.testing.expectError(error.CorruptFrame, decodedStreamSizeWithOptions(&.{ 0x11, 31 }, options));
+}
+
+fn largeWindowDistanceAlphabetLimit(npostfix: u2, ndirect: u16) usize {
+    const max_distance: u32 = 0x7fff_fffc;
+    var offset = max_distance - @as(u32, ndirect);
+    offset = (offset >> npostfix) + 4;
+    const bits: u32 = std.math.log2_int(u32, offset / 2);
+    var group: u32 = ((bits - 1) << 1) | ((offset >> @intCast(bits)) & 1);
+    group -= 1;
+    return (@as(usize, group) << npostfix) +
+        ((@as(usize, 1) << npostfix) - 1) + ndirect + 17;
+}
+
 fn writeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits: u5) Error!void {
     switch (window_bits) {
         16 => try writer.writeBits(allocator, 0, 1),
@@ -8805,6 +10167,33 @@ fn writeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits
             try writer.writeBits(allocator, @as(u64, window_bits - 8), 3);
         },
         else => return error.InvalidBlockPlan,
+    }
+}
+
+fn writeLargeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits: u5) Error!void {
+    if (window_bits < 10 or window_bits > 30) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, 1, 1);
+    try writer.writeBits(allocator, 0, 3);
+    try writer.writeBits(allocator, 1, 3);
+    try writer.writeBits(allocator, 0, 1);
+    try writer.writeBits(allocator, window_bits, 6);
+}
+
+test "br large window header preserves extension identity for all supported widths" {
+    for (10..31) |window_bits_usize| {
+        const window_bits: u5 = @intCast(window_bits_usize);
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(std.testing.allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeLargeWindowBits(std.testing.allocator, &writer, window_bits);
+
+        var strict_reader = bitstream.BitReader.init(encoded.items);
+        try std.testing.expectError(error.CorruptFrame, readWindowInfo(&strict_reader, .{}));
+        var extended_reader = bitstream.BitReader.init(encoded.items);
+        const window = try readWindowInfo(&extended_reader, .{ .allow_large_window = true });
+        try std.testing.expectEqual(window_bits, window.bits);
+        try std.testing.expect(window.large);
+        try std.testing.expectEqual(@as(usize, 14), extended_reader.bitPosition());
     }
 }
 
@@ -17851,6 +19240,83 @@ test "br regular distance resolver remains bounded at RFC maxima" {
     const distance = try resolveRegularDistance(3, 120, max_symbol, extra);
     try std.testing.expect(distance < (@as(usize, 1) << 30));
     try std.testing.expectError(error.CorruptFrame, resolveRegularDistance(3, 120, max_symbol, extra + 1));
+}
+
+test "br large window distance alphabet matches upstream safe limits" {
+    try std.testing.expectEqual(@as(usize, 1128), large_wire_max_distance_alphabet_size);
+    try std.testing.expectEqual(@as(usize, 88), largeWindowDistanceAlphabetLimit(0, 15));
+    try std.testing.expectEqual(@as(usize, 156), largeWindowDistanceAlphabetLimit(1, 30));
+    try std.testing.expectEqual(@as(usize, 288), largeWindowDistanceAlphabetLimit(2, 60));
+    try std.testing.expectEqual(@as(usize, 544), largeWindowDistanceAlphabetLimit(3, 120));
+
+    const max_symbol: u16 = @intCast(largeWindowDistanceAlphabetLimit(3, 120) - 1);
+    const xcode = @as(usize, max_symbol) - 120 - 16;
+    const extra_bits = 1 + (xcode >> 4);
+    const extra = (@as(usize, 1) << @intCast(extra_bits)) - 1;
+    const distance = try resolveLargeWindowRegularDistanceParts(3, 120, xcode, extra_bits, extra);
+    try std.testing.expect(distance <= max_allowed_large_window_distance);
+
+    const first_rejected_symbol: u16 = max_symbol + 1;
+    const rejected_xcode = @as(usize, first_rejected_symbol) - 120 - 16;
+    const rejected_extra_bits = 1 + (rejected_xcode >> 4);
+    const rejected_extra = (@as(usize, 1) << @intCast(rejected_extra_bits)) - 1;
+    try std.testing.expectError(
+        error.CorruptFrame,
+        resolveLargeWindowRegularDistanceParts(3, 120, rejected_xcode, rejected_extra_bits, rejected_extra),
+    );
+}
+
+test "br large window distance decoder reads extended extra bits" {
+    var large_header: LargeWindowCompressedHeader = undefined;
+    large_header.npostfix = 0;
+    large_header.ndirect = 0;
+    var extended_reader = bitstream.BitReader.init(&.{ 0, 0, 0, 0 });
+    try std.testing.expectEqual(
+        (@as(usize, 1) << 26) - 3,
+        try readRegularDistanceWithOptions(true, &large_header, &extended_reader, 64),
+    );
+    try std.testing.expectEqual(@as(usize, 25), extended_reader.bitPosition());
+
+    var header: MinimalCompressedHeader = undefined;
+    header.npostfix = 0;
+    header.ndirect = 0;
+    var strict_reader = bitstream.BitReader.init(&.{ 0, 0, 0, 0 });
+    try std.testing.expectError(error.CorruptFrame, readRegularDistance(&header, &strict_reader, 64));
+    try std.testing.expectEqual(@as(usize, 0), strict_reader.bitPosition());
+}
+
+test "br large window simple distance tree uses wire width and safe limit" {
+    var valid: std.ArrayList(u8) = .empty;
+    defer valid.deinit(std.testing.allocator);
+    var valid_writer = BitWriter{ .out = &valid };
+    try valid_writer.writeBits(std.testing.allocator, 1, 2); // simple tree
+    try valid_writer.writeBits(std.testing.allocator, 0, 2); // one symbol
+    try valid_writer.writeBits(std.testing.allocator, 543, alphabetBitsRuntime(large_wire_max_distance_alphabet_size));
+    var valid_reader = bitstream.BitReader.init(valid.items);
+    const tree = try readPrefixCodeRuntimeLimited(
+        large_max_distance_alphabet_size,
+        large_wire_max_distance_alphabet_size,
+        largeWindowDistanceAlphabetLimit(3, 120),
+        &valid_reader,
+    );
+    try std.testing.expectEqual(@as(?u16, 543), tree.single_symbol);
+
+    var invalid: std.ArrayList(u8) = .empty;
+    defer invalid.deinit(std.testing.allocator);
+    var invalid_writer = BitWriter{ .out = &invalid };
+    try invalid_writer.writeBits(std.testing.allocator, 1, 2);
+    try invalid_writer.writeBits(std.testing.allocator, 0, 2);
+    try invalid_writer.writeBits(std.testing.allocator, 544, alphabetBitsRuntime(large_wire_max_distance_alphabet_size));
+    var invalid_reader = bitstream.BitReader.init(invalid.items);
+    try std.testing.expectError(
+        error.InvalidHuffmanCode,
+        readPrefixCodeRuntimeLimited(
+            large_max_distance_alphabet_size,
+            large_wire_max_distance_alphabet_size,
+            largeWindowDistanceAlphabetLimit(3, 120),
+            &invalid_reader,
+        ),
+    );
 }
 
 test "br static dictionary addresses use the active window distance" {

@@ -47,6 +47,27 @@ public allocating decoder and through the byte-progressive decoder with
 deeper flushed, metadata, context-tree, 256-block-type, large-header, and full
 chunk-matrix fixtures; it strengthens decoder evidence without implying
 equivalent encoder quality or speed.
+The same required probe now adds six libbrotli-generated Large Window Brotli
+streams covering every 25...30-bit window supported by libbrotli 1.1.0. Legacy/default Vort APIs must
+reject their reserved RFC header, while explicit `BrotliDecodeOptions` paths
+decode them through allocating, caller-buffer, split-input, buffered-incremental,
+and byte-progressive APIs. The decoder uses the extension's 62-group wire
+alphabet width, applies upstream's per-NPOSTFIX/NDIRECT usable-symbol limit, and
+rejects decoded distances above `0x7ffffffc`. `StreamSummary.large_window`
+distinguishes extension streams even when they advertise a 10...24-bit window.
+An additional Vort-generated fixture copies from exactly 16 MiB back and must
+decode through both Vort and libbrotli's opt-in stateful decoder, proving the
+implementation crosses the RFC window ceiling rather than merely accepting the
+extended stream header (`large_window_decode_cases=7`).
+The extension keeps separate 257/705/544-capacity header types and places its
+non-inline decoder bodies in a dedicated target-specific text section, so the
+standard 256/704/520-symbol RFC path retains its original code shape. A fixed
+CPU-2 A/B using independent baseline/current binaries, 30,000 iterations per
+row, and five interleaved process samples across the 13-row reference matrix
+measured a `1.0020x` standard-decode geomean; the weakest row was `0.9881x`.
+The sparse Huffman builder also separates its already-validated non-empty path,
+removing two optimizer-sensitive large zero-table copies from the generated
+standard Brotli header parser.
 The same differential accepts repeatable `--real-file` inputs with a bounded
 `--real-limit` prefix, so local upstream and application checkouts can extend
 coverage without becoming repository dependencies. A first fixed-CPU run over

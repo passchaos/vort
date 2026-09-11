@@ -32,6 +32,7 @@ pub fn Decoder(comptime Codec: type) type {
             expected_compressed_len: ?usize = null,
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
+            decode: Codec.DecodeOptions = .{},
         };
         pub const Phase = enum { input, output, done };
         pub const Snapshot = struct {
@@ -183,12 +184,12 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn completeInput(self: *Self) Error!void {
-            const decoded_len = Codec.decodedSizeLimited(self.compressed.items, self.options.max_output_len) catch |err| return self.fail(.input, err);
+            const decoded_len = Codec.decodedSizeLimited(self.compressed.items, self.options.max_output_len, self.options.decode) catch |err| return self.fail(.input, err);
             if (self.options.expected_output_len) |expected| {
                 if (decoded_len != expected) return self.fail(.input, error.SizeMismatch);
             }
             try self.decoded.resize(self.allocator, decoded_len);
-            const written = Codec.decodeInto(self.compressed.items, self.decoded.items) catch |err| {
+            const written = Codec.decodeInto(self.compressed.items, self.decoded.items, self.options.decode) catch |err| {
                 self.decoded.clearRetainingCapacity();
                 return self.fail(.input, err);
             };
