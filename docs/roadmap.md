@@ -4089,6 +4089,13 @@ coverage.
   growing 18 bytes. Depths two and one increased README by 241/1,560 bytes and
   roadmap by 4,231/22,499 bytes. Treat these as user-selectable custom-option
   tradeoffs, not a better production fastest preset.
+  Ring-backed hash search now checks `len == max_len` immediately after a new
+  best match is selected, instead of testing the previous best at the start of
+  every candidate iteration. Full-table parsing retains its prior branch layout
+  after the unrestricted form regressed its 44 KiB source control. Fixed-CPU-8
+  A/Bs preserved every frame: README `.fastest/.fast` improved by `1.0176x` /
+  `1.0165x`, roadmap by `1.0121x` / `1.0054x`, and `src/png.zig` remained
+  slightly positive at `1.0052x`.
   Ring-backed hash-greedy search now computes `pos -| window_len` once per
   input position and compares predecessor positions directly, eliminating its
   impossible zero-distance check and repeated distance/window comparison. The

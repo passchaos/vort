@@ -303,6 +303,15 @@ control fell to `0.994x`. Adding a 64-byte diversity sample protected the
 allocation size but still cost roadmap throughput (`0.9959x`, 0/12 wins), while
 README improved `1.0161x`. Keep the simple 4,096-token initial reserve until a
 signal already available from parsing can size it without an extra prepass.
+Ring-backed hash search now tests a newly selected match against the
+per-position maximum immediately, instead of checking whether the previous
+best reached that maximum at the start of every candidate iteration. The
+full-table specialization keeps its prior control flow after an unrestricted
+version regressed the 44 KiB source control. Against the ring-window-bound
+baseline on fixed CPU 8, README `.fastest/.fast` improved by `1.0176x` /
+`1.0165x`, and roadmap improved by `1.0121x` / `1.0054x`; the corresponding win
+counts were 14/15, 11/11, 14/15, and 7/11. The `src/png.zig` full-table control
+was `1.0052x` with 8/11 wins, and every measured frame stayed identical.
 Ring-backed hash search now precomputes the earliest legal predecessor once per
 input position and compares candidate positions directly, removing the
 impossible zero-distance test and repeated distance/window comparison from its

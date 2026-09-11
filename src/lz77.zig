@@ -2140,8 +2140,8 @@ fn findBestHashMatchWithLayoutAndHashLimits(
         const distance = pos - candidate;
         if (comptime !ring) {
             if (distance == 0 or distance > limits.window_len) break;
+            if (best.length == max_len) break;
         }
-        if (best.length == max_len) break;
         const required_prefix = @max(best.length, minimum - 1);
         if (input[candidate + required_prefix] != input[pos + required_prefix]) {
             candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
@@ -2152,6 +2152,9 @@ fn findBestHashMatchWithLayoutAndHashLimits(
         if (len >= minimum and len > best.length) {
             best = .{ .length = len, .distance = distance };
             if (len >= limits.nice_len) break;
+            if (comptime ring) {
+                if (len == max_len) break;
+            }
         }
         candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
     }
