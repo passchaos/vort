@@ -8640,6 +8640,16 @@ coverage.
   A-B-C-A proposal, so no ratio gain is claimed; three alternating fixed-CPU-2
   pairs preserve all seven representative sizes/checksums with median
   throughput ratios from 0.997x to 1.002x.
+  A direct expansion from five to eleven always-on command prefix histograms
+  was rejected. Replacing the coarse grid regressed `dictionary.bin` by 59
+  bytes and Silesia `mr` by one byte because lower estimated payload entropy
+  did not cover the changed complete header. Retaining the five-point result
+  and treating the eleven-point boundary as an exact-wire challenger preserved
+  every byte across the same 17 inputs but found no winner; three alternating
+  fixed-CPU-2 pairs measured representative median throughput ratios of
+  0.989--1.000x. Future finer boundary work should rescan locally around a
+  profitable coarse split rather than maintaining eleven dense 704-bin
+  histograms for the whole command stream.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-
