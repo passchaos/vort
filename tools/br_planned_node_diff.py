@@ -56,7 +56,7 @@ def main() -> int:
     for i in range(len(expected)):
         state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
         nibble = state >> 28
-        expected[i] = nibble if i < len(expected) // 2 else 240 + nibble
+        expected[i] = nibble if i < len(expected) // 6 else 240 + nibble
     encoded = subprocess.check_output([sys.argv[1], "ratio-literal-split"])
     actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
     if actual != expected:

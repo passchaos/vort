@@ -796,7 +796,7 @@ pub fn main(init: std.process.Init) !void {
     for (planned_literal_split_payload, 0..) |*byte, i| {
         planned_literal_split_state = planned_literal_split_state *% 1_664_525 +% 1_013_904_223;
         const nibble: u8 = @truncate(planned_literal_split_state >> 28);
-        byte.* = if (i < planned_literal_split_payload.len / 2) nibble else 240 + nibble;
+        byte.* = if (i < planned_literal_split_payload.len / 6) nibble else 240 + nibble;
     }
     const planned_literal_split = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, planned_literal_split_payload, .{ .level = .ratio });
     defer init.gpa.free(planned_literal_split);

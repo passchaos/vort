@@ -53,7 +53,7 @@ pub fn main(init: std.process.Init) !void {
         for (payload, 0..) |*byte, i| {
             state = state *% 1_664_525 +% 1_013_904_223;
             const nibble: u8 = @truncate(state >> 28);
-            byte.* = if (i < payload.len / 2) nibble else 240 + nibble;
+            byte.* = if (i < payload.len / 6) nibble else 240 + nibble;
         }
         const encoded = try vort.brEncodePlannedStreamRatioAlloc(init.gpa, payload);
         defer init.gpa.free(encoded);

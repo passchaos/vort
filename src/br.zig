@@ -3144,16 +3144,17 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         if (cache_command_symbols) command_symbols[command_index] = encoding.symbol;
         try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
-            try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
             if (options.literal_split) |split| {
                 literal_block_frequencies[@intFromBool(literal_index >= split)][literal] += 1;
                 literal_index += 1;
-            }
-            if (options.use_utf8_text_contexts) {
-                const previous = if (position == 0) 0 else input[position - 1];
-                const second_previous = if (position < 2) 0 else input[position - 2];
-                const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
-                literal_context_frequencies[literal_context.utf8SuffixTree(context, options.utf8_context_cutoff)][literal] += 1;
+            } else {
+                try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
+                if (options.use_utf8_text_contexts) {
+                    const previous = if (position == 0) 0 else input[position - 1];
+                    const second_previous = if (position < 2) 0 else input[position - 2];
+                    const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
+                    literal_context_frequencies[literal_context.utf8SuffixTree(context, options.utf8_context_cutoff)][literal] += 1;
+                }
             }
         }
         if (!command.has_copy) continue;
@@ -3167,7 +3168,8 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     // Brotli still carries a literal tree when dictionary commands cover the
     // entire meta-block. A deterministic unused symbol keeps that tree legal
     // without adding payload bits.
-    if (literal_alphabet.len == 0) try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, 0);
+    if (options.literal_split == null and literal_alphabet.len == 0)
+        try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, 0);
     if (options.literal_split) |split| if (split == 0 or literal_index <= split) return error.InvalidBlockPlan;
     if (allZeroFrequencies(planned_distance_alphabet_size, &distance_frequencies)) distance_frequencies[0] = 1;
     if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
@@ -3175,7 +3177,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     var literal_context_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
     var literal_block_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
     var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
-    try literal_alphabet.sortByFrequencies(&literal_frequencies);
+    if (options.literal_split == null) try literal_alphabet.sortByFrequencies(&literal_frequencies);
     if (options.use_utf8_text_contexts) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
         if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
         try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
@@ -3184,7 +3186,10 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
     try command_alphabet.sortByFrequencies(&command_frequencies);
     try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
-    stats.literal_symbol_count = literal_alphabet.len;
+    stats.literal_symbol_count = if (options.literal_split != null)
+        literal_block_alphabets[0].len + literal_block_alphabets[1].len
+    else
+        literal_alphabet.len;
     stats.command_symbol_count = command_alphabet.len;
     stats.distance_symbol_count = distance_alphabet.len;
     if (io) |active| stats.alphabet_ns = elapsedNs(alphabet_start.?, active);
@@ -3200,7 +3205,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     try writeCompressedMetaBlockHeader(allocator, writer, input.len, options.final_meta_block);
     const distance_alphabet_size = 16 + @as(usize, options.ndirect) + 48;
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const literal_lengths = try literal_alphabet.codeLengths(&literal_frequencies);
+    const literal_lengths = if (options.literal_split == null) try literal_alphabet.codeLengths(&literal_frequencies) else undefined;
     const literal_context_lengths = if (options.use_utf8_text_contexts) blk: {
         var lengths: [2][256]u4 = undefined;
         for (&lengths, &literal_context_alphabets, &literal_context_frequencies) |*tree_lengths, *alphabet, *frequencies| tree_lengths.* = try alphabet.codeLengths(frequencies);
@@ -3225,7 +3230,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
 
     const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const literal_encoder = try initPlannedLiteralEncoder(&literal_lengths, &literal_alphabet);
+    const literal_encoder = if (options.literal_split == null) try initPlannedLiteralEncoder(&literal_lengths, &literal_alphabet) else undefined;
     const literal_context_encoders = if (options.use_utf8_text_contexts) [2]huffman.HuffmanTable(256).Encoder{
         try initPlannedLiteralEncoder(&literal_context_lengths[0], &literal_context_alphabets[0]),
         try initPlannedLiteralEncoder(&literal_context_lengths[1], &literal_context_alphabets[1]),
@@ -11265,7 +11270,7 @@ test "br ratio planner selects a profitable literal entropy split" {
     for (payload, 0..) |*byte, i| {
         state = state *% 1_664_525 +% 1_013_904_223;
         const nibble: u8 = @truncate(state >> 28);
-        byte.* = if (i < payload.len / 2) nibble else 240 + nibble;
+        byte.* = if (i < payload.len / 6) nibble else 240 + nibble;
     }
     const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
