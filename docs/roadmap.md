@@ -8650,6 +8650,14 @@ coverage.
   0.989--1.000x. Future finer boundary work should rescan locally around a
   profitable coarse split rather than maintaining eleven dense 704-bin
   histograms for the whole command stream.
+  A follow-up implemented exactly that two-neighbor local rescan after a
+  profitable coarse split. It recovered the synthetic twelve-division
+  boundary and preserved every byte across the same 17 real inputs, but found
+  no real winner. Three alternating fixed-CPU-2 pairs measured 0.953--0.981x
+  median throughput on the dictionary/font/`mr`/`samba`/tokenizer split rows
+  (XML retained 0.996x), so replaying the command stream was also rejected. A
+  future fine-grid attempt must reuse compact first-pass statistics rather than
+  retaining eleven dense histograms or replaying all commands.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-
