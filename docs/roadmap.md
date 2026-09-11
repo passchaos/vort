@@ -4063,6 +4063,13 @@ coverage.
   64 KiB `src/checksum.zig` control remained near-neutral but positive at
   `1.0042x` with 10/11 wins. Existing full-table/ring oracles preserve exact
   tokens and statistics, and every measured encoded frame was unchanged.
+  A full four-byte prefix check before `matchLength` was rejected despite
+  preserving the old collision budget and all measured wire bytes. Applied to
+  every four-byte-anchor path it was only about `1.005x` on README/roadmap and
+  regressed the 44 KiB `src/png.zig` row to `0.9742x` with 2/11 wins. A
+  ring-only specialization removed that full-table regression, but its final
+  15-pair result was noise-neutral: README `1.0043x` with 9/15 wins and roadmap
+  `0.9985x` with 5/15. Retain the cheaper last-required-byte filter.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent
