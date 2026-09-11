@@ -4076,6 +4076,12 @@ coverage.
   README `.fastest` pairs fell to `0.9295x` with 0/11 wins and unchanged output.
   A partial roadmap probe saved two bytes but was noisy and did not justify the
   throughput/cache cost, so the head remains at 32,768 buckets.
+  Larger one-shot hash token reserves were rejected. A bounded `input.len / 5`
+  reserve above 64 KiB improved README `.fastest` by about `1.025x`, but roadmap
+  was only `1.004x` and a 1 MiB single-byte-repeat control fell to `0.994x`. A
+  64-byte diversity precheck protected the allocation size but still reduced
+  roadmap to `0.9959x` with 0/12 wins, versus `1.0161x` on README. Keep the
+  simple 4,096-token reserve until parsing exposes a free sizing signal.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent
