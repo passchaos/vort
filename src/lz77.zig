@@ -12,10 +12,11 @@ const hash_head_init_words: usize = hash_head_table_size / 64;
 const tiny_hash_head_table_size: usize = 4096;
 const tiny_hash_head_init_words: usize = tiny_hash_head_table_size / 64;
 const HashAnchor = enum { three, four };
-// Below this size the full predecessor table is modest and avoids changing
-// allocator reuse behavior for short one-shot streams. Large image-style
-// payloads receive nearly all of the memory benefit from the bounded ring.
-const min_hash_prev_ring_input_len: usize = 512 * 1024;
+// Keep inputs through 64 KiB on the full predecessor table so common binary
+// and image blocks retain their established allocation/cache behavior. Larger
+// one-shot inputs can bound the table to the active power-of-two history
+// window without changing any reachable match.
+const min_hash_prev_ring_input_len: usize = 64 * 1024 + 1;
 const fixed_distance_costs = blk: {
     @setEvalBranchQuota(1_000_000);
     break :blk fixedDistanceCostTable(default_window_len);
@@ -3078,8 +3079,12 @@ test "hash greedy predecessor ring matches full-table reference" {
         hashPrevTableLen(4096, 16 * 1024),
     );
     try std.testing.expectEqual(
-        min_hash_prev_ring_input_len - 1,
-        hashPrevTableLen(min_hash_prev_ring_input_len - 1, 16 * 1024),
+        @as(usize, 64 * 1024),
+        hashPrevTableLen(64 * 1024, 16 * 1024),
+    );
+    try std.testing.expectEqual(
+        @as(usize, 16 * 1024),
+        hashPrevTableLen(64 * 1024 + 1, 16 * 1024),
     );
     try std.testing.expectEqual(
         @as(usize, 70_000),

@@ -4014,6 +4014,17 @@ coverage.
   Final validation passed `zig build test -j1` in 1:54.17 at 4,125,704-KiB
   peak RSS and `zig build check -j1` in 4:48.77 at 689,532-KiB peak RSS, both
   with zero swap.
+  The one-shot threshold is now lowered from 512 KiB to just above 64 KiB,
+  retaining the full predecessor table through the exact 64 KiB binary/image
+  boundary while covering README-sized source text with the 16 KiB ring. The
+  existing full-table oracle remains token-for-token and stat-for-stat exact,
+  with explicit 64 KiB/64 KiB+1 threshold assertions. On fixed i9-13900K
+  P-core 8, 15 alternating 100-iteration README fastest pairs preserve the
+  22,172-byte zlib frame and improve median time `1.147x` with 15/15 wins;
+  eleven fast pairs preserve 26,286 bytes and improve `1.130x` with 11/11
+  wins, while default remains noise-neutral at `0.999x`. This matches the local
+  fdeflate hash-chain design's bounded window-indexed links while retaining
+  Vort's deliberately conservative small-input allocation policy.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent
