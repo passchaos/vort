@@ -303,6 +303,23 @@ control fell to `0.994x`. Adding a 64-byte diversity sample protected the
 allocation size but still cost roadmap throughput (`0.9959x`, 0/12 wins), while
 README improved `1.0161x`. Keep the simple 4,096-token initial reserve until a
 signal already available from parsing can size it without an extra prepass.
+One-shot hash planning for `.stored_fixed_dynamic` now accumulates literal/
+length and distance histograms as tokens are emitted, eliminating the full
+token scan in `DynamicCodingPlan.init`. Length/distance extra-bit totals are
+derived afterward from the 29+30 symbol slots so their lookup work does not
+inflate the match-finder hot loop. The observer lives in `deflate.zig` and the
+generic LZ77 module only invokes its callback, avoiding a module cycle; tiny,
+scan, dictionary, split, and `.stored_fixed` paths retain their old layout. A
+token/plan/wire oracle compares the observed and scan-based paths through raw,
+zlib, and gzip output. Against an independently built `5b8a5c9e` baseline,
+eleven alternating ReleaseFast pairs pinned to i9-13900K CPU 8 kept every frame
+byte-identical and improved `.fastest` by `1.0488x` on README (11/11), `1.0455x`
+on roadmap (11/11), and `1.0276x` on `src/png.zig` (9/11); zlib-wrapped README
+improved `1.0466x` (11/11). The `.fast` controls, which do not use dynamic
+selection, remained noise-neutral at `1.0005x` on README and `0.9985x` on
+roadmap. Full validation passed 1,498 tests, all 83 compile-check steps, the
+50-check Rust differential, the five-case incremental encode gate, and the
+265-success/60-expected-failure Python zlib differential dashboard.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

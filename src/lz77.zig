@@ -1713,6 +1713,22 @@ pub fn hashGreedyPlanAutoAlloc(allocator: std.mem.Allocator, input: []const u8, 
         hashGreedyPlanAllocWithAnchor(allocator, input, options, .three);
 }
 
+/// Internal companion for format encoders that can derive metadata while the
+/// hash parser emits tokens. The observer must provide `recordToken(Token)`;
+/// it does not own the returned plan and is called only after a token append
+/// succeeds.
+pub fn hashGreedyPlanAutoAllocObserved(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    observer: anytype,
+) !GreedyPlan {
+    return if (minMatch(options) >= 4)
+        hashGreedyPlanAllocWithAnchorObserved(allocator, input, options, .four, observer)
+    else
+        hashGreedyPlanAllocWithAnchorObserved(allocator, input, options, .three, observer);
+}
+
 fn hashGreedyPlanAllocWithAnchor(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -1726,6 +1742,19 @@ fn hashGreedyPlanAllocWithAnchor(
         return hashGreedyPlanAllocWithPosition(i32, allocator, input, options, anchor);
     }
     return hashGreedyPlanAllocWithPosition(isize, allocator, input, options, anchor);
+}
+
+fn hashGreedyPlanAllocWithAnchorObserved(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    comptime anchor: HashAnchor,
+    observer: anytype,
+) !GreedyPlan {
+    if (hashPositionFitsI32(input.len)) {
+        return hashGreedyPlanAllocWithPositionObserved(i32, allocator, input, options, anchor, observer);
+    }
+    return hashGreedyPlanAllocWithPositionObserved(isize, allocator, input, options, anchor, observer);
 }
 
 fn hashPositionFitsI32(input_len: usize) bool {
@@ -1766,6 +1795,42 @@ fn hashGreedyPlanAllocWithPosition(
         false,
         {},
         anchor,
+    );
+}
+
+fn hashGreedyPlanAllocWithPositionObserved(
+    comptime Position: type,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    comptime anchor: HashAnchor,
+    observer: anytype,
+) !GreedyPlan {
+    const head = try allocator.alloc(Position, hash_head_table_size);
+    defer allocator.free(head);
+    @memset(head, -1);
+    const prev_len = hashPrevTableLen(input.len, options.window_len);
+    const ring = prev_len < input.len;
+    const prev = try allocator.alloc(Position, prev_len);
+    defer allocator.free(prev);
+    if (ring) {
+        return @call(
+            .never_inline,
+            hashGreedyPlanWithTablesObserved,
+            .{ allocator, input, options, head, prev, true, false, {}, anchor, observer },
+        );
+    }
+    return hashGreedyPlanWithTablesObserved(
+        allocator,
+        input,
+        options,
+        head,
+        prev,
+        false,
+        false,
+        {},
+        anchor,
+        observer,
     );
 }
 
@@ -2021,6 +2086,70 @@ fn hashGreedyPlanWithTables(
                     lazy_head,
                     initialized,
                 );
+            }
+            pos += 1;
+        }
+    }
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+fn hashGreedyPlanWithTablesObserved(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    head: anytype,
+    prev: anytype,
+    comptime ring: bool,
+    comptime lazy_head: bool,
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
+    comptime anchor: HashAnchor,
+    observer: anytype,
+) !GreedyPlan {
+    var tokens = try initTokenList(allocator, input.len);
+    errdefer tokens.deinit(allocator);
+    var stats = PlanStats{};
+    const accept_all_matches = acceptsEveryHashMatch(options);
+    const search_limits = hashSearchLimits(options);
+
+    var pos: usize = 0;
+    while (pos < input.len) {
+        const search = findBestHashMatchWithLayoutAndHashLimits(
+            input,
+            pos,
+            search_limits,
+            head,
+            prev,
+            ring,
+            lazy_head,
+            initialized,
+            anchor,
+        );
+        const best = search.best;
+        const accepted = if (accept_all_matches)
+            best.length != 0
+        else
+            acceptMatch(input, pos, best.length, best.distance, options);
+        if (accepted) {
+            const token: Token = .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } };
+            try appendToken(&tokens, allocator, token);
+            observer.recordToken(token);
+            stats.matches += 1;
+            stats.matched_bytes += best.length;
+            const end = @min(input.len, pos + best.length);
+            insertKnownHashWithLayout(pos, search.hash.?, head, prev, ring, lazy_head, initialized);
+            const tail_start = if (end > pos + 4) end - 4 else pos + 1;
+            pos += 1;
+            if (pos < tail_start) pos = tail_start;
+            while (pos < end) : (pos += 1) {
+                insertHashWithLayout(input, pos, head, prev, ring, lazy_head, initialized, anchor);
+            }
+        } else {
+            const token: Token = .{ .literal = input[pos] };
+            try appendToken(&tokens, allocator, token);
+            observer.recordToken(token);
+            stats.literals += 1;
+            if (search.hash) |hash| {
+                insertKnownHashWithLayout(pos, hash, head, prev, ring, lazy_head, initialized);
             }
             pos += 1;
         }

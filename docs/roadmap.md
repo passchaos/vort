@@ -4082,6 +4082,22 @@ coverage.
   64-byte diversity precheck protected the allocation size but still reduced
   roadmap to `0.9959x` with 0/12 wins, versus `1.0161x` on README. Keep the
   simple 4,096-token reserve until parsing exposes a free sizing signal.
+  One-shot hash planning for `.stored_fixed_dynamic` now records literal/length
+  and distance histograms while emitting tokens, removing the later full-token
+  scan from dynamic block selection. Extra-bit totals are recovered from the
+  bounded symbol histograms after parsing, keeping that work out of the LZ77 hot
+  loop. The observed parser is isolated from the original loop so `.stored_fixed`
+  code generation remains stable; tiny, scan, dictionary, and split paths are
+  unchanged. A retained oracle compares tokens, plan costs, code lengths, and
+  final raw/zlib/gzip bytes against the scan-based path. Eleven alternating
+  ReleaseFast pairs against an independently built `5b8a5c9e` baseline on
+  i9-13900K CPU 8 preserved every frame and improved `.fastest` by `1.0488x`
+  on README (11/11), `1.0455x` on roadmap (11/11), `1.0276x` on `src/png.zig`
+  (9/11), and `1.0466x` for zlib-wrapped README (11/11). `.fast` controls were
+  noise-neutral at `1.0005x` / `0.9985x` on README/roadmap. Final validation
+  passed 1,498 tests, all 83 compile-check steps, the 50-check Rust
+  differential, the five-case incremental encode gate, and the
+  265-success/60-expected-failure Python zlib differential dashboard.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about

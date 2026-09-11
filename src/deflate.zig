@@ -761,6 +761,67 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
     };
 }
 
+const OneShotTokenPlan = struct {
+    tokens: lz77.GreedyPlan,
+    dynamic: OneShotDynamicStats,
+
+    fn deinit(self: OneShotTokenPlan, allocator: std.mem.Allocator) void {
+        self.tokens.deinit(allocator);
+    }
+};
+
+const OneShotDynamicStats = struct {
+    literal_frequencies: [286]u32 = @splat(0),
+    distance_frequencies: [30]u32 = @splat(0),
+};
+
+const DynamicStatsObserver = struct {
+    stats: *OneShotDynamicStats,
+
+    pub inline fn recordToken(self: DynamicStatsObserver, token: lz77.Token) void {
+        switch (token) {
+            .literal => |byte| self.stats.literal_frequencies[byte] += 1,
+            .match => |match| {
+                const length_symbol = length_code_table[match.length - lz77.min_match_len].symbol;
+                const distance_value = match.distance - 1;
+                const distance_index: usize = if (distance_value < 256)
+                    distance_value
+                else
+                    256 + (distance_value >> 7);
+                const distance_symbol = distance_code_symbol_table[distance_index];
+                self.stats.literal_frequencies[length_symbol] += 1;
+                self.stats.distance_frequencies[distance_symbol] += 1;
+            },
+        }
+    }
+};
+
+fn usesOneShotDynamicStats(input: []const u8, options: CompressionOptions) bool {
+    // Callers also check the raw block-selection field first. That cheap
+    // short-circuit keeps the `.stored_fixed` encoder on its original code
+    // layout instead of pulling this normalization and large result type into
+    // the hot entry point.
+    const normalized = normalizeOptionsForStrategy(options);
+    return normalized.strategy == .default and
+        normalized.parser == .hash and
+        normalized.block_selection == .stored_fixed_dynamic and
+        !useSmallInputScanPlan(input, normalized) and
+        !useTinyHashPlan(input, normalized);
+}
+
+fn planOneShotBestTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !OneShotTokenPlan {
+    const normalized = normalizeOptionsForStrategy(options);
+    std.debug.assert(usesOneShotDynamicStats(input, normalized));
+    var dynamic: OneShotDynamicStats = .{};
+    const tokens = try lz77.hashGreedyPlanAutoAllocObserved(
+        allocator,
+        input,
+        normalized.lz77_options,
+        DynamicStatsObserver{ .stats = &dynamic },
+    );
+    return .{ .tokens = tokens, .dynamic = dynamic };
+}
+
 fn rollingParser(options: CompressionOptions) ?ParserMode {
     const normalized = normalizeOptionsForStrategy(options);
     if (normalized.strategy != .default or
@@ -818,6 +879,9 @@ fn planTokensWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8
 
 pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
+    if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
+        return @call(.never_inline, encodeRawBestWithStatsAlloc, .{ allocator, input, options });
+    }
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     var writer = bitstream.BitWriter{};
@@ -835,6 +899,15 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
         allocator.free(fallback);
     }
     return encoded;
+}
+
+fn encodeRawBestWithStatsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    const plan = try planOneShotBestTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeBestTokensBlockWithOneShotStats(allocator, &writer, input, plan.tokens.tokens, true, &plan.dynamic);
+    return writer.toOwnedSlice(allocator);
 }
 
 pub fn usesStoredFastPath(input: []const u8, options: CompressionOptions) bool {
@@ -1289,6 +1362,22 @@ fn writeBestTokensBlockMaybeStats(allocator: std.mem.Allocator, writer: *bitstre
     return dynamic_plan.writeReserved(writer, tokens, final);
 }
 
+fn writeBestTokensBlockWithOneShotStats(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, stats: *const OneShotDynamicStats) !void {
+    const stored_len = storedBlocksEncodedSizeFromState(writer.*, plain.len);
+    const dynamic_plan = try DynamicCodingPlan.initFromOneShotStats(stats);
+    const fixed_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.fixed_bits);
+    const dynamic_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.bitCost());
+    if (stored_len <= fixed_len and stored_len <= dynamic_len) {
+        return writeStoredBlocks(allocator, writer, plain, final);
+    }
+    if (fixed_len <= dynamic_len) {
+        try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + fixed_len);
+        return writeFixedTokens(allocator, writer, tokens, final);
+    }
+    try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + dynamic_len);
+    return dynamic_plan.writeReserved(writer, tokens, final);
+}
+
 fn encodedBytesForBitsFromState(writer: bitstream.BitWriter, bit_count: usize) usize {
     return (@as(usize, writer.bit_index) + bit_count + 7) / 8;
 }
@@ -1444,6 +1533,26 @@ const DynamicCodingPlan = struct {
             fixed_bits,
             stats.literalSymbols(),
             stats.distanceSymbols(),
+        );
+    }
+
+    fn initFromOneShotStats(stats: *const OneShotDynamicStats) !DynamicCodingPlan {
+        var lit_freqs = stats.literal_frequencies;
+        lit_freqs[256] = 1;
+        var length_extra_bits: usize = 0;
+        for (257..286) |symbol| {
+            length_extra_bits += @as(usize, stats.literal_frequencies[symbol]) *
+                length_table[symbol - 257].extra_bits;
+        }
+        var distance_extra_bits: usize = 0;
+        for (stats.distance_frequencies, distance_table) |frequency, metadata| {
+            distance_extra_bits += @as(usize, frequency) * metadata.extra_bits;
+        }
+        return initFromStats(
+            lit_freqs,
+            stats.distance_frequencies,
+            length_extra_bits,
+            distance_extra_bits,
         );
     }
 
@@ -7074,6 +7183,9 @@ fn encodeZlibDynamicSplitDirectAlloc(allocator: std.mem.Allocator, input: []cons
 
 pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
+    if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
+        return @call(.never_inline, encodeZlibBestWithStatsAlloc, .{ allocator, input, options });
+    }
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     const encoded = try encodeZlibBestTokensAlloc(allocator, input, null, plan.tokens, options);
@@ -7088,6 +7200,16 @@ pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
         allocator.free(fallback);
     }
     return encoded;
+}
+
+fn encodeZlibBestWithStatsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    const plan = try planOneShotBestTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    const header_len = try writeWrappedDeflatePrefix(allocator, &writer, null);
+    try writeBestTokensBlockWithOneShotStats(allocator, &writer, input, plan.tokens.tokens, true, &plan.dynamic);
+    return finishZlibFrame(allocator, &writer, input, header_len);
 }
 
 /// Encode one zlib stream with the static PNG-trained Huffman model used by
@@ -15690,6 +15812,9 @@ pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 
 pub fn encodeGzipBestWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
+    if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
+        return @call(.never_inline, encodeGzipBestWithStatsAlloc, .{ allocator, input, options, header_options });
+    }
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     const encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, plan.tokens, options, header_options);
@@ -15704,6 +15829,16 @@ pub fn encodeGzipBestWithHeaderAlloc(allocator: std.mem.Allocator, input: []cons
         allocator.free(fallback);
     }
     return encoded;
+}
+
+fn encodeGzipBestWithStatsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    const plan = try planOneShotBestTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
+    try writeBestTokensBlockWithOneShotStats(allocator, &writer, input, plan.tokens.tokens, true, &plan.dynamic);
+    return finishGzipFrame(allocator, &writer, input);
 }
 
 pub fn encodeGzipLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) ![]u8 {
@@ -22239,6 +22374,49 @@ test "cached Deflate block costs match token-scan references" {
         generated_plan.bitCostReference(&generated),
         generated_plan.bitCost(),
     );
+}
+
+test "one-shot hash dynamic stats preserve plans and wrapped bytes" {
+    const input =
+        ("pub fn update(state: *State, value: u32) void { state.total += value; }\n" ** 1024) ++
+        ("abcabcabcabc xyz xyz xyz 0123456789\n" ** 256);
+    const options = optionsForLevel(.fastest);
+
+    const observed = try planOneShotBestTokensAlloc(std.testing.allocator, input, options);
+    defer observed.deinit(std.testing.allocator);
+    const stats = &observed.dynamic;
+    const scanned = try planTokensAlloc(std.testing.allocator, input, options);
+    defer scanned.deinit(std.testing.allocator);
+    try std.testing.expectEqualDeep(scanned.tokens, observed.tokens.tokens);
+    try std.testing.expectEqual(scanned.stats, observed.tokens.stats);
+
+    const scanned_dynamic = try DynamicCodingPlan.init(scanned.tokens);
+    const observed_dynamic = try DynamicCodingPlan.initFromOneShotStats(stats);
+    try std.testing.expectEqual(scanned_dynamic.fixed_bits, observed_dynamic.fixed_bits);
+    try std.testing.expectEqual(scanned_dynamic.dynamic_bits, observed_dynamic.dynamic_bits);
+    try std.testing.expectEqual(scanned_dynamic.lit_lengths_full, observed_dynamic.lit_lengths_full);
+    try std.testing.expectEqual(scanned_dynamic.dist_lengths_full, observed_dynamic.dist_lengths_full);
+
+    var scanned_writer = bitstream.BitWriter{};
+    errdefer scanned_writer.deinit(std.testing.allocator);
+    try writeBestTokensBlock(std.testing.allocator, &scanned_writer, input, scanned.tokens, true, options);
+    const scanned_raw = try scanned_writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(scanned_raw);
+    const raw = try encodeRawBestAlloc(std.testing.allocator, input, options);
+    defer std.testing.allocator.free(raw);
+    try std.testing.expectEqualSlices(u8, scanned_raw, raw);
+
+    const scanned_zlib = try encodeZlibBestTokensAlloc(std.testing.allocator, input, null, scanned.tokens, options);
+    defer std.testing.allocator.free(scanned_zlib);
+    const zlib = try encodeZlibBestAlloc(std.testing.allocator, input, options);
+    defer std.testing.allocator.free(zlib);
+    try std.testing.expectEqualSlices(u8, scanned_zlib, zlib);
+
+    const scanned_gzip = try encodeGzipBestTokensAlloc(std.testing.allocator, input, scanned.tokens, options);
+    defer std.testing.allocator.free(scanned_gzip);
+    const gzip = try encodeGzipBestAlloc(std.testing.allocator, input, options);
+    defer std.testing.allocator.free(gzip);
+    try std.testing.expectEqualSlices(u8, scanned_gzip, gzip);
 }
 
 test "inflate output capacity hint expands compressed frames but stays capped" {
