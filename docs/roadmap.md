@@ -4171,6 +4171,13 @@ coverage.
   `.fastest`, while unrelated default README fell to `0.9897x` with 0/11 wins
   and full-table `src/png.zig` to `0.9958x`. Retain the cheap counters until the
   large parser instance can be isolated without code-layout regressions.
+  A private 32-bit token (`literal` or `length-3`/`distance-1`) for one-shot
+  hash/dynamic selection was rejected after global and <=64 KiB-only versions.
+  The isolated form improved `src/png.zig` / `src/checksum.zig` by `1.0441x` /
+  `1.0781x`, but README raw/zlib stayed neutral-negative and unrelated default/
+  fast README fell to `0.9937x` / `0.9899x`; the global form had already cut
+  README/roadmap `.fastest` to `0.9707x` / `0.9833x`. Retain the shared six-byte
+  token and avoid duplicated parser/writer bodies.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about

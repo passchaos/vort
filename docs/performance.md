@@ -412,6 +412,16 @@ on those fastest rows, while default README still fell to `0.9897x` with 0/11
 wins and the full-table `src/png.zig` control to `0.9958x`. Retain the three
 cheap counters until the parser can be isolated without whole-binary code-layout
 regressions.
+A 32-bit internal token format for one-shot hash/dynamic selection was rejected
+after both global and short/full-table-only trials. Packing literal or
+`length-3`/`distance-1` behind one tag reduced each token from six bytes to
+four and improved the 44--45 KiB `src/png.zig` / `src/checksum.zig` rows by up
+to `1.0441x` / `1.0781x` when isolated. The global form, however, reduced
+README/roadmap `.fastest` to `0.9707x` / `0.9833x`; the isolated <=64 KiB form
+left README raw/zlib neutral-negative and still reduced unrelated default/fast
+README to `0.9937x` / `0.9899x`. Keep the common six-byte `Token`; compact
+decode branches and duplicated writer/parser bodies do not repay the footprint
+gain across the complete public encoder.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The
