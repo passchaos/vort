@@ -8495,10 +8495,16 @@ coverage.
   four bytes (5,534 to 5,530) while remaining within 1.2% of libbrotli quality
   8. Context-map round-trip tests cover every retained cutoff, and the q8
   source gate pins the new 5,530-byte ceiling.
-  The same exact-wire search now enumerates NPOSTFIX=0 direct-distance counts
-  `0/3/7/15` rather than hard-coding 15. The source plan selects NDIRECT=0,
-  reducing its stream by another four bytes to 5,526 (1.08% above libbrotli
-  quality 8); every alternative remains guarded by complete final-wire size.
+  The selected optimal-plan candidate uses NPOSTFIX=0 / NDIRECT=0 instead of
+  the ordinary writer's NDIRECT=15. This reduces the source stream by another
+  four bytes to 5,526 (1.08% above libbrotli quality 8), and the complete final
+  wire is still compared with the ordinary candidate before selection.
+  A later experiment applied upstream Brotli's Huffman-count RLE smoothing to a
+  second exact-wire ratio candidate. Across twelve 128 KiB Silesia prefixes it
+  saved only 218 of 544,150 bytes (0.040%), while representative ratio-encode
+  times generally rose 9--32%; five source/XML/tokenizer/font/dictionary
+  prefixes saved another 76 of 219,053 bytes (0.035%). The candidate was
+  rejected rather than adding a second full encode to the default ratio path.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-
