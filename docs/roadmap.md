@@ -4147,6 +4147,11 @@ coverage.
   regressed to `0.9862x` / `0.9790x` and default README to `0.9907x`. Restricting
   the method split to the ring template did not restore the controls and made
   roadmap unstable, so the single `recordToken` callback remains.
+  Adding a 16-byte vector tail after the shared 32-byte match loop was rejected.
+  The exhaustive mismatch/limit oracle passed, but fixed-CPU-8 A/Bs reduced
+  README/roadmap `.fastest` to `0.9921x` / `0.9982x`, full-table `src/png.zig` /
+  `src/checksum.zig` to `0.9858x` / `0.9948x`, and README `.fast` to `0.9935x`.
+  Retain the u64/scalar tails; two u64 probes beat an extra vector branch.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about

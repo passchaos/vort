@@ -377,6 +377,12 @@ regressed full-table `src/png.zig` and `src/checksum.zig` to `0.9862x` /
 left the control rows negative and made roadmap unstable. Keep the compact
 single `recordToken` observer; the compiler already specializes its known union
 tag well enough that another large-loop code-shape split is counterproductive.
+A 16-byte vector tail after the existing 32-byte `matchLength` loop was also
+rejected. It preserved every mismatch/limit result through 321 bytes, but
+replacing at most two eight-byte tail probes reduced README/roadmap `.fastest`
+to `0.9921x` / `0.9982x`, full-table `src/png.zig` / `src/checksum.zig` to
+`0.9858x` / `0.9948x`, and README `.fast` to `0.9935x`. Keep the current
+32-byte vector loop followed by the compact u64/scalar tails.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The
