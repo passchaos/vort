@@ -4116,6 +4116,17 @@ coverage.
   tests, all 83 compile-check steps, the 50-check Rust differential, the
   five-case incremental encode gate, and the 265-success/60-expected-failure
   Python zlib differential dashboard.
+  Reserved dynamic output now also trusts token symbols after its Huffman
+  encoder constructors validate all three tables, removing repeated bounds and
+  non-zero-code branches from the internal payload loop. Debug assertions keep
+  the invariant visible, while checked/external writers preserve errors. Eleven
+  alternating fixed-CPU-8 pairs against the committed reservoir baseline kept
+  every output byte and improved README/roadmap raw `.fastest` by `1.0096x` /
+  `1.0031x` with 11/11 wins, plus `src/png.zig` by `1.0149x` with 9/11 wins.
+  The follow-up profile reduced `DynamicCodingPlan.writeReserved` from about
+  12.59% to 11.71%. Final validation again passed 1,499 tests, all 83 compile
+  steps, the 50-check Rust differential, and the 265-success/60-expected-failure
+  Python zlib dashboard.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about

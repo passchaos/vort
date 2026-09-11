@@ -1778,14 +1778,14 @@ const DynamicCodingPlan = struct {
             buffered.writeBits(self.code_len_lengths[symbol], 3);
         }
         for (self.code_len_ops.slice()) |op| {
-            try buffered.writeSymbol(&code_len_encoder, op.symbol);
+            buffered.writeSymbolTrusted(&code_len_encoder, op.symbol);
             buffered.writeBits(op.extra_value, op.extra_bits);
         }
         for (tokens) |token| switch (token) {
-            .literal => |byte| try buffered.writeSymbol(&lit_encoder, byte),
-            .match => |match| try buffered.writeMatch(&lit_encoder, &dist_encoder, match),
+            .literal => |byte| buffered.writeSymbolTrusted(&lit_encoder, byte),
+            .match => |match| buffered.writeMatchTrusted(&lit_encoder, &dist_encoder, match),
         };
-        try buffered.writeSymbol(&lit_encoder, 256);
+        buffered.writeSymbolTrusted(&lit_encoder, 256);
         buffered.finish();
     }
 
@@ -1922,22 +1922,22 @@ const ReservedBitWriter = struct {
         self.bit_count = total - 64;
     }
 
-    inline fn writeSymbol(self: *ReservedBitWriter, encoder: anytype, symbol: usize) !void {
-        if (symbol >= encoder.bits.len or encoder.bits[symbol] == 0) return error.InvalidHuffmanCode;
+    inline fn writeSymbolTrusted(self: *ReservedBitWriter, encoder: anytype, symbol: usize) void {
+        std.debug.assert(symbol < encoder.bits.len and encoder.bits[symbol] != 0);
         self.writeBits(encoder.codes[symbol], encoder.bits[symbol]);
     }
 
-    inline fn writeMatch(
+    inline fn writeMatchTrusted(
         self: *ReservedBitWriter,
         lit_encoder: *const huffman.HuffmanTable(286).Encoder,
         dist_encoder: *const huffman.HuffmanTable(30).Encoder,
         match: lz77.Token.Match,
-    ) !void {
+    ) void {
         const length = lengthCode(match.length);
         const distance = distanceCode(match.distance);
         const length_code_bits: u6 = lit_encoder.bits[length.symbol];
         const distance_code_bits: u6 = dist_encoder.bits[distance.symbol];
-        if (length_code_bits == 0 or distance_code_bits == 0) return error.InvalidHuffmanCode;
+        std.debug.assert(length_code_bits != 0 and distance_code_bits != 0);
 
         var bits: u64 = lit_encoder.codes[length.symbol];
         var count: u6 = length_code_bits;

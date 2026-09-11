@@ -340,6 +340,17 @@ from about 13.83% to 12.59% and sampled `memcpy` from 3.37% to 0.29%. Full
 validation passed 1,499 tests, all 83 compile-check steps, the 50-check Rust
 differential, the five-case incremental encode gate, and the
 265-success/60-expected-failure Python zlib differential dashboard.
+The same trusted reserved path now omits per-token symbol bounds/non-zero
+branches after its three encoder constructors have validated the coding tables;
+Debug builds retain assertions, while checked and externally assembled token
+writers still report `InvalidHuffmanCode`. Against the committed 64-bit
+reservoir baseline, eleven alternating fixed-CPU-8 pairs kept output identical
+and improved README/roadmap raw `.fastest` by `1.0096x` / `1.0031x`, both
+11/11 wins, plus `src/png.zig` by `1.0149x` with 9/11 wins. The follow-up
+profile reduced `DynamicCodingPlan.writeReserved` from about 12.59% to 11.71%.
+Final validation again passed 1,499 tests, all 83 compile-check steps, the
+50-check Rust differential, and the 265-success/60-expected-failure Python
+zlib differential dashboard.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The
