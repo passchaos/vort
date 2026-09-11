@@ -351,6 +351,17 @@ profile reduced `DynamicCodingPlan.writeReserved` from about 12.59% to 11.71%.
 Final validation again passed 1,499 tests, all 83 compile-check steps, the
 50-check Rust differential, and the 265-success/60-expected-failure Python
 zlib differential dashboard.
+Two follow-up encoder-table changes were measured and rejected. Constructing
+the three canonical encoders in place into undefined storage avoided clearing
+unused entries and a large return copy, but gained only about `1.002x` on
+README/roadmap `.fastest`, made `src/png.zig` slightly negative, and reduced
+default README to `0.9933x` with 0/11 wins. Packing each reversed code and bit
+length into one `u32` slot, similar to the compact entries used by zlib-ng and
+zlib-rs, regressed every tracked source row: README/roadmap `.fastest` reached
+`0.9769x` / `0.9859x`, `src/png.zig` `0.9729x`, `src/checksum.zig` `0.9770x`,
+and default README `0.9909x`. Keep the existing split code/length arrays and
+validated constructors; after reservoir batching, table construction/layout is
+not a profitable standalone target on this compiler and CPU.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

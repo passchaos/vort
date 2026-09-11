@@ -4127,6 +4127,14 @@ coverage.
   12.59% to 11.71%. Final validation again passed 1,499 tests, all 83 compile
   steps, the 50-check Rust differential, and the 265-success/60-expected-failure
   Python zlib dashboard.
+  Two encoder-table follow-ups were rejected. In-place construction into
+  undefined storage was only about `1.002x` on README/roadmap `.fastest`, made
+  `src/png.zig` slightly negative, and reduced default README to `0.9933x` with
+  0/11 wins. Packing reversed code and width into one `u32`, following the
+  compact entry shape used by zlib-ng/zlib-rs, regressed all tracked source
+  rows: README/roadmap `.fastest` were `0.9769x` / `0.9859x`, `src/png.zig`
+  `0.9729x`, `src/checksum.zig` `0.9770x`, and default README `0.9909x`. Retain
+  the separate code/length arrays and validated constructors.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about
