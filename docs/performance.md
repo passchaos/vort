@@ -320,6 +320,26 @@ selection, remained noise-neutral at `1.0005x` on README and `0.9985x` on
 roadmap. Full validation passed 1,498 tests, all 83 compile-check steps, the
 50-check Rust differential, the five-case incremental encode gate, and the
 265-success/60-expected-failure Python zlib differential dashboard.
+The reserved-capacity dynamic block writer now keeps pending fields in a local
+64-bit reservoir and appends eight bytes only when it fills, following the
+batched emission shape used by zlib-ng and zlib-rs. The prior implementation
+materialized and appended every complete-byte fragment after each literal or
+fused match even though total output capacity was already reserved. Checked,
+split, and general-purpose `BitWriter` paths remain unchanged. A dedicated
+oracle covers every starting bit alignment and widths 0...56 across repeated
+64-bit boundaries; the retained checked-vs-reserved dynamic block oracle covers
+the complete header, token payload, EOB, and all alignments. Against an
+independently built `b19130b3` baseline, eleven alternating ReleaseFast pairs
+pinned to i9-13900K CPU 8 preserved every frame and improved raw `.fastest` by
+`1.0464x` on README (11/11), `1.0334x` on roadmap (11/11), `1.0244x` on
+`src/png.zig` (10/11), and `1.0306x` on `src/checksum.zig` (11/11).
+Zlib-wrapped README improved `1.0421x` (11/11), default raw README improved
+`1.0092x` (11/11), and the non-dynamic `.fast` control remained neutral at
+`1.0028x`. A follow-up README profile reduced `DynamicCodingPlan.writeReserved`
+from about 13.83% to 12.59% and sampled `memcpy` from 3.37% to 0.29%. Full
+validation passed 1,499 tests, all 83 compile-check steps, the 50-check Rust
+differential, the five-case incremental encode gate, and the
+265-success/60-expected-failure Python zlib differential dashboard.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

@@ -4098,6 +4098,24 @@ coverage.
   passed 1,498 tests, all 83 compile-check steps, the 50-check Rust
   differential, the five-case incremental encode gate, and the
   265-success/60-expected-failure Python zlib differential dashboard.
+  The reserved dynamic block emitter now carries a local 64-bit bit reservoir
+  across the full header and token stream, appending eight bytes only when the
+  reservoir fills. This adopts the batched write shape used by zlib-ng and
+  zlib-rs instead of materializing a short byte slice after every literal or
+  fused match. Checked/split writers and the shared `BitWriter` retain their
+  existing behavior. A new width-0...56/all-alignment oracle crosses repeated
+  64-bit boundaries, while the existing full dynamic-block oracle verifies
+  header, token, EOB, and final-byte identity. Eleven alternating ReleaseFast
+  pairs against an independently built `b19130b3` baseline on i9-13900K CPU 8
+  kept every frame byte-identical and improved raw `.fastest` by `1.0464x` on
+  README (11/11), `1.0334x` on roadmap (11/11), `1.0244x` on `src/png.zig`
+  (10/11), and `1.0306x` on `src/checksum.zig` (11/11). Zlib-wrapped README
+  improved `1.0421x`, default raw README `1.0092x`, and `.fast` stayed neutral
+  at `1.0028x`. Profiling reduced dynamic reserved writing from about 13.83% to
+  12.59% and sampled `memcpy` from 3.37% to 0.29%. Final validation passed 1,499
+  tests, all 83 compile-check steps, the 50-check Rust differential, the
+  five-case incremental encode gate, and the 265-success/60-expected-failure
+  Python zlib differential dashboard.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about

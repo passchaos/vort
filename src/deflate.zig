@@ -1764,13 +1764,29 @@ const DynamicCodingPlan = struct {
         tokens: []const lz77.Token,
         final: bool,
     ) !void {
-        return self.writeWithCapacity(
-            undefined,
-            writer,
-            tokens,
-            final,
-            true,
-        );
+        const lit_encoder = try huffman.HuffmanTable(286).Encoder.init(self.lit_lengths_full[0..self.hlit]);
+        const dist_encoder = try huffman.HuffmanTable(30).Encoder.init(self.dist_lengths_full[0..self.hdist]);
+        const code_len_encoder = try huffman.CodeLengthTable.Encoder.init(&self.code_len_lengths);
+        var buffered = ReservedBitWriter.init(writer);
+
+        buffered.writeBits(@intFromBool(final), 1);
+        buffered.writeBits(0b10, 2);
+        buffered.writeBits(@intCast(self.hlit - 257), 5);
+        buffered.writeBits(@intCast(self.hdist - 1), 5);
+        buffered.writeBits(@intCast(self.hclen - 4), 4);
+        for (huffman.code_length_order[0..self.hclen]) |symbol| {
+            buffered.writeBits(self.code_len_lengths[symbol], 3);
+        }
+        for (self.code_len_ops.slice()) |op| {
+            try buffered.writeSymbol(&code_len_encoder, op.symbol);
+            buffered.writeBits(op.extra_value, op.extra_bits);
+        }
+        for (tokens) |token| switch (token) {
+            .literal => |byte| try buffered.writeSymbol(&lit_encoder, byte),
+            .match => |match| try buffered.writeMatch(&lit_encoder, &dist_encoder, match),
+        };
+        try buffered.writeSymbol(&lit_encoder, 256);
+        buffered.finish();
     }
 
     fn writeWithCapacity(
@@ -1871,6 +1887,83 @@ const DynamicCodingPlan = struct {
             256,
             assume_capacity,
         );
+    }
+};
+
+const ReservedBitWriter = struct {
+    writer: *bitstream.BitWriter,
+    reservoir: u64,
+    bit_count: u7,
+
+    fn init(writer: *bitstream.BitWriter) ReservedBitWriter {
+        return .{
+            .writer = writer,
+            .reservoir = writer.scratch,
+            .bit_count = writer.bit_index,
+        };
+    }
+
+    inline fn writeBits(self: *ReservedBitWriter, bits: u64, count: u6) void {
+        if (count == 0) return;
+        const masked = bits & ((@as(u64, 1) << count) - 1);
+        const previous_count = self.bit_count;
+        const total: u7 = previous_count + count;
+        self.reservoir |= masked << @intCast(previous_count);
+        if (total < 64) {
+            self.bit_count = total;
+            return;
+        }
+
+        var encoded: [8]u8 = undefined;
+        std.mem.writeInt(u64, &encoded, self.reservoir, .little);
+        std.debug.assert(self.writer.bytes.items.len + 8 <= self.writer.bytes.capacity);
+        self.writer.bytes.appendSliceAssumeCapacity(&encoded);
+        self.reservoir = masked >> @intCast(64 - previous_count);
+        self.bit_count = total - 64;
+    }
+
+    inline fn writeSymbol(self: *ReservedBitWriter, encoder: anytype, symbol: usize) !void {
+        if (symbol >= encoder.bits.len or encoder.bits[symbol] == 0) return error.InvalidHuffmanCode;
+        self.writeBits(encoder.codes[symbol], encoder.bits[symbol]);
+    }
+
+    inline fn writeMatch(
+        self: *ReservedBitWriter,
+        lit_encoder: *const huffman.HuffmanTable(286).Encoder,
+        dist_encoder: *const huffman.HuffmanTable(30).Encoder,
+        match: lz77.Token.Match,
+    ) !void {
+        const length = lengthCode(match.length);
+        const distance = distanceCode(match.distance);
+        const length_code_bits: u6 = lit_encoder.bits[length.symbol];
+        const distance_code_bits: u6 = dist_encoder.bits[distance.symbol];
+        if (length_code_bits == 0 or distance_code_bits == 0) return error.InvalidHuffmanCode;
+
+        var bits: u64 = lit_encoder.codes[length.symbol];
+        var count: u6 = length_code_bits;
+        bits |= @as(u64, length.extra_value) << count;
+        count += length.extra_bits;
+        bits |= @as(u64, dist_encoder.codes[distance.symbol]) << count;
+        count += distance_code_bits;
+        bits |= @as(u64, distance.extra_value) << count;
+        count += distance.extra_bits;
+        self.writeBits(bits, count);
+    }
+
+    fn finish(self: *ReservedBitWriter) void {
+        const full_bytes = self.bit_count / 8;
+        if (full_bytes != 0) {
+            var encoded: [8]u8 = undefined;
+            std.mem.writeInt(u64, &encoded, self.reservoir, .little);
+            std.debug.assert(self.writer.bytes.items.len + full_bytes <= self.writer.bytes.capacity);
+            self.writer.bytes.appendSliceAssumeCapacity(encoded[0..full_bytes]);
+        }
+        const trailing_bits: u3 = @intCast(self.bit_count % 8);
+        self.writer.scratch = if (trailing_bits == 0)
+            0
+        else
+            @truncate(self.reservoir >> @intCast(full_bytes * 8));
+        self.writer.bit_index = trailing_bits;
     }
 };
 
@@ -22311,6 +22404,32 @@ test "reserved dynamic block writer matches checked writer" {
             checked.bytes.items,
             reserved.bytes.items,
         );
+    }
+}
+
+test "reserved Deflate bit writer matches checked writes across reservoir boundaries" {
+    for (0..8) |prefix_bits_usize| {
+        const prefix_bits: u6 = @intCast(prefix_bits_usize);
+        var checked = bitstream.BitWriter{};
+        defer checked.deinit(std.testing.allocator);
+        var reserved = bitstream.BitWriter{};
+        defer reserved.deinit(std.testing.allocator);
+        try checked.writeBits(std.testing.allocator, 0b1010_1101, prefix_bits);
+        try reserved.writeBits(std.testing.allocator, 0b1010_1101, prefix_bits);
+        try reserved.bytes.ensureTotalCapacity(std.testing.allocator, 512);
+
+        var buffered = ReservedBitWriter.init(&reserved);
+        for (0..57) |count_usize| {
+            const count: u6 = @intCast(count_usize);
+            const bits = @as(u64, 0xd6_e5_f4_a3_b2_c1_90_87) ^
+                (@as(u64, count) *% 0x9e37_79b9_7f4a_7c15);
+            try checked.writeBits(std.testing.allocator, bits, count);
+            buffered.writeBits(bits, count);
+        }
+        buffered.finish();
+        try checked.alignToByte(std.testing.allocator);
+        try reserved.alignToByte(std.testing.allocator);
+        try std.testing.expectEqualSlices(u8, checked.bytes.items, reserved.bytes.items);
     }
 }
 
