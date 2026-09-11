@@ -4089,6 +4089,14 @@ coverage.
   growing 18 bytes. Depths two and one increased README by 241/1,560 bytes and
   roadmap by 4,231/22,499 bytes. Treat these as user-selectable custom-option
   tradeoffs, not a better production fastest preset.
+  Ring-backed hash-greedy search now computes `pos -| window_len` once per
+  input position and compares predecessor positions directly, eliminating its
+  impossible zero-distance check and repeated distance/window comparison. The
+  full-table specialization keeps its prior branch shape after an unrestricted
+  version regressed 44--45 KiB source rows by about 0.8%. Fixed-CPU-8 A/Bs
+  preserved every frame: README `.fastest/.fast` improved by `1.0157x` /
+  `1.0095x` (14/15 and 11/11 wins), roadmap by `1.0038x` / `1.0027x` (14/15 and
+  11/11), while the isolated `src/png.zig` full-table control was `1.0000x`.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent

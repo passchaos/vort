@@ -303,6 +303,15 @@ control fell to `0.994x`. Adding a 64-byte diversity sample protected the
 allocation size but still cost roadmap throughput (`0.9959x`, 0/12 wins), while
 README improved `1.0161x`. Keep the simple 4,096-token initial reserve until a
 signal already available from parsing can size it without an extra prepass.
+Ring-backed hash search now precomputes the earliest legal predecessor once per
+input position and compares candidate positions directly, removing the
+impossible zero-distance test and repeated distance/window comparison from its
+chain loop. Full-table parsing keeps the prior branch shape after an unrestricted
+version regressed 44--45 KiB source rows by about 0.8%. Fixed-CPU-8 A/Bs kept
+all frames identical: README `.fastest/.fast` improved by `1.0157x` / `1.0095x`
+with 14/15 and 11/11 wins, roadmap improved by `1.0038x` / `1.0027x` with 14/15
+and 11/11 wins, and the isolated `src/png.zig` full-table control was exactly
+neutral at `1.0000x`.
 An isolated `.fastest` chain-depth sweep also retained the existing six-entry
 budget. Reducing it to four made a single 200-iteration sample about 3.8% faster
 on README and roadmap, but grew their frames by 23 and 339 bytes; the 44 KiB

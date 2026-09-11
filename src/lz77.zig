@@ -2130,11 +2130,17 @@ fn findBestHashMatchWithLayoutAndHashLimits(
     var checked: usize = 0;
     var walked: usize = 0;
     const max_len = @min(limits.maximum, input.len - pos);
+    const earliest = if (comptime ring) pos -| limits.window_len else 0;
     var best = MatchCandidate{};
     while (candidate_i >= 0 and checked < limits.max_chain and walked < limits.max_walks) : (walked += 1) {
         const candidate: usize = @intCast(candidate_i);
+        if (comptime ring) {
+            if (candidate < earliest) break;
+        }
         const distance = pos - candidate;
-        if (distance == 0 or distance > limits.window_len) break;
+        if (comptime !ring) {
+            if (distance == 0 or distance > limits.window_len) break;
+        }
         if (best.length == max_len) break;
         const required_prefix = @max(best.length, minimum - 1);
         if (input[candidate + required_prefix] != input[pos + required_prefix]) {
