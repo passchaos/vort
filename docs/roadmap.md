@@ -8628,6 +8628,18 @@ coverage.
   real-corpus ratio win is claimed. Three alternating fixed-CPU-2 pairs across
   seven representative real rows preserve every size and checksum with median
   throughput ratios from 0.989x to 1.004x, bounding the inactive scan cost.
+  Four regions may now also share three command trees in `A-B-C-A` order,
+  exercising the RFC implicit wrap from current type 2 back to type 0. The same
+  at-most-six boundary triples and 1,024-command minimum apply; its estimate
+  must beat the best available three-/two-tree form by at least 128 bits, and
+  the complete candidate still competes against every other proposed wire.
+  Vort, Node, and libbrotli 1.1.0 decode the 180,253-byte stream back to its
+  385,911-byte fixture, and allocation-failure injection covers candidate
+  cleanup. The required differential now reports
+  `planned_command_split_cases=4`. The fixed 17-file corpus has no natural
+  A-B-C-A proposal, so no ratio gain is claimed; three alternating fixed-CPU-2
+  pairs preserve all seven representative sizes/checksums with median
+  throughput ratios from 0.997x to 1.002x.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-

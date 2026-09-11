@@ -104,6 +104,31 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("alternating-command-types: node output mismatch")
     print(f"brotli planned alternating-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    command_count = 8192
+    first_split = command_count // 6
+    second_split = command_count * 2 // 6
+    third_split = command_count * 3 // 6
+    insert_lens = (
+        outer_insert_lens,
+        (34, 50, 66, 98, 130, 194, 322, 578),
+        (18, 20, 22, 24, 26, 28, 30, 32),
+    )
+    copy_lens = (2, 40, 6)
+    expected = bytearray(385911)
+    position = 0
+    for i in range(command_count):
+        region = 0 if i < first_split else 1 if i < second_split else 2 if i < third_split else 3
+        tree = 0 if region == 3 else region
+        insert_len = insert_lens[tree][i & 7]
+        copy_len = copy_lens[tree]
+        byte = tree * 112 + (i & 15)
+        expected[position : position + insert_len + copy_len] = bytes([byte]) * (insert_len + copy_len)
+        position += insert_len + copy_len
+    encoded = subprocess.check_output([sys.argv[1], "reuse-first-three-command-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("reuse-first-three-command-types: node output mismatch")
+    print(f"brotli planned reuse-first-three-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
     state = 0x12345678
     random_tail = bytearray(512)
     for i in range(len(random_tail)):

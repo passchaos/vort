@@ -846,6 +846,17 @@ pub fn main(init: std.process.Init) !void {
     if (!std.mem.eql(u8, planned_alternating.payload, planned_alternating_decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(init.gpa, planned_alternating.encoded, planned_alternating.payload, 16, 17, 31);
     planned_command_split_cases += 1;
+    const planned_reuse_first_three = try vort.br.IncrementalTestSupport.encodeReuseFirstOfThreeCommandTypes(init.gpa);
+    defer init.gpa.free(planned_reuse_first_three.encoded);
+    defer init.gpa.free(planned_reuse_first_three.payload);
+    const planned_reuse_first_three_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_reuse_first_three.encoded);
+    if (planned_reuse_first_three_summary.max_command_block_types != 3) return error.ReferenceEncodeFailed;
+    const planned_reuse_first_three_decoded = try init.gpa.alloc(u8, planned_reuse_first_three.payload.len);
+    defer init.gpa.free(planned_reuse_first_three_decoded);
+    try reference.decode(planned_reuse_first_three.encoded, planned_reuse_first_three_decoded);
+    if (!std.mem.eql(u8, planned_reuse_first_three.payload, planned_reuse_first_three_decoded)) return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(init.gpa, planned_reuse_first_three.encoded, planned_reuse_first_three.payload, 16, 17, 31);
+    planned_command_split_cases += 1;
     const long_window_gap = 80 * 1024;
     const long_window_repeat = 12 * 1024;
     const long_window_payload = try init.gpa.alloc(u8, long_window_gap + long_window_repeat);
