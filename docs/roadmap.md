@@ -4097,6 +4097,11 @@ coverage.
   preserved every frame: README `.fastest/.fast` improved by `1.0157x` /
   `1.0095x` (14/15 and 11/11 wins), roadmap by `1.0038x` / `1.0027x` (14/15 and
   11/11), while the isolated `src/png.zig` full-table control was `1.0000x`.
+  A ring-only compile-time accept-all specialization was rejected. Removing the
+  runtime selection from the hot loop created a second large loop instance but
+  left `.fastest` effectively neutral on README (`1.0009x`, 8/15) and roadmap
+  (`0.9990x`, 6/15); the nominally isolated 44 KiB full-table control regressed
+  to `0.9910x` with 0/11 wins. Keep the shared loop and once-computed boolean.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent

@@ -312,6 +312,12 @@ all frames identical: README `.fastest/.fast` improved by `1.0157x` / `1.0095x`
 with 14/15 and 11/11 wins, roadmap improved by `1.0038x` / `1.0027x` with 14/15
 and 11/11 wins, and the isolated `src/png.zig` full-table control was exactly
 neutral at `1.0000x`.
+A ring-only compile-time specialization for the proven accept-all match policy
+was rejected. It removed the runtime selection inside the hash loop but added a
+second large loop instance: fixed-CPU-8 `.fastest` results were effectively
+neutral on README (`1.0009x`, 8/15) and roadmap (`0.9990x`, 6/15), while the
+supposedly isolated 44 KiB full-table control regressed to `0.9910x` with 0/11
+wins. Keep the single loop with its once-computed runtime boolean.
 An isolated `.fastest` chain-depth sweep also retained the existing six-entry
 budget. Reducing it to four made a single 200-iteration sample about 3.8% faster
 on README and roadmap, but grew their frames by 23 and 339 bytes; the 44 KiB
