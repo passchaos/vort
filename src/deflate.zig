@@ -5337,8 +5337,14 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     // speculative two-byte literal stores and bounded match writes. A smaller
     // headroom keeps short PNG rows and dynamic-block tails out of the compact
     // fallback decoder without changing the public OutputTooSmall boundary.
-    const output_headroom: usize =
-        if (pause_at_output_boundary) 258 else 16;
+    // A non-overlap iteration can retire two paired-literal entries before a
+    // maximum-length match, so its unchecked copy needs 4 + 258 bytes.
+    const output_headroom: usize = if (pause_at_output_boundary)
+        258
+    else if (inline_non_overlap)
+        262
+    else
+        16;
     if (out_pos + output_headroom <= output.len and byte_index + 8 <= input.len) {
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
     }
@@ -5605,8 +5611,8 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (distance >= length) {
                 @branchHint(.likely);
                 if (distance > out_pos) return error.InvalidMatch;
-                if (length > output.len - out_pos) return error.OutputTooSmall;
                 if (comptime pause_at_output_boundary) {
+                    if (length > output.len - out_pos) return error.OutputTooSmall;
                     if (!png_non_overlap.copyShortWindowMatch(
                         output,
                         out_pos,
@@ -5616,6 +5622,10 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                         @memcpy(output[out_pos..][0..length], output[out_pos - distance ..][0..length]);
                     }
                 } else {
+                    // The full-output specialization enters this loop with
+                    // room for two paired literals plus a maximum-length
+                    // match, so destination capacity is already proven.
+                    std.debug.assert(length <= output.len - out_pos);
                     @memcpy(output[out_pos..][0..length], output[out_pos - distance ..][0..length]);
                 }
             } else {
@@ -13731,6 +13741,10 @@ const semantic_non_overlap_mixed_tokens = [_]lz77.Token{
     .{ .match = .{ .length = 9, .distance = 64 } },
     .{ .match = .{ .length = 17, .distance = 5 } },
     .{ .match = .{ .length = 258, .distance = 258 } },
+    .{ .literal = 'E' },
+    .{ .literal = 'F' },
+    .{ .literal = 'G' },
+    .{ .literal = 'H' },
     .{ .match = .{ .length = 258, .distance = 300 } },
 };
 
@@ -13834,6 +13848,10 @@ test "semantic non-overlap full-output loop matches public decode" {
     defer std.testing.allocator.free(raw);
     const expected = try lz77.replayAlloc(std.testing.allocator, &tokens);
     defer std.testing.allocator.free(expected);
+    // The final maximum-length match begins with exactly 258 output bytes
+    // remaining, exercising the transactional tail boundary after the fast
+    // loop reserves room for a match plus preceding speculative literals.
+    try std.testing.expectEqual(@as(usize, 824), expected.len);
 
     var parsed_reader: bitstream.BufferedBitReader = undefined;
     var literal_table_: huffman.HuffmanTable(286) = undefined;
@@ -13877,6 +13895,13 @@ test "semantic non-overlap full-output loop matches public decode" {
     const public = try decodeRawAuto(raw, public_output);
     try std.testing.expectEqual(expected.len, public.output_written);
     try std.testing.expectEqualSlices(u8, expected, public_output);
+
+    const short_output = try std.testing.allocator.alloc(u8, expected.len - 1);
+    defer std.testing.allocator.free(short_output);
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        decodeRawAuto(raw, short_output),
+    );
 }
 
 test "png parallel reconstruction matches scalar mixed filters" {

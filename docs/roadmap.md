@@ -1522,6 +1522,27 @@ coverage.
 
 - Retried a narrower production length-extra staged helper only in the no-dictionary caller-buffer dynamic block path after the median-of-3 extra-bit gate turned positive. It was rejected because ReleaseFast decode-stage repeat3 still regressed end-to-end rows: README `gzip_into` fell from about `553.72` to `436.26` MiB/s, structured `gzip_into` from about `2180.39` to `1817.18` MiB/s, and several exact-size rows were mixed. Keep the staged length-extra path benchmark-only until a variant proves raw/zlib/gzip caller-buffer and wrapper rows together.
 
+- Matched zlib-ng's fast-inflate output-space invariant in Vort's existing
+  deep-distance caller-buffer specialization: it now requires 262 bytes of
+  headroom (two possible paired-literal entries plus the 258-byte maximum
+  DEFLATE match) before entering the semantic fast loop and omits the redundant
+  destination-capacity check on its dominant non-overlapping match branch.
+  Distance/history validation and the exact transactional tail remain
+  unchanged. A mixed-match test pins both a final 258-byte match that exactly
+  fills the output and the one-byte-short `OutputTooSmall` boundary. Nine
+  alternating 1,000-iteration pairs on fixed i9-13900K P-core 8 measured README
+  raw/zlib/gzip caller-buffer medians at `1.0264x/1.0128x/1.0216x` and roadmap
+  at `1.0087x/1.0077x/1.0053x`; all six medians were positive.
+
+- Rejected two nearby dynamic-payload changes before keeping the headroom
+  optimization. Extending the PNG resumable loop's zero-length-extra branch to
+  the full-output deep-distance loop regressed README caller-buffer throughput
+  by roughly 4% and roadmap by roughly 12% in the initial repeat3 probe.
+  Delaying third/fourth semantic literal-table loads until the preceding entry
+  proved literal also regressed the text rows by roughly 0.6--2.0%; the existing
+  early loads provide useful instruction-level overlap despite occasional
+  unused lookups. Both candidates were fully reverted.
+
 - Added `GzipDecodeOptions`, `decodeGzipWithOptions`, allocator-returning `decodeGzipAllocWithOptions*`, and concatenated `decodeGzipConcatenated*WithOptions` APIs, mirroring the zlib relaxed decode surface with `ignore_crc32`, `ignore_isize`, and `allow_trailing_data`. Default gzip decode behavior remains strict, while future wrapper/checksum profiling can now separate DEFLATE payload cost from trailer validation without private test hooks across single-member and concatenated streams. A narrow production experiment that updated `Crc32Slice32` per literal/match span in single-member caller-buffer gzip was rejected because the call granularity overwhelmed the avoided final scan; keep future CRC fusion batched by decoded spans/blocks. A block-level 4 KiB batched retry was also rejected after mixed ReleaseFast decode-stage results: structured improved but README/dynamic-match/binary caller-buffer gzip regressed, so future work needs a selective span accumulator instead of flushing only at deflate block boundaries. The checksum benchmark now carries decoded-span threshold rows for 256/1024/2048/4096-byte pending spans so selective CRC batching can be evaluated as evidence before another production attempt. An initial local ReleaseFast gate reported `crc32-slice32` around `2852.49` MiB/s, threshold256 around `2476.88` MiB/s, and threshold1024 around `2704.02` MiB/s; after extending the sweep, the next local gate reported threshold256 `2218.33`, threshold1024 `2270.45`, threshold2048 `1731.56`, and threshold4096 `2616.12` MiB/s, making 4096-byte pending spans the strongest simple-threshold candidate. A follow-up selective4096 benchmark row that flushes pending tiny spans but updates already-large spans directly reported about `2726.13` MiB/s versus `crc32-slice32` around `2847.67` MiB/s and `crc32-best` around `2883.34` MiB/s, making selective4096 the best benchmark-only shape before any production A/B. The decode-stage report now carries strict zlib/gzip rows beside zlib no-Adler, standalone `adler32_mib_s`, `zlib_adler_time_ratio`, gzip alloc/exact/into no-CRC rows, no-ISIZE, fully relaxed gzip, standalone `crc32_mib_s`, and `gzip_crc_time_ratio`, so Adler-32/CRC-32 scan costs and trailer-size checks can be separated across caller-buffer and allocator-returning paths; allocator-returning zlib relaxed decode skips Adler calculation when `ignore_adler` is set.
 
 - Rejected a broader production fused dynamic-distance FastDecoder hit path that consumed the distance Huffman code and extra bits together. It helped `docs/roadmap.md` in the targeted repeat3 probe but regressed README caller-buffer raw/zlib/gzip rows to about `474.04` / `495.73` / `453.28` MiB/s, so production keeps only the narrower staged helper for distance extra bits.
