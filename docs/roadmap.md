@@ -4135,6 +4135,12 @@ coverage.
   rows: README/roadmap `.fastest` were `0.9769x` / `0.9859x`, `src/png.zig`
   `0.9729x`, `src/checksum.zig` `0.9770x`, and default README `0.9909x`. Retain
   the separate code/length arrays and validated constructors.
+  Reconstructing sorted active-symbol arrays in the one-shot histogram
+  post-pass for the existing sparse Huffman builder was also rejected. Plan and
+  wire output remained exact, but eleven fixed-CPU-8 pairs reduced README/
+  roadmap `.fastest` to `0.9845x` / `0.9930x` and `src/png.zig` to `0.9877x`.
+  Retain dense 286/30-symbol scans unless active lists can be obtained without
+  adding work or state to the parser.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about

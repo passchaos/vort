@@ -362,6 +362,13 @@ zlib-rs, regressed every tracked source row: README/roadmap `.fastest` reached
 and default README `0.9909x`. Keep the existing split code/length arrays and
 validated constructors; after reservoir batching, table construction/layout is
 not a profitable standalone target on this compiler and CPU.
+Building sorted active-symbol lists during the one-shot histogram post-pass and
+feeding the existing sparse Huffman length builder was rejected too. It kept
+the plan/wire oracle exact, but list materialization plus the alternate builder
+reduced README/roadmap `.fastest` to `0.9845x` / `0.9930x` and `src/png.zig`
+to `0.9877x` in eleven fixed-CPU-8 pairs. Keep the dense 286/30-symbol scans;
+the remaining `initFromStats` cost is not removed profitably by reconstructing
+incremental-style active lists after parsing.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The
