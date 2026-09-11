@@ -4025,6 +4025,14 @@ coverage.
   wins, while default remains noise-neutral at `0.999x`. This matches the local
   fdeflate hash-chain design's bounded window-indexed links while retaining
   Vort's deliberately conservative small-input allocation policy.
+  A separate fdeflate-style no-match skip-ahead prototype used shift 6 only in
+  `.fastest`, emitting skipped bytes as literals but omitting their hash
+  probes/inserts. It was rejected on fixed i9-13900K P-core 8 after 15
+  alternating 100-iteration pairs: README preserved its 22,172-byte frame but
+  reached only `0.9936x` paired-median throughput with 1/15 wins, and roadmap
+  reached `0.9804x` with 1/15 wins while growing from 290,385 to 290,387 bytes.
+  Source-like inputs do not provide enough long no-match runs to amortize the
+  added state and branch, so production retains exhaustive hash-greedy probing.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent
