@@ -4033,6 +4033,18 @@ coverage.
   reached `0.9804x` with 1/15 wins while growing from 290,385 to 290,387 bytes.
   Source-like inputs do not provide enough long no-match runs to amortize the
   added state and branch, so production retains exhaustive hash-greedy probing.
+  The one-shot hash-greedy index now uses signed 32-bit positions when the
+  input length fits `i32`, halving both the 32,768-entry head table and the
+  full/ring predecessor storage on 64-bit targets. Larger theoretical inputs
+  explicitly retain the `isize` path. The existing `isize` table oracles cover
+  both layouts against compact production output token-for-token/stat-for-stat,
+  and a direct boundary test pins the fallback. Fixed CPU-8 source-text A/Bs
+  preserved every frame: 15-pair `.fastest` medians improved by `1.0721x` on
+  README and `1.0340x` on roadmap, both 15/15 wins; eleven-pair `.fast` medians
+  improved by `1.0684x` and `1.0274x`, both 11/11. Full-table inputs below the
+  ring threshold improved more: `src/png.zig` reached `1.2202x` and
+  `src/deflate/incremental/tests.zig` `1.2911x`, both 11/11 with unchanged
+  output bytes.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent

@@ -1719,12 +1719,32 @@ fn hashGreedyPlanAllocWithAnchor(
     options: GreedyOptions,
     comptime anchor: HashAnchor,
 ) !GreedyPlan {
-    const head = try allocator.alloc(isize, hash_head_table_size);
+    // DEFLATE positions are normally far below 2 GiB. Compact indices halve
+    // the hot head/ring footprint on 64-bit targets while retaining an isize
+    // fallback for callers that hand the generic planner a larger slice.
+    if (hashPositionFitsI32(input.len)) {
+        return hashGreedyPlanAllocWithPosition(i32, allocator, input, options, anchor);
+    }
+    return hashGreedyPlanAllocWithPosition(isize, allocator, input, options, anchor);
+}
+
+fn hashPositionFitsI32(input_len: usize) bool {
+    return input_len <= std.math.maxInt(i32);
+}
+
+fn hashGreedyPlanAllocWithPosition(
+    comptime Position: type,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    comptime anchor: HashAnchor,
+) !GreedyPlan {
+    const head = try allocator.alloc(Position, hash_head_table_size);
     defer allocator.free(head);
     var initialized: [hash_head_init_words]u64 = @splat(0);
     const prev_len = hashPrevTableLen(input.len, options.window_len);
     const ring = prev_len < input.len;
-    const prev = try allocator.alloc(isize, prev_len);
+    const prev = try allocator.alloc(Position, prev_len);
     defer allocator.free(prev);
     if (ring) {
         // Keep the ring-specialized planner out of encodeZlibBestAlloc's
@@ -3020,6 +3040,13 @@ test "hash greedy table variants share token and stats accounting" {
     try expectEqualTokenSlices(tiny.tokens, tiny_direct.tokens);
     try std.testing.expectEqual(tiny.stats, tiny_direct.stats);
     try expectPlanStatsConsistent(tiny_direct, input.len);
+}
+
+test "hash greedy compact position boundary" {
+    try std.testing.expect(hashPositionFitsI32(std.math.maxInt(i32)));
+    if (@bitSizeOf(usize) > @bitSizeOf(i32)) {
+        try std.testing.expect(!hashPositionFitsI32(@as(usize, std.math.maxInt(i32)) + 1));
+    }
 }
 
 test "hash greedy predecessor ring matches full-table reference" {
