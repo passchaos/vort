@@ -1830,9 +1830,10 @@ fn hashGreedyPlanWithTablesReuse(
 ) !PlanStats {
     var stats = PlanStats{};
     const accept_all_matches = acceptsEveryHashMatch(options);
+    const search_limits = hashSearchLimits(options);
     var pos: usize = 0;
     while (pos < input.len) {
-        const search = findBestHashMatchWithLayoutAndHash(input, pos, options, head, prev, false, lazy_head, initialized, anchor);
+        const search = findBestHashMatchWithLayoutAndHashLimits(input, pos, search_limits, head, prev, false, lazy_head, initialized, anchor);
         const best = search.best;
         const accepted = if (accept_all_matches) best.length != 0 else acceptMatch(input, pos, best.length, best.distance, options);
         if (accepted) {
@@ -1953,13 +1954,14 @@ fn hashGreedyPlanWithTables(
     errdefer tokens.deinit(allocator);
     var stats = PlanStats{};
     const accept_all_matches = acceptsEveryHashMatch(options);
+    const search_limits = hashSearchLimits(options);
 
     var pos: usize = 0;
     while (pos < input.len) {
-        const search = findBestHashMatchWithLayoutAndHash(
+        const search = findBestHashMatchWithLayoutAndHashLimits(
             input,
             pos,
-            options,
+            search_limits,
             head,
             prev,
             ring,
@@ -2075,20 +2077,64 @@ fn findBestHashMatchWithLayoutAndHash(
     initialized: HashHeadInit(lazy_head, @TypeOf(head)),
     comptime anchor: HashAnchor,
 ) HashMatchSearch {
-    const hash = hashAtInput(input, pos, head.len, anchor) orelse return .{};
+    return findBestHashMatchWithLayoutAndHashLimits(
+        input,
+        pos,
+        hashSearchLimits(options),
+        head,
+        prev,
+        ring,
+        lazy_head,
+        initialized,
+        anchor,
+    );
+}
+
+const HashSearchLimits = struct {
+    window_len: usize,
+    max_chain: usize,
+    nice_len: usize,
+    minimum: usize,
+    maximum: usize,
+    max_walks: usize,
+};
+
+fn hashSearchLimits(options: GreedyOptions) HashSearchLimits {
     const minimum = minMatch(options);
+    return .{
+        .window_len = options.window_len,
+        .max_chain = options.max_chain,
+        .nice_len = options.nice_len,
+        .minimum = minimum,
+        .maximum = maxMatch(options),
+        .max_walks = maxHashChainWalks(options, minimum),
+    };
+}
+
+fn findBestHashMatchWithLayoutAndHashLimits(
+    input: []const u8,
+    pos: usize,
+    limits: HashSearchLimits,
+    head: anytype,
+    prev: anytype,
+    comptime ring: bool,
+    comptime lazy_head: bool,
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
+    comptime anchor: HashAnchor,
+) HashMatchSearch {
+    const hash = hashAtInput(input, pos, head.len, anchor) orelse return .{};
+    const minimum = limits.minimum;
     if (pos + minimum > input.len) return .{ .hash = hash };
 
     var candidate_i = hashHeadGet(head, hash, lazy_head, initialized);
     var checked: usize = 0;
     var walked: usize = 0;
-    const max_walks = maxHashChainWalks(options, minimum);
-    const max_len = @min(maxMatch(options), input.len - pos);
+    const max_len = @min(limits.maximum, input.len - pos);
     var best = MatchCandidate{};
-    while (candidate_i >= 0 and checked < options.max_chain and walked < max_walks) : (walked += 1) {
+    while (candidate_i >= 0 and checked < limits.max_chain and walked < limits.max_walks) : (walked += 1) {
         const candidate: usize = @intCast(candidate_i);
         const distance = pos - candidate;
-        if (distance == 0 or distance > options.window_len) break;
+        if (distance == 0 or distance > limits.window_len) break;
         if (best.length == max_len) break;
         const required_prefix = @max(best.length, minimum - 1);
         if (input[candidate + required_prefix] != input[pos + required_prefix]) {
@@ -2099,7 +2145,7 @@ fn findBestHashMatchWithLayoutAndHash(
         const len = matchLength(input, candidate, pos, max_len);
         if (len >= minimum and len > best.length) {
             best = .{ .length = len, .distance = distance };
-            if (len >= options.nice_len) break;
+            if (len >= limits.nice_len) break;
         }
         candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
     }

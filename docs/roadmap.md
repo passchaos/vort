@@ -4045,6 +4045,15 @@ coverage.
   ring threshold improved more: `src/png.zig` reached `1.2202x` and
   `src/deflate/incremental/tests.zig` `1.2911x`, both 11/11 with unchanged
   output bytes.
+  The same hash-greedy loop now derives its normalized minimum/maximum match
+  lengths and maximum chain-walk budget once per plan, instead of repeating
+  those option-only clamps at every position. Candidate ordering, acceptance,
+  tokens, and wire bytes remain unchanged. Against the compact-index baseline,
+  15 alternating fixed-CPU-8 `.fastest` pairs improved README/roadmap by
+  `1.0339x` / `1.0155x` with 12/15 and 15/15 wins; eleven `.fast` pairs
+  improved by `1.0255x` / `1.0224x`, and full-table `src/png.zig` / incremental
+  test-source rows improved by `1.0108x` / `1.0183x`. All measured frame sizes
+  were identical.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent
