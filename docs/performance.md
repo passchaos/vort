@@ -377,6 +377,12 @@ regressed full-table `src/png.zig` and `src/checksum.zig` to `0.9862x` /
 left the control rows negative and made roadmap unstable. Keep the compact
 single `recordToken` observer; the compiler already specializes its known union
 tag well enough that another large-loop code-shape split is counterproductive.
+A dedicated `u8` length-symbol LUT for the observer was rejected. It replaced
+the six-byte `CodeExtra` table lookup used only to obtain a length symbol, but
+fixed-CPU-8 results were negative on README/roadmap `.fastest` (`0.9949x` /
+`0.9977x`) and default README (`0.9978x`); only `src/png.zig` was marginally
+positive at `1.0038x`. Keep the shared length metadata table and avoid another
+hot constant table for this sub-percent address calculation.
 A 16-byte vector tail after the existing 32-byte `matchLength` loop was also
 rejected. It preserved every mismatch/limit result through 321 bytes, but
 replacing at most two eight-byte tail probes reduced README/roadmap `.fastest`

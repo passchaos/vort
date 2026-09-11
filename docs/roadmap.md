@@ -4147,6 +4147,10 @@ coverage.
   regressed to `0.9862x` / `0.9790x` and default README to `0.9907x`. Restricting
   the method split to the ring template did not restore the controls and made
   roadmap unstable, so the single `recordToken` callback remains.
+  A separate `u8` length-symbol LUT for observed statistics was rejected too.
+  Avoiding the six-byte `CodeExtra` address multiplication left README/roadmap
+  `.fastest` at `0.9949x` / `0.9977x` and default README at `0.9978x`; only
+  `src/png.zig` reached a marginal `1.0038x`. Keep one shared length table.
   Adding a 16-byte vector tail after the shared 32-byte match loop was rejected.
   The exhaustive mismatch/limit oracle passed, but fixed-CPU-8 A/Bs reduced
   README/roadmap `.fastest` to `0.9921x` / `0.9982x`, full-table `src/png.zig` /
