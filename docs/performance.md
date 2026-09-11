@@ -422,6 +422,13 @@ left README raw/zlib neutral-negative and still reduced unrelated default/fast
 README to `0.9937x` / `0.9899x`. Keep the common six-byte `Token`; compact
 decode branches and duplicated writer/parser bodies do not repay the footprint
 gain across the complete public encoder.
+Caching the reserved writer's output pointer and byte length locally was also
+rejected. Direct eight-byte stores plus one final `items.len` commit avoided
+`appendSliceAssumeCapacity` bookkeeping, but increased live state and left all
+tracked rows neutral-to-negative: README raw/zlib `.fastest` were `0.9973x` /
+`0.9966x`, roadmap `1.0007x`, `src/png.zig` `0.9979x`, and default README
+`0.9906x`. Keep the standard ArrayList append primitive, which LLVM already
+reduces to efficient reserved stores.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

@@ -4178,6 +4178,11 @@ coverage.
   fast README fell to `0.9937x` / `0.9899x`; the global form had already cut
   README/roadmap `.fastest` to `0.9707x` / `0.9833x`. Retain the shared six-byte
   token and avoid duplicated parser/writer bodies.
+  A local raw output pointer/length inside the reserved bit writer was rejected.
+  Direct eight-byte stores did not beat `appendSliceAssumeCapacity`: README
+  raw/zlib `.fastest` were `0.9973x` / `0.9966x`, roadmap `1.0007x`,
+  `src/png.zig` `0.9979x`, and default README `0.9906x`. Retain the standard
+  ArrayList primitive and the smaller reservoir state.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about
