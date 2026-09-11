@@ -12,9 +12,10 @@ major gaps before Vort can claim broad industry-best parity:
 - Full libbrotli-class general-purpose compression is not implemented. The
   production encoder now covers stored streams, compressed-or-stored
   planner-backed LZ77/Huffman streams, bounded multi-meta-block input, and a
-  vetted static-dictionary subset. Ratio mode now also has a bounded two-type
-  literal entropy split, but still lacks libbrotli's complete adaptive literal /
-  command / distance block splitting, context modeling, and quality/ratio range.
+  vetted static-dictionary subset. Ratio mode now also has bounded two-type
+  literal and command entropy splits, but still lacks libbrotli's complete
+  adaptive multi-type literal / command / distance block splitting, context
+  modeling, and quality/ratio range.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -8523,6 +8524,23 @@ coverage.
   0.984x--1.003x. A Vort-produced 96 KiB split stream is decoded
   by libbrotli and Vort's byte-progressive path in the required upstream
   differential (`planned_literal_split_cases=1`).
+  The same exact-wire candidate now evaluates a bounded two-type command split
+  for 2,048--32,768 commands, matching upstream's 1,024-symbol minimum block
+  scale while limiting proposal work. Five evenly spaced prefix histograms use
+  the same fixed-point entropy preselection, then only the selected boundary's
+  two trees and the unsplit tree receive exact Huffman costing. Literal and
+  command splits share one final candidate, so their search does not multiply
+  complete encodes. Relative to the committed literal-split baseline, 128 KiB
+  `dictionary.bin`, Silesia `mr` / `samba`, and Qwen tokenizer prefixes improve
+  by 715 / 330 / 197 / 273 bytes; the other thirteen 17-file matrix rows remain
+  byte-size stable. The aggregate falls another 1,515 bytes, from 762,298 to
+  760,783 (0.199%), or 2,397 bytes (0.314%) below the pre-entropy-split
+  baseline. Five alternating fixed-CPU-2 process pairs measured median
+  throughput ratios of 0.804x / 0.991x / 0.991x / 0.913x on those four winning
+  rows, while representative rejected XML/font rows retained 0.977x / 0.968x.
+  Node and libbrotli independently decode the repository dictionary fixture,
+  and the upstream differential reports `planned_command_split_cases=1`; a
+  direct regression also combines literal and command switches in one wire.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-

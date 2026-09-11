@@ -63,6 +63,16 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "ratio-command-split")) {
+        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br/dictionary.bin", init.gpa, .limited(128 * 1024));
+        defer init.gpa.free(payload);
+        const encoded = try vort.brEncodePlannedStreamRatioAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        const summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
+        if (summary.max_command_block_types != 2) return error.InvalidBlockPlan;
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "incremental-planned")) {
         var payload: [1024]u8 = undefined;
         @memset(payload[0..512], 'a');

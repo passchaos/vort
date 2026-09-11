@@ -62,6 +62,12 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("ratio-literal-split: node output mismatch")
     print(f"brotli planned ratio-literal-split node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = open("src/br/dictionary.bin", "rb").read()
+    encoded = subprocess.check_output([sys.argv[1], "ratio-command-split"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("ratio-command-split: node output mismatch")
+    print(f"brotli planned ratio-command-split node diff: encoded={len(encoded)} decoded={len(actual)}")
     state = 0x12345678
     random_tail = bytearray(512)
     for i in range(len(random_tail)):

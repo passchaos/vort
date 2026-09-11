@@ -809,6 +809,17 @@ pub fn main(init: std.process.Init) !void {
     if (!std.mem.eql(u8, planned_literal_split_payload, planned_literal_split_decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(init.gpa, planned_literal_split, planned_literal_split_payload, 16, 17, 31);
     planned_literal_split_cases += 1;
+    var planned_command_split_cases: usize = 0;
+    const planned_command_split = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, dictionary_bytes, .{ .level = .ratio });
+    defer init.gpa.free(planned_command_split);
+    const planned_command_split_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_command_split);
+    if (planned_command_split_summary.max_command_block_types != 2) return error.ReferenceEncodeFailed;
+    const planned_command_split_decoded = try init.gpa.alloc(u8, dictionary_bytes.len);
+    defer init.gpa.free(planned_command_split_decoded);
+    try reference.decode(planned_command_split, planned_command_split_decoded);
+    if (!std.mem.eql(u8, dictionary_bytes, planned_command_split_decoded)) return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(init.gpa, planned_command_split, dictionary_bytes, 16, 17, 31);
+    planned_command_split_cases += 1;
     const long_window_gap = 80 * 1024;
     const long_window_repeat = 12 * 1024;
     const long_window_payload = try init.gpa.alloc(u8, long_window_gap + long_window_repeat);
@@ -1079,8 +1090,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} large_window_decode_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} real_options_per_file={d} real_quality_mask=0x{x} real_mode_mask=0x{x} real_window_mask=0x{x} planned_window_cases={d} planned_literal_split_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, real_options.len, real_quality_mask, real_mode_mask, real_window_mask, planned_window_cases, planned_literal_split_cases, planned_chunked_window_cases, planned_large_window_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} large_window_decode_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} real_options_per_file={d} real_quality_mask=0x{x} real_mode_mask=0x{x} real_window_mask=0x{x} planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, real_options.len, real_quality_mask, real_mode_mask, real_window_mask, planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_chunked_window_cases, planned_large_window_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }
