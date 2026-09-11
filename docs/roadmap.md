@@ -4116,6 +4116,11 @@ coverage.
   left `.fastest` effectively neutral on README (`1.0009x`, 8/15) and roadmap
   (`0.9990x`, 6/15); the nominally isolated 44 KiB full-table control regressed
   to `0.9910x` with 0/11 wins. Keep the shared loop and once-computed boolean.
+  Moving `walked < max_walks` from the hash-chain loop header to both candidate
+  exit paths was rejected. Avoiding one final predecessor load did not repay the
+  duplicated control flow: fixed-CPU-8 `.fastest` fell to `0.9957x` on README
+  (5/15 wins) and `0.9910x` over the first eight roadmap pairs (0/8 wins), with
+  unchanged frames.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent
