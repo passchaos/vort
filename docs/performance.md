@@ -436,6 +436,11 @@ every match was broadly slower: README raw/zlib `.fastest` reached `0.9950x` /
 README `.fast` `0.9798x`; only roadmap was marginally positive at `1.0039x`.
 The exhaustive RFC length/distance metadata and fused-writer oracles remained
 exact. Keep the naturally aligned fields for cheaper hot-path extraction.
+Fusing each code-length RLE symbol and its optional repeat-count bits into one
+reserved-reservoir update was rejected. README/roadmap raw `.fastest` improved
+only `1.0047x` / `1.0061x`, while `src/png.zig` was `0.9984x` and default
+README fell to `0.9916x` with 0/11 wins. Keep the two simple updates in the
+small dynamic-header loop; its branch/layout cost is visible outside the target.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

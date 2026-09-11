@@ -4188,6 +4188,10 @@ coverage.
   `.fastest` to `0.9950x` / `0.9977x`, full-table `src/png.zig` /
   `src/checksum.zig` to `0.9796x` / `0.9868x`, and README `.fast` to `0.9798x`;
   roadmap alone was marginally positive at `1.0039x`. Keep natural fields.
+  Fusing code-length RLE symbols and repeat-count bits into one reservoir update
+  was rejected. README/roadmap `.fastest` improved only `1.0047x` / `1.0061x`,
+  while `src/png.zig` was `0.9984x` and default README fell to `0.9916x` with
+  0/11 wins. Retain the simpler two-update dynamic-header loop.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about
