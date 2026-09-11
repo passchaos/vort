@@ -15,8 +15,7 @@ major gaps before Vort can claim broad industry-best parity:
   vetted static-dictionary subset. Ratio mode now also has bounded two-type
   literal and distance entropy splits plus three-type command splitting, but
   still lacks libbrotli's complete adaptive multi-type block splitting and
-  clustering, broader context
-  modeling, and quality/ratio range.
+  clustering, broader context modeling, and quality/ratio range.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -8578,16 +8577,15 @@ coverage.
   three-tree candidate is materialized. That conservative margin chooses
   two or three trees before one complete candidate is encoded, while final
   header cost and byte rounding still arbitrate it against the unsplit wire.
-  The
-  writer emits three command trees with deterministic implicit `0 -> 1 -> 2`
+  The writer emits three command trees with deterministic implicit `0 -> 1 -> 2`
   block-type switches, and allocation-failure injection covers candidate
   cleanup. Against an independent `1f66c483` build on the
   same 17 local inputs capped at 128 KiB, `dictionary.bin` falls from 56,461
   to 56,263 bytes and IBM Plex Sans Regular from 70,803 to 70,572 bytes; the
   other 15 inputs are unchanged and the aggregate falls from 752,427 to
   751,998 bytes (429 bytes, 0.057%). Node and libbrotli 1.1.0 decode the
-  three-type dictionary
-  stream, and the required upstream differential retains 7,056 generated and
+  three-type dictionary stream, and the required upstream differential retains
+  7,056 generated and
   7,056 progressive cases with zero unsupported summaries. Five alternating
   fixed-CPU-2 pairs measure ratio-encode throughput at 0.8563x / 0.8353x of
   the two-type baseline on the dictionary/font winners; rejected x-ray, XML,
