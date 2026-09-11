@@ -429,6 +429,13 @@ tracked rows neutral-to-negative: README raw/zlib `.fastest` were `0.9973x` /
 `0.9966x`, roadmap `1.0007x`, `src/png.zig` `0.9979x`, and default README
 `0.9906x`. Keep the standard ArrayList append primitive, which LLVM already
 reduces to efficient reserved stores.
+Packing `CodeExtra` from its natural six-byte layout into 32 bits was rejected.
+The table footprint shrank, but extracting 9-bit symbols and 6-bit widths on
+every match was broadly slower: README raw/zlib `.fastest` reached `0.9950x` /
+`0.9977x`, `src/png.zig` / `src/checksum.zig` `0.9796x` / `0.9868x`, and
+README `.fast` `0.9798x`; only roadmap was marginally positive at `1.0039x`.
+The exhaustive RFC length/distance metadata and fused-writer oracles remained
+exact. Keep the naturally aligned fields for cheaper hot-path extraction.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

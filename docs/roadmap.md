@@ -4183,6 +4183,11 @@ coverage.
   raw/zlib `.fastest` were `0.9973x` / `0.9966x`, roadmap `1.0007x`,
   `src/png.zig` `0.9979x`, and default README `0.9906x`. Retain the standard
   ArrayList primitive and the smaller reservoir state.
+  A packed 32-bit `CodeExtra` was rejected. Although it reduced each metadata
+  entry from six bytes, narrow-field extraction reduced README raw/zlib
+  `.fastest` to `0.9950x` / `0.9977x`, full-table `src/png.zig` /
+  `src/checksum.zig` to `0.9796x` / `0.9868x`, and README `.fast` to `0.9798x`;
+  roadmap alone was marginally positive at `1.0039x`. Keep natural fields.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about
