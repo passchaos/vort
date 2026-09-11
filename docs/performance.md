@@ -339,6 +339,12 @@ paths was rejected. It avoided one final predecessor load at budget exhaustion,
 but duplicated control flow and reduced fixed-CPU-8 `.fastest` throughput to
 `0.9957x` on README (5/15 wins) and `0.9910x` on the first eight roadmap pairs
 (0/8 wins), with unchanged frames. Keep `walked < max_walks` in the loop header.
+Incrementally maintaining the hash candidate's required-prefix offset was also
+rejected. It replaced `max(best.length, minimum - 1)` in the loop with mutable
+state, but fixed-CPU-8 `.fastest` samples were slightly negative on README
+(`0.9994x`, 5/15 wins) and the first ten roadmap pairs (`0.9979x`, 3/10), with
+unchanged frames. The compiler's branchless maximum is cheaper than the extra
+live state on this loop.
 An isolated `.fastest` chain-depth sweep also retained the existing six-entry
 budget. Reducing it to four made a single 200-iteration sample about 3.8% faster
 on README and roadmap, but grew their frames by 23 and 339 bytes; the 44 KiB
