@@ -101,7 +101,7 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(ratio_encoded);
         // Record semantic dictionary use in addition to the encoded size so the
         // benchmark gate catches regressions that silently fall back to literals.
-        const ratio_summary = try vort.brSummarizeStream(ratio_encoded);
+        const ratio_summary = try vort.brSummarizeStreamAlloc(init.gpa, ratio_encoded);
         const decoded = try init.gpa.alloc(u8, case.payload.len);
         defer init.gpa.free(decoded);
         for ([_][]const u8{ vort_encoded, lazy_encoded, ratio_encoded }) |encoded| {

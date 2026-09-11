@@ -7165,6 +7165,12 @@ coverage.
   bounded `--limit`, validates every Vort level through libbrotli before timing,
   and has a checked-in file-path gate. This makes wider real-corpus ratio and
   throughput experiments reproducible without embedding large corpora.
+  File-backed ratio reporting now uses the allocating summary path: a 256 KiB
+  OpenType prefix exposed legal roughly 100 KiB backward copies that exceed the
+  fixed summary's 64 KiB history and previously made the benchmark report
+  `UnsupportedBrotliFeature` after encoding had already succeeded. A
+  repository-owned deterministic source/random/far-copy regression pins the
+  fixed-summary rejection, allocating-summary success, distance, and round trip.
   Ratio mode now also uses the full distance range allowed by its 16-bit Brotli
   stream window (65,520 bytes), rather than inheriting DEFLATE's 32 KiB search
   ceiling. The shared LZ77 token distance remains `u16`, so DEFLATE's ABI and

@@ -11139,6 +11139,36 @@ test "br ratio UTF8 context split round trips beyond summary history" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "br allocating summary follows ratio matches beyond fixed history" {
+    const source = @embedFile("br.zig");
+    const source_prefix_len = 48 * 1024;
+    const random_len = 80 * 1024;
+    const repeated_len = 32 * 1024;
+    const tail = "tail literal context after far copy abcdefghijklmnopqrstuvwxyz";
+    const payload_len = source_prefix_len + random_len + repeated_len + tail.len;
+    const payload = try std.testing.allocator.alloc(u8, payload_len);
+    defer std.testing.allocator.free(payload);
+    @memcpy(payload[0..source_prefix_len], source[0..source_prefix_len]);
+    var state: u32 = 0x1234_5678;
+    for (payload[source_prefix_len .. source_prefix_len + random_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[source_prefix_len + random_len ..][0..repeated_len], source[0..repeated_len]);
+    @memcpy(payload[payload_len - tail.len ..], tail);
+
+    const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectError(error.UnsupportedBrotliFeature, summarizeStream(encoded));
+    const summary = try summarizeStreamAlloc(std.testing.allocator, encoded);
+    try std.testing.expectEqual(payload.len, summary.decoded_bytes);
+    try std.testing.expect(summary.max_lz77_distance > planner_max_backward_distance);
+
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
 test "br summary history covers the full encoder backward window" {
     try std.testing.expectEqual(planner_max_backward_distance, @sizeOf(@TypeOf(@as(LiteralHistory, .{}).tail)));
 }
