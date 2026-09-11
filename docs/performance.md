@@ -345,6 +345,12 @@ state, but fixed-CPU-8 `.fastest` samples were slightly negative on README
 (`0.9994x`, 5/15 wins) and the first ten roadmap pairs (`0.9979x`, 3/10), with
 unchanged frames. The compiler's branchless maximum is cheaper than the extra
 live state on this loop.
+Combining the one-shot hash head and predecessor arrays into one allocation was
+also rejected. The checked length sum and two logical slices preserved every
+token and frame, but fixed-CPU-8 results were mixed: README `.fastest` reached
+`0.9982x`, roadmap `.fast` `0.9963x`, while README `.fast` and the 44 KiB
+full-table source control reached only `1.0068x` and `1.0108x`. Keep separate
+allocations; one fewer allocator call did not improve the primary workloads.
 A ring/full-head four-byte hash helper that omitted the final bucket mask was
 rejected. The high 15 bits already fit the 32,768-entry table and all oracle
 tokens stayed identical, but fixed-CPU-8 gains on README/roadmap were only
