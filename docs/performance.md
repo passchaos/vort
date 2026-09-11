@@ -389,6 +389,14 @@ replacing at most two eight-byte tail probes reduced README/roadmap `.fastest`
 to `0.9921x` / `0.9982x`, full-table `src/png.zig` / `src/checksum.zig` to
 `0.9858x` / `0.9948x`, and README `.fast` to `0.9935x`. Keep the current
 32-byte vector loop followed by the compact u64/scalar tails.
+Replacing the four-byte 32-bit golden-ratio hash with fdeflate's 64-bit
+golden-ratio mix was rejected at the same 32,768-bucket size. It changed the
+bounded collision chains as expected, but README `.fastest` fell to `0.9941x`
+and grew by three bytes; README/roadmap `.fast` fell to `0.9731x` / `0.9781x`
+despite shrinking by 4/12 bytes. Full-table `src/png.zig` / `src/checksum.zig`
+improved `1.0130x` / `1.0262x`, but that isolated gain does not justify slower
+primary source workloads or a mixed level policy. Retain the zlib-ng/zlib-rs
+style 32-bit high-product hash.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

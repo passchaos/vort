@@ -4156,6 +4156,11 @@ coverage.
   README/roadmap `.fastest` to `0.9921x` / `0.9982x`, full-table `src/png.zig` /
   `src/checksum.zig` to `0.9858x` / `0.9948x`, and README `.fast` to `0.9935x`.
   Retain the u64/scalar tails; two u64 probes beat an extra vector branch.
+  fdeflate's 64-bit golden-ratio four-byte hash was tested with the existing
+  32,768 buckets and rejected. README `.fastest` slowed to `0.9941x` while
+  growing three bytes; README/roadmap `.fast` slowed to `0.9731x` / `0.9781x`
+  despite saving 4/12 bytes. The full-table source controls improved, but the
+  main source workloads favor the current zlib-ng/zlib-rs-style 32-bit mix.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about
