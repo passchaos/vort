@@ -835,6 +835,17 @@ pub fn main(init: std.process.Init) !void {
     if (!std.mem.eql(u8, planned_clustered.payload, planned_clustered_decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(init.gpa, planned_clustered.encoded, planned_clustered.payload, 16, 17, 31);
     planned_command_split_cases += 1;
+    const planned_alternating = try vort.br.IncrementalTestSupport.encodeAlternatingCommandTypes(init.gpa);
+    defer init.gpa.free(planned_alternating.encoded);
+    defer init.gpa.free(planned_alternating.payload);
+    const planned_alternating_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_alternating.encoded);
+    if (planned_alternating_summary.max_command_block_types != 2) return error.ReferenceEncodeFailed;
+    const planned_alternating_decoded = try init.gpa.alloc(u8, planned_alternating.payload.len);
+    defer init.gpa.free(planned_alternating_decoded);
+    try reference.decode(planned_alternating.encoded, planned_alternating_decoded);
+    if (!std.mem.eql(u8, planned_alternating.payload, planned_alternating_decoded)) return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(init.gpa, planned_alternating.encoded, planned_alternating.payload, 16, 17, 31);
+    planned_command_split_cases += 1;
     const long_window_gap = 80 * 1024;
     const long_window_repeat = 12 * 1024;
     const long_window_payload = try init.gpa.alloc(u8, long_window_gap + long_window_repeat);

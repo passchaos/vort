@@ -8615,6 +8615,19 @@ coverage.
   `mr`/`samba` two-tree winners, and rejected x-ray/XML/tokenizer rows preserve
   every size/checksum with median throughput ratios between 0.999x and 1.009x,
   bounding the inactive clustering probe overhead.
+  The bounded clustering model now also supports four regions sharing the same
+  two trees in `A-B-A-B` order. It evaluates at most six three-boundary
+  combinations, each containing the already-profitable two-way boundary, and
+  requires four 1,024-command regions plus a 256-bit incremental payload
+  margin. The block-length tree now carries four lengths while the command-tree
+  count remains two. Production selection, allocation-failure cleanup, and
+  Vort round-trip tests cover all three switches. Node and libbrotli 1.1.0
+  independently decode the 469,593-byte stream back to its 1,242,295-byte
+  fixture; the upstream differential reports `planned_command_split_cases=3`.
+  A 120-file local scan found no natural alternating-four proposal, so no
+  real-corpus ratio win is claimed. Three alternating fixed-CPU-2 pairs across
+  seven representative real rows preserve every size and checksum with median
+  throughput ratios from 0.989x to 1.004x, bounding the inactive scan cost.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-

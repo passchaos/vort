@@ -15,6 +15,7 @@ const min_three_over_two_savings_bits: u64 = 1024;
 // token but no tree. Keep a smaller margin over the two-region candidate for
 // that bounded form.
 const min_clustered_over_two_savings_bits: u64 = 128;
+const min_alternating_four_over_two_savings_bits: u64 = 256;
 const entropy_fraction_bits: u6 = 8;
 const entropy_scale: u64 = 1 << entropy_fraction_bits;
 
@@ -30,20 +31,28 @@ const log2_fraction_q8 = blk: {
 pub const Result = struct {
     split: usize,
     second_split: ?usize = null,
-    reuse_first_for_third: bool = false,
+    third_split: ?usize = null,
+    alternate_two_types: bool = false,
     savings_bits: u64,
 
     pub fn regionCount(self: Result) usize {
-        return if (self.second_split == null) 2 else 3;
+        return if (self.third_split != null) 4 else if (self.second_split != null) 3 else 2;
     }
 
     pub fn typeCount(self: Result) usize {
-        return if (self.reuse_first_for_third) 2 else self.regionCount();
+        return if (self.alternate_two_types) 2 else self.regionCount();
     }
 
     pub fn blockIndex(self: Result, command_index: usize) usize {
         if (command_index < self.split) return 0;
-        if (self.second_split) |second| return if (command_index < second) 1 else if (self.reuse_first_for_third) 0 else 2;
+        if (self.second_split) |second| {
+            if (command_index < second) return 1;
+            if (self.third_split) |third| {
+                if (self.alternate_two_types) return if (command_index < third) 0 else 1;
+                return if (command_index < third) 2 else 3;
+            }
+            return if (self.alternate_two_types) 0 else 2;
+        }
         return 1;
     }
 };
@@ -52,6 +61,7 @@ pub const Proposals = struct {
     two: ?Result = null,
     three: ?Result = null,
     clustered: ?Result = null,
+    alternating_four: ?Result = null,
 };
 
 pub const Accumulator = struct {
@@ -184,7 +194,7 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
             proposals.clustered = .{
                 .split = targets[best_clustered_first_index],
                 .second_split = targets[best_clustered_second_index],
-                .reuse_first_for_third = true,
+                .alternate_two_types = true,
                 .savings_bits = savings,
             };
     }
@@ -203,6 +213,74 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
         const refined_baseline = @max(proposals.two.?.savings_bits, if (proposals.clustered) |clustered| clustered.savings_bits else 0);
         if (savings >= 2 * min_estimated_savings_bits and savings -| refined_baseline >= min_three_over_two_savings_bits)
             proposals.three = .{ .split = targets[best_first_index], .second_split = targets[best_second_index], .savings_bits = savings };
+    }
+
+    // Four alternating regions reuse the same two tree types in A-B-A-B order.
+    // Five prefix histograms yield only ten boundary triples, and every region
+    // must retain the same 1,024-command minimum as the three-region forms.
+    var best_alternating_entropy = baseline_entropy;
+    var best_alternating_indexes: [3]usize = @splat(candidate_count);
+    for (0..candidate_count) |first_index| {
+        for (first_index + 1..candidate_count) |second_index| {
+            for (second_index + 1..candidate_count) |third_index| {
+                if (first_index != best_two_index and second_index != best_two_index and third_index != best_two_index) continue;
+                const first_split = targets[first_index];
+                const second_split = targets[second_index];
+                const third_split = targets[third_index];
+                if (first_split < min_block_commands or second_split - first_split < min_block_commands or third_split - second_split < min_block_commands or symbol_count - third_split < min_block_commands) continue;
+                var second: [alphabet_size]u32 = undefined;
+                var third: [alphabet_size]u32 = undefined;
+                var fourth: [alphabet_size]u32 = undefined;
+                var type_a: [alphabet_size]u32 = undefined;
+                var type_b: [alphabet_size]u32 = undefined;
+                for (&second, &third, &fourth, &prefixes[first_index], &prefixes[second_index], &prefixes[third_index], total) |*second_out, *third_out, *fourth_out, first, through_second, through_third, all| {
+                    second_out.* = through_second - first;
+                    third_out.* = through_third - through_second;
+                    fourth_out.* = all - through_third;
+                }
+                for (&type_a, &type_b, &prefixes[first_index], &second, &third, &fourth) |*a, *b, first, second_region, third_region, fourth_region| {
+                    a.* = first + third_region;
+                    b.* = second_region + fourth_region;
+                }
+                const entropy = entropyBitsQ8(&type_a) + entropyBitsQ8(&type_b);
+                if (entropy < best_alternating_entropy) {
+                    best_alternating_entropy = entropy;
+                    best_alternating_indexes = .{ first_index, second_index, third_index };
+                }
+            }
+        }
+    }
+    if (best_alternating_indexes[0] != candidate_count and baseline_entropy - best_alternating_entropy >= min_entropy_proposal_savings_bits * entropy_scale) {
+        const first_index = best_alternating_indexes[0];
+        const second_index = best_alternating_indexes[1];
+        const third_index = best_alternating_indexes[2];
+        var second: [alphabet_size]u32 = undefined;
+        var third: [alphabet_size]u32 = undefined;
+        var fourth: [alphabet_size]u32 = undefined;
+        var type_a: [alphabet_size]u32 = undefined;
+        var type_b: [alphabet_size]u32 = undefined;
+        for (&second, &third, &fourth, &prefixes[first_index], &prefixes[second_index], &prefixes[third_index], total) |*second_out, *third_out, *fourth_out, first, through_second, through_third, all| {
+            second_out.* = through_second - first;
+            third_out.* = through_third - through_second;
+            fourth_out.* = all - through_third;
+        }
+        for (&type_a, &type_b, &prefixes[first_index], &second, &third, &fourth) |*a, *b, first, second_region, third_region, fourth_region| {
+            a.* = first + third_region;
+            b.* = second_region + fourth_region;
+        }
+        const type_a_lengths = huffman.treeCodeLengths(alphabet_size, &type_a, 15);
+        const type_b_lengths = huffman.treeCodeLengths(alphabet_size, &type_b, 15);
+        const split_bits = weightedBits(&type_a, &type_a_lengths) + weightedBits(&type_b, &type_b_lengths);
+        const savings = baseline_bits -| split_bits;
+        const refined_baseline = @max(proposals.two.?.savings_bits, if (proposals.clustered) |clustered| clustered.savings_bits else 0);
+        if (savings >= min_estimated_savings_bits and savings -| refined_baseline >= min_alternating_four_over_two_savings_bits)
+            proposals.alternating_four = .{
+                .split = targets[first_index],
+                .second_split = targets[second_index],
+                .third_split = targets[third_index],
+                .alternate_two_types = true,
+                .savings_bits = savings,
+            };
     }
     return proposals;
 }
@@ -290,6 +368,29 @@ test "command block split clusters matching outer regions" {
     try std.testing.expectEqual(@as(usize, 0), clustered.blockIndex(0));
     try std.testing.expectEqual(@as(usize, 1), clustered.blockIndex(clustered.split));
     try std.testing.expectEqual(@as(usize, 0), clustered.blockIndex(clustered.second_split.?));
+}
+
+test "command block split clusters four alternating regions" {
+    var symbols: [8192]u16 = undefined;
+    const first_split = symbols.len / 6;
+    const second_split = symbols.len * 2 / 6;
+    const third_split = symbols.len * 3 / 6;
+    for (&symbols, 0..) |*symbol, i| {
+        const region: usize = if (i < first_split) 0 else if (i < second_split) 1 else if (i < third_split) 2 else 3;
+        symbol.* = if (region & 1 == 0) @intCast(i & 7) else @intCast(696 + (i & 7));
+    }
+    var accumulator = Accumulator.init(symbols.len).?;
+    for (symbols) |symbol| try std.testing.expect(accumulator.add(symbol));
+    const alternating = accumulator.finishProposals().alternating_four orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(first_split, alternating.split);
+    try std.testing.expectEqual(second_split, alternating.second_split.?);
+    try std.testing.expectEqual(third_split, alternating.third_split.?);
+    try std.testing.expectEqual(@as(usize, 4), alternating.regionCount());
+    try std.testing.expectEqual(@as(usize, 2), alternating.typeCount());
+    try std.testing.expectEqual(@as(usize, 0), alternating.blockIndex(0));
+    try std.testing.expectEqual(@as(usize, 1), alternating.blockIndex(alternating.split));
+    try std.testing.expectEqual(@as(usize, 0), alternating.blockIndex(alternating.second_split.?));
+    try std.testing.expectEqual(@as(usize, 1), alternating.blockIndex(alternating.third_split.?));
 }
 
 test "command block split rejects stationary and small streams" {
