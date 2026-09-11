@@ -4197,6 +4197,11 @@ coverage.
   and `src/png.zig` / `src/checksum.zig` by `1.0453x` / `1.0460x`, but enlarged
   the four frames by 281 / 4,332 / 153 / 84 bytes. Keep four anchors; the
   roughly 1--1.5% source-size loss is too large for this speed tier.
+  A 256-entry per-block table of pre-encoded dynamic length fields was rejected.
+  Its construction and 1 KiB stack footprint outweighed one fused lookup per
+  match: README raw/zlib `.fastest` measured `0.9947x` / `0.9939x`, roadmap
+  `0.9979x`, `src/png.zig` `0.9967x`, and default README `0.9894x`. Keep the
+  static length metadata and per-block Huffman arrays separate.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about
