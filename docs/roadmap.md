@@ -4192,6 +4192,11 @@ coverage.
   was rejected. README/roadmap `.fastest` improved only `1.0047x` / `1.0061x`,
   while `src/png.zig` was `0.9984x` and default README fell to `0.9916x` with
   0/11 wins. Retain the simpler two-update dynamic-header loop.
+  Reducing only observed hash planning from four retained match-tail anchors to
+  three was rejected. It sped README/roadmap `.fastest` by `1.0093x` / `1.0162x`
+  and `src/png.zig` / `src/checksum.zig` by `1.0453x` / `1.0460x`, but enlarged
+  the four frames by 281 / 4,332 / 153 / 84 bytes. Keep four anchors; the
+  roughly 1--1.5% source-size loss is too large for this speed tier.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about

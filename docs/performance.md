@@ -441,6 +441,13 @@ reserved-reservoir update was rejected. README/roadmap raw `.fastest` improved
 only `1.0047x` / `1.0061x`, while `src/png.zig` was `0.9984x` and default
 README fell to `0.9916x` with 0/11 wins. Keep the two simple updates in the
 small dynamic-header loop; its branch/layout cost is visible outside the target.
+Reducing only the observed hash parser's retained match-tail anchors from four
+to three was rejected as a poor speed/ratio trade. Eleven fixed-CPU-8 pairs
+improved README/roadmap `.fastest` by `1.0093x` / `1.0162x` and full-table
+`src/png.zig` / `src/checksum.zig` by `1.0453x` / `1.0460x`, but grew those
+frames by 281 / 4,332 / 153 / 84 bytes respectively. The non-target default/
+fast paths were slightly negative. Retain four final anchors; one fewer hash
+insert is not worth roughly 1--1.5% worse source compression.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The
