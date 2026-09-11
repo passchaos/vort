@@ -4070,6 +4070,12 @@ coverage.
   ring-only specialization removed that full-table regression, but its final
   15-pair result was noise-neutral: README `1.0043x` with 9/15 wins and roadmap
   `0.9985x` with 5/15. Retain the cheaper last-required-byte filter.
+  A one-shot 65,536-bucket head-table experiment was rejected too. It selected
+  the high 16 bits of the four-byte multiplicative hash, but doubling the clear
+  from 128 KiB to 256 KiB outweighed fewer collisions: eleven fixed-CPU-8
+  README `.fastest` pairs fell to `0.9295x` with 0/11 wins and unchanged output.
+  A partial roadmap probe saved two bytes but was noisy and did not justify the
+  throughput/cache cost, so the head remains at 32,768 buckets.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent
