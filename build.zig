@@ -2829,6 +2829,27 @@ pub fn build(b: *std.Build) void {
     );
     br_upstream_multiblock_diff_step.dependOn(&run_br_upstream_multiblock_diff.step);
 
+    const br_real_corpus_diff_smoke = b.addSystemCommand(&.{
+        "python3", "tools/br/real_corpus_diff_smoke.py",
+    });
+    const br_real_corpus_diff_smoke_step = b.step(
+        "run-br-real-corpus-diff-smoke",
+        "Validate the Brotli real-corpus manifest and gate driver",
+    );
+    br_real_corpus_diff_smoke_step.dependOn(&br_real_corpus_diff_smoke.step);
+
+    const br_real_corpus_diff = b.addSystemCommand(&.{
+        "python3", "tools/br/real_corpus_diff.py",
+    });
+    br_real_corpus_diff.addArtifactArg(br_upstream_multiblock_diff_exe);
+    if (b.args) |args| br_real_corpus_diff.addArgs(args);
+    br_real_corpus_diff.step.dependOn(&br_real_corpus_diff_smoke.step);
+    const br_real_corpus_diff_step = b.step(
+        "run-br-real-corpus-diff",
+        "Require one-shot and progressive Brotli decoding across real repository corpora",
+    );
+    br_real_corpus_diff_step.dependOn(&br_real_corpus_diff.step);
+
     const br_progressive_copy_bench_exe = b.addExecutable(.{
         .name = "vort-br-progressive-copy-bench",
         .root_module = b.createModule(.{
@@ -4067,6 +4088,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_planned_node_diff_step);
     ci_smoke_step.dependOn(br_planned_chunks_bench_gate_step);
     ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
+    ci_smoke_step.dependOn(br_real_corpus_diff_step);
     ci_smoke_step.dependOn(br_progressive_copy_bench_gate_step);
     ci_smoke_step.dependOn(br_progressive_huffman_bench_gate_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_step);

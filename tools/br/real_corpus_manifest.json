@@ -1,0 +1,38 @@
+{
+  "schema": "vort.br_real_corpus_manifest",
+  "schema_version": 1,
+  "real_limit": 1048576,
+  "options_per_file": 4,
+  "required_categories": [
+    "binary",
+    "documentation",
+    "source",
+    "structured"
+  ],
+  "cases": [
+    {
+      "label": "brotli-source",
+      "category": "source",
+      "path": "src/br.zig",
+      "min_bytes": 524288
+    },
+    {
+      "label": "roadmap-markdown",
+      "category": "documentation",
+      "path": "docs/roadmap.md",
+      "min_bytes": 262144
+    },
+    {
+      "label": "validation-schema-json",
+      "category": "structured",
+      "path": "tools/validation_json_schema_manifest.json",
+      "min_bytes": 131072
+    },
+    {
+      "label": "brotli-static-dictionary",
+      "category": "binary",
+      "path": "src/br/dictionary.bin",
+      "min_bytes": 65536
+    }
+  ]
+}

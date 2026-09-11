@@ -157,9 +157,11 @@ zig build run-br-planned-node-diff
 zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
 zig build -Doptimize=ReleaseFast run-br-planned-chunks-bench-gate
 zig build -Doptimize=ReleaseFast run-br-upstream-multiblock-diff
+zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 # Optional real-corpus prefixes from neighboring checkouts:
-zig build -Doptimize=ReleaseFast run-br-upstream-multiblock-diff -- \
-  --real-limit 1048576 --real-file ~/Work/godot/thirdparty/ufbx/ufbx.c
+zig build -Doptimize=ReleaseFast run-br-real-corpus-diff -- \
+  --extra-file ~/Work/godot/thirdparty/ufbx/ufbx.c \
+  --extra-file ~/Work/opencv/data/haarcascades/haarcascade_frontalface_default.xml
 zig build -Doptimize=ReleaseFast run-br-progressive-copy-bench-gate
 zig build -Doptimize=ReleaseFast run-br-progressive-huffman-bench-gate
 zig build -Doptimize=ReleaseFast run-br-incremental-planned-bench-gate

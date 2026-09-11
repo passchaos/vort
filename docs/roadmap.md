@@ -77,6 +77,12 @@ window-10/16/20/24 one-shot and 17-byte-input/31-byte-output progressive cases
 against libbrotli 1.1.0. The build step now forwards arguments to the probe,
 and its summary reports real-corpus counters so an accidentally ignored corpus
 cannot appear green.
+The required `run-br-real-corpus-diff` wrapper now turns this capability into a
+CI gate backed by a versioned manifest. Repository-owned source, Markdown,
+structured JSON, and binary dictionary files contribute 16 one-shot plus 16
+byte-progressive libbrotli cases at a 1 MiB prefix limit. The wrapper rejects
+missing files/categories and counter mismatches; optional `--extra-file` inputs
+from neighboring checkouts add coverage without replacing the required set.
 
 The next highest-value deliverable is broader real-corpus and cross-platform
 Brotli decoder evidence, followed by the remaining general Brotli encoder

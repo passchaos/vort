@@ -16,8 +16,19 @@ zig build run-python-zlib-diff
 zig build run-gzip-cli-diff
 zig build run-rust-deflate-diff
 zig build run-snappy-interop-probe
+zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
+
+`run-br-real-corpus-diff` reads the repository-owned
+`tools/br/real_corpus_manifest.json` and requires source, documentation,
+structured JSON, and binary dictionary inputs. Each file is encoded by
+libbrotli at four representative quality/mode/window combinations and decoded
+byte-exactly by both Vort's allocating and byte-progressive paths. The driver
+checks the probe's structured counters, so a missing file, missing category,
+ignored argument, or skipped progressive case fails the gate. Additional local
+corpora can be appended without weakening the required set, for example with
+`-- --extra-file ~/Work/godot/thirdparty/ufbx/ufbx.c`.
 
 The checksum zlib-family smoke checks Vort's CLI checksum output against Python
 zlib, then verifies Python zlib Adler-32 trailers and system gzip CRC-32
