@@ -862,6 +862,7 @@ coverage.
 - [x] Rust deflate encode benchmarks include overlap-RLE, distance-heavy, and dynamic-match payloads.
 - [x] Rust deflate encode benchmarks include deterministic incompressible payloads.
 - [x] Vort zlib encode benchmark exposes a dynamic-literal mode for literal-only wrapper timing.
+- [x] Vort zlib encode benchmark accepts `gzip-` wrapper prefixes for best, dynamic, dynamic-literal, fixed, split, and adaptive modes. A fixed-CPU-8 README `gzip-fastest` profile attributes only about 0.33% to CRC-32, keeping parser/dynamic writer work ahead of checksum fusion.
 - [x] Rust deflate benchmark CSV artifact steps write decode and encode rows to zig-out.
 - [x] Dashboard index tracks Rust deflate benchmark CSV artifacts.
 - [x] Dashboard index reports CSV benchmark row counts.

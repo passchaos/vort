@@ -2,7 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 
 const EncodeMode = enum { best, dynamic, dynamic_literal, fixed, split, adaptive };
-const Wrapper = enum { zlib, raw };
+const Wrapper = enum { zlib, raw, gzip };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -48,6 +48,11 @@ fn parseMode(text: ?[]const u8) Mode {
     if (std.mem.startsWith(u8, value, "raw-")) {
         var mode = parseMode(value["raw-".len..]);
         mode.wrapper = .raw;
+        return mode;
+    }
+    if (std.mem.startsWith(u8, value, "gzip-")) {
+        var mode = parseMode(value["gzip-".len..]);
+        mode.wrapper = .gzip;
         return mode;
     }
     if (std.mem.startsWith(u8, value, "fixed-")) {
@@ -96,5 +101,23 @@ fn encode(allocator: std.mem.Allocator, input: []const u8, mode: Mode) ![]u8 {
             .split => vort.encodeRawBestSplitAlloc(allocator, input, options.split_options.min_block_len, options),
             .adaptive => vort.encodeRawBestAdaptiveSplitAlloc(allocator, input, options, options.split_options),
         },
+        .gzip => switch (mode.kind) {
+            .best => vort.encodeGzipBestAlloc(allocator, input, options),
+            .dynamic => vort.encodeGzipDynamicWithOptionsAlloc(allocator, input, options),
+            .dynamic_literal => vort.encodeGzipDynamicLiteralAlloc(allocator, input),
+            .fixed => vort.encodeGzipFixedWithOptionsAlloc(allocator, input, options),
+            .split => vort.encodeGzipBestSplitAlloc(allocator, input, options.split_options.min_block_len, options),
+            .adaptive => vort.encodeGzipBestAdaptiveSplitAlloc(allocator, input, options, options.split_options),
+        },
     };
+}
+
+test "mode parser accepts wrapper prefixes" {
+    try std.testing.expectEqual(Wrapper.zlib, parseMode("fastest").wrapper);
+    try std.testing.expectEqual(Wrapper.raw, parseMode("raw-fastest").wrapper);
+    try std.testing.expectEqual(Wrapper.gzip, parseMode("gzip-fastest").wrapper);
+    try std.testing.expectEqual(EncodeMode.best, parseMode("gzip-fastest").kind);
+    try std.testing.expectEqual(vort.CompressionLevel.fastest, parseMode("gzip-fastest").level);
+    try std.testing.expectEqual(EncodeMode.fixed, parseMode("gzip-fixed-fast").kind);
+    try std.testing.expectEqual(vort.CompressionLevel.fast, parseMode("gzip-fixed-fast").level);
 }
