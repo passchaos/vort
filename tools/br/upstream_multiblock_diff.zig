@@ -824,6 +824,17 @@ pub fn main(init: std.process.Init) !void {
     try decodeProgressChunks(init.gpa, planned_command_split, dictionary_bytes, 16, 17, 31);
     planned_command_split_cases += 1;
     planned_distance_split_cases += 1;
+    const planned_clustered = try vort.br.IncrementalTestSupport.encodeClusteredCommandTypes(init.gpa);
+    defer init.gpa.free(planned_clustered.encoded);
+    defer init.gpa.free(planned_clustered.payload);
+    const planned_clustered_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_clustered.encoded);
+    if (planned_clustered_summary.max_command_block_types != 2) return error.ReferenceEncodeFailed;
+    const planned_clustered_decoded = try init.gpa.alloc(u8, planned_clustered.payload.len);
+    defer init.gpa.free(planned_clustered_decoded);
+    try reference.decode(planned_clustered.encoded, planned_clustered_decoded);
+    if (!std.mem.eql(u8, planned_clustered.payload, planned_clustered_decoded)) return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(init.gpa, planned_clustered.encoded, planned_clustered.payload, 16, 17, 31);
+    planned_command_split_cases += 1;
     const long_window_gap = 80 * 1024;
     const long_window_repeat = 12 * 1024;
     const long_window_payload = try init.gpa.alloc(u8, long_window_gap + long_window_repeat);

@@ -68,6 +68,24 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("ratio-command-split: node output mismatch")
     print(f"brotli planned ratio-command-split node diff: encoded={len(encoded)} decoded={len(actual)}")
+    command_count = 6144
+    region_commands = command_count // 3
+    outer_insert_lens = (1, 2, 3, 4, 5, 6, 8, 10)
+    middle_insert_lens = (34, 50, 66, 98, 130, 194, 322, 578)
+    expected = bytearray(486912)
+    position = 0
+    for i in range(command_count):
+        middle = region_commands <= i < 2 * region_commands
+        insert_len = middle_insert_lens[i & 7] if middle else outer_insert_lens[i & 7]
+        copy_len = 40 if middle else 2
+        byte = 240 + (i & 15) if middle else i & 15
+        expected[position : position + insert_len + copy_len] = bytes([byte]) * (insert_len + copy_len)
+        position += insert_len + copy_len
+    encoded = subprocess.check_output([sys.argv[1], "clustered-command-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("clustered-command-types: node output mismatch")
+    print(f"brotli planned clustered-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
     state = 0x12345678
     random_tail = bytearray(512)
     for i in range(len(random_tail)):

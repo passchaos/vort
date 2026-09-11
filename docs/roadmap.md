@@ -8596,6 +8596,25 @@ coverage.
   improve the dictionary/font winners by 1.158x / 1.188x over the two-wire
   implementation, with 5/5 wins; rejected x-ray/XML/tokenizer rows remain at
   1.000x / 1.006x / 0.998x.
+  The same bounded refinement now evaluates the first useful clustered command
+  shape: three regions may share two trees in `A-B-A` order when merging the
+  outer histograms clears both the existing two-tree gate and an additional
+  128-bit margin. The rare clustered proposal is still compared as a complete
+  wire against the ordinary two-/three-tree proposal, preserving ratio
+  monotonicity. This mirrors libbrotli's reuse of the second-last histogram
+  without importing its unbounded per-symbol assignment scratch. A direct
+  production-wire regression proves the second implicit block-type switch wraps
+  from type 1 back to type 0 and is smaller than three independent trees;
+  allocation-failure injection covers exact-candidate cleanup. Node and
+  libbrotli 1.1.0 independently decode the 194,002-byte stream back to its
+  486,912-byte fixture; the required
+  upstream differential now reports `planned_command_split_cases=2`. A 24-file
+  local scan found existing `none`, two-tree, and three-tree selections but no
+  natural clustered winner, so no real-corpus ratio improvement is claimed yet.
+  Five alternating fixed-CPU-2 pairs across dictionary/font three-tree winners,
+  `mr`/`samba` two-tree winners, and rejected x-ray/XML/tokenizer rows preserve
+  every size/checksum with median throughput ratios between 0.999x and 1.009x,
+  bounding the inactive clustering probe overhead.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-

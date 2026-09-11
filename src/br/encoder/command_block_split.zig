@@ -11,6 +11,10 @@ const min_entropy_proposal_savings_bits: u64 = min_estimated_savings_bits * 3 / 
 // block-length token. Require a conservative margin over the two-tree payload
 // estimate before paying for a second complete wire candidate.
 const min_three_over_two_savings_bits: u64 = 1024;
+// Reusing the first command tree for the third region adds one block-length
+// token but no tree. Keep a smaller margin over the two-region candidate for
+// that bounded form.
+const min_clustered_over_two_savings_bits: u64 = 128;
 const entropy_fraction_bits: u6 = 8;
 const entropy_scale: u64 = 1 << entropy_fraction_bits;
 
@@ -26,15 +30,20 @@ const log2_fraction_q8 = blk: {
 pub const Result = struct {
     split: usize,
     second_split: ?usize = null,
+    reuse_first_for_third: bool = false,
     savings_bits: u64,
 
-    pub fn blockCount(self: Result) usize {
+    pub fn regionCount(self: Result) usize {
         return if (self.second_split == null) 2 else 3;
+    }
+
+    pub fn typeCount(self: Result) usize {
+        return if (self.reuse_first_for_third) 2 else self.regionCount();
     }
 
     pub fn blockIndex(self: Result, command_index: usize) usize {
         if (command_index < self.split) return 0;
-        if (self.second_split) |second| return if (command_index < second) 1 else 2;
+        if (self.second_split) |second| return if (command_index < second) 1 else if (self.reuse_first_for_third) 0 else 2;
         return 1;
     }
 };
@@ -42,13 +51,9 @@ pub const Result = struct {
 pub const Proposals = struct {
     two: ?Result = null,
     three: ?Result = null,
-
-    /// Three-way proposals have already cleared a conservative incremental
-    /// margin over `two`; prefer them without materializing both full wires.
-    pub fn preferred(self: Proposals) ?Result {
-        return self.three orelse self.two;
-    }
+    clustered: ?Result = null,
 };
+
 pub const Accumulator = struct {
     symbol_count: usize,
     seen_count: usize = 0,
@@ -130,6 +135,9 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
     var best_three_entropy = baseline_entropy;
     var best_first_index: usize = candidate_count;
     var best_second_index: usize = candidate_count;
+    var best_clustered_entropy = baseline_entropy;
+    var best_clustered_first_index: usize = candidate_count;
+    var best_clustered_second_index: usize = candidate_count;
     const symbol_count = totalCount(total);
     for (0..candidate_count) |candidate_index| {
         if (candidate_index == best_two_index) continue;
@@ -150,6 +158,35 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
             best_first_index = first_index;
             best_second_index = second_index;
         }
+        var outer: [alphabet_size]u32 = undefined;
+        for (&outer, &prefixes[first_index], &suffix) |*out, first, last| out.* = first + last;
+        const clustered_entropy = entropyBitsQ8(&outer) + entropyBitsQ8(&middle);
+        if (clustered_entropy < best_clustered_entropy) {
+            best_clustered_entropy = clustered_entropy;
+            best_clustered_first_index = first_index;
+            best_clustered_second_index = second_index;
+        }
+    }
+    if (best_clustered_first_index != candidate_count and baseline_entropy - best_clustered_entropy >= min_entropy_proposal_savings_bits * entropy_scale) {
+        var middle: [alphabet_size]u32 = undefined;
+        var suffix: [alphabet_size]u32 = undefined;
+        var outer: [alphabet_size]u32 = undefined;
+        for (&middle, &suffix, &prefixes[best_clustered_first_index], &prefixes[best_clustered_second_index], total) |*middle_out, *suffix_out, first, second, all| {
+            middle_out.* = second - first;
+            suffix_out.* = all - second;
+        }
+        for (&outer, &prefixes[best_clustered_first_index], &suffix) |*out, first, last| out.* = first + last;
+        const outer_lengths = huffman.treeCodeLengths(alphabet_size, &outer, 15);
+        const middle_lengths = huffman.treeCodeLengths(alphabet_size, &middle, 15);
+        const split_bits = weightedBits(&outer, &outer_lengths) + weightedBits(&middle, &middle_lengths);
+        const savings = baseline_bits -| split_bits;
+        if (savings >= min_estimated_savings_bits and savings -| proposals.two.?.savings_bits >= min_clustered_over_two_savings_bits)
+            proposals.clustered = .{
+                .split = targets[best_clustered_first_index],
+                .second_split = targets[best_clustered_second_index],
+                .reuse_first_for_third = true,
+                .savings_bits = savings,
+            };
     }
     if (best_first_index != candidate_count and baseline_entropy - best_three_entropy >= 2 * min_entropy_proposal_savings_bits * entropy_scale) {
         var middle: [alphabet_size]u32 = undefined;
@@ -163,7 +200,8 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
         const suffix_lengths = huffman.treeCodeLengths(alphabet_size, &suffix, 15);
         const split_bits = weightedBits(&prefixes[best_first_index], &first_lengths) + weightedBits(&middle, &middle_lengths) + weightedBits(&suffix, &suffix_lengths);
         const savings = baseline_bits -| split_bits;
-        if (savings >= 2 * min_estimated_savings_bits and savings -| proposals.two.?.savings_bits >= min_three_over_two_savings_bits)
+        const refined_baseline = @max(proposals.two.?.savings_bits, if (proposals.clustered) |clustered| clustered.savings_bits else 0);
+        if (savings >= 2 * min_estimated_savings_bits and savings -| refined_baseline >= min_three_over_two_savings_bits)
             proposals.three = .{ .split = targets[best_first_index], .second_split = targets[best_second_index], .savings_bits = savings };
     }
     return proposals;
@@ -209,7 +247,8 @@ test "command block split finds distinct symbol regions" {
     var accumulator = Accumulator.init(symbols.len).?;
     for (symbols) |symbol| try std.testing.expect(accumulator.add(symbol));
     try std.testing.expectEqual(result, accumulator.finish().?);
-    try std.testing.expectEqual(@as(usize, 2), result.blockCount());
+    try std.testing.expectEqual(@as(usize, 2), result.regionCount());
+    try std.testing.expectEqual(@as(usize, 2), result.typeCount());
     try std.testing.expectEqual(@as(?usize, null), result.second_split);
 }
 
@@ -226,15 +265,31 @@ test "command block split finds three distinct symbol regions" {
     };
     try std.testing.expect(proposals.two != null);
     try std.testing.expect(proposals.three != null);
-    try std.testing.expectEqual(proposals.three.?, proposals.preferred().?);
     const three = proposals.three.?;
     try std.testing.expectEqual(proposals.two.?, result);
-    try std.testing.expectEqual(@as(usize, 3), three.blockCount());
+    try std.testing.expectEqual(@as(usize, 3), three.regionCount());
+    try std.testing.expectEqual(@as(usize, 3), three.typeCount());
     try std.testing.expect(three.split >= 1024 and three.split <= 3072);
     try std.testing.expect(three.second_split.? >= 3072 and three.second_split.? <= 5120);
     try std.testing.expectEqual(@as(usize, 0), three.blockIndex(0));
     try std.testing.expectEqual(@as(usize, 1), three.blockIndex(three.split));
     try std.testing.expectEqual(@as(usize, 2), three.blockIndex(three.second_split.?));
+}
+
+test "command block split clusters matching outer regions" {
+    var symbols: [6144]u16 = undefined;
+    for (symbols[0..2048], 0..) |*symbol, i| symbol.* = @intCast(i & 7);
+    for (symbols[2048..4096], 0..) |*symbol, i| symbol.* = @intCast(696 + (i & 7));
+    for (symbols[4096..], 0..) |*symbol, i| symbol.* = @intCast(i & 7);
+    var accumulator = Accumulator.init(symbols.len).?;
+    for (symbols) |symbol| try std.testing.expect(accumulator.add(symbol));
+    const proposals = accumulator.finishProposals();
+    const clustered = proposals.clustered orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, 3), clustered.regionCount());
+    try std.testing.expectEqual(@as(usize, 2), clustered.typeCount());
+    try std.testing.expectEqual(@as(usize, 0), clustered.blockIndex(0));
+    try std.testing.expectEqual(@as(usize, 1), clustered.blockIndex(clustered.split));
+    try std.testing.expectEqual(@as(usize, 0), clustered.blockIndex(clustered.second_split.?));
 }
 
 test "command block split rejects stationary and small streams" {
