@@ -13,7 +13,8 @@ major gaps before Vort can claim broad industry-best parity:
   production encoder now covers stored streams, compressed-or-stored
   planner-backed LZ77/Huffman streams, bounded multi-meta-block input, and a
   vetted static-dictionary subset. Ratio mode now also has bounded two-type
-  literal, command, and distance entropy splits, but still lacks libbrotli's
+  literal and distance entropy splits plus three-type command splitting, but
+  still lacks libbrotli's
   complete adaptive multi-type block splitting and clustering, broader context
   modeling, and quality/ratio range.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
@@ -8569,8 +8570,9 @@ coverage.
   dictionary / `dickens` / `mr` / tokenizer split winners; rejected
   x-ray/XML/font rows improved by 1.0638x / 1.0129x / 1.0276x. Every row won
   all five pairs.
-  Ratio mode now also retains a bounded three-region command proposal from the
-  same five prefix histograms. Every region must contain at least 1,024
+  Ratio mode now also retains a bounded three-region command proposal by
+  refining the profitable two-region boundary with the other four prefix
+  histograms. Every region must contain at least 1,024
   commands and the three-tree estimate must save at least 4,096 payload bits;
   both the existing two-tree proposal and the new three-tree proposal are then
   encoded completely, so header cost and byte rounding decide the winner. The
@@ -8582,7 +8584,12 @@ coverage.
   inputs are unchanged and the aggregate falls from 752,427 to 751,998 bytes
   (429 bytes, 0.057%). Node and libbrotli 1.1.0 decode the three-type dictionary
   stream, and the required upstream differential retains 7,056 generated and
-  7,056 progressive cases with zero unsupported summaries.
+  7,056 progressive cases with zero unsupported summaries. Five alternating
+  fixed-CPU-2 pairs measure ratio-encode throughput at 0.8563x / 0.8353x of
+  the two-type baseline on the dictionary/font winners; rejected x-ray, XML,
+  and tokenizer rows remain at 0.9947x / 0.9951x / 1.0022x. Avoiding the second
+  complete wire encode for accepted three-tree candidates is the next focused
+  throughput task.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-

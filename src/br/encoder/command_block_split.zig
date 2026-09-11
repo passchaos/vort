@@ -87,63 +87,61 @@ pub fn choose(symbols: []const u16) ?Result {
 
 fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [candidate_count][alphabet_size]u32, targets: *const [candidate_count]usize) Proposals {
     const baseline_entropy = entropyBitsQ8(total);
-    var best_two_split: usize = 0;
+    var best_two_index: usize = candidate_count;
     var best_two_entropy = baseline_entropy;
     var best_two_prefix: [alphabet_size]u32 = undefined;
-    for (prefixes, targets) |prefix, split| {
+    for (prefixes, 0..) |prefix, candidate_index| {
         var suffix: [alphabet_size]u32 = undefined;
         for (&suffix, total, &prefix) |*out, all, before| out.* = all - before;
         const split_entropy = entropyBitsQ8(&prefix) + entropyBitsQ8(&suffix);
         if (split_entropy < best_two_entropy) {
             best_two_entropy = split_entropy;
-            best_two_split = split;
+            best_two_index = candidate_index;
             best_two_prefix = prefix;
         }
     }
 
     var proposals: Proposals = .{};
-    const two_is_promising = best_two_split != 0 and baseline_entropy - best_two_entropy >= min_entropy_proposal_savings_bits * entropy_scale;
+    if (best_two_index == candidate_count or baseline_entropy - best_two_entropy < min_entropy_proposal_savings_bits * entropy_scale) return proposals;
 
+    const baseline_lengths = huffman.treeCodeLengths(alphabet_size, total, 15);
+    const baseline_bits = weightedBits(total, &baseline_lengths);
+    var best_two_suffix: [alphabet_size]u32 = undefined;
+    for (&best_two_suffix, total, &best_two_prefix) |*out, all, before| out.* = all - before;
+    const prefix_lengths = huffman.treeCodeLengths(alphabet_size, &best_two_prefix, 15);
+    const two_suffix_lengths = huffman.treeCodeLengths(alphabet_size, &best_two_suffix, 15);
+    const two_bits = weightedBits(&best_two_prefix, &prefix_lengths) + weightedBits(&best_two_suffix, &two_suffix_lengths);
+    if (two_bits >= baseline_bits or baseline_bits - two_bits < min_estimated_savings_bits) return proposals;
+    proposals.two = .{ .split = targets[best_two_index], .savings_bits = baseline_bits - two_bits };
+
+    // Refine the already-profitable two-way split with one additional boundary.
+    // This bounds three-way scoring to four candidates and avoids imposing its
+    // cost on stationary streams that cannot even justify two command trees.
     var best_three_entropy = baseline_entropy;
     var best_first_index: usize = candidate_count;
     var best_second_index: usize = candidate_count;
     const symbol_count = totalCount(total);
-    for (0..candidate_count) |first_index| {
+    for (0..candidate_count) |candidate_index| {
+        if (candidate_index == best_two_index) continue;
+        const first_index = @min(candidate_index, best_two_index);
+        const second_index = @max(candidate_index, best_two_index);
         const first_split = targets[first_index];
-        if (first_split < min_block_commands) continue;
-        for (first_index + 1..candidate_count) |second_index| {
-            const second_split = targets[second_index];
-            if (second_split - first_split < min_block_commands or symbol_count - second_split < min_block_commands) continue;
-            var middle: [alphabet_size]u32 = undefined;
-            var suffix: [alphabet_size]u32 = undefined;
-            for (&middle, &suffix, &prefixes[first_index], &prefixes[second_index], total) |*middle_out, *suffix_out, first, second, all| {
-                middle_out.* = second - first;
-                suffix_out.* = all - second;
-            }
-            const split_entropy = entropyBitsQ8(&prefixes[first_index]) + entropyBitsQ8(&middle) + entropyBitsQ8(&suffix);
-            if (split_entropy < best_three_entropy) {
-                best_three_entropy = split_entropy;
-                best_first_index = first_index;
-                best_second_index = second_index;
-            }
+        const second_split = targets[second_index];
+        if (first_split < min_block_commands or second_split - first_split < min_block_commands or symbol_count - second_split < min_block_commands) continue;
+        var middle: [alphabet_size]u32 = undefined;
+        var suffix: [alphabet_size]u32 = undefined;
+        for (&middle, &suffix, &prefixes[first_index], &prefixes[second_index], total) |*middle_out, *suffix_out, first, second, all| {
+            middle_out.* = second - first;
+            suffix_out.* = all - second;
+        }
+        const split_entropy = entropyBitsQ8(&prefixes[first_index]) + entropyBitsQ8(&middle) + entropyBitsQ8(&suffix);
+        if (split_entropy < best_three_entropy) {
+            best_three_entropy = split_entropy;
+            best_first_index = first_index;
+            best_second_index = second_index;
         }
     }
-    const three_is_promising = best_first_index != candidate_count and baseline_entropy - best_three_entropy >= 2 * min_entropy_proposal_savings_bits * entropy_scale;
-    if (!two_is_promising and !three_is_promising) return proposals;
-
-    const baseline_lengths = huffman.treeCodeLengths(alphabet_size, total, 15);
-    const baseline_bits = weightedBits(total, &baseline_lengths);
-    if (two_is_promising) {
-        var suffix: [alphabet_size]u32 = undefined;
-        for (&suffix, total, &best_two_prefix) |*out, all, before| out.* = all - before;
-        const prefix_lengths = huffman.treeCodeLengths(alphabet_size, &best_two_prefix, 15);
-        const suffix_lengths = huffman.treeCodeLengths(alphabet_size, &suffix, 15);
-        const split_bits = weightedBits(&best_two_prefix, &prefix_lengths) + weightedBits(&suffix, &suffix_lengths);
-        if (split_bits < baseline_bits and baseline_bits - split_bits >= min_estimated_savings_bits)
-            proposals.two = .{ .split = best_two_split, .savings_bits = baseline_bits - split_bits };
-    }
-
-    if (three_is_promising) {
+    if (best_first_index != candidate_count and baseline_entropy - best_three_entropy >= 2 * min_entropy_proposal_savings_bits * entropy_scale) {
         var middle: [alphabet_size]u32 = undefined;
         var suffix: [alphabet_size]u32 = undefined;
         for (&middle, &suffix, &prefixes[best_first_index], &prefixes[best_second_index], total) |*middle_out, *suffix_out, first, second, all| {
