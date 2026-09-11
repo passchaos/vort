@@ -345,6 +345,13 @@ state, but fixed-CPU-8 `.fastest` samples were slightly negative on README
 (`0.9994x`, 5/15 wins) and the first ten roadmap pairs (`0.9979x`, 3/10), with
 unchanged frames. The compiler's branchless maximum is cheaper than the extra
 live state on this loop.
+A one-shot match-tail insertion simplification was rejected. Replacing the
+existing increment-and-clamp sequence with `end - min(match_len - 1, 4)` kept
+the exact same inserted positions and wire bytes, and improved two full-table
+source rows (`src/png.zig` `1.0282x`, `src/checksum.zig` `1.0272x`). However,
+the all-layout form was neutral on README and `.fast`, and isolating it to the
+full-table specialization shifted code layout enough to regress README/roadmap
+`.fastest` to `0.9881x` / `0.9922x`. Keep the current shared tail loop shape.
 A `u16` relative-distance predecessor ring was rejected despite halving the
 16 KiB-window link storage from 64 KiB to 32 KiB. The expanded oracle included
 the full 32 KiB DEFLATE window and remained token/stat identical, but the extra

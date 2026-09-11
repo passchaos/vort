@@ -4125,6 +4125,12 @@ coverage.
   `max(best.length, minimum - 1)` was rejected. The extra live loop state left
   fixed-CPU-8 `.fastest` slightly negative on README (`0.9994x`, 5/15 wins) and
   the first ten roadmap pairs (`0.9979x`, 3/10), with unchanged frames.
+  Simplifying the one-shot match-tail insertion start to
+  `end - min(match_len - 1, 4)` was rejected. The equivalent expression kept
+  all inserted positions and frames, and improved full-table `src/png.zig` /
+  `src/checksum.zig` by `1.0282x` / `1.0272x`; however, its all-layout form was
+  neutral on the main text rows, and a full-table-only specialization regressed
+  README/roadmap `.fastest` to `0.9881x` / `0.9922x` through code-layout effects.
   A `u16` relative-distance predecessor ring was rejected despite halving the
   16 KiB-window link array from 64 KiB to 32 KiB. The full-table oracle was
   extended through the 32 KiB maximum window and remained token/stat identical,
