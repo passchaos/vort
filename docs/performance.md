@@ -195,6 +195,20 @@ extending the PNG-only zero-length-extra branch to the full-output loop
 regressed README by roughly 4% and roadmap by roughly 12% in the initial
 repeat3 caller-buffer probe, while delaying the third/fourth literal-table
 loads lost about 0.6--2.0% on the text rows.
+Unknown-size raw and zlib allocation without preset dictionaries now reuse the capacity already reserved
+from the compressed-size hint as a caller-buffer decode target before falling
+back to the growing ArrayList decoder. This mirrors zlib-rs's slice-oriented
+inflate interface, preserves bounded fallback for expansion beyond the hint,
+and lets the existing semantic fast loop handle large text streams without
+per-token ArrayList updates. On the same fixed i9-13900K P-core, seven
+alternating 500-iteration pairs moved README raw/zlib allocation medians from
+about `435.91/431.43` to `828.66/823.38` MiB/s (`1.9078x/1.9097x`) and roadmap
+from `387.86/384.28` to `717.05/705.79` MiB/s (`1.8502x/1.8394x`), with every
+pair winning. The already-direct exact-size and caller-buffer controls stayed
+within roughly one percent by paired median. Gzip allocation already uses the
+trailer ISIZE exact-buffer path and therefore remains unchanged. Tests cover
+the no-growth allocation boundary, insufficient reserved capacity, and a
+caller limit below the decoded size.
 Single-member and concatenated gzip caller-buffer plus allocator-returning decode now have `GzipDecodeOptions` through `decodeGzipWithOptions`, `decodeGzipAllocWithOptions*`, and `decodeGzipConcatenated*WithOptions` APIs, exposing strict-by-default toggles for CRC-32, ISIZE, and trailing-data validation; this gives wrapper/checksum investigations a public measurement surface analogous to `ZlibDecodeOptions` without changing normal API behavior. A first production attempt to update CRC-32 incrementally inside the single-member caller-buffer inflate loop was rejected: per-literal/match `Crc32Slice32.update` calls regressed ReleaseFast gzip caller-buffer rows badly (for example README `gzip_into` around `297.25` MiB/s versus no-CRC `506.45`, structured around `1852.31` versus `6878.47`), so future CRC fusion needs chunk/span batching rather than per-symbol updates. A follow-up block-level 4 KiB batched CRC candidate was also rejected: it improved some structured rows but regressed README (`~492.58 -> ~365.97` MiB/s), dynamic-match (`~1960.50 -> ~1798.71` MiB/s), and binary (`~1642.66 -> ~1375.55` MiB/s), so gzip CRC fusion needs a more selective batching design than flushing once per deflate block. The decode-stage report now emits `zlib_into_no_adler_mib_s`, `adler32_mib_s`, `zlib_adler_time_ratio`, gzip alloc/exact/into no-CRC rows, `gzip_into_no_isize_mib_s`, `gzip_into_relaxed_mib_s`, standalone `crc32_mib_s`, and strict-ratio columns; this separates Adler-32 and CRC-32 scan costs from wrapper validation beside strict zlib/gzip rows. Allocator-returning zlib relaxed decode now also skips Adler work when `ignore_adler` is set, matching the caller-buffer measurement path.
 
 This is not a final ecosystem claim: Rust's compression stack still has broader

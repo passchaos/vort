@@ -3658,6 +3658,18 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     try reserveInflateOutputHint(allocator, &out, input.len, max_output_len);
+    // The bounded stack path above already made one caller-buffer attempt for
+    // small compressed inputs. Avoid a second speculative decode when their
+    // expansion exceeded that scratch; use the reserved heap path only for
+    // larger members that have not yet been decoded.
+    if (dictionary.len == 0 and input.len > stack_inflate_alloc_max_input_len) {
+        if (try decodeRawAutoReservedIntoAllocMaybe(
+            allocator,
+            input,
+            max_output_len,
+            &out,
+        )) |decoded| return decoded;
+    }
 
     var reader = bitstream.BufferedBitReader.init(input);
     while (true) {
@@ -3900,6 +3912,36 @@ fn decodeRawAutoSmallIntoAlloc(allocator: std.mem.Allocator, input: []const u8, 
     errdefer allocator.free(owned);
     @memcpy(owned, scratch[0..decoded.output_written]);
     return .{ .bytes = owned, .input_read = decoded.input_read };
+}
+
+noinline fn decodeRawAutoReservedIntoAllocMaybe(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    max_output_len: ?usize,
+    out: *std.ArrayList(u8),
+) !?OwnedDecodeResult {
+    const direct_capacity = if (max_output_len) |limit|
+        @min(out.capacity, limit)
+    else
+        out.capacity;
+    const decoded = decodeRawAutoWithDictionary(
+        input,
+        "",
+        out.allocatedSlice()[0..direct_capacity],
+    ) catch |err| switch (err) {
+        error.OutputTooSmall => {
+            if (max_output_len) |limit| {
+                if (direct_capacity == limit) return error.OutputLimitExceeded;
+            }
+            return null;
+        },
+        else => return err,
+    };
+    out.items.len = decoded.output_written;
+    return .{
+        .bytes = try out.toOwnedSlice(allocator),
+        .input_read = decoded.input_read,
+    };
 }
 
 pub fn decodeRawAutoAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -20632,6 +20674,59 @@ test "small raw allocating decode falls back when scratch is too small" {
     const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &input, decoded);
+}
+
+test "large raw allocating decode uses bounded reserved caller buffer" {
+    var input: [12 * 1024]u8 = undefined;
+    for (&input, 0..) |*byte, i| {
+        byte.* = @truncate((i *% 131) ^ (i >> 3) ^ (i *% 17));
+    }
+    const encoded = try encodeRawDynamicLiteralAlloc(
+        std.testing.allocator,
+        &input,
+    );
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len > stack_inflate_alloc_max_input_len);
+    try std.testing.expect(input.len <= inflateOutputCapacityHint(encoded.len));
+
+    var failing = std.testing.FailingAllocator.init(
+        std.testing.allocator,
+        .{ .fail_index = 2 },
+    );
+    const decoded = try decodeRawAutoAlloc(failing.allocator(), encoded);
+    defer failing.allocator().free(decoded);
+    try std.testing.expectEqualSlices(u8, &input, decoded);
+    // The testing allocator cannot shrink in place, so the exact owned slice
+    // takes a second allocation. The decode itself must not allocate or grow.
+    try std.testing.expectEqual(@as(usize, 2), failing.allocations);
+
+    var short_reserve: std.ArrayList(u8) = .empty;
+    defer short_reserve.deinit(std.testing.allocator);
+    try short_reserve.ensureTotalCapacityPrecise(
+        std.testing.allocator,
+        input.len - 1,
+    );
+    try std.testing.expect(null == try decodeRawAutoReservedIntoAllocMaybe(
+        std.testing.allocator,
+        encoded,
+        null,
+        &short_reserve,
+    ));
+    try std.testing.expectEqual(@as(usize, 0), short_reserve.items.len);
+
+    var limited_failing = std.testing.FailingAllocator.init(
+        std.testing.allocator,
+        .{ .fail_index = 1 },
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        decodeRawAutoAllocLimited(
+            limited_failing.allocator(),
+            encoded,
+            input.len - 1,
+        ),
+    );
+    try std.testing.expectEqual(@as(usize, 1), limited_failing.allocations);
 }
 
 test "zlib and gzip wrappers reject truncated non-final raw deflate streams" {
