@@ -345,6 +345,12 @@ state, but fixed-CPU-8 `.fastest` samples were slightly negative on README
 (`0.9994x`, 5/15 wins) and the first ten roadmap pairs (`0.9979x`, 3/10), with
 unchanged frames. The compiler's branchless maximum is cheaper than the extra
 live state on this loop.
+A `u16` relative-distance predecessor ring was rejected despite halving the
+16 KiB-window link storage from 64 KiB to 32 KiB. The expanded oracle included
+the full 32 KiB DEFLATE window and remained token/stat identical, but the extra
+distance encode/decode arithmetic reduced the first three fixed-CPU-8 README
+`.fastest` pairs to roughly `0.875x`; the experiment was stopped before broader
+measurement. Keep absolute `i32` ring positions.
 An isolated `.fastest` chain-depth sweep also retained the existing six-entry
 budget. Reducing it to four made a single 200-iteration sample about 3.8% faster
 on README and roadmap, but grew their frames by 23 and 339 bytes; the 44 KiB

@@ -4125,6 +4125,11 @@ coverage.
   `max(best.length, minimum - 1)` was rejected. The extra live loop state left
   fixed-CPU-8 `.fastest` slightly negative on README (`0.9994x`, 5/15 wins) and
   the first ten roadmap pairs (`0.9979x`, 3/10), with unchanged frames.
+  A `u16` relative-distance predecessor ring was rejected despite halving the
+  16 KiB-window link array from 64 KiB to 32 KiB. The full-table oracle was
+  extended through the 32 KiB maximum window and remained token/stat identical,
+  but link distance encode/decode arithmetic cut the first three fixed-CPU-8
+  README `.fastest` pairs to roughly `0.875x`; retain absolute `i32` positions.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent
