@@ -4165,6 +4165,12 @@ coverage.
   rejected. Its extra lookahead/tag branch reduced README/roadmap `.fastest`
   to `0.9882x` / `0.9906x`, `src/png.zig` to `0.9931x`, and default README to
   `0.9862x`; keep the one-token loop after reservoir batching.
+  Removing unused `PlanStats` updates from the observed one-shot parser was
+  rejected after both a token-slice return and a restored-ABI/dedicated-section
+  layout. The latter left only `1.0030x` / `1.0040x` on README/roadmap
+  `.fastest`, while unrelated default README fell to `0.9897x` with 0/11 wins
+  and full-table `src/png.zig` to `0.9958x`. Retain the cheap counters until the
+  large parser instance can be isolated without code-layout regressions.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about

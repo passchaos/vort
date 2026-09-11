@@ -403,6 +403,15 @@ README/roadmap `.fastest` fell to `0.9882x` / `0.9906x`, `src/png.zig` to
 `0.9931x`, and default README to `0.9862x`; `src/checksum.zig` alone was a
 noise-level `1.0026x`. Keep the simple one-token loop now that reservoir
 updates no longer materialize output bytes on every symbol.
+Removing the observed one-shot planner's otherwise-unused `PlanStats` updates
+was rejected after two layouts. Returning only the owned token slice improved
+README/roadmap `.fastest` by `1.0095x` / `1.0130x`, but shifted the unrelated
+default README path to `0.9856x`. Restoring the `GreedyPlan` ABI and isolating
+the observed loop in its own executable section left only `1.0030x` / `1.0040x`
+on those fastest rows, while default README still fell to `0.9897x` with 0/11
+wins and the full-table `src/png.zig` control to `0.9958x`. Retain the three
+cheap counters until the parser can be isolated without whole-binary code-layout
+regressions.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The
