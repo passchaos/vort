@@ -4141,6 +4141,12 @@ coverage.
   roadmap `.fastest` to `0.9845x` / `0.9930x` and `src/png.zig` to `0.9877x`.
   Retain dense 286/30-symbol scans unless active lists can be obtained without
   adding work or state to the parser.
+  Splitting the observed parser callback into `recordLiteral` / `recordMatch`
+  methods was rejected. Ring-backed README/roadmap initially improved only
+  `1.0059x` / `1.0041x`, while full-table `src/png.zig` / `src/checksum.zig`
+  regressed to `0.9862x` / `0.9790x` and default README to `0.9907x`. Restricting
+  the method split to the ring template did not restore the controls and made
+  roadmap unstable, so the single `recordToken` callback remains.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about

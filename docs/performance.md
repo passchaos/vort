@@ -369,6 +369,14 @@ reduced README/roadmap `.fastest` to `0.9845x` / `0.9930x` and `src/png.zig`
 to `0.9877x` in eleven fixed-CPU-8 pairs. Keep the dense 286/30-symbol scans;
 the remaining `initFromStats` cost is not removed profitably by reconstructing
 incremental-style active lists after parsing.
+Splitting the observed hash parser's token callback into branch-specific
+`recordLiteral` / `recordMatch` methods was rejected. The all-layout form
+improved ring-backed README/roadmap `.fastest` by `1.0059x` / `1.0041x`, but
+regressed full-table `src/png.zig` and `src/checksum.zig` to `0.9862x` /
+`0.9790x`, plus default README to `0.9907x`. A ring-only comptime form still
+left the control rows negative and made roadmap unstable. Keep the compact
+single `recordToken` observer; the compiler already specializes its known union
+tag well enough that another large-loop code-shape split is counterproductive.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The
