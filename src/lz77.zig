@@ -1741,7 +1741,7 @@ fn hashGreedyPlanAllocWithPosition(
 ) !GreedyPlan {
     const head = try allocator.alloc(Position, hash_head_table_size);
     defer allocator.free(head);
-    var initialized: [hash_head_init_words]u64 = @splat(0);
+    @memset(head, -1);
     const prev_len = hashPrevTableLen(input.len, options.window_len);
     const ring = prev_len < input.len;
     const prev = try allocator.alloc(Position, prev_len);
@@ -1753,7 +1753,7 @@ fn hashGreedyPlanAllocWithPosition(
         return @call(
             .never_inline,
             hashGreedyPlanWithTables,
-            .{ allocator, input, options, head, prev, true, true, &initialized, anchor },
+            .{ allocator, input, options, head, prev, true, false, {}, anchor },
         );
     }
     return hashGreedyPlanWithTables(
@@ -1763,8 +1763,8 @@ fn hashGreedyPlanAllocWithPosition(
         head,
         prev,
         false,
-        true,
-        &initialized,
+        false,
+        {},
         anchor,
     );
 }

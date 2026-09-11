@@ -4054,6 +4054,15 @@ coverage.
   improved by `1.0255x` / `1.0224x`, and full-table `src/png.zig` / incremental
   test-source rows improved by `1.0108x` / `1.0183x`. All measured frame sizes
   were identical.
+  The one-shot heap hash parser now clears its compact 128 KiB head table once
+  per plan instead of consulting a 4 KiB lazy-initialization bitmap on every
+  lookup and insertion. Tiny/reusable parsers retain their bitmap policy.
+  Eleven alternating fixed-CPU-8 `.fastest` pairs improved README/roadmap/
+  `src/png.zig` by `1.0513x` / `1.0289x` / `1.0476x`, all 11/11 wins; matching
+  `.fast` README/roadmap pairs improved by `1.0439x` / `1.0193x`. The exact
+  64 KiB `src/checksum.zig` control remained near-neutral but positive at
+  `1.0042x` with 10/11 wins. Existing full-table/ring oracles preserve exact
+  tokens and statistics, and every measured encoded frame was unchanged.
 
 - Removed the redundant package sort at every length-limited Huffman
   package-merge depth. Each input package list is sorted, so sums of adjacent
