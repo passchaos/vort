@@ -473,6 +473,23 @@ every measured row: README raw/zlib `.fastest` to `0.9500x` / `0.9495x`,
 roadmap to `0.9743x`, and full-table `src/png.zig` / `src/checksum.zig` to
 `0.9764x` / `0.9367x`. Keep the shared runtime-options loop; its already-hoisted
 limits are cheaper than the instruction-footprint cost of another instance.
+High-diversity one-shot hash blocks through 64 KiB now use the existing lazy
+head-initialization bitmap instead of clearing the compact 128 KiB head table.
+The selector requires more than the tiny-parser threshold and at least 240
+distinct byte values in the first 1 KiB; source-like low-diversity inputs keep
+the proven full clear. The lazy and cleared observed planners share the same
+hash/search loop, and a deterministic 64 KiB binary oracle compares tokens,
+statistics, and final raw bytes exactly. Against an independently built
+`e670db72` baseline, fifteen alternating ReleaseFast pairs pinned to i9-13900K
+CPU 8 improved deterministic binary raw/zlib/gzip `.fastest` by `1.1145x` /
+`1.1155x` / `1.1086x`, all 15/15 wins with byte-identical 2,844/2,850/2,862-byte
+frames. README/roadmap controls were neutral at `1.0022x` / `1.0012x`;
+`src/png.zig` and `src/checksum.zig` improved `1.0247x` / `1.0261x`, while
+non-target `.fast`/`.default` controls stayed neutral-to-positive. Binary
+profiling reduced sampled `memset` from about 15.73% to 1.62%. Full validation
+passed 1,501 tests, all 83 compile-check steps, the 50-check Rust differential,
+the five-case incremental encode gate, and the 265-success/60-expected-failure
+Python zlib differential dashboard.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

@@ -813,13 +813,17 @@ fn planOneShotBestTokensAlloc(allocator: std.mem.Allocator, input: []const u8, o
     const normalized = normalizeOptionsForStrategy(options);
     std.debug.assert(usesOneShotDynamicStats(input, normalized));
     var dynamic: OneShotDynamicStats = .{};
-    const tokens = try lz77.hashGreedyPlanAutoAllocObserved(
-        allocator,
-        input,
-        normalized.lz77_options,
-        DynamicStatsObserver{ .stats = &dynamic },
-    );
+    const observer = DynamicStatsObserver{ .stats = &dynamic };
+    const tokens = if (useLazyOneShotHashHead(input))
+        try lz77.hashGreedyPlanAutoLazyHeadAllocObserved(allocator, input, normalized.lz77_options, observer)
+    else
+        try lz77.hashGreedyPlanAutoAllocObserved(allocator, input, normalized.lz77_options, observer);
     return .{ .tokens = tokens, .dynamic = dynamic };
+}
+
+fn useLazyOneShotHashHead(input: []const u8) bool {
+    return input.len > 24 * 1024 and input.len <= 64 * 1024 and
+        uniqueByteCount(input[0..@min(input.len, 1024)]) >= 240;
 }
 
 fn rollingParser(options: CompressionOptions) ?ParserMode {
@@ -22299,6 +22303,39 @@ test "fast level skips dynamic block candidate" {
     const fixed = try encodeRawFixedWithOptionsAlloc(std.testing.allocator, input, optionsForLevel(.fast));
     defer std.testing.allocator.free(fixed);
     try std.testing.expect(fast.len == @min(stored.len, fixed.len));
+}
+
+test "one-shot lazy hash-head policy targets diverse full-table inputs" {
+    var diverse: [64 * 1024 + 1]u8 = undefined;
+    for (&diverse, 0..) |*byte, index| byte.* = @truncate(index);
+    try std.testing.expect(useLazyOneShotHashHead(diverse[0 .. 64 * 1024]));
+    try std.testing.expect(!useLazyOneShotHashHead(&diverse));
+    try std.testing.expect(useLazyOneShotHashHead(diverse[0 .. 32 * 1024]));
+    try std.testing.expect(!useLazyOneShotHashHead(diverse[0 .. 24 * 1024]));
+    try std.testing.expect(!useLazyOneShotHashHead("source text with a narrow alphabet" ** 2048));
+}
+
+test "one-shot lazy hash head preserves full-table tokens and wire" {
+    var input: [64 * 1024]u8 = undefined;
+    for (&input, 0..) |*byte, index| {
+        byte.* = @truncate(index * 131 + (index >> 3) * 17 + 29);
+    }
+    const options = optionsForLevel(.fastest);
+    const observed = try planOneShotBestTokensAlloc(std.testing.allocator, &input, options);
+    defer observed.deinit(std.testing.allocator);
+    const cleared = try planTokensAlloc(std.testing.allocator, &input, options);
+    defer cleared.deinit(std.testing.allocator);
+    try std.testing.expectEqualDeep(cleared.tokens, observed.tokens.tokens);
+    try std.testing.expectEqual(cleared.stats, observed.tokens.stats);
+
+    var reference = bitstream.BitWriter{};
+    errdefer reference.deinit(std.testing.allocator);
+    try writeBestTokensBlock(std.testing.allocator, &reference, &input, cleared.tokens, true, options);
+    const reference_bytes = try reference.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(reference_bytes);
+    const encoded = try encodeRawBestAlloc(std.testing.allocator, &input, options);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqualSlices(u8, reference_bytes, encoded);
 }
 
 test "split raw fixed encoder emits multi-block deflate stream" {

@@ -4209,6 +4209,18 @@ coverage.
   `0.9500x` / `0.9495x`, roadmap to `0.9743x`, and `src/png.zig` /
   `src/checksum.zig` to `0.9764x` / `0.9367x`. Runtime limits stay hoisted in
   the shared loop; code footprint dominates the constants saved here.
+  High-diversity one-shot hash blocks above the tiny-parser threshold and
+  through 64 KiB now use the existing 4 KiB lazy-head bitmap instead of clearing
+  the 128 KiB compact head table. The first 1 KiB must contain at least 240
+  distinct byte values; low-diversity source text retains the full clear. A
+  deterministic 64 KiB binary oracle proves lazy/cleared token, stats, and raw
+  wire identity. Fifteen alternating ReleaseFast pairs against independently
+  built `e670db72` binaries on i9-13900K CPU 8 improved binary raw/zlib/gzip
+  `.fastest` by `1.1145x` / `1.1155x` / `1.1086x`, all 15/15, with unchanged
+  2,844/2,850/2,862-byte frames. README/roadmap stayed neutral, the 44--45 KiB
+  source controls improved about 2.5%, and sampled binary `memset` fell from
+  15.73% to 1.62%. Final validation passed 1,501 tests, all 83 compile steps,
+  Rust/Python differential checks, and the incremental encode gate.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about

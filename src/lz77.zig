@@ -1729,6 +1729,18 @@ pub fn hashGreedyPlanAutoAllocObserved(
         hashGreedyPlanAllocWithAnchorObserved(allocator, input, options, .three, observer);
 }
 
+pub fn hashGreedyPlanAutoLazyHeadAllocObserved(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    observer: anytype,
+) !GreedyPlan {
+    return if (minMatch(options) >= 4)
+        hashGreedyPlanLazyHeadAllocWithAnchorObserved(allocator, input, options, .four, observer)
+    else
+        hashGreedyPlanLazyHeadAllocWithAnchorObserved(allocator, input, options, .three, observer);
+}
+
 fn hashGreedyPlanAllocWithAnchor(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -1755,6 +1767,35 @@ fn hashGreedyPlanAllocWithAnchorObserved(
         return hashGreedyPlanAllocWithPositionObserved(i32, allocator, input, options, anchor, observer);
     }
     return hashGreedyPlanAllocWithPositionObserved(isize, allocator, input, options, anchor, observer);
+}
+
+fn hashGreedyPlanLazyHeadAllocWithAnchorObserved(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    comptime anchor: HashAnchor,
+    observer: anytype,
+) !GreedyPlan {
+    if (!hashPositionFitsI32(input.len)) {
+        return hashGreedyPlanAllocWithAnchorObserved(allocator, input, options, anchor, observer);
+    }
+    const head = try allocator.alloc(i32, hash_head_table_size);
+    defer allocator.free(head);
+    var initialized: [hash_head_init_words]u64 = @splat(0);
+    const prev = try allocator.alloc(i32, input.len);
+    defer allocator.free(prev);
+    return hashGreedyPlanWithTablesObserved(
+        allocator,
+        input,
+        options,
+        head,
+        prev,
+        false,
+        true,
+        &initialized,
+        anchor,
+        observer,
+    );
 }
 
 fn hashPositionFitsI32(input_len: usize) bool {
