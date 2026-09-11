@@ -345,6 +345,11 @@ state, but fixed-CPU-8 `.fastest` samples were slightly negative on README
 (`0.9994x`, 5/15 wins) and the first ten roadmap pairs (`0.9979x`, 3/10), with
 unchanged frames. The compiler's branchless maximum is cheaper than the extra
 live state on this loop.
+Splitting the one-shot hash scan before its final at-most-three literal bytes was
+rejected. The dedicated tail test and existing token oracles passed, but
+fixed-CPU-8 A/Bs reduced README `.fastest` to `0.9984x` (4/15 wins), roadmap
+`.fastest/.fast` to `0.9962x` / `0.9971x`, and `src/png.zig` to `0.9973x`, with
+unchanged frames. Keep the rare end-of-input checks in the shared loop.
 Combining the one-shot hash head and predecessor arrays into one allocation was
 also rejected. The checked length sum and two logical slices preserved every
 token and frame, but fixed-CPU-8 results were mixed: README `.fastest` reached

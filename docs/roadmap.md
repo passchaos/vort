@@ -4125,6 +4125,11 @@ coverage.
   `max(best.length, minimum - 1)` was rejected. The extra live loop state left
   fixed-CPU-8 `.fastest` slightly negative on README (`0.9994x`, 5/15 wins) and
   the first ten roadmap pairs (`0.9979x`, 3/10), with unchanged frames.
+  Splitting the one-shot hash scan before its final at-most-three literal bytes
+  was rejected. A dedicated tail test and all token oracles passed, but
+  fixed-CPU-8 A/Bs reduced README `.fastest` to `0.9984x` (4/15 wins), roadmap
+  `.fastest/.fast` to `0.9962x` / `0.9971x`, and `src/png.zig` to `0.9973x`,
+  with unchanged frames. Keep the rare boundary checks in the shared loop.
   Combining the one-shot hash head and predecessor arrays into one allocation
   was rejected. It preserved every token/frame, but fixed-CPU-8 results were
   mixed: README `.fastest` was `0.9982x`, roadmap `.fast` `0.9963x`, while the
