@@ -72,7 +72,7 @@ pub const Accumulator = struct {
     seen_count: usize = 0,
     target_index: usize = 0,
     total: [alphabet_size]u32 = @splat(0),
-    prefixes: [candidate_count][alphabet_size]u32 = undefined,
+    prefixes: [candidate_count][alphabet_size]u16 = undefined,
     targets: [candidate_count]usize,
 
     pub fn init(symbol_count: usize) ?Accumulator {
@@ -87,7 +87,7 @@ pub const Accumulator = struct {
         self.total[symbol] += 1;
         self.seen_count += 1;
         if (self.target_index < self.targets.len and self.seen_count == self.targets[self.target_index]) {
-            self.prefixes[self.target_index] = self.total;
+            for (&self.prefixes[self.target_index], &self.total) |*out, count| out.* = @intCast(count);
             self.target_index += 1;
         }
         return true;
@@ -113,14 +113,18 @@ pub fn choose(symbols: []const u16) ?Result {
     return accumulator.finish();
 }
 
-fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [candidate_count][alphabet_size]u32, targets: *const [candidate_count]usize) Proposals {
+fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [candidate_count][alphabet_size]u16, targets: *const [candidate_count]usize) Proposals {
     const baseline_entropy = entropyBitsQ8(total);
     var best_two_index: usize = candidate_count;
     var best_two_entropy = baseline_entropy;
     var best_two_prefix: [alphabet_size]u32 = undefined;
-    for (prefixes, 0..) |prefix, candidate_index| {
+    for (prefixes, 0..) |compact_prefix, candidate_index| {
+        var prefix: [alphabet_size]u32 = undefined;
         var suffix: [alphabet_size]u32 = undefined;
-        for (&suffix, total, &prefix) |*out, all, before| out.* = all - before;
+        for (&prefix, &suffix, total, &compact_prefix) |*before_out, *after_out, all, before| {
+            before_out.* = before;
+            after_out.* = all - before;
+        }
         const split_entropy = entropyBitsQ8(&prefix) + entropyBitsQ8(&suffix);
         if (split_entropy < best_two_entropy) {
             best_two_entropy = split_entropy;
@@ -162,7 +166,7 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
         var middle: [alphabet_size]u32 = undefined;
         var suffix: [alphabet_size]u32 = undefined;
         for (&middle, &suffix, &prefixes[first_index], &prefixes[second_index], total) |*middle_out, *suffix_out, first, second, all| {
-            middle_out.* = second - first;
+            middle_out.* = @as(u32, second) - first;
             suffix_out.* = all - second;
         }
         const split_entropy = entropyBitsQ8(&prefixes[first_index]) + entropyBitsQ8(&middle) + entropyBitsQ8(&suffix);
@@ -172,7 +176,7 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
             best_second_index = second_index;
         }
         var outer: [alphabet_size]u32 = undefined;
-        for (&outer, &prefixes[first_index], &suffix) |*out, first, last| out.* = first + last;
+        for (&outer, &prefixes[first_index], &suffix) |*out, first, last| out.* = @as(u32, first) + last;
         const clustered_entropy = entropyBitsQ8(&outer) + entropyBitsQ8(&middle);
         if (clustered_entropy < best_clustered_entropy) {
             best_clustered_entropy = clustered_entropy;
@@ -185,10 +189,10 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
         var suffix: [alphabet_size]u32 = undefined;
         var outer: [alphabet_size]u32 = undefined;
         for (&middle, &suffix, &prefixes[best_clustered_first_index], &prefixes[best_clustered_second_index], total) |*middle_out, *suffix_out, first, second, all| {
-            middle_out.* = second - first;
+            middle_out.* = @as(u32, second) - first;
             suffix_out.* = all - second;
         }
-        for (&outer, &prefixes[best_clustered_first_index], &suffix) |*out, first, last| out.* = first + last;
+        for (&outer, &prefixes[best_clustered_first_index], &suffix) |*out, first, last| out.* = @as(u32, first) + last;
         const outer_lengths = huffman.treeCodeLengths(alphabet_size, &outer, 15);
         const middle_lengths = huffman.treeCodeLengths(alphabet_size, &middle, 15);
         const split_bits = weightedBits(&outer, &outer_lengths) + weightedBits(&middle, &middle_lengths);
@@ -204,14 +208,16 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
     if (best_first_index != candidate_count and baseline_entropy - best_three_entropy >= 2 * min_entropy_proposal_savings_bits * entropy_scale) {
         var middle: [alphabet_size]u32 = undefined;
         var suffix: [alphabet_size]u32 = undefined;
-        for (&middle, &suffix, &prefixes[best_first_index], &prefixes[best_second_index], total) |*middle_out, *suffix_out, first, second, all| {
-            middle_out.* = second - first;
+        var first: [alphabet_size]u32 = undefined;
+        for (&first, &prefixes[best_first_index]) |*out, count| out.* = count;
+        for (&middle, &suffix, &first, &prefixes[best_second_index], total) |*middle_out, *suffix_out, first_count, second, all| {
+            middle_out.* = @as(u32, second) - first_count;
             suffix_out.* = all - second;
         }
-        const first_lengths = huffman.treeCodeLengths(alphabet_size, &prefixes[best_first_index], 15);
+        const first_lengths = huffman.treeCodeLengths(alphabet_size, &first, 15);
         const middle_lengths = huffman.treeCodeLengths(alphabet_size, &middle, 15);
         const suffix_lengths = huffman.treeCodeLengths(alphabet_size, &suffix, 15);
-        const split_bits = weightedBits(&prefixes[best_first_index], &first_lengths) + weightedBits(&middle, &middle_lengths) + weightedBits(&suffix, &suffix_lengths);
+        const split_bits = weightedBits(&first, &first_lengths) + weightedBits(&middle, &middle_lengths) + weightedBits(&suffix, &suffix_lengths);
         const savings = baseline_bits -| split_bits;
         const refined_baseline = @max(proposals.two.?.savings_bits, if (proposals.clustered) |clustered| clustered.savings_bits else 0);
         if (savings >= 2 * min_estimated_savings_bits and savings -| refined_baseline >= min_three_over_two_savings_bits)
@@ -239,12 +245,12 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
                 var type_a: [alphabet_size]u32 = undefined;
                 var type_b: [alphabet_size]u32 = undefined;
                 for (&second, &third, &fourth, &prefixes[first_index], &prefixes[second_index], &prefixes[third_index], total) |*second_out, *third_out, *fourth_out, first, through_second, through_third, all| {
-                    second_out.* = through_second - first;
-                    third_out.* = through_third - through_second;
+                    second_out.* = @as(u32, through_second) - first;
+                    third_out.* = @as(u32, through_third) - through_second;
                     fourth_out.* = all - through_third;
                 }
                 for (&type_a, &type_b, &prefixes[first_index], &second, &third, &fourth) |*a, *b, first, second_region, third_region, fourth_region| {
-                    a.* = first + third_region;
+                    a.* = @as(u32, first) + third_region;
                     b.* = second_region + fourth_region;
                 }
                 const entropy = entropyBitsQ8(&type_a) + entropyBitsQ8(&type_b);
@@ -253,7 +259,7 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
                     best_alternating_indexes = .{ first_index, second_index, third_index };
                 }
                 var outer: [alphabet_size]u32 = undefined;
-                for (&outer, &prefixes[first_index], &fourth) |*out, first, last| out.* = first + last;
+                for (&outer, &prefixes[first_index], &fourth) |*out, first, last| out.* = @as(u32, first) + last;
                 const reuse_first_entropy = entropyBitsQ8(&outer) + entropyBitsQ8(&second) + entropyBitsQ8(&third);
                 if (reuse_first_entropy < best_reuse_first_entropy) {
                     best_reuse_first_entropy = reuse_first_entropy;
@@ -272,12 +278,12 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
         var type_a: [alphabet_size]u32 = undefined;
         var type_b: [alphabet_size]u32 = undefined;
         for (&second, &third, &fourth, &prefixes[first_index], &prefixes[second_index], &prefixes[third_index], total) |*second_out, *third_out, *fourth_out, first, through_second, through_third, all| {
-            second_out.* = through_second - first;
-            third_out.* = through_third - through_second;
+            second_out.* = @as(u32, through_second) - first;
+            third_out.* = @as(u32, through_third) - through_second;
             fourth_out.* = all - through_third;
         }
         for (&type_a, &type_b, &prefixes[first_index], &second, &third, &fourth) |*a, *b, first, second_region, third_region, fourth_region| {
-            a.* = first + third_region;
+            a.* = @as(u32, first) + third_region;
             b.* = second_region + fourth_region;
         }
         const type_a_lengths = huffman.treeCodeLengths(alphabet_size, &type_a, 15);
@@ -303,11 +309,11 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
         var fourth: [alphabet_size]u32 = undefined;
         var outer: [alphabet_size]u32 = undefined;
         for (&second, &third, &fourth, &prefixes[first_index], &prefixes[second_index], &prefixes[third_index], total) |*second_out, *third_out, *fourth_out, first, through_second, through_third, all| {
-            second_out.* = through_second - first;
-            third_out.* = through_third - through_second;
+            second_out.* = @as(u32, through_second) - first;
+            third_out.* = @as(u32, through_third) - through_second;
             fourth_out.* = all - through_third;
         }
-        for (&outer, &prefixes[first_index], &fourth) |*out, first, last| out.* = first + last;
+        for (&outer, &prefixes[first_index], &fourth) |*out, first, last| out.* = @as(u32, first) + last;
         const outer_lengths = huffman.treeCodeLengths(alphabet_size, &outer, 15);
         const second_lengths = huffman.treeCodeLengths(alphabet_size, &second, 15);
         const third_lengths = huffman.treeCodeLengths(alphabet_size, &third, 15);
@@ -332,7 +338,7 @@ fn totalCount(total: *const [alphabet_size]u32) usize {
     return length;
 }
 
-fn entropyBitsQ8(frequencies: *const [alphabet_size]u32) u64 {
+fn entropyBitsQ8(frequencies: anytype) u64 {
     var sum: u64 = 0;
     var weighted_logs: u64 = 0;
     for (frequencies) |frequency| {
@@ -478,6 +484,20 @@ test "command block split rejects stationary and small streams" {
     var complete = Accumulator.init(symbols.len).?;
     for (symbols) |symbol| try std.testing.expect(complete.add(symbol));
     try std.testing.expect(!complete.add(0));
+}
+
+test "command block split compact prefixes cover the maximum command count" {
+    var accumulator = Accumulator.init(max_split_commands).?;
+    for (0..max_split_commands) |i| {
+        const symbol: u16 = if (i < max_split_commands / 2) 0 else 703;
+        try std.testing.expect(accumulator.add(symbol));
+    }
+    try std.testing.expectEqual(@as(u32, max_split_commands / 2), accumulator.total[0]);
+    try std.testing.expectEqual(@as(u32, max_split_commands / 2), accumulator.total[703]);
+    try std.testing.expectEqual(@as(u16, max_split_commands / 2), accumulator.prefixes[accumulator.prefixes.len - 1][0]);
+    try std.testing.expectEqual(accumulator.targets.len, accumulator.target_index);
+    _ = accumulator.finishProposals();
+    try std.testing.expect(@sizeOf(Accumulator) <= 10 * 1024);
 }
 
 test "command block split fixed-point logarithm stays within two q8 units" {

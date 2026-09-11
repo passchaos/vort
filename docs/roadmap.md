@@ -8666,6 +8666,15 @@ coverage.
   state and complexity were rejected without a demonstrated ratio improvement.
   Future refinement should use sparse per-symbol deltas or a corpus-selected
   adaptive window, not another dense always-on grid.
+  The retained five prefix snapshots now store counts as `u16` while the total
+  histogram remains `u32`; the 32,768-command eligibility ceiling proves every
+  snapshot count fits. Candidate arithmetic expands only the currently scored
+  one to three histograms, reducing the accumulator from about 16.9 KiB to at
+  most 10 KiB. A maximum-count regression pins both the 16,384-symbol boundary
+  and the size cap. The same 17-file matrix is byte-identical at 751,983 bytes.
+  Five alternating fixed-CPU-2 pairs measured median ratios of 0.992--1.005x
+  across seven representative rows; the bounded-memory win retains a measured
+  sub-1% throughput tradeoff rather than claiming a speed improvement.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-
