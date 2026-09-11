@@ -8569,6 +8569,20 @@ coverage.
   dictionary / `dickens` / `mr` / tokenizer split winners; rejected
   x-ray/XML/font rows improved by 1.0638x / 1.0129x / 1.0276x. Every row won
   all five pairs.
+  Ratio mode now also retains a bounded three-region command proposal from the
+  same five prefix histograms. Every region must contain at least 1,024
+  commands and the three-tree estimate must save at least 4,096 payload bits;
+  both the existing two-tree proposal and the new three-tree proposal are then
+  encoded completely, so header cost and byte rounding decide the winner. The
+  writer emits three command trees with deterministic implicit `0 -> 1 -> 2`
+  block-type switches, and allocation-failure injection covers cleanup between
+  the two exact candidates. Against an independent `1f66c483` build on the
+  same 17 local inputs capped at 128 KiB, `dictionary.bin` falls from 56,461 to 56,263
+  bytes and IBM Plex Sans Regular from 70,803 to 70,572 bytes; the other 15
+  inputs are unchanged and the aggregate falls from 752,427 to 751,998 bytes
+  (429 bytes, 0.057%). Node and libbrotli 1.1.0 decode the three-type dictionary
+  stream, and the required upstream differential retains 7,056 generated and
+  7,056 progressive cases with zero unsupported summaries.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-

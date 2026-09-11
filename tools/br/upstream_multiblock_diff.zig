@@ -814,7 +814,7 @@ pub fn main(init: std.process.Init) !void {
     const planned_command_split = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, dictionary_bytes, .{ .level = .ratio });
     defer init.gpa.free(planned_command_split);
     const planned_command_split_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_command_split);
-    if (planned_command_split_summary.max_command_block_types != 2 or
+    if (planned_command_split_summary.max_command_block_types != 3 or
         planned_command_split_summary.max_distance_block_types != 2 or
         planned_command_split_summary.max_distance_context_trees != 2) return error.ReferenceEncodeFailed;
     const planned_command_split_decoded = try init.gpa.alloc(u8, dictionary_bytes.len);

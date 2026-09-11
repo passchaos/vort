@@ -69,7 +69,7 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.brEncodePlannedStreamRatioAlloc(init.gpa, payload);
         defer init.gpa.free(encoded);
         const summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
-        if (summary.max_command_block_types != 2 or
+        if (summary.max_command_block_types != 3 or
             summary.max_distance_block_types != 2 or
             summary.max_distance_context_trees != 2) return error.InvalidBlockPlan;
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);

@@ -19,7 +19,26 @@ const log2_fraction_q8 = blk: {
     break :blk table;
 };
 
-pub const Result = struct { split: usize, savings_bits: u64 };
+pub const Result = struct {
+    split: usize,
+    second_split: ?usize = null,
+    savings_bits: u64,
+
+    pub fn blockCount(self: Result) usize {
+        return if (self.second_split == null) 2 else 3;
+    }
+
+    pub fn blockIndex(self: Result, command_index: usize) usize {
+        if (command_index < self.split) return 0;
+        if (self.second_split) |second| return if (command_index < second) 1 else 2;
+        return 1;
+    }
+};
+
+pub const Proposals = struct {
+    two: ?Result = null,
+    three: ?Result = null,
+};
 pub const Accumulator = struct {
     symbol_count: usize,
     seen_count: usize = 0,
@@ -47,7 +66,11 @@ pub const Accumulator = struct {
     }
 
     pub fn finish(self: *const Accumulator) ?Result {
-        if (self.seen_count != self.symbol_count or self.target_index != self.targets.len) return null;
+        return self.finishProposals().two;
+    }
+
+    pub fn finishProposals(self: *const Accumulator) Proposals {
+        if (self.seen_count != self.symbol_count or self.target_index != self.targets.len) return .{};
         return chooseFromHistograms(&self.total, &self.prefixes, &self.targets);
     }
 };
@@ -62,32 +85,86 @@ pub fn choose(symbols: []const u16) ?Result {
     return accumulator.finish();
 }
 
-fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [candidate_count][alphabet_size]u32, targets: *const [candidate_count]usize) ?Result {
+fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [candidate_count][alphabet_size]u32, targets: *const [candidate_count]usize) Proposals {
     const baseline_entropy = entropyBitsQ8(total);
-    var best_split: usize = 0;
-    var best_entropy = baseline_entropy;
-    var best_prefix: [alphabet_size]u32 = undefined;
+    var best_two_split: usize = 0;
+    var best_two_entropy = baseline_entropy;
+    var best_two_prefix: [alphabet_size]u32 = undefined;
     for (prefixes, targets) |prefix, split| {
         var suffix: [alphabet_size]u32 = undefined;
         for (&suffix, total, &prefix) |*out, all, before| out.* = all - before;
         const split_entropy = entropyBitsQ8(&prefix) + entropyBitsQ8(&suffix);
-        if (split_entropy < best_entropy) {
-            best_entropy = split_entropy;
-            best_split = split;
-            best_prefix = prefix;
+        if (split_entropy < best_two_entropy) {
+            best_two_entropy = split_entropy;
+            best_two_split = split;
+            best_two_prefix = prefix;
         }
     }
-    if (best_split == 0 or baseline_entropy - best_entropy < min_entropy_proposal_savings_bits * entropy_scale) return null;
 
-    var best_suffix: [alphabet_size]u32 = undefined;
-    for (&best_suffix, total, &best_prefix) |*out, all, before| out.* = all - before;
+    var proposals: Proposals = .{};
+    const two_is_promising = best_two_split != 0 and baseline_entropy - best_two_entropy >= min_entropy_proposal_savings_bits * entropy_scale;
+
+    var best_three_entropy = baseline_entropy;
+    var best_first_index: usize = candidate_count;
+    var best_second_index: usize = candidate_count;
+    const symbol_count = totalCount(total);
+    for (0..candidate_count) |first_index| {
+        const first_split = targets[first_index];
+        if (first_split < min_block_commands) continue;
+        for (first_index + 1..candidate_count) |second_index| {
+            const second_split = targets[second_index];
+            if (second_split - first_split < min_block_commands or symbol_count - second_split < min_block_commands) continue;
+            var middle: [alphabet_size]u32 = undefined;
+            var suffix: [alphabet_size]u32 = undefined;
+            for (&middle, &suffix, &prefixes[first_index], &prefixes[second_index], total) |*middle_out, *suffix_out, first, second, all| {
+                middle_out.* = second - first;
+                suffix_out.* = all - second;
+            }
+            const split_entropy = entropyBitsQ8(&prefixes[first_index]) + entropyBitsQ8(&middle) + entropyBitsQ8(&suffix);
+            if (split_entropy < best_three_entropy) {
+                best_three_entropy = split_entropy;
+                best_first_index = first_index;
+                best_second_index = second_index;
+            }
+        }
+    }
+    const three_is_promising = best_first_index != candidate_count and baseline_entropy - best_three_entropy >= 2 * min_entropy_proposal_savings_bits * entropy_scale;
+    if (!two_is_promising and !three_is_promising) return proposals;
+
     const baseline_lengths = huffman.treeCodeLengths(alphabet_size, total, 15);
-    const prefix_lengths = huffman.treeCodeLengths(alphabet_size, &best_prefix, 15);
-    const suffix_lengths = huffman.treeCodeLengths(alphabet_size, &best_suffix, 15);
     const baseline_bits = weightedBits(total, &baseline_lengths);
-    const split_bits = weightedBits(&best_prefix, &prefix_lengths) + weightedBits(&best_suffix, &suffix_lengths);
-    if (split_bits >= baseline_bits or baseline_bits - split_bits < min_estimated_savings_bits) return null;
-    return .{ .split = best_split, .savings_bits = baseline_bits - split_bits };
+    if (two_is_promising) {
+        var suffix: [alphabet_size]u32 = undefined;
+        for (&suffix, total, &best_two_prefix) |*out, all, before| out.* = all - before;
+        const prefix_lengths = huffman.treeCodeLengths(alphabet_size, &best_two_prefix, 15);
+        const suffix_lengths = huffman.treeCodeLengths(alphabet_size, &suffix, 15);
+        const split_bits = weightedBits(&best_two_prefix, &prefix_lengths) + weightedBits(&suffix, &suffix_lengths);
+        if (split_bits < baseline_bits and baseline_bits - split_bits >= min_estimated_savings_bits)
+            proposals.two = .{ .split = best_two_split, .savings_bits = baseline_bits - split_bits };
+    }
+
+    if (three_is_promising) {
+        var middle: [alphabet_size]u32 = undefined;
+        var suffix: [alphabet_size]u32 = undefined;
+        for (&middle, &suffix, &prefixes[best_first_index], &prefixes[best_second_index], total) |*middle_out, *suffix_out, first, second, all| {
+            middle_out.* = second - first;
+            suffix_out.* = all - second;
+        }
+        const first_lengths = huffman.treeCodeLengths(alphabet_size, &prefixes[best_first_index], 15);
+        const middle_lengths = huffman.treeCodeLengths(alphabet_size, &middle, 15);
+        const suffix_lengths = huffman.treeCodeLengths(alphabet_size, &suffix, 15);
+        const split_bits = weightedBits(&prefixes[best_first_index], &first_lengths) + weightedBits(&middle, &middle_lengths) + weightedBits(&suffix, &suffix_lengths);
+        const savings = baseline_bits -| split_bits;
+        if (savings >= 2 * min_estimated_savings_bits)
+            proposals.three = .{ .split = targets[best_first_index], .second_split = targets[best_second_index], .savings_bits = savings };
+    }
+    return proposals;
+}
+
+fn totalCount(total: *const [alphabet_size]u32) usize {
+    var length: usize = 0;
+    for (total) |frequency| length += frequency;
+    return length;
 }
 
 fn entropyBitsQ8(frequencies: *const [alphabet_size]u32) u64 {
@@ -124,6 +201,31 @@ test "command block split finds distinct symbol regions" {
     var accumulator = Accumulator.init(symbols.len).?;
     for (symbols) |symbol| try std.testing.expect(accumulator.add(symbol));
     try std.testing.expectEqual(result, accumulator.finish().?);
+    try std.testing.expectEqual(@as(usize, 2), result.blockCount());
+    try std.testing.expectEqual(@as(?usize, null), result.second_split);
+}
+
+test "command block split finds three distinct symbol regions" {
+    var symbols: [6144]u16 = undefined;
+    for (symbols[0..2048], 0..) |*symbol, i| symbol.* = @intCast(i & 7);
+    for (symbols[2048..4096], 0..) |*symbol, i| symbol.* = @intCast(320 + (i & 7));
+    for (symbols[4096..], 0..) |*symbol, i| symbol.* = @intCast(696 + (i & 7));
+    const result = choose(&symbols) orelse return error.TestUnexpectedResult;
+    const proposals = blk: {
+        var accumulator = Accumulator.init(symbols.len).?;
+        for (symbols) |symbol| try std.testing.expect(accumulator.add(symbol));
+        break :blk accumulator.finishProposals();
+    };
+    try std.testing.expect(proposals.two != null);
+    try std.testing.expect(proposals.three != null);
+    const three = proposals.three.?;
+    try std.testing.expectEqual(proposals.two.?, result);
+    try std.testing.expectEqual(@as(usize, 3), three.blockCount());
+    try std.testing.expect(three.split >= 1024 and three.split <= 3072);
+    try std.testing.expect(three.second_split.? >= 3072 and three.second_split.? <= 5120);
+    try std.testing.expectEqual(@as(usize, 0), three.blockIndex(0));
+    try std.testing.expectEqual(@as(usize, 1), three.blockIndex(three.split));
+    try std.testing.expectEqual(@as(usize, 2), three.blockIndex(three.second_split.?));
 }
 
 test "command block split rejects stationary and small streams" {
