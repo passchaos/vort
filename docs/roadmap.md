@@ -4096,6 +4096,13 @@ coverage.
   A/Bs preserved every frame: README `.fastest/.fast` improved by `1.0176x` /
   `1.0165x`, roadmap by `1.0121x` / `1.0054x`, and `src/png.zig` remained
   slightly positive at `1.0052x`.
+  The checked-candidate budget test now runs immediately after the candidate
+  that consumes it instead of at every chain-loop header. A zero-budget
+  preflight and the existing collision oracle preserve custom no-search and
+  collision-budget behavior. Fixed-CPU-8 A/Bs kept every frame identical:
+  README `.fastest/.fast` improved by `1.0090x` / `1.0076x`, roadmap by
+  `1.0107x` / `1.0114x`, and the 44 KiB full-table control stayed neutral at
+  `0.9989x`.
   Ring-backed hash-greedy search now computes `pos -| window_len` once per
   input position and compares predecessor positions directly, eliminating its
   impossible zero-distance check and repeated distance/window comparison. The

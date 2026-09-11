@@ -2125,6 +2125,7 @@ fn findBestHashMatchWithLayoutAndHashLimits(
     const hash = hashAtInput(input, pos, head.len, anchor) orelse return .{};
     const minimum = limits.minimum;
     if (pos + minimum > input.len) return .{ .hash = hash };
+    if (limits.max_chain == 0) return .{ .hash = hash };
 
     var candidate_i = hashHeadGet(head, hash, lazy_head, initialized);
     var checked: usize = 0;
@@ -2132,7 +2133,7 @@ fn findBestHashMatchWithLayoutAndHashLimits(
     const max_len = @min(limits.maximum, input.len - pos);
     const earliest = if (comptime ring) pos -| limits.window_len else 0;
     var best = MatchCandidate{};
-    while (candidate_i >= 0 and checked < limits.max_chain and walked < limits.max_walks) : (walked += 1) {
+    while (candidate_i >= 0 and walked < limits.max_walks) : (walked += 1) {
         const candidate: usize = @intCast(candidate_i);
         if (comptime ring) {
             if (candidate < earliest) break;
@@ -2156,6 +2157,7 @@ fn findBestHashMatchWithLayoutAndHashLimits(
                 if (len == max_len) break;
             }
         }
+        if (checked == limits.max_chain) break;
         candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
     }
     return .{ .best = best, .hash = hash };
@@ -2883,6 +2885,16 @@ test "hash planner skips non-viable prefixes before spending match budget" {
         else => {},
     };
     try std.testing.expect(saw_deeper_match);
+}
+
+test "hash planner with zero chain budget emits only literals" {
+    const input = "abcabcabcabc";
+    const plan = try hashGreedyPlanAlloc(std.testing.allocator, input, .{ .max_chain = 0 });
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expectEqual(input.len, plan.stats.literals);
+    try std.testing.expectEqual(@as(usize, 0), plan.stats.matches);
+    try std.testing.expectEqual(@as(usize, 0), plan.stats.matched_bytes);
+    try std.testing.expectEqual(input.len, plan.tokens.len);
 }
 
 test "tiny hash greedy planner round trips small repeated data" {
