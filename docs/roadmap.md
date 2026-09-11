@@ -8658,6 +8658,14 @@ coverage.
   (XML retained 0.996x), so replaying the command stream was also rejected. A
   future fine-grid attempt must reuse compact first-pass statistics rather than
   retaining eleven dense histograms or replaying all commands.
+  A compact retry stored eleven `u16` prefix histograms in about 18.3 KiB,
+  reconstructing the original five `u32` sixths exactly while exposing adjacent
+  twelfths without a replay. It again preserved every byte across the 17-file
+  matrix and found no winner. Five fixed-CPU-2 pairs were noisy under concurrent
+  system load, but stable font/XML medians remained about 0.988x; the extra
+  state and complexity were rejected without a demonstrated ratio improvement.
+  Future refinement should use sparse per-symbol deltas or a corpus-selected
+  adaptive window, not another dense always-on grid.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-
