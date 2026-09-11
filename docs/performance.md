@@ -397,6 +397,12 @@ despite shrinking by 4/12 bytes. Full-table `src/png.zig` / `src/checksum.zig`
 improved `1.0130x` / `1.0262x`, but that isolated gain does not justify slower
 primary source workloads or a mixed level policy. Retain the zlib-ng/zlib-rs
 style 32-bit high-product hash.
+Pairing consecutive dynamic literals into one reserved-reservoir update was
+rejected. The lookahead and second token-tag branch outweighed fewer writes:
+README/roadmap `.fastest` fell to `0.9882x` / `0.9906x`, `src/png.zig` to
+`0.9931x`, and default README to `0.9862x`; `src/checksum.zig` alone was a
+noise-level `1.0026x`. Keep the simple one-token loop now that reservoir
+updates no longer materialize output bytes on every symbol.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

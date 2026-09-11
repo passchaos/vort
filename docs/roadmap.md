@@ -4161,6 +4161,10 @@ coverage.
   growing three bytes; README/roadmap `.fast` slowed to `0.9731x` / `0.9781x`
   despite saving 4/12 bytes. The full-table source controls improved, but the
   main source workloads favor the current zlib-ng/zlib-rs-style 32-bit mix.
+  Pairing adjacent dynamic literals into one reserved-reservoir update was
+  rejected. Its extra lookahead/tag branch reduced README/roadmap `.fastest`
+  to `0.9882x` / `0.9906x`, `src/png.zig` to `0.9931x`, and default README to
+  `0.9862x`; keep the one-token loop after reservoir batching.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about
