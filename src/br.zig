@@ -3043,9 +3043,9 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
 
 /// Evaluate literal, command, and distance entropy splits once, after the bounded
 /// short-match alternatives have selected their exact-wire winner. This avoids
-/// rescanning transient command plans. Two- and three-command-type proposals
-/// receive separate full-wire trials before strict size arbitration against
-/// the chosen unsplit stream.
+/// rescanning transient command plans. A conservative incremental estimate
+/// chooses the two- or three-command-type proposal before one full-wire trial
+/// and strict size arbitration against the chosen unsplit stream.
 fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan) Error!?[]u8 {
     const literal_split = if (options.try_literal_split)
         literal_block_split.choose(input, commands, if (baseline.use_recent_distances) 56 else null)
@@ -3053,32 +3053,18 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
         null;
     const symbol_splits = try chooseCommandAndDistanceSplitsAlloc(allocator, commands, baseline.use_recent_distances, options.try_command_split, options.try_distance_split);
     const distance_split = symbol_splits.distance;
-    if (literal_split == null and symbol_splits.command.two == null and symbol_splits.command.three == null and distance_split == null) return null;
-
+    const command_split = symbol_splits.command.preferred();
+    if (literal_split == null and command_split == null and distance_split == null) return null;
     const baseline_stats = stats.*;
-    var best_stats = baseline_stats;
-    var best: ?[]u8 = null;
-    errdefer if (best) |selected| allocator.free(selected);
     errdefer stats.* = baseline_stats;
-    if (literal_split != null or symbol_splits.command.two != null or distance_split != null) {
-        var candidate_stats = baseline_stats;
-        const candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &candidate_stats, options, baseline.use_recent_distances, literal_split, symbol_splits.command.two, distance_split);
-        if (candidate.len < baseline.encoded.len) {
-            best = candidate;
-            best_stats = candidate_stats;
-        } else allocator.free(candidate);
+    var candidate_stats = baseline_stats;
+    const candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &candidate_stats, options, baseline.use_recent_distances, literal_split, command_split, distance_split);
+    if (candidate.len < baseline.encoded.len) {
+        stats.* = candidate_stats;
+        return candidate;
     }
-    if (symbol_splits.command.three) |three| {
-        var candidate_stats = baseline_stats;
-        const candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &candidate_stats, options, baseline.use_recent_distances, literal_split, three, distance_split);
-        if (candidate.len < if (best) |selected| selected.len else baseline.encoded.len) {
-            if (best) |selected| allocator.free(selected);
-            best = candidate;
-            best_stats = candidate_stats;
-        } else allocator.free(candidate);
-    }
-    stats.* = best_stats;
-    return best;
+    allocator.free(candidate);
+    return null;
 }
 
 fn encodeEntropySplitWireCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, use_recent_distances: bool, literal_split: ?usize, command_split: ?command_block_split.Result, distance_split: ?distance_block_split.Result) Error![]u8 {

@@ -7,6 +7,10 @@ const max_split_commands: usize = 32 * 1024;
 const candidate_count: usize = 5;
 const min_estimated_savings_bits: u64 = 2048;
 const min_entropy_proposal_savings_bits: u64 = min_estimated_savings_bits * 3 / 4;
+// A three-tree command header adds one complete command tree plus a second
+// block-length token. Require a conservative margin over the two-tree payload
+// estimate before paying for a second complete wire candidate.
+const min_three_over_two_savings_bits: u64 = 1024;
 const entropy_fraction_bits: u6 = 8;
 const entropy_scale: u64 = 1 << entropy_fraction_bits;
 
@@ -38,6 +42,12 @@ pub const Result = struct {
 pub const Proposals = struct {
     two: ?Result = null,
     three: ?Result = null,
+
+    /// Three-way proposals have already cleared a conservative incremental
+    /// margin over `two`; prefer them without materializing both full wires.
+    pub fn preferred(self: Proposals) ?Result {
+        return self.three orelse self.two;
+    }
 };
 pub const Accumulator = struct {
     symbol_count: usize,
@@ -153,7 +163,7 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
         const suffix_lengths = huffman.treeCodeLengths(alphabet_size, &suffix, 15);
         const split_bits = weightedBits(&prefixes[best_first_index], &first_lengths) + weightedBits(&middle, &middle_lengths) + weightedBits(&suffix, &suffix_lengths);
         const savings = baseline_bits -| split_bits;
-        if (savings >= 2 * min_estimated_savings_bits)
+        if (savings >= 2 * min_estimated_savings_bits and savings -| proposals.two.?.savings_bits >= min_three_over_two_savings_bits)
             proposals.three = .{ .split = targets[best_first_index], .second_split = targets[best_second_index], .savings_bits = savings };
     }
     return proposals;
@@ -216,6 +226,7 @@ test "command block split finds three distinct symbol regions" {
     };
     try std.testing.expect(proposals.two != null);
     try std.testing.expect(proposals.three != null);
+    try std.testing.expectEqual(proposals.three.?, proposals.preferred().?);
     const three = proposals.three.?;
     try std.testing.expectEqual(proposals.two.?, result);
     try std.testing.expectEqual(@as(usize, 3), three.blockCount());

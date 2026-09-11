@@ -14,8 +14,8 @@ major gaps before Vort can claim broad industry-best parity:
   planner-backed LZ77/Huffman streams, bounded multi-meta-block input, and a
   vetted static-dictionary subset. Ratio mode now also has bounded two-type
   literal and distance entropy splits plus three-type command splitting, but
-  still lacks libbrotli's
-  complete adaptive multi-type block splitting and clustering, broader context
+  still lacks libbrotli's complete adaptive multi-type block splitting and
+  clustering, broader context
   modeling, and quality/ratio range.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
@@ -8574,22 +8574,30 @@ coverage.
   refining the profitable two-region boundary with the other four prefix
   histograms. Every region must contain at least 1,024
   commands and the three-tree estimate must save at least 4,096 payload bits;
-  both the existing two-tree proposal and the new three-tree proposal are then
-  encoded completely, so header cost and byte rounding decide the winner. The
+  it must also beat the two-tree estimate by at least 1,024 bits before the
+  three-tree candidate is materialized. That conservative margin chooses
+  two or three trees before one complete candidate is encoded, while final
+  header cost and byte rounding still arbitrate it against the unsplit wire.
+  The
   writer emits three command trees with deterministic implicit `0 -> 1 -> 2`
-  block-type switches, and allocation-failure injection covers cleanup between
-  the two exact candidates. Against an independent `1f66c483` build on the
-  same 17 local inputs capped at 128 KiB, `dictionary.bin` falls from 56,461 to 56,263
-  bytes and IBM Plex Sans Regular from 70,803 to 70,572 bytes; the other 15
-  inputs are unchanged and the aggregate falls from 752,427 to 751,998 bytes
-  (429 bytes, 0.057%). Node and libbrotli 1.1.0 decode the three-type dictionary
+  block-type switches, and allocation-failure injection covers candidate
+  cleanup. Against an independent `1f66c483` build on the
+  same 17 local inputs capped at 128 KiB, `dictionary.bin` falls from 56,461
+  to 56,263 bytes and IBM Plex Sans Regular from 70,803 to 70,572 bytes; the
+  other 15 inputs are unchanged and the aggregate falls from 752,427 to
+  751,998 bytes (429 bytes, 0.057%). Node and libbrotli 1.1.0 decode the
+  three-type dictionary
   stream, and the required upstream differential retains 7,056 generated and
   7,056 progressive cases with zero unsupported summaries. Five alternating
   fixed-CPU-2 pairs measure ratio-encode throughput at 0.8563x / 0.8353x of
   the two-type baseline on the dictionary/font winners; rejected x-ray, XML,
-  and tokenizer rows remain at 0.9947x / 0.9951x / 1.0022x. Avoiding the second
-  complete wire encode for accepted three-tree candidates is the next focused
-  throughput task.
+  and tokenizer rows remain at 0.9947x / 0.9951x / 1.0022x. A follow-up uses
+  the conservative 1,024-bit incremental margin to choose the two- or
+  three-tree shape before materializing one complete candidate. Five
+  alternating fixed-CPU-2 pairs preserve all five tested sizes/checksums and
+  improve the dictionary/font winners by 1.158x / 1.188x over the two-wire
+  implementation, with 5/5 wins; rejected x-ray/XML/tokenizer rows remain at
+  1.000x / 1.006x / 0.998x.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-
