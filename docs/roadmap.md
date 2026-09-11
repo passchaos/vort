@@ -4,7 +4,7 @@ This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
 architecture blindly.
 
-### Current completion audit (2026-09-05)
+### Current completion audit (2026-09-11)
 
 The long-term objective is **not complete**. Current evidence still leaves these
 major gaps before Vort can claim broad industry-best parity:
@@ -12,8 +12,9 @@ major gaps before Vort can claim broad industry-best parity:
 - Full libbrotli-class general-purpose compression is not implemented. The
   production encoder now covers stored streams, compressed-or-stored
   planner-backed LZ77/Huffman streams, bounded multi-meta-block input, and a
-  vetted static-dictionary subset, but still lacks libbrotli's complete adaptive
-  block splitting, context modeling, and quality/ratio range.
+  vetted static-dictionary subset. Ratio mode now also has a bounded two-type
+  literal entropy split, but still lacks libbrotli's complete adaptive literal /
+  command / distance block splitting, context modeling, and quality/ratio range.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -8505,6 +8506,23 @@ coverage.
   times generally rose 9--32%; five source/XML/tokenizer/font/dictionary
   prefixes saved another 76 of 219,053 bytes (0.035%). The candidate was
   rejected rather than adding a second full encode to the default ratio path.
+  Ratio mode now evaluates one bounded two-type literal entropy split after its
+  short-match command alternatives have selected an exact-wire winner. A
+  single pass over plans with at most 32 KiB of literals records five evenly
+  spaced prefix histograms plus the winner's actual one-tree or two-tree UTF-8
+  context baseline; an upstream-style fixed-point Shannon estimate selects one
+  boundary, exact Huffman payload cost must predict at least 256 bytes of
+  savings, and the complete candidate wire must still be smaller. On 128 KiB
+  prefixes of twelve Silesia files plus local
+  dictionary/source/OpenCV XML/Qwen tokenizer/OpenType font inputs, only `mr`
+  and `samba` change: 31,946 -> 31,638 and 46,950 -> 46,376 bytes. The 17-file
+  aggregate falls from 763,180 to 762,298 bytes (882 bytes, 0.116%) with all
+  other files byte-size stable. Five alternating fixed-CPU-2 process pairs
+  measured median ratio-encode throughput at 0.967x / 0.837x on the two winning
+  rows; representative rejected dictionary/XML/tokenizer/font rows retained
+  0.984x--1.003x. A Vort-produced 96 KiB split stream is decoded
+  by libbrotli and Vort's byte-progressive path in the required upstream
+  differential (`planned_literal_split_cases=1`).
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-

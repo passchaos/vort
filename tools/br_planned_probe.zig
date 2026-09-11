@@ -46,6 +46,23 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "ratio-literal-split")) {
+        const payload = try init.gpa.alloc(u8, 96 * 1024);
+        defer init.gpa.free(payload);
+        var state: u32 = 0x1234_5678;
+        for (payload, 0..) |*byte, i| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const nibble: u8 = @truncate(state >> 28);
+            byte.* = if (i < payload.len / 2) nibble else 240 + nibble;
+        }
+        const encoded = try vort.brEncodePlannedStreamRatioAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        const summary = try vort.brSummarizeStream(encoded);
+        if (summary.max_literal_block_types != 2 or summary.max_literal_context_trees != 2)
+            return error.InvalidBlockPlan;
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "incremental-planned")) {
         var payload: [1024]u8 = undefined;
         @memset(payload[0..512], 'a');

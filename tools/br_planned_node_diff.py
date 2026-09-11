@@ -52,6 +52,17 @@ def main() -> int:
         raise SystemExit("ratio-oversized: expected compressed multi-block output")
     print(f"brotli planned ratio-oversized node diff: encoded={len(encoded)} decoded={len(actual)}")
     state = 0x12345678
+    expected = bytearray(96 * 1024)
+    for i in range(len(expected)):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        nibble = state >> 28
+        expected[i] = nibble if i < len(expected) // 2 else 240 + nibble
+    encoded = subprocess.check_output([sys.argv[1], "ratio-literal-split"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("ratio-literal-split: node output mismatch")
+    print(f"brotli planned ratio-literal-split node diff: encoded={len(encoded)} decoded={len(actual)}")
+    state = 0x12345678
     random_tail = bytearray(512)
     for i in range(len(random_tail)):
         state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
