@@ -345,6 +345,12 @@ state, but fixed-CPU-8 `.fastest` samples were slightly negative on README
 (`0.9994x`, 5/15 wins) and the first ten roadmap pairs (`0.9979x`, 3/10), with
 unchanged frames. The compiler's branchless maximum is cheaper than the extra
 live state on this loop.
+A ring/full-head four-byte hash helper that omitted the final bucket mask was
+rejected. The high 15 bits already fit the 32,768-entry table and all oracle
+tokens stayed identical, but fixed-CPU-8 gains on README/roadmap were only
+`1.001--1.005x`; the nominally isolated 44 KiB full-table control fell to
+`0.9947x` with 1/11 wins. Keep the shared masked hash helper to avoid another
+code-shape split for a single redundant instruction.
 A one-shot match-tail insertion simplification was rejected. Replacing the
 existing increment-and-clamp sequence with `end - min(match_len - 1, 4)` kept
 the exact same inserted positions and wire bytes, and improved two full-table

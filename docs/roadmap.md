@@ -4125,6 +4125,11 @@ coverage.
   `max(best.length, minimum - 1)` was rejected. The extra live loop state left
   fixed-CPU-8 `.fastest` slightly negative on README (`0.9994x`, 5/15 wins) and
   the first ten roadmap pairs (`0.9979x`, 3/10), with unchanged frames.
+  A ring/full-head four-byte hash helper that omitted the redundant final
+  32,768-bucket mask was rejected. It preserved all oracle tokens and measured
+  frames, but README/roadmap gains stayed around `1.001--1.005x`, while the
+  nominally isolated 44 KiB full-table control fell to `0.9947x` with 1/11
+  wins. Keep the shared masked helper rather than another code-shape split.
   Simplifying the one-shot match-tail insertion start to
   `end - min(match_len - 1, 4)` was rejected. The equivalent expression kept
   all inserted positions and frames, and improved full-table `src/png.zig` /
