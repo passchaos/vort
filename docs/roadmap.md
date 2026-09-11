@@ -13,8 +13,8 @@ major gaps before Vort can claim broad industry-best parity:
   production encoder now covers stored streams, compressed-or-stored
   planner-backed LZ77/Huffman streams, bounded multi-meta-block input, and a
   vetted static-dictionary subset. Ratio mode now also has bounded two-type
-  literal and command entropy splits, but still lacks libbrotli's complete
-  adaptive multi-type literal / command / distance block splitting, context
+  literal, command, and distance entropy splits, but still lacks libbrotli's
+  complete adaptive multi-type block splitting and clustering, broader context
   modeling, and quality/ratio range.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
@@ -8541,6 +8541,22 @@ coverage.
   Node and libbrotli independently decode the repository dictionary fixture,
   and the upstream differential reports `planned_command_split_cases=1`; a
   direct regression also combines literal and command switches in one wire.
+  A bounded two-type distance split completes the same exact-wire candidate for
+  plans with at least 1,024 emitted distance symbols, using upstream's 512-
+  symbol minimum block scale. Its fixed-point entropy preselection and exact
+  Huffman gate require at least 2,200 predicted payload bits before paying for
+  the two block trees and eight-entry context map. Relative to the literal +
+  command split baseline, 128 KiB dictionary, Silesia `dickens` / `mr`, and
+  tokenizer prefixes save another 306 / 322 / 330 / 253 bytes; lower-value
+  x-ray/XML/font candidates are filtered. The 17-file aggregate falls from
+  760,783 to 759,572 bytes (1,211 bytes, 0.159%), or 3,608 bytes (0.473%) below
+  the pre-entropy-split baseline. Five alternating fixed-CPU-2 process pairs
+  measured median throughput ratios of 0.947x / 0.870x / 0.991x / 0.982x on
+  the four winning rows; rejected x-ray/XML/font rows retained 0.927x / 0.962x
+  / 0.960x. Node and libbrotli decode the repository dictionary fixture with
+  both command and distance block types, and the upstream differential reports
+  `planned_distance_split_cases=1`; a direct regression combines all three
+  split categories in one wire.
   Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
   meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
   slices through the bounded 32 KiB planner and emits one legal multi-meta-

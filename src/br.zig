@@ -20,6 +20,7 @@ const encoder_stats = @import("br/encoder/stats.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
 const literal_block_split = @import("br/encoder/literal_block_split.zig");
 const command_block_split = @import("br/encoder/command_block_split.zig");
+const distance_block_split = @import("br/encoder/distance_block_split.zig");
 const header_profile = @import("br/header_profile.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
@@ -562,6 +563,7 @@ test {
     _ = static_dictionary_matcher;
     _ = literal_block_split;
     _ = command_block_split;
+    _ = distance_block_split;
     _ = header_profile;
 }
 
@@ -2082,6 +2084,7 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
         .try_recent_distances = true,
         .try_literal_split = true,
         .try_command_split = true,
+        .try_distance_split = true,
         .window_bits = window_bits,
         .metadata = options.metadata,
     });
@@ -2321,6 +2324,7 @@ const CommandPlanEncodeOptions = struct {
     use_utf8_text_contexts: bool = false,
     literal_split: ?usize = null,
     command_split: ?usize = null,
+    distance_split: ?usize = null,
     utf8_context_cutoff: u6 = 56,
     ndirect: u7 = 15,
     window_bits: u5 = default_window_bits,
@@ -2334,6 +2338,7 @@ const LazyWireOptions = struct {
     try_recent_distances: bool = false,
     try_literal_split: bool = false,
     try_command_split: bool = false,
+    try_distance_split: bool = false,
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
 };
@@ -3049,7 +3054,11 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
         try chooseCommandSplitAlloc(allocator, commands, baseline.use_recent_distances)
     else
         null;
-    if (literal_split == null and command_split == null) return null;
+    const distance_split = if (options.try_distance_split)
+        try chooseDistanceSplitAlloc(allocator, commands, baseline.use_recent_distances)
+    else
+        null;
+    if (literal_split == null and command_split == null and distance_split == null) return null;
     const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, stats, .{
         // The ordinary-vs-UTF8 decision is made first. A literal block split
         // then inherits that winner's distance coding instead of accidentally
@@ -3058,6 +3067,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
         .use_utf8_text_contexts = baseline.use_recent_distances and literal_split == null,
         .literal_split = literal_split,
         .command_split = if (command_split) |result| result.split else null,
+        .distance_split = if (distance_split) |result| result.split else null,
         .window_bits = options.window_bits,
         .metadata = options.metadata,
     });
@@ -3079,6 +3089,28 @@ fn chooseCommandSplitAlloc(allocator: std.mem.Allocator, commands: []const comma
         if (command.has_copy and command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
     return command_block_split.choose(symbols);
+}
+
+fn chooseDistanceSplitAlloc(allocator: std.mem.Allocator, commands: []const command_plan.Command, use_recent_distances: bool) Error!?distance_block_split.Result {
+    // There cannot be more explicit distance symbols than commands, so short
+    // plans cannot qualify. Keep candidate discovery bounded on large plans.
+    if (commands.len < 1024 or commands.len > 32 * 1024) return null;
+    const symbols = try allocator.alloc(u16, commands.len);
+    defer allocator.free(symbols);
+    var symbol_count: usize = 0;
+    var last_distances = initial_last_distances;
+    for (commands) |command| {
+        const recent_symbol = if (use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
+        const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, recent_symbol == 0) orelse
+            commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
+        if (command.has_copy and encoding.command.distance_code == -1) {
+            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), 15) orelse return error.InvalidBlockPlan;
+            symbols[symbol_count] = distance.symbol;
+            symbol_count += 1;
+        }
+        if (command.has_copy and command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
+    }
+    return distance_block_split.choose(symbols[0..symbol_count]);
 }
 
 fn countReusableRecentDistances(commands: []const command_plan.Command) usize {
@@ -3158,6 +3190,8 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     var command_block_frequencies: [2][704]u32 = undefined;
     if (options.command_split != null) @memset(&command_block_frequencies, @splat(0));
     var distance_frequencies: [planned_distance_alphabet_size]u32 = @splat(0);
+    var distance_block_frequencies: [2][planned_distance_alphabet_size]u32 = undefined;
+    if (options.distance_split != null) @memset(&distance_block_frequencies, @splat(0));
     // Frequency collection already resolves every command symbol. Retain the
     // common small-plan result so payload emission does not repeat both length
     // classifications and the 24x24 command-table lookup. Large plans keep the
@@ -3167,6 +3201,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     const frequency_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     var last_distances = initial_last_distances;
     var literal_index: usize = 0;
+    var distance_index: usize = 0;
     for (commands, 0..) |command, command_index| {
         const recent_symbol = if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
         const use_last_distance = recent_symbol == 0;
@@ -3194,7 +3229,10 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         if (encoding.command.distance_code == -1) {
             const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), options.ndirect) orelse return error.InvalidBlockPlan;
             if (distance.symbol >= planned_distance_alphabet_size) return error.InvalidBlockPlan;
-            distance_frequencies[distance.symbol] += 1;
+            if (options.distance_split) |split| {
+                distance_block_frequencies[@intFromBool(distance_index >= split)][distance.symbol] += 1;
+                distance_index += 1;
+            } else distance_frequencies[distance.symbol] += 1;
         }
         if (command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
@@ -3205,12 +3243,15 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, 0);
     if (options.literal_split) |split| if (split == 0 or literal_index <= split) return error.InvalidBlockPlan;
     if (options.command_split) |split| if (split == 0 or commands.len <= split) return error.InvalidBlockPlan;
-    if (allZeroFrequencies(planned_distance_alphabet_size, &distance_frequencies)) distance_frequencies[0] = 1;
+    if (options.distance_split) |split| {
+        if (split == 0 or distance_index <= split) return error.InvalidBlockPlan;
+    } else if (allZeroFrequencies(planned_distance_alphabet_size, &distance_frequencies)) distance_frequencies[0] = 1;
     if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
     const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     var literal_context_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
     var literal_block_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
     var command_block_alphabets: [2]command_plan.PrefixAlphabet = undefined;
+    var distance_block_alphabets: [2]command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
     var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
     if (options.literal_split == null) try literal_alphabet.sortByFrequencies(&literal_frequencies);
     if (options.use_utf8_text_contexts) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
@@ -3223,7 +3264,10 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         for (&command_block_alphabets, &command_block_frequencies) |*alphabet, *frequencies|
             try command_plan.alphabetFromFrequenciesInto(704, alphabet, frequencies);
     } else try command_alphabet.sortByFrequencies(&command_frequencies);
-    try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
+    if (options.distance_split != null) {
+        for (&distance_block_alphabets, &distance_block_frequencies) |*alphabet, *frequencies|
+            try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, alphabet, frequencies);
+    } else try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
     stats.literal_symbol_count = if (options.literal_split != null)
         literal_block_alphabets[0].len + literal_block_alphabets[1].len
     else
@@ -3232,7 +3276,10 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         command_block_alphabets[0].len + command_block_alphabets[1].len
     else
         command_alphabet.len;
-    stats.distance_symbol_count = distance_alphabet.len;
+    stats.distance_symbol_count = if (options.distance_split != null)
+        distance_block_alphabets[0].len + distance_block_alphabets[1].len
+    else
+        distance_alphabet.len;
     if (io) |active| stats.alphabet_ns = elapsedNs(alphabet_start.?, active);
 
     // Useful planner streams are usually a small fraction of input. Reserving
@@ -3268,7 +3315,16 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
             tree_lengths.* = if (alphabet.len <= 4) @splat(0) else try alphabet.codeLengths(frequencies);
         break :blk lengths;
     } else undefined;
-    const distance_lengths = if (distance_alphabet.len <= 4) @as([planned_distance_alphabet_size]u4, @splat(0)) else try distance_alphabet.codeLengths(&distance_frequencies);
+    const distance_lengths = if (options.distance_split == null)
+        if (distance_alphabet.len <= 4) @as([planned_distance_alphabet_size]u4, @splat(0)) else try distance_alphabet.codeLengths(&distance_frequencies)
+    else
+        undefined;
+    const distance_block_lengths = if (options.distance_split != null) blk: {
+        var lengths: [2][planned_distance_alphabet_size]u4 = undefined;
+        for (&lengths, &distance_block_alphabets, &distance_block_frequencies) |*tree_lengths, *alphabet, *frequencies|
+            tree_lengths.* = if (alphabet.len <= 4) @splat(0) else try alphabet.codeLengths(frequencies);
+        break :blk lengths;
+    } else undefined;
     if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
     const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_split_code = if (options.literal_split) |split| try TwoBlockLengthCode.init(split, literal_index - split) else undefined;
@@ -3278,11 +3334,17 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         .lengths = &command_block_lengths,
         .split_code = &command_split_code,
     } else null;
+    const distance_split_code = if (options.distance_split) |split| try TwoBlockLengthCode.init(split, distance_index - split) else undefined;
+    const distance_split_header: ?DistanceBlockSplitHeader = if (options.distance_split != null) .{
+        .alphabets = &distance_block_alphabets,
+        .lengths = &distance_block_lengths,
+        .split_code = &distance_split_code,
+    } else null;
     if (options.literal_split != null) {
-        try writePlannedCompressedHeaderTwoLiteralBlocks(allocator, writer, &literal_block_alphabets, &literal_block_lengths, &literal_split_code, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_alphabet_size, &command_lengths, &distance_lengths);
+        try writePlannedCompressedHeaderTwoLiteralBlocks(allocator, writer, &literal_block_alphabets, &literal_block_lengths, &literal_split_code, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
     } else if (options.use_utf8_text_contexts) {
-        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, options.utf8_context_cutoff, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_alphabet_size, &command_lengths, &distance_lengths);
-    } else try writePlannedCompressedHeader(allocator, writer, &literal_alphabet, &command_alphabet, command_split_header, &distance_alphabet, options.ndirect, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
+        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, options.utf8_context_cutoff, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
+    } else try writePlannedCompressedHeader(allocator, writer, &literal_alphabet, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, options.ndirect, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
     if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
 
     const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
@@ -3311,16 +3373,27 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         else
             try huffman.HuffmanTable(704).Encoder.init(&command_block_lengths[1]),
     } else undefined;
-    const distance_encoder = if (distance_alphabet.len <= 4)
+    const distance_encoder = if (options.distance_split != null or distance_alphabet.len <= 4)
         huffman.HuffmanTable(planned_distance_alphabet_size).Encoder{}
     else if (distance_alphabet.len <= 64)
         try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.initSparseTrusted(&distance_lengths, distance_alphabet.symbols[0..distance_alphabet.len])
     else
         try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.init(&distance_lengths);
+    const distance_block_encoders = if (options.distance_split != null) [2]huffman.HuffmanTable(planned_distance_alphabet_size).Encoder{
+        if (distance_block_alphabets[0].len <= 4) .{} else if (distance_block_alphabets[0].len <= 64)
+            try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.initSparseTrusted(&distance_block_lengths[0], distance_block_alphabets[0].symbols[0..distance_block_alphabets[0].len])
+        else
+            try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.init(&distance_block_lengths[0]),
+        if (distance_block_alphabets[1].len <= 4) .{} else if (distance_block_alphabets[1].len <= 64)
+            try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.initSparseTrusted(&distance_block_lengths[1], distance_block_alphabets[1].symbols[0..distance_block_alphabets[1].len])
+        else
+            try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.init(&distance_block_lengths[1]),
+    } else undefined;
     if (io) |active| stats.encoder_ns = elapsedNs(encoder_start.?, active);
     const payload_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     last_distances = initial_last_distances;
     literal_index = 0;
+    distance_index = 0;
     for (commands, 0..) |command, command_index| {
         const recent_symbol = if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
         const use_last_distance = recent_symbol == 0;
@@ -3356,14 +3429,18 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         }
         if (command.has_copy and encoding.command.distance_code == -1) {
             const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), options.ndirect) orelse unreachable;
-            if (distance_alphabet.len > 1) {
-                if (distance_alphabet.len <= 4) {
-                    const code = distance_alphabet.simpleCode(distance.symbol).?;
+            const active_distance_alphabet = if (options.distance_split) |split| &distance_block_alphabets[@intFromBool(distance_index >= split)] else &distance_alphabet;
+            const active_distance_encoder = if (options.distance_split) |split| &distance_block_encoders[@intFromBool(distance_index >= split)] else &distance_encoder;
+            if (options.distance_split) |split| if (distance_index == split) try distance_split_code.writeLength(allocator, writer, 1);
+            if (active_distance_alphabet.len > 1) {
+                if (active_distance_alphabet.len <= 4) {
+                    const code = active_distance_alphabet.simpleCode(distance.symbol).?;
                     try writer.writeHuffmanBits(allocator, code.code, code.bits);
-                } else try writer.writeHuffmanBits(allocator, distance_encoder.codes[distance.symbol], distance_encoder.bits[distance.symbol]);
+                } else try writer.writeHuffmanBits(allocator, active_distance_encoder.codes[distance.symbol], active_distance_encoder.bits[distance.symbol]);
             }
             if (distance.extra_bits != 0)
                 try writer.writeBits(allocator, distance.extra, distance.extra_bits);
+            distance_index += 1;
         }
         if (command.has_copy and command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
@@ -11314,7 +11391,7 @@ test "br planned wire encodes a two-type literal entropy split" {
     try std.testing.expectEqualSlices(u8, &payload, decoded);
 }
 
-test "br planned wire combines literal and command entropy splits" {
+test "br planned wire combines literal command and distance entropy splits" {
     const command_count = 4096;
     const first_command_count = command_count / 2;
     const first_bytes = first_command_count * 3;
@@ -11343,11 +11420,14 @@ test "br planned wire combines literal and command entropy splits" {
     const encoded = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{
         .literal_split = first_command_count,
         .command_split = first_command_count,
+        .distance_split = first_command_count,
     });
     defer std.testing.allocator.free(encoded);
     const summary = try summarizeStream(encoded);
     try std.testing.expectEqual(@as(usize, 2), summary.max_literal_block_types);
     try std.testing.expectEqual(@as(usize, 2), summary.max_command_block_types);
+    try std.testing.expectEqual(@as(usize, 2), summary.max_distance_block_types);
+    try std.testing.expectEqual(@as(usize, 2), summary.max_distance_context_trees);
     try std.testing.expectEqual(@as(usize, 2), summary.max_literal_context_trees);
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
@@ -11397,6 +11477,8 @@ test "br ratio planner selects a profitable command entropy split" {
     defer std.testing.allocator.free(encoded);
     const summary = try summarizeStreamAlloc(std.testing.allocator, encoded);
     try std.testing.expectEqual(@as(usize, 2), summary.max_command_block_types);
+    try std.testing.expectEqual(@as(usize, 2), summary.max_distance_block_types);
+    try std.testing.expectEqual(@as(usize, 2), summary.max_distance_context_trees);
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
@@ -20127,6 +20209,12 @@ const CommandBlockSplitHeader = struct {
     split_code: *const TwoBlockLengthCode,
 };
 
+const DistanceBlockSplitHeader = struct {
+    alphabets: *const [2]command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
+    lengths: *const [2][planned_distance_alphabet_size]u4,
+    split_code: *const TwoBlockLengthCode,
+};
+
 fn writeCommandBlockSwitchHeader(allocator: std.mem.Allocator, writer: *BitWriter, split: ?CommandBlockSplitHeader) Error!void {
     if (split) |header| {
         try writeBlockTypeCount(allocator, writer, 2);
@@ -20141,6 +20229,42 @@ fn writePlannedCommandTrees(allocator: std.mem.Allocator, writer: *BitWriter, al
         inline for (0..2) |tree|
             try writePrefixSymbolsWithLengths(allocator, writer, 704, &header.alphabets[tree], &header.lengths[tree]);
     } else try writePrefixSymbolsWithLengths(allocator, writer, 704, alphabet, lengths);
+}
+
+fn writeDistanceBlockSwitchHeader(allocator: std.mem.Allocator, writer: *BitWriter, split: ?DistanceBlockSplitHeader) Error!void {
+    if (split) |header| {
+        try writeBlockTypeCount(allocator, writer, 2);
+        try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, 4, 1);
+        try writePrefixSymbolsWithLengths(allocator, writer, 26, &header.split_code.alphabet, &header.split_code.lengths);
+        try header.split_code.writeLength(allocator, writer, 0);
+    } else try writeBlockTypeCount(allocator, writer, 1);
+}
+
+fn writeDistanceTreeContextMap(allocator: std.mem.Allocator, writer: *BitWriter, split: ?DistanceBlockSplitHeader) Error!void {
+    if (split == null) return writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 2);
+    // Eight entries: block type 0 uses tree 0 for all four contexts; block
+    // type 1 uses tree 1. With IMTF the latter becomes [1,0,0,0].
+    try writer.writeBits(allocator, 1, 1); // use RLE for zeros
+    try writer.writeBits(allocator, 1, 4); // RLEMAX = 2
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 2, 2); // NSYM = 3
+    try writer.writeBits(allocator, 1, alphabetBits(4)); // zero run 2...3
+    try writer.writeBits(allocator, 2, alphabetBits(4)); // zero run 4...7
+    try writer.writeBits(allocator, 3, alphabetBits(4)); // tree 1
+    try writeThreeSymbolContextMapCode(allocator, writer, 1);
+    try writer.writeBits(allocator, 0, 2); // four zeros
+    try writeThreeSymbolContextMapCode(allocator, writer, 2);
+    try writeThreeSymbolContextMapCode(allocator, writer, 0);
+    try writer.writeBits(allocator, 1, 1); // three zeros
+    try writer.writeBits(allocator, 1, 1); // IMTF
+}
+
+fn writePlannedDistanceTrees(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size), lengths: *const [planned_distance_alphabet_size]u4, split: ?DistanceBlockSplitHeader) Error!void {
+    if (split) |header| {
+        inline for (0..2) |tree|
+            try writePrefixSymbolsWithLengths(allocator, writer, alphabet_size, &header.alphabets[tree], &header.lengths[tree]);
+    } else try writePrefixSymbolsWithLengths(allocator, writer, alphabet_size, alphabet, lengths);
 }
 
 fn blockLengthEncoding(len: usize) ?BlockLengthEncoding {
@@ -20163,6 +20287,7 @@ fn writePlannedCompressedHeaderTwoLiteralBlocks(
     command_alphabet: *const command_plan.PrefixAlphabet,
     command_split: ?CommandBlockSplitHeader,
     distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
+    distance_split: ?DistanceBlockSplitHeader,
     distance_alphabet_size: usize,
     command_lengths: *const [704]u4,
     distance_lengths: *const [planned_distance_alphabet_size]u4,
@@ -20173,18 +20298,18 @@ fn writePlannedCompressedHeaderTwoLiteralBlocks(
     try writePrefixSymbolsWithLengths(allocator, writer, 26, &split_code.alphabet, &split_code.lengths);
     try split_code.writeLength(allocator, writer, 0);
     try writeCommandBlockSwitchHeader(allocator, writer, command_split);
-    try writeBlockTypeCount(allocator, writer, 1);
+    try writeDistanceBlockSwitchHeader(allocator, writer, distance_split);
     try writer.writeBits(allocator, 0, 2); // NPOSTFIX
     try writer.writeBits(allocator, ndirect, 4);
     try writer.writeBits(allocator, 0, 2); // literal context mode, block 0
     try writer.writeBits(allocator, 0, 2); // literal context mode, block 1
     try writeBlockTypeCount(allocator, writer, 2);
     try writeTwoLiteralBlockContextMap(allocator, writer);
-    try writeBlockTypeCount(allocator, writer, 1);
+    try writeDistanceTreeContextMap(allocator, writer, distance_split);
     inline for (0..2) |tree|
         try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
     try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
-    try writePrefixSymbolsWithLengths(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths);
+    try writePlannedDistanceTrees(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
 }
 
 fn writeTwoLiteralBlockContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
@@ -20213,6 +20338,7 @@ fn writePlannedCompressedHeader(
     command_alphabet: *const command_plan.PrefixAlphabet,
     command_split: ?CommandBlockSplitHeader,
     distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
+    distance_split: ?DistanceBlockSplitHeader,
     ndirect: u7,
     distance_alphabet_size: usize,
     literal_lengths: *const [256]u4,
@@ -20221,15 +20347,15 @@ fn writePlannedCompressedHeader(
 ) Error!void {
     try writeBlockTypeCount(allocator, writer, 1);
     try writeCommandBlockSwitchHeader(allocator, writer, command_split);
-    try writeBlockTypeCount(allocator, writer, 1);
+    try writeDistanceBlockSwitchHeader(allocator, writer, distance_split);
     try writer.writeBits(allocator, 0, 2); // NPOSTFIX
     try writer.writeBits(allocator, ndirect, 4);
     try writer.writeBits(allocator, 0, 2); // literal context mode
     try writeBlockTypeCount(allocator, writer, 1);
-    try writeBlockTypeCount(allocator, writer, 1);
+    try writeDistanceTreeContextMap(allocator, writer, distance_split);
     try writePrefixSymbolsWithLengths(allocator, writer, 256, literal_alphabet, literal_lengths);
     try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
-    try writePrefixSymbolsWithLengths(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths);
+    try writePlannedDistanceTrees(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
 }
 
 fn writePlannedCompressedHeaderTwoLiteralContexts(
@@ -20242,22 +20368,23 @@ fn writePlannedCompressedHeaderTwoLiteralContexts(
     command_alphabet: *const command_plan.PrefixAlphabet,
     command_split: ?CommandBlockSplitHeader,
     distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
+    distance_split: ?DistanceBlockSplitHeader,
     distance_alphabet_size: usize,
     command_lengths: *const [704]u4,
     distance_lengths: *const [planned_distance_alphabet_size]u4,
 ) Error!void {
     try writeBlockTypeCount(allocator, writer, 1);
     try writeCommandBlockSwitchHeader(allocator, writer, command_split);
-    try writeBlockTypeCount(allocator, writer, 1);
+    try writeDistanceBlockSwitchHeader(allocator, writer, distance_split);
     try writer.writeBits(allocator, 0, 2); // NPOSTFIX
     try writer.writeBits(allocator, ndirect, 4);
     try writer.writeBits(allocator, literal_context.mode_utf8, 2);
     try writeBlockTypeCount(allocator, writer, 2);
     try writeUtf8SuffixContextMap(allocator, writer, context_cutoff);
-    try writeBlockTypeCount(allocator, writer, 1);
+    try writeDistanceTreeContextMap(allocator, writer, distance_split);
     inline for (0..2) |tree| try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
     try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
-    try writePrefixSymbolsWithLengths(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths);
+    try writePlannedDistanceTrees(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
 }
 
 fn writeUtf8TextContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
