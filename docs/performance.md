@@ -465,6 +465,14 @@ footprint reduced README raw/zlib `.fastest` to `0.9947x` / `0.9939x`, roadmap
 to `0.9979x`, `src/png.zig` to `0.9967x`, and default README to `0.9894x`.
 All length-boundary and block-wire oracles remained exact. Keep direct access
 to the small static metadata plus per-block Huffman encoder.
+An exact `.fastest` observed-parser clone with compile-time window, chain, nice,
+minimum, maximum, walk, acceptance, and four-byte-anchor settings was rejected.
+Although its generic-vs-specialized token/stat and wrapper-wire oracles were
+exact for full-table and ring-backed inputs, duplicating the large loop reduced
+every measured row: README raw/zlib `.fastest` to `0.9500x` / `0.9495x`,
+roadmap to `0.9743x`, and full-table `src/png.zig` / `src/checksum.zig` to
+`0.9764x` / `0.9367x`. Keep the shared runtime-options loop; its already-hoisted
+limits are cheaper than the instruction-footprint cost of another instance.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

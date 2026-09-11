@@ -4203,6 +4203,12 @@ coverage.
   match: README raw/zlib `.fastest` measured `0.9947x` / `0.9939x`, roadmap
   `0.9979x`, `src/png.zig` `0.9967x`, and default README `0.9894x`. Keep the
   static length metadata and per-block Huffman arrays separate.
+  An exact `.fastest` observed-parser specialization was rejected after
+  token/stat and full wrapper-wire oracles matched the generic full-table and
+  ring paths. Duplicating the large loop reduced README raw/zlib `.fastest` to
+  `0.9500x` / `0.9495x`, roadmap to `0.9743x`, and `src/png.zig` /
+  `src/checksum.zig` to `0.9764x` / `0.9367x`. Runtime limits stay hoisted in
+  the shared loop; code footprint dominates the constants saved here.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about
