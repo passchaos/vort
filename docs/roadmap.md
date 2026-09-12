@@ -9866,6 +9866,15 @@ coverage.
   improves by `1.0218x`, and all frame bytes/checksums remain unchanged. The
   isolated parser body also shrinks from `0xab4` to `0xa70`, while the existing
   two-state and shared selector sizes remain unchanged.
+  The level-1 single-state chain is now bounded to 16 candidates instead of
+  128. A 128-shape 4--32 KiB audit found one parser plan with 12 extra proxy
+  bits, but complete candidate arbitration remained byte-identical across all
+  128 cases (`649,782` bytes per side); a deliberately constructed 24-collision
+  chain also retained its exact 779-byte block. Forty-one alternating
+  fixed-CPU-8 JSON level-1 pairs improve by `1.0237x` (40/41 wins), binary level
+  1 improves by `1.0169x`, and eight target/control medians reach `1.0062x`
+  geometrically with a `0.9985x` floor. Depth 32 improved JSON by only
+  `1.0081x`, while depth 8 regressed it to `0.9574x`; both were rejected.
   A narrow-alphabet extension of level 1's double-fast speed policy was audited
   and rejected. Requiring a complete 44:1 block reduced the locked 32 KiB JSON
   encode from the strict 640-byte frame to a 694-byte frame, still below

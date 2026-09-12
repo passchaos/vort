@@ -10756,6 +10756,37 @@ fn emitNativeMatchCompressedBlockSerialWithTwoStateBeamReference(
     );
 }
 
+fn emitNativeMatchCompressedBlockSerialWithDeepSingleBeamReference(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    match_search_budget: usize,
+) Error!bool {
+    var beam_scratch: lz77.RepBeamScratch = .{};
+    defer beam_scratch.deinit(allocator);
+    var single_scratch: single_beam_match.Scratch = .{};
+    defer single_scratch.deinit(allocator);
+    const stats = single_beam_match.planDeepReferenceReuse(&single_scratch, allocator, block) catch |err| switch (err) {
+        error.InvalidBlockPlan => return false,
+        else => return err,
+    };
+    try beam_scratch.reversed.appendSlice(allocator, single_scratch.reversed.items);
+    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(
+        true,
+        allocator,
+        out,
+        block,
+        last,
+        match_search_budget,
+        true,
+        &beam_scratch,
+        null,
+        stats,
+        null,
+    );
+}
+
 inline fn emitNativeMatchCompressedBlockSerialWithBeamDispatch(
     comptime has_precomputed_rep_beam: bool,
     allocator: std.mem.Allocator,
@@ -23453,6 +23484,75 @@ test "zstd level one single-state beam audits generated block sizes" {
     try std.testing.expectEqual(@as(usize, 12_581), json_total_single);
     try std.testing.expectEqual(@as(usize, 12_534), json_total_double);
     try std.testing.expectEqual(@as(usize, 3), json_worst_extra);
+}
+
+test "zstd level one bounded single-state chain preserves candidate bytes" {
+    var changed: usize = 0;
+    var total_fast: usize = 0;
+    var total_deep: usize = 0;
+    for (0..128) |seed| {
+        const length = 4 * 1024 + (seed % 8) * 4 * 1024;
+        const payload = try std.testing.allocator.alloc(u8, length);
+        defer std.testing.allocator.free(payload);
+        var state: u32 = @truncate(0x6a09_e667 +% seed *% 0x0100_0193);
+        for (payload, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @truncate(state >> 24),
+                1 => @intCast('a' + (index + seed) % 23),
+                2 => if (index % 64 < 52) @intCast('a' + (index / 7 + seed) % 19) else @truncate(state >> 24),
+                else => @truncate((index * 37 + (index / 11) * 17 + seed) & 0xff),
+            };
+        }
+        if (seed % 3 == 0) {
+            const copy_len = payload.len / 4;
+            @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+        }
+
+        var fast: std.ArrayList(u8) = .empty;
+        defer fast.deinit(std.testing.allocator);
+        const fast_ok = try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &fast, payload, true, fastest_wide_match_search_budget, true, null, null);
+        var deep: std.ArrayList(u8) = .empty;
+        defer deep.deinit(std.testing.allocator);
+        const deep_ok = try emitNativeMatchCompressedBlockSerialWithDeepSingleBeamReference(std.testing.allocator, &deep, payload, true, fastest_wide_match_search_budget);
+        changed += @intFromBool(fast_ok != deep_ok or (fast_ok and !std.mem.eql(u8, fast.items, deep.items)));
+        total_fast += if (fast_ok) fast.items.len else payload.len + 3;
+        total_deep += if (deep_ok) deep.items.len else payload.len + 3;
+    }
+    try std.testing.expectEqual(@as(usize, 0), changed);
+    try std.testing.expectEqual(@as(usize, 649_782), total_fast);
+    try std.testing.expectEqual(total_fast, total_deep);
+}
+
+test "zstd level one bounded single-state chain preserves collision candidate" {
+    var payload: [1024]u8 = undefined;
+    var random_state: u32 = 0x510e_527f;
+    for (&payload) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    const source_start = 16;
+    const target_start = 704;
+    const match_len = 258;
+    const target_word = std.mem.readInt(u32, payload[source_start..][0..4], .little);
+    const target_hash = ((target_word *% 2_654_435_761) >> 17) & 4095;
+    var collision_count: usize = 0;
+    var word: u32 = 0;
+    while (collision_count < 24) : (word +%= 1) {
+        if (word == target_word or ((word *% 2_654_435_761) >> 17) & 4095 != target_hash) continue;
+        std.mem.writeInt(u32, payload[384 + collision_count * 8 ..][0..4], word, .little);
+        collision_count += 1;
+    }
+    @memcpy(payload[target_start..][0..match_len], payload[source_start..][0..match_len]);
+
+    var fast: std.ArrayList(u8) = .empty;
+    defer fast.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &fast, &payload, true, fastest_wide_match_search_budget, true, null, null));
+    var deep: std.ArrayList(u8) = .empty;
+    defer deep.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithDeepSingleBeamReference(std.testing.allocator, &deep, &payload, true, fastest_wide_match_search_budget));
+    try std.testing.expectEqual(@as(usize, 779), fast.items.len);
+    try std.testing.expectEqualSlices(u8, fast.items, deep.items);
 }
 
 test "zstd reusable encoder retains wide sequence scratch" {

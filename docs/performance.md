@@ -1619,6 +1619,16 @@ alternating fixed-CPU-8 JSON level-1 pairs improve the median by `1.0320x`
 (40/41 wins); eight target/control medians reach `1.0045x` geometrically with a
 `0.9940x` floor. Text level 1 improves by `1.0218x`, all frame bytes/checksums
 are unchanged, and the isolated parser body shrinks from `0xab4` to `0xa70`.
+The level-1 single-state chain depth is now capped at 16 rather than 128. A
+128-shape, 4--32 KiB audit found one parser plan with a 12-bit higher proxy
+cost, but complete candidate encoding produced identical bytes in all 128
+cases (`649,782` bytes per side); a deliberately constructed 24-collision
+chain likewise produced the same 779-byte block after complete arbitration.
+Forty-one alternating fixed-CPU-8 JSON level-1 pairs improve the median by
+`1.0237x` (40/41 wins), binary level 1 improves by `1.0169x`, and the eight-row
+target/control median geomean is `1.0062x` with a `0.9985x` floor. All locked
+frame bytes and checksums remain unchanged. Depth 32 improved JSON only
+`1.0081x`; depth 8 regressed it to `0.9574x`, so neither is retained.
 
 A follow-up attempted to extend level 1's audited double-fast speed tradeoff
 from wide alphabets to extremely compressible narrow/JSON blocks. A 44:1

@@ -13,7 +13,7 @@ const max_input_len = std.math.maxInt(u16);
 const min_match = 4;
 const head_size = 4096;
 const empty = std.math.maxInt(u16);
-const max_chain = 128;
+const max_chain = 16;
 
 const State = struct {
     cost: u32 = std.math.maxInt(u32),
@@ -39,6 +39,19 @@ pub const Scratch = struct {
 };
 
 pub noinline fn planReuse(scratch: *Scratch, allocator: std.mem.Allocator, input: []const u8) linksection(text_section) !lz77.PlanStats {
+    return planReuseWithChainLimit(scratch, allocator, input, max_chain);
+}
+
+pub fn planDeepReferenceReuse(scratch: *Scratch, allocator: std.mem.Allocator, input: []const u8) !lz77.PlanStats {
+    return planReuseWithChainLimit(scratch, allocator, input, 128);
+}
+
+fn planReuseWithChainLimit(
+    scratch: *Scratch,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    comptime chain_limit: usize,
+) !lz77.PlanStats {
     if (input.len == 0 or input.len > max_input_len) return error.InvalidBlockPlan;
     try scratch.prev.resize(allocator, input.len);
     @memset(&scratch.head, empty);
@@ -69,7 +82,7 @@ pub noinline fn planReuse(scratch: *Scratch, allocator: std.mem.Allocator, input
         const first_candidate = scratch.head[hash];
         scratch.prev.items[position] = first_candidate;
         scratch.head[hash] = @intCast(position);
-        const indexed_match = firstIndexedMatch(scratch, input, position, first_candidate, anchor);
+        const indexed_match = firstIndexedMatch(scratch, input, position, first_candidate, anchor, chain_limit);
         if (indexed_match) |match|
             extendMatch(states, occupied, position, state, match);
         const indexed_rep0 = if (indexed_match) |match| match.distance == state.rep0 else false;
@@ -109,12 +122,13 @@ fn firstIndexedMatch(
     position: usize,
     first_candidate: u16,
     anchor: u32,
+    comptime chain_limit: usize,
 ) ?lz77.Token.Match {
     var candidate_i = first_candidate;
     var checked: usize = 0;
     const maximum = @min(lz77.max_match_len, input.len - position);
     const window_len = @min(input.len, lz77.default_window_len);
-    while (candidate_i != empty and checked < max_chain) : (checked += 1) {
+    while (candidate_i != empty and checked < chain_limit) : (checked += 1) {
         const candidate: usize = candidate_i;
         const distance = position - candidate;
         if (distance == 0 or distance > window_len) break;
@@ -249,6 +263,84 @@ test "single-state prefixed match extension preserves every boundary" {
         const maximum = @min(expected + 1, input.len - position);
         try std.testing.expectEqual(expected, matchLengthAfterPrefix(&input, candidate, position, maximum, min_match));
     }
+}
+
+test "single-state bounded chain preserves generated plan cost" {
+    var fast: Scratch = .{};
+    defer fast.deinit(std.testing.allocator);
+    var deep: Scratch = .{};
+    defer deep.deinit(std.testing.allocator);
+    var changed: usize = 0;
+    var higher_cost: usize = 0;
+    var total_fast_cost: usize = 0;
+    var total_deep_cost: usize = 0;
+    var worst_extra: usize = 0;
+
+    for (0..128) |seed| {
+        const length = 4 * 1024 + (seed % 8) * 4 * 1024;
+        const input = try std.testing.allocator.alloc(u8, length);
+        defer std.testing.allocator.free(input);
+        var random_state: u32 = @truncate(0x6a09_e667 +% seed *% 0x0100_0193);
+        for (input, 0..) |*byte, index| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @truncate(random_state >> 24),
+                1 => @intCast('a' + (index + seed) % 23),
+                2 => if (index % 64 < 52) @intCast('a' + (index / 7 + seed) % 19) else @truncate(random_state >> 24),
+                else => @truncate((index * 37 + (index / 11) * 17 + seed) & 0xff),
+            };
+        }
+        if (seed % 3 == 0) {
+            const copy_len = input.len / 4;
+            @memcpy(input[input.len - copy_len ..], input[input.len / 4 ..][0..copy_len]);
+        }
+
+        const fast_stats = try planReuseWithChainLimit(&fast, std.testing.allocator, input, max_chain);
+        const deep_stats = try planReuseWithChainLimit(&deep, std.testing.allocator, input, 128);
+        try std.testing.expectEqual(input.len, fast_stats.literals + fast_stats.matched_bytes);
+        try std.testing.expectEqual(input.len, deep_stats.literals + deep_stats.matched_bytes);
+        const fast_cost = planCost(fast.reversed.items);
+        const deep_cost = planCost(deep.reversed.items);
+        changed += @intFromBool(!tokenSlicesEqual(fast.reversed.items, deep.reversed.items));
+        higher_cost += @intFromBool(fast_cost > deep_cost);
+        total_fast_cost += fast_cost;
+        total_deep_cost += deep_cost;
+        worst_extra = @max(worst_extra, fast_cost -| deep_cost);
+    }
+    try std.testing.expectEqual(@as(usize, 1), changed);
+    try std.testing.expectEqual(@as(usize, 1), higher_cost);
+    try std.testing.expectEqual(@as(usize, 4_593_896), total_fast_cost);
+    try std.testing.expectEqual(@as(usize, 4_593_884), total_deep_cost);
+    try std.testing.expectEqual(@as(usize, 12), worst_extra);
+}
+
+fn planCost(tokens: []const lz77.Token) usize {
+    var total: usize = 0;
+    var rep0: usize = 1;
+    for (tokens) |token| switch (token) {
+        .literal => |byte| total += literalCost(byte),
+        .match => |match| {
+            total += lengthCost(match.length);
+            total += if (match.distance == rep0) 1 else distanceCost(match.distance) + 4;
+            rep0 = match.distance;
+        },
+    };
+    return total;
+}
+
+fn tokenSlicesEqual(a: []const lz77.Token, b: []const lz77.Token) bool {
+    if (a.len != b.len) return false;
+    for (a, b) |left, right| switch (left) {
+        .literal => |byte| switch (right) {
+            .literal => |other| if (byte != other) return false,
+            .match => return false,
+        },
+        .match => |match| switch (right) {
+            .literal => return false,
+            .match => |other| if (match.length != other.length or match.distance != other.distance) return false,
+        },
+    };
+    return true;
 }
 
 test "single-state repeat beam releases every allocation failure" {
