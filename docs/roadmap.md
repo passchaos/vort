@@ -11005,6 +11005,12 @@ coverage.
   same arithmetic change to the adjacent FSE/FSE/RLE loop was rejected because
   its full-matrix `rle64k` control fell to `0.9735x`; that loop retains checked
   additions.
+  Removing the all-FSE/Huffman helper's duplicate `literal_offset` cursor was
+  rejected at the focused gate. `HuffmanLiteralDecodeState.decoded` already
+  advances by each copied run and is equal by construction, but using that
+  field as the sole cursor grew the helper from `0xf59` to `0xf8a`. Thirty-one
+  fixed-CPU-8 pairs reduced `large_json` to `0.9942x`; the separate local cursor
+  remains because it produces better register allocation.
 - Rejected replacing Zig std's Zstd Huffman canonical-tree sort with a local
   rank-count/rank-start builder modeled on upstream `HUF_readDTableX1_wksp`.
   The prototype decoded both direct and FSE-compressed weight headers, matched
