@@ -9918,6 +9918,14 @@ coverage.
   `1.0394x`; the three-row stage median geomean was `1.0121x` with a
   `0.9972x` floor. However, thirty-one end-to-end pairs reduced level-3 JSON
   to `0.9741x` at the median, so the original linear occupied buffer remains.
+  A compile-time double-fast sink that accumulated the proxy cost without
+  materializing tokens was rejected too. It matched `fixedBitCost` on empty,
+  tiny, repetitive, structured, and binary inputs. Inlining the extra parser
+  instance expanded the level-3 helper and reduced 31/31 target pairs to a
+  `0.9681x` median; isolating it in a dedicated text section recovered code
+  layout but reached only `1.0021x` median over the retained token-producing
+  proxy. The existing implementation remains smaller and within the project's
+  1% retention threshold.
   Wider single-state hash tables were rejected after a same-layout sweep. An
   8,192-bucket table improved JSON level 1 by only `1.0085x` with an eight-row
   `1.0023x` median geomean and `0.9988x` floor; 16,384 buckets improved JSON by
