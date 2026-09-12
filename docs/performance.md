@@ -646,6 +646,12 @@ acceptance, tokens, and wire bytes. The duplicated search body and added
 acceptance branch still outweighed the saved tail work: fifteen fixed-CPU-8
 raw-default pairs measured only `0.9671x` on README and `0.9787x` on roadmap,
 with the latter losing all 15 pairs. Keep the shared full match search.
+Replacing the compact lazy parser's 128 KiB `u32` head clear with the existing
+4 KiB initialization bitmap was also rejected. It preserved the full-table
+token/head/predecessor oracle, but default text rapidly touches enough buckets
+that per-lookup and per-insert bitmap work dominates the saved clear. Fifteen
+fixed-CPU-8 raw-default pairs measured `0.9648x` on README and `0.9780x` on
+roadmap, with neither candidate winning a pair. The one-time `u32` clear stays.
 The stored-fast-path classifier now counts repeated four-byte sample windows
 with an exact 2,048-slot open-addressed position set instead of sorting 1,021
 `u32` values. Hash collisions probe onward and compare the original four bytes,

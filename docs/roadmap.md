@@ -4332,6 +4332,10 @@ coverage.
   duplicated search body and acceptance branch reduced README/roadmap
   raw-default throughput to `0.9671x`/`0.9787x`; roadmap lost all 15 pairs.
   Keep the shared full match search for current and lookahead positions.
+  Replacing the compact lazy parser's 128 KiB `u32` head clear with its 4 KiB
+  initialization bitmap was rejected too. The full token/head/predecessor
+  oracle remained exact, but per-access bitmap work reduced README/roadmap
+  raw-default throughput to `0.9648x`/`0.9780x`, with 0/15 wins on both.
   The stored fast-path classifier now uses an exact 2,048-slot open-addressed
   position set to count duplicate four-byte windows instead of sorting 1,021
   words. Collisions probe and compare original bytes, and a 256-case randomized/
