@@ -18,7 +18,9 @@ zig build -Doptimize=ReleaseFast run-zstd-encode-bench-path-smoke
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench -- --level 1 --limit 131072 --path README.md --path src/zstd.zig
 zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench-gate
+zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench-path-smoke
 zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench -- --level 1 --case json --candidate primary --stage rep_beam_single --iterations 20 --rounds 9 --warmup 2
+zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench -- --level 1 --candidate primary --limit 131072 --path src/zstd.zig
 zig build run-zstd-compat-probe
 zig build -Doptimize=ReleaseFast run-zstd-decodecorpus-gate -j1
 zig build bench-deflate-decode -Doptimize=ReleaseFast

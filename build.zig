@@ -3073,6 +3073,10 @@ pub fn build(b: *std.Build) void {
     zstd_native_encode_stage_bench_gate.step.dependOn(&run_zstd_native_encode_stage_bench_csv.step);
     const zstd_native_encode_stage_bench_gate_step = b.step("run-zstd-native-encode-stage-bench-gate", "Validate native Zstd stage benchmark coverage");
     zstd_native_encode_stage_bench_gate_step.dependOn(&zstd_native_encode_stage_bench_gate.step);
+    const zstd_native_encode_stage_bench_path_smoke = b.addSystemCommand(&.{ "python3", "tools/zstd/native_encode_stage_bench_path_smoke.py" });
+    zstd_native_encode_stage_bench_path_smoke.addArtifactArg(zstd_native_encode_stage_bench_exe);
+    const zstd_native_encode_stage_bench_path_smoke_step = b.step("run-zstd-native-encode-stage-bench-path-smoke", "Validate file-backed native Zstd stage benchmark inputs");
+    zstd_native_encode_stage_bench_path_smoke_step.dependOn(&zstd_native_encode_stage_bench_path_smoke.step);
 
     const zstd_large_sequence_probe_exe = b.addExecutable(.{
         .name = "vort-zstd-large-sequence-probe",
@@ -4125,6 +4129,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zstd_native_summary_dashboard_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
     ci_smoke_step.dependOn(zstd_encode_bench_path_smoke_step);
+    ci_smoke_step.dependOn(zstd_native_encode_stage_bench_path_smoke_step);
     ci_smoke_step.dependOn(zstd_decodecorpus_gate_smoke_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_timeout_smoke_step);

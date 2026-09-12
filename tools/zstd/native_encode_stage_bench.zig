@@ -5,6 +5,14 @@ const Case = struct {
     name: []const u8,
     payload: []const u8,
     primary_double_fast_only: bool = false,
+    owned: bool = false,
+
+    fn deinit(case: Case, allocator: std.mem.Allocator) void {
+        if (case.owned) {
+            allocator.free(case.name);
+            allocator.free(case.payload);
+        }
+    }
 };
 const Options = struct {
     iterations: usize = 1,
@@ -15,6 +23,13 @@ const Options = struct {
     only_candidate: ?[]const u8 = null,
     only_stage: ?[]const u8 = null,
     csv_path: ?[]const u8 = null,
+    path_limit: usize = std.compress.zstd.block_size_max,
+    paths: std.ArrayList([]const u8) = .empty,
+
+    fn deinit(options: *Options, allocator: std.mem.Allocator) void {
+        for (options.paths.items) |path| allocator.free(path);
+        options.paths.deinit(allocator);
+    }
 };
 const Candidate = struct { name: []const u8, block_size: usize };
 const Sample = struct { ns: u64, mix: usize };
@@ -37,7 +52,8 @@ pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
     _ = args.next();
-    const options = try parseOptions(&args);
+    var options = try parseOptions(init.gpa, &args);
+    defer options.deinit(init.gpa);
 
     var numbered_json: std.ArrayList(u8) = .empty;
     defer numbered_json.deinit(init.gpa);
@@ -61,12 +77,33 @@ pub fn main(init: std.process.Init) !void {
         state = state *% 1_664_525 +% 1_013_904_223;
         byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(state >> 16);
     }
-    const cases = [_]Case{
-        .{ .name = "text", .payload = "Zstandard encode benchmark text with repeated structure and punctuation.\n" ** 512 },
-        .{ .name = "json", .payload = numbered_json.items },
-        .{ .name = "binary", .payload = binary },
-        .{ .name = "wide_sequences", .payload = wide_sequences, .primary_double_fast_only = true },
-    };
+    var cases: std.ArrayList(Case) = .empty;
+    defer {
+        for (cases.items) |case| case.deinit(init.gpa);
+        cases.deinit(init.gpa);
+    }
+    if (options.paths.items.len == 0) {
+        try cases.append(init.gpa, .{ .name = "text", .payload = "Zstandard encode benchmark text with repeated structure and punctuation.\n" ** 512 });
+        try cases.append(init.gpa, .{ .name = "json", .payload = numbered_json.items });
+        try cases.append(init.gpa, .{ .name = "binary", .payload = binary });
+        try cases.append(init.gpa, .{ .name = "wide_sequences", .payload = wide_sequences, .primary_double_fast_only = true });
+    } else {
+        for (options.paths.items, 0..) |path, index| {
+            const file = try std.Io.Dir.cwd().openFile(init.io, path, .{});
+            defer file.close(init.io);
+            const stat = try file.stat(init.io);
+            const read_len: usize = @intCast(@min(stat.size, options.path_limit));
+            if (read_len == 0) continue;
+            const payload = try init.gpa.alloc(u8, read_len);
+            errdefer init.gpa.free(payload);
+            var reader_buffer: [4096]u8 = undefined;
+            var reader = file.reader(init.io, &reader_buffer);
+            if (try reader.interface.readSliceShort(payload) != read_len) return error.InputTooSmall;
+            const name = try caseNameForPath(init.gpa, path, index);
+            errdefer init.gpa.free(name);
+            try cases.append(init.gpa, .{ .name = name, .payload = payload, .owned = true });
+        }
+    }
 
     const policy = try vort.zstd.nativeEncodeLevelDiagnostics(options.level, .{});
     const candidates = [_]Candidate{
@@ -77,9 +114,9 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,level,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,iterations,rounds,warmup,median_ns,ns_per_block,checksum\n");
+    try csv.writer.writeAll("case,level,input_bytes,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,iterations,rounds,warmup,median_ns,ns_per_block,checksum\n");
     var selected_rows: usize = 0;
-    for (cases) |case| {
+    for (cases.items) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
         for (candidates) |candidate| {
             if (options.only_candidate) |wanted| if (!std.mem.eql(u8, wanted, candidate.name)) continue;
@@ -187,9 +224,10 @@ fn writeMeasuredRow(
     const median = samples[samples.len / 2];
     const blocks_per_sample = blockCount(case.payload.len, candidate.block_size) * options.iterations;
     const ns_per_block = if (blocks_per_sample == 0) 0 else median.ns / blocks_per_sample;
-    try csv.print("{s},{d},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
+    try csv.print("{s},{d},{d},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
         case.name,
         options.level,
+        case.payload.len,
         candidate.name,
         candidate.block_size,
         blockCount(case.payload.len, candidate.block_size),
@@ -296,8 +334,18 @@ fn elapsed(start: std.Io.Timestamp, io: std.Io) u64 {
     return if (ns <= 0) 0 else @intCast(ns);
 }
 
-fn parseOptions(args: *std.process.Args.Iterator) !Options {
+fn caseNameForPath(allocator: std.mem.Allocator, path: []const u8, index: usize) ![]u8 {
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    errdefer out.deinit();
+    try out.writer.print("file{d}_", .{index});
+    for (std.fs.path.basename(path)) |byte|
+        try out.writer.writeByte(if (std.ascii.isAlphanumeric(byte)) byte else '_');
+    return try out.toOwnedSlice();
+}
+
+fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) !Options {
     var options: Options = .{};
+    errdefer options.deinit(allocator);
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--iterations"))
             options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
@@ -315,9 +363,13 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.only_stage = args.next() orelse return error.MissingLimit
         else if (std.mem.eql(u8, arg, "--csv"))
             options.csv_path = args.next() orelse return error.MissingCorpusPath
+        else if (std.mem.eql(u8, arg, "--limit"))
+            options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
+        else if (std.mem.eql(u8, arg, "--path"))
+            try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath))
         else
             return error.UnknownArgument;
     }
-    if (options.iterations == 0 or options.rounds == 0) return error.InvalidBlockPlan;
+    if (options.iterations == 0 or options.rounds == 0 or options.path_limit == 0) return error.InvalidBlockPlan;
     return options;
 }

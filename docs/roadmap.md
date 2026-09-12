@@ -12394,3 +12394,14 @@ reuse, so production keeps the simpler independently owned plans.
   production routing and oracle code was removed. The Zstd encode benchmark's
   new repeatable `--path` and bounded `--limit` inputs remain for future real-file
   experiments using the same measurement and bidirectional-decode harness.
+  The native Zstd candidate-stage benchmark now accepts the same repeatable
+  `--path` and `--limit` inputs, and records `input_bytes` in every row so a
+  truncated real-file run is self-describing. Its dedicated smoke covers two
+  files, stable names, exact truncation, case/candidate/stage filtering, the CSV
+  schema, empty input, a zero limit, and unknown arguments. Profiling the first
+  128 KiB of Ghostty's `Terminal.zig` through this surface attributes the level-1
+  primary bottleneck to the exact optimal candidate: 31,739 encoded bytes at
+  roughly 18.45 ms/block, versus greedy's 34,304 bytes at 5.50 ms/block and
+  double-fast's 39,648 bytes at 3.65 ms/block. This provides a reproducible
+  real-source target for exact-wire optimal-parser work instead of relying only
+  on synthetic 32 KiB rows.
