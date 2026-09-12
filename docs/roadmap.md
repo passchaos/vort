@@ -231,6 +231,14 @@ eleven fixed-CPU-8 independent-binary pairs regressed dictionary to `0.7972x`,
 mixed to `0.8574x`, uppercase to `0.9544x`, and the no-match control to
 `0.6993x`. The added canonical comparison cost more than the existing suffix
 pre-filter saves, so the experiment was removed.
+A zero-memory follow-up packed a 14-bit independent canonical-prefix
+fingerprint into the unused high bits of each 32-bit LUT entry. Filtering every
+Hash15 bucket improved the mixed and no-match short cases, but eleven
+fixed-CPU-8 independent-binary pairs regressed the dictionary row to `0.7972x`
+median. Enabling it only for buckets with at least four entries still left
+dictionary at `0.8679x`; mixed improved to `1.0258x`, but the no-match median
+fell to `0.9115x`. Both variants were removed rather than penalizing successful
+dictionary matches.
 
 ## Milestone 0: repository and validation spine
 
