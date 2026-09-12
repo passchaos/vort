@@ -4249,6 +4249,11 @@ coverage.
   frames; source and default controls remained neutral. Final validation passed
   1,504 tests, all 83 compile steps, both differential suites, and the
   incremental encode gate.
+  A lookup-and-insert fusion for the lazy-head parser preserved the 64 KiB
+  token/stat/wire oracle but was rejected. Binary raw/zlib/gzip improved only
+  `1.0017x` / `1.0000x` / `1.0026x`, while roadmap fell to `0.9966x` with 0/11
+  wins and default README to `0.9946x`. The current separate bitmap/head lookup
+  and insertion remain.
   The stored fast-path classifier now uses an exact 2,048-slot open-addressed
   position set to count duplicate four-byte windows instead of sorting 1,021
   words. Collisions probe and compare original bytes, and a 256-case randomized/

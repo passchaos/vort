@@ -527,6 +527,14 @@ frames. README/roadmap/PNG/checksum and default controls were neutral within
 about 0.35%. Final validation passed 1,504 tests, all 83 compile-check steps,
 the 50-check Rust differential, the five-case incremental encode gate, and the
 265-success/60-expected-failure Python zlib differential dashboard.
+A follow-up lazy-head experiment moved the current-position insertion into the
+hash lookup, reusing the bitmap/head load before walking the old chain in the
+style of zlib-family quick-insert helpers. The existing 64 KiB oracle confirmed
+identical tokens, statistics, and wire bytes, but independent fixed-CPU-8 A/Bs
+did not justify the control-flow change: binary raw/zlib/gzip `.fastest` were
+only `1.0017x` / `1.0000x` / `1.0026x`, roadmap was a repeatable `0.9966x`
+with 0/11 wins, and default README was `0.9946x`. Keep the separate lookup and
+insertion until a design can remove more work without shifting source paths.
 The stored-fast-path classifier now counts repeated four-byte sample windows
 with an exact 2,048-slot open-addressed position set instead of sorting 1,021
 `u32` values. Hash collisions probe onward and compare the original four bytes,
