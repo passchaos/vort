@@ -10994,6 +10994,17 @@ coverage.
   Unlike the broader rejected prototype below, this path is selected only at
   the contiguous frame-literal call site for FSE-weight headers; direct trees
   and standard-dictionary parsing retain Zig std's implementation.
+  The all-FSE/Huffman sequence loop now also uses the format-proven LL/ML
+  bounds directly: every validated symbol has a maximum decoded literal or
+  match length of 131,071/131,074 bytes, so the former two generic `usize`
+  overflow branches were unreachable even on 32-bit targets. The helper keeps
+  its exact start address and shrinks by 20 bytes. Thirty-one fixed-CPU-8 core
+  pairs improve 512 KiB `large_json` by `1.0373x` with 30/31 wins, while
+  `huffman80k`/`binary_mixed` stay at `1.0004x`/`1.0048x`; a 21-pair 13-row
+  matrix reaches `1.0066x` geometrically with a `0.9927x` floor. Applying the
+  same arithmetic change to the adjacent FSE/FSE/RLE loop was rejected because
+  its full-matrix `rle64k` control fell to `0.9735x`; that loop retains checked
+  additions.
 - Rejected replacing Zig std's Zstd Huffman canonical-tree sort with a local
   rank-count/rank-start builder modeled on upstream `HUF_readDTableX1_wksp`.
   The prototype decoded both direct and FSE-compressed weight headers, matched

@@ -1796,6 +1796,17 @@ differentials, 512 deterministic malformed/truncated headers, 64 generated
 trees, both 273-case libzstd compatibility matrices, and the 9,900-frame
 upstream decodecorpus suite with all 64 sequence-mode combinations.
 
+The large all-FSE/Huffman sequence loop additionally relies on the validated
+Zstd LL/ML alphabets when adding extra bits: compile-time checks cap decoded
+literal and match lengths at 131,071 and 131,074 bytes, respectively, so those
+two additions cannot overflow even a 32-bit `usize`. Removing only the
+unreachable generic overflow branches keeps the helper start address fixed and
+reduces its body by 20 bytes. Thirty-one fixed-CPU-8 core pairs improve
+`large_json` by `1.0373x` (30/31 wins), with `huffman80k` at `1.0004x` and
+`binary_mixed` at `1.0048x`. The 21-pair 13-row reference matrix reaches a
+`1.0066x` row-median geometric mean and a `0.9927x` floor. The analogous
+FSE/FSE/RLE change was not kept after `rle64k` fell to `0.9735x`.
+
 ## Zstd speed-level multi-block scheduling (2026-09-04)
 
 Large level-1--3 encodes now overlap the primary candidate on the calling thread
