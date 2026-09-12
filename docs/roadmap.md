@@ -9882,13 +9882,15 @@ coverage.
   Level 3 now reuses that isolated one-state parser behind a narrower speed
   policy instead of applying it to every 64-state block. Only low-alphabet,
   non-prefix-tail blocks above 32 KiB enter the probe; the complete one-state
-  wire must lie between 1/128 and 1/32 of the source and beat the independently
-  encoded double-fast block by at least 1/32. Everything else falls back to the
+  wire must lie between 1/128 and 1/32 of the source, and its token fixed-bit
+  cost must beat an independent double-fast plan by at least 1/32. Everything
+  else falls back to the
   original two-state parser and complete candidate arbitration after releasing
   probe scratch. A 128-case mixed/noise/copied-tail audit plus 24 shorter JSON
   streams retain the two-state result byte-for-byte. Across 24 eligible large
   JSON streams, 19 select the speed path; aggregate output grows 49 bytes and
-  the worst case grows four bytes. On the locked 32,797-byte JSON input the
+  the worst case grows four bytes. On the
+  locked 32,797-byte JSON input the
   frame moves from 640 to 643 bytes, still 269 bytes smaller than libzstd 1.5.5
   level 3. Thirty-one independent fixed-CPU-8 pairs improve end-to-end median
   throughput by `3.2317x` with 31/31 wins; a six-row 15-pair target/control
@@ -9896,6 +9898,19 @@ coverage.
   isolated parser itself is `1.4875x` faster than two-state at the median.
   One-shot, reusable, caller-buffer, round-trip, and exhaustive allocation-
   failure tests cover the selected path.
+  A follow-up replaces the double-fast candidate's full entropy serialization
+  with a parser-only fixed-bit comparison. The one-state plan must beat that
+  independent proxy by at least 1/32 before the existing wire-size bounds may
+  accept it. Removing double-fast evidence entirely was rejected: a 64-case
+  JSON/log/source/CSV audit exposed a 47-byte structured JSON regression. The
+  fixed-cost guard rejected all 48 shapes that reached it, while retaining all
+  24 target-style large JSON cases; 20 change output, adding 52 bytes
+  cumulatively with the same four-byte worst-case growth.
+  Thirty-one fixed-CPU-8 pairs improve the committed full-wire proof by
+  `1.2616x` at the median (27/31 wins), bringing the cumulative target speedup
+  over the original two-state path to `4.1281x` (31/31 wins). Five control rows
+  over 21 pairs have a `0.9982x` row-median geometric mean and `0.9941x` floor;
+  all control wires remain byte-identical.
   Wider single-state hash tables were rejected after a same-layout sweep. An
   8,192-bucket table improved JSON level 1 by only `1.0085x` with an eight-row
   `1.0023x` median geomean and `0.9988x` floor; 16,384 buckets improved JSON by

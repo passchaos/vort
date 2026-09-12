@@ -1646,7 +1646,8 @@ All compared frame bytes and checksums are unchanged.
 Level 3 now has a separately bounded single-state fast path for low-alphabet
 blocks larger than 32 KiB. It is eligible only when there is no prefix-to-tail
 copy shortcut, its complete block is between 1/128 and 1/32 of the source, and
-it beats the independently encoded double-fast block by at least 1/32; all
+its token fixed-bit cost beats an independent double-fast plan by at least
+1/32; all
 other inputs retain the two-state parser and complete arbitration. This follows
 the latency intent of upstream zstd's level-3 double-fast strategy while still
 requiring stronger Vort-specific ratio evidence before accepting one state. On
@@ -1661,6 +1662,19 @@ retain the two-state result exactly; among 24 eligible large JSON streams, 19
 select the fast path, adding 49 bytes cumulatively with a four-byte worst case.
 Public one-shot, reusable, caller-buffer, round-trip, and allocation-failure
 tests cover the selected path.
+The retained follow-up still runs the cheap double-fast parser for independent
+evidence, but compares its token fixed-bit cost instead of serializing a second
+complete Huffman/FSE block. A `1/32` proxy-cost margin preserves the locked
+selection and rejects all 48 analyzed JSON/log/source/CSV cases that passed the
+outer input classifier. Removing the proxy entirely exposed a 47-byte
+structured JSON regression and was rejected. Thirty-one fixed-CPU-8 pairs
+measure another `1.2616x` median improvement over the prior full-wire proof
+(27/31 wins), for a cumulative `4.1281x` median over the original level-3
+two-state path (31/31 wins). A five-row, 21-pair control matrix has a `0.9941x`
+weakest median and `0.9982x` row-median geometric mean, with all control wires
+unchanged. The retained proxy still accepts all 24 target-style large JSON
+cases: 20 produce different output, adding 52 bytes cumulatively with a
+four-byte worst case.
 Wider single-state hash tables were measured and rejected. With the same
 compact heap-backed index layout, 8,192 buckets improved JSON level 1 by only
 `1.0085x`; the eight-row row-median geometric mean was `1.0023x` and the
