@@ -11079,6 +11079,7 @@ pub const NativeMatchStage = enum {
     lazy,
     optimal,
     rep_beam,
+    rep_beam_single,
     repeated,
     multi_duplicate,
     single_duplicate,
@@ -11099,6 +11100,7 @@ pub const NativeMatchStageScratch = struct {
     lazy_tokens: std.ArrayList(lz77.Token) = .empty,
     optimal: lz77.OptimalScratch = .{},
     rep_beam: lz77.RepBeamScratch = .{},
+    single_beam: single_beam_match.Scratch = .{},
     large_sequences: LargeSequenceScratch = .{},
     duplicate_index: ?*DuplicateMatchIndex = null,
     duplicate_index_input_ptr: ?[*]const u8 = null,
@@ -11109,6 +11111,7 @@ pub const NativeMatchStageScratch = struct {
         if (self.duplicate_index) |index| allocator.destroy(index);
         self.large_sequences.deinit(allocator);
         self.optimal.deinit(allocator);
+        self.single_beam.deinit(allocator);
         self.rep_beam.deinit(allocator);
         self.lazy_tokens.deinit(allocator);
         self.double_fast_tokens.deinit(allocator);
@@ -11244,6 +11247,14 @@ pub fn benchmarkNativeMatchStage(
             };
             sequence_count = stats.matches;
             break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, scratch.rep_beam.reversed.items, stats, &scratch.large_sequences);
+        },
+        .rep_beam_single => blk: {
+            const stats = single_beam_match.planReuse(&scratch.single_beam, allocator, block) catch |err| switch (err) {
+                error.InvalidBlockPlan => break :blk false,
+                else => return err,
+            };
+            sequence_count = stats.matches;
+            break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, scratch.single_beam.reversed.items, stats, &scratch.large_sequences);
         },
         .repeated => try emitRepeatedPatternCompressedBlock(allocator, &scratch.candidate, block, last),
         .multi_duplicate => if (match_search_budget >= multi_duplicate_min_search_budget)
@@ -11861,6 +11872,12 @@ test "zstd native match stage benchmark mirrors production emitters" {
                 defer plan.deinit(std.testing.allocator);
                 break :blk try emitHashTokenSequenceBlock(std.testing.allocator, &expected, payload, true, plan.tokens, plan.stats);
             },
+            .rep_beam_single => blk: {
+                var single_scratch: single_beam_match.Scratch = .{};
+                defer single_scratch.deinit(std.testing.allocator);
+                const stats = try single_beam_match.planReuse(&single_scratch, std.testing.allocator, payload);
+                break :blk try emitHashTokenSequenceBlock(std.testing.allocator, &expected, payload, true, single_scratch.reversed.items, stats);
+            },
             .repeated => try emitRepeatedPatternCompressedBlock(std.testing.allocator, &expected, payload, true),
             .multi_duplicate => try emitMultiDuplicateMatchCompressedBlock(std.testing.allocator, &expected, payload, true, scratch.duplicate_index),
             .single_duplicate => try emitSingleMatchCompressedBlock(std.testing.allocator, &expected, payload, true, scratch.duplicate_index),
@@ -11891,6 +11908,23 @@ test "zstd rep beam stage retains reusable scratch capacities" {
     try std.testing.expectEqual(states_capacity, scratch.rep_beam.states.capacity);
     try std.testing.expectEqual(lengths_capacity, scratch.rep_beam.lengths.capacity);
     try std.testing.expectEqual(tokens_capacity, scratch.rep_beam.reversed.capacity);
+
+    const single_first = try benchmarkNativeMatchStage(std.testing.allocator, payload, true, 16, .rep_beam_single, &scratch);
+    try std.testing.expect(single_first.available);
+    const single_capacities = .{
+        scratch.single_beam.prev.capacity,
+        scratch.single_beam.states.capacity,
+        scratch.single_beam.occupied.capacity,
+        scratch.single_beam.reversed.capacity,
+    };
+    const single_second = try benchmarkNativeMatchStage(std.testing.allocator, payload, true, 16, .rep_beam_single, &scratch);
+    try std.testing.expectEqual(single_first, single_second);
+    try std.testing.expectEqual(single_capacities, .{
+        scratch.single_beam.prev.capacity,
+        scratch.single_beam.states.capacity,
+        scratch.single_beam.occupied.capacity,
+        scratch.single_beam.reversed.capacity,
+    });
 }
 
 test "zstd double-fast diagnostic stage round trips structured input" {

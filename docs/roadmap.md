@@ -3104,14 +3104,16 @@ coverage.
   8 KiB candidate ladder from the production level policy, warms reusable
   scratch, reports median time across configurable rounds, and separates the
   shared large-block duplicate-index setup from mixed, greedy, lazy, optimal,
-  repeated, multi-duplicate, and single-duplicate candidate emission. The first
+  two-state repeat-beam, single-state repeat-beam, repeated, multi-duplicate,
+  and single-duplicate candidate emission. The first
   fixed-CPU-8..10 nine-round level-9 JSON baseline measured aggregate family
   times of about 20.35/0.12/8.58/2.44/0.13/7.16/0.47 ms for the primary block,
   59.31/0.30/0.38/2.57/0.60/13.27/1.86 ms across 4 KiB blocks, and
   26.41/0.21/0.31/2.54/0.83/3.28/0.33 ms across 8 KiB blocks, respectively.
   This localizes the next work to mixed search first and multi-duplicate second,
   rather than continuing low-signal whole-frame micro-tuning. The CSV coverage
-  gate requires all 81 case/candidate/stage rows and pins the current level-9
+  gate currently requires 99 case/candidate/stage rows plus the one wide-
+  sequence double-fast row, and pins the level-9
   split policy so future reports cannot silently compare different pipelines.
   The stage tool additionally accepts `--candidate` and `--stage`, allowing perf
   and interleaved A/B runs to execute only one isolated row rather than spending
@@ -3123,6 +3125,11 @@ coverage.
   60.031 ms (1.006x). Two broader structural trials—borrowing the large duplicate
   index in the candidate cache and pruning generic FSE planning with a proven
   lower bound—were neutral or slower and were fully reverted.
+  The `rep_beam_single` row exposes the level-1 speed parser independently from
+  the retained two-state `rep_beam` row. Its scratch is owned by the benchmark
+  harness and reused across warmup/measurement passes; the mirror-emitter test
+  and 100-row gate pin its token count, 636-byte primary JSON block, literal/
+  sequence accounting, and selectable `--stage rep_beam_single` CLI path.
   Predefined sequence plans no longer duplicate their caller-owned LL/OF/ML
   values into three fixed 128-`usize` arrays. They now retain only the selected
   FSE states, while scoring and emission explicitly borrow the original values;

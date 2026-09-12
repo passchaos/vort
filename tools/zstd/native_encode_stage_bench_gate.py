@@ -16,7 +16,8 @@ WIDE_SEQUENCE_CASE = "wide_sequences"
 CANDIDATES = {"primary", "adaptive_0", "adaptive_1"}
 STAGES = {
     "duplicate_index", "mixed", "double_fast", "greedy", "lazy", "optimal",
-    "rep_beam", "repeated", "multi_duplicate", "single_duplicate",
+    "rep_beam", "rep_beam_single", "repeated", "multi_duplicate",
+    "single_duplicate",
 }
 DOUBLE_FAST_MAX_BYTES = {
     ("text", "primary"): 210,
@@ -34,6 +35,17 @@ REP_BEAM_MAX_BYTES = {
     ("text", "adaptive_0"): 2919,
     ("text", "adaptive_1"): 1659,
     ("json", "primary"): 633,
+    ("json", "adaptive_0"): 3672,
+    ("json", "adaptive_1"): 2156,
+    ("binary", "primary"): 8600,
+    ("binary", "adaptive_0"): 15138,
+    ("binary", "adaptive_1"): 11776,
+}
+SINGLE_BEAM_MAX_BYTES = {
+    ("text", "primary"): 210,
+    ("text", "adaptive_0"): 2919,
+    ("text", "adaptive_1"): 1659,
+    ("json", "primary"): 636,
     ("json", "adaptive_0"): 3672,
     ("json", "adaptive_1"): 2156,
     ("binary", "primary"): 8600,
@@ -84,7 +96,7 @@ def main() -> int:
                 assert encoded_bytes == 3 * available_blocks + literals_bytes + sequence_bytes, row
             else:
                 assert literals_bytes == 0 and sequence_bytes == 0, row
-        if row["stage"] in {"double_fast", "greedy", "lazy", "optimal", "rep_beam"}:
+        if row["stage"] in {"double_fast", "greedy", "lazy", "optimal", "rep_beam", "rep_beam_single"}:
             assert sequences > 0, row
         if row["stage"] == "double_fast":
             if row["case"] == WIDE_SEQUENCE_CASE:
@@ -97,6 +109,8 @@ def main() -> int:
                 assert encoded_bytes <= DOUBLE_FAST_MAX_BYTES[(row["case"], row["candidate"])], row
         if row["stage"] == "rep_beam":
             assert encoded_bytes <= REP_BEAM_MAX_BYTES[(row["case"], row["candidate"])], row
+        if row["stage"] == "rep_beam_single":
+            assert encoded_bytes <= SINGLE_BEAM_MAX_BYTES[(row["case"], row["candidate"])], row
 
     # The current level-9 policy is the subject of this benchmark. Pinning its
     # candidate labels to 128 KiB/4 KiB/8 KiB makes policy drift visible instead
