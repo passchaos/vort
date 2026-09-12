@@ -11005,6 +11005,14 @@ coverage.
   same arithmetic change to the adjacent FSE/FSE/RLE loop was rejected because
   its full-matrix `rle64k` control fell to `0.9735x`; that loop retains checked
   additions.
+  Two adjacent loop-shape experiments were rejected. Replacing the duplicated
+  literal cursor with `HuffmanLiteralDecodeState.decoded` grew the helper from
+  `0xf59` to `0xf8a` and reduced 31-pair `large_json` to `0.9942x`. Removing
+  the format-bounded overflow addition from shared FSE next-state transitions
+  improved `large_json` to `1.0325x` and `binary_mixed` to `1.0055x`, but
+  shifted the helper by 64 bytes and reduced `huffman80k` to `0.9756x`. Both
+  variants were removed; the local cursor and shared checked transition retain
+  their established code generation.
   Removing the equivalent checked addition from shared FSE state transitions
   was rejected separately. Inlining three direct updates enlarged the all-FSE/
   Huffman helper; keeping one shared helper shortened it but shifted its entry
