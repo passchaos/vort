@@ -239,6 +239,20 @@ median. Enabling it only for buckets with at least four entries still left
 dictionary at `0.8679x`; mixed improved to `1.0258x`, but the no-match median
 fell to `0.9115x`. Both variants were removed rather than penalizing successful
 dictionary matches.
+A reordered full-word candidate path was rejected as well. It first selected
+the best prefix/suffix-compatible transform, then compared the canonical word
+only once, while leaving omission transforms on the existing comparator. A
+complete oracle covered every indexed base word across every applicable
+full-word transform. Eleven fixed-CPU-8 pairs nevertheless regressed dictionary
+to `0.7230x`, mixed to `0.7944x`, uppercase to `0.9590x`, and no-match to
+`0.6878x`; deferring the comparison added more control flow than it removed.
+A parallel 32-bit canonical-prefix array was also rejected. Exact-key filtering
+improved mixed by `1.2228x` and the no-match control by `1.4299x`, but eleven
+fixed-CPU-8 pairs put dictionary at `0.8885x` and uppercase at `0.9687x`, while
+increasing the persistent index by about 124 KiB. Restricting the comparison to
+buckets of at least 8 or 16 entries did not recover the hit-heavy controls:
+seven-pair medians were `0.8620x`/`0.8578x` for dictionary. The extra array and
+both thresholds were removed.
 
 ## Milestone 0: repository and validation spine
 
