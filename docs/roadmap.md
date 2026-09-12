@@ -266,6 +266,14 @@ independent-binary pairs showed only a small mixed signal in the first layout
 (`1.0103x`) with a no-match control at `0.9844x`; isolating the selector made
 the broader matrix worse, including mixed `0.9671x`, dictionary `0.9456x`, and
 JSON/source `0.9147x`/`0.9154x`. The reorder and isolation were removed.
+A canonical-LUT-only segmented comparison was also rejected. It verified the
+four-byte canonical prefix once, deferred one tail comparison until a complete-
+word affix survived prefix/suffix filtering, and left omission transforms on
+the original comparator. A complete full-word transform oracle passed, but
+eleven fixed-CPU-8 pairs regressed dictionary to `0.7591x` and uppercase to
+`0.9091x`; mixed improved to `1.1389x`, showing that successful dictionary
+hits need the existing direct comparison order even when miss-heavy rows favor
+early canonical filtering.
 
 ## Milestone 0: repository and validation spine
 
