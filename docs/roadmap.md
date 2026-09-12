@@ -4317,6 +4317,16 @@ coverage.
   medians by about `1.11x`/`1.075x`; a seven-pair raw/zlib/gzip source matrix
   kept all output sizes/checksums exact and measured default-path gains of
   roughly `1.06x`--`1.13x`, with fast-level controls essentially neutral.
+  Applying a predecessor ring to this deeper lazy search was rejected: its
+  per-link mask/window checks reduced README/roadmap raw-default throughput to
+  about `0.94x`/`0.96x`, unlike the retained shallow `.fastest` ring. The
+  compact full-table path instead now uses zlib-ng-style front/back candidate
+  screening after charging the unchanged search budget. The unscreened `isize`
+  oracle remains byte- and state-exact. Fifteen long README/roadmap pairs
+  improved by `1.011x`/`1.006x` (14/15 each); a nine-pair, twelve-row
+  raw/zlib/gzip source matrix reached a `1.0112x` row-median geometric mean with
+  identical wires. Its initially noisy roadmap-gzip control was confirmed over
+  21 longer pairs at `1.0065x` median with 16/21 wins.
   The stored fast-path classifier now uses an exact 2,048-slot open-addressed
   position set to count duplicate four-byte windows instead of sorting 1,021
   words. Collisions probe and compare original bytes, and a 256-case randomized/

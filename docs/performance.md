@@ -624,6 +624,21 @@ A separate seven-pair raw/zlib/gzip matrix over README, roadmap, `src/png.zig`,
 and `src/checksum.zig` kept every encoded size/checksum identical and measured
 default-path median gains of roughly `1.06x`--`1.13x`; `.fastest`/`.fast`
 controls were essentially neutral.
+A predecessor-ring variant for the same default lazy parser was rejected before
+the compact full-table representation was selected. It reduced retained index
+memory further, but the per-link mask and earliest-position branch reduced
+README and roadmap raw-default throughput to roughly `0.94x` and `0.96x`; the
+deeper default search does not share the shallow `.fastest` ring's tradeoff.
+The retained `u32` specialization now mirrors zlib-ng's `longest_match`
+front/back screening after a candidate consumes search budget. Once a best
+match exists, two-, four-, or eight-byte checks reject candidates that cannot
+extend it before entering Vort's 32-byte-vector match scan. The `isize` path in
+the 96 KiB oracle remains an unscreened reference and produces identical tokens,
+statistics, heads, and predecessors. Fifteen long README/roadmap raw-default
+pairs improved by `1.011x`/`1.006x` with 14/15 wins each. A nine-pair, twelve-row
+raw/zlib/gzip matrix over four source files reached a `1.0112x` row-median
+geometric mean with identical wires; the apparent weakest roadmap-gzip row was
+then confirmed over 21 longer pairs at `1.0065x` median with 16/21 wins.
 The stored-fast-path classifier now counts repeated four-byte sample windows
 with an exact 2,048-slot open-addressed position set instead of sorting 1,021
 `u32` values. Hash collisions probe onward and compare the original four bytes,

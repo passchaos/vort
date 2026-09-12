@@ -2359,6 +2359,33 @@ fn findBestHashMatchWithLayoutAndHashLimits(
             continue;
         }
         checked += 1;
+        if (comptime @TypeOf(candidate_i) == u32) {
+            // The compact lazy parser follows substantially deeper chains than
+            // the speed presets. Mirror zlib-ng's longest-match front/back
+            // screening after charging this candidate to the search budget:
+            // a mismatch inside the already-known best prefix cannot improve
+            // the result, while avoiding the full vector match scan. Keep the
+            // existing required-prefix byte check above budget-free so token
+            // selection remains identical to the isize reference path.
+            const prefix_matches = if (best.length >= 8)
+                std.mem.readInt(u64, input[candidate..][0..8], .little) ==
+                    std.mem.readInt(u64, input[pos..][0..8], .little) and
+                    std.mem.readInt(u64, input[candidate + best.length - 7 ..][0..8], .little) ==
+                        std.mem.readInt(u64, input[pos + best.length - 7 ..][0..8], .little)
+            else if (best.length >= 4)
+                std.mem.readInt(u32, input[candidate..][0..4], .little) ==
+                    std.mem.readInt(u32, input[pos..][0..4], .little) and
+                    std.mem.readInt(u32, input[candidate + best.length - 3 ..][0..4], .little) ==
+                        std.mem.readInt(u32, input[pos + best.length - 3 ..][0..4], .little)
+            else
+                std.mem.readInt(u16, input[candidate..][0..2], .little) ==
+                    std.mem.readInt(u16, input[pos..][0..2], .little);
+            if (!prefix_matches) {
+                if (checked == limits.max_chain) break;
+                candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
+                continue;
+            }
+        }
         const len = matchLength(input, candidate, pos, max_len);
         if (len >= minimum and len > best.length) {
             best = .{ .length = len, .distance = distance };
