@@ -282,6 +282,12 @@ mixed at `1.0158x` but q8 source32k at `0.9794x`; isolating the helper restored
 source32k to `1.0006x` median but regressed mixed/dictionary/JSON/source to
 `0.9771x`/`0.9514x`/`0.9197x`/`0.9205x`. The duplicate builders and stack frame
 were removed.
+Reusing one `ArrayList(Command)` across the existing mixed and dictionary-only
+builders was rejected separately. This avoided duplicating planner logic and
+kept exact command/wire parity, but fifteen fixed-CPU-8 pairs measured mixed
+`0.9776x`, dictionary `0.9858x`, source `0.9741x`, and no-match `0.9212x`; the
+two short-lived command allocations are not the dominant cost after matcher
+reuse, so production keeps the simpler independently owned plans.
 
 ## Milestone 0: repository and validation spine
 
