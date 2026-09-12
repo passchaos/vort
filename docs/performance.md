@@ -89,7 +89,48 @@ zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv-repeat3
 zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3
 zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3
 zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-dashboard
+zig build run-competitor-gap-report-smoke
+zig build -Doptimize=ReleaseFast run-competitor-gap-report
 ```
+
+## Unified competitor gap report
+
+`run-competitor-gap-report` reads the existing Deflate, Zstd, LZ4, Snappy, and
+Brotli benchmark CSV artifacts and writes
+`zig-out/vort-competitor-gap-report.md` plus
+`zig-out/vort-competitor-gap-report.json`. The default build step uses strict
+mode: all eight core benchmark inputs must exist. Incremental Deflate and the
+standard-corpus dashboard are optional because they are not produced by the
+same fast benchmark cycle; when present they are included and when absent they
+remain explicit in the evidence table. An explicitly supplied input path is
+always required, even without `--strict`.
+
+The report keeps codec, operation, and profile separate. Throughput is
+`Vort MiB/s / reference MiB/s` (higher is better), while compressed size is
+`Vort bytes / reference bytes` (lower is better). Group status checks both the
+geometric mean and the weakest case: a strong mean with a material weak case is
+`mixed`, not `ahead`. Priority is the largest aggregate or weakest-case gap
+inside one group; there is deliberately no cross-format total score. Deflate
+`best-speed` and `best-size` rows choose Pareto endpoints per case, so they are
+diagnostic rather than stable production configurations and are excluded from
+the action ranking and global weakest-case callouts. Standard-corpus Vort zlib
+rows are also split into explicit per-reference groups whose names identify
+whether the competitor artifact uses zlib, gzip, or zstd framing; those wire
+formats are never collapsed into a single best-reference aggregate.
+
+The JSON records the source paths and row counts, reference versions, git and
+report-environment metadata, per-input SHA-256/mtime/row/metric evidence,
+normalized rows, group summaries, coverage flags, and missing inputs. Existing
+source CSVs do not encode their benchmark CPU or build mode, so the report
+marks that provenance gap explicitly rather than treating its aggregation
+machine as the benchmark machine. Real-corpus coverage becomes true only when
+usable standard-corpus comparisons were loaded; peak-memory comparison remains
+false until a common cross-library memory harness exists.
+`run-competitor-gap-report-smoke` uses temporary synthetic CSVs to test
+aggregation, dynamic reference selection, mixed-status rules, independent and
+wire-explicit standard-corpus measurements, strict and explicit-path behavior,
+duplicate rows, malformed schemas, and invalid numeric values without running
+expensive benchmarks.
 
 The internal `vort-zlib-encode-bench` executable accepts plain zlib modes plus
 `raw-` and `gzip-` wrapper prefixes (for example `fastest`, `raw-fastest`, and

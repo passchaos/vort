@@ -40,6 +40,23 @@ major gaps before Vort can claim broad industry-best parity:
 - Cross-platform optimized kernels and reproducible competitor measurements are
   not yet comprehensive enough for a blanket performance-leadership claim.
 
+A unified competitor-gap report now aggregates the existing Deflate, Zstd,
+LZ4, Snappy, and Brotli CSV evidence into schema-versioned JSON and Markdown.
+It preserves codec/API/profile boundaries, reports throughput and size ratios
+separately, requires both geometric mean and weakest-case evidence before an
+`ahead` label, and exposes missing real-corpus and memory coverage instead of
+implying completeness. Per-case Deflate Pareto-envelope profiles remain visible
+but are excluded from the action ranking. Standard-corpus zlib/gzip competitor
+rows use separate, wire-explicit profiles rather than one dynamic-best group.
+Per-input SHA-256, modification time, row count, and normalized metric count
+make each snapshot auditable, while the
+report explicitly records that the current source CSVs lack benchmark CPU/build
+mode provenance. A 43-check synthetic smoke suite pins
+positive aggregation plus missing, malformed, duplicate, non-finite, zero, and
+strict-input failure paths. The next evidence milestone is to feed repeatable
+standard-corpus CSVs into this report and add comparable peak-memory rows before
+using it for broad industry-performance claims.
+
 The libbrotli-generated compatibility matrix now also includes 7,056 one-shot
 frames spanning four deterministic entropy shapes, seven payload sizes from one
 byte through 64 KiB, all qualities 0...11, generic/text/font modes, and window

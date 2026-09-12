@@ -3976,6 +3976,15 @@ pub fn build(b: *std.Build) void {
     full_compat_benchmark_suite_step.dependOn(standard_multi_corpus_dashboard_step);
     full_compat_benchmark_suite_step.dependOn(standard_multi_corpus_full_dashboard_step);
 
+    const competitor_gap_report = b.addSystemCommand(&.{ "python3", "tools/competitor_gap_report.py", "--strict" });
+    if (b.args) |args| competitor_gap_report.addArgs(args);
+    const competitor_gap_report_step = b.step("run-competitor-gap-report", "Aggregate available competitor benchmark CSVs into Markdown and JSON gap reports");
+    competitor_gap_report_step.dependOn(&competitor_gap_report.step);
+
+    const competitor_gap_report_smoke = b.addSystemCommand(&.{ "python3", "tools/competitor_gap_report_smoke.py" });
+    const competitor_gap_report_smoke_step = b.step("run-competitor-gap-report-smoke", "Validate competitor gap report positive and negative paths");
+    competitor_gap_report_smoke_step.dependOn(&competitor_gap_report_smoke.step);
+
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);
     check_step.dependOn(&cli_exe.step);
@@ -4177,6 +4186,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(dashboard_strict_smoke_step);
     ci_smoke_step.dependOn(dashboard_strict_dashboard_step);
     ci_smoke_step.dependOn(compat_benchmark_step);
+    ci_smoke_step.dependOn(competitor_gap_report_smoke_step);
     ci_smoke_step.dependOn(standard_corpus_report_step);
     ci_smoke_step.dependOn(standard_multi_corpus_dashboard_step);
     ci_smoke_step.dependOn(standard_multi_corpus_full_dashboard_step);
