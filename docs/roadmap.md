@@ -222,6 +222,15 @@ and construction were rejected: the former regressed dictionary/source/
 uppercase, while the latter put the mixed median at `0.9826x`. Production
 therefore keeps upstream-style deduplication and isolates only one-time index
 construction.
+An attempted follow-up reused one canonical base-word comparison across all
+full-word prefix/suffix transforms in a bucket, leaving omission transforms on
+the existing independent comparator. A complete oracle covered every indexed
+word across every applicable full-word transform, including all supported
+prefix lengths and case families. Despite byte-identical selected streams,
+eleven fixed-CPU-8 independent-binary pairs regressed dictionary to `0.7972x`,
+mixed to `0.8574x`, uppercase to `0.9544x`, and the no-match control to
+`0.6993x`. The added canonical comparison cost more than the existing suffix
+pre-filter saves, so the experiment was removed.
 
 ## Milestone 0: repository and validation spine
 
