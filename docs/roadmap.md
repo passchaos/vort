@@ -9964,6 +9964,18 @@ coverage.
   geometric mean. Independent full-encoder binaries again reversed the result:
   JSON levels 1/3 measured `0.9859x`/`0.9712x`, while binary level 1 was
   `0.9839x`. The original 32-byte-vector/8-byte-tail extender remains.
+  Transferring the single-state token buffer into repeat-beam scratch instead
+  of copying it was rejected as below the retention threshold. A counting-
+  allocator reference proved byte-identical output while removing one
+  allocation and 9,654 cumulatively requested bytes on the locked 32 KiB JSON
+  block; exhaustive allocation-failure injection verified ownership rollback.
+  Swapping only around the selector kept six independent full-encoder row
+  medians within `0.9988x`--`1.0048x`, but the target JSON level 1 gain was
+  only `1.0044x`. Swapping before parsing additionally reused retained token
+  capacity and removed two allocations from a second call, yet its six-row
+  median geometric mean was `0.9988x`, with binary level 1 at `0.9910x`. The
+  explicit copy remains because neither allocation reduction clears the 1%
+  throughput bar.
   Wider single-state hash tables were rejected after a same-layout sweep. An
   8,192-bucket table improved JSON level 1 by only `1.0085x` with an eight-row
   `1.0023x` median geomean and `0.9988x` floor; 16,384 buckets improved JSON by
