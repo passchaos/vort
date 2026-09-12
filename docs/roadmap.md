@@ -3130,6 +3130,10 @@ coverage.
   harness and reused across warmup/measurement passes; the mirror-emitter test
   and 100-row gate pin its token count, 636-byte primary JSON block, literal/
   sequence accounting, and selectable `--stage rep_beam_single` CLI path.
+  That isolated stage rejected fusing `PlanStats` accumulation into token
+  backtracking: JSON improved by `1.0296x`, but binary fell to `0.9759x` with
+  only 2/31 wins and the three-row geometric mean reached only `1.0016x`. Keep
+  the separate forward statistics pass until it preserves the binary control.
   Predefined sequence plans no longer duplicate their caller-owned LL/OF/ML
   values into three fixed 128-`usize` arrays. They now retain only the selected
   FSE states, while scoring and emission explicitly borrow the original values;

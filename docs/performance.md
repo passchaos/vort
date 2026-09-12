@@ -1630,6 +1630,11 @@ Forty-one alternating fixed-CPU-8 JSON level-1 pairs improve the median by
 target/control median geomean is `1.0062x` with a `0.9985x` floor. All locked
 frame bytes and checksums remain unchanged. Depth 32 improved JSON only
 `1.0081x`; depth 8 regressed it to `0.9574x`, so neither is retained.
+The dedicated `rep_beam_single` stage also rejected accumulating `PlanStats`
+during token backtracking. Forty-one fixed-CPU-8 JSON pairs improved by
+`1.0296x`, but binary fell to `0.9759x` with only 2/31 wins and the three-row
+geometric mean reached only `1.0016x`. Keep the separate forward token-
+statistics pass until an alternative preserves the binary control.
 Compacting each one-state DP node from 16 to 8 bytes by reconstructing tokens
 from predecessor spans was also rejected. It preserved every focused token and
 candidate oracle and shrank the isolated parser body from `0xa85` to `0xa24`,
