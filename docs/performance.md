@@ -559,6 +559,13 @@ reduced the fast helper to a 14 KiB stack frame and improved the isolated
 builder by `1.0247x`, but complete zlib/gzip encode fell to `0.9961x` /
 `0.9937x` with only 3/15 and 2/15 wins. Keep the unified node layout and
 inlined fallback; neither isolated micro win survived the full encoder.
+A dense-only trusted literal encoder constructor was also rejected. It skipped
+oversubscription checks and left inactive slots undefined for the already-
+trusted reserved writer; a 64-case checked/trusted code-and-width oracle and
+the real one-shot wire oracle were exact. However, adding the specialized
+writer instance made binary raw `.fastest` `0.9986x`, PNG `0.9957x` (1/11),
+checksum `0.9965x` (0/11), and default README `0.9913x`; only zlib/gzip binary
+improved about 0.6--0.7%. Retain the single checked encoder constructor.
 The stored-fast-path classifier now counts repeated four-byte sample windows
 with an exact 2,048-slot open-addressed position set instead of sorting 1,021
 `u32` values. Hash collisions probe onward and compare the original four bytes,

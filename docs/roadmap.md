@@ -4271,6 +4271,11 @@ coverage.
   KiB and improved the builder by `1.0247x`, yet complete zlib/gzip encode was
   `0.9961x` / `0.9937x` with 3/15 and 2/15 wins. Keep the current unified
   layout and inlined fallback.
+  A dense-only trusted literal encoder constructor also preserved all 64
+  checked/trusted code-and-width cases and the real one-shot wire oracle, but
+  its extra writer specialization made binary raw `0.9986x`, PNG `0.9957x`
+  (1/11), checksum `0.9965x` (0/11), and default README `0.9913x`; the
+  zlib/gzip-only gains were insufficient. Retain the checked constructor.
   The stored fast-path classifier now uses an exact 2,048-slot open-addressed
   position set to count duplicate four-byte windows instead of sorting 1,021
   words. Collisions probe and compare original bytes, and a 256-case randomized/
