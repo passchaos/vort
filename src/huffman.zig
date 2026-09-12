@@ -7,6 +7,12 @@ const zstd_dense_text_section = switch (builtin.object_format) {
     .coff => ".text$vort_zstd_dense_huffman",
     else => ".text",
 };
+const deflate_dense_text_section = switch (builtin.object_format) {
+    .elf => ".vort_deflate_dense_huffman",
+    .macho => "__TEXT,__vort_dfl_dhuf",
+    .coff => ".text$vort_deflate_dense_huffman",
+    else => ".text",
+};
 const bitstream = @import("bitstream.zig");
 const core = @import("core.zig");
 
@@ -981,6 +987,18 @@ pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n
     if (n > 64)
         return backrefPackageMergeCodeLengths(n, freqs, max_bits, active);
     return packageMergeCodeLengths(n, freqs, max_bits, active);
+}
+
+/// Fast canonical Huffman construction for a dense DEFLATE literal/length
+/// alphabet. The ordinary bounded builder remains the fallback for any
+/// distribution whose natural tree exceeds RFC 1951's 15-bit limit.
+pub noinline fn treeCodeLengthsDenseDeflate(
+    freqs: *const [286]u32,
+    active: usize,
+) linksection(deflate_dense_text_section) [286]u4 {
+    std.debug.assert(active >= 240 and active <= freqs.len);
+    return unboundedDenseCodeLengthsWithSpreadPolicy(286, freqs, 15, active, false) orelse
+        backrefPackageMergeCodeLengths(286, freqs, 15, active);
 }
 
 /// Build lengths when the caller already tracks every non-zero symbol. The
@@ -2318,6 +2336,30 @@ test "dense back-reference package-merge preserves optimal weighted cost" {
         );
         try std.testing.expect(kraftCost(freqs.len, &production, 15) <= (@as(usize, 1) << 15));
         try std.testing.expectEqual(production, treeCodeLengths(freqs.len, &freqs, 15));
+    }
+}
+
+test "dense Deflate unbounded tree matches package-merge cost" {
+    var state: u32 = 0x510e_527f;
+    var freqs: [286]u32 = undefined;
+    for (0..64) |seed| {
+        @memset(&freqs, 0);
+        const active = 240 + seed % 47;
+        for (0..active) |index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            freqs[(index * 149 + seed * 53) % freqs.len] = 1 + (state >> 20);
+        }
+        const reference = backrefPackageMergeCodeLengths(freqs.len, &freqs, 15, active);
+        const production = treeCodeLengthsDenseDeflate(&freqs, active);
+        try std.testing.expectEqual(reference, production);
+        if (unboundedDenseCodeLengthsWithSpreadPolicy(freqs.len, &freqs, 15, active, false)) |fast| {
+            try std.testing.expectEqual(
+                codeLengthCost(freqs.len, &freqs, &reference),
+                codeLengthCost(freqs.len, &freqs, &fast),
+            );
+            try std.testing.expectEqual(reference, fast);
+            try std.testing.expect(kraftCost(freqs.len, &fast, 15) <= (@as(usize, 1) << 15));
+        }
     }
 }
 

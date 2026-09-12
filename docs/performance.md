@@ -490,6 +490,22 @@ profiling reduced sampled `memset` from about 15.73% to 1.62%. Full validation
 passed 1,501 tests, all 83 compile-check steps, the 50-check Rust differential,
 the five-case incremental encode gate, and the 265-success/60-expected-failure
 Python zlib differential dashboard.
+High-diversity one-shot blocks with at least 240 active literal/length symbols
+now try an isolated ordinary Huffman tree builder before the 15-bit package-
+merge path. The natural tree is accepted only when every depth satisfies the
+DEFLATE limit; otherwise construction falls back to the unchanged bounded
+builder. A 64-case oracle spanning 240--286 active symbols verifies the public
+helper against package merge, including exact per-symbol lengths on successful
+fast paths and exact fallback output. Fifteen alternating ReleaseFast CPU-8
+pairs from independently cached baseline and candidate builds preserved the
+2,844/2,850/2,862-byte binary raw/zlib/gzip frames and improved them by
+`1.1736x` / `1.1724x` / `1.1610x` (15/15, 15/15, 14/15 wins). README and
+roadmap stayed neutral; `src/png.zig` was the weakest control at `0.9935x`, and
+default README was positive. The binary profile now places the
+isolated dense builder at about 1.35%; the former `initFromStats` symbol no
+longer appears above the 0.15% reporting threshold. Full validation passed
+1,502 tests, all 83 compile-check steps, the Rust/Python differential checks,
+and the incremental encode gate.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

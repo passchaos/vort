@@ -4221,6 +4221,19 @@ coverage.
   source controls improved about 2.5%, and sampled binary `memset` fell from
   15.73% to 1.62%. Final validation passed 1,501 tests, all 83 compile steps,
   Rust/Python differential checks, and the incremental encode gate.
+  High-diversity one-shot blocks with at least 240 active literal/length symbols
+  now attempt an isolated ordinary Huffman tree before bounded 15-bit package
+  merge, falling back whenever the natural tree exceeds the DEFLATE limit. A
+  64-case 240--286-active-symbol oracle checks exact per-symbol lengths and
+  fallback equality against package merge. Fifteen alternating ReleaseFast
+  CPU-8 pairs from independently cached builds preserved the 2,844/2,850/2,862-
+  byte binary raw/zlib/gzip frames and improved them by `1.1736x` / `1.1724x` /
+  `1.1610x` with 15/15, 15/15, and 14/15 wins. README/roadmap stayed neutral,
+  `src/png.zig` was the weakest control at `0.9935x`, and default README was
+  positive. Profiling leaves the isolated dense
+  builder at about 1.35%, with the former `initFromStats` symbol below the 0.15%
+  report threshold. Final validation passed 1,502 tests, all 83 compile steps,
+  both differential suites, and the incremental encode gate.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about

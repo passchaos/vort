@@ -773,6 +773,7 @@ const OneShotTokenPlan = struct {
 const OneShotDynamicStats = struct {
     literal_frequencies: [286]u32 = @splat(0),
     distance_frequencies: [30]u32 = @splat(0),
+    prefer_dense_huffman: bool = false,
 };
 
 const DynamicStatsObserver = struct {
@@ -812,9 +813,10 @@ fn usesOneShotDynamicStats(input: []const u8, options: CompressionOptions) bool 
 fn planOneShotBestTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !OneShotTokenPlan {
     const normalized = normalizeOptionsForStrategy(options);
     std.debug.assert(usesOneShotDynamicStats(input, normalized));
-    var dynamic: OneShotDynamicStats = .{};
+    const lazy_head = useLazyOneShotHashHead(input);
+    var dynamic: OneShotDynamicStats = .{ .prefer_dense_huffman = lazy_head };
     const observer = DynamicStatsObserver{ .stats = &dynamic };
-    const tokens = if (useLazyOneShotHashHead(input))
+    const tokens = if (lazy_head)
         try lz77.hashGreedyPlanAutoLazyHeadAllocObserved(allocator, input, normalized.lz77_options, observer)
     else
         try lz77.hashGreedyPlanAutoAllocObserved(allocator, input, normalized.lz77_options, observer);
@@ -1552,12 +1554,48 @@ const DynamicCodingPlan = struct {
         for (stats.distance_frequencies, distance_table) |frequency, metadata| {
             distance_extra_bits += @as(usize, frequency) * metadata.extra_bits;
         }
-        return initFromStats(
-            lit_freqs,
-            stats.distance_frequencies,
-            length_extra_bits,
-            distance_extra_bits,
-        );
+        if (!stats.prefer_dense_huffman) {
+            return initFromStats(lit_freqs, stats.distance_frequencies, length_extra_bits, distance_extra_bits);
+        }
+        return initFromStatsDenseDeflate(lit_freqs, stats.distance_frequencies, length_extra_bits, distance_extra_bits);
+    }
+
+    fn initFromStatsDenseDeflate(
+        lit_freqs: [286]u32,
+        dist_freqs: [30]u32,
+        length_extra_bits: usize,
+        distance_extra_bits: usize,
+    ) !DynamicCodingPlan {
+        var fixed_bits: usize = 3 + length_extra_bits + distance_extra_bits;
+        var literal_active: usize = 0;
+        for (lit_freqs, huffman.fixed_literal_encoder.bits[0..lit_freqs.len]) |frequency, code_bits| {
+            fixed_bits += @as(usize, frequency) * code_bits;
+            literal_active += @intFromBool(frequency != 0);
+        }
+        for (dist_freqs, huffman.fixed_distance_encoder.bits[0..dist_freqs.len]) |frequency, code_bits| {
+            fixed_bits += @as(usize, frequency) * code_bits;
+        }
+        for (280..285) |symbol| fixed_bits -= lit_freqs[symbol];
+        if (literal_active < 240) {
+            return initFromStatsCore(
+                lit_freqs,
+                dist_freqs,
+                length_extra_bits,
+                distance_extra_bits,
+                fixed_bits,
+                literal_active,
+                countActiveFrequencies(30, &dist_freqs),
+            );
+        }
+
+        var lit_tree_freqs = lit_freqs;
+        var dist_tree_freqs = dist_freqs;
+        completeFrequencySetKnownActive(286, &lit_tree_freqs, literal_active);
+        const distance_active = countActiveFrequencies(30, &dist_freqs);
+        if (distance_active != 0) completeFrequencySetKnownActive(30, &dist_tree_freqs, distance_active);
+        const lit_lengths_full = huffman.treeCodeLengthsDenseDeflate(&lit_tree_freqs, literal_active);
+        const dist_lengths_full = huffman.treeCodeLengths(30, &dist_tree_freqs, 15);
+        return finishFromLengths(lit_freqs, dist_freqs, length_extra_bits, distance_extra_bits, fixed_bits, lit_lengths_full, dist_lengths_full);
     }
 
     fn initFromStatsKnownActive(
@@ -2197,6 +2235,12 @@ fn completeFrequencySetKnownActive(comptime n: usize, freqs: *[n]u32, active_cou
             if (active == 2) return;
         }
     }
+}
+
+fn countActiveFrequencies(comptime n: usize, freqs: *const [n]u32) usize {
+    var active: usize = 0;
+    for (freqs.*) |frequency| active += @intFromBool(frequency != 0);
+    return active;
 }
 
 fn hasDistanceSymbols(freqs: *const [30]u32) bool {
