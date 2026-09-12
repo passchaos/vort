@@ -587,6 +587,12 @@ A follow-up that cleared the compact 64 KiB `u16` head to the sentinel and
 removed bitmap probes was rejected immediately: fifteen long fixed-CPU-8 raw
 pairs fell to `0.9205x` with only 1/15 wins. Even after halving the head width,
 the per-block clear remains much more expensive than the 4 KiB bitmap.
+A u16-lazy four-byte-prefix specialization was rejected too. It compared the
+complete four-byte anchor before calling `matchLength` and continued from byte
+four on exact prefixes, preserving candidate-budget semantics and every oracle
+token/wire byte. Fifteen long binary raw pairs nevertheless fell to `0.9809x`
+with 0/15 wins; the extra load and branch cost more than the avoided prefix
+comparison.
 The stored-fast-path classifier now counts repeated four-byte sample windows
 with an exact 2,048-slot open-addressed position set instead of sorting 1,021
 `u32` values. Hash collisions probe onward and compare the original four bytes,
