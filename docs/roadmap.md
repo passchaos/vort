@@ -9911,6 +9911,13 @@ coverage.
   over the original two-state path to `4.1281x` (31/31 wins). Five control rows
   over 21 pairs have a `0.9982x` row-median geometric mean and `0.9941x` floor;
   all control wires remain byte-identical.
+  Replacing the single-state parser's input-sized occupied array with a
+  259-entry circular position tag was rejected. The maximum 258-byte match
+  makes the ring logically sufficient, all focused token and allocation-
+  failure tests passed, and thirty-one fixed-CPU-8 stage pairs improved JSON by
+  `1.0394x`; the three-row stage median geomean was `1.0121x` with a
+  `0.9972x` floor. However, thirty-one end-to-end pairs reduced level-3 JSON
+  to `0.9741x` at the median, so the original linear occupied buffer remains.
   Wider single-state hash tables were rejected after a same-layout sweep. An
   8,192-bucket table improved JSON level 1 by only `1.0085x` with an eight-row
   `1.0023x` median geomean and `0.9988x` floor; 16,384 buckets improved JSON by
