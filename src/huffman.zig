@@ -1079,7 +1079,6 @@ fn unboundedDenseCodeLengthsWithSpreadPolicy(
     const Node = struct {
         weight: u64,
         symbol: u16 = invalid,
-        serial: u16,
     };
     const Less = struct {
         nodes: []const Node,
@@ -1088,7 +1087,7 @@ fn unboundedDenseCodeLengthsWithSpreadPolicy(
             const left = context.nodes[lhs];
             const right = context.nodes[rhs];
             return left.weight < right.weight or
-                (left.weight == right.weight and left.serial < right.serial);
+                (left.weight == right.weight and lhs < rhs);
         }
     };
 
@@ -1104,7 +1103,7 @@ fn unboundedDenseCodeLengthsWithSpreadPolicy(
         min_frequency = @min(min_frequency, frequency);
         max_frequency = @max(max_frequency, frequency);
         const index: u16 = @intCast(node_len);
-        nodes[node_len] = .{ .weight = frequency, .symbol = @intCast(symbol), .serial = index };
+        nodes[node_len] = .{ .weight = frequency, .symbol = @intCast(symbol) };
         if (deflate_leaf_order)
             deflate_leaf_counts[denseDeflateLeafFrequencyBucket(frequency)] += 1
         else
@@ -1131,7 +1130,6 @@ fn unboundedDenseCodeLengthsWithSpreadPolicy(
         const parent: u16 = @intCast(node_len);
         nodes[node_len] = .{
             .weight = nodes[first].weight + nodes[second].weight,
-            .serial = parent,
         };
         parents[first] = parent;
         parents[second] = parent;
@@ -1174,7 +1172,7 @@ inline fn popHuffmanNode(
     const leaf_node = nodes[leaf];
     const parent_node = nodes[parent];
     if (leaf_node.weight < parent_node.weight or
-        (leaf_node.weight == parent_node.weight and leaf_node.serial < parent_node.serial))
+        (leaf_node.weight == parent_node.weight and leaf < parent))
     {
         leaf_i.* += 1;
         return leaf;

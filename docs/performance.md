@@ -527,6 +527,20 @@ frames. README/roadmap/PNG/checksum and default controls were neutral within
 about 0.35%. Final validation passed 1,504 tests, all 83 compile-check steps,
 the 50-check Rust differential, the five-case incremental encode gate, and the
 265-success/60-expected-failure Python zlib differential dashboard.
+A follow-up dense-builder cleanup removes the redundant `serial` field from
+ordinary-tree nodes. Node indexes already increase exactly in creation order,
+so comparing indexes on equal weights preserves the previous total order and
+all package-merge-equivalent lengths. The 64 random dense-tree cases and the
+128-case ordering oracle remain exact. Although alignment keeps the node stride
+at 16 bytes, avoiding the leaf/parent serial stores and equal-weight loads
+improved one million real-histogram builds by `1.0109x` median with 21/21 wins.
+Fifteen longer CPU-8 encode pairs improved binary raw/zlib/gzip `.fastest` by
+`1.0058x` / `1.0060x` / `1.0037x` with 12/15, 12/15, and 11/15 wins and
+unchanged frame sizes; README/roadmap/default controls stayed within about
+0.25%, while `src/png.zig` was `1.0051x`. Final validation passed 1,504 tests,
+all 83 compile-check steps, the 50-check Rust differential, the five-case
+incremental encode gate, and the 265-success/60-expected-failure Python zlib
+differential dashboard.
 A follow-up lazy-head experiment moved the current-position insertion into the
 hash lookup, reusing the bitmap/head load before walking the old chain in the
 style of zlib-family quick-insert helpers. The existing 64 KiB oracle confirmed

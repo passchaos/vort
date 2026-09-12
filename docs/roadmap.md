@@ -4249,6 +4249,15 @@ coverage.
   frames; source and default controls remained neutral. Final validation passed
   1,504 tests, all 83 compile steps, both differential suites, and the
   incremental encode gate.
+  Ordinary dense-tree nodes no longer store a redundant `serial`: node indexes
+  are the identical creation-order key and now break equal-weight ties directly.
+  Existing code-length and full-order oracles remain exact. The 16-byte aligned
+  node stride is unchanged, but removing serial stores/loads improved one million
+  real-histogram builds by `1.0109x` median (21/21); fifteen CPU-8 encode pairs
+  improved binary raw/zlib/gzip `.fastest` by `1.0058x` / `1.0060x` / `1.0037x`
+  with identical frames and neutral source/default controls. Final validation
+  passed 1,504 tests, all 83 compile steps, both differential suites, and the
+  incremental encode gate.
   A lookup-and-insert fusion for the lazy-head parser preserved the 64 KiB
   token/stat/wire oracle but was rejected. Binary raw/zlib/gzip improved only
   `1.0017x` / `1.0000x` / `1.0026x`, while roadmap fell to `0.9966x` with 0/11
