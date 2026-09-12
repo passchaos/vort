@@ -1776,13 +1776,16 @@ fn hashGreedyPlanLazyHeadAllocWithAnchorObserved(
     comptime anchor: HashAnchor,
     observer: anytype,
 ) !GreedyPlan {
-    if (!hashPositionFitsI32(input.len)) {
+    if (input.len > 64 * 1024) {
         return hashGreedyPlanAllocWithAnchorObserved(allocator, input, options, anchor, observer);
     }
-    const head = try allocator.alloc(i32, hash_head_table_size);
+    // With at least a three-byte anchor, a 64 KiB input can only insert
+    // positions through 65533. Reserve maxInt(u16) as the empty-chain marker
+    // and halve both one-shot hash tables without changing reachable matches.
+    const head = try allocator.alloc(u16, hash_head_table_size);
     defer allocator.free(head);
     var initialized: [hash_head_init_words]u64 = @splat(0);
-    const prev = try allocator.alloc(i32, input.len);
+    const prev = try allocator.alloc(u16, input.len);
     defer allocator.free(prev);
     return hashGreedyPlanWithTablesObserved(
         allocator,
@@ -2298,12 +2301,13 @@ fn findBestHashMatchWithLayoutAndHashLimits(
     if (limits.max_chain == 0) return .{ .hash = hash };
 
     var candidate_i = hashHeadGet(head, hash, lazy_head, initialized);
+    const empty = hashPositionEmpty(@TypeOf(candidate_i));
     var checked: usize = 0;
     var walked: usize = 0;
     const max_len = @min(limits.maximum, input.len - pos);
     const earliest = if (comptime ring) pos -| limits.window_len else 0;
     var best = MatchCandidate{};
-    while (candidate_i >= 0 and walked < limits.max_walks) : (walked += 1) {
+    while (candidate_i != empty and walked < limits.max_walks) : (walked += 1) {
         const candidate: usize = @intCast(candidate_i);
         if (comptime ring) {
             if (candidate < earliest) break;
@@ -2542,7 +2546,7 @@ fn hashHeadGet(
 ) @TypeOf(head[0]) {
     if (lazy_head) {
         const mask = @as(u64, 1) << @intCast(hash & 63);
-        if (initialized[hash / 64] & mask == 0) return -1;
+        if (initialized[hash / 64] & mask == 0) return hashPositionEmpty(@TypeOf(head[0]));
     }
     return head[hash];
 }
@@ -2583,13 +2587,20 @@ fn insertKnownHashWithLayout(
         const word = &initialized[h / 64];
         if (word.* & mask == 0) {
             word.* |= mask;
-            prev[hashPrevIndex(pos, prev, ring)] = -1;
+            prev[hashPrevIndex(pos, prev, ring)] = hashPositionEmpty(@TypeOf(prev[0]));
             head[h] = @intCast(pos);
             return;
         }
     }
     prev[hashPrevIndex(pos, prev, ring)] = head[h];
     head[h] = @intCast(pos);
+}
+
+fn hashPositionEmpty(comptime Position: type) Position {
+    return switch (@typeInfo(Position).int.signedness) {
+        .signed => -1,
+        .unsigned => std.math.maxInt(Position),
+    };
 }
 
 fn hashAtInput(
@@ -3280,9 +3291,88 @@ test "hash greedy table variants share token and stats accounting" {
 }
 
 test "hash greedy compact position boundary" {
+    try std.testing.expectEqual(@as(i32, -1), hashPositionEmpty(i32));
+    try std.testing.expectEqual(std.math.maxInt(u16), hashPositionEmpty(u16));
+    try std.testing.expect(@as(usize, std.math.maxInt(u16)) > 64 * 1024 - 3);
+    try std.testing.expect(@as(usize, std.math.maxInt(u16)) > 64 * 1024 - 4);
     try std.testing.expect(hashPositionFitsI32(std.math.maxInt(i32)));
     if (@bitSizeOf(usize) > @bitSizeOf(i32)) {
         try std.testing.expect(!hashPositionFitsI32(@as(usize, std.math.maxInt(i32)) + 1));
+    }
+}
+
+test "64 KiB lazy hash u16 positions match i32 reference" {
+    const Observer = struct {
+        pub fn recordToken(_: @This(), _: Token) void {}
+    };
+
+    const input = try std.testing.allocator.alloc(u8, 64 * 1024);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x243f_6a88;
+    for (input, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state ^ (state >> 11) ^ @as(u32, @truncate(index * 73)));
+    }
+
+    inline for (.{ HashAnchor.three, HashAnchor.four }) |anchor| {
+        const minimum: usize = switch (anchor) {
+            .three => 3,
+            .four => 4,
+        };
+        const options: GreedyOptions = .{
+            .window_len = 16 * 1024,
+            .max_chain = 6,
+            .nice_len = 16,
+            .max_candidates = 1,
+            .lazy_min_gain = 3,
+            .min_match = minimum,
+            .max_match = 96,
+            .min_savings_bits = 6,
+        };
+
+        const reference_head = try std.testing.allocator.alloc(i32, hash_head_table_size);
+        defer std.testing.allocator.free(reference_head);
+        const reference_prev = try std.testing.allocator.alloc(i32, input.len);
+        defer std.testing.allocator.free(reference_prev);
+        var reference_initialized: [hash_head_init_words]u64 = @splat(0);
+        const reference = try hashGreedyPlanWithTablesObserved(
+            std.testing.allocator,
+            input,
+            options,
+            reference_head,
+            reference_prev,
+            false,
+            true,
+            &reference_initialized,
+            anchor,
+            Observer{},
+        );
+        defer reference.deinit(std.testing.allocator);
+
+        const compact_head = try std.testing.allocator.alloc(u16, hash_head_table_size);
+        defer std.testing.allocator.free(compact_head);
+        const compact_prev = try std.testing.allocator.alloc(u16, input.len);
+        defer std.testing.allocator.free(compact_prev);
+        var compact_initialized: [hash_head_init_words]u64 = @splat(0);
+        const compact = try hashGreedyPlanWithTablesObserved(
+            std.testing.allocator,
+            input,
+            options,
+            compact_head,
+            compact_prev,
+            false,
+            true,
+            &compact_initialized,
+            anchor,
+            Observer{},
+        );
+        defer compact.deinit(std.testing.allocator);
+
+        try expectEqualTokenSlices(reference.tokens, compact.tokens);
+        try std.testing.expectEqual(reference.stats, compact.stats);
+        const last_position = input.len - minimum;
+        const last_hash = hashAtInput(input, last_position, compact_head.len, anchor).?;
+        try std.testing.expectEqual(@as(u16, @intCast(last_position)), compact_head[last_hash]);
     }
 }
 

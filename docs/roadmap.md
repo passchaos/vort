@@ -4276,6 +4276,19 @@ coverage.
   its extra writer specialization made binary raw `0.9986x`, PNG `0.9957x`
   (1/11), checksum `0.9965x` (0/11), and default README `0.9913x`; the
   zlib/gzip-only gains were insufficient. Retain the checked constructor.
+  High-diversity one-shot blocks through 64 KiB now use `u16` positions in the
+  lazy-head and predecessor tables, with 65,535 reserved as the empty sentinel.
+  Three-/four-byte anchors can insert at most positions 65,533/65,532, so the
+  representation is exact while its 64 KiB working set falls from 384 KiB to
+  192 KiB plus the unchanged 4 KiB bitmap. A maximum-size, both-anchor
+  differential compares tokens, statistics, and the final inserted head against
+  i32 tables, while the existing one-shot oracle pins final wire bytes. Fifteen
+  independently built CPU-8 pairs improved binary raw/zlib/gzip `.fastest` by
+  `1.4906x` / `1.4756x` / `1.4744x` (15/15 each), preserving
+  2,844/2,850/2,862-byte frames; source/default/`.fast` controls stayed within
+  about 0.8%. Final validation passed 1,505 tests, all 83 compile steps, both
+  differential suites, the incremental encode gate, and the x86-linux-musl
+  LZ77 compile check.
   The stored fast-path classifier now uses an exact 2,048-slot open-addressed
   position set to count duplicate four-byte windows instead of sorting 1,021
   words. Collisions probe and compare original bytes, and a 256-case randomized/

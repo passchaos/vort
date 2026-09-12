@@ -566,6 +566,23 @@ the real one-shot wire oracle were exact. However, adding the specialized
 writer instance made binary raw `.fastest` `0.9986x`, PNG `0.9957x` (1/11),
 checksum `0.9965x` (0/11), and default README `0.9913x`; only zlib/gzip binary
 improved about 0.6--0.7%. Retain the single checked encoder constructor.
+High-diversity one-shot hash blocks through 64 KiB now store lazy-head and
+predecessor positions as `u16`, reserving 65,535 as the empty-chain sentinel.
+With three- or four-byte anchors, the largest insertable position is 65,533 or
+65,532, so all positions remain exact. The head/prev working set for a 64 KiB
+block falls from 384 KiB to 192 KiB, in addition to the unchanged 4 KiB
+initialization bitmap. A boundary differential builds the maximum-size block
+with both anchor widths and compares every token and statistic against an i32
+lazy-head reference, including the final inserted head; the existing one-shot
+oracle also preserves final wire bytes. Fifteen alternating ReleaseFast CPU-8
+pairs against independently cached `facc90fd` binaries improved deterministic
+binary raw/zlib/gzip `.fastest` by `1.4906x` / `1.4756x` / `1.4744x`, all
+15/15 wins with unchanged 2,844/2,850/2,862-byte frames. README/roadmap and
+default/`.fast` controls remained within about 0.8%; PNG/checksum were slightly
+positive. Final validation passed 1,505 tests, all 83 compile-check steps, the
+50-check Rust differential, the five-case incremental encode gate, the
+265-success/60-expected-failure Python zlib differential dashboard, and the
+x86-linux-musl LZ77 compile check.
 The stored-fast-path classifier now counts repeated four-byte sample windows
 with an exact 2,048-slot open-addressed position set instead of sorting 1,021
 `u32` values. Hash collisions probe onward and compare the original four bytes,
