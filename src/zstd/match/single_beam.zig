@@ -103,7 +103,13 @@ pub noinline fn planReuse(scratch: *Scratch, allocator: std.mem.Allocator, input
     return stats;
 }
 
-fn firstIndexedMatch(scratch: *const Scratch, input: []const u8, position: usize, first_candidate: u16, anchor: u32) ?lz77.Token.Match {
+fn firstIndexedMatch(
+    scratch: *const Scratch,
+    input: []const u8,
+    position: usize,
+    first_candidate: u16,
+    anchor: u32,
+) ?lz77.Token.Match {
     var candidate_i = first_candidate;
     var checked: usize = 0;
     const maximum = @min(lz77.max_match_len, input.len - position);
