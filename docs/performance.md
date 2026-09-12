@@ -1772,6 +1772,30 @@ pairs improve the target level-3 encode by `7.06x` on average (`7.04x` median,
 case/level rows remain within about 1% and keep their frame sizes unchanged.
 Level 2 and level 9+ continue to require double-fast/repeat-beam consensus.
 
+## Zstd FSE-weight Huffman tree construction (2026-09-12)
+
+Zstd frames whose Huffman weights are themselves FSE-compressed now use a
+Vort-local parser backed by the existing native FSE table reader. Canonical
+tree nodes are produced with stable 16-bucket weight counts and starts, matching
+the rank-based construction used by upstream zstd while preserving the exact
+`std.compress.zstd` tree representation consumed by the decoder. Direct-weight
+headers continue through Zig std's decoder, and the new FSE path is isolated in
+`.vort_zstd_huffman_build` (with object-format equivalents) to avoid inflating
+the sequence hot loops.
+
+Twenty-one alternating fixed-CPU-8 independent-binary pairs against a freshly
+built parent measured the following caller-buffer decode medians with identical
+encoded sizes and checksums: `numbered_json 1.3724x`, `large_json 1.0371x`,
+`large_text 1.1013x`, `ascii64k 1.0240x`, `huffman80k 0.9998x`, and
+`binary_mixed 1.0038x`. Across all 13 reference rows the row-median geometric
+mean is `1.0455x` and the weakest median is `0.9992x`. The generated
+`numbered_json` reference row now reaches about `0.454x` libzstd 1.5.5
+throughput rather than the prior `0.339x`; the gate floor is conservatively
+raised to `0.38x`. Correctness coverage includes direct/FSE node-by-node
+differentials, 512 deterministic malformed/truncated headers, 64 generated
+trees, both 273-case libzstd compatibility matrices, and the 9,900-frame
+upstream decodecorpus suite with all 64 sequence-mode combinations.
+
 ## Zstd speed-level multi-block scheduling (2026-09-04)
 
 Large level-1--3 encodes now overlap the primary candidate on the calling thread

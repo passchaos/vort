@@ -46,6 +46,13 @@ const fse_encode_helper_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const huffman_build_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_huffman_build",
+    .macho => "__TEXT,__vort_zstd_hb",
+    .coff => ".text$vort_zstd_huffman_build",
+    else => ".text",
+};
+
 pub const Error = core.Error || std.mem.Allocator.Error;
 
 pub const default_compression_level: c_int = 1;
@@ -7793,11 +7800,9 @@ fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Err
             const payload = block[literal_payload_offset..][0..literal_payload_len];
             var reader: std.Io.Reader = .fixed(payload);
             var remaining: std.Io.Limit = .limited(payload.len);
-            // Zig std's Zstandard Huffman table builder is public and tracks the
-            // same canonical tree invariants we need here. Keep the local code
-            // focused on frame integration and bitstream traversal instead of
-            // carrying a forked copy of the FSE/direct tree parser.
-            huffman_tree = decodeStdZstdHuffmanTree(&reader, &remaining) catch |err| switch (err) {
+            // FSE-compressed weights use the local linear canonical builder;
+            // direct weights retain Zig std's parser and tree representation.
+            huffman_tree = decodeFrameHuffmanTree(payload, &reader, &remaining) catch |err| switch (err) {
                 error.EndOfStream => return error.TruncatedFrame,
                 else => return error.CorruptFrame,
             };
@@ -7958,7 +7963,242 @@ fn decodeStdZstdHuffmanTree(
     reader: *std.Io.Reader,
     remaining: *std.Io.Limit,
 ) StdZstdHuffmanTree.DecodeError!StdZstdHuffmanTree {
-    return try StdZstdHuffmanTree.decode(reader, remaining);
+    return StdZstdHuffmanTree.decode(reader, remaining);
+}
+
+fn decodeFrameHuffmanTree(
+    payload: []const u8,
+    reader: *std.Io.Reader,
+    remaining: *std.Io.Limit,
+) StdZstdHuffmanTree.DecodeError!StdZstdHuffmanTree {
+    // Direct-weight trees keep the established std implementation and call
+    // shape. Only FSE-compressed weight headers use the linear stable builder.
+    if (payload.len == 0) return error.EndOfStream;
+    if (payload[0] >= 128) return StdZstdHuffmanTree.decode(reader, remaining);
+    return decodeLinearZstdHuffmanTree(reader, remaining) catch |err| switch (err) {
+        error.TruncatedFrame => error.EndOfStream,
+        else => error.MalformedHuffmanTree,
+    };
+}
+
+noinline fn decodeLinearZstdHuffmanTree(
+    reader: *std.Io.Reader,
+    remaining: *std.Io.Limit,
+) linksection(huffman_build_text_section) Error!StdZstdHuffmanTree {
+    remaining.* = remaining.subtract(1) orelse return error.TruncatedFrame;
+    const header = reader.takeByte() catch return error.TruncatedFrame;
+    var weights: [256]u4 = undefined;
+    const symbol_count = if (header < 128) blk: {
+        const compressed_size: usize = header;
+        remaining.* = remaining.subtract(compressed_size) orelse return error.TruncatedFrame;
+        const compressed = reader.take(compressed_size) catch return error.TruncatedFrame;
+        break :blk try decodeHuffmanWeightsFse(compressed, &weights);
+    } else blk: {
+        const encoded_symbol_count: usize = header - 127;
+        const byte_count = (encoded_symbol_count + 1) / 2;
+        remaining.* = remaining.subtract(byte_count) orelse return error.TruncatedFrame;
+        const encoded = reader.take(byte_count) catch return error.TruncatedFrame;
+        for (encoded, 0..) |byte, index| {
+            weights[index * 2] = @intCast(byte >> 4);
+            weights[index * 2 + 1] = @intCast(byte & 0x0f);
+        }
+        break :blk encoded_symbol_count + 1;
+    };
+    return buildHuffmanTreeFromWeights(&weights, symbol_count);
+}
+
+inline fn decodeHuffmanWeightsFse(compressed: []const u8, weights: *[256]u4) Error!usize {
+    var forward: ForwardBitReader = .{ .bytes = compressed };
+    var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
+    const table_len = try decodeFseTable(&forward, 256, 6, &entries);
+    if (forward.byteIndex() >= compressed.len) return error.TruncatedFrame;
+    var reverse = try ReverseBitReader.init(compressed[forward.byteIndex()..]);
+    const accuracy_log: u8 = @intCast(std.math.log2_int(usize, table_len));
+    var even_state = try reverse.readSmall(@intCast(accuracy_log));
+    var odd_state = try reverse.readSmall(@intCast(accuracy_log));
+    var index: usize = 0;
+    while (index < 254) {
+        const even = entries[even_state];
+        if (even.symbol > std.math.maxInt(u4)) return error.CorruptFrame;
+        weights[index] = @intCast(even.symbol);
+        index += 1;
+        const even_bits = try readHuffmanWeightFseBits(&reverse, even.bits);
+        if (even_bits.count < even.bits) {
+            const odd = entries[odd_state];
+            if (odd.symbol > std.math.maxInt(u4)) return error.CorruptFrame;
+            weights[index] = @intCast(odd.symbol);
+            index += 1;
+            break;
+        }
+        even_state = even.baseline + even_bits.value;
+        if (even_state >= table_len) return error.CorruptFrame;
+
+        const odd = entries[odd_state];
+        if (odd.symbol > std.math.maxInt(u4)) return error.CorruptFrame;
+        weights[index] = @intCast(odd.symbol);
+        index += 1;
+        const odd_bits = try readHuffmanWeightFseBits(&reverse, odd.bits);
+        if (odd_bits.count < odd.bits) {
+            if (index == 255) return error.CorruptFrame;
+            const final_even = entries[even_state];
+            if (final_even.symbol > std.math.maxInt(u4)) return error.CorruptFrame;
+            weights[index] = @intCast(final_even.symbol);
+            index += 1;
+            break;
+        }
+        odd_state = odd.baseline + odd_bits.value;
+        if (odd_state >= table_len) return error.CorruptFrame;
+    } else return error.CorruptFrame;
+    if (reverse.available() != 0) return error.CorruptFrame;
+    return index + 1;
+}
+
+const HuffmanWeightFseBits = struct { value: usize, count: u8 };
+
+fn readHuffmanWeightFseBits(reader: *ReverseBitReader, bit_count: u8) Error!HuffmanWeightFseBits {
+    const count: u8 = @intCast(@min(@as(usize, bit_count), reader.available()));
+    return .{
+        .value = if (count == 0) 0 else try reader.read(count),
+        .count = count,
+    };
+}
+
+inline fn buildHuffmanTreeFromWeights(weights: *[256]u4, symbol_count: usize) Error!StdZstdHuffmanTree {
+    if (symbol_count < 2 or symbol_count > weights.len) return error.CorruptFrame;
+    var weight_power_sum: u32 = 0;
+    for (weights[0 .. symbol_count - 1]) |weight| {
+        if (weight > 11) return error.CorruptFrame;
+        weight_power_sum += (@as(u16, 1) << weight) >> 1;
+    }
+    if (weight_power_sum >= 1 << 11) return error.CorruptFrame;
+    const max_bit_count: u4 = @intCast(if (weight_power_sum == 0) 1 else std.math.log2_int(u32, weight_power_sum) + 1);
+    const remaining_power = (@as(u32, 1) << max_bit_count) - weight_power_sum;
+    if (remaining_power == 0) return error.CorruptFrame;
+    weights[symbol_count - 1] = @intCast(std.math.log2_int(u32, remaining_power) + 1);
+
+    var counts: [16]u16 = @splat(0);
+    for (weights[0..symbol_count]) |weight| {
+        if (weight > max_bit_count + 1) return error.CorruptFrame;
+        counts[weight] += 1;
+    }
+    var starts: [16]u16 = @splat(0);
+    var active_count: usize = 0;
+    for (1..counts.len) |weight| {
+        starts[weight] = @intCast(active_count);
+        active_count += counts[weight];
+    }
+    if (active_count == 0 or active_count > 256) return error.CorruptFrame;
+
+    var tree: StdZstdHuffmanTree = undefined;
+    var next = starts;
+    for (weights[0..symbol_count], 0..) |weight, symbol| {
+        if (weight == 0) continue;
+        const slot = next[weight];
+        tree.nodes[slot].symbol = @intCast(symbol);
+        tree.nodes[slot].weight = weight;
+        next[weight] += 1;
+    }
+    var prefix: u16 = 0;
+    var previous_weight: u4 = 0;
+    for (1..counts.len) |weight_usize| {
+        const count = counts[weight_usize];
+        if (count == 0) continue;
+        const weight: u4 = @intCast(weight_usize);
+        if (previous_weight != 0)
+            prefix = ((prefix - 1) >> @intCast(weight - previous_weight)) + 1;
+        const start = starts[weight];
+        for (tree.nodes[start..][0..count]) |*node| {
+            node.prefix = prefix;
+            prefix += 1;
+        }
+        previous_weight = weight;
+    }
+    tree.max_bit_count = max_bit_count;
+    tree.symbol_count_minus_one = @intCast(active_count - 1);
+    return tree;
+}
+
+fn expectLinearHuffmanTreeMatchesStd(encoded: []const u8) !void {
+    var expected_reader: std.Io.Reader = .fixed(encoded);
+    var expected_remaining: std.Io.Limit = .limited(encoded.len);
+    const expected = try StdZstdHuffmanTree.decode(&expected_reader, &expected_remaining);
+    var actual_reader: std.Io.Reader = .fixed(encoded);
+    var actual_remaining: std.Io.Limit = .limited(encoded.len);
+    const actual = try decodeLinearZstdHuffmanTree(&actual_reader, &actual_remaining);
+    try std.testing.expectEqual(expected_reader.seek, actual_reader.seek);
+    try std.testing.expectEqual(expected_remaining, actual_remaining);
+    try expectHuffmanTreesEqual(expected, actual);
+}
+
+fn expectHuffmanTreesEqual(expected: StdZstdHuffmanTree, actual: StdZstdHuffmanTree) !void {
+    try std.testing.expectEqual(expected.max_bit_count, actual.max_bit_count);
+    try std.testing.expectEqual(expected.symbol_count_minus_one, actual.symbol_count_minus_one);
+    try std.testing.expectEqualSlices(
+        StdZstdHuffmanTree.PrefixedSymbol,
+        expected.nodes[0 .. @as(usize, expected.symbol_count_minus_one) + 1],
+        actual.nodes[0 .. @as(usize, actual.symbol_count_minus_one) + 1],
+    );
+}
+
+test "zstd linear Huffman tree builder matches standard direct and FSE trees" {
+    const direct = [_]u8{ 0x83, 0x11, 0x11 };
+    try expectLinearHuffmanTreeMatchesStd(&direct);
+
+    const fse_hex =
+        "3710657a2b5cbc991677a0b3d956ae1aa76ac132b29a169ab2abdcef38e438a8e62e6e" ++
+        "8751108babaaaaaaaaaaaaaaaaaaaaaaaaaaaa6a82";
+    var fse: [fse_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&fse, fse_hex);
+    try expectLinearHuffmanTreeMatchesStd(&fse);
+}
+
+test "zstd linear Huffman tree parser matches standard acceptance" {
+    var state: u32 = 0x243f_6a88;
+    for (0..512) |seed| {
+        const len = 1 + seed % 96;
+        var encoded: [96]u8 = undefined;
+        for (encoded[0..len]) |*byte| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = @truncate(state >> 24);
+        }
+        var expected_reader: std.Io.Reader = .fixed(encoded[0..len]);
+        var expected_remaining: std.Io.Limit = .limited(len);
+        const expected_result = StdZstdHuffmanTree.decode(&expected_reader, &expected_remaining);
+        var actual_reader: std.Io.Reader = .fixed(encoded[0..len]);
+        var actual_remaining: std.Io.Limit = .limited(len);
+        const actual_result = decodeLinearZstdHuffmanTree(&actual_reader, &actual_remaining);
+        if (expected_result) |expected_tree| {
+            const actual_tree = try actual_result;
+            try std.testing.expectEqual(expected_reader.seek, actual_reader.seek);
+            try std.testing.expectEqual(expected_remaining, actual_remaining);
+            try expectHuffmanTreesEqual(expected_tree, actual_tree);
+        } else |expected_error| switch (expected_error) {
+            error.EndOfStream => try std.testing.expectError(error.TruncatedFrame, actual_result),
+            else => try std.testing.expectError(error.CorruptFrame, actual_result),
+        }
+    }
+}
+
+test "zstd linear Huffman tree parser matches generated trees" {
+    var state: u32 = 0x9e37_79b9;
+    var direct_count: usize = 0;
+    var fse_count: usize = 0;
+    for (0..64) |seed| {
+        var payload: [4096]u8 = undefined;
+        const alphabet = 2 + seed * 251 / 63;
+        for (&payload) |*byte| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = @intCast((state >> 16) % alphabet);
+        }
+        const plan = smallHuffmanLiteralPlan(&payload) orelse continue;
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(std.testing.allocator);
+        if (!try emitSmallHuffmanTree(std.testing.allocator, &encoded, &plan)) continue;
+        if (encoded.items[0] < 128) fse_count += 1 else direct_count += 1;
+        try expectLinearHuffmanTreeMatchesStd(encoded.items);
+    }
+    try std.testing.expect(direct_count != 0);
+    try std.testing.expect(fse_count != 0);
 }
 
 fn parseSequenceCount(block: []const u8, offset: *usize) Error!usize {

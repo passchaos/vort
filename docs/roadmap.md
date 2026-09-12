@@ -10974,6 +10974,26 @@ coverage.
   dispatch form regressed at least one adjacent large FSE path by about 1--7%;
   it was also fully removed rather than trading general throughput for the
   narrow win.
+- Zstd frame decoding now parses FSE-compressed Huffman weights through Vort's
+  existing native FSE table reader and constructs canonical tree nodes with 16
+  stable weight buckets, mirroring the rank-count/rank-start shape in upstream
+  `HUF_readDTableX1_wksp`. Direct-weight headers retain Zig std's established
+  decoder. The new path is isolated in its own object-format-aware text section
+  so the large sequence loops keep their prior generated shape. Direct and FSE
+  fixtures, 512 deterministic malformed/truncated inputs, and 64 generated
+  trees compare consumed bytes, remaining limits, acceptance, and every active
+  `(symbol, prefix, weight)` node against Zig std. Twenty-one alternating
+  fixed-CPU-8 independent-binary pairs across all 13 reference cases improve
+  the row-median geometric mean by `1.0455x`, with a `0.9992x` floor. The main
+  wins are `numbered_json` `1.3724x`, 512 KiB `large_json` `1.0371x`,
+  `large_text` `1.1013x`, and `ascii64k` `1.0240x`; `huffman80k` and
+  `binary_mixed` remain at `0.9998x`/`1.0038x`. The libzstd reference floor
+  for `numbered_json` is raised from `0.24x` to `0.38x`. Both 273-case
+  libzstd 1.5.5/1.6.0 compatibility matrices and the complete 9,900-frame
+  upstream decodecorpus suite pass, including all 64 LL/OF/ML mode tuples.
+  Unlike the broader rejected prototype below, this path is selected only at
+  the contiguous frame-literal call site for FSE-weight headers; direct trees
+  and standard-dictionary parsing retain Zig std's implementation.
 - Rejected replacing Zig std's Zstd Huffman canonical-tree sort with a local
   rank-count/rank-start builder modeled on upstream `HUF_readDTableX1_wksp`.
   The prototype decoded both direct and FSE-compressed weight headers, matched
