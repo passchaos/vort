@@ -4289,6 +4289,18 @@ coverage.
   about 0.8%. Final validation passed 1,505 tests, all 83 compile steps, both
   differential suites, the incremental encode gate, and the x86-linux-musl
   LZ77 compile check.
+  Compact lazy parsing now also keeps absolute `u16` predecessors in a ring
+  sized to the active power-of-two history window. Unlike the rejected relative-
+  distance ring, links require no encode/decode arithmetic; the established
+  ring mask and earliest-position guard preserve overwrite safety. The
+  `.fastest` 16 KiB path therefore uses 96 KiB for head plus predecessors, plus
+  the 4 KiB bitmap. The maximum-size both-anchor differential covers the ring
+  against the i32 full table. Fifteen long CPU-8 pairs improved binary
+  raw/zlib/gzip `.fastest` by `1.6683x` / `1.6395x` / `1.6391x` (15/15 each),
+  with identical frames; README/roadmap/PNG/checksum were also positive, default
+  README neutral, and the non-target binary `.fast` control was `0.9988x`. Final
+  validation passed 1,505 tests, all 83 compile steps, both differential suites,
+  the incremental encode gate, and the x86-linux-musl LZ77 compile check.
   Clearing the compact 64 KiB `u16` head and removing bitmap branches was
   rejected after the first long raw matrix: it reached only `0.9205x` with
   1/15 wins. Retain the 4 KiB lazy-initialization bitmap even with u16 entries.

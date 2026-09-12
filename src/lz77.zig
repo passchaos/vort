@@ -1785,8 +1785,16 @@ fn hashGreedyPlanLazyHeadAllocWithAnchorObserved(
     const head = try allocator.alloc(u16, hash_head_table_size);
     defer allocator.free(head);
     var initialized: [hash_head_init_words]u64 = @splat(0);
-    const prev = try allocator.alloc(u16, input.len);
+    const prev_len = compactLazyPrevTableLen(input.len, options.window_len);
+    const prev = try allocator.alloc(u16, prev_len);
     defer allocator.free(prev);
+    if (prev_len < input.len) {
+        return @call(
+            .never_inline,
+            hashGreedyPlanWithTablesObserved,
+            .{ allocator, input, options, head, prev, true, true, &initialized, anchor, observer },
+        );
+    }
     return hashGreedyPlanWithTablesObserved(
         allocator,
         input,
@@ -1799,6 +1807,17 @@ fn hashGreedyPlanLazyHeadAllocWithAnchorObserved(
         anchor,
         observer,
     );
+}
+
+fn compactLazyPrevTableLen(input_len: usize, window_len: usize) usize {
+    if (window_len != 0 and
+        window_len <= default_window_len and
+        input_len > window_len and
+        std.math.isPowerOfTwo(window_len))
+    {
+        return window_len;
+    }
+    return input_len;
 }
 
 fn hashPositionFitsI32(input_len: usize) bool {
@@ -3351,7 +3370,7 @@ test "64 KiB lazy hash u16 positions match i32 reference" {
 
         const compact_head = try std.testing.allocator.alloc(u16, hash_head_table_size);
         defer std.testing.allocator.free(compact_head);
-        const compact_prev = try std.testing.allocator.alloc(u16, input.len);
+        const compact_prev = try std.testing.allocator.alloc(u16, options.window_len);
         defer std.testing.allocator.free(compact_prev);
         var compact_initialized: [hash_head_init_words]u64 = @splat(0);
         const compact = try hashGreedyPlanWithTablesObserved(
@@ -3360,7 +3379,7 @@ test "64 KiB lazy hash u16 positions match i32 reference" {
             options,
             compact_head,
             compact_prev,
-            false,
+            true,
             true,
             &compact_initialized,
             anchor,
@@ -3373,6 +3392,12 @@ test "64 KiB lazy hash u16 positions match i32 reference" {
         const last_position = input.len - minimum;
         const last_hash = hashAtInput(input, last_position, compact_head.len, anchor).?;
         try std.testing.expectEqual(@as(u16, @intCast(last_position)), compact_head[last_hash]);
+        const reference_link = reference_prev[last_position];
+        const compact_link = compact_prev[hashPrevIndex(last_position, compact_prev, true)];
+        try std.testing.expectEqual(
+            if (reference_link < 0) std.math.maxInt(u16) else @as(u16, @intCast(reference_link)),
+            compact_link,
+        );
     }
 }
 

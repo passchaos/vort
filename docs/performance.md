@@ -583,6 +583,23 @@ positive. Final validation passed 1,505 tests, all 83 compile-check steps, the
 50-check Rust differential, the five-case incremental encode gate, the
 265-success/60-expected-failure Python zlib differential dashboard, and the
 x86-linux-musl LZ77 compile check.
+The same compact path now stores absolute `u16` predecessors in a ring sized to
+the active power-of-two history window. This differs from the rejected relative-
+distance ring: links remain absolute and need no encode/decode arithmetic, while
+the existing ring mask and earliest-position guard provide overwrite safety. At
+the `.fastest` 16 KiB window, head plus predecessor storage falls again from
+192 KiB to 96 KiB (plus the 4 KiB bitmap). The maximum-size three-/four-byte
+anchor differential now compares this ring directly with the i32 full table,
+including final head and predecessor values. Fifteen long alternating CPU-8
+pairs against the independently built u16-full-table baseline improved binary
+raw/zlib/gzip `.fastest` by `1.6683x` / `1.6395x` / `1.6391x`, all 15/15 wins
+with unchanged frames. README/roadmap/PNG/checksum `.fastest` improved by
+`1.0143x` / `1.0065x` / `1.0036x` / `1.0021x`; default README was `1.0021x`,
+and the non-target binary `.fast` control was neutral at `0.9988x`. Final
+validation passed 1,505 tests, all 83 compile-check steps, the 50-check Rust
+differential, the five-case incremental encode gate, the 265-success/60-
+expected-failure Python zlib differential dashboard, and the x86-linux-musl
+LZ77 compile check.
 A follow-up that cleared the compact 64 KiB `u16` head to the sentinel and
 removed bitmap probes was rejected immediately: fifteen long fixed-CPU-8 raw
 pairs fell to `0.9205x` with only 1/15 wins. Even after halving the head width,
