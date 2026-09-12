@@ -274,6 +274,14 @@ eleven fixed-CPU-8 pairs regressed dictionary to `0.7591x` and uppercase to
 `0.9091x`; mixed improved to `1.1389x`, showing that successful dictionary
 hits need the existing direct comparison order even when miss-heavy rows favor
 early canonical filtering.
+A caller-owned short-ratio command builder was rejected after implementing
+allocating/into parity and undersized-buffer tests. The <=256-byte contract
+proves a 128-command maximum, so mixed and dictionary-only plans reused one
+6 KiB stack array and removed both command allocations. The direct layout left
+mixed at `1.0158x` but q8 source32k at `0.9794x`; isolating the helper restored
+source32k to `1.0006x` median but regressed mixed/dictionary/JSON/source to
+`0.9771x`/`0.9514x`/`0.9197x`/`0.9205x`. The duplicate builders and stack frame
+were removed.
 
 ## Milestone 0: repository and validation spine
 
