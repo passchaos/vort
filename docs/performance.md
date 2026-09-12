@@ -506,6 +506,27 @@ isolated dense builder at about 1.35%; the former `initFromStats` symbol no
 longer appears above the 0.15% reporting threshold. Full validation passed
 1,502 tests, all 83 compile-check steps, the Rust/Python differential checks,
 and the incremental encode gate.
+The isolated dense DEFLATE tree builder now fuses leaf-bucket counting into its
+existing frequency scan and orders leaves directly into the destination index
+array. Frequencies 1--4 use exact stable buckets; the remaining tail is sorted
+by the full `(weight, serial)` key. The general and dense-Zstd builders retain
+their previous sort. The deterministic 64 KiB binary histogram has 263 active
+literal/length symbols: 20/88/88/62 occur 1/2/3/4 times, and only five symbols
+form the tail (three at 53, one at 97, and one at 661). Thus the old generic
+path never sorted a multi-element coarse bucket; its avoidable cost was the
+second index scan, 192-entry bucket management, and intermediate array. A
+128-case ordering oracle covers ties, the former 165 boundary, and large tails
+against the exact comparison order, while the existing 64-case dense-tree
+oracle continues to require exact package-merge code lengths. Independently
+cached ReleaseFast builder binaries pinned to CPU 8 improved one million builds
+of the real histogram by `1.4357x` median with 21/21 wins and an identical
+checksum. Fifteen longer alternating encode pairs against detached `7234297e`
+improved binary raw/zlib/gzip `.fastest` by `1.0107x` / `1.0116x` / `1.0068x`
+with 11/15, 13/15, and 11/15 wins, preserving the 2,844/2,850/2,862-byte
+frames. README/roadmap/PNG/checksum and default controls were neutral within
+about 0.35%. Final validation passed 1,504 tests, all 83 compile-check steps,
+the 50-check Rust differential, the five-case incremental encode gate, and the
+265-success/60-expected-failure Python zlib differential dashboard.
 The stored-fast-path classifier now counts repeated four-byte sample windows
 with an exact 2,048-slot open-addressed position set instead of sorting 1,021
 `u32` values. Hash collisions probe onward and compare the original four bytes,

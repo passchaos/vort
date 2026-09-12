@@ -4234,6 +4234,21 @@ coverage.
   builder at about 1.35%, with the former `initFromStats` symbol below the 0.15%
   report threshold. Final validation passed 1,502 tests, all 83 compile steps,
   both differential suites, and the incremental encode gate.
+  Dense DEFLATE leaf ordering now counts buckets during the existing frequency
+  scan and writes directly into the final index array. Exact stable buckets
+  cover frequencies 1--4; a full `(weight, serial)` comparison orders the
+  remaining tail, while generic and dense-Zstd construction stay unchanged.
+  The deterministic 64 KiB binary histogram places 258 of 263 active symbols
+  in those four buckets and only five in the tail, so the old logarithmic
+  high-frequency buckets never invoked a multi-element sort on the target. A
+  128-case full-order oracle plus the existing 64-case package-merge oracle
+  pins exact tie order and code lengths. Independently cached CPU-8 builds
+  improved one million real-histogram builders by `1.4357x` median (21/21),
+  then fifteen longer encode pairs improved binary raw/zlib/gzip `.fastest` by
+  `1.0107x` / `1.0116x` / `1.0068x` with unchanged 2,844/2,850/2,862-byte
+  frames; source and default controls remained neutral. Final validation passed
+  1,504 tests, all 83 compile steps, both differential suites, and the
+  incremental encode gate.
   The stored fast-path classifier now uses an exact 2,048-slot open-addressed
   position set to count duplicate four-byte windows instead of sorting 1,021
   words. Collisions probe and compare original bytes, and a 256-case randomized/

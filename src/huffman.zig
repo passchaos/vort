@@ -997,7 +997,7 @@ pub noinline fn treeCodeLengthsDenseDeflate(
     active: usize,
 ) linksection(deflate_dense_text_section) [286]u4 {
     std.debug.assert(active >= 240 and active <= freqs.len);
-    return unboundedDenseCodeLengthsWithSpreadPolicy(286, freqs, 15, active, false) orelse
+    return unboundedDenseCodeLengthsWithSpreadPolicy(286, freqs, 15, active, false, true) orelse
         backrefPackageMergeCodeLengths(286, freqs, 15, active);
 }
 
@@ -1064,7 +1064,7 @@ noinline fn unboundedDenseCodeLengths(
     max_bits: u4,
     active: usize,
 ) linksection(zstd_dense_text_section) ?[n]u4 {
-    return unboundedDenseCodeLengthsWithSpreadPolicy(n, freqs, max_bits, active, true);
+    return unboundedDenseCodeLengthsWithSpreadPolicy(n, freqs, max_bits, active, true, false);
 }
 
 fn unboundedDenseCodeLengthsWithSpreadPolicy(
@@ -1073,6 +1073,7 @@ fn unboundedDenseCodeLengthsWithSpreadPolicy(
     max_bits: u4,
     active: usize,
     comptime reject_wide_spread: bool,
+    comptime deflate_leaf_order: bool,
 ) ?[n]u4 {
     const invalid = std.math.maxInt(u16);
     const Node = struct {
@@ -1097,13 +1098,17 @@ fn unboundedDenseCodeLengthsWithSpreadPolicy(
     var node_len: usize = 0;
     var min_frequency: u32 = std.math.maxInt(u32);
     var max_frequency: u32 = 0;
+    var deflate_leaf_counts: [dense_deflate_leaf_bucket_count]u16 = if (deflate_leaf_order) @splat(0) else undefined;
     for (freqs.*, 0..) |frequency, symbol| {
         if (frequency == 0) continue;
         min_frequency = @min(min_frequency, frequency);
         max_frequency = @max(max_frequency, frequency);
         const index: u16 = @intCast(node_len);
         nodes[node_len] = .{ .weight = frequency, .symbol = @intCast(symbol), .serial = index };
-        leaves[node_len] = index;
+        if (deflate_leaf_order)
+            deflate_leaf_counts[denseDeflateLeafFrequencyBucket(frequency)] += 1
+        else
+            leaves[node_len] = index;
         node_len += 1;
     }
     std.debug.assert(node_len == active);
@@ -1112,7 +1117,11 @@ fn unboundedDenseCodeLengthsWithSpreadPolicy(
     // fallback does not pay for a failed full-tree probe. The tree depth check
     // below remains authoritative for every admitted distribution.
     if (reject_wide_spread and @as(u64, max_frequency) > @as(u64, min_frequency) * 16) return null;
-    bucketSortNodeIndexes(n, leaves[0..active], nodes[0..active], Less{ .nodes = nodes[0..active] }, Less.less);
+    const less = Less{ .nodes = nodes[0..active] };
+    if (deflate_leaf_order)
+        orderDenseDeflateNodeIndexes(leaves[0..active], nodes[0..active], &deflate_leaf_counts, less, Less.less)
+    else
+        bucketSortNodeIndexes(n, leaves[0..active], nodes[0..active], less, Less.less);
 
     var leaf_i: usize = 0;
     var parent_i: usize = active;
@@ -1363,6 +1372,47 @@ fn backrefPackageMergeCodeLengthsWithRecovery(
 
 const leaf_exact_count_cutoff = 166;
 const leaf_bucket_count = 192;
+// Dense high-diversity DEFLATE blocks overwhelmingly use leaf frequencies
+// 1--4. Keep those stable buckets exact and comparison-sort the small tail;
+// scanning the generic 166-entry exact range costs more than sorting that tail.
+const dense_deflate_leaf_bucket_count = 6;
+
+fn denseDeflateLeafFrequencyBucket(weight: u64) u8 {
+    std.debug.assert(weight != 0 and weight <= std.math.maxInt(u32));
+    return @intCast(@min(weight, dense_deflate_leaf_bucket_count - 1));
+}
+
+/// Order the dense DEFLATE leaves directly from their creation-order node
+/// array. Frequencies 1--4 retain exact stable buckets; the remaining
+/// tail receives one full `(weight, serial)` sort. This is equivalent to the
+/// generic logarithmic tail buckets while avoiding an input-index scan, an
+/// intermediate ordered array, and the unused generic bucket range on this
+/// isolated path.
+fn orderDenseDeflateNodeIndexes(
+    indexes: []u16,
+    nodes: anytype,
+    counts: *const [dense_deflate_leaf_bucket_count]u16,
+    context: anytype,
+    comptime lessThanFn: fn (@TypeOf(context), u16, u16) bool,
+) void {
+    std.debug.assert(indexes.len == nodes.len);
+    var offsets: [dense_deflate_leaf_bucket_count]u16 = undefined;
+    var next: u16 = 0;
+    for (counts.*, 0..) |count, bucket| {
+        offsets[bucket] = next;
+        next += count;
+    }
+    std.debug.assert(next == indexes.len);
+    const tail_start = offsets[dense_deflate_leaf_bucket_count - 1];
+
+    for (nodes, 0..) |node, index| {
+        const bucket = denseDeflateLeafFrequencyBucket(node.weight);
+        indexes[offsets[bucket]] = @intCast(index);
+        offsets[bucket] += 1;
+    }
+    if (indexes.len - tail_start > 1)
+        std.mem.sort(u16, indexes[tail_start..], context, lessThanFn);
+}
 
 fn leafFrequencyBucket(weight: u64) u8 {
     std.debug.assert(weight != 0 and weight <= std.math.maxInt(u32));
@@ -2352,7 +2402,7 @@ test "dense Deflate unbounded tree matches package-merge cost" {
         const reference = backrefPackageMergeCodeLengths(freqs.len, &freqs, 15, active);
         const production = treeCodeLengthsDenseDeflate(&freqs, active);
         try std.testing.expectEqual(reference, production);
-        if (unboundedDenseCodeLengthsWithSpreadPolicy(freqs.len, &freqs, 15, active, false)) |fast| {
+        if (unboundedDenseCodeLengthsWithSpreadPolicy(freqs.len, &freqs, 15, active, false, true)) |fast| {
             try std.testing.expectEqual(
                 codeLengthCost(freqs.len, &freqs, &reference),
                 codeLengthCost(freqs.len, &freqs, &fast),
@@ -2360,6 +2410,55 @@ test "dense Deflate unbounded tree matches package-merge cost" {
             try std.testing.expectEqual(reference, fast);
             try std.testing.expect(kraftCost(freqs.len, &fast, 15) <= (@as(usize, 1) << 15));
         }
+    }
+}
+
+test "dense Deflate leaf ordering matches generic total order" {
+    const Node = struct {
+        weight: u64,
+        serial: u16,
+    };
+    const Less = struct {
+        nodes: []const Node,
+
+        fn less(context: @This(), lhs: u16, rhs: u16) bool {
+            const left = context.nodes[lhs];
+            const right = context.nodes[rhs];
+            return left.weight < right.weight or
+                (left.weight == right.weight and left.serial < right.serial);
+        }
+    };
+
+    var state: u32 = 0x1f83_d9ab;
+    var nodes: [286]Node = undefined;
+    var production: [286]u16 = undefined;
+    var reference: [286]u16 = undefined;
+    for (0..128) |seed| {
+        const active = 240 + seed % 47;
+        var counts: [dense_deflate_leaf_bucket_count]u16 = @splat(0);
+        for (nodes[0..active], 0..) |*node, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const weight: u32 = switch (seed % 4) {
+                0 => 1 + (state % 4),
+                1 => 160 + (state % 16),
+                2 => 1 + (state >> 20),
+                else => if (index < 258) 1 + @as(u32, @intCast(index % 4)) else 166 + (state % 4096),
+            };
+            node.* = .{ .weight = weight, .serial = @intCast(index) };
+            production[index] = @intCast(index);
+            reference[index] = @intCast(index);
+            counts[denseDeflateLeafFrequencyBucket(weight)] += 1;
+        }
+        const less = Less{ .nodes = nodes[0..active] };
+        orderDenseDeflateNodeIndexes(
+            production[0..active],
+            nodes[0..active],
+            &counts,
+            less,
+            Less.less,
+        );
+        std.mem.sort(u16, reference[0..active], less, Less.less);
+        try std.testing.expectEqualSlices(u16, reference[0..active], production[0..active]);
     }
 }
 
@@ -2446,7 +2545,7 @@ test "dense known-active fast paths match comparison sort" {
         symbol.* = @intCast(index);
         skewed[index] = if (index < 96) 1 else @as(u32, 1) << @intCast(@min(index - 96, 30));
     }
-    try std.testing.expect(unboundedDenseCodeLengthsWithSpreadPolicy(skewed.len, &skewed, 11, active_skewed.len, false) == null);
+    try std.testing.expect(unboundedDenseCodeLengthsWithSpreadPolicy(skewed.len, &skewed, 11, active_skewed.len, false, false) == null);
     try std.testing.expectEqual(
         backrefPackageMergeCodeLengths(skewed.len, &skewed, 11, active_skewed.len),
         treeCodeLengthsKnownActive(skewed.len, &skewed, 11, &active_skewed),
