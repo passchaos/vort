@@ -64,16 +64,17 @@ pub noinline fn planReuse(scratch: *Scratch, allocator: std.mem.Allocator, input
             scratch.prev.items[position] = empty;
             continue;
         }
-        const hash = hash4(input, position);
+        const anchor = std.mem.readInt(u32, input[position..][0..4], .little);
+        const hash = hashWord(anchor);
         const first_candidate = scratch.head[hash];
         scratch.prev.items[position] = first_candidate;
         scratch.head[hash] = @intCast(position);
-        const indexed_match = firstIndexedMatch(scratch, input, position, first_candidate);
+        const indexed_match = firstIndexedMatch(scratch, input, position, first_candidate, anchor);
         if (indexed_match) |match|
             extendMatch(states, occupied, position, state, match);
         const indexed_rep0 = if (indexed_match) |match| match.distance == state.rep0 else false;
         if (state.rep0 <= position and !indexed_rep0) {
-            const length = matchAtDistance(input, position, state.rep0);
+            const length = matchAtDistance(input, position, state.rep0, anchor);
             if (length != 0) extendMatch(states, occupied, position, state, .{
                 .length = @intCast(length),
                 .distance = state.rep0,
@@ -102,7 +103,7 @@ pub noinline fn planReuse(scratch: *Scratch, allocator: std.mem.Allocator, input
     return stats;
 }
 
-fn firstIndexedMatch(scratch: *const Scratch, input: []const u8, position: usize, first_candidate: u16) ?lz77.Token.Match {
+fn firstIndexedMatch(scratch: *const Scratch, input: []const u8, position: usize, first_candidate: u16, anchor: u32) ?lz77.Token.Match {
     var candidate_i = first_candidate;
     var checked: usize = 0;
     const maximum = @min(lz77.max_match_len, input.len - position);
@@ -111,10 +112,11 @@ fn firstIndexedMatch(scratch: *const Scratch, input: []const u8, position: usize
         const candidate: usize = candidate_i;
         const distance = position - candidate;
         if (distance == 0 or distance > window_len) break;
-        if (input[candidate + 3] == input[position + 3]) {
-            const length = matchLength(input, candidate, position, maximum);
-            if (length >= min_match) return .{ .length = @intCast(length), .distance = @intCast(distance) };
-        }
+        if (std.mem.readInt(u32, input[candidate..][0..4], .little) == anchor)
+            return .{
+                .length = @intCast(matchLengthAfterPrefix(input, candidate, position, maximum, min_match)),
+                .distance = @intCast(distance),
+            };
         candidate_i = scratch.prev.items[candidate];
     }
     return null;
@@ -137,16 +139,15 @@ fn insertState(states: []State, occupied: []u8, position: usize, candidate: Stat
     }
 }
 
-fn matchAtDistance(input: []const u8, position: usize, distance: usize) usize {
+fn matchAtDistance(input: []const u8, position: usize, distance: usize, anchor: u32) usize {
     if (distance == 0 or distance > position) return 0;
     const candidate = position - distance;
-    if (std.mem.readInt(u32, input[candidate..][0..4], .little) !=
-        std.mem.readInt(u32, input[position..][0..4], .little)) return 0;
-    return matchLength(input, candidate, position, @min(lz77.max_match_len, input.len - position));
+    if (std.mem.readInt(u32, input[candidate..][0..4], .little) != anchor) return 0;
+    return matchLengthAfterPrefix(input, candidate, position, @min(lz77.max_match_len, input.len - position), min_match);
 }
 
-fn matchLength(input: []const u8, a: usize, b: usize, maximum: usize) usize {
-    var len: usize = 0;
+fn matchLengthAfterPrefix(input: []const u8, a: usize, b: usize, maximum: usize, prefix_len: usize) usize {
+    var len = prefix_len;
     while (len + 32 <= maximum) : (len += 32) {
         const left: @Vector(32, u8) = input[a + len ..][0..32].*;
         const right: @Vector(32, u8) = input[b + len ..][0..32].*;
@@ -164,6 +165,10 @@ fn matchLength(input: []const u8, a: usize, b: usize, maximum: usize) usize {
 
 fn hash4(input: []const u8, position: usize) usize {
     const word = std.mem.readInt(u32, input[position..][0..4], .little);
+    return hashWord(word);
+}
+
+inline fn hashWord(word: u32) usize {
     return ((word *% 2654435761) >> 17) & (head_size - 1);
 }
 
@@ -220,6 +225,24 @@ test "single-state fused index matches prebuilt predecessor chains" {
     _ = try planReuse(&scratch, std.testing.allocator, &input);
     try std.testing.expectEqualSlices(u16, &expected_head, &scratch.head);
     try std.testing.expectEqualSlices(u16, expected_prev, scratch.prev.items);
+}
+
+test "single-state prefixed match extension preserves every boundary" {
+    var input: [768]u8 = undefined;
+    var random_state: u32 = 0x9e37_79b9;
+    for (&input) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    const candidate: usize = 17;
+    const position: usize = 320;
+    for (min_match..259) |expected| {
+        @memcpy(input[position..][0..expected], input[candidate..][0..expected]);
+        if (position + expected < input.len)
+            input[position + expected] = input[candidate + expected] ^ 1;
+        const maximum = @min(expected + 1, input.len - position);
+        try std.testing.expectEqual(expected, matchLengthAfterPrefix(&input, candidate, position, maximum, min_match));
+    }
 }
 
 test "single-state repeat beam releases every allocation failure" {

@@ -1609,6 +1609,16 @@ weakest median `0.9988x`. A 16,384-bucket table improved JSON by only
 was also neutral on JSON (`1.0005x`) and slightly negative on text
 (`0.9950x`). The 4,096-bucket stack layout therefore remains: the wider tables
 do not clear the 1% retention bar and consume 8--32 KiB more scratch.
+The retained 4,096-bucket parser now loads each current four-byte anchor once,
+uses the complete anchor to reject hash collisions, and starts both indexed and
+recent-offset match extension after those four proven bytes. This mirrors the
+prefix-validation contract in upstream zstd's fast matcher and removes the
+previous fourth-byte-only collision probe plus redundant prefix comparisons. A
+boundary oracle covers every match length from 4 through 258. Forty-one
+alternating fixed-CPU-8 JSON level-1 pairs improve the median by `1.0320x`
+(40/41 wins); eight target/control medians reach `1.0045x` geometrically with a
+`0.9940x` floor. Text level 1 improves by `1.0218x`, all frame bytes/checksums
+are unchanged, and the isolated parser body shrinks from `0xab4` to `0xa70`.
 
 A follow-up attempted to extend level 1's audited double-fast speed tradeoff
 from wide alphabets to extremely compressible narrow/JSON blocks. A 44:1
