@@ -11005,6 +11005,17 @@ coverage.
   same arithmetic change to the adjacent FSE/FSE/RLE loop was rejected because
   its full-matrix `rle64k` control fell to `0.9735x`; that loop retains checked
   additions.
+  Removing the equivalent checked addition from shared FSE state transitions
+  was rejected separately. Inlining three direct updates enlarged the all-FSE/
+  Huffman helper; keeping one shared helper shortened it but shifted its entry
+  by 64 bytes. Thirty-one fixed-CPU-8 core pairs still improved `large_json` by
+  `1.0325x` and `binary_mixed` by `1.0055x`, but reduced `huffman80k` to
+  `0.9756x`. The shared transition keeps its explicit overflow check.
+  Mirroring upstream zstd's x86-64 `.p2align 6/5/3` sequence-loop alignment was
+  rejected on the retained Zig loop. It grew the helper by 112 bytes and moved
+  its entry by 16 bytes; 31 fixed-CPU-8 core pairs improved `large_json` by
+  only `1.0064x` while reducing `huffman80k`/`binary_mixed` to `0.9540x`/
+  `0.9874x`. LLVM's existing layout remains better for these mixed workloads.
   Removing the all-FSE/Huffman helper's duplicate `literal_offset` cursor was
   rejected at the focused gate. `HuffmanLiteralDecodeState.decoded` already
   advances by each copied run and is equal by construction, but using that
