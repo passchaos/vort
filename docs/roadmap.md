@@ -253,6 +253,19 @@ increasing the persistent index by about 124 KiB. Restricting the comparison to
 buckets of at least 8 or 16 entries did not recover the hit-heavy controls:
 seven-pair medians were `0.8620x`/`0.8578x` for dictionary. The extra array and
 both thresholds were removed.
+Reconstructing that exact four-byte key from each indexed base word avoided the
+extra array and is correctness-safe only after the canonical-LUT change. It was
+still rejected: eleven fixed-CPU-8 pairs put dictionary at `0.8764x` median
+despite mixed improving to `1.1931x`; repeatedly applying the case transform to
+rebuild the key costs more than the rejected collision work on hit-heavy rows.
+A higher-level attempt reversed the shared-cache planning order so the
+dictionary-only greedy walk populated matches before the mixed planner visited
+LZ literal runs, while keeping wire encoding and arbitration order unchanged.
+The reverse-order command oracle matched both plans exactly. Fifteen fixed-CPU-8
+independent-binary pairs showed only a small mixed signal in the first layout
+(`1.0103x`) with a no-match control at `0.9844x`; isolating the selector made
+the broader matrix worse, including mixed `0.9671x`, dictionary `0.9456x`, and
+JSON/source `0.9147x`/`0.9154x`. The reorder and isolation were removed.
 
 ## Milestone 0: repository and validation spine
 
