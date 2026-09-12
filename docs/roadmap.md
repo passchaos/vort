@@ -9938,6 +9938,17 @@ coverage.
   extra helper and dispatch were removed completely; future level-1 early-exit
   work must avoid adding another encoder body or otherwise prove stable whole-
   binary layout.
+  Moving that level-1 proof behind the existing single-state helper was also
+  rejected. This avoided a new top-level dispatch and kept the ordinary helper
+  as a small entry; the large implementation lived in a final dedicated text
+  section. The locked JSON output remained 643 bytes, focused old-selector
+  equivalence covered the 26,625-byte beam-first counterexample and prefix-tail
+  text, and exhaustive allocation-failure injection passed. Against a freshly
+  rebuilt HEAD binary, 31 fixed-CPU-8 pairs improved JSON level 1 by `1.6702x`
+  with 31/31 wins, but JSON level 3 fell to `0.9616x`, the level-1 tradeoff
+  corpus to `0.9838x`, and text level 1 to `0.9926x`. The extra implementation
+  was removed; a viable level-1 early return must not perturb the existing
+  encoder/entropy section placement.
   Replacing the single-state parser's input-sized occupancy bitmap with a
   sliding `State.cost` infinity sentinel was rejected as an end-to-end loss.
   Every position remains reachable through a literal transition and no match
