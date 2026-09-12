@@ -53,12 +53,13 @@ def main() -> int:
     assert int(json_rows[1]["vort_bytes"]) <= 13_688, json_rows
     assert int(json_rows[3]["vort_bytes"]) <= 13_688, json_rows
     assert int(json_rows[9]["vort_bytes"]) <= 13_506, json_rows
-    # Level 1 uses the speed-oriented single-state repeat beam. Its audited
-    # three-byte JSON tradeoff remains substantially smaller than libzstd's
-    # level-1 frame, while levels 3+ retain the two-state 640-byte result.
+    # Levels 1 and 3 use bounded speed-oriented single-state repeat-beam
+    # policies. Their audited three-byte JSON tradeoffs remain substantially
+    # smaller than the corresponding libzstd frames; levels 9+ retain the
+    # two-state 640-byte result.
     assert int(json_rows[1]["vort_bytes"]) <= 643, json_rows
     assert int(json_rows[1]["vort_bytes"]) < int(json_rows[1]["reference_bytes"]), json_rows
-    assert int(json_rows[3]["vort_bytes"]) <= 640, json_rows
+    assert int(json_rows[3]["vort_bytes"]) <= 643, json_rows
     # The level-9 repeat-aware beam closes the structured JSON gap to one byte
     # over libzstd 1.5.5 on this locked corpus. Keep lower-level ceilings
     # independent because they intentionally omit that ratio-oriented parser.

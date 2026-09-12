@@ -9854,8 +9854,9 @@ coverage.
   with 12/12 wins; an eight-run complete matrix measures `1.64x`, preserves all
   wires/checksums, and leaves levels 3/9 within 0.5%. The encode gate now keeps
   all three binary levels within 25% latency of one another.
-  Level 1 now uses an isolated one-state repeat beam, while levels 2+ retain the
-  two-state ratio parser. The new module keeps one recent-offset history per
+  Level 1 now always uses an isolated one-state repeat beam, while levels 2+
+  retain the two-state ratio parser as their default/fallback. The new module
+  keeps one recent-offset history per
   byte and uses a dedicated text section, restoring the original two-state
   function's exact machine-code size. Focused text/JSON/binary stages improve
   by about `1.13x`/`1.51x`/`1.54x`; only JSON changes size, from 633 to 636
@@ -9878,6 +9879,23 @@ coverage.
   (29/31 wins); six primary target/control medians reach `1.0045x`
   geometrically with a `0.9964x` floor, while multiblock level 3/9 controls
   remain at `1.0023x`/`1.0007x`. All frame bytes and checksums are unchanged.
+  Level 3 now reuses that isolated one-state parser behind a narrower speed
+  policy instead of applying it to every 64-state block. Only low-alphabet,
+  non-prefix-tail blocks above 32 KiB enter the probe; the complete one-state
+  wire must lie between 1/128 and 1/32 of the source and beat the independently
+  encoded double-fast block by at least 1/32. Everything else falls back to the
+  original two-state parser and complete candidate arbitration after releasing
+  probe scratch. A 128-case mixed/noise/copied-tail audit plus 24 shorter JSON
+  streams retain the two-state result byte-for-byte. Across 24 eligible large
+  JSON streams, 19 select the speed path; aggregate output grows 49 bytes and
+  the worst case grows four bytes. On the locked 32,797-byte JSON input the
+  frame moves from 640 to 643 bytes, still 269 bytes smaller than libzstd 1.5.5
+  level 3. Thirty-one independent fixed-CPU-8 pairs improve end-to-end median
+  throughput by `3.2317x` with 31/31 wins; a six-row 15-pair target/control
+  matrix has a `1.2152x` row-median geometric mean and `0.9920x` floor. The
+  isolated parser itself is `1.4875x` faster than two-state at the median.
+  One-shot, reusable, caller-buffer, round-trip, and exhaustive allocation-
+  failure tests cover the selected path.
   Wider single-state hash tables were rejected after a same-layout sweep. An
   8,192-bucket table improved JSON level 1 by only `1.0085x` with an eight-row
   `1.0023x` median geomean and `0.9988x` floor; 16,384 buckets improved JSON by

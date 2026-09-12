@@ -1613,8 +1613,9 @@ arbitration. Twelve fixed-CPU-8 binary level-1 pairs improve by `1.71x` with
 checksums unchanged, and leaves levels 3/9 within 0.5% of baseline. The gate now
 requires all three binary levels to remain within 25% latency of one another.
 
-Level 1 now uses a speed-oriented one-state repeat beam, while levels 2+ retain
-the established two-state ratio parser. The isolated module owns the same
+Level 1 now always uses a speed-oriented one-state repeat beam, while levels 2+
+retain the established two-state ratio parser as their default/fallback. The
+isolated module owns the same
 4,096-bucket compact index and one state per input position; placing it in a
 dedicated text section restores the original two-state function's exact machine
 code size. On the primary text/JSON/binary stage rows, the one-state parser is
@@ -1642,6 +1643,24 @@ the locked JSON level-1 median by another `1.0223x` (29/31 wins); six primary
 target/control medians reach `1.0045x` geometrically with a `0.9964x` floor,
 and two additional multiblock level-3/9 controls remain at `1.0023x`/`1.0007x`.
 All compared frame bytes and checksums are unchanged.
+Level 3 now has a separately bounded single-state fast path for low-alphabet
+blocks larger than 32 KiB. It is eligible only when there is no prefix-to-tail
+copy shortcut, its complete block is between 1/128 and 1/32 of the source, and
+it beats the independently encoded double-fast block by at least 1/32; all
+other inputs retain the two-state parser and complete arbitration. This follows
+the latency intent of upstream zstd's level-3 double-fast strategy while still
+requiring stronger Vort-specific ratio evidence before accepting one state. On
+the locked 32,797-byte JSON row, 31 independent fixed-CPU-8 interleaved pairs
+improve median end-to-end encode throughput by `3.2317x` with 31/31 wins. The
+frame grows from 640 to 643 bytes (`+0.47%`) but remains 269 bytes (`29.5%`)
+smaller than libzstd 1.5.5 level 3's 912-byte frame. A six-row, 15-pair control
+matrix has a `0.9920x` weakest median and `1.2152x` row-median geometric mean.
+The isolated one-state parser is `1.4875x` faster than the two-state parser at
+the median. A 128-case mixed/noise/copied-tail audit and 24 shorter JSON streams
+retain the two-state result exactly; among 24 eligible large JSON streams, 19
+select the fast path, adding 49 bytes cumulatively with a four-byte worst case.
+Public one-shot, reusable, caller-buffer, round-trip, and allocation-failure
+tests cover the selected path.
 Wider single-state hash tables were measured and rejected. With the same
 compact heap-backed index layout, 8,192 buckets improved JSON level 1 by only
 `1.0085x`; the eight-row row-median geometric mean was `1.0023x` and the

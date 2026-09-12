@@ -230,8 +230,8 @@ pub const NativeFrameOptions = struct {
     /// dictionary-only match emitters remain available when callers provide a
     /// dictionary.
     match_search_budget: usize = mixed_match_path_search_budget,
-    /// Enable the bounded recent-offset beam parser used by ratio-oriented
-    /// one-shot levels. Incremental and latency-oriented callers leave it off.
+    /// Enable the bounded recent-offset beam parser used by selected one-shot
+    /// levels. Incremental and explicitly latency-oriented callers leave it off.
     rep_beam_search: bool = false,
 };
 
@@ -5969,9 +5969,12 @@ fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeF
         // Upstream zstd's fast, double-fast, and greedy strategies check recent
         // offsets directly in their match loops. Enable Vort's bounded repeat
         // beam at levels 1-3 as well as ratio levels; level 1 uses its isolated
-        // one-state speed variant while the other levels retain two states.
-        // Complete block/frame arbitration still rejects it whenever the
-        // repeat-aware stream is not smaller.
+        // one-state variant. Level 3 may accept that fast candidate only behind
+        // a conservative double-fast margin, while its fallback and the other
+        // levels retain two states.
+        // Outside that bounded speed-policy shortcut, complete block/frame
+        // arbitration still rejects it whenever the repeat-aware stream is not
+        // smaller.
         native_options.rep_beam_search = (level >= 1 and level <= 3) or level >= 9;
     }
     return native_options;
@@ -10802,11 +10805,30 @@ inline fn emitNativeMatchCompressedBlockSerialWithBeamDispatch(
 ) Error!bool {
     if (match_search_budget == 0) return false;
     if (match_search_budget < multi_duplicate_min_search_budget)
-        return try emitNativeMatchCompressedBlockSerialWithBeamLevelOne(has_precomputed_rep_beam, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
+        return try emitNativeMatchCompressedBlockSerialWithSingleStateBeam(has_precomputed_rep_beam, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
+    if (!has_precomputed_rep_beam and enable_rep_beam and shouldTryLevelThreeSingleBeam(block, match_search_budget))
+        return try emitNativeMatchCompressedBlockSerialWithFastLevelThree(allocator, out, block, last, match_search_budget, reusable_rep_beam, mixed_dominated, large_sequence_scratch);
     return try emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
 }
 
-noinline fn emitNativeMatchCompressedBlockSerialWithBeamLevelOne(
+inline fn shouldTryLevelThreeSingleBeam(block: []const u8, match_search_budget: usize) bool {
+    return match_search_budget == fast_wide_match_search_budget and
+        block.len > 32 * 1024 and
+        preferSerialMixedSearch(block) and
+        findPrefixTailDuplicateMatch(block) == null;
+}
+
+inline fn acceptLevelThreeSingleBeam(single_len: usize, double_fast_len: usize, block_len: usize) bool {
+    // Extremely small candidates leave enough absolute byte savings for the
+    // two-state ratio parser to matter; keep it below the existing 1/128
+    // decisive-history boundary. The moderate 1/32 band is the speed-policy
+    // region where a clear win over double-fast can accept one-state output.
+    return single_len > block_len / 128 and
+        single_len <= block_len / 32 and
+        single_len <= double_fast_len - double_fast_len / 32;
+}
+
+noinline fn emitNativeMatchCompressedBlockSerialWithSingleStateBeam(
     comptime has_precomputed_rep_beam: bool,
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -10833,6 +10855,50 @@ noinline fn emitNativeMatchCompressedBlockSerialWithBeamLevelOne(
     beam_scratch.reversed.clearRetainingCapacity();
     try beam_scratch.reversed.appendSlice(allocator, single_scratch.reversed.items);
     return try emitNativeMatchCompressedBlockSerialWithBeamImpl(true, allocator, out, block, last, match_search_budget, true, beam_scratch, mixed_dominated, single_stats, large_sequence_scratch);
+}
+
+noinline fn emitNativeMatchCompressedBlockSerialWithFastLevelThree(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    match_search_budget: usize,
+    reusable_rep_beam: ?*lz77.RepBeamScratch,
+    mixed_dominated: ?*bool,
+    large_sequence_scratch: ?*LargeSequenceScratch,
+) linksection(fast_encode_helper_text_section) Error!bool {
+    const output_start = out.items.len;
+    errdefer out.items.len = output_start;
+    {
+        var single_scratch: single_beam_match.Scratch = .{};
+        defer single_scratch.deinit(allocator);
+        const single_stats = single_beam_match.planReuse(&single_scratch, allocator, block) catch |err| switch (err) {
+            error.InvalidBlockPlan => return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, allocator, out, block, last, match_search_budget, true, reusable_rep_beam, mixed_dominated, undefined, large_sequence_scratch),
+            else => return err,
+        };
+        var local_large_sequence_scratch: LargeSequenceScratch = .{};
+        defer if (large_sequence_scratch == null) local_large_sequence_scratch.deinit(allocator);
+        const sequence_scratch = large_sequence_scratch orelse &local_large_sequence_scratch;
+        var single: std.ArrayList(u8) = .empty;
+        defer single.deinit(allocator);
+        const single_ok = try emitHashTokenSequenceBlockReuse(allocator, &single, block, last, single_scratch.reversed.items, single_stats, sequence_scratch);
+
+        var double_fast_tokens: std.ArrayList(lz77.Token) = .empty;
+        defer double_fast_tokens.deinit(allocator);
+        const double_fast_stats = double_fast_match.planReuse(&double_fast_tokens, allocator, block, zstdHashParserOptions(block.len)) catch |err| switch (err) {
+            error.InvalidBlockPlan => return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, allocator, out, block, last, match_search_budget, true, reusable_rep_beam, mixed_dominated, undefined, sequence_scratch),
+            else => return err,
+        };
+        var double_fast: std.ArrayList(u8) = .empty;
+        defer double_fast.deinit(allocator);
+        const double_fast_ok = try emitHashTokenSequenceBlockReuse(allocator, &double_fast, block, last, double_fast_tokens.items, double_fast_stats, sequence_scratch);
+        if (single_ok and double_fast_ok and acceptLevelThreeSingleBeam(single.items.len, double_fast.items.len, block.len)) {
+            if (mixed_dominated) |value| value.* = false;
+            try out.appendSlice(allocator, single.items);
+            return true;
+        }
+    }
+    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, allocator, out, block, last, match_search_budget, true, reusable_rep_beam, mixed_dominated, undefined, large_sequence_scratch);
 }
 
 fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
@@ -11065,6 +11131,23 @@ test "zstd decisive single lookup reuses the level one result" {
     try std.testing.expect(shouldQueryDecisiveSingleDuplicate(false, true, false));
     try std.testing.expect(!shouldQueryDecisiveSingleDuplicate(false, false, false));
     try std.testing.expect(!shouldQueryDecisiveSingleDuplicate(false, true, true));
+}
+
+test "zstd level three single-state beam policy is bounded" {
+    const short = "structured JSON 0123456789" ** 1024;
+    var long: [32 * 1024 + 1]u8 = undefined;
+    for (&long, 0..) |*byte, index| byte.* = @intCast('a' + index % 23);
+    long[long.len - 1] = '!';
+    const repeated = "one repeated text line for a prefix-tail match\n" ** 1024;
+    try std.testing.expect(!shouldTryLevelThreeSingleBeam(short, fast_wide_match_search_budget));
+    try std.testing.expect(shouldTryLevelThreeSingleBeam(&long, fast_wide_match_search_budget));
+    try std.testing.expect(!shouldTryLevelThreeSingleBeam(&long, 32));
+    try std.testing.expect(!shouldTryLevelThreeSingleBeam(repeated, fast_wide_match_search_budget));
+    try std.testing.expect(acceptLevelThreeSingleBeam(636, 687, 32 * 1024));
+    try std.testing.expect(!acceptLevelThreeSingleBeam(190, 240, 32 * 1024));
+    try std.testing.expect(!acceptLevelThreeSingleBeam(355, 362, 16_389));
+    try std.testing.expect(!acceptLevelThreeSingleBeam(636, 650, 32 * 1024));
+    try std.testing.expect(!acceptLevelThreeSingleBeam(1025, 1200, 32 * 1024));
 }
 
 /// Candidate families evaluated by the native compressed-block selector.
@@ -22726,6 +22809,7 @@ test "zstd level three uses repeat-offset search on structured input" {
 
     const with_repcodes = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 3);
     defer std.testing.allocator.free(with_repcodes);
+    try std.testing.expectEqual(@as(usize, 643), with_repcodes.len);
     var without_options = try nativeFrameOptionsForLevel(3, .{});
     without_options.rep_beam_search = false;
     const without_repcodes = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, without_options);
@@ -22735,6 +22819,15 @@ test "zstd level three uses repeat-offset search on structured input" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, with_repcodes);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
+
+    var reusable = LevelFrameEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    try std.testing.expectEqualSlices(u8, with_repcodes, try reusable.encodeScratch(payload.items, 3));
+    const bound = try encodedFrameBoundWithLevel(payload.items.len, 3);
+    const into = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(into);
+    const written = try encodeFrameIntoSliceWithLevel(std.testing.allocator, payload.items, 3, into);
+    try std.testing.expectEqualSlices(u8, with_repcodes, into[0..written]);
 }
 
 test "zstd decisive rep beam safely bypasses ordinary optimal parser" {
@@ -23520,6 +23613,216 @@ test "zstd level one single-state beam audits generated block sizes" {
     try std.testing.expectEqual(@as(usize, 3), json_worst_extra);
 }
 
+test "zstd level three single-state beam audits generated block sizes" {
+    var changed: usize = 0;
+    var larger: usize = 0;
+    var smaller: usize = 0;
+    var total_single: usize = 0;
+    var total_double: usize = 0;
+    var worst_extra: usize = 0;
+    var policy_selected: usize = 0;
+    for (0..128) |seed| {
+        const length = 32 * 1024 + 1 + (seed % 7) * 4 * 1024;
+        const payload = try std.testing.allocator.alloc(u8, length);
+        defer std.testing.allocator.free(payload);
+        var state: u32 = @truncate(0x9e37_79b9 +% seed *% 0x0100_0193);
+        for (payload, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 7) {
+                0 => @truncate(state >> 24),
+                1 => @intCast('a' + (index + seed) % 23),
+                2 => if (index % 64 < 52) @intCast('a' + (index / 7 + seed) % 19) else @truncate(state >> 24),
+                3 => @truncate((index * 37 + (index / 11) * 17 + seed) & 0xff),
+                4 => @intCast('0' + (index / 13 + seed) % 10),
+                5 => if (index % 96 < 80) @intCast('A' + (index / 17 + seed) % 26) else @truncate(state >> 16),
+                6 => @truncate((index / 5) ^ (index * 29) ^ seed),
+                else => @truncate((state >> 16) ^ (index / 31)),
+            };
+        }
+        if (seed % 3 == 0) {
+            const copy_len = payload.len / 4;
+            @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+        }
+
+        var single: std.ArrayList(u8) = .empty;
+        defer single.deinit(std.testing.allocator);
+        const single_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+            std.testing.allocator,
+            &single,
+            payload,
+            true,
+            fast_wide_match_search_budget,
+            true,
+            null,
+            null,
+        );
+        var double: std.ArrayList(u8) = .empty;
+        defer double.deinit(std.testing.allocator);
+        const double_ok = try emitNativeMatchCompressedBlockSerialWithTwoStateBeamReference(
+            std.testing.allocator,
+            &double,
+            payload,
+            true,
+            fast_wide_match_search_budget,
+            null,
+        );
+        try std.testing.expectEqual(double_ok, single_ok);
+        const single_len = if (single_ok) single.items.len else payload.len + 3;
+        const double_len = if (double_ok) double.items.len else payload.len + 3;
+        changed += @intFromBool(single_len != double_len);
+        larger += @intFromBool(single_len > double_len);
+        smaller += @intFromBool(single_len < double_len);
+        total_single += single_len;
+        total_double += double_len;
+        worst_extra = @max(worst_extra, single_len -| double_len);
+        policy_selected += @intFromBool(!std.mem.eql(u8, single.items, double.items));
+    }
+    std.debug.print(
+        "level three single beam audit: changed={d} larger={d} smaller={d} total={d}/{d} worst_extra={d}\n",
+        .{ changed, larger, smaller, total_single, total_double, worst_extra },
+    );
+    try std.testing.expectEqual(@as(usize, 0), changed);
+    try std.testing.expectEqual(@as(usize, 0), larger);
+    try std.testing.expectEqual(@as(usize, 0), smaller);
+    try std.testing.expectEqual(@as(usize, 0), worst_extra);
+    try std.testing.expectEqual(total_double, total_single);
+    try std.testing.expectEqual(@as(usize, 0), policy_selected);
+
+    var json_changed: usize = 0;
+    var json_larger: usize = 0;
+    var json_total_single: usize = 0;
+    var json_total_double: usize = 0;
+    var json_worst_extra: usize = 0;
+    var rejected_larger_single: usize = 0;
+    for (0..24) |seed| {
+        var payload: std.ArrayList(u8) = .empty;
+        defer payload.deinit(std.testing.allocator);
+        const target_len = 16 * 1024 + seed * 613;
+        while (payload.items.len < target_len) {
+            var line: [160]u8 = undefined;
+            const formatted = try std.fmt.bufPrint(
+                &line,
+                "{{\"id\":{d},\"shard\":{d},\"service\":\"vort\",\"message\":\"level three single beam audit\"}}\n",
+                .{ payload.items.len / 64, seed % 7 },
+            );
+            try payload.appendSlice(std.testing.allocator, formatted);
+        }
+        var single: std.ArrayList(u8) = .empty;
+        defer single.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+            std.testing.allocator,
+            &single,
+            payload.items,
+            true,
+            fast_wide_match_search_budget,
+            true,
+            null,
+            null,
+        ));
+        var double: std.ArrayList(u8) = .empty;
+        defer double.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithTwoStateBeamReference(
+            std.testing.allocator,
+            &double,
+            payload.items,
+            true,
+            fast_wide_match_search_budget,
+            null,
+        ));
+        var raw_single_scratch: single_beam_match.Scratch = .{};
+        defer raw_single_scratch.deinit(std.testing.allocator);
+        const raw_single_stats = try single_beam_match.planReuse(
+            &raw_single_scratch,
+            std.testing.allocator,
+            payload.items,
+        );
+        var raw_single: std.ArrayList(u8) = .empty;
+        defer raw_single.deinit(std.testing.allocator);
+        try std.testing.expect(try emitHashTokenSequenceBlock(
+            std.testing.allocator,
+            &raw_single,
+            payload.items,
+            true,
+            raw_single_scratch.reversed.items,
+            raw_single_stats,
+        ));
+        json_changed += @intFromBool(single.items.len != double.items.len);
+        json_larger += @intFromBool(single.items.len > double.items.len);
+        json_total_single += single.items.len;
+        json_total_double += double.items.len;
+        json_worst_extra = @max(json_worst_extra, single.items.len -| double.items.len);
+        rejected_larger_single += @intFromBool(raw_single.items.len > double.items.len);
+    }
+    std.debug.print(
+        "level three single beam JSON audit: changed={d} larger={d} total={d}/{d} worst_extra={d}\n",
+        .{ json_changed, json_larger, json_total_single, json_total_double, json_worst_extra },
+    );
+    try std.testing.expectEqual(@as(usize, 0), json_changed);
+    try std.testing.expectEqual(@as(usize, 0), json_larger);
+    try std.testing.expectEqual(@as(usize, 0), json_worst_extra);
+    try std.testing.expectEqual(json_total_double, json_total_single);
+    try std.testing.expectEqual(@as(usize, 24), rejected_larger_single);
+
+    var large_selected: usize = 0;
+    var large_changed: usize = 0;
+    var large_larger: usize = 0;
+    var large_total_fast: usize = 0;
+    var large_total_double: usize = 0;
+    var large_worst_extra: usize = 0;
+    for (0..24) |seed| {
+        var payload: std.ArrayList(u8) = .empty;
+        defer payload.deinit(std.testing.allocator);
+        const target_len = 32 * 1024 + 1 + seed * 1201;
+        while (payload.items.len < target_len) {
+            var line: [160]u8 = undefined;
+            const formatted = try std.fmt.bufPrint(
+                &line,
+                "{{\"id\":{d},\"shard\":{d},\"service\":\"vort\",\"message\":\"large level three audit\"}}\n",
+                .{ payload.items.len / 64, seed % 7 },
+            );
+            try payload.appendSlice(std.testing.allocator, formatted);
+        }
+        var fast: std.ArrayList(u8) = .empty;
+        defer fast.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+            std.testing.allocator,
+            &fast,
+            payload.items,
+            true,
+            fast_wide_match_search_budget,
+            true,
+            null,
+            null,
+        ));
+        var double: std.ArrayList(u8) = .empty;
+        defer double.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithTwoStateBeamReference(
+            std.testing.allocator,
+            &double,
+            payload.items,
+            true,
+            fast_wide_match_search_budget,
+            null,
+        ));
+        large_selected += @intFromBool(!std.mem.eql(u8, fast.items, double.items));
+        large_changed += @intFromBool(fast.items.len != double.items.len);
+        large_larger += @intFromBool(fast.items.len > double.items.len);
+        large_total_fast += fast.items.len;
+        large_total_double += double.items.len;
+        large_worst_extra = @max(large_worst_extra, fast.items.len -| double.items.len);
+    }
+    std.debug.print(
+        "level three large single beam audit: selected={d} changed={d} larger={d} total={d}/{d} worst_extra={d}\n",
+        .{ large_selected, large_changed, large_larger, large_total_fast, large_total_double, large_worst_extra },
+    );
+    try std.testing.expectEqual(@as(usize, 19), large_selected);
+    try std.testing.expectEqual(@as(usize, 19), large_changed);
+    try std.testing.expectEqual(@as(usize, 19), large_larger);
+    try std.testing.expectEqual(@as(usize, 19_573), large_total_fast);
+    try std.testing.expectEqual(@as(usize, 19_524), large_total_double);
+    try std.testing.expectEqual(@as(usize, 4), large_worst_extra);
+}
+
 test "zstd level one bounded single-state chain preserves candidate bytes" {
     var changed: usize = 0;
     var total_fast: usize = 0;
@@ -23969,6 +24272,44 @@ test "zstd level three wide tradeoff rolls back every allocation failure" {
             };
             try std.testing.expect(result);
             try std.testing.expect(beam_stats == null);
+            try std.testing.expectEqualSlices(u8, "prefix", output.items[0.."prefix".len]);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
+}
+
+test "zstd level three single-state policy rolls back every allocation failure" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            var payload: std.ArrayList(u8) = .empty;
+            defer payload.deinit(allocator);
+            while (payload.items.len < 32 * 1024) {
+                var line: [128]u8 = undefined;
+                const index = payload.items.len / 64;
+                const formatted = try std.fmt.bufPrint(
+                    &line,
+                    "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n",
+                    .{index},
+                );
+                try payload.appendSlice(allocator, formatted);
+            }
+            var output: std.ArrayList(u8) = .empty;
+            defer output.deinit(allocator);
+            try output.appendSlice(allocator, "prefix");
+            const result = emitNativeMatchCompressedBlockSerialWithFastLevelThree(
+                allocator,
+                &output,
+                payload.items,
+                true,
+                fast_wide_match_search_budget,
+                null,
+                null,
+                null,
+            ) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix", output.items);
+                return err;
+            };
+            try std.testing.expect(result);
             try std.testing.expectEqualSlices(u8, "prefix", output.items[0.."prefix".len]);
         }
     };
