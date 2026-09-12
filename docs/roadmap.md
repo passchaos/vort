@@ -12361,3 +12361,19 @@ reuse, so production keeps the simpler independently owned plans.
   libzstd 1.6.0 as well as the system libzstd 1.5.5. The corpus gate records
   both the explicit path and actual `ZSTD_versionString`, and requires one
   stable version across all campaigns.
+  A q3-fast adaptive lazy-parser experiment was rejected despite materially
+  better compression. For 1,024--4,096-byte inputs it performed one-step lazy
+  lookahead only when the current match was three bytes; a specialized probe
+  proved the next position had a four-byte match without finding its complete
+  length. Token/stat oracles showed that probe was equivalent to the complete
+  lazy search for the selected policy, reusable-scratch tests passed, and the
+  fast JSON/source/log rows shrank from 92/130/113 bytes to 62/91/83 bytes
+  (libbrotli q3: 62/86/87). However, twenty-one alternating ReleaseFast pairs
+  on fixed CPU 8, using independent baseline and candidate binaries, measured
+  only `0.6187x`/`0.6340x`/`0.5927x` median throughput versus the existing fast
+  parser. Their geometric mean was `0.6149x`, far below the `0.8x` retention
+  threshold. Five non-target controls kept identical sizes and reached a
+  `0.9790x` median-ratio geometric mean (`0.9669x` floor; 32 KiB source
+  `0.9945x`). The length dispatch, lazy limit, specialized lookahead, scratch
+  API, and tests were removed; future q3 size work must avoid a second hash-chain
+  traversal on the fast path.
