@@ -9949,6 +9949,16 @@ coverage.
   corpus to `0.9838x`, and text level 1 to `0.9926x`. The extra implementation
   was removed; a viable level-1 early return must not perturb the existing
   encoder/entropy section placement.
+  A final placement variant kept the existing level-1 helper as a small entry
+  and moved only the large fast implementation to a trailing dedicated section.
+  This reduced ordinary level-1 dispatch growth to 184 bytes and preserved the
+  level-3 helper body, but the new code still shifted the complete Zstd custom-
+  section group. Against a freshly rebuilt HEAD binary, 31 fixed-CPU-8 pairs
+  improved JSON level 1 by `1.6702x` with 31/31 wins while JSON level 3 fell
+  to `0.9616x`, the level-1 tradeoff corpus to `0.9838x`, and text level 1 to
+  `0.9926x`. The trailing implementation was removed. Future work must first
+  stabilize section placement independently rather than combining layout and
+  policy changes in one candidate.
   Replacing the single-state parser's input-sized occupancy bitmap with a
   sliding `State.cost` infinity sentinel was rejected as an end-to-end loss.
   Every position remains reachable through a literal transition and no match
