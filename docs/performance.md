@@ -610,6 +610,20 @@ four on exact prefixes, preserving candidate-budget semantics and every oracle
 token/wire byte. Fifteen long binary raw pairs nevertheless fell to `0.9809x`
 with 0/15 wins; the extra load and branch cost more than the avoided prefix
 comparison.
+The default lazy parser now stores its full hash head and predecessor positions
+as absolute `u32` indexes on inputs through 4 GiB, reserving `0xffffffff` as the
+empty sentinel and retaining the `isize` fallback above that bound. Unlike a
+ring specialization, this changes neither chain traversal nor window checks; on
+64-bit targets it simply halves the two index allocations. A 96 KiB
+mixed-history oracle
+compares every token, statistic, initialized head, and predecessor against the
+old `isize` representation and checks the exact allocation-byte reduction.
+Fifteen alternating fixed-CPU-8 raw-default pairs preserved the README and
+roadmap wires while improving median throughput by about `1.11x` and `1.075x`.
+A separate seven-pair raw/zlib/gzip matrix over README, roadmap, `src/png.zig`,
+and `src/checksum.zig` kept every encoded size/checksum identical and measured
+default-path median gains of roughly `1.06x`--`1.13x`; `.fastest`/`.fast`
+controls were essentially neutral.
 The stored-fast-path classifier now counts repeated four-byte sample windows
 with an exact 2,048-slot open-addressed position set instead of sorting 1,021
 `u32` values. Hash collisions probe onward and compare the original four bytes,

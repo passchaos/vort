@@ -805,11 +805,23 @@ fn scanLazyGreedyPlanReuse(tokens: *std.ArrayList(Token), allocator: std.mem.All
 }
 
 fn hashLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    if (hashPositionFitsU32(input.len)) {
+        return hashLazyGreedyPlanAllocWithPosition(u32, allocator, input, options);
+    }
+    return hashLazyGreedyPlanAllocWithPosition(isize, allocator, input, options);
+}
+
+fn hashLazyGreedyPlanAllocWithPosition(
+    comptime Position: type,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+) !GreedyPlan {
     const table_size = 1 << 15;
-    const head = try allocator.alloc(isize, table_size);
+    const head = try allocator.alloc(Position, table_size);
     defer allocator.free(head);
-    @memset(head, -1);
-    const prev = try allocator.alloc(isize, input.len);
+    @memset(head, hashPositionEmpty(Position));
+    const prev = try allocator.alloc(Position, input.len);
     defer allocator.free(prev);
     return hashLazyGreedyPlanWithTables(allocator, input, options, head, prev);
 }
@@ -822,7 +834,7 @@ fn hashLazyGreedyPlanTinyAlloc(allocator: std.mem.Allocator, input: []const u8, 
     return hashLazyGreedyPlanWithTables(allocator, input, options, &head, prev_stack[0..input.len]);
 }
 
-fn hashLazyGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: []isize, prev: []isize) !GreedyPlan {
+fn hashLazyGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: anytype, prev: anytype) !GreedyPlan {
     // `prev` is intentionally left uninitialized: every position reachable
     // through `head` is written by `insertHash` before it can be followed.
     // Avoiding a full-buffer clear removes one hot memory pass per block. The
@@ -844,16 +856,16 @@ pub fn hashLazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std
     return try hashLazyGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len]);
 }
 
-fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: []isize, prev: []isize) !PlanStats {
+fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: anytype, prev: anytype) !PlanStats {
     var stats = PlanStats{};
 
     var pos: usize = 0;
     while (pos < input.len) {
-        const best = findBestHashMatch(input, pos, options, head, prev);
+        const best = findBestHashMatchWithLayout(input, pos, options, head, prev, false, false, {}, .three);
         if (!acceptMatch(input, pos, best.length, best.distance, options)) {
             try appendToken(tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
-            insertHash(input, pos, head, prev);
+            insertHashWithLayout(input, pos, head, prev, false, false, {}, .three);
             pos += 1;
             continue;
         }
@@ -863,9 +875,9 @@ fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: s
             // Insert the current position before the lazy probe so distance-1
             // runs can be discovered at pos+1. If we keep the current match we
             // skip re-inserting pos below and only seed the skipped positions.
-            insertHash(input, pos, head, prev);
+            insertHashWithLayout(input, pos, head, prev, false, false, {}, .three);
             current_inserted = true;
-            const next = findBestHashMatch(input, pos + 1, options, head, prev);
+            const next = findBestHashMatchWithLayout(input, pos + 1, options, head, prev, false, false, {}, .three);
             if (next.length >= best.length + options.lazy_min_gain and acceptMatch(input, pos + 1, next.length, next.distance, options)) {
                 try appendToken(tokens, allocator, .{ .literal = input[pos] });
                 stats.literals += 1;
@@ -879,7 +891,8 @@ fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: s
         stats.matched_bytes += best.length;
         var insert_pos = if (current_inserted) pos + 1 else pos;
         const end = @min(input.len, pos + best.length);
-        while (insert_pos < end) : (insert_pos += 1) insertHash(input, insert_pos, head, prev);
+        while (insert_pos < end) : (insert_pos += 1)
+            insertHashWithLayout(input, insert_pos, head, prev, false, false, {}, .three);
         pos += best.length;
     }
 
@@ -1822,6 +1835,10 @@ fn compactLazyPrevTableLen(input_len: usize, window_len: usize) usize {
 
 fn hashPositionFitsI32(input_len: usize) bool {
     return input_len <= std.math.maxInt(i32);
+}
+
+fn hashPositionFitsU32(input_len: usize) bool {
+    return input_len <= std.math.maxInt(u32);
 }
 
 fn hashGreedyPlanAllocWithPosition(
@@ -3318,6 +3335,10 @@ test "hash greedy compact position boundary" {
     if (@bitSizeOf(usize) > @bitSizeOf(i32)) {
         try std.testing.expect(!hashPositionFitsI32(@as(usize, std.math.maxInt(i32)) + 1));
     }
+    try std.testing.expect(hashPositionFitsU32(std.math.maxInt(u32)));
+    if (@bitSizeOf(usize) > @bitSizeOf(u32)) {
+        try std.testing.expect(!hashPositionFitsU32(@as(usize, std.math.maxInt(u32)) + 1));
+    }
 }
 
 test "64 KiB lazy hash u16 positions match i32 reference" {
@@ -3397,6 +3418,97 @@ test "64 KiB lazy hash u16 positions match i32 reference" {
         try std.testing.expectEqual(
             if (reference_link < 0) std.math.maxInt(u16) else @as(u16, @intCast(reference_link)),
             compact_link,
+        );
+    }
+}
+
+test "lazy hash compact positions match isize reference" {
+    const input = try std.testing.allocator.alloc(u8, 96 * 1024 + 37);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x9e37_79b9;
+    for (input, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index >= 33 * 1024 and index % 11 < 8)
+            input[index - 33 * 1024]
+        else
+            @truncate(state ^ (state >> 13) ^ @as(u32, @truncate(index * 29)));
+    }
+
+    const options: GreedyOptions = .{
+        .window_len = default_window_len,
+        .max_chain = 160,
+        .nice_len = 80,
+        .max_candidates = 6,
+        .lazy_min_gain = 1,
+        .min_match = 3,
+        .max_match = max_match_len,
+        .min_savings_bits = 1,
+    };
+    const reference_head = try std.testing.allocator.alloc(isize, hash_head_table_size);
+    defer std.testing.allocator.free(reference_head);
+    @memset(reference_head, -1);
+    const reference_prev = try std.testing.allocator.alloc(isize, input.len);
+    defer std.testing.allocator.free(reference_prev);
+    const reference = try hashLazyGreedyPlanWithTables(
+        std.testing.allocator,
+        input,
+        options,
+        reference_head,
+        reference_prev,
+    );
+    defer reference.deinit(std.testing.allocator);
+
+    const compact_head = try std.testing.allocator.alloc(u32, hash_head_table_size);
+    defer std.testing.allocator.free(compact_head);
+    @memset(compact_head, hashPositionEmpty(u32));
+    const compact_prev = try std.testing.allocator.alloc(u32, input.len);
+    defer std.testing.allocator.free(compact_prev);
+    const compact = try hashLazyGreedyPlanWithTables(
+        std.testing.allocator,
+        input,
+        options,
+        compact_head,
+        compact_prev,
+    );
+    defer compact.deinit(std.testing.allocator);
+
+    try expectEqualTokenSlices(reference.tokens, compact.tokens);
+    try std.testing.expectEqual(reference.stats, compact.stats);
+    for (reference_head, compact_head) |reference_position, compact_position| {
+        try std.testing.expectEqual(
+            if (reference_position < 0) hashPositionEmpty(u32) else @as(u32, @intCast(reference_position)),
+            compact_position,
+        );
+    }
+    for (reference_prev[0 .. input.len - min_match_len + 1], compact_prev[0 .. input.len - min_match_len + 1]) |reference_position, compact_position| {
+        try std.testing.expectEqual(
+            if (reference_position < 0) hashPositionEmpty(u32) else @as(u32, @intCast(reference_position)),
+            compact_position,
+        );
+    }
+
+    if (@sizeOf(isize) > @sizeOf(u32)) {
+        var compact_alloc = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+        {
+            const plan = try hashLazyGreedyPlanAlloc(compact_alloc.allocator(), input, options);
+            defer plan.deinit(compact_alloc.allocator());
+        }
+        var reference_alloc = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+        {
+            const allocator = reference_alloc.allocator();
+            const head = try allocator.alloc(isize, hash_head_table_size);
+            defer allocator.free(head);
+            @memset(head, -1);
+            const prev = try allocator.alloc(isize, input.len);
+            defer allocator.free(prev);
+            const plan = try hashLazyGreedyPlanWithTables(allocator, input, options, head, prev);
+            defer plan.deinit(allocator);
+        }
+        const compact_index_bytes = (hash_head_table_size + input.len) * @sizeOf(u32);
+        const reference_index_bytes = (hash_head_table_size + input.len) * @sizeOf(isize);
+        try std.testing.expectEqual(
+            reference_index_bytes - compact_index_bytes,
+            reference_alloc.allocated_bytes - compact_alloc.allocated_bytes,
         );
     }
 }

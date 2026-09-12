@@ -4307,6 +4307,16 @@ coverage.
   A u16-lazy four-byte-prefix specialization also preserved candidate budgets,
   tokens, and wire bytes, but long binary raw pairs reached only `0.9809x` with
   0/15 wins. Keep the existing one-byte rejection plus shared `matchLength`.
+  The default lazy parser now uses absolute `u32` hash-head and predecessor
+  positions for inputs through 4 GiB, retaining `isize` only above that bound.
+  This halves both index allocations on 64-bit targets without adding per-link
+  ring mask/window work to the default parser's deeper chain search. A 96 KiB
+  differential compares tokens, statistics, every head, every initialized
+  predecessor, and allocation bytes against the old representation. Fifteen
+  fixed-CPU-8 raw-default pairs preserved README/roadmap wires and improved
+  medians by about `1.11x`/`1.075x`; a seven-pair raw/zlib/gzip source matrix
+  kept all output sizes/checksums exact and measured default-path gains of
+  roughly `1.06x`--`1.13x`, with fast-level controls essentially neutral.
   The stored fast-path classifier now uses an exact 2,048-slot open-addressed
   position set to count duplicate four-byte windows instead of sorting 1,021
   words. Collisions probe and compare original bytes, and a 256-case randomized/
