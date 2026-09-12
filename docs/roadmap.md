@@ -11030,6 +11030,13 @@ coverage.
   field as the sole cursor grew the helper from `0xf59` to `0xf8a`. Thirty-one
   fixed-CPU-8 pairs reduced `large_json` to `0.9942x`; the separate local cursor
   remains because it produces better register allocation.
+  Carrying the existing `buildComplete` proof into sequence-interleaved Huffman
+  lookup was rejected too. A proof bit fit entirely in
+  `HuffmanLiteralDecodeState`'s tail padding and preserved checked lookup for
+  incomplete trees, but its extra hot branch grew and moved the large helper.
+  Thirty-one fixed-CPU-8 core pairs reduced `large_json`/`huffman80k`/
+  `binary_mixed` to `0.9810x`/`0.9344x`/`0.9912x`. Only the established
+  sequence-free bulk decoder keeps unchecked complete-table lookup.
 - Rejected replacing Zig std's Zstd Huffman canonical-tree sort with a local
   rank-count/rank-start builder modeled on upstream `HUF_readDTableX1_wksp`.
   The prototype decoded both direct and FSE-compressed weight headers, matched
