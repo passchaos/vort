@@ -1600,6 +1600,15 @@ the locked JSON level-1 median by another `1.0223x` (29/31 wins); six primary
 target/control medians reach `1.0045x` geometrically with a `0.9964x` floor,
 and two additional multiblock level-3/9 controls remain at `1.0023x`/`1.0007x`.
 All compared frame bytes and checksums are unchanged.
+Wider single-state hash tables were measured and rejected. With the same
+compact heap-backed index layout, 8,192 buckets improved JSON level 1 by only
+`1.0085x`; the eight-row row-median geometric mean was `1.0023x` and the
+weakest median `0.9988x`. A 16,384-bucket table improved JSON by only
+`1.0028x` while binary level 1 fell to `0.9935x`. Moving the original
+4,096-bucket head from its small stack array into the predecessor allocation
+was also neutral on JSON (`1.0005x`) and slightly negative on text
+(`0.9950x`). The 4,096-bucket stack layout therefore remains: the wider tables
+do not clear the 1% retention bar and consume 8--32 KiB more scratch.
 
 A follow-up attempted to extend level 1's audited double-fast speed tradeoff
 from wide alphabets to extremely compressible narrow/JSON blocks. A 44:1

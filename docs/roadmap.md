@@ -9850,6 +9850,13 @@ coverage.
   (29/31 wins); six primary target/control medians reach `1.0045x`
   geometrically with a `0.9964x` floor, while multiblock level 3/9 controls
   remain at `1.0023x`/`1.0007x`. All frame bytes and checksums are unchanged.
+  Wider single-state hash tables were rejected after a same-layout sweep. An
+  8,192-bucket table improved JSON level 1 by only `1.0085x` with an eight-row
+  `1.0023x` median geomean and `0.9988x` floor; 16,384 buckets improved JSON by
+  only `1.0028x` while binary level 1 fell to `0.9935x`. Moving the original
+  4,096-bucket head into the predecessor heap allocation was neutral on JSON
+  (`1.0005x`) and slightly negative on text (`0.9950x`). Keep the smaller stack
+  table until collision evidence justifies the extra scratch.
   A narrow-alphabet extension of level 1's double-fast speed policy was audited
   and rejected. Requiring a complete 44:1 block reduced the locked 32 KiB JSON
   encode from the strict 640-byte frame to a 694-byte frame, still below
