@@ -9826,6 +9826,22 @@ coverage.
   with 12/12 wins; an eight-run complete matrix measures `1.64x`, preserves all
   wires/checksums, and leaves levels 3/9 within 0.5%. The encode gate now keeps
   all three binary levels within 25% latency of one another.
+  Level 1 now uses an isolated one-state repeat beam, while levels 2+ retain the
+  two-state ratio parser. The new module keeps one recent-offset history per
+  byte and uses a dedicated text section, restoring the original two-state
+  function's exact machine-code size. Focused text/JSON/binary stages improve
+  by about `1.13x`/`1.51x`/`1.54x`; only JSON changes size, from 633 to 636
+  bytes. A 64-shape mixed/noise audit has zero regressions and is three bytes
+  smaller in aggregate; 24 JSON-record blocks grow 47 bytes total with a
+  three-byte worst case. Thirty-one independent fixed-CPU-8 full-encode pairs
+  improve JSON level 1 by `1.2633x` (31/31), with the frame changing 640 to 643
+  bytes versus libzstd 1.5.5's 838 bytes. The final eight-row target/control
+  matrix reaches `1.0280x` by row-median geometric mean and keeps the weakest
+  median at `0.9932x`. Three scratch-retention variants were rejected after
+  they respectively reduced JSON by about 1%, small text by about 6.7%, or
+  binary level 1 by about 2.4%; the isolated per-call scratch retains the best
+  balanced result and preserves the two-state planner's `0x1078` machine-code
+  size.
   A narrow-alphabet extension of level 1's double-fast speed policy was audited
   and rejected. Requiring a complete 44:1 block reduced the locked 32 KiB JSON
   encode from the strict 640-byte frame to a 694-byte frame, still below

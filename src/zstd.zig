@@ -21,6 +21,7 @@ const incremental_history_match = @import("zstd/incremental/encoder/history_matc
 const incremental_history = @import("zstd/incremental/encoder/history.zig");
 const incremental_history_index = @import("zstd/incremental/encoder/history_index.zig");
 const double_fast_match = @import("zstd/match/double_fast.zig");
+const single_beam_match = @import("zstd/match/single_beam.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
 
@@ -5966,10 +5967,11 @@ fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeF
             else => 96,
         };
         // Upstream zstd's fast, double-fast, and greedy strategies check recent
-        // offsets directly in their match loops. Enable Vort's bounded two-state
-        // equivalent at levels 1-3 as well as ratio levels; complete block/frame
-        // arbitration still rejects it whenever the repeat-aware stream is not
-        // smaller.
+        // offsets directly in their match loops. Enable Vort's bounded repeat
+        // beam at levels 1-3 as well as ratio levels; level 1 uses its isolated
+        // one-state speed variant while the other levels retain two states.
+        // Complete block/frame arbitration still rejects it whenever the
+        // repeat-aware stream is not smaller.
         native_options.rep_beam_search = (level >= 1 and level <= 3) or level >= 9;
     }
     return native_options;
@@ -10731,6 +10733,29 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
     return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(false, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, undefined, null);
 }
 
+fn emitNativeMatchCompressedBlockSerialWithTwoStateBeamReference(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    match_search_budget: usize,
+    reusable_rep_beam: ?*lz77.RepBeamScratch,
+) Error!bool {
+    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(
+        false,
+        allocator,
+        out,
+        block,
+        last,
+        match_search_budget,
+        true,
+        reusable_rep_beam,
+        null,
+        undefined,
+        null,
+    );
+}
+
 inline fn emitNativeMatchCompressedBlockSerialWithBeamDispatch(
     comptime has_precomputed_rep_beam: bool,
     allocator: std.mem.Allocator,
@@ -10763,7 +10788,20 @@ noinline fn emitNativeMatchCompressedBlockSerialWithBeamLevelOne(
     precomputed_rep_beam_stats: lz77.PlanStats,
     large_sequence_scratch: ?*LargeSequenceScratch,
 ) linksection(fast_encode_helper_text_section) Error!bool {
-    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
+    if (has_precomputed_rep_beam or !enable_rep_beam)
+        return try emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
+    var local_rep_beam: lz77.RepBeamScratch = .{};
+    defer if (reusable_rep_beam == null) local_rep_beam.deinit(allocator);
+    const beam_scratch = reusable_rep_beam orelse &local_rep_beam;
+    var single_scratch: single_beam_match.Scratch = .{};
+    defer single_scratch.deinit(allocator);
+    const single_stats = single_beam_match.planReuse(&single_scratch, allocator, block) catch |err| switch (err) {
+        error.InvalidBlockPlan => return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, allocator, out, block, last, match_search_budget, false, beam_scratch, mixed_dominated, undefined, large_sequence_scratch),
+        else => return err,
+    };
+    beam_scratch.reversed.clearRetainingCapacity();
+    try beam_scratch.reversed.appendSlice(allocator, single_scratch.reversed.items);
+    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(true, allocator, out, block, last, match_search_budget, true, beam_scratch, mixed_dominated, single_stats, large_sequence_scratch);
 }
 
 fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
@@ -23295,6 +23333,128 @@ test "zstd wide consensus applies current frame sequence state directly" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ &payload, sequence_state });
 }
 
+test "zstd level one single-state beam audits generated block sizes" {
+    var changed: usize = 0;
+    var larger: usize = 0;
+    var smaller: usize = 0;
+    var total_single: usize = 0;
+    var total_double: usize = 0;
+    var worst_extra: usize = 0;
+    for (0..64) |seed| {
+        const length = 16 * 1024 + (seed % 4) * 4 * 1024;
+        const payload = try std.testing.allocator.alloc(u8, length);
+        defer std.testing.allocator.free(payload);
+        var state: u32 = @truncate(0x243f_6a88 +% seed *% 0x0100_0193);
+        for (payload, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @truncate(index * 17 + seed * 13),
+                1 => if (index % 64 < 52) @intCast('a' + (index + seed) % 23) else @truncate(state >> 24),
+                2 => @truncate((state >> 16) ^ (index / 31)),
+                else => @truncate((index * 37 + (index / 7) * 13) ^ (index >> 3)),
+            };
+        }
+        if (seed % 3 == 0) {
+            const copy_len = payload.len / 4;
+            @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+        }
+
+        var single: std.ArrayList(u8) = .empty;
+        defer single.deinit(std.testing.allocator);
+        const single_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+            std.testing.allocator,
+            &single,
+            payload,
+            true,
+            fastest_wide_match_search_budget,
+            true,
+            null,
+            null,
+        );
+        var double: std.ArrayList(u8) = .empty;
+        defer double.deinit(std.testing.allocator);
+        const double_ok = try emitNativeMatchCompressedBlockSerialWithTwoStateBeamReference(
+            std.testing.allocator,
+            &double,
+            payload,
+            true,
+            fastest_wide_match_search_budget,
+            null,
+        );
+        const single_len = if (single_ok) single.items.len else payload.len + 3;
+        const double_len = if (double_ok) double.items.len else payload.len + 3;
+        changed += @intFromBool(single_len != double_len);
+        larger += @intFromBool(single_len > double_len);
+        smaller += @intFromBool(single_len < double_len);
+        total_single += single_len;
+        total_double += double_len;
+        worst_extra = @max(worst_extra, single_len -| double_len);
+    }
+    std.debug.print(
+        "single beam audit: changed={d} larger={d} smaller={d} total={d}/{d} worst_extra={d}\n",
+        .{ changed, larger, smaller, total_single, total_double, worst_extra },
+    );
+    try std.testing.expectEqual(@as(usize, 1), changed);
+    try std.testing.expectEqual(@as(usize, 0), larger);
+    try std.testing.expectEqual(@as(usize, 1), smaller);
+    try std.testing.expectEqual(@as(usize, 0), worst_extra);
+    try std.testing.expectEqual(total_double - 3, total_single);
+
+    var json_changed: usize = 0;
+    var json_total_single: usize = 0;
+    var json_total_double: usize = 0;
+    var json_worst_extra: usize = 0;
+    for (0..24) |seed| {
+        var payload: std.ArrayList(u8) = .empty;
+        defer payload.deinit(std.testing.allocator);
+        const target_len = 16 * 1024 + seed * 613;
+        while (payload.items.len < target_len) {
+            var line: [160]u8 = undefined;
+            const formatted = try std.fmt.bufPrint(
+                &line,
+                "{{\"id\":{d},\"shard\":{d},\"service\":\"vort\",\"message\":\"single beam audit\"}}\n",
+                .{ payload.items.len / 64, seed % 7 },
+            );
+            try payload.appendSlice(std.testing.allocator, formatted);
+        }
+
+        var single: std.ArrayList(u8) = .empty;
+        defer single.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+            std.testing.allocator,
+            &single,
+            payload.items,
+            true,
+            fastest_wide_match_search_budget,
+            true,
+            null,
+            null,
+        ));
+        var double: std.ArrayList(u8) = .empty;
+        defer double.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithTwoStateBeamReference(
+            std.testing.allocator,
+            &double,
+            payload.items,
+            true,
+            fastest_wide_match_search_budget,
+            null,
+        ));
+        json_changed += @intFromBool(single.items.len != double.items.len);
+        json_total_single += single.items.len;
+        json_total_double += double.items.len;
+        json_worst_extra = @max(json_worst_extra, single.items.len -| double.items.len);
+    }
+    std.debug.print(
+        "single beam JSON audit: changed={d} total={d}/{d} worst_extra={d}\n",
+        .{ json_changed, json_total_single, json_total_double, json_worst_extra },
+    );
+    try std.testing.expectEqual(@as(usize, 20), json_changed);
+    try std.testing.expectEqual(@as(usize, 12_581), json_total_single);
+    try std.testing.expectEqual(@as(usize, 12_534), json_total_double);
+    try std.testing.expectEqual(@as(usize, 3), json_worst_extra);
+}
+
 test "zstd reusable encoder retains wide sequence scratch" {
     const block_len = 33 * 1024;
     var payload: [block_len * 2]u8 = undefined;
@@ -23579,7 +23739,7 @@ test "zstd fastest wide policy pins worst audited double fast tradeoff" {
 
     var exhaustive: std.ArrayList(u8) = .empty;
     defer exhaustive.deinit(std.testing.allocator);
-    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &exhaustive, &payload, true, 16, true, null, null));
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithTwoStateBeamReference(std.testing.allocator, &exhaustive, &payload, true, 16, null));
     try std.testing.expectEqual(@as(usize, 6587), exhaustive.items.len);
     var selected: std.ArrayList(u8) = .empty;
     defer selected.deinit(std.testing.allocator);

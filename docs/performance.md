@@ -1571,6 +1571,27 @@ arbitration. Twelve fixed-CPU-8 binary level-1 pairs improve by `1.71x` with
 checksums unchanged, and leaves levels 3/9 within 0.5% of baseline. The gate now
 requires all three binary levels to remain within 25% latency of one another.
 
+Level 1 now uses a speed-oriented one-state repeat beam, while levels 2+ retain
+the established two-state ratio parser. The isolated module owns the same
+4,096-bucket compact index and one state per input position; placing it in a
+dedicated text section restores the original two-state function's exact machine
+code size. On the primary text/JSON/binary stage rows, the one-state parser is
+about `1.13x`/`1.51x`/`1.54x` faster; text and binary block sizes are unchanged
+and JSON grows only 633 to 636 bytes. A 64-shape structured/noise audit has no
+regressions and is three bytes smaller in aggregate. Across 24 JSON-record
+blocks, 20 differ, growing only 47 bytes cumulatively with a three-byte worst
+case. Thirty-one independent fixed-CPU-8 full-encode pairs improve locked JSON
+level 1 by `1.2633x` (31/31 wins), changing the complete frame from 640 to 643
+bytes while remaining below libzstd 1.5.5 level 1's 838 bytes. The final
+eight-row target/control matrix reaches `1.0280x` by row-median geometric mean;
+its weakest median is binary level 1 at `0.9932x`, while text and multi-block
+controls are neutral. Three attempts to retain the single-state arrays across
+encodes were rejected: an indirect scratch object reduced JSON by about 1%, an
+embedded object reduced small text by about 6.7%, and borrowing existing
+sequence arrays reduced binary level 1 by about 2.4%. The isolated per-call
+scratch remains preferable until reuse can preserve code layout and all control
+rows.
+
 A follow-up attempted to extend level 1's audited double-fast speed tradeoff
 from wide alphabets to extremely compressible narrow/JSON blocks. A 44:1
 threshold skipped repeat-beam on the locked 32 KiB JSON row, changing its frame
