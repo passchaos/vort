@@ -9826,6 +9826,17 @@ coverage.
   with 12/12 wins; an eight-run complete matrix measures `1.64x`, preserves all
   wires/checksums, and leaves levels 3/9 within 0.5%. The encode gate now keeps
   all three binary levels within 25% latency of one another.
+  A narrow-alphabet extension of level 1's double-fast speed policy was audited
+  and rejected. Requiring a complete 44:1 block reduced the locked 32 KiB JSON
+  encode from the strict 640-byte frame to a 694-byte frame, still below
+  libzstd 1.5.5 level 1's 838 bytes, and improved the target by as much as
+  `4.45x`. Across 64 periodic/noise shapes the policy triggered zero times;
+  across 24 JSON-record shapes it triggered seven times, growing their aggregate
+  from 4,106 to 4,464 bytes with a 52-byte worst case. Multiple placements,
+  including an isolated fast-helper section and high-byte prefilter, still
+  reduced the unchanged binary level-1 control by roughly 1.4%--2.7%. All
+  production changes and temporary gate relaxations were reverted; narrow
+  level-1 blocks continue to use repeat-beam arbitration.
   Removed the consensus helper's temporary encoded-block buffer. Double-fast
   now writes directly into the caller's reusable candidate list; a saved entry
   length transactionally restores prior output on threshold misses, parser

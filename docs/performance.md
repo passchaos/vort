@@ -1571,6 +1571,19 @@ arbitration. Twelve fixed-CPU-8 binary level-1 pairs improve by `1.71x` with
 checksums unchanged, and leaves levels 3/9 within 0.5% of baseline. The gate now
 requires all three binary levels to remain within 25% latency of one another.
 
+A follow-up attempted to extend level 1's audited double-fast speed tradeoff
+from wide alphabets to extremely compressible narrow/JSON blocks. A 44:1
+threshold skipped repeat-beam on the locked 32 KiB JSON row, changing its frame
+from 640 to 694 bytes (still below libzstd 1.5.5 level 1's 838 bytes) while
+improving 21 alternating fixed-CPU-8 pairs by up to about `4.45x` after the
+required exact-single checks. A generated audit covered 64 narrow periodic/noise
+blocks with zero triggers and 24 JSON record streams with seven triggers; those
+seven grew from 4,106 to 4,464 bytes cumulatively, with a 52-byte worst case.
+The candidate was rejected because every attempted placement or out-of-line
+dispatcher still regressed the unchanged 32 KiB binary level-1 control by about
+1.4%--2.7% at the median. Keep repeat-beam authoritative for narrow level-1
+blocks until the speed policy can be isolated without a general-path cost.
+
 The consensus helper now emits its double-fast wire directly into the caller's
 reusable candidate buffer and transactionally restores the original length on
 threshold misses, parser disagreements, or allocation failures. On the locked
