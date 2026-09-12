@@ -98,6 +98,11 @@ its built-in Brotli rows, for example `dictionary`, `mixed`, or `source32k`.
 Use the filter for profiling and fixed-CPU interleaved A/B runs; omit it for
 the formal eight-row `run-br-planned-encode-bench-gate`. An unknown case is an
 error rather than a silently empty benchmark.
+The ratio encoder's shared RFC dictionary index contains the same 31,704
+deduplicated identity/uppercase canonical spellings as upstream Brotli's
+static lookup table. Its exact persistent size is 192,354 bytes; the Node
+compatibility gate pins that value and independently decodes the dictionary,
+mixed, uppercase, and unmatched planned streams.
 
 ## Unified competitor gap report
 

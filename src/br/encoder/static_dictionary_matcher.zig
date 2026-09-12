@@ -1,5 +1,13 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const static_dictionary = @import("../static_dictionary.zig");
+
+const index_build_text_section = switch (builtin.object_format) {
+    .elf => ".vort_br_dictionary_index",
+    .macho => "__TEXT,__vort_br_dict",
+    .coff => ".text$vort_br_dictionary_index",
+    else => ".text",
+};
 
 const bucket_bits = 15;
 const bucket_count = 1 << bucket_bits;
@@ -7,6 +15,7 @@ const no_entry = std.math.maxInt(u16);
 const word_index_bits = 11;
 const word_index_mask = (@as(u32, 1) << word_index_bits) - 1;
 const BaseWord = struct { word_index: usize, copy_len: usize };
+const IndexedWord = struct { word_index: usize, copy_len: usize, case_kind: static_dictionary.TransformCaseKind };
 const PrefixGroup = struct {
     transforms: [3][static_dictionary.transform_count]u8 = @splat(@splat(std.math.maxInt(u8))),
     lengths: [3]u8 = @splat(0),
@@ -26,48 +35,94 @@ const transforms_by_prefix = blk: {
     break :blk result;
 };
 
-/// Compact index over the 13,504 untransformed dictionary words. Matches are
-/// verified by the independent transform implementation, so all 121 standard
-/// transforms remain supported without materializing ~1.6 million entries.
+const canonical_case_transforms = [_]u8{ 0, 9, 44 };
+
+comptime {
+    for (canonical_case_transforms, 0..) |transform_index, case_index| {
+        const metadata = static_dictionary.transformMetadata(transform_index).?;
+        std.debug.assert(metadata.keeps_whole_word and metadata.prefix_len == 0 and metadata.suffix_len == 0);
+        std.debug.assert(@intFromEnum(metadata.case_kind) == case_index);
+    }
+}
+
+const max_indexed_word_count = static_dictionary.base_word_count * canonical_case_transforms.len;
+
+/// Upstream-style compact index over 31,704 unique identity, uppercase-first,
+/// and uppercase-all dictionary spellings. Candidate transforms are verified
+/// by the independent transform implementation without materializing roughly
+/// 1.6 million transformed words.
 pub const Index = struct {
     allocator: std.mem.Allocator,
     heads: []u16,
-    next: []u16,
     words: []u32,
 
     var shared: ?Index = null;
     var shared_lock: std.atomic.Mutex = .unlocked;
     var shared_ready: std.atomic.Value(bool) = .init(false);
 
-    pub fn init(allocator: std.mem.Allocator) !Index {
-        const heads = try allocator.alloc(u16, bucket_count);
+    pub noinline fn init(allocator: std.mem.Allocator) linksection(index_build_text_section) !Index {
+        const heads = try allocator.alloc(u16, bucket_count + 1);
         errdefer allocator.free(heads);
-        @memset(heads, no_entry);
-        const next = try allocator.alloc(u16, static_dictionary.base_word_count);
-        errdefer allocator.free(next);
-        const words = try allocator.alloc(u32, static_dictionary.base_word_count);
-        errdefer allocator.free(words);
-
-        var entry_count: usize = 0;
+        @memset(heads, 0);
+        const dedup_heads = try allocator.alloc(u16, bucket_count);
+        defer allocator.free(dedup_heads);
+        @memset(dedup_heads, no_entry);
+        var staged: std.ArrayList(u32) = .empty;
+        defer staged.deinit(allocator);
+        try staged.ensureTotalCapacity(allocator, max_indexed_word_count);
+        var dedup_next: std.ArrayList(u16) = .empty;
+        defer dedup_next.deinit(allocator);
+        try dedup_next.ensureTotalCapacity(allocator, max_indexed_word_count);
+        var transformed_storage: [64]u8 = undefined;
+        var duplicate_storage: [64]u8 = undefined;
+        var case_counts: [3]usize = @splat(0);
         for (4..25) |copy_len| {
-            const bits = static_dictionary.sizeBits(copy_len) orelse continue;
+            const bits = static_dictionary.sizeBits(copy_len).?;
             const word_count = @as(usize, 1) << bits;
-            for (0..word_count) |word_index| {
-                const word = static_dictionary.baseWord(copy_len, word_index).?;
-                const bucket = hashPrefix(word);
-                next[entry_count] = heads[bucket];
-                words[entry_count] = packBaseWord(word_index, copy_len);
-                heads[bucket] = @intCast(entry_count);
-                entry_count += 1;
+            // Upstream inserts every identity spelling before the two uppercase
+            // families. Preserve that order so an uppercase spelling already
+            // present as a later base word is deduplicated in favor of the
+            // smaller identity address.
+            for (canonical_case_transforms, 0..) |transform_index, case_index| {
+                for (0..word_count) |word_index| {
+                    const word = static_dictionary.baseWord(copy_len, word_index).?;
+                    if (!canonicalCaseEligible(word, @enumFromInt(case_index))) continue;
+                    const transformed = static_dictionary.transformWord(transform_index, word, &transformed_storage).?;
+                    const bucket = hashPrefix(transformed);
+                    if (case_index != 0 and containsEarlierCanonicalWord(staged.items, dedup_next.items, dedup_heads[bucket], transformed, &duplicate_storage)) continue;
+                    std.debug.assert(staged.items.len < no_entry);
+                    try dedup_next.append(allocator, dedup_heads[bucket]);
+                    try staged.append(allocator, packIndexedWord(word_index, copy_len, @enumFromInt(case_index)));
+                    dedup_heads[bucket] = @intCast(staged.items.len - 1);
+                    heads[bucket + 1] += 1;
+                    case_counts[case_index] += 1;
+                }
             }
         }
-        std.debug.assert(entry_count == static_dictionary.base_word_count);
-        return .{ .allocator = allocator, .heads = heads, .next = next, .words = words };
+        std.debug.assert(std.mem.eql(usize, &case_counts, &.{ 13_504, 8_168, 10_032 }));
+        std.debug.assert(staged.items.len == 31_704);
+        prefixSumOffsets(heads);
+        const words = try allocator.alloc(u32, staged.items.len);
+        errdefer allocator.free(words);
+        const cursors = try allocator.dupe(u16, heads[0..bucket_count]);
+        defer allocator.free(cursors);
+        for (staged.items) |encoded_word| {
+            const candidate = unpackIndexedWord(encoded_word);
+            const word = static_dictionary.baseWord(candidate.copy_len, candidate.word_index).?;
+            const transformed = static_dictionary.transformWord(canonical_case_transforms[@intFromEnum(candidate.case_kind)], word, &transformed_storage).?;
+            const bucket = hashPrefix(transformed);
+            const cursor = cursors[bucket];
+            if (cursor >= heads[bucket + 1] or cursor >= words.len) return error.InvalidBlockPlan;
+            words[cursor] = encoded_word;
+            cursors[bucket] += 1;
+        }
+        for (cursors, heads[1..]) |cursor, expected|
+            if (cursor != expected) return error.InvalidBlockPlan;
+        return .{ .allocator = allocator, .heads = heads, .words = words };
     }
 
     pub fn deinit(self: *Index) void {
         self.allocator.free(self.heads);
-        self.allocator.free(self.next);
         self.allocator.free(self.words);
         self.* = undefined;
     }
@@ -75,7 +130,7 @@ pub const Index = struct {
     pub fn sharedIndex() !*const Index {
         if (shared_ready.load(.acquire)) return &shared.?;
         // The RFC dictionary is immutable, so one process-wide index avoids a
-        // 146 KiB rebuild on every short ratio encode. Only the first caller
+        // roughly 192 KiB rebuild on every short ratio encode. Only the first caller
         // takes the lock; release/acquire publication makes steady-state access
         // lock-free while allowing a failed allocation to be retried.
         while (!shared_lock.tryLock()) std.atomic.spinLoopHint();
@@ -102,23 +157,14 @@ pub const Index = struct {
 
     fn findCandidates(self: *const Index, input: []const u8, prefix_len: usize, best: *?static_dictionary.Match) void {
         if (input.len - prefix_len < 4) return;
-        self.findCandidatesForCase(input, prefix_len, .none, input[prefix_len..], best);
-        var normalized: [4]u8 = input[prefix_len..][0..4].*;
-        if (normalizeUppercasePrefix(&normalized, false))
-            self.findCandidatesForCase(input, prefix_len, .first, &normalized, best);
-        normalized = input[prefix_len..][0..4].*;
-        if (normalizeUppercasePrefix(&normalized, true))
-            self.findCandidatesForCase(input, prefix_len, .all, &normalized, best);
-    }
-
-    fn findCandidatesForCase(self: *const Index, input: []const u8, prefix_len: usize, case_kind: static_dictionary.TransformCaseKind, hash_bytes: []const u8, best: *?static_dictionary.Match) void {
-        var entry = self.heads[hashPrefix(hash_bytes)];
-        while (entry != no_entry) : (entry = self.next[entry]) {
-            const base = unpackBaseWord(self.words[entry]);
+        const bucket = hashPrefix(input[prefix_len..]);
+        for (self.words[self.heads[bucket]..self.heads[bucket + 1]]) |encoded_word| {
+            const candidate = unpackIndexedWord(encoded_word);
+            const base = BaseWord{ .word_index = candidate.word_index, .copy_len = candidate.copy_len };
             const bits = static_dictionary.sizeBits(base.copy_len).?;
             const word = static_dictionary.baseWord(base.copy_len, base.word_index).?;
             const group = &transforms_by_prefix[prefix_len];
-            const case_index = @intFromEnum(case_kind);
+            const case_index = @intFromEnum(candidate.case_kind);
             for (group.transforms[case_index][0..group.lengths[case_index]]) |transform_index| {
                 const address = (@as(usize, transform_index) << bits) | base.word_index;
                 // Most transforms differ only by suffix. When the complete
@@ -149,39 +195,61 @@ pub const Index = struct {
     }
 };
 
-fn normalizeUppercasePrefix(bytes: *[4]u8, all: bool) bool {
-    var changed = false;
-    for (bytes, 0..) |*byte, index| {
-        if (byte.* >= 'A' and byte.* <= 'Z') {
-            byte.* |= 32;
-            changed = true;
-        }
-        if (!all and index == 0) break;
+pub const max_index_bytes = (bucket_count + 1) * @sizeOf(u16) + 31_704 * @sizeOf(u32);
+
+fn containsEarlierCanonicalWord(staged: []const u32, next: []const u16, first: u16, transformed: []const u8, scratch: *[64]u8) bool {
+    var entry = first;
+    while (entry != no_entry) : (entry = next[entry]) {
+        const encoded_word = staged[entry];
+        const candidate = unpackIndexedWord(encoded_word);
+        const word = static_dictionary.baseWord(candidate.copy_len, candidate.word_index).?;
+        const candidate_bytes = static_dictionary.transformWord(canonical_case_transforms[@intFromEnum(candidate.case_kind)], word, scratch).?;
+        if (std.mem.eql(u8, candidate_bytes, transformed)) return true;
     }
-    return changed;
+    return false;
 }
 
-pub const max_index_bytes = bucket_count * @sizeOf(u16) +
-    static_dictionary.base_word_count * (@sizeOf(u16) + @sizeOf(u32));
+fn canonicalCaseEligible(word: []const u8, case_kind: static_dictionary.TransformCaseKind) bool {
+    return switch (case_kind) {
+        .none => true,
+        .first => word[0] >= 'a' and word[0] <= 'z',
+        .all => blk: {
+            for (word) |byte| if (byte >= 128) break :blk false;
+            for (word[1..]) |byte| if (byte >= 'a' and byte <= 'z') break :blk true;
+            break :blk false;
+        },
+    };
+}
+
+fn prefixSumOffsets(offsets: []u16) void {
+    var index: usize = 1;
+    while (index < offsets.len) : (index += 1) offsets[index] += offsets[index - 1];
+}
 
 fn hashPrefix(bytes: []const u8) usize {
     const word = std.mem.readInt(u32, bytes[0..4], .little);
     return (word *% 0x1e35a7bd) >> (32 - bucket_bits);
 }
 
-fn packBaseWord(word_index: usize, copy_len: usize) u32 {
+fn packIndexedWord(word_index: usize, copy_len: usize, case_kind: static_dictionary.TransformCaseKind) u32 {
     std.debug.assert(word_index <= word_index_mask);
-    return @as(u32, @intCast(word_index)) | (@as(u32, @intCast(copy_len - 4)) << word_index_bits);
+    return @as(u32, @intCast(word_index)) |
+        (@as(u32, @intCast(copy_len - 4)) << word_index_bits) |
+        (@as(u32, @intFromEnum(case_kind)) << 16);
 }
 
-fn unpackBaseWord(encoded: u32) BaseWord {
-    return .{ .word_index = encoded & word_index_mask, .copy_len = 4 + (encoded >> word_index_bits) };
+fn unpackIndexedWord(encoded: u32) IndexedWord {
+    return .{
+        .word_index = encoded & word_index_mask,
+        .copy_len = 4 + ((encoded >> word_index_bits) & 0x1f),
+        .case_kind = @enumFromInt((encoded >> 16) & 0x3),
+    };
 }
 
 test "indexed static dictionary matcher agrees with exhaustive reference" {
     var index = try Index.init(std.testing.allocator);
     defer index.deinit();
-    try std.testing.expectEqual(static_dictionary.base_word_count, index.entryCount());
+    try std.testing.expectEqual(@as(usize, 31_704), index.entryCount());
 
     const cases = [_][]const u8{
         " information follows",
@@ -211,6 +279,7 @@ test "indexed static dictionary matcher finds uppercase transforms without a sec
     const cases = [_][]const u8{
         "Information",
         "INFORMATION",
+        "MTOPB",
         " DICTIONARY",
         "COMPRESSION",
     };
@@ -219,6 +288,34 @@ test "indexed static dictionary matcher finds uppercase transforms without a sec
         const actual = index.findLongest(input);
         try std.testing.expectEqual(expected, actual);
         try std.testing.expect(actual != null);
+    }
+}
+
+test "indexed static dictionary matcher reaches every canonical transformed word" {
+    var index = try Index.init(std.testing.allocator);
+    defer index.deinit();
+
+    var transformed_storage: [64]u8 = undefined;
+    var decoded_storage: [64]u8 = undefined;
+    for (4..25) |copy_len| {
+        const bits = static_dictionary.sizeBits(copy_len).?;
+        const word_count = @as(usize, 1) << bits;
+        for (0..word_count) |word_index| {
+            const word = static_dictionary.baseWord(copy_len, word_index).?;
+            for (canonical_case_transforms, 0..) |transform_index, case_index| {
+                if (!canonicalCaseEligible(word, @enumFromInt(case_index))) continue;
+                const transformed = static_dictionary.transformWord(transform_index, word, &transformed_storage).?;
+                const actual = index.findLongest(transformed) orelse {
+                    std.debug.print("canonical miss: copy_len={d} transform={d} word_index={d} output={any}\n", .{ copy_len, transform_index, word_index, transformed });
+                    return error.TestUnexpectedResult;
+                };
+                try std.testing.expectEqual(transformed.len, actual.output_len);
+                const source_address = (@as(usize, transform_index) << bits) | word_index;
+                try std.testing.expect(actual.address <= source_address);
+                const decoded = static_dictionary.transform(actual.address, actual.copy_len, &decoded_storage) orelse return error.TestUnexpectedResult;
+                try std.testing.expectEqualSlices(u8, transformed, decoded);
+            }
+        }
     }
 }
 

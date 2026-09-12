@@ -190,8 +190,8 @@ The runtime libbrotli 1.1.0 differential independently decodes the retained
 extended-dictionary stream (`planned_extended_dictionary_cases=1`).
 The planned encode benchmark now accepts an explicit dictionary-probe budget
 for direct measurement of this opt-in path. Static-dictionary indexing was
-audited against the locally available upstream Brotli matcher. The current
-146,560-byte base-word index does not discover every omit-first, short
+audited against the locally available upstream Brotli matcher. The former
+146,560-byte base-word index did not discover every omit-first, short
 omit-last-plus-suffix, or non-ASCII uppercase transform shape. Complete
 supplemental-index prototypes were rejected because they increased memory to
 roughly 0.5--0.7 MiB and slowed the 64-probe aggregate by about 15% to 21%. An
@@ -201,6 +201,27 @@ made a same-binary fixed-CPU matcher microbenchmark neutral (`0.9998x`). Keep
 complete transform coverage as a future compact-index design target rather
 than trading memory, latency, or existing deterministic choices for nominal
 coverage.
+The retained matcher now mirrors upstream's compact canonical LUT instead: it
+indexes and deduplicates 13,504 identity, 8,168 uppercase-first, and 10,032
+uppercase-all spellings, then scans one contiguous Hash15 bucket rather than
+three linked base-word chains. The immutable shared index grows modestly to an
+exact 192,354 bytes, and its one-time builder is isolated in a cold text
+section so the unrelated 32 KiB ratio path retains its layout. A complete
+31,704-entry oracle requires every retained canonical spelling to be found at
+the same length and at an equal-or-smaller dictionary address, then regenerates
+the selected address byte-for-byte. Twenty-one fixed-CPU-8 independent-binary
+pairs using the final builder-isolated binary improved median ratio encode
+throughput by `1.0467x` for the 65-byte dictionary row, `1.0576x` for
+uppercase, `1.2270x` for the no-match control, and `1.0397x` for source. A
+longer 15-pair follow-up measured JSON at `1.0521x` and mixed at `0.9951x`.
+The same final binary kept q8 `source32k` within the retention floor: a
+21-pair run measured `0.9967x` median and `0.9981x` geometric mean. All
+selected sizes, dictionary copy counts, and checksums remained identical. An
+un-deduplicated 40,512-entry prototype and a layout that isolated both lookup
+and construction were rejected: the former regressed dictionary/source/
+uppercase, while the latter put the mixed median at `0.9826x`. Production
+therefore keeps upstream-style deduplication and isolates only one-time index
+construction.
 
 ## Milestone 0: repository and validation spine
 
@@ -7692,10 +7713,12 @@ coverage.
   distance addressing. An experimental exhaustive reference planner compresses
   dictionary-heavy input without depending on libbrotli and is externally
   decoded by Node; stable levels await an indexed matcher before enabling it.
-  A caller-owned 15-bit base-word index now reduces lookup to 13,504 entries
-  and verifies all 121 transforms through the independent transform routine.
-  Differential tests match the exhaustive reference and the 146,560-byte
-  memory budget is enforced by the Node compatibility gate.
+  A caller-owned 15-bit base-word index initially reduced lookup to 13,504
+  entries and verified candidates through the independent 121-transform
+  routine. Differential tests matched the sampled exhaustive reference, and
+  the then-current 146,560-byte memory budget was enforced by the Node
+  compatibility gate. The later canonical-LUT replacement above supersedes
+  this original index and strengthens mixed-case uppercase coverage.
   PrefixAlphabet's small-active insertion sort now caches the candidate pair and
   shifts predecessors instead of swapping both parallel arrays at every step.
   It preserves the exact `(frequency desc,symbol asc)` order and wire while
@@ -7715,7 +7738,7 @@ coverage.
   12–40x the LZ path below 154 bytes and becomes sharply less attractive above
   256 bytes, which is why the production gate remains deliberately narrow.
   The selected ratio stream is decoded through Node in the external gate.
-  The immutable 146,560-byte base-word index is now initialized once with the
+  The original immutable 146,560-byte base-word index was initialized once with the
   thread-safe allocator and reused across independent encodes. Fixed-CPU
   1000-iteration samples reduced short ratio encode time by roughly 30% for
   dictionary-heavy English/JSON/source inputs and by about 78% when the static
@@ -7818,8 +7841,8 @@ coverage.
   transforms without adding a second dictionary index: it lowercases the four-
   byte hash prefix, probes the existing base-word buckets, and visits only the
   matching case transform group. The sampled 121-transform coverage matrix
-  improves from 6,751/9,836 to 8,656/9,836 full-length matches while retaining
-  the 146,560-byte index. `INFORMATION` now compresses as an 11-byte dictionary
+  improved from 6,751/9,836 to 8,656/9,836 full-length matches while retaining
+  the then-current 146,560-byte index. `INFORMATION` now compresses as an 11-byte dictionary
   stream instead of falling back, and fixed-CPU 1000-run short-ratio A/B improves
   representative mixed/English/JSON/source rows by roughly 10%/15%/16%/14%.
   Shared-index lookup now uses an acquire/release ready flag, so only first

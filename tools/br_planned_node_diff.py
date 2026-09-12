@@ -224,8 +224,11 @@ def main() -> int:
             raise SystemExit(f"{mode}: node output mismatch")
         print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
     index_bytes = int(subprocess.check_output([sys.argv[1], "dictionary-index-bytes"]))
-    if index_bytes > 150_000:
-        raise SystemExit(f"dictionary index exceeds memory budget: {index_bytes}")
+    expected_index_bytes = 192_354
+    if index_bytes != expected_index_bytes:
+        raise SystemExit(
+            f"dictionary index size mismatch: expected {expected_index_bytes}, got {index_bytes}"
+        )
     print(f"brotli planned dictionary index: bytes={index_bytes}")
     return 0
 
