@@ -40,7 +40,8 @@ pub const Scratch = struct {
 
 pub noinline fn planReuse(scratch: *Scratch, allocator: std.mem.Allocator, input: []const u8) linksection(text_section) !lz77.PlanStats {
     if (input.len == 0 or input.len > max_input_len) return error.InvalidBlockPlan;
-    try buildIndex(scratch, allocator, input);
+    try scratch.prev.resize(allocator, input.len);
+    @memset(&scratch.head, empty);
     try scratch.states.resize(allocator, input.len + 1);
     try scratch.occupied.resize(allocator, input.len + 1);
     const states = scratch.states.items;
@@ -59,8 +60,15 @@ pub noinline fn planReuse(scratch: *Scratch, allocator: std.mem.Allocator, input
             .token = .{ .literal = input[position] },
         });
 
-        if (position + min_match > input.len) continue;
-        const indexed_match = firstIndexedMatch(scratch, input, position);
+        if (position + min_match > input.len) {
+            scratch.prev.items[position] = empty;
+            continue;
+        }
+        const hash = hash4(input, position);
+        const first_candidate = scratch.head[hash];
+        scratch.prev.items[position] = first_candidate;
+        scratch.head[hash] = @intCast(position);
+        const indexed_match = firstIndexedMatch(scratch, input, position, first_candidate);
         if (indexed_match) |match|
             extendMatch(states, occupied, position, state, match);
         const indexed_rep0 = if (indexed_match) |match| match.distance == state.rep0 else false;
@@ -94,22 +102,8 @@ pub noinline fn planReuse(scratch: *Scratch, allocator: std.mem.Allocator, input
     return stats;
 }
 
-fn buildIndex(scratch: *Scratch, allocator: std.mem.Allocator, input: []const u8) !void {
-    try scratch.prev.resize(allocator, input.len);
-    @memset(&scratch.head, empty);
-    for (0..input.len) |position| {
-        if (position + min_match > input.len) {
-            scratch.prev.items[position] = empty;
-            continue;
-        }
-        const hash = hash4(input, position);
-        scratch.prev.items[position] = scratch.head[hash];
-        scratch.head[hash] = @intCast(position);
-    }
-}
-
-fn firstIndexedMatch(scratch: *const Scratch, input: []const u8, position: usize) ?lz77.Token.Match {
-    var candidate_i = scratch.prev.items[position];
+fn firstIndexedMatch(scratch: *const Scratch, input: []const u8, position: usize, first_candidate: u16) ?lz77.Token.Match {
+    var candidate_i = first_candidate;
     var checked: usize = 0;
     const maximum = @min(lz77.max_match_len, input.len - position);
     const window_len = @min(input.len, lz77.default_window_len);
@@ -195,6 +189,37 @@ test "single-state repeat beam replays bounded input" {
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
     try std.testing.expectEqual(input.len, stats.literals + stats.matched_bytes);
+}
+
+test "single-state fused index matches prebuilt predecessor chains" {
+    var input: [8192]u8 = undefined;
+    var random_state: u32 = 0x243f_6a88;
+    for (&input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 52)
+            @intCast('a' + index % 23)
+        else
+            @truncate(random_state >> 24);
+    }
+
+    var expected_head: [head_size]u16 = @splat(empty);
+    const expected_prev = try std.testing.allocator.alloc(u16, input.len);
+    defer std.testing.allocator.free(expected_prev);
+    for (&input, 0..) |_, position| {
+        if (position + min_match > input.len) {
+            expected_prev[position] = empty;
+            continue;
+        }
+        const hash = hash4(&input, position);
+        expected_prev[position] = expected_head[hash];
+        expected_head[hash] = @intCast(position);
+    }
+
+    var scratch: Scratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    _ = try planReuse(&scratch, std.testing.allocator, &input);
+    try std.testing.expectEqualSlices(u16, &expected_head, &scratch.head);
+    try std.testing.expectEqualSlices(u16, expected_prev, scratch.prev.items);
 }
 
 test "single-state repeat beam releases every allocation failure" {

@@ -1591,6 +1591,15 @@ embedded object reduced small text by about 6.7%, and borrowing existing
 sequence arrays reduced binary level 1 by about 2.4%. The isolated per-call
 scratch remains preferable until reuse can preserve code layout and all control
 rows.
+The single-state predecessor index is now built in the same forward pass that
+evaluates DP states, following upstream zstd's query-then-insert fast-match
+shape instead of first writing and then rereading the complete predecessor
+array. A generated 8 KiB oracle pins every predecessor and final hash head to
+the former prebuilt layout. Thirty-one alternating fixed-CPU-8 pairs improve
+the locked JSON level-1 median by another `1.0223x` (29/31 wins); six primary
+target/control medians reach `1.0045x` geometrically with a `0.9964x` floor,
+and two additional multiblock level-3/9 controls remain at `1.0023x`/`1.0007x`.
+All compared frame bytes and checksums are unchanged.
 
 A follow-up attempted to extend level 1's audited double-fast speed tradeoff
 from wide alphabets to extremely compressible narrow/JSON blocks. A 44:1

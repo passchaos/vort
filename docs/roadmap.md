@@ -9842,6 +9842,14 @@ coverage.
   binary level 1 by about 2.4%; the isolated per-call scratch retains the best
   balanced result and preserves the two-state planner's `0x1078` machine-code
   size.
+  The single-state parser now follows upstream zstd's query-then-insert fast
+  match shape and builds predecessor links inline with its forward DP, removing
+  a complete predecessor write/read pass. An 8 KiB generated oracle pins every
+  predecessor and final hash head to the former prebuilt index. Thirty-one
+  alternating fixed-CPU-8 pairs improve JSON level 1 by another `1.0223x`
+  (29/31 wins); six primary target/control medians reach `1.0045x`
+  geometrically with a `0.9964x` floor, while multiblock level 3/9 controls
+  remain at `1.0023x`/`1.0007x`. All frame bytes and checksums are unchanged.
   A narrow-alphabet extension of level 1's double-fast speed policy was audited
   and rejected. Requiring a complete 44:1 block reduced the locked 32 KiB JSON
   encode from the strict 640-byte frame to a 694-byte frame, still below
