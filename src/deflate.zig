@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const checksum = @import("checksum.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
@@ -23,6 +24,13 @@ const incremental_fixed_literal_decoder = @import("deflate/incremental/decoder/f
 const incremental_zlib_decoder = @import("deflate/incremental/decoder/zlib.zig");
 const incremental_gzip_decoder = @import("deflate/incremental/decoder/gzip.zig");
 const incremental_tests = @import("deflate/incremental/tests.zig");
+
+const incompressible_classifier_text_section = switch (builtin.object_format) {
+    .elf => ".vort_deflate_incompressible",
+    .macho => "__TEXT,__vort_dfl_incomp",
+    .coff => ".text$vort_deflate_incompressible",
+    else => ".text",
+};
 
 const png = @import("png.zig");
 const png_up_dominant = @import("png/up_dominant.zig");
@@ -929,16 +937,43 @@ pub fn usesStoredFastPath(input: []const u8, options: CompressionOptions) bool {
 fn looksIncompressible(input: []const u8) bool {
     const sample_len = @min(input.len, 1024);
     if (uniqueByteCount(input[0..sample_len]) < 240) return false;
+    return hasFewRepeatedFourByteWords(input[0..sample_len]);
+}
+
+noinline fn hasFewRepeatedFourByteWords(sample: []const u8) linksection(incompressible_classifier_text_section) bool {
+    const word_count = sample.len -| 3;
+    if (word_count < 2) return false;
+    const empty = std.math.maxInt(u16);
+    var slots: [2048]u16 = @splat(empty);
+    var repeats: usize = 0;
+    for (0..word_count) |index| {
+        const word = std.mem.readInt(u32, sample[index..][0..4], .little);
+        var slot = ((word *% 2654435761) >> 21) & (slots.len - 1);
+        while (slots[slot] != empty) : (slot = (slot + 1) & (slots.len - 1)) {
+            const previous = slots[slot];
+            if (std.mem.readInt(u32, sample[previous..][0..4], .little) == word) {
+                repeats += 1;
+                if (repeats >= 4) return false;
+                break;
+            }
+        }
+        if (slots[slot] == empty) slots[slot] = @intCast(index);
+    }
+    return true;
+}
+
+fn looksIncompressibleSortedReference(input: []const u8) bool {
+    const sample_len = @min(input.len, 1024);
+    if (uniqueByteCount(input[0..sample_len]) < 240) return false;
     const word_count = sample_len -| 3;
     if (word_count < 2) return false;
     var words: [1024]u32 = undefined;
-    for (words[0..word_count], 0..) |*word, i| {
-        word.* = std.mem.readInt(u32, input[i..][0..4], .little);
-    }
+    for (words[0..word_count], 0..) |*word, index|
+        word.* = std.mem.readInt(u32, input[index..][0..4], .little);
     std.mem.sort(u32, words[0..word_count], {}, std.sort.asc(u32));
     var repeats: usize = 0;
-    for (words[1..word_count], 1..) |word, i| {
-        if (word == words[i - 1]) {
+    for (words[1..word_count], 1..) |word, index| {
+        if (word == words[index - 1]) {
             repeats += 1;
             if (repeats >= 4) return false;
         }
@@ -21811,6 +21846,35 @@ test "stored fast path does not mask repeated binary structure" {
     const stored = try encodeRawStoredAlloc(std.testing.allocator, &input);
     defer std.testing.allocator.free(stored);
     try std.testing.expect(encoded.len < stored.len);
+}
+
+test "stored fast-path hash set matches sorted reference" {
+    var input: [1024]u8 = undefined;
+    var state: u32 = 0x243f_6a88;
+    for (0..256) |seed| {
+        for (&input, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = @truncate(state ^ (index * 131 + seed * 17));
+        }
+        if (seed % 3 == 0) {
+            @memcpy(input[333..337], input[17..21]);
+            @memcpy(input[701..705], input[17..21]);
+        }
+        if (seed % 5 == 0) {
+            @memcpy(input[901..905], input[17..21]);
+            @memcpy(input[977..981], input[17..21]);
+        }
+        try std.testing.expectEqual(
+            looksIncompressibleSortedReference(&input),
+            looksIncompressible(&input),
+        );
+    }
+
+    const low_diversity = "abcd" ** 256;
+    try std.testing.expectEqual(
+        looksIncompressibleSortedReference(low_diversity),
+        looksIncompressible(low_diversity),
+    );
 }
 
 test "compression level presets round trip" {

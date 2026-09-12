@@ -506,6 +506,21 @@ isolated dense builder at about 1.35%; the former `initFromStats` symbol no
 longer appears above the 0.15% reporting threshold. Full validation passed
 1,502 tests, all 83 compile-check steps, the Rust/Python differential checks,
 and the incremental encode gate.
+The stored-fast-path classifier now counts repeated four-byte sample windows
+with an exact 2,048-slot open-addressed position set instead of sorting 1,021
+`u32` values. Hash collisions probe onward and compare the original four bytes,
+so the existing “four repeats” decision is unchanged; the old sort remains as
+a 256-case randomized/constructed differential reference. The lookup helper is
+isolated in its own executable section so low-diversity inputs still return
+after the existing byte-cardinality test without shifting unrelated hot code.
+Against independently cached `ce58be28` baseline/candidate builds, fixed-CPU-8
+ReleaseFast medians improved deterministic incompressible raw/zlib/gzip by
+`1.4347x` / `1.4104x` / `1.3912x` (15/15 each) and the compressible high-
+diversity binary row by `1.0571x` (14/15), with identical frame bytes. README,
+roadmap, and default controls remained neutral. Full validation passed 1,503
+tests, all 83 compile-check steps, the 50-check Rust differential, the five-case
+incremental encode gate, and the 265-success/60-expected-failure Python zlib
+differential dashboard.
 Ring-backed hash search now tests a newly selected match against the
 per-position maximum immediately, instead of checking whether the previous
 best reached that maximum at the start of every candidate iteration. The

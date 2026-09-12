@@ -4234,6 +4234,17 @@ coverage.
   builder at about 1.35%, with the former `initFromStats` symbol below the 0.15%
   report threshold. Final validation passed 1,502 tests, all 83 compile steps,
   both differential suites, and the incremental encode gate.
+  The stored fast-path classifier now uses an exact 2,048-slot open-addressed
+  position set to count duplicate four-byte windows instead of sorting 1,021
+  words. Collisions probe and compare original bytes, and a 256-case randomized/
+  constructed differential retains the sort implementation as an oracle. The
+  helper is isolated so low-diversity callers preserve their existing code
+  layout. Fifteen fixed-CPU-8 pairs from independently cached `ce58be28` builds
+  improved incompressible raw/zlib/gzip by `1.4347x` / `1.4104x` / `1.3912x`
+  (15/15 each), and compressible high-diversity binary by `1.0571x` (14/15),
+  with identical frames; source/default controls stayed neutral. Final
+  validation passed 1,503 tests, all 83 compile steps, both differential suites,
+  and the incremental encode gate.
   An isolated `.fastest` `max_chain=1/2/4/6` sweep kept the existing depth six.
   Depth four was about 3.8% faster in single 200-iteration README/roadmap
   samples, but grew the frames by 23/339 bytes; `src/png.zig` gained only about
