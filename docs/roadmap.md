@@ -9926,6 +9926,18 @@ coverage.
   layout but reached only `1.0021x` median over the retained token-producing
   proxy. The existing implementation remains smaller and within the project's
   1% retention threshold.
+  A level-1 early return using the same single-state/fixed-cost proof was
+  rejected after isolating its helper in a separate text section. Generated
+  audits preserved complete-arbitration output across 128 broad mixed/noise/
+  copied-tail shapes, all screened structured controls, and 24 large JSON
+  streams; the locked JSON wire also remained 643 bytes. Thirty-one
+  alternating fixed-CPU-8 independent-binary pairs improved JSON level 1 by
+  `1.7357x` with 31/31 wins, but unchanged text level 1 fell to `0.8704x` with
+  0/31 wins. The eight-row matrix floor was therefore `0.8704x`, far below the
+  `0.99x` control threshold despite a `1.0517x` row-median geometric mean. The
+  extra helper and dispatch were removed completely; future level-1 early-exit
+  work must avoid adding another encoder body or otherwise prove stable whole-
+  binary layout.
   Wider single-state hash tables were rejected after a same-layout sweep. An
   8,192-bucket table improved JSON level 1 by only `1.0085x` with an eight-row
   `1.0023x` median geomean and `0.9988x` floor; 16,384 buckets improved JSON by
