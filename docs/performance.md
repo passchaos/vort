@@ -583,6 +583,10 @@ positive. Final validation passed 1,505 tests, all 83 compile-check steps, the
 50-check Rust differential, the five-case incremental encode gate, the
 265-success/60-expected-failure Python zlib differential dashboard, and the
 x86-linux-musl LZ77 compile check.
+A follow-up that cleared the compact 64 KiB `u16` head to the sentinel and
+removed bitmap probes was rejected immediately: fifteen long fixed-CPU-8 raw
+pairs fell to `0.9205x` with only 1/15 wins. Even after halving the head width,
+the per-block clear remains much more expensive than the 4 KiB bitmap.
 The stored-fast-path classifier now counts repeated four-byte sample windows
 with an exact 2,048-slot open-addressed position set instead of sorting 1,021
 `u32` values. Hash collisions probe onward and compare the original four bytes,

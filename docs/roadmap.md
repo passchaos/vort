@@ -4289,6 +4289,9 @@ coverage.
   about 0.8%. Final validation passed 1,505 tests, all 83 compile steps, both
   differential suites, the incremental encode gate, and the x86-linux-musl
   LZ77 compile check.
+  Clearing the compact 64 KiB `u16` head and removing bitmap branches was
+  rejected after the first long raw matrix: it reached only `0.9205x` with
+  1/15 wins. Retain the 4 KiB lazy-initialization bitmap even with u16 entries.
   The stored fast-path classifier now uses an exact 2,048-slot open-addressed
   position set to count duplicate four-byte windows instead of sorting 1,021
   words. Collisions probe and compare original bytes, and a 256-case randomized/
