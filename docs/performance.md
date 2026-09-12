@@ -1629,6 +1629,13 @@ Forty-one alternating fixed-CPU-8 JSON level-1 pairs improve the median by
 target/control median geomean is `1.0062x` with a `0.9985x` floor. All locked
 frame bytes and checksums remain unchanged. Depth 32 improved JSON only
 `1.0081x`; depth 8 regressed it to `0.9574x`, so neither is retained.
+Compacting each one-state DP node from 16 to 8 bytes by reconstructing tokens
+from predecessor spans was also rejected. It preserved every focused token and
+candidate oracle and shrank the isolated parser body from `0xa85` to `0xa24`,
+but forty-one fixed-CPU-8 JSON level-1 pairs fell to a `0.8767x` median; text
+and binary controls were also negative. Retain the power-of-two 16-byte state
+layout with the explicit token until a different representation improves the
+end-to-end pipeline.
 
 A follow-up attempted to extend level 1's audited double-fast speed tradeoff
 from wide alphabets to extremely compressible narrow/JSON blocks. A 44:1

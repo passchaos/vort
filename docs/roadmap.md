@@ -9875,6 +9875,11 @@ coverage.
   1 improves by `1.0169x`, and eight target/control medians reach `1.0062x`
   geometrically with a `0.9985x` floor. Depth 32 improved JSON by only
   `1.0081x`, while depth 8 regressed it to `0.9574x`; both were rejected.
+  Compacting each single-state DP node from 16 to 8 bytes by reconstructing its
+  token from predecessor spans was rejected too. All focused token/candidate
+  oracles remained exact and the parser body shrank from `0xa85` to `0xa24`,
+  but forty-one fixed-CPU-8 JSON level-1 pairs fell to `0.8767x`; text and
+  binary controls were also negative. Keep the 16-byte power-of-two stride.
   A narrow-alphabet extension of level 1's double-fast speed policy was audited
   and rejected. Requiring a complete 44:1 block reduced the locked 32 KiB JSON
   encode from the strict 640-byte frame to a 694-byte frame, still below

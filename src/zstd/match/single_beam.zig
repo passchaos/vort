@@ -22,6 +22,10 @@ const State = struct {
     token: lz77.Token = .{ .literal = 0 },
 };
 
+comptime {
+    std.debug.assert(@sizeOf(State) == 16);
+}
+
 pub const Scratch = struct {
     head: [head_size]u16 = @splat(empty),
     prev: std.ArrayList(u16) = .empty,
