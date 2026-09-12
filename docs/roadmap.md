@@ -11226,6 +11226,21 @@ coverage.
   ratio arbitrarily low, so no output/input percentage alone proves that lazy
   arbitration is dominated. The temporary probe and candidate split were
   removed.
+  Two upstream-inspired static-dictionary matcher reductions were also rejected
+  on the focused q3 ratio path. Sharing one base-word prefix comparison across
+  identity/omit-last transforms preserved every selected byte, dictionary copy
+  count, and checksum, but eleven alternating fixed-CPU-8 pairs all lost on the
+  65-byte dictionary case (median `0.7275x`). Computing an exact transform-output
+  upper bound before byte comparison likewise preserved all benchmark wires,
+  yet fifteen pairs regressed dictionary to `0.9597x`, mixed to `0.9873x`,
+  uppercase to `0.9408x`, and the no-match incompressible control to `0.8491x`.
+  A third variant merged uppercase-first and uppercase-all scans when their
+  normalized four-byte keys were identical. It moved the intended uppercase
+  row by only `1.0093x` while dictionary/mixed/incompressible fell to
+  `0.7597x`/`0.8482x`/`0.9081x` in fifteen pairs. All production experiments
+  were removed; the planned-encode benchmark keeps its new `--case` filter so
+  future short-input profiles and interleaved A/Bs can isolate one workload
+  without changing the default eight-row gate.
   Simplifying optimal length-prefix tie selection from a redundant compound
   comparison to `cost <= best_cost` was semantically exact: lengths are visited
   in strictly increasing order, and the existing randomized prefix oracle plus

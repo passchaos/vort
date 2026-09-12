@@ -93,6 +93,12 @@ zig build run-competitor-gap-report-smoke
 zig build -Doptimize=ReleaseFast run-competitor-gap-report
 ```
 
+`run-br-planned-encode-bench` accepts `-- --case <name>` to isolate one of
+its built-in Brotli rows, for example `dictionary`, `mixed`, or `source32k`.
+Use the filter for profiling and fixed-CPU interleaved A/B runs; omit it for
+the formal eight-row `run-br-planned-encode-bench-gate`. An unknown case is an
+error rather than a silently empty benchmark.
+
 ## Unified competitor gap report
 
 `run-competitor-gap-report` reads the existing Deflate, Zstd, LZ4, Snappy, and
