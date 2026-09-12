@@ -14,6 +14,8 @@ zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-gate
+zig build -Doptimize=ReleaseFast run-zstd-encode-bench-path-smoke
+zig build -Doptimize=ReleaseFast run-zstd-encode-bench -- --level 1 --limit 131072 --path README.md --path src/zstd.zig
 zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench -- --level 1 --case json --candidate primary --stage rep_beam_single --iterations 20 --rounds 9 --warmup 2
@@ -103,6 +105,13 @@ deduplicated identity/uppercase canonical spellings as upstream Brotli's
 static lookup table. Its exact persistent size is 192,354 bytes; the Node
 compatibility gate pins that value and independently decodes the dictionary,
 mixed, uppercase, and unmatched planned streams.
+
+`run-zstd-encode-bench` accepts repeatable `--path <file>` inputs and a shared
+`--limit <bytes>` prefix limit. File rows use stable `fileN_basename` names and
+the same Vort/libzstd bidirectional decode check, level filter, and interleaved
+timing loop as the built-in matrix. Omit `--path` for the formal five-case,
+four-level gate; use file mode for fixed-CPU A/B checks on real JSON, source,
+configuration, and corpus files without maintaining a separate benchmark.
 
 ## Unified competitor gap report
 

@@ -12377,3 +12377,20 @@ reuse, so production keeps the simpler independently owned plans.
   `0.9945x`). The length dispatch, lazy limit, specialized lookahead, scratch
   API, and tests were removed; future q3 size work must avoid a second hash-chain
   traversal on the fast path.
+  A Zstd level-1 narrow-JSON double-fast shortcut was also rejected after four
+  progressively smaller routing layouts. The motivating 32,797-byte NDJSON row
+  moved from the 643-byte single-state result to a 694-byte double-fast frame,
+  still 17.2% smaller than libzstd 1.5.5's 838 bytes, while 31-pair fixed-CPU-8
+  ReleaseFast runs improved throughput by roughly `5.6x` with 31/31 wins. A
+  64-case JSON/log/source/CSV audit kept every non-target wire exact; a separate
+  24-case target family selected 11 blocks behind a 44:1 compressed-size rule,
+  with each selected block within 12.5% of complete level-1 arbitration. Eight
+  real JSON/source/configuration files also retained exact sizes and measured a
+  `1.0012x` median-ratio geometric mean with a `0.9951x` floor. Nevertheless,
+  integrating the shortcut changed whole-binary code placement: the best final
+  layouts left repetitive text level 1 near `0.975x`, and one layout reduced
+  multiblock level 22 to `0.9845x`. Exact single-state wire validation erased
+  the target gain, and section isolation did not restore all controls, so all
+  production routing and oracle code was removed. The Zstd encode benchmark's
+  new repeatable `--path` and bounded `--limit` inputs remain for future real-file
+  experiments using the same measurement and bidirectional-decode harness.
