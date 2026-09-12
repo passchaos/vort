@@ -549,6 +549,16 @@ did not justify the control-flow change: binary raw/zlib/gzip `.fastest` were
 only `1.0017x` / `1.0000x` / `1.0026x`, roadmap was a repeatable `0.9966x`
 with 0/11 wins, and default README was `0.9946x`. Keep the separate lookup and
 insertion until a design can remove more work without shifting source paths.
+Two further dense-builder layout experiments were rejected. Splitting symbols
+from the ordinary-tree nodes produced an 8-byte hot weight arena and improved
+the isolated real-histogram builder by `1.1548x`, but the extra symbol map and
+final frequency rescan enlarged the generated fast-helper stack from about
+79.7 KiB to 80.5 KiB; full binary raw/zlib/gzip encode measured only `1.0031x`
+/ `0.9983x` / `1.0029x`. Separately no-inlining the rare package-merge fallback
+reduced the fast helper to a 14 KiB stack frame and improved the isolated
+builder by `1.0247x`, but complete zlib/gzip encode fell to `0.9961x` /
+`0.9937x` with only 3/15 and 2/15 wins. Keep the unified node layout and
+inlined fallback; neither isolated micro win survived the full encoder.
 The stored-fast-path classifier now counts repeated four-byte sample windows
 with an exact 2,048-slot open-addressed position set instead of sorting 1,021
 `u32` values. Hash collisions probe onward and compare the original four bytes,

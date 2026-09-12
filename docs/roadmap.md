@@ -4263,6 +4263,14 @@ coverage.
   `1.0017x` / `1.0000x` / `1.0026x`, while roadmap fell to `0.9966x` with 0/11
   wins and default README to `0.9946x`. The current separate bitmap/head lookup
   and insertion remain.
+  Two dense-builder layout variants were rejected despite isolated wins. An
+  8-byte weight arena improved the real-histogram builder by `1.1548x`, but its
+  separate symbol map/final rescan enlarged the generated stack frame and made
+  full binary raw/zlib/gzip only `1.0031x` / `0.9983x` / `1.0029x`. A noinline
+  package-merge fallback cut the fast-helper stack from about 79.7 KiB to 14
+  KiB and improved the builder by `1.0247x`, yet complete zlib/gzip encode was
+  `0.9961x` / `0.9937x` with 3/15 and 2/15 wins. Keep the current unified
+  layout and inlined fallback.
   The stored fast-path classifier now uses an exact 2,048-slot open-addressed
   position set to count duplicate four-byte windows instead of sorting 1,021
   words. Collisions probe and compare original bytes, and a 256-case randomized/
