@@ -9959,6 +9959,13 @@ coverage.
   `0.9926x`. The trailing implementation was removed. Future work must first
   stabilize section placement independently rather than combining layout and
   policy changes in one candidate.
+  Aligning the isolated single-state parser and shared fast-encode section to
+  separate 4 KiB boundaries was rejected as a standalone layout foundation.
+  It fixed their starts at page boundaries without changing code or wire bytes,
+  but 31-pair full-encoder controls reduced binary level 1 to `0.9788x`; the
+  six-row median geometric mean was `0.9980x`. Coarse page alignment therefore
+  changes instruction-cache placement enough to be a regression by itself and
+  was removed.
   Replacing the single-state parser's input-sized occupancy bitmap with a
   sliding `State.cost` infinity sentinel was rejected as an end-to-end loss.
   Every position remains reachable through a literal transition and no match
