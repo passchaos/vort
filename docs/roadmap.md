@@ -4327,6 +4327,11 @@ coverage.
   raw/zlib/gzip source matrix reached a `1.0112x` row-median geometric mean with
   identical wires. Its initially noisy roadmap-gzip control was confirmed over
   21 longer pairs at `1.0065x` median with 16/21 wins.
+  A threshold-only `u32` lazy-lookahead search was rejected next. It preserved
+  candidate order/budget, match acceptance, tokens, and wire bytes, but its
+  duplicated search body and acceptance branch reduced README/roadmap
+  raw-default throughput to `0.9671x`/`0.9787x`; roadmap lost all 15 pairs.
+  Keep the shared full match search for current and lookahead positions.
   The stored fast-path classifier now uses an exact 2,048-slot open-addressed
   position set to count duplicate four-byte windows instead of sorting 1,021
   words. Collisions probe and compare original bytes, and a 256-case randomized/

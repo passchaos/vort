@@ -639,6 +639,13 @@ pairs improved by `1.011x`/`1.006x` with 14/15 wins each. A nine-pair, twelve-ro
 raw/zlib/gzip matrix over four source files reached a `1.0112x` row-median
 geometric mean with identical wires; the apparent weakest roadmap-gzip row was
 then confirmed over 21 longer pairs at `1.0065x` median with 16/21 wins.
+A threshold-only lazy-lookahead search was rejected on top of that retained
+screen. It returned as soon as the next position found the one-byte gain needed
+to displace the current match, while preserving candidate order, budget,
+acceptance, tokens, and wire bytes. The duplicated search body and added
+acceptance branch still outweighed the saved tail work: fifteen fixed-CPU-8
+raw-default pairs measured only `0.9671x` on README and `0.9787x` on roadmap,
+with the latter losing all 15 pairs. Keep the shared full match search.
 The stored-fast-path classifier now counts repeated four-byte sample windows
 with an exact 2,048-slot open-addressed position set instead of sorting 1,021
 `u32` values. Hash collisions probe onward and compare the original four bytes,
