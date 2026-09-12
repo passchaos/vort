@@ -9938,6 +9938,21 @@ coverage.
   extra helper and dispatch were removed completely; future level-1 early-exit
   work must avoid adding another encoder body or otherwise prove stable whole-
   binary layout.
+  Replacing the single-state parser's input-sized occupancy bitmap with a
+  sliding `State.cost` infinity sentinel was rejected as an end-to-end loss.
+  Every position remains reachable through a literal transition and no match
+  can write more than 258 positions ahead, so initializing that horizon and one
+  future slot per iteration is sufficient. A 128-shape oracle matched the old
+  bitmap's tokens and statistics exactly, all 17 single-state tests passed, and
+  41 fixed-CPU-8 stage pairs improved JSON by `1.0695x` and binary by
+  `1.0103x`, with text at `1.0014x`; the parser body shrank from `0xa85` to
+  `0x98e`. Independent full-encoder binaries exposed the opposite result:
+  JSON levels 1/3 measured `0.9796x`/`0.9705x`. Preserving the old scratch
+  field did not help. A final x86-64 ELF layout-controlled variant restored
+  both the parser start and the following fast-helper address, yet 31-pair JSON
+  levels 1/3 remained `0.9806x`/`0.9657x` (level 3 won 0/31). The bitmap and
+  original layout remain; stage-only savings are not evidence of whole-encoder
+  benefit when allocator and entropy phases share the same path.
   Wider single-state hash tables were rejected after a same-layout sweep. An
   8,192-bucket table improved JSON level 1 by only `1.0085x` with an eight-row
   `1.0023x` median geomean and `0.9988x` floor; 16,384 buckets improved JSON by
