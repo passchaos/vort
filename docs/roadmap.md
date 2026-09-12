@@ -9953,6 +9953,17 @@ coverage.
   levels 1/3 remained `0.9806x`/`0.9657x` (level 3 won 0/31). The bitmap and
   original layout remain; stage-only savings are not evidence of whole-encoder
   benefit when allocator and entropy phases share the same path.
+  A distribution-guided 16-byte first probe in the single-state match extender
+  was rejected too. Temporary instrumentation found text dominated by 37,172
+  extensions in the 132--258-byte bucket, while JSON/binary concentrated in
+  the 12--67-byte buckets; probing 16 bytes before the retained 32-byte loop
+  therefore offered earlier exits without shortening long scans. The exhaustive
+  4--258-byte mismatch oracle and generated plan-cost oracle stayed exact.
+  Thirty-one fixed-CPU-8 stage pairs improved JSON by `1.0305x` and text by
+  `1.0021x`, with binary at `0.9959x` and a `1.0094x` three-row median
+  geometric mean. Independent full-encoder binaries again reversed the result:
+  JSON levels 1/3 measured `0.9859x`/`0.9712x`, while binary level 1 was
+  `0.9839x`. The original 32-byte-vector/8-byte-tail extender remains.
   Wider single-state hash tables were rejected after a same-layout sweep. An
   8,192-bucket table improved JSON level 1 by only `1.0085x` with an eight-row
   `1.0023x` median geomean and `0.9988x` floor; 16,384 buckets improved JSON by
