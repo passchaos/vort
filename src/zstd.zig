@@ -17991,8 +17991,12 @@ test "zstd reserved Huffman stream matches checked append reference" {
         if (len >= 1024) {
             var long_actual: std.ArrayList(u8) = .empty;
             defer long_actual.deinit(std.testing.allocator);
-            try emitLongHuffmanStream(std.testing.allocator, &long_actual, payload[0..len], &plan);
+            try emitLongHuffmanStream(false, std.testing.allocator, &long_actual, payload[0..len], &plan);
             try std.testing.expectEqualSlices(u8, expected.items, long_actual.items);
+            var known_active: std.ArrayList(u8) = .empty;
+            defer known_active.deinit(std.testing.allocator);
+            try emitLongHuffmanStream(true, std.testing.allocator, &known_active, payload[0..len], &plan);
+            try std.testing.expectEqualSlices(u8, expected.items, known_active.items);
         }
 
         if (plan.bit_counts[255] == 0) {
@@ -18070,7 +18074,7 @@ fn emitHuffmanLiteralsSectionWithPlan(
     if (literals.len <= 1023) {
         var stream: std.ArrayList(u8) = .empty;
         defer stream.deinit(allocator);
-        try emitSmallHuffmanStream(allocator, &stream, literals, plan);
+        try emitSmallHuffmanStreamKnownActive(allocator, &stream, literals, plan);
         const compressed_size = huffman_tree.len + stream.items.len;
         try emitHuffmanLiteralsHeader(allocator, out, literals.len, compressed_size, reuse_previous_tree) orelse return null;
         try out.appendSlice(allocator, huffman_tree);
@@ -18093,7 +18097,7 @@ fn emitHuffmanLiteralsSectionWithPlan(
             literals[segment_2_end..segment_3_end],
             literals[segment_3_end..],
         };
-        for (&streams, segments) |*stream, segment| try emitSmallHuffmanStream(allocator, stream, segment, plan);
+        for (&streams, segments) |*stream, segment| try emitSmallHuffmanStreamKnownActive(allocator, stream, segment, plan);
         const compressed_size = huffman_tree.len + 6 +
             streams[0].items.len + streams[1].items.len + streams[2].items.len + streams[3].items.len;
         if (streams[0].items.len > std.math.maxInt(u16) or
@@ -18882,7 +18886,7 @@ fn smallHuffmanBitCount(plan: *const SmallHuffmanLiteralPlan, symbol: u8) ?u8 {
 
 fn emitSmallHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: *const SmallHuffmanLiteralPlan) Error!void {
     if (comptime @bitSizeOf(usize) >= 64)
-        if (block.len >= 1024) return emitLongHuffmanStream(allocator, out, block, plan);
+        if (block.len >= 1024) return emitLongHuffmanStream(false, allocator, out, block, plan);
     const lookup = try smallHuffmanLiteralLookup(plan);
     const max_payload_bits = std.math.mul(usize, block.len, @as(usize, plan.max_bit_count)) catch return error.IntegerOverflow;
     const max_stream_bits = std.math.add(usize, max_payload_bits, 1) catch return error.IntegerOverflow;
@@ -18964,7 +18968,19 @@ fn emitSmallHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8),
     }
 }
 
-noinline fn emitLongHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: *const SmallHuffmanLiteralPlan) linksection(wide_sequence_emit_text_section) Error!void {
+fn emitSmallHuffmanStreamKnownActive(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: *const SmallHuffmanLiteralPlan) Error!void {
+    if (comptime @bitSizeOf(usize) >= 64)
+        if (block.len >= 1024) return emitLongHuffmanStream(true, allocator, out, block, plan);
+    return emitSmallHuffmanStream(allocator, out, block, plan);
+}
+
+noinline fn emitLongHuffmanStream(
+    comptime known_active: bool,
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    plan: *const SmallHuffmanLiteralPlan,
+) linksection(wide_sequence_emit_text_section) Error!void {
     if (comptime @bitSizeOf(usize) < 64) return emitSmallHuffmanStream(allocator, out, block, plan);
 
     std.debug.assert(block.len >= 1024);
@@ -18986,7 +19002,8 @@ noinline fn emitLongHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayL
         const second_bits = lookup.bit_counts[second_symbol];
         const third_bits = lookup.bit_counts[third_symbol];
         const fourth_bits = lookup.bit_counts[fourth_symbol];
-        if (first_bits == 0 or second_bits == 0 or third_bits == 0 or fourth_bits == 0) return error.CorruptFrame;
+        if (comptime !known_active)
+            if (first_bits == 0 or second_bits == 0 or third_bits == 0 or fourth_bits == 0) return error.CorruptFrame;
         const first_code: usize = lookup.codes[first_symbol];
         const second_code: usize = lookup.codes[second_symbol];
         const third_code: usize = lookup.codes[third_symbol];
@@ -19016,7 +19033,7 @@ noinline fn emitLongHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayL
     while (i > 0) {
         i -= 1;
         const bits = lookup.bit_counts[block[i]];
-        if (bits == 0) return error.CorruptFrame;
+        if (comptime !known_active) if (bits == 0) return error.CorruptFrame;
         accumulator |= lookup.codes[block[i]] << bit_count;
         bit_count += @intCast(bits);
         while (bit_count >= 8) {

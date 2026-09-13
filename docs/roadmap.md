@@ -12966,3 +12966,14 @@ reuse, so production keeps the simpler independently owned plans.
   offset probes reject every time on text/binary and match only 466 times on
   JSON. This rules out wider chains as the next priority and localizes remaining
   work to successful match extension and state insertion.
+  Long Zstd Huffman literal streams now omit per-symbol inactive-code checks only
+  when the encoder emits literals from the same freshly built plan. The checked
+  API and invalid-symbol behavior remain unchanged; the scalar reference covers
+  both checked and known-active long writers across the 1,023--1,027 dispatch
+  boundary, modulo-four tails, maximum 11-bit codes, and allocation failure. The
+  isolated known-active helper shrinks from `0x346` to `0x2e3`. Thirty independent
+  fixed-CPU-8 complete-frame pairs preserve all 20 sizes and checksums, improve
+  binary levels 1/3/9/22 by `1.0381x`/`1.0080x`/`1.0111x`/`1.0108x`, reach a
+  `1.0036x` row-median geometric mean, and keep the weakest median at `0.9961x`.
+  The 100-row native stage gate, 20-row libzstd 1.5.5 encode gate, and 273-case
+  bidirectional compatibility probe all pass.
