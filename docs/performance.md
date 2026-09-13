@@ -114,6 +114,9 @@ the same Vort/libzstd bidirectional decode check, level filter, and interleaved
 timing loop as the built-in matrix. Omit `--path` for the formal five-case,
 four-level gate; use file mode for fixed-CPU A/B checks on real JSON, source,
 configuration, and corpus files without maintaining a separate benchmark.
+The native stage benchmark accepts the same `--path`/`--limit` pair and records
+`input_bytes` in every row. This is the preferred way to isolate match-family
+costs on real 128 KiB prefixes before running a complete frame A/B.
 
 ## Unified competitor gap report
 

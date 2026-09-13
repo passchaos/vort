@@ -12405,3 +12405,22 @@ reuse, so production keeps the simpler independently owned plans.
   double-fast's 39,648 bytes at 3.65 ms/block. This provides a reproducible
   real-source target for exact-wire optimal-parser work instead of relying only
   on synthetic 32 KiB rows.
+  A Zstd level-1-only four-byte optimal hash anchor was evaluated and rejected.
+  A 128-shape, 4--124 KiB oracle proved that modeled cost never rose, improved
+  at least once, replayed every token stream, and retained consistent
+  statistics; 128 KiB boundary and allocation-failure tests also passed. On
+  CPU 8, eleven interleaved ReleaseFast pairs over five source files and all
+  twelve Silesia 128 KiB prefixes improved the isolated optimal stage by
+  `1.374x` geometrically (`1.125x` floor, 17/17 wins), while aggregate candidate
+  size fell from 695,449 to 694,776 bytes. Fifteen complete-frame pairs over
+  Ghostty `Terminal.zig` and the twelve Silesia prefixes improved `1.163x`
+  geometrically (`1.0017x` floor, 13/13 wins), with aggregate output falling
+  from 606,640 to 606,193 bytes; Terminal itself improved `1.217x` and shrank
+  from 31,748 to 31,718 bytes. However, even after restricting the route to
+  blocks above 64 KiB and moving the new parser/emitter behind independent
+  noinline sections, a 21-pair, 512-iteration short-text control fell to
+  `0.9807x` at level 1 and about `0.987--0.988x` at levels 3/9/22 despite
+  byte-identical output. The stable non-target/layout regression violates the
+  `0.99x` control floor, so the production code and proposal-specific tests
+  were fully removed rather than exchanging broad latency for one large-block
+  gain.
