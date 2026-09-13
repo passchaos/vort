@@ -13020,3 +13020,10 @@ reuse, so production keeps the simpler independently owned plans.
   3 at `0.9940x`. The stage CSV now retains literal/indexed/recent-offset empty
   insert, replacement, and rejection counts plus minimum-cost rejection counts
   so future transition work can be evidence-driven.
+  Extending the same transition lower bound to exactly 258-byte matches was
+  rejected at the focused stage gate. The profiler found only 189 provable
+  primary-text rejections and 1,890/945 in the 4/8 KiB adaptive rows, versus
+  tens of thousands of maximum-length matches that still require exact costs.
+  Twenty-one independent fixed-CPU-2 pairs reduced text primary/adaptive
+  throughput to `0.9821x`/`0.9893x`/`0.9914x`; JSON and binary controls also
+  fell to `0.9879x`/`0.9898x`. Production retains the short-match-only branch.
