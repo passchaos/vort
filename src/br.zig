@@ -46,6 +46,7 @@ const large_window_text_section = switch (builtin.object_format) {
 pub const Error = core.Error || std.mem.Allocator.Error;
 pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
+pub const RatioEncodeProfile = encoder_stats.RatioEncodeProfile;
 pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
 pub const max_extended_dictionary_probes: u16 = 4096;
 pub const PlannedEncodeOptions = struct {
@@ -2069,6 +2070,124 @@ pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const
 /// arbitrary payloads inside its documented one-meta-block size range.
 pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return encodePlannedStreamRatioWithOptionsAlloc(allocator, input, .{ .level = .ratio });
+}
+
+/// Profile the exact default-window ratio pipeline for one bounded block. The
+/// returned bytes have the same ownership and wire semantics as
+/// `encodePlannedStreamRatioAlloc`; timing is intentionally isolated from the
+/// production entry point so normal callers pay no instrumentation overhead.
+pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []const u8, io: std.Io, profile: *RatioEncodeProfile) Error![]u8 {
+    if (input.len < 4 * 1024 or input.len > 32 * 1024) return error.InvalidBlockPlan;
+    profile.* = .{ .input_bytes = input.len };
+    const total_start = std.Io.Clock.awake.now(io);
+    const parser_options = PlannedParserOptions{
+        .window_len = @min(input.len, planner_max_backward_distance),
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+    };
+
+    var stage_start = std.Io.Clock.awake.now(io);
+    const lazy_plan = try lz77.lazyGreedyPlanAlloc(allocator, input, .{
+        .window_len = @min(input.len, parser_options.window_len),
+        .max_chain = parser_options.max_chain,
+        .nice_len = parser_options.nice_len,
+        .max_candidates = 1,
+        .lazy_min_gain = parser_options.lazy_min_gain,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    });
+    defer lazy_plan.deinit(allocator);
+    profile.lazy_plan_ns = elapsedNs(stage_start, io);
+    profile.lazy_token_count = lazy_plan.tokens.len;
+    profile.lazy_match_count = lazy_plan.stats.matches;
+    if (lazy_plan.stats.matches == 0) {
+        stage_start = std.Io.Clock.awake.now(io);
+        const stored = try encodeStoredStreamAlloc(allocator, input);
+        profile.selection_ns = elapsedNs(stage_start, io);
+        profile.stored_bytes = stored.len;
+        profile.selected_bytes = stored.len;
+        profile.total_ns = elapsedNs(total_start, io);
+        return stored;
+    }
+
+    profile.optimal_attempted = true;
+    stage_start = std.Io.Clock.awake.now(io);
+    const lazy_commands = try command_plan.buildAlloc(allocator, input, lazy_plan.tokens);
+    defer lazy_commands.deinit(allocator);
+    profile.lazy_command_ns = elapsedNs(stage_start, io);
+    profile.lazy_command_count = lazy_commands.commands.len;
+
+    var wire_stats: encoder_stats.PlannedEncodeStats = .{};
+    stage_start = std.Io.Clock.awake.now(io);
+    var selected = try encodeLazyCommandPlanAlloc(allocator, input, lazy_commands.commands, &wire_stats, .{
+        .try_recent_distances = true,
+        .try_literal_split = true,
+        .try_command_split = true,
+        .try_distance_split = true,
+    });
+    var selected_owned = true;
+    errdefer if (selected_owned) allocator.free(selected);
+    profile.lazy_wire_ns = elapsedNs(stage_start, io);
+    profile.lazy_bytes = selected.len;
+
+    stage_start = std.Io.Clock.awake.now(io);
+    var optimal_profile: lz77.OptimalSearchProfile = .{};
+    const optimal_plan = try lz77.optimalPlanAllocProfiled(allocator, input, .{
+        .window_len = @min(input.len, @min(parser_options.window_len, lz77.default_window_len)),
+        .max_chain = @min(parser_options.max_chain, 256),
+        .nice_len = parser_options.nice_len,
+        .max_candidates = 128,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    }, io, &optimal_profile);
+    defer optimal_plan.deinit(allocator);
+    profile.optimal_plan_ns = elapsedNs(stage_start, io);
+    profile.optimal_token_count = optimal_plan.tokens.len;
+    profile.optimal_match_count = optimal_plan.stats.matches;
+    profile.optimal_index_bytes = optimal_profile.index_bytes;
+    profile.optimal_positions = optimal_profile.positions;
+    profile.optimal_chain_nodes = optimal_profile.chain_nodes;
+    profile.optimal_prefix_rejections = optimal_profile.prefix_rejections;
+    profile.optimal_bound_rejections = optimal_profile.bound_rejections;
+    profile.optimal_match_length_calls = optimal_profile.match_length_calls;
+    profile.optimal_valid_match_candidates = optimal_profile.valid_match_candidates;
+    profile.optimal_length_choices_built = optimal_profile.length_choices_built;
+    profile.optimal_candidate_budget_stops = optimal_profile.candidate_budget_stops;
+    profile.optimal_index_ns = optimal_profile.index_ns;
+    profile.optimal_search_ns = optimal_profile.search_ns;
+    profile.optimal_reconstruct_ns = optimal_profile.reconstruct_ns;
+
+    if (optimal_plan.stats.matches != 0) {
+        stage_start = std.Io.Clock.awake.now(io);
+        const optimal_commands = try command_plan.buildAlloc(allocator, input, optimal_plan.tokens);
+        defer optimal_commands.deinit(allocator);
+        profile.optimal_command_ns = elapsedNs(stage_start, io);
+        profile.optimal_command_count = optimal_commands.commands.len;
+
+        stage_start = std.Io.Clock.awake.now(io);
+        const optimal_candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, optimal_commands.commands, null, &wire_stats, .{
+            .use_recent_distances = true,
+            .use_utf8_text_contexts = true,
+            .utf8_context_cutoff = 48,
+            .ndirect = 0,
+        });
+        profile.optimal_wire_ns = elapsedNs(stage_start, io);
+        profile.optimal_bytes = optimal_candidate.len;
+        if (optimal_candidate.len < selected.len) {
+            allocator.free(selected);
+            selected = optimal_candidate;
+            profile.optimal_selected = true;
+        } else allocator.free(optimal_candidate);
+    }
+
+    stage_start = std.Io.Clock.awake.now(io);
+    profile.stored_bytes = try encodedStoredStreamBound(input.len);
+    selected_owned = false;
+    const result = try chooseStoredIfSmaller(allocator, input, selected);
+    profile.selection_ns = elapsedNs(stage_start, io);
+    profile.selected_bytes = result.len;
+    profile.total_ns = elapsedNs(total_start, io);
+    return result;
 }
 
 fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
@@ -11888,6 +12007,60 @@ test "br ratio planner keeps an exact optimal candidate for source blocks" {
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br ratio block profile reproduces the production wire" {
+    const payload = @embedFile("br.zig")[0 .. 32 * 1024];
+    const expected = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(expected);
+    var profile: RatioEncodeProfile = .{};
+    const actual = try profilePlannedRatioBlockAlloc(std.testing.allocator, payload, std.testing.io, &profile);
+    defer std.testing.allocator.free(actual);
+
+    try std.testing.expectEqualSlices(u8, expected, actual);
+    try std.testing.expectEqual(payload.len, profile.input_bytes);
+    try std.testing.expect(profile.lazy_token_count > 0);
+    try std.testing.expect(profile.lazy_command_count > 0);
+    try std.testing.expect(profile.lazy_bytes > 0);
+    try std.testing.expect(profile.optimal_attempted);
+    try std.testing.expect(profile.optimal_token_count > 0);
+    try std.testing.expect(profile.optimal_command_count > 0);
+    try std.testing.expect(profile.optimal_bytes > 0);
+    try std.testing.expect(profile.optimal_selected);
+    try std.testing.expectEqual(actual.len, profile.selected_bytes);
+    try std.testing.expect(profile.stageNs() <= profile.total_ns);
+    try std.testing.expect(profile.optimal_index_ns <= profile.optimal_plan_ns);
+    try std.testing.expect(profile.optimal_search_ns <= profile.optimal_plan_ns);
+    try std.testing.expect(profile.optimal_reconstruct_ns <= profile.optimal_plan_ns);
+    try std.testing.expect(profile.optimal_chain_nodes >= profile.optimal_match_length_calls);
+    try std.testing.expect(profile.optimal_match_length_calls >= profile.optimal_valid_match_candidates);
+    try std.testing.expect(profile.optimal_length_choices_built > 0);
+}
+
+test "br ratio block profile preserves stored fallback without optimal search" {
+    var payload: [4 * 1024]u8 = undefined;
+    for (0..payload.len / 2) |i| {
+        payload[2 * i] = @intCast(i >> 8);
+        payload[2 * i + 1] = @truncate(i);
+    }
+    const expected = try encodePlannedStreamRatioAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(expected);
+    var profile: RatioEncodeProfile = .{};
+    const actual = try profilePlannedRatioBlockAlloc(std.testing.allocator, &payload, std.testing.io, &profile);
+    defer std.testing.allocator.free(actual);
+
+    try std.testing.expectEqualSlices(u8, expected, actual);
+    try std.testing.expectEqual(@as(usize, 0), profile.lazy_match_count);
+    try std.testing.expect(!profile.optimal_attempted);
+    try std.testing.expectEqual(@as(usize, 0), profile.optimal_plan_ns);
+    try std.testing.expectEqual(actual.len, profile.stored_bytes);
+    try std.testing.expectEqual(actual.len, profile.selected_bytes);
+    try std.testing.expect(profile.stageNs() <= profile.total_ns);
+
+    var ignored: RatioEncodeProfile = .{};
+    try std.testing.expectError(error.InvalidBlockPlan, profilePlannedRatioBlockAlloc(std.testing.allocator, payload[0 .. 4 * 1024 - 1], std.testing.io, &ignored));
+    const oversized = "x" ** (32 * 1024 + 1);
+    try std.testing.expectError(error.InvalidBlockPlan, profilePlannedRatioBlockAlloc(std.testing.allocator, oversized, std.testing.io, &ignored));
 }
 
 test "br ratio UTF8 context split round trips beyond summary history" {

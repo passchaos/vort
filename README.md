@@ -155,6 +155,7 @@ zig build run-br-stored-corpus
 zig build run-br-literal-cli-diff
 zig build run-br-planned-node-diff
 zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
+zig build -Doptimize=ReleaseFast run-br-ratio-stage-profile-gate
 zig build -Doptimize=ReleaseFast run-br-planned-chunks-bench-gate
 zig build -Doptimize=ReleaseFast run-br-upstream-multiblock-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
@@ -1117,6 +1118,13 @@ budgets return `error.InvalidBlockPlan`.
 The planned encode benchmark accepts `--extended-dictionary-probes N`, so this
 opt-in path can be measured with the same built-in and repeatable `--path`
 corpora as the default levels.
+`brProfilePlannedRatioBlockAlloc` is the explicit diagnostic counterpart for
+default-window 4--32 KiB ratio blocks. It reproduces the production wire while
+reporting lazy/optimal plan, command, wire, and selection timings plus optimal
+chain/search counters; normal encode entrypoints do not enable those counters.
+`run-br-ratio-stage-profile-gate` writes and validates the corresponding
+three-size source profile at `zig-out/vort-br-ratio-stage-profile.csv`, including
+input/output hashes, stage/count identities, and independent libbrotli decode.
 
 ### Native LZ4/Zstd library knobs
 

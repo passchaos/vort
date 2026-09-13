@@ -43,6 +43,23 @@ pub const PlanStats = struct {
     }
 };
 
+pub const OptimalSearchProfile = struct {
+    input_bytes: usize = 0,
+    index_bytes: usize = 0,
+    positions: usize = 0,
+    chain_nodes: usize = 0,
+    prefix_rejections: usize = 0,
+    bound_rejections: usize = 0,
+    match_length_calls: usize = 0,
+    valid_match_candidates: usize = 0,
+    length_choices_built: usize = 0,
+    candidate_budget_stops: usize = 0,
+    index_ns: u64 = 0,
+    search_ns: u64 = 0,
+    reconstruct_ns: u64 = 0,
+    total_ns: u64 = 0,
+};
+
 pub const GreedyOptions = struct {
     window_len: usize = default_window_len,
     max_chain: usize = 128,
@@ -1129,7 +1146,7 @@ inline fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: us
 }
 
 pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
-    return optimalPlanReuseInternal(scratch, allocator, input, options, true);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, false, undefined, undefined);
 }
 
 fn optimalPlanReuseInternal(
@@ -1138,6 +1155,30 @@ fn optimalPlanReuseInternal(
     input: []const u8,
     options: GreedyOptions,
     comptime enable_prefix_bound: bool,
+) !PlanStats {
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, enable_prefix_bound, false, undefined, undefined);
+}
+
+pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, io: std.Io, profile: *OptimalSearchProfile) !GreedyPlan {
+    profile.* = .{ .input_bytes = input.len };
+    const total_start = std.Io.Clock.awake.now(io);
+    var scratch: OptimalScratch = .{};
+    defer scratch.deinit(allocator);
+    const stats = try optimalPlanReuseInternalProfiled(&scratch, allocator, input, options, true, true, io, profile);
+    const tokens = try allocator.dupe(Token, scratch.tokens.items);
+    profile.total_ns = elapsedNs(total_start, io);
+    return .{ .tokens = tokens, .stats = stats };
+}
+
+fn optimalPlanReuseInternalProfiled(
+    scratch: *OptimalScratch,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    comptime enable_prefix_bound: bool,
+    comptime collect_profile: bool,
+    io: if (collect_profile) std.Io else void,
+    profile: if (collect_profile) *OptimalSearchProfile else void,
 ) !PlanStats {
     const n = input.len;
     // A literal-only path costs at most nine bits per byte. This bound is far
@@ -1149,6 +1190,7 @@ fn optimalPlanReuseInternal(
     try scratch.steps.resize(allocator, n);
     scratch.tokens.clearRetainingCapacity();
     if (enable_prefix_bound and input.len <= optimal_compact_index_empty) {
+        const index_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
         try buildOptimalCompactHashIndex(
             allocator,
             input,
@@ -1156,10 +1198,19 @@ fn optimalPlanReuseInternal(
             &scratch.compact_prev,
             &scratch.index.head_initialized,
         );
-        return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound);
+        if (comptime collect_profile) {
+            profile.index_ns = elapsedNs(index_start, io);
+            profile.index_bytes = (scratch.compact_head.items.len + scratch.compact_prev.items.len) * @sizeOf(u32) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
+        }
+        return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, io, profile);
     }
+    const index_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
     try scratch.index.build(allocator, input);
-    return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound);
+    if (comptime collect_profile) {
+        profile.index_ns = elapsedNs(index_start, io);
+        profile.index_bytes = (scratch.index.head.items.len + scratch.index.prev.items.len) * @sizeOf(isize) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
+    }
+    return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound, collect_profile, io, profile);
 }
 
 inline fn optimalPlanReuseWithIndex(
@@ -1170,6 +1221,9 @@ inline fn optimalPlanReuseWithIndex(
     prev: anytype,
     comptime empty: @TypeOf(prev[0]),
     comptime enable_prefix_bound: bool,
+    comptime collect_profile: bool,
+    io: if (collect_profile) std.Io else void,
+    profile: if (collect_profile) *OptimalSearchProfile else void,
 ) !PlanStats {
     const n = input.len;
     const costs = scratch.costs.items;
@@ -1180,9 +1234,11 @@ inline fn optimalPlanReuseWithIndex(
     const minimum = minMatch(options);
     const candidate_limit = normalizedMaxCandidates(options);
     const distance_costs = &fixed_distance_costs;
+    const search_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
 
     while (rev_i > 0) {
         rev_i -= 1;
+        if (comptime collect_profile) profile.positions += 1;
         costs[rev_i] = fixedLiteralCost(input[rev_i]) + costs[rev_i + 1];
         steps[rev_i] = .{ .literal = input[rev_i] };
 
@@ -1195,6 +1251,7 @@ inline fn optimalPlanReuseWithIndex(
         var candidates_seen: usize = 0;
 
         while (chain_i != empty and checked < options.max_chain) : (checked += 1) {
+            if (comptime collect_profile) profile.chain_nodes += 1;
             const candidate: usize = @intCast(chain_i);
             std.debug.assert(candidate < rev_i);
             const distance = rev_i - candidate;
@@ -1203,6 +1260,7 @@ inline fn optimalPlanReuseWithIndex(
                 std.mem.readInt(u32, input[candidate..][0..4], .little) !=
                     std.mem.readInt(u32, input[rev_i..][0..4], .little))
             {
+                if (comptime collect_profile) profile.prefix_rejections += 1;
                 chain_i = prev[candidate];
                 continue;
             }
@@ -1215,14 +1273,23 @@ inline fn optimalPlanReuseWithIndex(
                 input[candidate + choices_built_through] != input[rev_i + choices_built_through] and
                 optimalLengthChoiceCost(scratch.index.best_length_choices[choices_built_through]) + distance_cost >= costs[rev_i])
             {
+                if (comptime collect_profile) profile.bound_rejections += 1;
                 candidates_seen += 1;
-                if (candidates_seen >= candidate_limit) break;
+                if (candidates_seen >= candidate_limit) {
+                    if (comptime collect_profile) profile.candidate_budget_stops += 1;
+                    break;
+                }
                 chain_i = prev[candidate];
                 continue;
             }
 
+            if (comptime collect_profile) profile.match_length_calls += 1;
             const length = matchLength(input, candidate, rev_i, max_len);
             if (length >= minimum) {
+                if (comptime collect_profile) {
+                    profile.valid_match_candidates += 1;
+                    profile.length_choices_built += length -| choices_built_through;
+                }
                 extendOptimalLengthChoices(
                     costs,
                     rev_i,
@@ -1241,13 +1308,21 @@ inline fn optimalPlanReuseWithIndex(
                 }
                 candidates_seen += 1;
                 if (length == max_len) break;
-                if (length >= options.nice_len and candidates_seen >= candidate_limit) break;
-                if (candidates_seen >= candidate_limit) break;
+                if (length >= options.nice_len and candidates_seen >= candidate_limit) {
+                    if (comptime collect_profile) profile.candidate_budget_stops += 1;
+                    break;
+                }
+                if (candidates_seen >= candidate_limit) {
+                    if (comptime collect_profile) profile.candidate_budget_stops += 1;
+                    break;
+                }
             }
             chain_i = prev[candidate];
         }
     }
 
+    if (comptime collect_profile) profile.search_ns = elapsedNs(search_start, io);
+    const reconstruct_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
     var stats = PlanStats{};
     var pos: usize = 0;
     while (pos < n) {
@@ -1265,7 +1340,13 @@ inline fn optimalPlanReuseWithIndex(
             },
         }
     }
+    if (comptime collect_profile) profile.reconstruct_ns = elapsedNs(reconstruct_start, io);
     return stats;
+}
+
+fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
+    const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
+    return if (ns <= 0) 0 else @intCast(ns);
 }
 
 fn extendOptimalLengthChoices(
@@ -3002,6 +3083,43 @@ test "optimal prefix bound preserves reference tokens" {
         try std.testing.expectEqual(reference_stats, bounded_stats);
         try std.testing.expectEqualSlices(Token, reference.tokens.items, bounded.tokens.items);
     }
+}
+
+test "profiled optimal parser preserves tokens and search accounting" {
+    var input: [4096]u8 = undefined;
+    var state: u32 = 0x3c6e_f372;
+    for (&input, 0..) |*byte, position| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (position >= 769 and position % 17 < 13)
+            input[position - 769]
+        else
+            @truncate(state >> 24);
+    }
+    const options: GreedyOptions = .{
+        .window_len = input.len,
+        .max_chain = 128,
+        .nice_len = max_match_len,
+        .max_candidates = 32,
+        .min_match = 4,
+        .max_match = max_match_len,
+    };
+    const expected = try optimalPlanAlloc(std.testing.allocator, &input, options);
+    defer expected.deinit(std.testing.allocator);
+    var profile: OptimalSearchProfile = .{};
+    const actual = try optimalPlanAllocProfiled(std.testing.allocator, &input, options, std.testing.io, &profile);
+    defer actual.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(expected.stats, actual.stats);
+    try expectEqualTokenSlices(expected.tokens, actual.tokens);
+    try std.testing.expectEqual(input.len, profile.input_bytes);
+    try std.testing.expectEqual(input.len, profile.positions);
+    try std.testing.expect(profile.index_bytes > 0);
+    try std.testing.expectEqual(
+        profile.chain_nodes,
+        profile.prefix_rejections + profile.bound_rejections + profile.match_length_calls,
+    );
+    try std.testing.expect(profile.match_length_calls >= profile.valid_match_candidates);
+    try std.testing.expect(profile.index_ns + profile.search_ns + profile.reconstruct_ns <= profile.total_ns);
 }
 
 test "compact optimal hash index matches reference beyond u16 positions" {

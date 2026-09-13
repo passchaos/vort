@@ -12695,3 +12695,20 @@ reuse, so production keeps the simpler independently owned plans.
   `0.9230x`/`0.8643x`. The compact tables and boundary oracle were removed;
   retain the established `isize` tiny-lazy layout until it can be isolated in a
   separately linked object without perturbing either caller family.
+  Added a dedicated Brotli ratio-stage profiler instead of continuing to infer
+  candidate costs from the fast-only planned-stage tool. The explicit profiling
+  API replays the production 4--32 KiB default-window ratio pipeline and requires
+  byte-identical output, while compile-time-disabled instrumentation keeps normal
+  optimal parsing free of clock reads and counters. Its CSV records lazy and
+  optimal plan/command/wire times, selected/lazy/optimal/stored sizes, token and
+  match counts, compact-index bytes, visited chain nodes, four-byte prefix and
+  lower-bound rejections, full match-length calls, expanded length choices,
+  candidate-budget stops, and unaccounted time. The three-row gate covers 4/16/
+  32 KiB prefixes of `src/br.zig`, validates timing and search-count identities,
+  hashes both input and encoded output, checks production-wire parity, and
+  independently decodes every stream with libbrotli 1.1.0. The initial fixed-
+  CPU-2 profile attributes about 73% of the 32 KiB run to optimal search:
+  1,247,919 chain visits comprise 482,477 four-byte prefix rejections, 700,227
+  lower-bound rejections, and only 65,215 full match-length calls. This narrows
+  the next optimization target to collision/bound handling inside the search,
+  rather than the roughly 12% combined lazy/optimal wire construction.

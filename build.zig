@@ -1011,6 +1011,30 @@ pub fn build(b: *std.Build) void {
     const run_br_planned_stage_profile = b.addRunArtifact(br_planned_stage_profile_exe);
     const br_planned_stage_profile_step = b.step("run-br-planned-stage-profile", "Report planner-backed Brotli token/command/alphabet shape");
     br_planned_stage_profile_step.dependOn(&run_br_planned_stage_profile.step);
+    const br_ratio_stage_profile_exe = b.addExecutable(.{
+        .name = "vort-br-ratio-stage-profile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/ratio_stage_profile.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_br_ratio_stage_profile = b.addRunArtifact(br_ratio_stage_profile_exe);
+    if (b.args) |args| run_br_ratio_stage_profile.addArgs(args);
+    const br_ratio_stage_profile_step = b.step("run-br-ratio-stage-profile", "Profile Brotli ratio candidate stages and optimal search");
+    br_ratio_stage_profile_step.dependOn(&run_br_ratio_stage_profile.step);
+    const run_br_ratio_stage_profile_csv = b.addRunArtifact(br_ratio_stage_profile_exe);
+    run_br_ratio_stage_profile_csv.addArgs(&.{ "--iterations", "3", "--csv", "zig-out/vort-br-ratio-stage-profile.csv" });
+    const br_ratio_stage_profile_gate = b.addSystemCommand(&.{ "python3", "tools/br/ratio_stage_profile_gate.py", "--csv", "zig-out/vort-br-ratio-stage-profile.csv", "--executable" });
+    br_ratio_stage_profile_gate.addArtifactArg(br_ratio_stage_profile_exe);
+    br_ratio_stage_profile_gate.step.dependOn(&run_br_ratio_stage_profile_csv.step);
+    const br_ratio_stage_profile_gate_step = b.step("run-br-ratio-stage-profile-gate", "Validate Brotli ratio stage profile coverage and counters");
+    br_ratio_stage_profile_gate_step.dependOn(&br_ratio_stage_profile_gate.step);
     const br_planned_stage_bench_exe = b.addExecutable(.{
         .name = "vort-br-planned-stage-bench",
         .root_module = b.createModule(.{
@@ -4123,6 +4147,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_planned_encode_bench_exe.step);
     check_step.dependOn(&br_planned_chunks_bench_exe.step);
     check_step.dependOn(&br_planned_stage_profile_exe.step);
+    check_step.dependOn(&br_ratio_stage_profile_exe.step);
     check_step.dependOn(&br_planned_stage_bench_exe.step);
     check_step.dependOn(&br_lazy_sweep_exe.step);
     check_step.dependOn(&br_command_lut_bench_exe.step);
@@ -4196,6 +4221,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_stored_corpus_step);
     ci_smoke_step.dependOn(br_planned_corpus_step);
     ci_smoke_step.dependOn(br_planned_node_diff_step);
+    ci_smoke_step.dependOn(br_ratio_stage_profile_gate_step);
     ci_smoke_step.dependOn(br_planned_chunks_bench_gate_step);
     ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
     ci_smoke_step.dependOn(br_real_corpus_diff_step);

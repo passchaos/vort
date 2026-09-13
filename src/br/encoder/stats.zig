@@ -18,3 +18,48 @@ pub const PlannedEncodeStats = struct {
     payload_ns: u64 = 0,
     wire_ns: u64 = 0,
 };
+
+/// Timed diagnostics for the bounded 4...32 KiB Brotli ratio pipeline. These
+/// fields are populated only by the explicit profiling API; normal encoders do
+/// not carry counters or clock reads through their hot paths.
+pub const RatioEncodeProfile = struct {
+    input_bytes: usize = 0,
+    lazy_token_count: usize = 0,
+    lazy_match_count: usize = 0,
+    lazy_command_count: usize = 0,
+    lazy_bytes: usize = 0,
+    optimal_attempted: bool = false,
+    optimal_token_count: usize = 0,
+    optimal_match_count: usize = 0,
+    optimal_command_count: usize = 0,
+    optimal_bytes: usize = 0,
+    optimal_selected: bool = false,
+    stored_bytes: usize = 0,
+    selected_bytes: usize = 0,
+    optimal_index_bytes: usize = 0,
+    optimal_positions: usize = 0,
+    optimal_chain_nodes: usize = 0,
+    optimal_prefix_rejections: usize = 0,
+    optimal_bound_rejections: usize = 0,
+    optimal_match_length_calls: usize = 0,
+    optimal_valid_match_candidates: usize = 0,
+    optimal_length_choices_built: usize = 0,
+    optimal_candidate_budget_stops: usize = 0,
+    lazy_plan_ns: u64 = 0,
+    lazy_command_ns: u64 = 0,
+    lazy_wire_ns: u64 = 0,
+    optimal_plan_ns: u64 = 0,
+    optimal_index_ns: u64 = 0,
+    optimal_search_ns: u64 = 0,
+    optimal_reconstruct_ns: u64 = 0,
+    optimal_command_ns: u64 = 0,
+    optimal_wire_ns: u64 = 0,
+    selection_ns: u64 = 0,
+    total_ns: u64 = 0,
+
+    pub fn stageNs(self: RatioEncodeProfile) u64 {
+        return self.lazy_plan_ns + self.lazy_command_ns + self.lazy_wire_ns +
+            self.optimal_plan_ns + self.optimal_command_ns + self.optimal_wire_ns +
+            self.selection_ns;
+    }
+};
