@@ -12916,6 +12916,14 @@ reuse, so production keeps the simpler independently owned plans.
   encoder's `.text` and `.rodata` remain byte-identical to the pre-profile binary,
   localizing the next work to successful match extension/state insertion rather
   than wider hashes or deeper chains.
+  The same compile-time-only profile now splits recent-offset prefix failures by
+  their first mismatching byte, with a gate identity against the parent reject
+  counter. On the primary rows, text is `330;0;0;0`, JSON is
+  `25322;1879;0;0`, and binary is `8397;534;507;507`. Thus 93.09% of JSON's
+  27,201 failed recent-offset probes and 84.43% of binary's 9,945 fail at the
+  first byte. Production `.text`/`.rodata` remain byte-identical, providing
+  direct evidence for a one-byte recent-offset prefilter rather than a wider
+  early match probe.
   Specializing single-state match extension for the common constant 258-byte
   maximum was rejected at the focused gate. Positions outside the final
   257-byte tail called a compile-time fixed-limit instance while the tail kept

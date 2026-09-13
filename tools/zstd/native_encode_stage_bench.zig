@@ -124,7 +124,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.print("case,level,input_bytes,input_sha256,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,single_positions,single_indexed_searches,single_chain_nodes,single_prefix_rejections,single_matches,single_window_stops,single_chain_limit_stops,single_indexed_length_histogram,single_rep0_probes,single_rep0_prefix_rejections,single_rep0_matches,single_rep0_length_histogram,iterations,rounds,warmup,median_ns,ns_per_block,checksum,{s}\n", .{benchmark_provenance.csv_columns});
+    try csv.writer.print("case,level,input_bytes,input_sha256,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,single_positions,single_indexed_searches,single_chain_nodes,single_prefix_rejections,single_matches,single_window_stops,single_chain_limit_stops,single_indexed_length_histogram,single_rep0_probes,single_rep0_prefix_rejections,single_rep0_prefix_mismatch_histogram,single_rep0_matches,single_rep0_length_histogram,iterations,rounds,warmup,median_ns,ns_per_block,checksum,{s}\n", .{benchmark_provenance.csv_columns});
     var selected_rows: usize = 0;
     for (cases.items) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -258,11 +258,12 @@ fn writeMeasuredRow(
     });
     try csv.writeByte(',');
     try writeHistogram(csv, &aggregate.single_beam_profile.indexed_length_histogram);
-    try csv.print(",{d},{d},{d},", .{
+    try csv.print(",{d},{d},", .{
         aggregate.single_beam_profile.rep0_probes,
         aggregate.single_beam_profile.rep0_prefix_rejections,
-        aggregate.single_beam_profile.rep0_matches,
     });
+    try writeHistogram(csv, &aggregate.single_beam_profile.rep0_prefix_mismatch_histogram);
+    try csv.print(",{d},", .{aggregate.single_beam_profile.rep0_matches});
     try writeHistogram(csv, &aggregate.single_beam_profile.rep0_length_histogram);
     try csv.print(",{d},{d},{d},{d},{d},{d}", .{
         options.iterations,

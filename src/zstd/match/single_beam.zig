@@ -28,6 +28,7 @@ pub const Profile = struct {
     indexed_length_histogram: [length_bucket_count]usize = @splat(0),
     rep0_probes: usize = 0,
     rep0_prefix_rejections: usize = 0,
+    rep0_prefix_mismatch_histogram: [4]usize = @splat(0),
     rep0_matches: usize = 0,
     rep0_length_histogram: [length_bucket_count]usize = @splat(0),
 
@@ -45,6 +46,7 @@ pub const Profile = struct {
             "rep0_matches",
         }) |field| @field(self, field) += @field(other, field);
         for (&self.indexed_length_histogram, other.indexed_length_histogram) |*total, count| total.* += count;
+        for (&self.rep0_prefix_mismatch_histogram, other.rep0_prefix_mismatch_histogram) |*total, count| total.* += count;
         for (&self.rep0_length_histogram, other.rep0_length_histogram) |*total, count| total.* += count;
     }
 };
@@ -144,7 +146,12 @@ fn planReuseWithChainLimit(
                     .length = @intCast(length),
                     .distance = state.rep0,
                 });
-            } else if (comptime collect_profile) profile.rep0_prefix_rejections += 1;
+            } else if (comptime collect_profile) {
+                profile.rep0_prefix_rejections += 1;
+                const candidate = position - state.rep0;
+                const candidate_prefix = std.mem.readInt(u32, input[candidate..][0..4], .little);
+                profile.rep0_prefix_mismatch_histogram[@ctz(candidate_prefix ^ anchor) / 8] += 1;
+            }
         }
     }
 
@@ -319,6 +326,9 @@ test "profiled single-state repeat beam preserves tokens and accounting" {
     for (profile.rep0_length_histogram) |count| rep0_length_total += count;
     try std.testing.expectEqual(profile.rep0_matches, rep0_length_total);
     try std.testing.expectEqual(profile.rep0_probes, profile.rep0_prefix_rejections + profile.rep0_matches);
+    var rep0_mismatch_total: usize = 0;
+    for (profile.rep0_prefix_mismatch_histogram) |count| rep0_mismatch_total += count;
+    try std.testing.expectEqual(profile.rep0_prefix_rejections, rep0_mismatch_total);
 }
 
 test "single-state fused index matches prebuilt predecessor chains" {

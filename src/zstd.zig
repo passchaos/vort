@@ -12303,6 +12303,9 @@ test "zstd profiled single beam preserves production tokens and accounting" {
     for (profile.rep0_length_histogram) |count| rep0_length_total += count;
     try std.testing.expectEqual(profile.rep0_matches, rep0_length_total);
     try std.testing.expectEqual(profile.rep0_probes, profile.rep0_prefix_rejections + profile.rep0_matches);
+    var rep0_mismatch_total: usize = 0;
+    for (profile.rep0_prefix_mismatch_histogram) |count| rep0_mismatch_total += count;
+    try std.testing.expectEqual(profile.rep0_prefix_rejections, rep0_mismatch_total);
 }
 
 test "zstd double-fast diagnostic stage round trips structured input" {

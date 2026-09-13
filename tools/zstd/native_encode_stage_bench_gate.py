@@ -14,7 +14,7 @@ COLUMNS = [
     "single_positions", "single_indexed_searches", "single_chain_nodes",
     "single_prefix_rejections", "single_matches", "single_window_stops",
     "single_chain_limit_stops", "single_indexed_length_histogram",
-    "single_rep0_probes", "single_rep0_prefix_rejections", "single_rep0_matches",
+    "single_rep0_probes", "single_rep0_prefix_rejections", "single_rep0_prefix_mismatch_histogram", "single_rep0_matches",
     "single_rep0_length_histogram", "iterations",
     "rounds", "warmup", "median_ns", "ns_per_block", "checksum",
 ] + PROVENANCE_COLUMNS
@@ -142,6 +142,7 @@ def main() -> int:
             rep0_prefix = int(row["single_rep0_prefix_rejections"])
             rep0_matches = int(row["single_rep0_matches"])
             assert rep0_prefix + rep0_matches == rep0_probes, row
+            assert sum(int(value) for value in row["single_rep0_prefix_mismatch_histogram"].split(";")) == rep0_prefix, row
             assert sum(int(value) for value in row["single_rep0_length_histogram"].split(";")) == rep0_matches, row
         else:
             for key in (
@@ -152,6 +153,7 @@ def main() -> int:
             ):
                 assert int(row[key]) == 0, row
             assert row["single_indexed_length_histogram"] == "0;0;0;0;0;0", row
+            assert row["single_rep0_prefix_mismatch_histogram"] == "0;0;0;0", row
             assert row["single_rep0_length_histogram"] == "0;0;0;0;0;0", row
 
     # The current level-9 policy is the subject of this benchmark. Pinning its
