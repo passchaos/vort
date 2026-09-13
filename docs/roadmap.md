@@ -12845,3 +12845,12 @@ reuse, so production keeps the simpler independently owned plans.
   layout changed. Reversing specialization order did not recover them
   (`0.9409x`/`0.9585x`). The cache and specializations were removed; any future
   retry needs separate-object layout isolation, not another in-module clone.
+  Simplifying single-state beam predecessor bounds was rejected below the
+  retention threshold. Query-before-insert guarantees every predecessor is
+  strictly earlier, and the parser's 65,535-byte input bound makes a fixed
+  32 KiB window equivalent to `min(input.len, window)`; the existing index
+  oracle, 17 single-state tests, stage output, and complete frame bytes stayed
+  exact. The parser body shrank from `0xa85` to `0xa55`; 21 fixed-CPU-8 JSON
+  stage pairs improved by `1.0291x` at the median (18/21 wins), but 31
+  independent complete-encoder pairs reached only `1.0089x` (25/31 wins), below
+  the 1% retention bar. The defensive generic bounds remain.
