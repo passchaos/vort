@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const libzstd = @import("libzstd_runtime.zig");
+const benchmark_provenance = @import("benchmark_provenance.zig");
 
 const Case = struct {
     name: []const u8,
@@ -36,6 +37,8 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     var options = try parseOptions(init.gpa, &args);
     defer options.deinit(init.gpa);
+    const provenance = try benchmark_provenance.capture(init.io, init.gpa, init.minimal.args, "internal-auto");
+    defer provenance.deinit(init.gpa);
     var runtime = try libzstd.Runtime.open();
     defer runtime.deinit();
 
@@ -104,7 +107,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,reference_version,level,input_bytes,vort_bytes,reference_bytes,size_over_reference,iterations,rounds,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum\n");
+    try csv.writer.print("case,reference_version,level,input_bytes,input_sha256,vort_bytes,reference_bytes,size_over_reference,iterations,rounds,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,{s}\n", .{benchmark_provenance.csv_columns});
     var selected_rows: usize = 0;
     for (cases.items) |case| for (levels) |level| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -119,11 +122,14 @@ pub fn main(init: std.process.Init) !void {
         const total_bytes = case.payload.len * options.iterations;
         const vort_rate = mibPerSecond(total_bytes, samples.vort.ns);
         const reference_rate = mibPerSecond(total_bytes, samples.reference.ns);
-        try csv.writer.print("{s},{s},{d},{d},{d},{d},{d:.4},{d},{d},{d},{d},{d:.6},{d:.6},{d:.8},{d}\n", .{
-            case.name,                                                                                  runtime.version(),          level,                                     case.payload.len, vort_encoded.len,     reference_encoded.len,
-            @as(f64, @floatFromInt(vort_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)), options.iterations,         options.rounds,                            samples.vort.ns,  samples.reference.ns, vort_rate,
-            reference_rate,                                                                             vort_rate / reference_rate, samples.vort.mix +% samples.reference.mix,
+        const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
+        try csv.writer.print("{s},{s},{d},{d},{s},{d},{d},{d:.4},{d},{d},{d},{d},{d:.6},{d:.6},{d:.8},{d}", .{
+            case.name,                                                                                  runtime.version(),                         level,          case.payload.len, &input_sha256,        vort_encoded.len, reference_encoded.len,
+            @as(f64, @floatFromInt(vort_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)), options.iterations,                        options.rounds, samples.vort.ns,  samples.reference.ns, vort_rate,        reference_rate,
+            vort_rate / reference_rate,                                                                 samples.vort.mix +% samples.reference.mix,
         });
+        try provenance.writeCsvFields(&csv.writer);
+        try csv.writer.writeByte('\n');
     };
     if (selected_rows == 0) return error.InvalidBlockPlan;
     if (options.csv_path) |path| {

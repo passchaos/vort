@@ -14,6 +14,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT = ROOT / "tools" / "competitor_gap_report.py"
+PROVENANCE = {
+    "provenance_version": "1",
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "raptorlake",
+    "cpu_model": "smoke-cpu",
+    "cpu_affinity": "8",
+    "affinity_cpu_count": "1",
+    "benchmark_threads": "1",
+    "codec_thread_policy": "single",
+    "executable_sha256": "a" * 64,
+    "command": "vort-bench%20--iterations%20100",
+}
 
 
 def write_csv(path: Path, rows: list[dict[str, object]]) -> None:
@@ -77,13 +93,13 @@ def write_core_fixtures(root: Path) -> None:
     write_csv(
         root / "vort-zstd-encode-bench.csv",
         [
-            {"case": "alpha", "level": 1, "input_bytes": 1000, "reference_version": "10505", "vort_bytes": 90, "reference_bytes": 100, "vort_mib_s": 200, "reference_mib_s": 100},
-            {"case": "beta", "level": 1, "input_bytes": 1000, "reference_version": "10505", "vort_bytes": 90, "reference_bytes": 100, "vort_mib_s": 80, "reference_mib_s": 100},
+            {"case": "alpha", "level": 1, "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "10505", "vort_bytes": 90, "reference_bytes": 100, "vort_mib_s": 200, "reference_mib_s": 100} | PROVENANCE,
+            {"case": "beta", "level": 1, "input_bytes": 1000, "input_sha256": "2" * 64, "reference_version": "10505", "vort_bytes": 90, "reference_bytes": 100, "vort_mib_s": 80, "reference_mib_s": 100} | PROVENANCE,
         ],
     )
     write_csv(
         root / "vort-zstd-reference-bench.csv",
-        [{"case": "alpha", "input_bytes": 1000, "reference_version": "10505", "vort_mib_s": 120, "reference_mib_s": 100}],
+        [{"case": "alpha", "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "10505", "vort_mib_s": 120, "reference_mib_s": 100} | PROVENANCE],
     )
     write_csv(
         root / "vort-lz4-reference-bench.csv",
@@ -101,6 +117,12 @@ def write_core_fixtures(root: Path) -> None:
         root / "vort-br-reference-bench.csv",
         [{"case": "alpha", "input_bytes": 1000, "reference_version": 1001000, "vort_mib_s": 150, "reference_mib_s": 100}],
     )
+
+
+def add_provenance(path: Path) -> None:
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    write_csv(path, [row | {"input_sha256": "f" * 64} | PROVENANCE for row in rows])
 
 
 def summary(payload: dict[str, object], codec: str, operation: str, profile: str) -> dict[str, object]:
@@ -127,13 +149,18 @@ def main() -> int:
         payload = json.loads(json_path.read_text(encoding="utf-8"))
         rendered = markdown_path.read_text(encoding="utf-8")
         assert payload["schema"] == "vort.competitor_gap_report"
+        assert payload["schema_version"] == 2
         assert payload["coverage"]["loaded_sources"] == 8
         assert payload["coverage"]["missing_sources"] == 2
         assert payload["coverage"]["empty_sources"] == 0
         assert payload["coverage"]["real_corpus"] is False
         assert payload["coverage"]["benchmark_environment_recorded"] is False
+        assert payload["coverage"]["benchmark_environment_source_count"] == 2
+        assert payload["coverage"]["benchmark_environment_total_sources"] == 8
+        zstd_input = next(item for item in payload["inputs"] if item["name"] == "zstd_encode")
+        assert zstd_input["benchmark_provenance"] == PROVENANCE
         assert len(payload["inputs"][0]["sha256"]) == 64
-        checks += 7
+        checks += 11
 
         deflate = summary(payload, "deflate", "encode", "zlib-best-speed")
         assert deflate["reference"] == "alpha-ref/beta-ref"
@@ -159,12 +186,26 @@ def main() -> int:
         checks += 7
 
         assert "| zstd | encode | level-1 |" in rendered
-        assert "Provenance limitation" in rendered
+        assert "Benchmark provenance: `2/8`" in rendered
+        assert "ReleaseFast; zig 0.16.0; x86_64-linux-gnu" in rendered
+        assert "`111111111111`" in rendered
         assert f"{float(zstd['speed_geomean_x']):.3f}x" in rendered
         assert len(payload["metrics"]) == payload["coverage"]["metric_count"]
+        assert {row["input_sha256"] for row in payload["metrics"] if row["source"] == "zstd_encode"} == {"1" * 64, "2" * 64}
         ranking = rendered.split("## Highest-priority gaps", 1)[1].split("## Current weakest cases", 1)[0]
         assert "zlib-best-speed" not in ranking
-        checks += 5
+        checks += 7
+
+        for path in root.glob("*.csv"):
+            add_provenance(path)
+        result = run_report(root, markdown_path, json_path, "--strict")
+        if result.returncode != 0:
+            raise AssertionError(f"complete-provenance report failed: {result.stderr}")
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+        assert payload["coverage"]["benchmark_environment_recorded"] is True
+        assert payload["coverage"]["benchmark_environment_source_count"] == 8
+        assert payload["coverage"]["benchmark_environment_total_sources"] == 8
+        checks += 3
 
         standard_path = root / "standard.csv"
         write_csv(
@@ -235,17 +276,17 @@ def main() -> int:
             ),
             (
                 [
-                    {"case": "alpha", "input_bytes": 1000, "reference_version": "1.5.5", "vort_mib_s": 1, "reference_mib_s": 1},
-                    {"case": "alpha", "input_bytes": 1000, "reference_version": "1.5.5", "vort_mib_s": 2, "reference_mib_s": 1},
+                    {"case": "alpha", "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "1.5.5", "vort_mib_s": 1, "reference_mib_s": 1},
+                    {"case": "alpha", "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "1.5.5", "vort_mib_s": 2, "reference_mib_s": 1},
                 ],
                 "duplicate row",
             ),
             (
-                [{"case": "alpha", "input_bytes": 1000, "reference_version": "1.5.5", "vort_mib_s": "nan", "reference_mib_s": 1}],
+                [{"case": "alpha", "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "1.5.5", "vort_mib_s": "nan", "reference_mib_s": 1}],
                 "non-positive or non-finite",
             ),
             (
-                [{"case": "alpha", "input_bytes": 1000, "reference_version": "1.5.5", "vort_mib_s": 0, "reference_mib_s": 1}],
+                [{"case": "alpha", "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "1.5.5", "vort_mib_s": 0, "reference_mib_s": 1}],
                 "non-positive or non-finite",
             ),
         ]
@@ -272,6 +313,79 @@ def main() -> int:
         )
         expect_failure(result, "inconsistent input_bytes")
         checks += 1
+
+        incomplete_provenance = invalid_dir / "incomplete-provenance.csv"
+        write_csv(
+            incomplete_provenance,
+            [{"case": "alpha", "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "1.5.5", "vort_mib_s": 1, "reference_mib_s": 1, "optimize": "ReleaseFast"}],
+        )
+        result = run_report(
+            invalid_dir, invalid_dir / "bad.md", invalid_dir / "bad.json",
+            "--zstd-decode", str(incomplete_provenance),
+        )
+        expect_failure(result, "incomplete benchmark provenance columns")
+        checks += 1
+
+        inconsistent_provenance = invalid_dir / "inconsistent-provenance.csv"
+        write_csv(
+            inconsistent_provenance,
+            [
+                {"case": "alpha", "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "1.5.5", "vort_mib_s": 1, "reference_mib_s": 1} | PROVENANCE,
+                {"case": "beta", "input_bytes": 1000, "input_sha256": "2" * 64, "reference_version": "1.5.5", "vort_mib_s": 1, "reference_mib_s": 1} | (PROVENANCE | {"cpu_affinity": "9"}),
+            ],
+        )
+        result = run_report(
+            invalid_dir, invalid_dir / "bad.md", invalid_dir / "bad.json",
+            "--zstd-decode", str(inconsistent_provenance),
+        )
+        expect_failure(result, "inconsistent benchmark provenance across rows")
+        checks += 1
+
+        malformed_provenance = invalid_dir / "malformed-provenance.csv"
+        write_csv(
+            malformed_provenance,
+            [{"case": "alpha", "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "1.5.5", "vort_mib_s": 1, "reference_mib_s": 1} | (PROVENANCE | {"executable_sha256": "not-a-digest"})],
+        )
+        result = run_report(
+            invalid_dir, invalid_dir / "bad.md", invalid_dir / "bad.json",
+            "--zstd-decode", str(malformed_provenance),
+        )
+        expect_failure(result, "invalid executable_sha256")
+        checks += 1
+
+        invalid_input_hash = invalid_dir / "invalid-input-hash.csv"
+        write_csv(
+            invalid_input_hash,
+            [{"case": "alpha", "input_bytes": 1000, "input_sha256": "bad", "reference_version": "1.5.5", "vort_mib_s": 1, "reference_mib_s": 1} | PROVENANCE],
+        )
+        result = run_report(
+            invalid_dir, invalid_dir / "bad.md", invalid_dir / "bad.json",
+            "--zstd-decode", str(invalid_input_hash),
+        )
+        expect_failure(result, "invalid input_sha256")
+        checks += 1
+
+        malformed_provenance_cases = (
+            ({"provenance_version": "2"}, "unsupported benchmark provenance version"),
+            ({"optimize": "Debug"}, "benchmark provenance is not ReleaseFast"),
+            ({"affinity_cpu_count": "0"}, "affinity_cpu_count does not match cpu_affinity"),
+            ({"affinity_cpu_count": "2"}, "affinity_cpu_count does not match cpu_affinity"),
+            ({"cpu_affinity": "8-7"}, "invalid cpu_affinity"),
+            ({"benchmark_threads": "0"}, "invalid benchmark_threads"),
+            ({"command": "benchmark,--bad"}, "command is not CSV-safe"),
+        )
+        for override, expected in malformed_provenance_cases:
+            path = invalid_dir / f"bad-{next(iter(override))}.csv"
+            write_csv(
+                path,
+                [{"case": "alpha", "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "1.5.5", "vort_mib_s": 1, "reference_mib_s": 1} | (PROVENANCE | override)],
+            )
+            result = run_report(
+                invalid_dir, invalid_dir / "bad.md", invalid_dir / "bad.json",
+                "--zstd-decode", str(path),
+            )
+            expect_failure(result, expected)
+            checks += 1
 
         no_comparison_dir = root / "no-comparison"
         no_comparison_dir.mkdir()

@@ -1,5 +1,6 @@
 const std = @import("std");
 const vort = @import("vort");
+const benchmark_provenance = @import("benchmark_provenance.zig");
 
 const Options = struct {
     iterations: usize = 1,
@@ -14,6 +15,8 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const options = try parseOptions(&args);
+    const provenance = try benchmark_provenance.capture(init.io, init.gpa, init.minimal.args, "internal-auto");
+    defer provenance.deinit(init.gpa);
 
     const payload = try init.gpa.alloc(u8, 129 * 1024);
     defer init.gpa.free(payload);
@@ -27,7 +30,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("level,input_bytes,encoded_bytes,iterations,rounds,parallel_ns,serial_ns,speedup,parallel_checksum,serial_checksum\n");
+    try csv.writer.print("level,input_bytes,input_sha256,encoded_bytes,iterations,rounds,parallel_ns,serial_ns,speedup,parallel_checksum,serial_checksum,{s}\n", .{benchmark_provenance.csv_columns});
     for ([_]c_int{ 1, 2, 3 }) |level| {
         const parallel = try vort.zstdEncodeFrameWithLevelAlloc(init.gpa, payload, level);
         defer init.gpa.free(parallel);
@@ -40,10 +43,14 @@ pub fn main(init: std.process.Init) !void {
             return error.SizeMismatch;
 
         const samples = try measureInterleaved(init.io, init.gpa, payload, level, options);
-        try csv.writer.print("{d},{d},{d},{d},{d},{d},{d},{d:.8},{d},{d}\n", .{
-            level,               payload.len,       parallel.len,                                                                              options.iterations,   options.rounds,
-            samples.parallel.ns, samples.serial.ns, @as(f64, @floatFromInt(samples.serial.ns)) / @as(f64, @floatFromInt(samples.parallel.ns)), samples.parallel.mix, samples.serial.mix,
+        const input_sha256 = benchmark_provenance.sha256Hex(payload);
+        try csv.writer.print("{d},{d},{s},{d},{d},{d},{d},{d},{d:.8},{d},{d}", .{
+            level,              payload.len,         &input_sha256,     parallel.len,                                                                              options.iterations,
+            options.rounds,     samples.parallel.ns, samples.serial.ns, @as(f64, @floatFromInt(samples.serial.ns)) / @as(f64, @floatFromInt(samples.parallel.ns)), samples.parallel.mix,
+            samples.serial.mix,
         });
+        try provenance.writeCsvFields(&csv.writer);
+        try csv.writer.writeByte('\n');
     }
 
     if (options.csv_path) |path| {

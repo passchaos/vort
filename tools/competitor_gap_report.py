@@ -47,6 +47,22 @@ DEFAULT_FILES = {
     ),
 }
 OPTIONAL_FILES = {"deflate_incremental", "standard_corpus"}
+PROVENANCE_COLUMNS = (
+    "provenance_version",
+    "optimize",
+    "zig_version",
+    "target_arch",
+    "target_os",
+    "target_abi",
+    "target_cpu",
+    "cpu_model",
+    "cpu_affinity",
+    "affinity_cpu_count",
+    "benchmark_threads",
+    "codec_thread_policy",
+    "executable_sha256",
+    "command",
+)
 
 
 class ReportError(RuntimeError):
@@ -71,6 +87,7 @@ class Metric:
     vort_bytes: int | None
     reference_bytes: int | None
     source: str
+    input_sha256: str | None = None
 
 
 def read_csv(path: Path, required: set[str], source: str) -> list[dict[str, str]]:
@@ -154,13 +171,14 @@ def speed_metric(
     operation: str = "decode",
     vort_bytes: int | None = None,
     reference_bytes: int | None = None,
+    input_sha256: str | None = None,
 ) -> Metric:
     if vort_speed <= 0.0 or reference_speed <= 0.0:
         raise ReportError(f"{source}: throughput must be positive for {case}")
     return Metric(
         codec, operation, profile, case, "throughput", "MiB/s", "higher",
         vort_speed, reference_speed, vort_speed / reference_speed, reference,
-        version or "unreported", input_bytes, vort_bytes, reference_bytes, source,
+        version or "unreported", input_bytes, vort_bytes, reference_bytes, source, input_sha256,
     )
 
 
@@ -174,6 +192,7 @@ def size_metric(
     version: str,
     input_bytes: int,
     source: str,
+    input_sha256: str | None = None,
 ) -> Metric:
     if input_bytes <= 0 or vort_bytes <= 0 or reference_bytes <= 0:
         raise ReportError(f"{source}: sizes must be positive for {case}")
@@ -181,7 +200,7 @@ def size_metric(
         codec, "encode", profile, case, "compressed_size", "compressed/input",
         "lower", vort_bytes / input_bytes, reference_bytes / input_bytes,
         vort_bytes / reference_bytes, reference, version or "unreported",
-        input_bytes, vort_bytes, reference_bytes, source,
+        input_bytes, vort_bytes, reference_bytes, source, input_sha256,
     )
 
 
@@ -325,15 +344,18 @@ def paired_metrics(
         version = version_text(row.get(version_column, "unreported")) if version_column else "unreported"
         vort_bytes = integer(row, vort_bytes_column, source) if vort_bytes_column else None
         ref_bytes = integer(row, reference_bytes_column, source) if reference_bytes_column else None
+        input_sha256 = row.get("input_sha256")
+        if input_sha256 is not None and (len(input_sha256) != 64 or any(character not in "0123456789abcdef" for character in input_sha256)):
+            raise ReportError(f"{source}: invalid input_sha256 for {case}")
         metrics.append(speed_metric(
             codec, profile_name, case, number(row, vort_speed_column, source),
             number(row, reference_speed_column, source), reference, version,
-            input_bytes, source, operation, vort_bytes, ref_bytes,
+            input_bytes, source, operation, vort_bytes, ref_bytes, input_sha256,
         ))
         if operation == "encode" and vort_bytes is not None and ref_bytes is not None:
             metrics.append(size_metric(
                 codec, profile_name, case, vort_bytes, ref_bytes, reference, version,
-                input_bytes, source,
+                input_bytes, source, input_sha256,
             ))
     return metrics
 
@@ -536,6 +558,77 @@ def input_evidence(path: Path) -> dict[str, object]:
     }
 
 
+def benchmark_provenance(rows: list[dict[str, str]], source: str) -> dict[str, str] | None:
+    fields = set(rows[0])
+    present = fields.intersection(PROVENANCE_COLUMNS)
+    if not present:
+        return None
+    missing = set(PROVENANCE_COLUMNS) - fields
+    if missing:
+        raise ReportError(f"{source}: incomplete benchmark provenance columns: {sorted(missing)}")
+    values = {tuple(row[column] for column in PROVENANCE_COLUMNS) for row in rows}
+    if len(values) != 1:
+        raise ReportError(f"{source}: inconsistent benchmark provenance across rows")
+    value = next(iter(values))
+    if any(not item for item in value):
+        raise ReportError(f"{source}: empty benchmark provenance value")
+    provenance = dict(zip(PROVENANCE_COLUMNS, value, strict=True))
+    if provenance["provenance_version"] != "1":
+        raise ReportError(f"{source}: unsupported benchmark provenance version")
+    if provenance["optimize"] != "ReleaseFast":
+        raise ReportError(f"{source}: benchmark provenance is not ReleaseFast")
+    try:
+        affinity_cpu_count = int(provenance["affinity_cpu_count"])
+    except ValueError as error:
+        raise ReportError(f"{source}: invalid affinity_cpu_count") from error
+    if affinity_cpu_count < 0:
+        raise ReportError(f"{source}: invalid affinity_cpu_count")
+    if provenance["cpu_affinity"] == "unavailable":
+        if affinity_cpu_count != 0:
+            raise ReportError(f"{source}: invalid affinity_cpu_count")
+    elif affinity_count(provenance["cpu_affinity"], source) != affinity_cpu_count:
+        raise ReportError(f"{source}: affinity_cpu_count does not match cpu_affinity")
+    try:
+        benchmark_threads = int(provenance["benchmark_threads"])
+    except ValueError as error:
+        raise ReportError(f"{source}: invalid benchmark_threads") from error
+    if benchmark_threads <= 0:
+        raise ReportError(f"{source}: invalid benchmark_threads")
+    executable_sha256 = provenance["executable_sha256"]
+    if len(executable_sha256) != 64 or any(character not in "0123456789abcdef" for character in executable_sha256):
+        raise ReportError(f"{source}: invalid executable_sha256")
+    if any(character in provenance["command"] for character in ",\r\n"):
+        raise ReportError(f"{source}: command is not CSV-safe")
+    if "input_sha256" not in fields:
+        raise ReportError(f"{source}: benchmark provenance requires input_sha256")
+    for row in rows:
+        input_sha256 = row["input_sha256"]
+        if len(input_sha256) != 64 or any(character not in "0123456789abcdef" for character in input_sha256):
+            raise ReportError(f"{source}: invalid input_sha256")
+    return provenance
+
+
+def affinity_count(value: str, source: str) -> int:
+    count = 0
+    previous_end = -1
+    try:
+        for item in value.split(";"):
+            parts = item.split("-")
+            if len(parts) == 1:
+                start = end = int(parts[0])
+            elif len(parts) == 2:
+                start, end = map(int, parts)
+            else:
+                raise ValueError
+            if start < 0 or end < start or start <= previous_end:
+                raise ValueError
+            count += end - start + 1
+            previous_end = end
+    except ValueError as error:
+        raise ReportError(f"{source}: invalid cpu_affinity") from error
+    return count
+
+
 def load_metrics(args: argparse.Namespace) -> tuple[list[Metric], list[dict[str, object]]]:
     paths = {
         name: resolve_path(args.input_dir, getattr(args, name), candidates)
@@ -559,6 +652,7 @@ def load_metrics(args: argparse.Namespace) -> tuple[list[Metric], list[dict[str,
             })
             return
         rows = read_csv(path, required, name)
+        provenance = benchmark_provenance(rows, name)
         loaded = loader(rows, name)
         metrics.extend(loaded)
         inputs.append({
@@ -567,6 +661,7 @@ def load_metrics(args: argparse.Namespace) -> tuple[list[Metric], list[dict[str,
             "status": "loaded" if loaded else "no-comparable-rows",
             "rows": len(rows),
             "metrics": len(loaded),
+            "benchmark_provenance": provenance,
         } | input_evidence(path))
 
     consume(
@@ -720,9 +815,11 @@ def report_payload(metrics: list[Metric], inputs: list[dict[str, object]]) -> di
     weakest_size = max(sizes, key=lambda metric: metric.vort_over_reference) if sizes else None
     git = git_metadata()
     real_corpus = any(metric.source == "standard_corpus" for metric in metrics)
+    loaded_inputs = [item for item in inputs if item["status"] == "loaded"]
+    provenance_inputs = [item for item in loaded_inputs if item.get("benchmark_provenance") is not None]
     return {
         "schema": "vort.competitor_gap_report",
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_utc": datetime.now(timezone.utc).isoformat(),
         "git": git,
         "report_environment": environment_metadata(),
@@ -735,7 +832,9 @@ def report_payload(metrics: list[Metric], inputs: list[dict[str, object]]) -> di
             "group_count": len(summaries),
             "real_corpus": real_corpus,
             "memory_comparison": False,
-            "benchmark_environment_recorded": False,
+            "benchmark_environment_recorded": bool(loaded_inputs) and len(provenance_inputs) == len(loaded_inputs),
+            "benchmark_environment_source_count": len(provenance_inputs),
+            "benchmark_environment_total_sources": len(loaded_inputs),
         },
         "summaries": summaries,
         "weakest": {
@@ -755,7 +854,7 @@ def markdown(payload: dict[str, object]) -> str:
         f"- Report environment: `{payload['report_environment']['platform']}`; machine=`{payload['report_environment']['machine']}`; Python=`{payload['report_environment']['python']}`",
         f"- Evidence: `{payload['coverage']['loaded_sources']}` sources, `{payload['coverage']['metric_count']}` normalized metrics, `{payload['coverage']['group_count']}` comparable groups",
         f"- Scope: locked benchmark artifacts; real-corpus=`{str(payload['coverage']['real_corpus']).lower()}`; cross-library peak-memory=`{str(payload['coverage']['memory_comparison']).lower()}`",
-        "- Provenance limitation: source CSVs do not encode benchmark CPU/build mode; the report environment above describes aggregation only, not necessarily benchmark execution",
+        f"- Benchmark provenance: `{payload['coverage']['benchmark_environment_source_count']}/{payload['coverage']['benchmark_environment_total_sources']}` loaded sources record build target and runtime CPU affinity; complete=`{str(payload['coverage']['benchmark_environment_recorded']).lower()}`",
         "- Interpretation: throughput ratios above 1.0 are faster; compressed-size ratios below 1.0 are smaller",
         "- Status requires both the geometric mean and weakest case to meet the threshold; mixed means the aggregate and at least one dimension/case disagree",
         "- Gap priority is the largest aggregate or weakest-case shortfall within one codec/operation/profile group; no cross-format total score is computed",
@@ -812,13 +911,23 @@ def markdown(payload: dict[str, object]) -> str:
         "",
         "## Evidence coverage",
         "",
-        "| input | status | rows | metrics | modified UTC | SHA-256 | path |",
-        "| --- | --- | ---: | ---: | --- | --- | --- |",
+        "| input | status | rows | metrics | benchmark provenance | modified UTC | SHA-256 | path |",
+        "| --- | --- | ---: | ---: | --- | --- | --- | --- |",
     ])
     for item in payload["inputs"]:
         sha256 = "—" if item["sha256"] is None else str(item["sha256"])[:12]
+        provenance = item.get("benchmark_provenance")
+        provenance_text = "—" if provenance is None else (
+            f"{provenance['optimize']}; zig {provenance['zig_version']}; "
+            f"{provenance['target_arch']}-{provenance['target_os']}-{provenance['target_abi']}; "
+            f"target CPU {provenance['target_cpu']}; host CPU {provenance['cpu_model']}; "
+            f"affinity {provenance['cpu_affinity']} ({provenance['affinity_cpu_count']} CPUs); "
+            f"benchmark threads {provenance['benchmark_threads']}; codec threads {provenance['codec_thread_policy']}; "
+            f"exe {provenance['executable_sha256'][:12]}; "
+            f"command `{provenance['command']}`"
+        )
         lines.append(
-            f"| {item['name']} | {item['status']} | {item['rows']} | {item['metrics']} | "
+            f"| {item['name']} | {item['status']} | {item['rows']} | {item['metrics']} | {provenance_text} | "
             f"{item['modified_utc'] or '—'} | `{sha256}` | `{item['path'] or '—'}` |"
         )
     if payload["coverage"]["missing_sources"]:
@@ -836,12 +945,14 @@ def markdown(payload: dict[str, object]) -> str:
         "",
         "## Normalized rows",
         "",
-        "| codec | operation | profile | case | metric | Vort | reference | Vort/reference | status | source |",
-        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | --- | --- |",
+        "| codec | operation | profile | case | input SHA-256 | metric | Vort | reference | Vort/reference | status | source |",
+        "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- | --- |",
     ])
     for metric in payload["metrics"]:
+        input_hash = "—" if metric["input_sha256"] is None else f"`{metric['input_sha256'][:12]}`"
         lines.append(
-            f"| {metric['codec']} | {metric['operation']} | {metric['profile']} | {metric['case']} | {metric['metric']} | "
+            f"| {metric['codec']} | {metric['operation']} | {metric['profile']} | {metric['case']} | "
+            f"{input_hash} | {metric['metric']} | "
             f"{metric['vort_value']:.4f} | {metric['reference_value']:.4f} | {metric['vort_over_reference']:.3f}x | "
             f"{metric['status']} | {metric['source']} |"
         )

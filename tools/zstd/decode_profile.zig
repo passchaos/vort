@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const libzstd = @import("libzstd_runtime.zig");
+const benchmark_provenance = @import("benchmark_provenance.zig");
 
 const Case = struct { name: []const u8, payload: []const u8, level: c_int = 1 };
 const Options = struct { iterations: usize = 1000, only_case: ?[]const u8 = null, csv_path: ?[]const u8 = null };
@@ -10,6 +11,8 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const options = try parseOptions(&args);
+    const provenance = try benchmark_provenance.capture(init.io, init.gpa, init.minimal.args, "single");
+    defer provenance.deinit(init.gpa);
     var runtime = try libzstd.Runtime.open();
     defer runtime.deinit();
 
@@ -56,7 +59,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,input_bytes,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum,block_count,compressed_blocks,literals_kind,sequence_count,ll_mode,of_mode,ml_mode\n");
+    try csv.writer.print("case,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum,block_count,compressed_blocks,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,{s}\n", .{benchmark_provenance.csv_columns});
     var selected: usize = 0;
     for (cases) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -77,12 +80,15 @@ pub fn main(init: std.process.Init) !void {
             if (output.len != 0) mix +%= output[0];
         }
         const elapsed_ns = elapsedNs(init.io, start);
-        try csv.writer.print("{s},{d},{d},{d},{d},{d:.2},{d},{d},{d},{s},{d},{s},{s},{s}\n", .{
-            case.name,                      case.payload.len,                                                encoded.len,          options.iterations,
-            elapsed_ns,                     mibPerSecond(case.payload.len * options.iterations, elapsed_ns), mix,                  summary.block_count,
-            summary.compressed_block_count, @tagName(shape.literals_kind),                                   shape.sequence_count, @tagName(shape.literal_length_mode),
-            @tagName(shape.offset_mode),    @tagName(shape.match_length_mode),
+        const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
+        try csv.writer.print("{s},{d},{s},{d},{d},{d},{d:.2},{d},{d},{d},{s},{d},{s},{s},{s}", .{
+            case.name,                           case.payload.len,               &input_sha256,                                                   encoded.len,
+            options.iterations,                  elapsed_ns,                     mibPerSecond(case.payload.len * options.iterations, elapsed_ns), mix,
+            summary.block_count,                 summary.compressed_block_count, @tagName(shape.literals_kind),                                   shape.sequence_count,
+            @tagName(shape.literal_length_mode), @tagName(shape.offset_mode),    @tagName(shape.match_length_mode),
         });
+        try provenance.writeCsvFields(&csv.writer);
+        try csv.writer.writeByte('\n');
     }
     if (selected == 0) return error.InvalidBlockPlan;
     if (options.csv_path) |path| {

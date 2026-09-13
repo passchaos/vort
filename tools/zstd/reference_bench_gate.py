@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 from pathlib import Path
 
+PROVENANCE_COLUMNS = ["provenance_version", "optimize", "zig_version", "target_arch", "target_os", "target_abi", "target_cpu", "cpu_model", "cpu_affinity", "affinity_cpu_count", "benchmark_threads", "codec_thread_policy", "executable_sha256", "command"]
 EXPECTED_COLUMNS = [
-    "case", "reference_version", "input_bytes", "encoded_bytes",
+    "case", "reference_version", "input_bytes", "input_sha256", "encoded_bytes",
     "iterations", "vort_ns", "reference_ns", "vort_mib_s",
     "reference_mib_s", "vort_over_reference", "checksum",
     "block_count", "raw_blocks", "rle_blocks", "compressed_blocks",
@@ -16,7 +18,7 @@ EXPECTED_COLUMNS = [
     "ll_mode", "of_mode", "ml_mode", "header_inspect_ns",
     "block_inspect_ns", "sequence_inspect_ns",
     "alloc_ns", "alloc_mib_s", "into_over_alloc",
-]
+] + PROVENANCE_COLUMNS
 EXPECTED_CASES = {
     "tiny", "text", "structured", "repetitive",
     "incompressible", "rle64k", "raw256k",
@@ -28,6 +30,7 @@ EXPECTED_CASES = {
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, required=True)
+    parser.add_argument("--executable", type=Path)
     args = parser.parse_args()
     with args.csv.open(newline="") as file:
         reader = csv.DictReader(file)
@@ -40,8 +43,24 @@ def main() -> int:
     versions = {row["reference_version"] for row in rows}
     if len(versions) != 1 or not next(iter(versions)):
         raise AssertionError(f"bad reference versions: {versions!r}")
+    provenance = {tuple(row[key] for key in PROVENANCE_COLUMNS) for row in rows}
+    if len(provenance) != 1 or not all(next(iter(provenance))):
+        raise AssertionError(f"inconsistent provenance: {provenance!r}")
+    if rows[0]["optimize"] != "ReleaseFast":
+        raise AssertionError(f"non-ReleaseFast benchmark: {rows[0]!r}")
+    if rows[0]["provenance_version"] != "1":
+        raise AssertionError(f"unsupported provenance: {rows[0]!r}")
+    affinity_consistent = (rows[0]["cpu_affinity"] == "unavailable") == (int(rows[0]["affinity_cpu_count"]) == 0)
+    if not affinity_consistent or int(rows[0]["benchmark_threads"]) != 1 or rows[0]["codec_thread_policy"] != "single":
+        raise AssertionError(f"invalid CPU/thread provenance: {rows[0]!r}")
+    if len(rows[0]["executable_sha256"]) != 64:
+        raise AssertionError(f"invalid executable hash: {rows[0]!r}")
+    if args.executable is not None and hashlib.sha256(args.executable.read_bytes()).hexdigest() != rows[0]["executable_sha256"]:
+        raise AssertionError(f"executable hash mismatch: {rows[0]!r}")
 
     for row in rows:
+        if len(row["input_sha256"]) != 64 or not set(row["input_sha256"]) <= set("0123456789abcdef"):
+            raise AssertionError(f"invalid input hash: {row!r}")
         for key in (
             "input_bytes", "encoded_bytes", "iterations", "vort_ns",
             "reference_ns", "checksum", "block_count",

@@ -117,6 +117,12 @@ configuration, and corpus files without maintaining a separate benchmark.
 The native stage benchmark accepts the same `--path`/`--limit` pair and records
 `input_bytes` in every row. This is the preferred way to isolate match-family
 costs on real 128 KiB prefixes before running a complete frame A/B.
+The Zstd encode, decode-reference, decode-profile, candidate-stage, and
+level-schedule CSVs also record the exact input SHA-256, `ReleaseFast` mode, Zig
+version, target triple and CPU, host CPU model, process CPU affinity, benchmark
+thread count, codec thread policy, executable SHA-256, and percent-encoded
+command line. Their gates reject missing or inconsistent provenance and verify
+the recorded executable digest against the artifact supplied by the build.
 
 ## Unified competitor gap report
 
@@ -143,14 +149,18 @@ rows are also split into explicit per-reference groups whose names identify
 whether the competitor artifact uses zlib, gzip, or zstd framing; those wire
 formats are never collapsed into a single best-reference aggregate.
 
-The JSON records the source paths and row counts, reference versions, git and
-report-environment metadata, per-input SHA-256/mtime/row/metric evidence,
+The schema-v2 JSON records the source paths and row counts, reference versions,
+git and report-environment metadata, per-input SHA-256/mtime/row/metric evidence,
 normalized rows, group summaries, coverage flags, and missing inputs. Existing
-source CSVs do not encode their benchmark CPU or build mode, so the report
-marks that provenance gap explicitly rather than treating its aggregation
-machine as the benchmark machine. Real-corpus coverage becomes true only when
-usable standard-corpus comparisons were loaded; peak-memory comparison remains
-false until a common cross-library memory harness exists.
+source CSVs that predate the provenance columns remain accepted, but the report
+counts which loaded sources carry complete benchmark metadata and sets
+`benchmark_environment_recorded` only when every loaded source does. Provenance
+columns must be complete and constant within one CSV; ReleaseFast mode, valid
+input/executable hashes, positive affinity metadata, and CSV-safe commands are
+validated instead of inferred from the aggregation machine. Real-corpus
+coverage becomes true only when usable standard-corpus comparisons were loaded;
+peak-memory comparison remains false until a common cross-library memory harness
+exists.
 `run-competitor-gap-report-smoke` uses temporary synthetic CSVs to test
 aggregation, dynamic reference selection, mixed-status rules, independent and
 wire-explicit standard-corpus measurements, strict and explicit-path behavior,

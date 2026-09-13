@@ -1,5 +1,6 @@
 const std = @import("std");
 const vort = @import("vort");
+const benchmark_provenance = @import("benchmark_provenance.zig");
 
 const Case = struct {
     name: []const u8,
@@ -54,6 +55,8 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     var options = try parseOptions(init.gpa, &args);
     defer options.deinit(init.gpa);
+    const provenance = try benchmark_provenance.capture(init.io, init.gpa, init.minimal.args, "single");
+    defer provenance.deinit(init.gpa);
 
     var numbered_json: std.ArrayList(u8) = .empty;
     defer numbered_json.deinit(init.gpa);
@@ -114,7 +117,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,level,input_bytes,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,iterations,rounds,warmup,median_ns,ns_per_block,checksum\n");
+    try csv.writer.print("case,level,input_bytes,input_sha256,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,iterations,rounds,warmup,median_ns,ns_per_block,checksum,{s}\n", .{benchmark_provenance.csv_columns});
     var selected_rows: usize = 0;
     for (cases.items) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -126,7 +129,7 @@ pub fn main(init: std.process.Init) !void {
                 policy.primary_options.match_search_budget
             else
                 policy.adaptive_match_search_budget;
-            selected_rows += try benchmarkCandidate(init.io, init.gpa, &csv.writer, case, candidate, search_budget, options);
+            selected_rows += try benchmarkCandidate(init.io, init.gpa, &csv.writer, case, candidate, search_budget, options, provenance);
         }
     }
     if (selected_rows == 0) return error.InvalidBlockPlan;
@@ -149,6 +152,7 @@ fn benchmarkCandidate(
     candidate: Candidate,
     search_budget: usize,
     options: Options,
+    provenance: benchmark_provenance.Info,
 ) !usize {
     var scratch: vort.zstd.NativeMatchStageScratch = .{};
     defer scratch.deinit(allocator);
@@ -157,14 +161,14 @@ fn benchmarkCandidate(
     if (!case.primary_double_fast_only and stageSelected(options.only_stage, "duplicate_index")) {
         const indexed_block_count = try prepareAllBlocks(allocator, case.payload, candidate.block_size, search_budget, &scratch);
         vort.zstd.benchmarkInvalidateNativeMatchStageScratch(&scratch);
-        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .index, indexed_block_count, 0, 0, 0, 0, &scratch);
+        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, provenance, .index, indexed_block_count, 0, 0, 0, 0, &scratch);
         selected_rows += 1;
     }
     for (stages) |stage| {
         if (!stageSelected(options.only_stage, @tagName(stage))) continue;
         if (case.primary_double_fast_only and stage != .double_fast) continue;
         const probe = try evaluateAllBlocks(allocator, case.payload, candidate.block_size, search_budget, stage, &scratch);
-        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .{ .candidate = stage }, probe.available_blocks, probe.sequence_count, probe.encoded_len, probe.literals_bytes, probe.sequence_bytes, &scratch);
+        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, provenance, .{ .candidate = stage }, probe.available_blocks, probe.sequence_count, probe.encoded_len, probe.literals_bytes, probe.sequence_bytes, &scratch);
         selected_rows += 1;
     }
     return selected_rows;
@@ -195,6 +199,7 @@ fn writeMeasuredRow(
     candidate: Candidate,
     search_budget: usize,
     options: Options,
+    provenance: benchmark_provenance.Info,
     stage: MeasuredStage,
     available_blocks: usize,
     sequence_count: usize,
@@ -224,10 +229,12 @@ fn writeMeasuredRow(
     const median = samples[samples.len / 2];
     const blocks_per_sample = blockCount(case.payload.len, candidate.block_size) * options.iterations;
     const ns_per_block = if (blocks_per_sample == 0) 0 else median.ns / blocks_per_sample;
-    try csv.print("{s},{d},{d},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
+    const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
+    try csv.print("{s},{d},{d},{s},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}", .{
         case.name,
         options.level,
         case.payload.len,
+        &input_sha256,
         candidate.name,
         candidate.block_size,
         blockCount(case.payload.len, candidate.block_size),
@@ -245,6 +252,8 @@ fn writeMeasuredRow(
         ns_per_block,
         median.mix +% warmup_mix,
     });
+    try provenance.writeCsvFields(csv);
+    try csv.writeByte('\n');
 }
 
 fn measureStagePass(

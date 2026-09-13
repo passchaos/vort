@@ -2,15 +2,18 @@
 """Validate Vort/libzstd Zstandard encode evidence."""
 import argparse
 import csv
+import hashlib
 from pathlib import Path
 
-COLUMNS = ["case", "reference_version", "level", "input_bytes", "vort_bytes", "reference_bytes", "size_over_reference", "iterations", "rounds", "vort_ns", "reference_ns", "vort_mib_s", "reference_mib_s", "vort_over_reference", "checksum"]
+PROVENANCE_COLUMNS = ["provenance_version", "optimize", "zig_version", "target_arch", "target_os", "target_abi", "target_cpu", "cpu_model", "cpu_affinity", "affinity_cpu_count", "benchmark_threads", "codec_thread_policy", "executable_sha256", "command"]
+COLUMNS = ["case", "reference_version", "level", "input_bytes", "input_sha256", "vort_bytes", "reference_bytes", "size_over_reference", "iterations", "rounds", "vort_ns", "reference_ns", "vort_mib_s", "reference_mib_s", "vort_over_reference", "checksum"] + PROVENANCE_COLUMNS
 CASES = {"text", "json", "binary", "level3_tradeoff", "multiblock"}
 LEVELS = {1, 3, 9, 22}
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, required=True)
+    parser.add_argument("--executable", type=Path)
     args = parser.parse_args()
     with args.csv.open(newline="") as file:
         reader = csv.DictReader(file)
@@ -19,7 +22,18 @@ def main() -> int:
     assert {(row["case"], int(row["level"])) for row in rows} == {(case, level) for case in CASES for level in LEVELS}
     assert len(rows) == len(CASES) * len(LEVELS)
     assert len({row["reference_version"] for row in rows}) == 1
+    provenance = {tuple(row[key] for key in PROVENANCE_COLUMNS) for row in rows}
+    assert len(provenance) == 1 and all(next(iter(provenance))), provenance
+    assert rows[0]["optimize"] == "ReleaseFast", rows[0]
+    assert rows[0]["provenance_version"] == "1", rows[0]
+    assert (rows[0]["cpu_affinity"] == "unavailable") == (int(rows[0]["affinity_cpu_count"]) == 0), rows[0]
+    assert int(rows[0]["benchmark_threads"]) == 1, rows[0]
+    assert rows[0]["codec_thread_policy"] == "internal-auto", rows[0]
+    assert len(rows[0]["executable_sha256"]) == 64, rows[0]
+    if args.executable is not None:
+        assert hashlib.sha256(args.executable.read_bytes()).hexdigest() == rows[0]["executable_sha256"], rows[0]
     for row in rows:
+        assert len(row["input_sha256"]) == 64 and set(row["input_sha256"]) <= set("0123456789abcdef"), row
         for key in ("input_bytes", "vort_bytes", "reference_bytes", "iterations", "rounds", "vort_ns", "reference_ns", "checksum"):
             assert int(row[key]) > 0, row
         for key in ("size_over_reference", "vort_mib_s", "reference_mib_s", "vort_over_reference"):
@@ -34,6 +48,8 @@ def main() -> int:
         len({int(row["reference_bytes"]) for row in rows if row["case"] == case}) >= 2
         for case in CASES
     ), rows
+    for case in CASES:
+        assert len({row["input_sha256"] for row in rows if row["case"] == case}) == 1, case
     # Keep wall-clock assertions to broad regression ceilings. Level 9 may now
     # legitimately finish before level 3 because its primary/8 KiB screen can
     # avoid the 4 KiB candidate; the dedicated stage gate validates the exact

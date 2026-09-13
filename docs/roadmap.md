@@ -12424,3 +12424,17 @@ reuse, so production keeps the simpler independently owned plans.
   `0.99x` control floor, so the production code and proposal-specific tests
   were fully removed rather than exchanging broad latency for one large-block
   gain.
+  Zstd's five performance executables now emit self-contained provenance with
+  every CSV row: exact input and executable SHA-256, ReleaseFast mode, Zig
+  version, target architecture/OS/ABI/CPU, host CPU model, process affinity and
+  CPU count, outer benchmark thread count, codec-internal thread policy, and a
+  percent-encoded command line. Decode reference/profile builds are now pinned
+  to ReleaseFast just like encode/stage/schedule instead of inheriting a Debug
+  default. Each gate requires one consistent provenance tuple and verifies the
+  executable digest against the exact build artifact; the two path smokes also
+  recompute truncated-input hashes and compare inherited affinity. The unified
+  competitor report advances to schema v2, retains per-metric input hashes,
+  exposes per-source provenance, and distinguishes partial coverage from the
+  all-loaded-sources condition. Its 63-check smoke covers partial and complete
+  provenance plus missing columns, inconsistent rows, Debug data, invalid CPU
+  counts, unsafe commands, and malformed executable/input hashes.

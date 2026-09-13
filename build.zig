@@ -2936,13 +2936,24 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/zstd/reference_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .link_libc = true,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });
+    const zstd_benchmark_provenance_tests = b.addTest(.{
+        .name = "vort-zstd-benchmark-provenance-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/benchmark_provenance.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+        }),
+    });
+    const run_zstd_benchmark_provenance_tests = b.addRunArtifact(zstd_benchmark_provenance_tests);
+    const zstd_benchmark_provenance_test_step = b.step("test-zstd-benchmark-provenance", "Test Zstd benchmark provenance capture");
+    zstd_benchmark_provenance_test_step.dependOn(&run_zstd_benchmark_provenance_tests.step);
     const run_zstd_reference_bench =
         b.addRunArtifact(zstd_reference_bench_exe);
     if (b.args) |args| run_zstd_reference_bench.addArgs(args);
@@ -2959,9 +2970,11 @@ pub fn build(b: *std.Build) void {
         "--csv",        "zig-out/vort-zstd-reference-bench.csv",
     });
     const zstd_reference_bench_gate = b.addSystemCommand(&.{
-        "python3", "tools/zstd/reference_bench_gate.py",
-        "--csv",   "zig-out/vort-zstd-reference-bench.csv",
+        "python3",      "tools/zstd/reference_bench_gate.py",
+        "--csv",        "zig-out/vort-zstd-reference-bench.csv",
+        "--executable",
     });
+    zstd_reference_bench_gate.addArtifactArg(zstd_reference_bench_exe);
     zstd_reference_bench_gate.step.dependOn(
         &run_zstd_reference_bench_gate_csv.step,
     );
@@ -2978,10 +2991,10 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/zstd/decode_profile.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .link_libc = true,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });
@@ -2999,9 +3012,11 @@ pub fn build(b: *std.Build) void {
         "--csv",        "zig-out/vort-zstd-decode-profile.csv",
     });
     const zstd_decode_profile_gate = b.addSystemCommand(&.{
-        "python3", "tools/zstd/decode_profile_gate.py",
-        "--csv",   "zig-out/vort-zstd-decode-profile.csv",
+        "python3",      "tools/zstd/decode_profile_gate.py",
+        "--csv",        "zig-out/vort-zstd-decode-profile.csv",
+        "--executable",
     });
+    zstd_decode_profile_gate.addArtifactArg(zstd_decode_profile_exe);
     zstd_decode_profile_gate.step.dependOn(&run_zstd_decode_profile_gate_csv.step);
     const zstd_decode_profile_gate_step = b.step(
         "run-zstd-decode-profile-gate",
@@ -3025,7 +3040,8 @@ pub fn build(b: *std.Build) void {
     zstd_encode_bench_step.dependOn(&run_zstd_encode_bench.step);
     const run_zstd_encode_bench_csv = b.addRunArtifact(zstd_encode_bench_exe);
     run_zstd_encode_bench_csv.addArgs(&.{ "--iterations", "3", "--rounds", "3", "--csv", "zig-out/vort-zstd-encode-bench.csv" });
-    const zstd_encode_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/encode_bench_gate.py", "--csv", "zig-out/vort-zstd-encode-bench.csv" });
+    const zstd_encode_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/encode_bench_gate.py", "--csv", "zig-out/vort-zstd-encode-bench.csv", "--executable" });
+    zstd_encode_bench_gate.addArtifactArg(zstd_encode_bench_exe);
     zstd_encode_bench_gate.step.dependOn(&run_zstd_encode_bench_csv.step);
     const zstd_encode_bench_gate_step = b.step("run-zstd-encode-bench-gate", "Validate Zstd encode comparison CSV");
     zstd_encode_bench_gate_step.dependOn(&zstd_encode_bench_gate.step);
@@ -3049,7 +3065,8 @@ pub fn build(b: *std.Build) void {
     zstd_level_schedule_bench_step.dependOn(&run_zstd_level_schedule_bench.step);
     const run_zstd_level_schedule_bench_csv = b.addRunArtifact(zstd_level_schedule_bench_exe);
     run_zstd_level_schedule_bench_csv.addArgs(&.{ "--iterations", "1", "--rounds", "5", "--csv", "zig-out/vort-zstd-level-schedule-bench.csv" });
-    const zstd_level_schedule_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/level_schedule_bench_gate.py", "--csv", "zig-out/vort-zstd-level-schedule-bench.csv" });
+    const zstd_level_schedule_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/level_schedule_bench_gate.py", "--csv", "zig-out/vort-zstd-level-schedule-bench.csv", "--executable" });
+    zstd_level_schedule_bench_gate.addArtifactArg(zstd_level_schedule_bench_exe);
     zstd_level_schedule_bench_gate.step.dependOn(&run_zstd_level_schedule_bench_csv.step);
     const zstd_level_schedule_bench_gate_step = b.step("run-zstd-level-schedule-bench-gate", "Validate Zstd level scheduling benchmark");
     zstd_level_schedule_bench_gate_step.dependOn(&zstd_level_schedule_bench_gate.step);
@@ -3069,7 +3086,8 @@ pub fn build(b: *std.Build) void {
     zstd_native_encode_stage_bench_step.dependOn(&run_zstd_native_encode_stage_bench.step);
     const run_zstd_native_encode_stage_bench_csv = b.addRunArtifact(zstd_native_encode_stage_bench_exe);
     run_zstd_native_encode_stage_bench_csv.addArgs(&.{ "--level", "9", "--iterations", "1", "--rounds", "1", "--warmup", "1", "--csv", "zig-out/vort-zstd-native-encode-stage-bench.csv" });
-    const zstd_native_encode_stage_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/native_encode_stage_bench_gate.py", "--csv", "zig-out/vort-zstd-native-encode-stage-bench.csv" });
+    const zstd_native_encode_stage_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/native_encode_stage_bench_gate.py", "--csv", "zig-out/vort-zstd-native-encode-stage-bench.csv", "--executable" });
+    zstd_native_encode_stage_bench_gate.addArtifactArg(zstd_native_encode_stage_bench_exe);
     zstd_native_encode_stage_bench_gate.step.dependOn(&run_zstd_native_encode_stage_bench_csv.step);
     const zstd_native_encode_stage_bench_gate_step = b.step("run-zstd-native-encode-stage-bench-gate", "Validate native Zstd stage benchmark coverage");
     zstd_native_encode_stage_bench_gate_step.dependOn(&zstd_native_encode_stage_bench_gate.step);
@@ -4045,6 +4063,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&lz4_decode_profile_exe.step);
     check_step.dependOn(&br_compressed_header_profile_exe.step);
     check_step.dependOn(&zstd_reference_bench_exe.step);
+    check_step.dependOn(&zstd_benchmark_provenance_tests.step);
     check_step.dependOn(&zstd_decode_profile_exe.step);
     check_step.dependOn(&zstd_encode_bench_exe.step);
     check_step.dependOn(&zstd_level_schedule_bench_exe.step);
@@ -4130,6 +4149,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zstd_native_probe_step);
     ci_smoke_step.dependOn(zstd_encode_bench_path_smoke_step);
     ci_smoke_step.dependOn(zstd_native_encode_stage_bench_path_smoke_step);
+    ci_smoke_step.dependOn(zstd_benchmark_provenance_test_step);
     ci_smoke_step.dependOn(zstd_decodecorpus_gate_smoke_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_timeout_smoke_step);
