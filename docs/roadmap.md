@@ -12502,3 +12502,26 @@ reuse, so production keeps the simpler independently owned plans.
   levels 1/22 to `0.9858x`/`0.9867x`. Both forms were removed: the extra cache
   state and branch perturb production rows that cannot use the recurrence, and
   the target gain does not clear the 1% retention bar.
+  The corrected allocator benchmark exposed a real `overlap-rle` inflate gap,
+  and a bitstream audit found a new boundary distinct from the rejected
+  semantic-table, global fill, batch-four, and run-grouping attempts. The final
+  dynamic block has exactly one literal plus EOB and length 258 in a complete
+  `2/2/1` literal tree, and exactly distance symbols zero/one in a `1/1` tree.
+  Those canonical codes make every payload token two bits. Caller-buffer raw,
+  zlib, and gzip decode now proves that complete shape from the existing compact
+  table before building the 9-bit literal or 8-bit distance fast table, then
+  consumes the four possible tokens in an isolated final-block loop. The route
+  requires no dictionary and non-overlapping input/output; all other stream and
+  reader shapes retain the generic path. Tests cover policy rejection,
+  distance-one and distance-two tokens, invalid initial matches, exact/short
+  output, truncation, reader-state equivalence, and full dynamic-frame token replay;
+  Python zlib independently decodes the raw/zlib/gzip fixtures to the same
+  32 KiB SHA-256. Thirty fixed-CPU-8 interleaved independent-binary pairs gave
+  target caller-buffer medians of `3.8339x/4.6415x/3.7848x`, all 30/30 wins.
+  Thirty non-target codec/API row medians had a `1.0081x` geometric mean and
+  `0.9972x` floor. A separate alloc/exact/into target matrix won all 270 pairs.
+  Formal repeat-3 throughput reaches `10,992.78/21,480.23 MiB/s` for Vort zlib
+  alloc/into versus `7,257.16` for fdeflate, and
+  `13,356.35/34,052.81 MiB/s` for Vort raw alloc/into versus `6,988.75` for
+  miniz_oxide raw; only the owned-result rows are direct allocator-semantic
+  comparisons.

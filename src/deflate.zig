@@ -4434,11 +4434,37 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
             2 => {
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
-                const dist_decoder = try makeDynamicDistanceDecoderFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
+                if (comptime Reader == bitstream.BufferedBitReader) {
+                    if (header.final and lit_lookup_bits == 9 and
+                        dictionary.len == 0 and
+                        !slicesOverlapForSemanticDecode(reader.input, output))
+                    {
+                        if (semantic_rle258.compactPairLiteral(&lit_table, parsed)) |literal| {
+                            const written = try decodeCompactRle258BlockIntoBufferedReader(
+                                reader,
+                                output,
+                                out_offset,
+                                literal,
+                            );
+                            return .{
+                                .input_read = reader.byteOffset() - raw_base_offset,
+                                .output_written = written,
+                            };
+                        }
+                    }
+                }
+                const dist_decoder = try makeDynamicDistanceDecoderFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
                 if (lit_lookup_bits == 9) {
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
-                    try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
+                    try decodeCompressedBlockIntoReader(
+                        reader,
+                        output,
+                        &out_offset,
+                        dictionary,
+                        &lit_decoder,
+                        &dist_decoder,
+                    );
                 } else if (comptime Reader == bitstream.BufferedBitReader) {
                     if (dictionary.len == 0 and !slicesOverlapForSemanticDecode(reader.input, output)) {
                         var semantic_decoder: SemanticDynamicDecoder = undefined;
@@ -5533,6 +5559,75 @@ noinline fn decodeSemanticDynamicBlockIntoRle258BufferedReader(
         initial_out_offset,
         decoder,
     );
+}
+
+noinline fn decodeCompactRle258BlockIntoBufferedReader(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    literal: u8,
+) linksection(semantic_rle258.text_section) Error!usize {
+    const input = reader.input;
+    var bit_buffer = reader.bit_buffer;
+    var bit_count = reader.bit_count;
+    var byte_index = reader.byte_index;
+    var consumed_bits = reader.consumed_bits;
+    var out_pos = initial_out_offset;
+
+    if (out_pos + 258 <= output.len and byte_index + 8 <= input.len) {
+        refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+    }
+    while (out_pos + 258 <= output.len and byte_index + 8 <= input.len) {
+        const token: u2 = @truncate(bit_buffer);
+        bit_buffer >>= 2;
+        bit_count -= 2;
+        consumed_bits += 2;
+        switch (token) {
+            0b00 => {
+                if (out_pos == 0) return error.InvalidMatch;
+                fillLinearRle(output, out_pos, 258, output[out_pos - 1]);
+                out_pos += 258;
+            },
+            0b01 => {
+                output[out_pos] = literal;
+                out_pos += 1;
+            },
+            0b10 => {
+                try copyMatchAt(output, out_pos, 258, 2);
+                out_pos += 258;
+            },
+            0b11 => {
+                storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+                return out_pos;
+            },
+        }
+        refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+    }
+
+    storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+    while (true) {
+        const token = reader.peekBitsPadded(u2, 2);
+        if (!reader.hasStagedBits(2)) return error.TruncatedFrame;
+        reader.advanceBitsStagedAssumeAvailable(2);
+        switch (token) {
+            0b00 => {
+                if (out_pos == 0) return error.InvalidMatch;
+                if (output.len - out_pos < 258) return error.OutputTooSmall;
+                fillLinearRle(output, out_pos, 258, output[out_pos - 1]);
+                out_pos += 258;
+            },
+            0b01 => {
+                if (out_pos == output.len) return error.OutputTooSmall;
+                output[out_pos] = literal;
+                out_pos += 1;
+            },
+            0b10 => {
+                try copyMatchAt(output, out_pos, 258, 2);
+                out_pos += 258;
+            },
+            0b11 => return out_pos,
+        }
+    }
 }
 
 const SemanticLinearStatus = enum { need_output, end_of_block };
@@ -13945,6 +14040,179 @@ test "semantic decoder proves only exact one-bit RLE258 pair tables" {
     try std.testing.expect(semantic_rle258.isCandidate(candidate_parsed));
     candidate_parsed.literal_max_bits = 11;
     try std.testing.expect(!semantic_rle258.isCandidate(candidate_parsed));
+}
+
+test "compact RLE258 policy proves only the complete two-bit token tree" {
+    var literal_lengths: [286]u4 = @splat(0);
+    literal_lengths['a'] = 2;
+    literal_lengths[256] = 2;
+    literal_lengths[285] = 1;
+    const literal_table_ = try huffman.HuffmanTable(286).init(&literal_lengths);
+
+    var parsed = huffman.DynamicLengths{
+        .header = .{
+            .final = true,
+            .hlit = 286,
+            .hdist = 2,
+            .hclen = 4,
+            .code_length_lengths = @splat(0),
+        },
+        .literal_lengths = literal_lengths,
+        .literal_max_bits = 2,
+        .distance_max_bits = 1,
+    };
+    parsed.distance_lengths[0] = 1;
+    parsed.distance_lengths[1] = 1;
+    try std.testing.expectEqual(
+        @as(?u8, 'a'),
+        semantic_rle258.compactPairLiteral(&literal_table_, parsed),
+    );
+
+    parsed.header.hdist = 3;
+    try std.testing.expectEqual(
+        @as(?u8, null),
+        semantic_rle258.compactPairLiteral(&literal_table_, parsed),
+    );
+    parsed.header.hdist = 2;
+    parsed.distance_lengths[1] = 0;
+    try std.testing.expectEqual(
+        @as(?u8, null),
+        semantic_rle258.compactPairLiteral(&literal_table_, parsed),
+    );
+
+    var ordinary_lengths: [286]u4 = @splat(0);
+    ordinary_lengths['a'] = 2;
+    ordinary_lengths['b'] = 2;
+    ordinary_lengths[256] = 2;
+    ordinary_lengths[285] = 2;
+    const ordinary_table = try huffman.HuffmanTable(286).init(&ordinary_lengths);
+    parsed.literal_lengths = ordinary_lengths;
+    try std.testing.expectEqual(
+        @as(?u8, null),
+        semantic_rle258.compactPairLiteral(&ordinary_table, parsed),
+    );
+}
+
+test "compact RLE258 two-bit loop matches generic distance-one and distance-two decode" {
+    var literal_lengths: [286]u4 = @splat(0);
+    literal_lengths['A'] = 2;
+    literal_lengths[256] = 2;
+    literal_lengths[285] = 1;
+    const literal_table_ = try huffman.HuffmanTable(286).init(&literal_lengths);
+    const distance_lengths = [_]u4{ 1, 1 };
+    const distance_table_ = try huffman.HuffmanTable(30).init(&distance_lengths);
+    var reference_decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(reference_decoder.init(
+        &literal_table_,
+        &distance_table_,
+    ));
+
+    // literal A, literal A, length-258/distance-two,
+    // length-258/distance-one, EOB. Padding enables the word-refill loop.
+    const encoded = [_]u8{ 0b0010_0101, 0b0000_0011 } ++
+        ([_]u8{0} ** 15);
+    var reference_reader = bitstream.BufferedBitReader.init(&encoded);
+    var active_reader = bitstream.BufferedBitReader.init(&encoded);
+    var reference: [518]u8 = undefined;
+    var active: [reference.len]u8 = undefined;
+    const reference_written = try decodeSemanticDynamicBlockIntoBufferedReader(
+        &reference_reader,
+        &reference,
+        0,
+        &reference_decoder,
+    );
+    const active_written = try decodeCompactRle258BlockIntoBufferedReader(
+        &active_reader,
+        &active,
+        0,
+        'A',
+    );
+    try std.testing.expectEqual(reference.len, active_written);
+    try std.testing.expectEqual(reference_written, active_written);
+    try std.testing.expectEqualSlices(u8, &reference, &active);
+    try std.testing.expectEqual(reference_reader, active_reader);
+
+    var short_reader = bitstream.BufferedBitReader.init(&encoded);
+    var short: [517]u8 = undefined;
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        decodeCompactRle258BlockIntoBufferedReader(
+            &short_reader,
+            &short,
+            0,
+            'A',
+        ),
+    );
+
+    const invalid_distance = [_]u8{0b0000_1110};
+    var invalid_reader = bitstream.BufferedBitReader.init(&invalid_distance);
+    var invalid_output: [258]u8 = undefined;
+    try std.testing.expectError(
+        error.InvalidMatch,
+        decodeCompactRle258BlockIntoBufferedReader(
+            &invalid_reader,
+            &invalid_output,
+            0,
+            'A',
+        ),
+    );
+
+    const truncated = [_]u8{0b0000_0101};
+    var truncated_reader = bitstream.BufferedBitReader.init(&truncated);
+    var truncated_output: [518]u8 = undefined;
+    try std.testing.expectError(
+        error.TruncatedFrame,
+        decodeCompactRle258BlockIntoBufferedReader(
+            &truncated_reader,
+            &truncated_output,
+            0,
+            'A',
+        ),
+    );
+}
+
+test "compact RLE258 final block dispatch matches token replay" {
+    var tokens: [129]lz77.Token = undefined;
+    tokens[0] = .{ .literal = 'a' };
+    tokens[1] = .{ .literal = 'a' };
+    tokens[2] = .{ .match = .{ .length = 258, .distance = 2 } };
+    for (tokens[3..]) |*token| {
+        token.* = .{ .match = .{ .length = 258, .distance = 1 } };
+    }
+    const raw = try encodeRawDynamicTokensAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(raw);
+    const expected = try lz77.replayAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(expected);
+
+    var inspect_reader = bitstream.BufferedBitReader.init(raw);
+    const header = try readBlockHeader(&inspect_reader);
+    const parsed = try huffman.parseDynamicLengthsAfterHeader(
+        header.final,
+        &inspect_reader,
+    );
+    const literal_table_ = try huffman.HuffmanTable(286).init(
+        parsed.literal_lengths[0..parsed.header.hlit],
+    );
+    try std.testing.expectEqual(
+        @as(?u8, 'a'),
+        semantic_rle258.compactPairLiteral(&literal_table_, parsed),
+    );
+
+    const output = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(output);
+    const decoded = try decodeRawAutoWithDictionary(raw, "", output);
+    try std.testing.expectEqual(expected.len, decoded.output_written);
+    try std.testing.expectEqual(raw.len, decoded.input_read);
+    try std.testing.expectEqualSlices(u8, expected, output);
+
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        decodeRawAutoWithDictionary(raw, "", output[0 .. output.len - 1]),
+    );
+    try std.testing.expectError(
+        error.TruncatedFrame,
+        decodeRawAutoWithDictionary(raw[0 .. raw.len - 1], "", output),
+    );
 }
 
 test "semantic RLE258 pair shortcut matches generic decode" {

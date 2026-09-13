@@ -347,6 +347,33 @@ made the target `2.15--2.72x` faster but caused the same broad code-layout
 regressions. Both variants were rejected; RLE copy needs either call-site-local
 code generation or a stronger selection mechanism before another production
 attempt.
+A later bitstream audit found that this generated final block has an even
+narrower shape that those rejected loops did not use: its complete
+literal/length tree contains only one literal, EOB, and length 258 with widths
+`2/2/1`, while distance symbols zero and one both have width one. The resulting
+payload alphabet is four exact two-bit tokens: RLE258/distance-one, the lone
+literal, RLE258/distance-two, and EOB. The caller-buffer decoder now proves that
+canonical layout directly from the already-built compact literal table and
+parsed lengths, before constructing either the 9-bit literal or 8-bit distance
+fast table, then decodes the two-bit tokens in an isolated RLE258 section.
+Final-block, no-dictionary, non-aliasing guards keep multi-block, chunked-reader,
+dictionary, and in-place inputs on their prior paths.
+
+Thirty interleaved ReleaseFast pairs on fixed CPU 8 used independent baseline
+and candidate binaries and verified identical mixes on every run. Target
+caller-buffer median speedups were `3.8339x` raw, `4.6415x` zlib, and `3.7848x`
+gzip, all with 30/30 wins. Across 30 non-target raw/zlib/gzip rows covering
+tiny, repetitive, distance-heavy, dynamic-match, text, binary, stored,
+incompressible, README, and roadmap inputs, the geometric mean of row medians
+was `1.0081x` and the lowest row median was `0.9972x`. A second 30-pair target
+matrix covered alloc, exact-size alloc, and caller-buffer APIs: every row won,
+with medians from `2.2101x` (zlib alloc, including allocation/checksum work) to
+`6.7540x` (raw caller-buffer). The formal repeat-3 comparison now reports Vort
+zlib alloc/into at `10,992.78/21,480.23 MiB/s` versus fdeflate zlib at
+`7,257.16 MiB/s`, and Vort raw alloc/into at `13,356.35/34,052.81 MiB/s`
+versus miniz_oxide raw at `6,988.75 MiB/s`. Caller-buffer and Rust owned-result
+rows remain different API contracts; the directly comparable Vort owned-result
+rows are about `1.51x` and `1.91x` the respective Rust baselines here.
 Single-member and concatenated gzip caller-buffer plus allocator-returning decode now have `GzipDecodeOptions` through `decodeGzipWithOptions`, `decodeGzipAllocWithOptions*`, and `decodeGzipConcatenated*WithOptions` APIs, exposing strict-by-default toggles for CRC-32, ISIZE, and trailing-data validation; this gives wrapper/checksum investigations a public measurement surface analogous to `ZlibDecodeOptions` without changing normal API behavior. A first production attempt to update CRC-32 incrementally inside the single-member caller-buffer inflate loop was rejected: per-literal/match `Crc32Slice32.update` calls regressed ReleaseFast gzip caller-buffer rows badly (for example README `gzip_into` around `297.25` MiB/s versus no-CRC `506.45`, structured around `1852.31` versus `6878.47`), so future CRC fusion needs chunk/span batching rather than per-symbol updates. A follow-up block-level 4 KiB batched CRC candidate was also rejected: it improved some structured rows but regressed README (`~492.58 -> ~365.97` MiB/s), dynamic-match (`~1960.50 -> ~1798.71` MiB/s), and binary (`~1642.66 -> ~1375.55` MiB/s), so gzip CRC fusion needs a more selective batching design than flushing once per deflate block. The decode-stage report now emits `zlib_into_no_adler_mib_s`, `adler32_mib_s`, `zlib_adler_time_ratio`, gzip alloc/exact/into no-CRC rows, `gzip_into_no_isize_mib_s`, `gzip_into_relaxed_mib_s`, standalone `crc32_mib_s`, and strict-ratio columns; this separates Adler-32 and CRC-32 scan costs from wrapper validation beside strict zlib/gzip rows. Allocator-returning zlib relaxed decode now also skips Adler work when `ignore_adler` is set, matching the caller-buffer measurement path.
 
 This is not a final ecosystem claim: Rust's compression stack still has broader

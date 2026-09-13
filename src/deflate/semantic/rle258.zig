@@ -19,6 +19,41 @@ pub inline fn isCandidate(parsed: huffman.DynamicLengths) bool {
         parsed.distance_max_bits == 9;
 }
 
+/// Recognize the complete tiny tree emitted for a long single-byte run. Its
+/// literal/length alphabet is `{literal, EOB, length-258}` with widths
+/// `{2, 2, 1}`, while distance symbols zero and one both have width one.
+/// Every payload token is consequently exactly two bits: `00` is the hot
+/// length-258/distance-one pair, `10` is length-258/distance-two, `01` is the
+/// literal, and `11` is EOB.
+///
+/// Return the literal byte only after proving that exact canonical layout. The
+/// caller can then decode the payload directly without constructing another
+/// semantic table.
+pub fn compactPairLiteral(
+    literal_table: *const huffman.HuffmanTable(286),
+    parsed: huffman.DynamicLengths,
+) ?u8 {
+    if (parsed.literal_max_bits != 2 or
+        parsed.distance_max_bits != 1 or
+        parsed.header.hdist != 2 or
+        parsed.distance_lengths[0] != 1 or
+        parsed.distance_lengths[1] != 1 or
+        literal_table.len != 3 or
+        literal_table.max_bits != 2 or
+        literal_table.count_by_bits[1] != 1 or
+        literal_table.count_by_bits[2] != 2 or
+        !hasOneBitZeroCode(literal_table, 285)) return null;
+
+    const two_bit_start = literal_table.first_by_bits[2];
+    const literal_entry = literal_table.entries[two_bit_start];
+    const eob_entry = literal_table.entries[two_bit_start + 1];
+    if (literal_entry.symbol >= 256 or
+        literal_entry.code != 0b01 or
+        eob_entry.symbol != 256 or
+        eob_entry.code != 0b11) return null;
+    return @intCast(literal_entry.symbol);
+}
+
 /// Prove the exact canonical two-bit pair consumed by the RLE258 loop.
 ///
 /// Canonical Huffman entries are stored by bit width and then symbol order. The
