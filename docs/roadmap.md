@@ -12800,6 +12800,12 @@ reuse, so production keeps the simpler independently owned plans.
   Eleven fixed-CPU-2 `source32k` pairs nevertheless measured `0.9944x` with
   0/11 wins (`0.9937x`--`0.9955x`). The original adjacent write/read lets LLVM
   arrange the extension loop and candidate update more efficiently.
+  Moving the length-extension guard into the caller was rejected as well. It
+  enters the helper only when a match grows the built prefix and replaces the
+  following `@max` with direct assignment, without changing any chosen token or
+  profile field. All optimal tests, the 32-bit compile check, and the ratio gate
+  passed, but eleven fixed-CPU-2 `source32k` pairs measured `0.9931x` with 0/11
+  wins (`0.9923x`--`0.9940x`). Production retains the helper-local early return.
   Caching only the raw cost of the longest already-built length choice was also
   rejected after a promising target-only result. It removes the packed-choice
   reload and shift from lower-bound rejections, and exact optimal tests, the
