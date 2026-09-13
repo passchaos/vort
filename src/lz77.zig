@@ -23,6 +23,11 @@ const fixed_distance_costs = blk: {
     break :blk fixedDistanceCostTable(default_window_len);
 };
 
+pub inline fn fixedDistanceCost(distance: usize) usize {
+    std.debug.assert(distance > 0 and distance <= default_window_len);
+    return fixed_distance_costs[distance];
+}
+
 pub const Token = union(enum) {
     literal: u8,
     match: Match,

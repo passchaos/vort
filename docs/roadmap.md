@@ -12861,3 +12861,15 @@ reuse, so production keeps the simpler independently owned plans.
   from `0xa85` to `0x9f9`. Yet 31 independent complete level-1 JSON pairs
   measured `0.9942x` with only 4/31 wins. The scalar ranges remain because their
   whole-encoder layout is better despite the isolated parser result.
+  Single-state beam now reuses the shared optimal parser's exact 1...32,768
+  fixed-distance cost table instead of recomputing `log2(distance - 1)` for
+  every non-repcode transition. A complete distance-range oracle matches the
+  scalar formula, and all 18 single-state policy/token/allocation tests pass.
+  The isolated parser body shrinks from `0xa85` to `0xa75`; 21 fixed-CPU-8 JSON
+  stage pairs improve by `1.0449x` with 21/21 wins, while a 30-pair three-corpus
+  stage matrix reaches a `1.0151x` row-median geometric mean with a `0.9969x`
+  floor. Thirty independent complete-encoder matrix pairs preserve all 20 frame
+  sizes and checksums: JSON levels 1/3/9/22 improve by `1.0162x`/`1.0246x`/
+  `1.0072x`/`1.0064x`, the 20-row geometric mean is `1.0008x`, and the weakest
+  median is `0.9907x`. The native stage gate, 20-row libzstd 1.5.5 encode gate,
+  and 273-case bidirectional compatibility probe all pass.

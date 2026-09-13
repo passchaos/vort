@@ -205,8 +205,14 @@ fn lengthCost(length: usize) u32 {
 }
 
 fn distanceCost(distance: usize) usize {
-    if (distance <= 4) return 5;
-    return 4 + std.math.log2_int(usize, distance - 1);
+    return lz77.fixedDistanceCost(distance);
+}
+
+test "single-state shared distance cost matches scalar formula" {
+    for (1..lz77.default_window_len + 1) |distance| {
+        const expected: usize = if (distance <= 4) 5 else 4 + std.math.log2_int(usize, distance - 1);
+        try std.testing.expectEqual(expected, distanceCost(distance));
+    }
 }
 
 test "single-state repeat beam replays bounded input" {
