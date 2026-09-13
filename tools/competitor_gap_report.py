@@ -21,6 +21,11 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
+from benchmark_provenance_gate import (
+    PROVENANCE_COLUMNS as SHARED_PROVENANCE_COLUMNS,
+    PROVENANCE_V2_COLUMNS as SHARED_PROVENANCE_V2_COLUMNS,
+    validate_artifact_manifest_record,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,21 +52,12 @@ DEFAULT_FILES = {
     ),
 }
 OPTIONAL_FILES = {"deflate_incremental", "standard_corpus"}
-PROVENANCE_COLUMNS = (
-    "provenance_version",
-    "optimize",
-    "zig_version",
-    "target_arch",
-    "target_os",
-    "target_abi",
-    "target_cpu",
-    "cpu_model",
-    "cpu_affinity",
-    "affinity_cpu_count",
-    "benchmark_threads",
-    "codec_thread_policy",
-    "executable_sha256",
-    "command",
+PROVENANCE_COLUMNS = tuple(SHARED_PROVENANCE_COLUMNS)
+PROVENANCE_V2_COLUMNS = tuple(SHARED_PROVENANCE_V2_COLUMNS)
+COMPARABILITY_COLUMNS = (
+    "optimize", "zig_version", "target_arch", "target_os",
+    "target_abi", "target_cpu", "cpu_model", "cpu_affinity",
+    "affinity_cpu_count", "benchmark_threads",
 )
 
 
@@ -223,6 +219,22 @@ def common_input_bytes(rows: list[dict[str, str]], source: str, context: object)
     return next(iter(values))
 
 
+def common_input_sha256(
+    rows: list[dict[str, str]], source: str, context: object
+) -> str | None:
+    if "input_sha256" not in rows[0]:
+        return None
+    values = {row["input_sha256"] for row in rows}
+    if len(values) != 1:
+        raise ReportError(
+            f"{source}: inconsistent input_sha256 for {context!r}: {sorted(values)}"
+        )
+    value = next(iter(values))
+    if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+        raise ReportError(f"{source}: invalid input_sha256 for {context!r}")
+    return value
+
+
 def deflate_encode_metrics(rows: list[dict[str, str]], source: str) -> list[Metric]:
     required = {"engine", "format", "case", "input_bytes", "frame_bytes", "throughput_mib_s"}
     if any(required - set(row) for row in rows):
@@ -233,6 +245,7 @@ def deflate_encode_metrics(rows: list[dict[str, str]], source: str) -> list[Metr
         if wire_format not in {"raw", "zlib"}:
             continue
         input_bytes = common_input_bytes(items, source, (wire_format, case))
+        input_sha256 = common_input_sha256(items, source, (wire_format, case))
         vort = [row for row in items if row["engine"].startswith("vort")]
         refs = [row for row in items if not row["engine"].startswith("vort")]
         if not vort or not refs:
@@ -249,11 +262,11 @@ def deflate_encode_metrics(rows: list[dict[str, str]], source: str) -> list[Metr
             metrics.append(speed_metric(
                 "deflate", label, case, number(vort_row, "throughput_mib_s", source),
                 number(ref_row, "throughput_mib_s", source), reference, "unreported",
-                input_bytes, source, "encode", vort_bytes, ref_bytes,
+                input_bytes, source, "encode", vort_bytes, ref_bytes, input_sha256,
             ))
             metrics.append(size_metric(
                 "deflate", label, case, vort_bytes, ref_bytes, reference,
-                "unreported", input_bytes, source,
+                "unreported", input_bytes, source, input_sha256,
             ))
     return metrics
 
@@ -272,6 +285,7 @@ def deflate_decode_metrics(rows: list[dict[str, str]], source: str) -> list[Metr
         if wire_format not in modes:
             continue
         input_bytes = common_input_bytes(items, source, (wire_format, case))
+        input_sha256 = common_input_sha256(items, source, (wire_format, case))
         by_engine = {row["engine"]: row for row in items}
         refs = [row for row in items if not row["engine"].startswith("vort")]
         if not refs:
@@ -285,6 +299,7 @@ def deflate_decode_metrics(rows: list[dict[str, str]], source: str) -> list[Metr
                 "deflate", f"{wire_format}-{api}", case,
                 number(row, "throughput_mib_s", source), number(ref, "throughput_mib_s", source),
                 ref["engine"], "unreported", input_bytes, source,
+                input_sha256=input_sha256,
             ))
     return metrics
 
@@ -566,14 +581,23 @@ def benchmark_provenance(rows: list[dict[str, str]], source: str) -> dict[str, s
     missing = set(PROVENANCE_COLUMNS) - fields
     if missing:
         raise ReportError(f"{source}: incomplete benchmark provenance columns: {sorted(missing)}")
-    values = {tuple(row[column] for column in PROVENANCE_COLUMNS) for row in rows}
+    version = rows[0]["provenance_version"]
+    present_v2 = fields.intersection(PROVENANCE_V2_COLUMNS)
+    columns = PROVENANCE_COLUMNS + (PROVENANCE_V2_COLUMNS if version == "2" else ())
+    if version == "2":
+        missing_v2 = set(PROVENANCE_V2_COLUMNS) - fields
+        if missing_v2:
+            raise ReportError(f"{source}: incomplete benchmark provenance v2 columns: {sorted(missing_v2)}")
+    elif present_v2:
+        raise ReportError(f"{source}: unexpected benchmark provenance v2 columns")
+    values = {tuple(row[column] for column in columns) for row in rows}
     if len(values) != 1:
         raise ReportError(f"{source}: inconsistent benchmark provenance across rows")
     value = next(iter(values))
     if any(not item for item in value):
         raise ReportError(f"{source}: empty benchmark provenance value")
-    provenance = dict(zip(PROVENANCE_COLUMNS, value, strict=True))
-    if provenance["provenance_version"] != "1":
+    provenance = dict(zip(columns, value, strict=True))
+    if provenance["provenance_version"] not in {"1", "2"}:
         raise ReportError(f"{source}: unsupported benchmark provenance version")
     if provenance["optimize"] != "ReleaseFast":
         raise ReportError(f"{source}: benchmark provenance is not ReleaseFast")
@@ -599,6 +623,11 @@ def benchmark_provenance(rows: list[dict[str, str]], source: str) -> dict[str, s
         raise ReportError(f"{source}: invalid executable_sha256")
     if any(character in provenance["command"] for character in ",\r\n"):
         raise ReportError(f"{source}: command is not CSV-safe")
+    if version == "2":
+        try:
+            validate_artifact_manifest_record(provenance)
+        except AssertionError as error:
+            raise ReportError(f"{source}: {error}") from error
     if "input_sha256" not in fields:
         raise ReportError(f"{source}: benchmark provenance requires input_sha256")
     for row in rows:
@@ -817,9 +846,19 @@ def report_payload(metrics: list[Metric], inputs: list[dict[str, object]]) -> di
     real_corpus = any(metric.source == "standard_corpus" for metric in metrics)
     loaded_inputs = [item for item in inputs if item["status"] == "loaded"]
     provenance_inputs = [item for item in loaded_inputs if item.get("benchmark_provenance") is not None]
+    environment_signatures = {
+        tuple(item["benchmark_provenance"][column] for column in COMPARABILITY_COLUMNS)
+        for item in provenance_inputs
+    }
+    environment_consistent = bool(provenance_inputs) and len(environment_signatures) == 1
+    environment_complete = (
+        bool(loaded_inputs)
+        and len(provenance_inputs) == len(loaded_inputs)
+        and environment_consistent
+    )
     return {
         "schema": "vort.competitor_gap_report",
-        "schema_version": 2,
+        "schema_version": 3,
         "generated_utc": datetime.now(timezone.utc).isoformat(),
         "git": git,
         "report_environment": environment_metadata(),
@@ -832,7 +871,8 @@ def report_payload(metrics: list[Metric], inputs: list[dict[str, object]]) -> di
             "group_count": len(summaries),
             "real_corpus": real_corpus,
             "memory_comparison": False,
-            "benchmark_environment_recorded": bool(loaded_inputs) and len(provenance_inputs) == len(loaded_inputs),
+            "benchmark_environment_recorded": environment_complete,
+            "benchmark_environment_consistent": environment_consistent,
             "benchmark_environment_source_count": len(provenance_inputs),
             "benchmark_environment_total_sources": len(loaded_inputs),
         },
@@ -854,7 +894,7 @@ def markdown(payload: dict[str, object]) -> str:
         f"- Report environment: `{payload['report_environment']['platform']}`; machine=`{payload['report_environment']['machine']}`; Python=`{payload['report_environment']['python']}`",
         f"- Evidence: `{payload['coverage']['loaded_sources']}` sources, `{payload['coverage']['metric_count']}` normalized metrics, `{payload['coverage']['group_count']}` comparable groups",
         f"- Scope: locked benchmark artifacts; real-corpus=`{str(payload['coverage']['real_corpus']).lower()}`; cross-library peak-memory=`{str(payload['coverage']['memory_comparison']).lower()}`",
-        f"- Benchmark provenance: `{payload['coverage']['benchmark_environment_source_count']}/{payload['coverage']['benchmark_environment_total_sources']}` loaded sources record build target and runtime CPU affinity; complete=`{str(payload['coverage']['benchmark_environment_recorded']).lower()}`",
+        f"- Benchmark provenance: `{payload['coverage']['benchmark_environment_source_count']}/{payload['coverage']['benchmark_environment_total_sources']}` loaded sources record build target and runtime CPU affinity; cross-source-consistent=`{str(payload['coverage']['benchmark_environment_consistent']).lower()}`; complete=`{str(payload['coverage']['benchmark_environment_recorded']).lower()}`",
         "- Interpretation: throughput ratios above 1.0 are faster; compressed-size ratios below 1.0 are smaller",
         "- Status requires both the geometric mean and weakest case to meet the threshold; mixed means the aggregate and at least one dimension/case disagree",
         "- Gap priority is the largest aggregate or weakest-case shortfall within one codec/operation/profile group; no cross-format total score is computed",
@@ -924,7 +964,8 @@ def markdown(payload: dict[str, object]) -> str:
             f"affinity {provenance['cpu_affinity']} ({provenance['affinity_cpu_count']} CPUs); "
             f"benchmark threads {provenance['benchmark_threads']}; codec threads {provenance['codec_thread_policy']}; "
             f"exe {provenance['executable_sha256'][:12]}; "
-            f"command `{provenance['command']}`"
+            + (f"artifact set {provenance['artifact_set_sha256'][:12]}; " if provenance['provenance_version'] == '2' else "")
+            + f"command `{provenance['command']}`"
         )
         lines.append(
             f"| {item['name']} | {item['status']} | {item['rows']} | {item['metrics']} | {provenance_text} | "
@@ -967,6 +1008,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--markdown", type=Path, default=Path("zig-out/vort-competitor-gap-report.md"))
     parser.add_argument("--json", type=Path, default=Path("zig-out/vort-competitor-gap-report.json"))
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--require-provenance", action="store_true")
     return parser.parse_args()
 
 
@@ -1002,6 +1044,13 @@ def main() -> int:
         if not metrics:
             raise ReportError("no comparable benchmark metrics were found")
         payload = report_payload(metrics, inputs)
+        if args.require_provenance and not payload["coverage"]["benchmark_environment_recorded"]:
+            coverage = payload["coverage"]
+            raise ReportError(
+                "benchmark provenance is incomplete or inconsistent: "
+                f"{coverage['benchmark_environment_source_count']}/"
+                f"{coverage['benchmark_environment_total_sources']} sources"
+            )
         args.markdown.parent.mkdir(parents=True, exist_ok=True)
         args.json.parent.mkdir(parents=True, exist_ok=True)
         args.markdown.write_text(markdown(payload), encoding="utf-8")

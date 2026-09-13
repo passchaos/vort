@@ -91,12 +91,13 @@ zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --full
 zig build -Doptimize=ReleaseFast run-standard-multi-corpus-suite
 zig build -Doptimize=ReleaseFast run-standard-multi-corpus-dashboard -- --limit 3
 zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-suite
-zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv-repeat3
-zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3
+taskset -c 8 zig build run-rust-deflate-bench-gate
+taskset -c 8 zig build run-rust-deflate-encode-bench-gate
 zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3
 zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-dashboard
 zig build run-competitor-gap-report-smoke
-zig build -Doptimize=ReleaseFast run-competitor-gap-report
+zig build run-rust-deflate-bench-gate-smoke
+taskset -c 8 zig build -j1 run-competitor-gap-report
 ```
 
 `run-br-planned-encode-bench` accepts `-- --case <name>` to isolate one of
@@ -128,7 +129,7 @@ percent-encoded command line. Their gates reject missing or inconsistent
 provenance and verify the recorded executable digest against the exact artifact
 supplied by the build. These formal benchmark executables are pinned to
 ReleaseFast even when the outer build uses another optimization mode. The
-shared provenance gate has a 13-check positive/negative smoke covering artifact
+shared provenance gate has a 23-check positive/negative smoke covering artifact
 tampering, malformed hashes, invalid or overlapping affinity ranges, thread
 policy, command escaping, and cross-row consistency.
 
@@ -137,8 +138,10 @@ policy, command escaping, and cross-row consistency.
 `run-competitor-gap-report` reads the existing Deflate, Zstd, LZ4, Snappy, and
 Brotli benchmark CSV artifacts and writes
 `zig-out/vort-competitor-gap-report.md` plus
-`zig-out/vort-competitor-gap-report.json`. The default build step uses strict
-mode: all eight core benchmark inputs must exist. Incremental Deflate and the
+`zig-out/vort-competitor-gap-report.json`. The default build step regenerates
+and gates all eight core benchmark inputs before aggregation, then uses strict
+and required-provenance modes. Run it with one pinned CPU and `-j1` as shown
+above so the eight benchmark producers cannot overlap. Incremental Deflate and the
 standard-corpus dashboard are optional because they are not produced by the
 same fast benchmark cycle; when present they are included and when absent they
 remain explicit in the evidence table. An explicitly supplied input path is
@@ -157,32 +160,42 @@ rows are also split into explicit per-reference groups whose names identify
 whether the competitor artifact uses zlib, gzip, or zstd framing; those wire
 formats are never collapsed into a single best-reference aggregate.
 
-The schema-v2 JSON records the source paths and row counts, reference versions,
+The schema-v3 JSON records the source paths and row counts, reference versions,
 git and report-environment metadata, per-input SHA-256/mtime/row/metric evidence,
 normalized rows, group summaries, coverage flags, and missing inputs. Existing
 source CSVs that predate the provenance columns remain accepted, but the report
 counts which loaded sources carry complete benchmark metadata and sets
-`benchmark_environment_recorded` only when every loaded source does. Provenance
+`benchmark_environment_recorded` only when every loaded source does and their
+compile/runtime environment tuple agrees. The formal build passes
+`--require-provenance`, so a missing source record or cross-source target, CPU,
+affinity, or benchmark-thread mismatch fails instead of producing a nominally
+complete report. Provenance
 columns must be complete and constant within one CSV; ReleaseFast mode, valid
 input/executable hashes, positive affinity metadata, and CSV-safe commands are
 validated instead of inferred from the aggregation machine. Real-corpus
 coverage becomes true only when usable standard-corpus comparisons were loaded;
 peak-memory comparison remains false until a common cross-library memory harness
 exists.
-The current generated core report has complete provenance for six of its eight
-loaded sources: both Zstd sources, LZ4, Snappy, and both Brotli sources. Their
-134 normalized metrics also retain per-input hashes. The two remaining Deflate
-sources are intentionally still reported without provenance because their Python
-drivers execute a Vort artifact plus a generated Cargo release runner backed by
-local fdeflate/miniz_oxide checkouts; representing that chain honestly requires
-an artifact-set manifest rather than reusing the single-executable field. Until
-those two producers migrate, the report remains `6/8` and
-`benchmark_environment_recorded=false`.
+The current generated core report has complete, mutually consistent provenance
+for all eight loaded sources, and all 274 normalized metrics retain per-input
+hashes. Deflate encode/decode use provenance v2 because their Python drivers
+coordinate more than one executable. Their canonical percent-encoded artifact
+manifest records and hashes the Python driver/interpreter/shared modules, the
+ReleaseFast Vort helper, generated Rust runner source and release executable,
+Cargo/rustc/Python versions and Rust host/flags, plus the full local fdeflate
+and miniz_oxide source-tree digests, commits, and dirty state. Dedicated gates
+recompute all ten artifact records from disk, verify the full 210/120-row engine
+matrices and exact input hashes, and recompute elapsed seconds, throughput, and
+encode ratio from exact nanoseconds and byte counts.
 `run-competitor-gap-report-smoke` uses temporary synthetic CSVs to test
 aggregation, dynamic reference selection, mixed-status rules, independent and
 wire-explicit standard-corpus measurements, strict and explicit-path behavior,
 duplicate rows, malformed schemas, and invalid numeric values without running
-expensive benchmarks.
+expensive benchmarks. Its v3 coverage includes provenance v1/v2, canonical
+artifact manifests, artifact-set hashes, and cross-source environment mismatch.
+The separate Deflate matrix smoke validates engine/case completeness, duplicate
+rows, exact input hashes, repeat counts, and recomputed elapsed-time, throughput,
+and ratio fields without running the codecs.
 
 The internal `vort-zlib-encode-bench` executable accepts plain zlib modes plus
 `raw-` and `gzip-` wrapper prefixes (for example `fastest`, `raw-fastest`, and

@@ -1,5 +1,6 @@
 const std = @import("std");
 const vort = @import("vort");
+const benchmark_provenance = @import("benchmark_provenance");
 
 const Mode = enum { raw_alloc, raw_exact, raw_into, zlib_alloc, zlib_exact, zlib_into, gzip_alloc, gzip_exact, gzip_into };
 
@@ -7,8 +8,27 @@ pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
     _ = args.next();
+    if (args.next()) |first| {
+        if (std.mem.eql(u8, first, "--benchmark-provenance")) {
+            const provenance = try benchmark_provenance.capture(
+                init.io,
+                init.gpa,
+                init.minimal.args,
+                "single",
+            );
+            defer provenance.deinit(init.gpa);
+            var buffer: [4096]u8 = undefined;
+            var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &buffer);
+            try benchmark_provenance.writeCsv(provenance, &stdout_writer.interface);
+            try stdout_writer.interface.flush();
+            return;
+        }
+        return run(init, first, &args);
+    }
+    return error.MissingCorpusPath;
+}
 
-    const frame_path = args.next() orelse return error.MissingCorpusPath;
+fn run(init: std.process.Init, frame_path: []const u8, args: *std.process.Args.Iterator) !void {
     const iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
     const mode = parseMode(args.next());
     const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, frame_path, init.gpa, .limited(128 * 1024 * 1024));

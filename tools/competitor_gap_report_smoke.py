@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,6 +127,35 @@ def add_provenance(path: Path) -> None:
     write_csv(path, [row | {"input_sha256": "f" * 64} | PROVENANCE for row in rows])
 
 
+def add_composite_provenance(path: Path) -> dict[str, object]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    manifest = {
+        "artifacts": [
+            {"kind": "file", "role": "python_driver", "sha256": "b" * 64},
+            {"kind": "executable", "role": "vort_benchmark", "sha256": "a" * 64},
+        ],
+        "cargo_version": "cargo smoke",
+        "python_version": "3.12.0",
+        "rustc_host": "x86_64-unknown-linux-gnu",
+        "rustc_version": "rustc smoke",
+        "rustflags": "-C target-cpu=native",
+        "schema": "vort.benchmark_artifact_set",
+        "version": 1,
+    }
+    canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+    composite = PROVENANCE | {
+        "provenance_version": "2",
+        "artifact_set_sha256": hashlib.sha256(canonical.encode()).hexdigest(),
+        "artifact_manifest": quote(canonical, safe="-._~"),
+    }
+    write_csv(
+        path,
+        [row | {"input_sha256": "f" * 64} | composite for row in rows],
+    )
+    return manifest
+
+
 def summary(payload: dict[str, object], codec: str, operation: str, profile: str) -> dict[str, object]:
     rows = payload["summaries"]
     assert isinstance(rows, list)
@@ -149,18 +180,19 @@ def main() -> int:
         payload = json.loads(json_path.read_text(encoding="utf-8"))
         rendered = markdown_path.read_text(encoding="utf-8")
         assert payload["schema"] == "vort.competitor_gap_report"
-        assert payload["schema_version"] == 2
+        assert payload["schema_version"] == 3
         assert payload["coverage"]["loaded_sources"] == 8
         assert payload["coverage"]["missing_sources"] == 2
         assert payload["coverage"]["empty_sources"] == 0
         assert payload["coverage"]["real_corpus"] is False
         assert payload["coverage"]["benchmark_environment_recorded"] is False
+        assert payload["coverage"]["benchmark_environment_consistent"] is True
         assert payload["coverage"]["benchmark_environment_source_count"] == 6
         assert payload["coverage"]["benchmark_environment_total_sources"] == 8
         zstd_input = next(item for item in payload["inputs"] if item["name"] == "zstd_encode")
         assert zstd_input["benchmark_provenance"] == PROVENANCE
         assert len(payload["inputs"][0]["sha256"]) == 64
-        checks += 11
+        checks += 12
 
         deflate = summary(payload, "deflate", "encode", "zlib-best-speed")
         assert deflate["reference"] == "alpha-ref/beta-ref"
@@ -201,16 +233,57 @@ def main() -> int:
         assert "zlib-best-speed" not in ranking
         checks += 8
 
-        for path in root.glob("*.csv"):
-            add_provenance(path)
+        result = run_report(
+            root, markdown_path, json_path, "--strict", "--require-provenance"
+        )
+        expect_failure(result, "benchmark provenance is incomplete or inconsistent: 6/8 sources")
+        checks += 1
+
+        deflate_manifests = [
+            add_composite_provenance(root / name)
+            for name in (
+                "vort-rust-deflate-encode-bench-repeat3.csv",
+                "vort-rust-deflate-decode-bench-repeat3.csv",
+            )
+        ]
         result = run_report(root, markdown_path, json_path, "--strict")
         if result.returncode != 0:
             raise AssertionError(f"complete-provenance report failed: {result.stderr}")
         payload = json.loads(json_path.read_text(encoding="utf-8"))
         assert payload["coverage"]["benchmark_environment_recorded"] is True
+        assert payload["coverage"]["benchmark_environment_consistent"] is True
         assert payload["coverage"]["benchmark_environment_source_count"] == 8
         assert payload["coverage"]["benchmark_environment_total_sources"] == 8
-        checks += 3
+        deflate_inputs = [
+            item for item in payload["inputs"]
+            if item["name"] in {"deflate_encode", "deflate_decode"}
+        ]
+        assert all(item["benchmark_provenance"]["provenance_version"] == "2" for item in deflate_inputs)
+        assert all("artifact_set_sha256" in item["benchmark_provenance"] for item in deflate_inputs)
+        assert all(manifest["schema"] == "vort.benchmark_artifact_set" for manifest in deflate_manifests)
+        assert "artifact set " in markdown_path.read_text(encoding="utf-8")
+        checks += 8
+
+        result = run_report(root, markdown_path, json_path, "--strict", "--require-provenance")
+        if result.returncode != 0:
+            raise AssertionError(f"required-provenance report failed: {result.stderr}")
+        checks += 1
+
+        inconsistent_path = root / "vort-lz4-reference-bench.csv"
+        with inconsistent_path.open(newline="", encoding="utf-8") as handle:
+            inconsistent_rows = list(csv.DictReader(handle))
+        write_csv(
+            inconsistent_path,
+            [row | {"cpu_affinity": "9"} for row in inconsistent_rows],
+        )
+        result = run_report(
+            root, markdown_path, json_path, "--strict", "--require-provenance"
+        )
+        expect_failure(result, "benchmark provenance is incomplete or inconsistent")
+        checks += 1
+        write_core_fixtures(root)
+        add_composite_provenance(root / "vort-rust-deflate-encode-bench-repeat3.csv")
+        add_composite_provenance(root / "vort-rust-deflate-decode-bench-repeat3.csv")
 
         standard_path = root / "standard.csv"
         write_csv(
@@ -371,7 +444,7 @@ def main() -> int:
         checks += 1
 
         malformed_provenance_cases = (
-            ({"provenance_version": "2"}, "unsupported benchmark provenance version"),
+            ({"provenance_version": "3"}, "unsupported benchmark provenance version"),
             ({"optimize": "Debug"}, "benchmark provenance is not ReleaseFast"),
             ({"affinity_cpu_count": "0"}, "affinity_cpu_count does not match cpu_affinity"),
             ({"affinity_cpu_count": "2"}, "affinity_cpu_count does not match cpu_affinity"),
@@ -384,6 +457,40 @@ def main() -> int:
             write_csv(
                 path,
                 [{"case": "alpha", "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "1.5.5", "vort_mib_s": 1, "reference_mib_s": 1} | (PROVENANCE | override)],
+            )
+            result = run_report(
+                invalid_dir, invalid_dir / "bad.md", invalid_dir / "bad.json",
+                "--zstd-decode", str(path),
+            )
+            expect_failure(result, expected)
+            checks += 1
+
+        valid_manifest = {
+            "artifacts": [],
+            "schema": "vort.benchmark_artifact_set",
+            "version": 1,
+        }
+        canonical_manifest = json.dumps(
+            valid_manifest, sort_keys=True, separators=(",", ":")
+        )
+        valid_v2 = PROVENANCE | {
+            "provenance_version": "2",
+            "artifact_set_sha256": hashlib.sha256(
+                canonical_manifest.encode()
+            ).hexdigest(),
+            "artifact_manifest": quote(canonical_manifest, safe="-._~"),
+        }
+        malformed_v2_cases = (
+            ({"artifact_set_sha256": "bad"}, "invalid artifact set hash"),
+            ({"artifact_manifest": "not-json"}, "invalid artifact manifest"),
+            ({"artifact_set_sha256": "0" * 64}, "artifact set hash mismatch"),
+            ({"artifact_manifest": quote(json.dumps(valid_manifest), safe="-._~")}, "not canonical JSON"),
+        )
+        for override, expected in malformed_v2_cases:
+            path = invalid_dir / f"bad-v2-{next(iter(override))}.csv"
+            write_csv(
+                path,
+                [{"case": "alpha", "input_bytes": 1000, "input_sha256": "1" * 64, "reference_version": "1.5.5", "vort_mib_s": 1, "reference_mib_s": 1} | (valid_v2 | override)],
             )
             result = run_report(
                 invalid_dir, invalid_dir / "bad.md", invalid_dir / "bad.json",

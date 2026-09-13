@@ -12435,7 +12435,7 @@ reuse, so production keeps the simpler independently owned plans.
   recompute truncated-input hashes and compare inherited affinity. The unified
   competitor report advances to schema v2, retains per-metric input hashes,
   exposes per-source provenance, and distinguishes partial coverage from the
-  all-loaded-sources condition. Its 63-check smoke covers partial and complete
+  all-loaded-sources condition. Its initial 63-check smoke covered partial and complete
   provenance plus missing columns, inconsistent rows, Debug data, invalid CPU
   counts, unsafe commands, and malformed executable/input hashes.
   The same capture code is now a codec-neutral build module used by the formal
@@ -12444,7 +12444,7 @@ reuse, so production keeps the simpler independently owned plans.
   input hashes and the common provenance tuple, and pass their exact Zig
   artifact to the gate for an independent executable SHA-256 check. A shared
   Python validator keeps the provenance rules identical across the four gates;
-  its 13-check smoke covers positive validation, cross-row inconsistency,
+  its initial 13-check smoke covered positive validation, cross-row inconsistency,
   artifact tampering, malformed hashes, CPU affinity ranges/counts, thread
   policy, and CSV-safe commands. The unified report smoke now performs 64
   checks, and a fixed-CPU-8 real report contains 274 metrics in 25 groups with
@@ -12455,3 +12455,23 @@ reuse, so production keeps the simpler independently owned plans.
   must use a verifiable artifact-set manifest in the next slice instead of
   misleadingly assigning the existing single-executable digest to only one
   component.
+  Deflate encode/decode now close that final evidence gap with provenance v2.
+  Both helpers are pinned to ReleaseFast and expose a machine-readable
+  `--benchmark-provenance` record; each Python harness builds its Cargo release
+  runner once with `-C target-cpu=native` and executes the stable binary
+  directly. A canonical artifact-set manifest covers ten independently
+  revalidated inputs: the Python driver, interpreter and shared provenance/
+  corpus modules; the Vort helper; generated Rust source and release binary;
+  and complete fdeflate/miniz_oxide source trees with commit and dirty state.
+  The formal gates validate the full 210-row encode and 120-row decode matrices,
+  exact per-case input hashes, repeat counts, and recomputed elapsed seconds,
+  throughput, and encode ratios. The unified report is schema v3, requires
+  provenance in its formal build step, rejects cross-source environment
+  mismatches, and now reports 8/8 consistent sources with all 274 normalized
+  metrics carrying input SHA-256. Shared provenance smoke coverage is 23 checks
+  and competitor-report smoke coverage is 77 checks. A separate 15-check
+  Deflate matrix smoke covers duplicate/missing rows, input hashes, repeat
+  counts, elapsed nanoseconds, throughput, and ratio derivation without a long
+  benchmark run. The formal unified-report build now depends on all eight
+  benchmark gates; use fixed affinity with `-j1` so it cannot consume stale
+  artifacts or overlap benchmark producers.

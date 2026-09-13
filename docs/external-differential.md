@@ -98,9 +98,10 @@ by one Rust-baseline-oriented command. Passing that smoke is compatibility
 evidence for its small payload set; it is not yet throughput or ratio evidence,
 so dedicated benchmark harnesses are still required before making performance
 claims. The
-`run-rust-deflate-bench` step is the first such decode-throughput smoke: run it
-with `-Doptimize=ReleaseFast` so the Vort rows are comparable to the
-release-mode temporary Cargo runner built against both Rust checkouts. It prints
+`run-rust-deflate-bench` step is the first such decode-throughput smoke. Its
+Vort helper is pinned to ReleaseFast, and it builds one stable Cargo release
+runner with `-C target-cpu=native` before directly executing that binary against
+both Rust checkouts. It prints
 CSV rows comparing Vort, fdeflate, and miniz_oxide zlib decode throughput on
 generated tiny, repetitive, text, and binary payloads plus real project
 README/roadmap files. It also reports raw-deflate rows for Vort and
@@ -116,6 +117,10 @@ matching gzip wrapper rows (`vort-gzip`, `vort-gzip-exact`,
 `vort-gzip-into`) so regressions can distinguish inflate/checksum work, wrapper
 format overhead, exact allocation overhead, and per-iteration growable
 allocation overhead.
+Use `run-rust-deflate-bench-gate` for the formal median-of-3 CSV. The gate
+recomputes every input hash and the ten-artifact provenance manifest, including
+the Python driver/interpreter/shared modules, Vort helper, generated Rust runner
+source/binary, and full fdeflate/miniz_oxide source trees with Git state.
 
 `run-rust-deflate-encode-bench` provides the matching encode-side smoke. It
 prints CSV rows for zlib and raw-deflate frame size, ratio, and encode
@@ -129,10 +134,12 @@ split/adaptive overhead, raw core encode cost, and raw strongest-size behavior
 are visible next to the Rust baselines. The best rows use fewer iterations
 because they currently exercise the
 slower optimal parser; each row records its actual iteration count. It also
-includes real project README/roadmap files. Run it with
-`-Doptimize=ReleaseFast` before interpreting the Vort rows. Use
+includes real project README/roadmap files. The formal helper remains
+ReleaseFast regardless of the outer build mode. Use
 `run-rust-deflate-encode-bench-csv` to persist the same rows to
 `zig-out/vort-rust-deflate-encode-bench.csv`.
+`run-rust-deflate-encode-bench-gate` validates the corresponding median-of-3
+210-row matrix, exact input/artifact hashes, and recomputed timing/ratio fields.
 `run-rust-deflate-benchmark-summary` consumes both CSV files and writes
 `zig-out/vort-rust-deflate-benchmark-summary.md`. It starts with a geomean
 overview of the key throughput and size ratios so each run has an immediate

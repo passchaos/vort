@@ -6,6 +6,7 @@ performance claim. It records fdeflate/miniz_oxide zlib and raw DEFLATE decode
 throughput on the same generated frames so Vort can track the Rust baselines the
 user requested while separating wrapper cost from the inflate core.
 """
+import hashlib
 import pathlib
 import shutil
 import subprocess
@@ -14,7 +15,20 @@ import tempfile
 import textwrap
 import zlib
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+from benchmark_provenance import capture_composite, provenance_csv_values
+from benchmark_provenance_gate import PROVENANCE_COLUMNS, PROVENANCE_V2_COLUMNS
+from rust_deflate_benchmark_common import (
+    FDEFLATE,
+    MINIZ_OXIDE,
+    ROOT,
+    build_runner,
+    payloads,
+    write_if_changed,
+)
+
+DRIVER = pathlib.Path(__file__).resolve()
+RUNNER_PROJECT = ROOT / ".zig-cache" / "vort-rust-deflate-decode-runner"
+RUNNER_PACKAGE = "vort-rust-deflate-bench"
 ARGS = sys.argv[1:]
 CSV_PATH = None
 if "--csv" in ARGS:
@@ -29,13 +43,11 @@ if "--repeat" in ARGS:
         raise SystemExit("--repeat must be positive")
     del ARGS[index : index + 2]
 VORT_BENCH = pathlib.Path(ARGS[0]) if ARGS else None
-FDEFLATE = pathlib.Path.home() / "Work" / "fdeflate"
-MINIZ_OXIDE = pathlib.Path.home() / "Work" / "miniz_oxide" / "miniz_oxide"
 
 
-def write_runner(workdir: pathlib.Path) -> pathlib.Path:
-    (workdir / "src").mkdir(parents=True)
-    (workdir / "Cargo.toml").write_text(
+def write_runner(workdir):
+    write_if_changed(
+        workdir / "Cargo.toml",
         textwrap.dedent(
             f"""
             [package]
@@ -50,7 +62,8 @@ def write_runner(workdir: pathlib.Path) -> pathlib.Path:
         ).strip()
         + "\n"
     )
-    (workdir / "src" / "main.rs").write_text(
+    write_if_changed(
+        workdir / "src" / "main.rs",
         textwrap.dedent(
             """
             use std::{env, fs, process, time::Instant};
@@ -103,10 +116,9 @@ def write_runner(workdir: pathlib.Path) -> pathlib.Path:
     return workdir
 
 
-def run_bench(project: pathlib.Path, engine: str, fmt: str, frame: pathlib.Path, iterations: int) -> tuple[int, int]:
+def run_bench(executable, engine: str, fmt: str, frame, iterations: int) -> tuple[int, int]:
     out = subprocess.run(
-        ["cargo", "run", "--release", "--quiet", "--", engine, fmt, str(frame), str(iterations)],
-        cwd=project,
+        [str(executable), engine, fmt, str(frame), str(iterations)],
         check=True,
         text=True,
         stdout=subprocess.PIPE,
@@ -115,7 +127,7 @@ def run_bench(project: pathlib.Path, engine: str, fmt: str, frame: pathlib.Path,
     return int(fields["elapsed_ns"]), int(fields["mix"])
 
 
-def run_vort_bench(frame: pathlib.Path, iterations: int, mode: str = "alloc") -> tuple[int, int]:
+def run_vort_bench(frame, iterations: int, mode: str = "alloc") -> tuple[int, int]:
     if VORT_BENCH is None:
         raise RuntimeError("missing Vort zlib decode benchmark executable")
     out = subprocess.run(
@@ -159,30 +171,44 @@ def raw_from_zlib(frame: bytes) -> bytes:
 
 def main() -> int:
     if shutil.which("cargo") is None:
-        print("rust deflate decode benchmark: skipped cargo=missing")
+        message = "rust deflate decode benchmark: cargo is missing"
+        if CSV_PATH is not None:
+            print(message, file=sys.stderr)
+            return 1
+        print(message + "; skipped")
         return 0
     missing = [str(path) for path in (FDEFLATE, MINIZ_OXIDE) if not path.exists()]
     if missing:
-        print(f"rust deflate decode benchmark: skipped missing={','.join(missing)}")
+        message = f"rust deflate decode benchmark: missing={','.join(missing)}"
+        if CSV_PATH is not None:
+            print(message, file=sys.stderr)
+            return 1
+        print(message + "; skipped")
         return 0
+    if VORT_BENCH is None or not VORT_BENCH.is_file():
+        print("rust deflate decode benchmark: Vort artifact is missing", file=sys.stderr)
+        return 1
 
-    payloads = [
-        ("tiny", b"hello rust deflate baselines"),
-        ("repetitive", b"abcabcabcabc" * 512),
-        ("overlap-rle", b"a" * (32 * 1024)),
-        ("distance-heavy", (b"0123456789abcdef" * 1024) + b"----" + (b"0123456789abcdef" * 1024)),
-        ("dynamic-match", b"literal-heavy dynamic huffman decode stage\n" * 512),
-        ("text", b"the quick brown fox jumps over the lazy dog\n" * 1024),
-        ("binary", bytes((i * 131 + (i >> 3) * 17 + 29) & 0xFF for i in range(64 * 1024))),
-        ("stored-binary", bytes((i * 131 + (i >> 3) * 17 + 29) & 0xFF for i in range(64 * 1024))),
-        ("readme", (ROOT / "README.md").read_bytes()),
-        ("roadmap", (ROOT / "docs" / "roadmap.md").read_bytes()),
-    ]
-    output_rows = ["engine,format,case,input_bytes,frame_bytes,iterations,repeat,elapsed_s,throughput_mib_s,mix"]
-    with tempfile.TemporaryDirectory(prefix="vort-rust-deflate-bench-", dir=ROOT / ".zig-cache") as tmpdir:
+    benchmark_payloads = payloads(encode=False)
+    project = write_runner(RUNNER_PROJECT)
+    runner = build_runner(project, RUNNER_PACKAGE)
+    provenance = capture_composite(
+        vort_executable=VORT_BENCH,
+        driver=DRIVER,
+        runner_project=project,
+        runner_executable=runner,
+        fdeflate=FDEFLATE,
+        miniz_oxide=MINIZ_OXIDE,
+        argv=[sys.executable, *sys.argv],
+        extra_environment={
+            "python_zlib_compile_version": zlib.ZLIB_VERSION,
+            "python_zlib_runtime_version": zlib.ZLIB_RUNTIME_VERSION,
+        },
+    )
+    output_rows = ["engine,format,case,input_bytes,input_sha256,frame_bytes,iterations,repeat,elapsed_ns,elapsed_s,throughput_mib_s,mix," + ",".join(PROVENANCE_COLUMNS + PROVENANCE_V2_COLUMNS)]
+    with tempfile.TemporaryDirectory(prefix="vort-rust-deflate-bench-inputs-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
-        project = write_runner(tmp / "runner")
-        for name, payload in payloads:
+        for name, payload in benchmark_payloads:
             zlib_frame = tmp / f"{name}.zlib"
             zlib_frame.write_bytes(zlib.compress(payload, level=0 if name == "stored-binary" else 6))
             raw_frame = tmp / f"{name}.raw"
@@ -201,18 +227,20 @@ def main() -> int:
                 ("vort-gzip-exact", "gzip", gzip_frame, median_result(lambda: run_vort_bench(gzip_frame, iterations, "gzip-exact"))),
                 ("vort-gzip-into", "gzip", gzip_frame, median_result(lambda: run_vort_bench(gzip_frame, iterations, "gzip-into"))),
             ]
-            rows.extend((engine, "zlib", zlib_frame, median_result(lambda engine=engine: run_bench(project, engine, "zlib", zlib_frame, iterations))) for engine in ("fdeflate", "miniz_oxide"))
-            rows.append(("miniz_oxide-raw", "raw", raw_frame, median_result(lambda: run_bench(project, "miniz_oxide", "raw", raw_frame, iterations))))
+            rows.extend((engine, "zlib", zlib_frame, median_result(lambda engine=engine: run_bench(runner, engine, "zlib", zlib_frame, iterations))) for engine in ("fdeflate", "miniz_oxide"))
+            rows.append(("miniz_oxide-raw", "raw", raw_frame, median_result(lambda: run_bench(runner, "miniz_oxide", "raw", raw_frame, iterations))))
+            input_sha256 = hashlib.sha256(payload).hexdigest()
             for engine, fmt, frame, (elapsed_ns, mix) in rows:
                 output_rows.append(
-                    f"{engine},{fmt},{name},{len(payload)},{frame.stat().st_size},{iterations},{REPEAT},"
+                    f"{engine},{fmt},{name},{len(payload)},{input_sha256},{frame.stat().st_size},{iterations},{REPEAT},{elapsed_ns},"
                     f"{elapsed_ns / 1_000_000_000:.6f},{throughput_mib_s(len(payload), iterations, elapsed_ns):.2f},{mix}"
+                    f",{provenance_csv_values(provenance)}"
                 )
-    for row in output_rows:
-        print(row)
     if CSV_PATH is not None:
         CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
         CSV_PATH.write_text("\n".join(output_rows) + "\n")
+    else:
+        print("\n".join(output_rows))
     return 0
 
 

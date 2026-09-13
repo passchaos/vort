@@ -139,9 +139,10 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/zlib_decode_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
             },
         }),
     });
@@ -551,9 +552,10 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/zlib_encode_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
             },
         }),
     });
@@ -2285,6 +2287,17 @@ pub fn build(b: *std.Build) void {
     rust_deflate_bench_csv_repeat3.addArgs(&.{ "--repeat", "3", "--csv", "zig-out/vort-rust-deflate-decode-bench-repeat3.csv" });
     const rust_deflate_bench_csv_repeat3_step = b.step("run-rust-deflate-bench-csv-repeat3", "Write median-of-3 Vort/Rust decode benchmark CSV to zig-out");
     rust_deflate_bench_csv_repeat3_step.dependOn(&rust_deflate_bench_csv_repeat3.step);
+    const rust_deflate_bench_gate = b.addSystemCommand(&.{
+        "python3",           "tools/rust_deflate_bench_gate.py",
+        "--kind",            "decode",
+        "--csv",             "zig-out/vort-rust-deflate-decode-bench-repeat3.csv",
+        "--repeat",          "3",
+        "--vort-executable",
+    });
+    rust_deflate_bench_gate.addArtifactArg(zlib_decode_bench_exe);
+    rust_deflate_bench_gate.step.dependOn(&rust_deflate_bench_csv_repeat3.step);
+    const rust_deflate_bench_gate_step = b.step("run-rust-deflate-bench-gate", "Validate median-of-3 Vort/Rust decode benchmark provenance and CSV");
+    rust_deflate_bench_gate_step.dependOn(&rust_deflate_bench_gate.step);
 
     const rust_deflate_encode_bench = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_encode_bench.py" });
     rust_deflate_encode_bench.addArtifactArg(zlib_encode_bench_exe);
@@ -2302,6 +2315,20 @@ pub fn build(b: *std.Build) void {
     rust_deflate_encode_bench_csv_repeat3.addArgs(&.{ "--repeat", "3", "--csv", "zig-out/vort-rust-deflate-encode-bench-repeat3.csv" });
     const rust_deflate_encode_bench_csv_repeat3_step = b.step("run-rust-deflate-encode-bench-csv-repeat3", "Write median-of-3 Vort/Rust encode benchmark CSV to zig-out");
     rust_deflate_encode_bench_csv_repeat3_step.dependOn(&rust_deflate_encode_bench_csv_repeat3.step);
+    const rust_deflate_encode_bench_gate = b.addSystemCommand(&.{
+        "python3",           "tools/rust_deflate_bench_gate.py",
+        "--kind",            "encode",
+        "--csv",             "zig-out/vort-rust-deflate-encode-bench-repeat3.csv",
+        "--repeat",          "3",
+        "--vort-executable",
+    });
+    rust_deflate_encode_bench_gate.addArtifactArg(zlib_encode_bench_exe);
+    rust_deflate_encode_bench_gate.step.dependOn(&rust_deflate_encode_bench_csv_repeat3.step);
+    const rust_deflate_encode_bench_gate_step = b.step("run-rust-deflate-encode-bench-gate", "Validate median-of-3 Vort/Rust encode benchmark provenance and CSV");
+    rust_deflate_encode_bench_gate_step.dependOn(&rust_deflate_encode_bench_gate.step);
+    const rust_deflate_bench_gate_smoke = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_bench_gate_smoke.py" });
+    const rust_deflate_bench_gate_smoke_step = b.step("run-rust-deflate-bench-gate-smoke", "Validate Deflate benchmark matrix positive and negative paths");
+    rust_deflate_bench_gate_smoke_step.dependOn(&rust_deflate_bench_gate_smoke.step);
 
     const external_probe = b.addSystemCommand(&.{ "python3", "tools/external_probe.py" });
     const external_probe_step = b.step("run-external-probe", "Report available local compression competitors/tools");
@@ -3501,8 +3528,8 @@ pub fn build(b: *std.Build) void {
         "--output",
         "zig-out/vort-rust-deflate-benchmark-summary-repeat3.md",
     });
-    rust_deflate_benchmark_summary_repeat3.step.dependOn(rust_deflate_bench_csv_repeat3_step);
-    rust_deflate_benchmark_summary_repeat3.step.dependOn(rust_deflate_encode_bench_csv_repeat3_step);
+    rust_deflate_benchmark_summary_repeat3.step.dependOn(rust_deflate_bench_gate_step);
+    rust_deflate_benchmark_summary_repeat3.step.dependOn(rust_deflate_encode_bench_gate_step);
     rust_deflate_benchmark_summary_repeat3.step.dependOn(dynamic_plan_report_csv_step);
     rust_deflate_benchmark_summary_repeat3.step.dependOn(huffman_length_report_dashboard_step);
     rust_deflate_benchmark_summary_repeat3.step.dependOn(dictionary_deflate_report_csv_step);
@@ -4040,7 +4067,15 @@ pub fn build(b: *std.Build) void {
     full_compat_benchmark_suite_step.dependOn(standard_multi_corpus_dashboard_step);
     full_compat_benchmark_suite_step.dependOn(standard_multi_corpus_full_dashboard_step);
 
-    const competitor_gap_report = b.addSystemCommand(&.{ "python3", "tools/competitor_gap_report.py", "--strict" });
+    const competitor_gap_report = b.addSystemCommand(&.{ "python3", "tools/competitor_gap_report.py", "--strict", "--require-provenance" });
+    competitor_gap_report.step.dependOn(rust_deflate_encode_bench_gate_step);
+    competitor_gap_report.step.dependOn(rust_deflate_bench_gate_step);
+    competitor_gap_report.step.dependOn(zstd_encode_bench_gate_step);
+    competitor_gap_report.step.dependOn(zstd_reference_bench_gate_step);
+    competitor_gap_report.step.dependOn(lz4_reference_bench_gate_step);
+    competitor_gap_report.step.dependOn(snappy_reference_bench_gate_step);
+    competitor_gap_report.step.dependOn(br_planned_encode_bench_gate_step);
+    competitor_gap_report.step.dependOn(br_reference_bench_gate_step);
     if (b.args) |args| competitor_gap_report.addArgs(args);
     const competitor_gap_report_step = b.step("run-competitor-gap-report", "Aggregate available competitor benchmark CSVs into Markdown and JSON gap reports");
     competitor_gap_report_step.dependOn(&competitor_gap_report.step);
@@ -4189,6 +4224,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zstd_native_encode_stage_bench_path_smoke_step);
     ci_smoke_step.dependOn(benchmark_provenance_test_step);
     ci_smoke_step.dependOn(benchmark_provenance_gate_smoke_step);
+    ci_smoke_step.dependOn(rust_deflate_bench_gate_smoke_step);
     ci_smoke_step.dependOn(zstd_decodecorpus_gate_smoke_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_timeout_smoke_step);

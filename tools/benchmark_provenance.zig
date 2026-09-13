@@ -29,7 +29,12 @@ pub const Info = struct {
     }
 
     pub fn writeCsvFields(info: Info, writer: *std.Io.Writer) !void {
-        try writer.print(",{d},{s},{s},{s},{s},{s},{s},{s},{s},{d},{d},{s},{s},{s}", .{
+        try writer.writeByte(',');
+        try info.writeCsvValues(writer);
+    }
+
+    pub fn writeCsvValues(info: Info, writer: *std.Io.Writer) !void {
+        try writer.print("{d},{s},{s},{s},{s},{s},{s},{s},{s},{d},{d},{s},{s},{s}", .{
             info.provenance_version,
             info.optimize,
             info.zig_version,
@@ -47,6 +52,12 @@ pub const Info = struct {
         });
     }
 };
+
+pub fn writeCsv(info: Info, writer: *std.Io.Writer) !void {
+    try writer.print("{s}\n", .{csv_columns});
+    try info.writeCsvValues(writer);
+    try writer.writeByte('\n');
+}
 
 pub fn capture(io: std.Io, allocator: std.mem.Allocator, process_args: std.process.Args, codec_thread_policy: []const u8) !Info {
     const target_cpu = try std.zig.serializeCpuAlloc(allocator, builtin.cpu);
@@ -227,4 +238,27 @@ test "benchmark provenance reports compile target and runtime affinity" {
     try std.testing.expect(info.executable_sha256.len == 64);
     try std.testing.expect(info.command.len != 0);
     try std.testing.expect(std.mem.indexOfScalar(u8, info.cpu_affinity, ',') == null);
+}
+
+test "benchmark provenance writes a standalone CSV record" {
+    const target_cpu = try std.testing.allocator.dupe(u8, "baseline");
+    const cpu_model = try std.testing.allocator.dupe(u8, "test cpu");
+    const cpu_affinity = try std.testing.allocator.dupe(u8, "2-3");
+    const executable_sha256 = try std.testing.allocator.dupe(u8, "a" ** 64);
+    const command = try std.testing.allocator.dupe(u8, "benchmark%20--probe");
+    const info = Info{
+        .target_cpu = target_cpu,
+        .cpu_model = cpu_model,
+        .cpu_affinity = cpu_affinity,
+        .affinity_cpu_count = 2,
+        .codec_thread_policy = "single",
+        .executable_sha256 = executable_sha256,
+        .command = command,
+    };
+    defer info.deinit(std.testing.allocator);
+    var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer output.deinit();
+    try writeCsv(info, &output.writer);
+    try std.testing.expect(std.mem.startsWith(u8, output.written(), csv_columns));
+    try std.testing.expect(std.mem.endsWith(u8, output.written(), "single," ++ "a" ** 64 ++ ",benchmark%20--probe\n"));
 }

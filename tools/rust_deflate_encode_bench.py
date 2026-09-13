@@ -4,6 +4,7 @@
 Rows include both zlib-wrapped and raw DEFLATE encoders so wrapper/checksum
 costs can be separated from the core LZ77/Huffman encode work.
 """
+import hashlib
 import pathlib
 import shutil
 import subprocess
@@ -11,7 +12,20 @@ import sys
 import tempfile
 import textwrap
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+from benchmark_provenance import capture_composite, provenance_csv_values
+from benchmark_provenance_gate import PROVENANCE_COLUMNS, PROVENANCE_V2_COLUMNS
+from rust_deflate_benchmark_common import (
+    FDEFLATE,
+    MINIZ_OXIDE,
+    ROOT,
+    build_runner,
+    payloads,
+    write_if_changed,
+)
+
+DRIVER = pathlib.Path(__file__).resolve()
+RUNNER_PROJECT = ROOT / ".zig-cache" / "vort-rust-deflate-encode-runner"
+RUNNER_PACKAGE = "vort-rust-deflate-encode-bench"
 ARGS = sys.argv[1:]
 CSV_PATH = None
 if "--csv" in ARGS:
@@ -26,13 +40,11 @@ if "--repeat" in ARGS:
         raise SystemExit("--repeat must be positive")
     del ARGS[index : index + 2]
 VORT_BENCH = pathlib.Path(ARGS[0]) if ARGS else None
-FDEFLATE = pathlib.Path.home() / "Work" / "fdeflate"
-MINIZ_OXIDE = pathlib.Path.home() / "Work" / "miniz_oxide" / "miniz_oxide"
 
 
 def write_runner(workdir: pathlib.Path) -> pathlib.Path:
-    (workdir / "src").mkdir(parents=True)
-    (workdir / "Cargo.toml").write_text(
+    write_if_changed(
+        workdir / "Cargo.toml",
         textwrap.dedent(
             f"""
             [package]
@@ -47,7 +59,8 @@ def write_runner(workdir: pathlib.Path) -> pathlib.Path:
         ).strip()
         + "\n"
     )
-    (workdir / "src" / "main.rs").write_text(
+    write_if_changed(
+        workdir / "src" / "main.rs",
         textwrap.dedent(
             """
             use std::{env, fs, process, time::Instant};
@@ -104,10 +117,9 @@ def parse_fields(output: str) -> dict[str, int]:
     return {key: int(value) for key, value in (item.split("=", 1) for item in output.split())}
 
 
-def run_rust(project: pathlib.Path, engine: str, fmt: str, input_path: pathlib.Path, iterations: int) -> dict[str, int]:
+def run_rust(executable: pathlib.Path, engine: str, fmt: str, input_path: pathlib.Path, iterations: int) -> dict[str, int]:
     out = subprocess.run(
-        ["cargo", "run", "--release", "--quiet", "--", engine, fmt, str(input_path), str(iterations)],
-        cwd=project,
+        [str(executable), engine, fmt, str(input_path), str(iterations)],
         check=True,
         text=True,
         stdout=subprocess.PIPE,
@@ -126,19 +138,6 @@ def run_vort(input_path: pathlib.Path, iterations: int, level: str) -> dict[str,
         stdout=subprocess.PIPE,
     ).stdout.strip()
     return parse_fields(out)
-
-
-
-
-def deterministic_noise(size: int) -> bytes:
-    state = 0x1234ABCD
-    out = bytearray(size)
-    for i in range(size):
-        state ^= (state << 13) & 0xFFFFFFFF
-        state ^= state >> 17
-        state ^= (state << 5) & 0xFFFFFFFF
-        out[i] = state & 0xFF
-    return bytes(out)
 
 def iterations_for(size: int) -> int:
     target = 16 * 1024 * 1024
@@ -170,30 +169,40 @@ def median_fields(run_once):
 
 def main() -> int:
     if shutil.which("cargo") is None:
-        print("rust deflate encode benchmark: skipped cargo=missing")
+        message = "rust deflate encode benchmark: cargo is missing"
+        if CSV_PATH is not None:
+            print(message, file=sys.stderr)
+            return 1
+        print(message + "; skipped")
         return 0
     missing = [str(path) for path in (FDEFLATE, MINIZ_OXIDE) if not path.exists()]
     if missing:
-        print(f"rust deflate encode benchmark: skipped missing={','.join(missing)}")
+        message = f"rust deflate encode benchmark: missing={','.join(missing)}"
+        if CSV_PATH is not None:
+            print(message, file=sys.stderr)
+            return 1
+        print(message + "; skipped")
         return 0
+    if VORT_BENCH is None or not VORT_BENCH.is_file():
+        print("rust deflate encode benchmark: Vort artifact is missing", file=sys.stderr)
+        return 1
 
-    payloads = [
-        ("tiny", b"hello rust deflate baselines"),
-        ("repetitive", b"abcabcabcabc" * 512),
-        ("overlap-rle", b"a" * (32 * 1024)),
-        ("distance-heavy", (b"0123456789abcdef" * 1024) + b"----" + (b"0123456789abcdef" * 1024)),
-        ("dynamic-match", b"literal-heavy dynamic huffman decode stage\n" * 512),
-        ("text", b"the quick brown fox jumps over the lazy dog\n" * 1024),
-        ("binary", bytes((i * 131 + (i >> 3) * 17 + 29) & 0xFF for i in range(64 * 1024))),
-        ("incompressible", deterministic_noise(64 * 1024)),
-        ("readme", (ROOT / "README.md").read_bytes()),
-        ("roadmap", (ROOT / "docs" / "roadmap.md").read_bytes()),
-    ]
-    output_rows = ["engine,format,case,input_bytes,frame_bytes,ratio,iterations,repeat,elapsed_s,throughput_mib_s,mix"]
-    with tempfile.TemporaryDirectory(prefix="vort-rust-deflate-encode-bench-", dir=ROOT / ".zig-cache") as tmpdir:
+    benchmark_payloads = payloads(encode=True)
+    project = write_runner(RUNNER_PROJECT)
+    runner = build_runner(project, RUNNER_PACKAGE)
+    provenance = capture_composite(
+        vort_executable=VORT_BENCH,
+        driver=DRIVER,
+        runner_project=project,
+        runner_executable=runner,
+        fdeflate=FDEFLATE,
+        miniz_oxide=MINIZ_OXIDE,
+        argv=[sys.executable, *sys.argv],
+    )
+    output_rows = ["engine,format,case,input_bytes,input_sha256,frame_bytes,ratio,iterations,repeat,elapsed_ns,elapsed_s,throughput_mib_s,mix," + ",".join(PROVENANCE_COLUMNS + PROVENANCE_V2_COLUMNS)]
+    with tempfile.TemporaryDirectory(prefix="vort-rust-deflate-encode-inputs-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
-        project = write_runner(tmp / "runner")
-        for name, payload in payloads:
+        for name, payload in benchmark_payloads:
             plain = tmp / f"{name}.bin"
             plain.write_bytes(payload)
             iterations = iterations_for(len(payload))
@@ -223,21 +232,23 @@ def main() -> int:
             ]:
                 mode_iterations = iterations_for_vort_mode(len(payload), mode.removeprefix("raw-"))
                 rows.append((engine, "raw", mode_iterations, median_fields(lambda mode=mode, mode_iterations=mode_iterations: run_vort(plain, mode_iterations, mode))))
-            rows.extend((engine, "zlib", iterations, median_fields(lambda engine=engine: run_rust(project, engine, "zlib", plain, iterations))) for engine in ("fdeflate", "miniz_oxide"))
-            rows.extend((f"{engine}-raw", "raw", iterations, median_fields(lambda engine=engine: run_rust(project, engine, "raw", plain, iterations))) for engine in ("fdeflate", "miniz_oxide"))
+            rows.extend((engine, "zlib", iterations, median_fields(lambda engine=engine: run_rust(runner, engine, "zlib", plain, iterations))) for engine in ("fdeflate", "miniz_oxide"))
+            rows.extend((f"{engine}-raw", "raw", iterations, median_fields(lambda engine=engine: run_rust(runner, engine, "raw", plain, iterations))) for engine in ("fdeflate", "miniz_oxide"))
+            input_sha256 = hashlib.sha256(payload).hexdigest()
             for engine, fmt, row_iterations, fields in rows:
                 frame_bytes = fields.get("frame_bytes", fields.get("zlib_bytes"))
                 output_rows.append(
-                    f"{engine},{fmt},{name},{len(payload)},{frame_bytes},"
-                    f"{frame_bytes / max(len(payload), 1):.4f},{row_iterations},{REPEAT},"
+                    f"{engine},{fmt},{name},{len(payload)},{input_sha256},{frame_bytes},"
+                    f"{frame_bytes / max(len(payload), 1):.4f},{row_iterations},{REPEAT},{fields['elapsed_ns']},"
                     f"{fields['elapsed_ns'] / 1_000_000_000:.6f},"
                     f"{throughput_mib_s(len(payload), row_iterations, fields['elapsed_ns']):.2f},{fields['mix']}"
+                    f",{provenance_csv_values(provenance)}"
                 )
-    for row in output_rows:
-        print(row)
     if CSV_PATH is not None:
         CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
         CSV_PATH.write_text("\n".join(output_rows) + "\n")
+    else:
+        print("\n".join(output_rows))
     return 0
 
 
