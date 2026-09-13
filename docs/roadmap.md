@@ -12565,3 +12565,22 @@ reuse, so production keeps the simpler independently owned plans.
   the established floor. The helper, routing, and oracle were removed; retain
   the shared regular-distance path until a design changes more than its call
   boundary or code placement.
+  A Brotli ratio-mode three-type literal entropy split was also evaluated and
+  rejected. The proposal refined an already-profitable two-way split into three
+  consecutive regions, then retained the candidate only when its complete wire
+  image beat the selected baseline. Temporary direct and ratio-path tests
+  covered exact `2048/4096` boundaries over three disjoint 16-symbol alphabets;
+  the generated three-tree context map round-tripped locally and libbrotli
+  independently decoded the one-shot and progressive fixtures. On 17 real
+  corpus files only Silesia `samba` changed, from 46,179 to 46,030 bytes; the
+  aggregate changed from 738,929 to 738,780 bytes. Keeping the established
+  two-tree writer as a separate compile-time instance isolated the new storage
+  shape, but eleven fixed-CPU-2, 500-iteration, independent-binary interleaved
+  pairs still measured row medians of `0.9533x` for dictionary, `0.9653x` for
+  incompressible, `1.0094x` for JSON, `0.9699x` for mixed, `0.9917x` for source,
+  and `1.0013x` for 32 KiB source. Their median-ratio geometric mean was
+  `0.9816x`, with dictionary and mixed losing all 11 pairs. The production
+  writer, proposal, fixtures, and tests were removed. Revisit three-type literal
+  splitting only with a design that avoids perturbing the existing ratio-path
+  binary layout or that wins enough real-corpus bytes to justify a separately
+  dispatched implementation.
