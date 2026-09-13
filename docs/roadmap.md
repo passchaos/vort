@@ -12682,6 +12682,16 @@ reuse, so production keeps the simpler independently owned plans.
   but dictionary/mixed fell to `0.9304x`/`0.9556x`; ordinary JSON was only
   `1.0021x`, for a `0.9787x` four-row median geometric mean. The explicit
   per-position hash retains the better complete-binary layout.
+  A packed optimal predecessor/fingerprint index was rejected despite keeping
+  the existing `u32` allocation size, three-byte chain order, and 256-node
+  budget. For inputs below 16 MiB, the low 24 bits stored the absolute previous
+  position and the high eight bits stored the exact fourth source byte, allowing
+  collision rejection from the already-loaded chain entry. A full 64 KiB index
+  oracle compared every head, predecessor, and fingerprint with the unpacked
+  representation; all optimal token tests and ratio-profile counters remained
+  exact. Eleven fixed-CPU-2 source32k pairs nevertheless measured `0.9647x`
+  with 0/11 wins. The mask/unpack dependency costs more than the avoided random
+  byte load on this CPU, so the packed index and oracle were removed.
   Compacting the <=32 KiB lazy-lookahead parser's 4,096-entry head and 32 KiB
   predecessor arrays from `isize` to exact signed `i16` positions was also
   rejected. A maximum-boundary oracle compared every token, statistic, head,
