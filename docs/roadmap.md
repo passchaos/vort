@@ -12722,6 +12722,11 @@ reuse, so production keeps the simpler independently owned plans.
   lower-bound rejections, and only 65,215 full match-length calls. This narrows
   the next optimization target to collision/bound handling inside the search,
   rather than the roughly 12% combined lazy/optimal wire construction.
+  Marking that measured 91.5%-taken lower-bound branch as likely was rejected.
+  The hint changed no counters, tokens, or wire bytes, but eleven fixed-CPU-2
+  source32k pairs measured `0.9807x` with 0/11 wins. LLVM's resulting block
+  placement is worse than its unhinted layout despite the observed probability,
+  so the source leaves branch prediction unspecified.
   Reordering the lower-bound conjunction to compare cached cost before reading
   the candidate's mismatching byte was rejected as neutral. Eleven fixed-CPU-2
   independent-binary pairs preserved the 6,472-byte 32 KiB source wire and
