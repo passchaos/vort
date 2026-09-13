@@ -12793,6 +12793,13 @@ reuse, so production keeps the simpler independently owned plans.
   wires, and checksums were exact, but eleven fixed-CPU-2 `source32k` pairs
   measured only `0.9948x` with 0/11 wins (`0.9939x`--`0.9959x`). The original
   compact `u8` cost table and arithmetic remain faster on this CPU.
+  Returning the final packed choice directly from the inlined length-extension
+  helper was rejected too. It avoids the source-level reload of
+  `best_length_choices[length]`, and the extended return-value oracle, optimal
+  tests, 32-bit compile check, profile shape, wires, and checksums were exact.
+  Eleven fixed-CPU-2 `source32k` pairs nevertheless measured `0.9944x` with
+  0/11 wins (`0.9937x`--`0.9955x`). The original adjacent write/read lets LLVM
+  arrange the extension loop and candidate update more efficiently.
   Caching only the raw cost of the longest already-built length choice was also
   rejected after a promising target-only result. It removes the packed-choice
   reload and shift from lower-bound rejections, and exact optimal tests, the
