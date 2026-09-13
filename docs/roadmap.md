@@ -12766,3 +12766,13 @@ reuse, so production keeps the simpler independently owned plans.
   `1.0241x`. The complete control matrix fell to a `0.9638x` median geometric
   mean, however: dictionary/source/mixed were `0.9373x`/`0.9432x`/`0.9477x`.
   The cached threshold state and oracle were removed.
+  Keeping the 64-bit optimal DP cost array in the packed length choice's Q9
+  representation was rejected. This removed the per-choice cost shift in the
+  length-extension loop while leaving the 32-bit two-array path unchanged. The
+  descending-choice oracle, 32-bit compile check, and all three ratio-profiler
+  rows preserved exact tokens, commands, search counters, histograms, wires,
+  and SHA-256 values. Eleven alternating fixed-CPU-2, 500-iteration,
+  independent-binary `source32k` pairs nevertheless measured only `0.9804x` at
+  the median, with 0/11 wins and a `0.9792x`--`0.9819x` range. Repeated shifted
+  literal/distance additions cost more than the shifts removed from expanded
+  length choices, so raw DP costs remain in production.
