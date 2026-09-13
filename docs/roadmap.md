@@ -12916,6 +12916,14 @@ reuse, so production keeps the simpler independently owned plans.
   encoder's `.text` and `.rodata` remain byte-identical to the pre-profile binary,
   localizing the next work to successful match extension/state insertion rather
   than wider hashes or deeper chains.
+  Specializing single-state match extension for the common constant 258-byte
+  maximum was rejected at the focused gate. Positions outside the final
+  257-byte tail called a compile-time fixed-limit instance while the tail kept
+  the original bounded helper; the exhaustive mismatch oracle, all 19 focused
+  tests, stage counters, and candidate bytes remained exact. LLVM emitted both
+  a `0x1bc` bounded helper and a `0x1e9` fixed helper, and 21 fixed-CPU-8 JSON
+  stage pairs measured only `0.9892x` with 4/21 wins. The one shared bounded
+  helper remains.
   Giving the outer Zstd match selector a reusable `TinyGreedyScratch` was also
   rejected. The existing scratch API preserved greedy tokens, statistics, and
   candidate bytes while replacing its roughly 288 KiB stack tables and 32 KiB
