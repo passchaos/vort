@@ -13027,3 +13027,16 @@ reuse, so production keeps the simpler independently owned plans.
   Twenty-one independent fixed-CPU-2 pairs reduced text primary/adaptive
   throughput to `0.9821x`/`0.9893x`/`0.9914x`; JSON and binary controls also
   fell to `0.9879x`/`0.9898x`. Production retains the short-match-only branch.
+  The native Zstd candidate-stage benchmark now reuses the shared compile-time-
+  only optimal-search profiler for every `optimal` row. Its CSV exposes compact-
+  index bytes, index/search/reconstruction time, visited chain nodes, four-byte
+  prefix and prefix-cost rejections, mismatch/bound/slack histograms, full
+  match-length calls, expanded length choices, and candidate-budget stops; the
+  100-row gate checks every accounting identity and requires zeroed fields on
+  unrelated stages. The ordinary encoder's `.text` and `.rodata` remain byte-
+  identical. On the first 128 KiB of Ghostty `Terminal.zig`, 1,988,269 chain
+  visits split into 1,296,473 prefix rejects, 484,550 lower-bound rejects, and
+  176,096 full match-length calls; 65,058 searches stop at the eight-candidate
+  budget. Search takes about 17.90 ms of the 18.47 ms profiled plan, identifying
+  candidate traversal rather than index construction or token reconstruction as
+  the next large-source target.

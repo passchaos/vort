@@ -41,6 +41,7 @@ const Aggregate = struct {
     literals_bytes: usize,
     sequence_bytes: usize,
     single_beam_profile: vort.zstd.NativeSingleBeamProfile = .{},
+    optimal_profile: vort.zstd.NativeOptimalSearchProfile = .{},
 };
 
 const stages = [_]vort.zstd.NativeMatchStage{
@@ -124,7 +125,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.print("case,level,input_bytes,input_sha256,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,single_positions,single_literal_empty_inserts,single_literal_replacements,single_literal_rejections,single_indexed_empty_inserts,single_indexed_replacements,single_indexed_rejections,single_indexed_min_cost_rejections,single_indexed_short_min_cost_rejections,single_rep0_empty_inserts,single_rep0_replacements,single_rep0_rejections,single_rep0_min_cost_rejections,single_indexed_searches,single_chain_nodes,single_prefix_rejections,single_matches,single_window_stops,single_chain_limit_stops,single_indexed_length_histogram,single_rep0_probes,single_rep0_prefix_rejections,single_rep0_prefix_mismatch_histogram,single_rep0_matches,single_rep0_length_histogram,iterations,rounds,warmup,median_ns,ns_per_block,checksum,{s}\n", .{benchmark_provenance.csv_columns});
+    try csv.writer.print("case,level,input_bytes,input_sha256,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,single_positions,single_literal_empty_inserts,single_literal_replacements,single_literal_rejections,single_indexed_empty_inserts,single_indexed_replacements,single_indexed_rejections,single_indexed_min_cost_rejections,single_indexed_short_min_cost_rejections,single_rep0_empty_inserts,single_rep0_replacements,single_rep0_rejections,single_rep0_min_cost_rejections,single_indexed_searches,single_chain_nodes,single_prefix_rejections,single_matches,single_window_stops,single_chain_limit_stops,single_indexed_length_histogram,single_rep0_probes,single_rep0_prefix_rejections,single_rep0_prefix_mismatch_histogram,single_rep0_matches,single_rep0_length_histogram,optimal_input_bytes,optimal_index_bytes,optimal_positions,optimal_chain_nodes,optimal_prefix_rejections,optimal_prefix_mismatch_histogram,optimal_bound_rejections,optimal_bound_length_histogram,optimal_bound_distance_cost_histogram,optimal_bound_slack_histogram,optimal_match_length_calls,optimal_valid_match_candidates,optimal_length_choices_built,optimal_length_extension_histogram,optimal_candidate_budget_stops,optimal_index_ns,optimal_search_ns,optimal_reconstruct_ns,optimal_total_ns,iterations,rounds,warmup,median_ns,ns_per_block,checksum,{s}\n", .{benchmark_provenance.csv_columns});
     var selected_rows: usize = 0;
     for (cases.items) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -174,7 +175,7 @@ fn benchmarkCandidate(
     for (stages) |stage| {
         if (!stageSelected(options.only_stage, @tagName(stage))) continue;
         if (case.primary_double_fast_only and stage != .double_fast) continue;
-        const probe = try evaluateAllBlocks(allocator, case.payload, candidate.block_size, search_budget, stage, &scratch);
+        const probe = try evaluateAllBlocks(io, allocator, case.payload, candidate.block_size, search_budget, stage, &scratch);
         try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, provenance, .{ .candidate = stage }, probe, &scratch);
         selected_rows += 1;
     }
@@ -279,6 +280,33 @@ fn writeMeasuredRow(
     try writeHistogram(csv, &aggregate.single_beam_profile.rep0_prefix_mismatch_histogram);
     try csv.print(",{d},", .{aggregate.single_beam_profile.rep0_matches});
     try writeHistogram(csv, &aggregate.single_beam_profile.rep0_length_histogram);
+    try csv.print(",{d},{d},{d},{d},{d},", .{
+        aggregate.optimal_profile.input_bytes,
+        aggregate.optimal_profile.index_bytes,
+        aggregate.optimal_profile.positions,
+        aggregate.optimal_profile.chain_nodes,
+        aggregate.optimal_profile.prefix_rejections,
+    });
+    try writeHistogram(csv, &aggregate.optimal_profile.prefix_mismatch_histogram);
+    try csv.print(",{d},", .{aggregate.optimal_profile.bound_rejections});
+    try writeHistogram(csv, &aggregate.optimal_profile.bound_length_histogram);
+    try csv.writeByte(',');
+    try writeHistogram(csv, &aggregate.optimal_profile.bound_distance_cost_histogram);
+    try csv.writeByte(',');
+    try writeHistogram(csv, &aggregate.optimal_profile.bound_slack_histogram);
+    try csv.print(",{d},{d},{d},", .{
+        aggregate.optimal_profile.match_length_calls,
+        aggregate.optimal_profile.valid_match_candidates,
+        aggregate.optimal_profile.length_choices_built,
+    });
+    try writeHistogram(csv, &aggregate.optimal_profile.length_extension_histogram);
+    try csv.print(",{d},{d},{d},{d},{d}", .{
+        aggregate.optimal_profile.candidate_budget_stops,
+        aggregate.optimal_profile.index_ns,
+        aggregate.optimal_profile.search_ns,
+        aggregate.optimal_profile.reconstruct_ns,
+        aggregate.optimal_profile.total_ns,
+    });
     try csv.print(",{d},{d},{d},{d},{d},{d}", .{
         options.iterations,
         options.rounds,
@@ -347,6 +375,7 @@ fn prepareAllBlocks(allocator: std.mem.Allocator, payload: []const u8, block_siz
 }
 
 fn evaluateAllBlocks(
+    io: std.Io,
     allocator: std.mem.Allocator,
     payload: []const u8,
     block_size: usize,
@@ -360,6 +389,7 @@ fn evaluateAllBlocks(
     var literals_bytes: usize = 0;
     var sequence_bytes: usize = 0;
     var single_beam_profile: vort.zstd.NativeSingleBeamProfile = .{};
+    var optimal_profile: vort.zstd.NativeOptimalSearchProfile = .{};
     var offset: usize = 0;
     while (offset < payload.len) {
         const end = @min(payload.len, offset + block_size);
@@ -376,10 +406,15 @@ fn evaluateAllBlocks(
             const stats = try vort.zstd.benchmarkNativeSingleBeamProfile(allocator, block, scratch, &block_profile);
             if (stats.matches != result.sequence_count) return error.ProfileShapeMismatch;
             single_beam_profile.add(block_profile);
+        } else if (stage == .optimal) {
+            var block_profile: vort.zstd.NativeOptimalSearchProfile = .{};
+            const stats = try vort.zstd.benchmarkNativeOptimalProfile(io, allocator, block, scratch, &block_profile);
+            if (stats.matches != result.sequence_count) return error.ProfileShapeMismatch;
+            optimal_profile.add(block_profile);
         }
         offset = end;
     }
-    return .{ .available_blocks = available_blocks, .encoded_len = encoded_len, .sequence_count = sequence_count, .literals_bytes = literals_bytes, .sequence_bytes = sequence_bytes, .single_beam_profile = single_beam_profile };
+    return .{ .available_blocks = available_blocks, .encoded_len = encoded_len, .sequence_count = sequence_count, .literals_bytes = literals_bytes, .sequence_bytes = sequence_bytes, .single_beam_profile = single_beam_profile, .optimal_profile = optimal_profile };
 }
 
 fn blockCount(input_len: usize, block_size: usize) usize {

@@ -19,7 +19,13 @@ COLUMNS = [
     "single_prefix_rejections", "single_matches", "single_window_stops",
     "single_chain_limit_stops", "single_indexed_length_histogram",
     "single_rep0_probes", "single_rep0_prefix_rejections", "single_rep0_prefix_mismatch_histogram", "single_rep0_matches",
-    "single_rep0_length_histogram", "iterations",
+    "single_rep0_length_histogram",
+    "optimal_input_bytes", "optimal_index_bytes", "optimal_positions", "optimal_chain_nodes",
+    "optimal_prefix_rejections", "optimal_prefix_mismatch_histogram", "optimal_bound_rejections",
+    "optimal_bound_length_histogram", "optimal_bound_distance_cost_histogram", "optimal_bound_slack_histogram",
+    "optimal_match_length_calls", "optimal_valid_match_candidates", "optimal_length_choices_built",
+    "optimal_length_extension_histogram", "optimal_candidate_budget_stops", "optimal_index_ns",
+    "optimal_search_ns", "optimal_reconstruct_ns", "optimal_total_ns", "iterations",
     "rounds", "warmup", "median_ns", "ns_per_block", "checksum",
 ] + PROVENANCE_COLUMNS
 CASES = {"text", "json", "binary"}
@@ -175,6 +181,43 @@ def main() -> int:
             assert row["single_indexed_length_histogram"] == "0;0;0;0;0;0", row
             assert row["single_rep0_prefix_mismatch_histogram"] == "0;0;0;0", row
             assert row["single_rep0_length_histogram"] == "0;0;0;0;0;0", row
+        if row["stage"] == "optimal":
+            optimal_input = int(row["optimal_input_bytes"])
+            optimal_positions = int(row["optimal_positions"])
+            optimal_chain_nodes = int(row["optimal_chain_nodes"])
+            optimal_prefix_rejections = int(row["optimal_prefix_rejections"])
+            optimal_bound_rejections = int(row["optimal_bound_rejections"])
+            optimal_match_length_calls = int(row["optimal_match_length_calls"])
+            optimal_valid_matches = int(row["optimal_valid_match_candidates"])
+            assert optimal_input == int(row["input_bytes"]), row
+            assert optimal_positions == optimal_input, row
+            assert int(row["optimal_index_bytes"]) > 0, row
+            assert optimal_chain_nodes == optimal_prefix_rejections + optimal_bound_rejections + optimal_match_length_calls, row
+            assert sum(int(value) for value in row["optimal_prefix_mismatch_histogram"].split(";")) == optimal_prefix_rejections, row
+            assert sum(int(value) for value in row["optimal_bound_length_histogram"].split(";")) == optimal_bound_rejections, row
+            assert sum(int(value) for value in row["optimal_bound_distance_cost_histogram"].split(";")) == optimal_bound_rejections, row
+            assert sum(int(value) for value in row["optimal_bound_slack_histogram"].split(";")) == optimal_bound_rejections, row
+            assert optimal_valid_matches <= optimal_match_length_calls, row
+            assert sum(int(value) for value in row["optimal_length_extension_histogram"].split(";")) == optimal_valid_matches, row
+            assert int(row["optimal_length_choices_built"]) >= optimal_valid_matches, row
+            assert int(row["optimal_candidate_budget_stops"]) <= optimal_bound_rejections + optimal_valid_matches, row
+            inner_ns = sum(int(row[key]) for key in (
+                "optimal_index_ns", "optimal_search_ns", "optimal_reconstruct_ns",
+            ))
+            assert 0 < inner_ns <= int(row["optimal_total_ns"]), row
+        else:
+            for key in (
+                "optimal_input_bytes", "optimal_index_bytes", "optimal_positions", "optimal_chain_nodes",
+                "optimal_prefix_rejections", "optimal_bound_rejections", "optimal_match_length_calls",
+                "optimal_valid_match_candidates", "optimal_length_choices_built", "optimal_candidate_budget_stops",
+                "optimal_index_ns", "optimal_search_ns", "optimal_reconstruct_ns", "optimal_total_ns",
+            ):
+                assert int(row[key]) == 0, row
+            assert row["optimal_prefix_mismatch_histogram"] == "0;0;0;0", row
+            assert row["optimal_bound_length_histogram"] == "0;0;0;0;0;0", row
+            assert row["optimal_bound_distance_cost_histogram"] == "0;0;0;0;0;0;0;0;0;0;0;0;0;0;0", row
+            assert row["optimal_bound_slack_histogram"] == "0;0;0;0;0;0;0;0;0", row
+            assert row["optimal_length_extension_histogram"] == "0;0;0;0;0;0;0;0;0", row
 
     # The current level-9 policy is the subject of this benchmark. Pinning its
     # candidate labels to 128 KiB/4 KiB/8 KiB makes policy drift visible instead

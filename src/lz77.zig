@@ -74,6 +74,30 @@ pub const OptimalSearchProfile = struct {
     search_ns: u64 = 0,
     reconstruct_ns: u64 = 0,
     total_ns: u64 = 0,
+
+    pub fn add(self: *OptimalSearchProfile, other: OptimalSearchProfile) void {
+        inline for (.{
+            "input_bytes",
+            "index_bytes",
+            "positions",
+            "chain_nodes",
+            "prefix_rejections",
+            "bound_rejections",
+            "match_length_calls",
+            "valid_match_candidates",
+            "length_choices_built",
+            "candidate_budget_stops",
+            "index_ns",
+            "search_ns",
+            "reconstruct_ns",
+            "total_ns",
+        }) |field| @field(self, field) += @field(other, field);
+        for (&self.prefix_mismatch_histogram, other.prefix_mismatch_histogram) |*total, count| total.* += count;
+        for (&self.bound_length_histogram, other.bound_length_histogram) |*total, count| total.* += count;
+        for (&self.bound_distance_cost_histogram, other.bound_distance_cost_histogram) |*total, count| total.* += count;
+        for (&self.bound_slack_histogram, other.bound_slack_histogram) |*total, count| total.* += count;
+        for (&self.length_extension_histogram, other.length_extension_histogram) |*total, count| total.* += count;
+    }
 };
 
 pub const GreedyOptions = struct {
@@ -1184,6 +1208,14 @@ pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8,
     const tokens = try allocator.dupe(Token, scratch.tokens.items);
     profile.total_ns = elapsedNs(total_start, io);
     return .{ .tokens = tokens, .stats = stats };
+}
+
+pub fn optimalPlanReuseProfiled(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, io: std.Io, profile: *OptimalSearchProfile) !PlanStats {
+    profile.* = .{ .input_bytes = input.len };
+    const total_start = std.Io.Clock.awake.now(io);
+    const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, true, io, profile);
+    profile.total_ns = elapsedNs(total_start, io);
+    return stats;
 }
 
 fn optimalPlanReuseInternalProfiled(

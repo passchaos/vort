@@ -11435,6 +11435,7 @@ pub const NativeMatchStageResult = struct {
 };
 
 pub const NativeSingleBeamProfile = single_beam_match.Profile;
+pub const NativeOptimalSearchProfile = lz77.OptimalSearchProfile;
 
 pub const NativeMatchStageScratch = struct {
     candidate: std.ArrayList(u8) = .empty,
@@ -11508,6 +11509,16 @@ pub fn benchmarkNativeSingleBeamProfile(
     profile: *NativeSingleBeamProfile,
 ) Error!lz77.PlanStats {
     return try single_beam_match.planReuseProfiled(&scratch.single_beam, allocator, block, profile);
+}
+
+pub fn benchmarkNativeOptimalProfile(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    block: []const u8,
+    scratch: *NativeMatchStageScratch,
+    profile: *NativeOptimalSearchProfile,
+) Error!lz77.PlanStats {
+    return try lz77.optimalPlanReuseProfiled(&scratch.optimal, allocator, block, zstdHashParserOptions(block.len), io, profile);
 }
 
 fn duplicateIndexInputFingerprint(block: []const u8) u64 {
@@ -12318,6 +12329,23 @@ test "zstd profiled single beam preserves production tokens and accounting" {
     var rep0_mismatch_total: usize = 0;
     for (profile.rep0_prefix_mismatch_histogram) |count| rep0_mismatch_total += count;
     try std.testing.expectEqual(profile.rep0_prefix_rejections, rep0_mismatch_total);
+}
+
+test "zstd profiled optimal stage preserves production tokens and accounting" {
+    const payload = ("pub fn profiledOptimal(value: usize) usize { return value *% 17; }\n" ** 128);
+    var expected: lz77.OptimalScratch = .{};
+    defer expected.deinit(std.testing.allocator);
+    const expected_stats = try lz77.optimalPlanReuse(&expected, std.testing.allocator, payload, zstdHashParserOptions(payload.len));
+
+    var scratch: NativeMatchStageScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    var profile: NativeOptimalSearchProfile = .{};
+    const actual_stats = try benchmarkNativeOptimalProfile(std.testing.io, std.testing.allocator, payload, &scratch, &profile);
+    try std.testing.expectEqual(expected_stats, actual_stats);
+    try std.testing.expect(nativeMatchTokenSlicesEqual(expected.tokens.items, scratch.optimal.tokens.items));
+    try std.testing.expectEqual(payload.len, profile.input_bytes);
+    try std.testing.expectEqual(payload.len, profile.positions);
+    try std.testing.expectEqual(profile.chain_nodes, profile.prefix_rejections + profile.bound_rejections + profile.match_length_calls);
 }
 
 test "zstd double-fast diagnostic stage round trips structured input" {
