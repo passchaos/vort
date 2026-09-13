@@ -171,6 +171,8 @@ def main() -> int:
             {
                 "python_zlib_compile_version": zlib.ZLIB_VERSION,
                 "python_zlib_runtime_version": zlib.ZLIB_RUNTIME_VERSION,
+                "rust_result_allocator": "rust-global-default",
+                "vort_result_allocator": "std.heap.c_allocator",
             }
             if args.kind == "decode"
             else None

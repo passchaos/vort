@@ -121,6 +121,10 @@ Use `run-rust-deflate-bench-gate` for the formal median-of-3 CSV. The gate
 recomputes every input hash and the ten-artifact provenance manifest, including
 the Python driver/interpreter/shared modules, Vort helper, generated Rust runner
 source/binary, and full fdeflate/miniz_oxide source trees with Git state.
+Vort's timed allocator-returning rows use `std.heap.c_allocator`, matching the
+process allocator behind the Rust `Vec` results on the Linux benchmark host;
+the manifest records this policy explicitly. Caller-buffer rows keep allocation
+outside the timed loop and remain the allocator-independent core comparison.
 
 `run-rust-deflate-encode-bench` provides the matching encode-side smoke. It
 prints CSV rows for zlib and raw-deflate frame size, ratio, and encode

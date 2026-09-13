@@ -187,6 +187,13 @@ and miniz_oxide source-tree digests, commits, and dirty state. Dedicated gates
 recompute all ten artifact records from disk, verify the full 210/120-row engine
 matrices and exact input hashes, and recompute elapsed seconds, throughput, and
 encode ratio from exact nanoseconds and byte counts.
+The Deflate decode harness uses `std.heap.c_allocator` for Vort's timed
+allocator-returning rows, matching the process allocator used by the Rust
+`Vec` baselines on this Linux host; caller-buffer rows allocate their reusable
+scratch outside the timed loop. The v2 manifest records both allocator policies
+so allocator-inclusive numbers cannot be mistaken for allocator-independent
+codec throughput. Use the caller-buffer profiles for core decode comparisons,
+and alloc/exact profiles when the application-facing allocation cost matters.
 `run-competitor-gap-report-smoke` uses temporary synthetic CSVs to test
 aggregation, dynamic reference selection, mixed-status rules, independent and
 wire-explicit standard-corpus measurements, strict and explicit-path behavior,

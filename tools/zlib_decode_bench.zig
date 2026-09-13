@@ -34,16 +34,20 @@ fn run(init: std.process.Init, frame_path: []const u8, args: *std.process.Args.I
     const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, frame_path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(frame);
 
+    // Rust's Vec allocator is the process allocator. Use libc here as well so
+    // allocator-returning rows measure codec/allocation work rather than Zig's
+    // page allocator mapping every result independently.
+    const benchmark_allocator = std.heap.c_allocator;
     const warmup = switch (mode) {
-        .raw_alloc, .raw_exact, .raw_into => try vort.decodeRawDeflateAlloc(init.gpa, frame),
-        .zlib_alloc, .zlib_exact, .zlib_into => try vort.decodeZlibAlloc(init.gpa, frame),
-        .gzip_alloc, .gzip_exact, .gzip_into => try vort.decodeGzipAlloc(init.gpa, frame),
+        .raw_alloc, .raw_exact, .raw_into => try vort.decodeRawDeflateAlloc(benchmark_allocator, frame),
+        .zlib_alloc, .zlib_exact, .zlib_into => try vort.decodeZlibAlloc(benchmark_allocator, frame),
+        .gzip_alloc, .gzip_exact, .gzip_into => try vort.decodeGzipAlloc(benchmark_allocator, frame),
     };
-    defer init.gpa.free(warmup);
+    defer benchmark_allocator.free(warmup);
     var empty_scratch: [0]u8 = .{};
     const uses_scratch = mode == .raw_into or mode == .zlib_into or mode == .gzip_into;
-    const scratch = if (uses_scratch) try init.gpa.alloc(u8, warmup.len) else empty_scratch[0..];
-    defer if (uses_scratch) init.gpa.free(scratch);
+    const scratch = if (uses_scratch) try benchmark_allocator.alloc(u8, warmup.len) else empty_scratch[0..];
+    defer if (uses_scratch) benchmark_allocator.free(scratch);
     if (uses_scratch) {
         const written = switch (mode) {
             .raw_into => (try vort.decodeRawDeflate(frame, scratch)).output_written,
@@ -59,17 +63,17 @@ fn run(init: std.process.Init, frame_path: []const u8, args: *std.process.Args.I
     for (0..iterations) |_| {
         switch (mode) {
             .raw_alloc => {
-                const decoded = try vort.decodeRawDeflateAlloc(init.gpa, frame);
+                const decoded = try vort.decodeRawDeflateAlloc(benchmark_allocator, frame);
                 {
-                    defer init.gpa.free(decoded);
+                    defer benchmark_allocator.free(decoded);
                     mix +%= decoded.len;
                     if (decoded.len != 0) mix +%= decoded[0];
                 }
             },
             .raw_exact => {
-                const decoded = try vort.decodeRawDeflateAllocExactSize(init.gpa, frame, warmup.len);
+                const decoded = try vort.decodeRawDeflateAllocExactSize(benchmark_allocator, frame, warmup.len);
                 {
-                    defer init.gpa.free(decoded);
+                    defer benchmark_allocator.free(decoded);
                     mix +%= decoded.len;
                     if (decoded.len != 0) mix +%= decoded[0];
                 }
@@ -80,17 +84,17 @@ fn run(init: std.process.Init, frame_path: []const u8, args: *std.process.Args.I
                 if (decoded.output_written != 0) mix +%= scratch[0];
             },
             .zlib_alloc => {
-                const decoded = try vort.decodeZlibAlloc(init.gpa, frame);
+                const decoded = try vort.decodeZlibAlloc(benchmark_allocator, frame);
                 {
-                    defer init.gpa.free(decoded);
+                    defer benchmark_allocator.free(decoded);
                     mix +%= decoded.len;
                     if (decoded.len != 0) mix +%= decoded[0];
                 }
             },
             .zlib_exact => {
-                const decoded = try vort.decodeZlibAllocExactSize(init.gpa, frame, warmup.len);
+                const decoded = try vort.decodeZlibAllocExactSize(benchmark_allocator, frame, warmup.len);
                 {
-                    defer init.gpa.free(decoded);
+                    defer benchmark_allocator.free(decoded);
                     mix +%= decoded.len;
                     if (decoded.len != 0) mix +%= decoded[0];
                 }
@@ -101,17 +105,17 @@ fn run(init: std.process.Init, frame_path: []const u8, args: *std.process.Args.I
                 if (written != 0) mix +%= scratch[0];
             },
             .gzip_alloc => {
-                const decoded = try vort.decodeGzipAlloc(init.gpa, frame);
+                const decoded = try vort.decodeGzipAlloc(benchmark_allocator, frame);
                 {
-                    defer init.gpa.free(decoded);
+                    defer benchmark_allocator.free(decoded);
                     mix +%= decoded.len;
                     if (decoded.len != 0) mix +%= decoded[0];
                 }
             },
             .gzip_exact => {
-                const decoded = try vort.decodeGzipAllocExactSize(init.gpa, frame, warmup.len);
+                const decoded = try vort.decodeGzipAllocExactSize(benchmark_allocator, frame, warmup.len);
                 {
-                    defer init.gpa.free(decoded);
+                    defer benchmark_allocator.free(decoded);
                     mix +%= decoded.len;
                     if (decoded.len != 0) mix +%= decoded[0];
                 }

@@ -140,6 +140,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("tools/zlib_decode_bench.zig"),
             .target = target,
             .optimize = .ReleaseFast,
+            .link_libc = true,
             .imports = &.{
                 .{ .name = "vort", .module = vort_mod_releasefast },
                 .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },

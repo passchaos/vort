@@ -12475,6 +12475,17 @@ reuse, so production keeps the simpler independently owned plans.
   benchmark run. The formal unified-report build now depends on all eight
   benchmark gates; use fixed affinity with `-j1` so it cannot consume stale
   artifacts or overlap benchmark producers.
+  The Deflate decode comparison now uses `std.heap.c_allocator` for Vort's
+  timed owned-result rows, matching the process allocator used by Rust `Vec` on
+  the Linux benchmark host; both policies are recorded in the v2 manifest. The
+  prior `init.gpa` helper reached the page allocator and made stored-block
+  allocation look like a codec gap even though caller-buffer decode was already
+  far ahead. Thirty fixed-CPU-8 interleaved pairs against the frozen page-backed
+  helper preserve every checksum and improve stored raw alloc/exact by
+  `11.5891x`/`11.7149x`, zlib alloc/exact by `6.3570x`/`6.3776x`, and gzip
+  alloc/exact by `1.6844x`/`1.6861x`. The no-allocation raw/zlib/gzip controls
+  remain near neutral at `0.9904x`/`1.0109x`/`1.0102x`, confirming the change
+  corrects allocator methodology rather than claiming a codec-core speedup.
   Reusing repeat-beam's previous indexed match length at the next position was
   evaluated and rejected. The reuse is exact only when the next predecessor is
   the previous candidate plus one and the prior match ended at a real mismatch

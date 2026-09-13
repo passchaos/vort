@@ -203,6 +203,8 @@ def main() -> int:
         extra_environment={
             "python_zlib_compile_version": zlib.ZLIB_VERSION,
             "python_zlib_runtime_version": zlib.ZLIB_RUNTIME_VERSION,
+            "rust_result_allocator": "rust-global-default",
+            "vort_result_allocator": "std.heap.c_allocator",
         },
     )
     output_rows = ["engine,format,case,input_bytes,input_sha256,frame_bytes,iterations,repeat,elapsed_ns,elapsed_s,throughput_mib_s,mix," + ",".join(PROVENANCE_COLUMNS + PROVENANCE_V2_COLUMNS)]
