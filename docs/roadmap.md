@@ -12750,6 +12750,14 @@ reuse, so production keeps the simpler independently owned plans.
   total. Production `.text` and `.rodata` remain byte-identical, so this points
   toward range-based work reduction for the long tail rather than unconditional
   short-loop expansion.
+  A 64-bit long-extension prototype grouped the fixed-cost length ranges
+  3--10/11--18/19--34/35--66/67--130/131--257/258 so each inner loop could
+  reuse one scalar length cost, while additions below eight choices and the
+  32-bit path kept the original loop. The full choice oracle, all optimal tests,
+  32-bit compile check, ratio profile, wires, and checksums stayed exact. Eleven
+  fixed-CPU-2 `source32k` pairs nevertheless measured `0.9768x` with 0/11 wins
+  (`0.9762x`--`0.9779x`); extra range control flow overwhelms the avoided compact
+  table loads, so the single loop remains.
   Marking that measured 91.5%-taken lower-bound branch as likely was rejected.
   The hint changed no counters, tokens, or wire bytes, but eleven fixed-CPU-2
   source32k pairs measured `0.9807x` with 0/11 wins. LLVM's resulting block
