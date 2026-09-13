@@ -27,7 +27,7 @@ pub fn main(init: std.process.Init) !void {
     var csv: std.Io.Writer.Allocating = .init(init.gpa);
     defer csv.deinit();
     try csv.writer.print(
-        "case,reference_version,input_bytes,input_sha256,encoded_sha256,iterations,selected_bytes,lazy_bytes,optimal_bytes,stored_bytes,optimal_attempted,optimal_selected,lazy_tokens,lazy_matches,lazy_commands,optimal_tokens,optimal_matches,optimal_commands,optimal_index_bytes,optimal_positions,optimal_chain_nodes,optimal_prefix_rejections,optimal_bound_rejections,optimal_match_length_calls,optimal_valid_match_candidates,optimal_length_choices_built,optimal_candidate_budget_stops,lazy_plan_ns,lazy_command_ns,lazy_wire_ns,optimal_plan_ns,optimal_index_ns,optimal_search_ns,optimal_reconstruct_ns,optimal_command_ns,optimal_wire_ns,selection_ns,total_ns,stage_ns,unaccounted_ns,{s}\n",
+        "case,reference_version,input_bytes,input_sha256,encoded_sha256,iterations,selected_bytes,lazy_bytes,optimal_bytes,stored_bytes,optimal_attempted,optimal_selected,lazy_tokens,lazy_matches,lazy_commands,optimal_tokens,optimal_matches,optimal_commands,optimal_index_bytes,optimal_positions,optimal_chain_nodes,optimal_prefix_rejections,optimal_bound_rejections,optimal_bound_length_histogram,optimal_bound_distance_cost_histogram,optimal_bound_slack_histogram,optimal_match_length_calls,optimal_valid_match_candidates,optimal_length_choices_built,optimal_candidate_budget_stops,lazy_plan_ns,lazy_command_ns,lazy_wire_ns,optimal_plan_ns,optimal_index_ns,optimal_search_ns,optimal_reconstruct_ns,optimal_command_ns,optimal_wire_ns,selection_ns,total_ns,stage_ns,unaccounted_ns,{s}\n",
         .{benchmark_provenance.csv_columns},
     );
     for (cases) |case| try writeCase(init, reference, &csv.writer, case, options.iterations, provenance);
@@ -67,19 +67,27 @@ fn writeCase(init: std.process.Init, reference: libbrotli.Runtime, writer: *std.
     const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
     const encoded_sha256 = benchmark_provenance.sha256Hex(expected);
     try writer.print(
-        "{s},{x},{d},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
+        "{s},{x},{d},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
         .{
-            case.name,                            reference.version(),                fixed.input_bytes,                     &input_sha256,                        &encoded_sha256,           iterations,                      fixed.selected_bytes,           fixed.lazy_bytes,
-            fixed.optimal_bytes,                  fixed.stored_bytes,                 @intFromBool(fixed.optimal_attempted), @intFromBool(fixed.optimal_selected), fixed.lazy_token_count,    fixed.lazy_match_count,          fixed.lazy_command_count,       fixed.optimal_token_count,
-            fixed.optimal_match_count,            fixed.optimal_command_count,        fixed.optimal_index_bytes,             fixed.optimal_positions,              fixed.optimal_chain_nodes, fixed.optimal_prefix_rejections, fixed.optimal_bound_rejections, fixed.optimal_match_length_calls,
-            fixed.optimal_valid_match_candidates, fixed.optimal_length_choices_built, fixed.optimal_candidate_budget_stops,
+            case.name,                 reference.version(),         fixed.input_bytes,                     &input_sha256,                        &encoded_sha256,           iterations,                      fixed.selected_bytes,           fixed.lazy_bytes,
+            fixed.optimal_bytes,       fixed.stored_bytes,          @intFromBool(fixed.optimal_attempted), @intFromBool(fixed.optimal_selected), fixed.lazy_token_count,    fixed.lazy_match_count,          fixed.lazy_command_count,       fixed.optimal_token_count,
+            fixed.optimal_match_count, fixed.optimal_command_count, fixed.optimal_index_bytes,             fixed.optimal_positions,              fixed.optimal_chain_nodes, fixed.optimal_prefix_rejections, fixed.optimal_bound_rejections,
         },
     );
+    try writer.writeByte(',');
+    try writeHistogram(writer, &fixed.optimal_bound_length_histogram);
+    try writer.writeByte(',');
+    try writeHistogram(writer, &fixed.optimal_bound_distance_cost_histogram);
+    try writer.writeByte(',');
+    try writeHistogram(writer, &fixed.optimal_bound_slack_histogram);
     try writer.print(
-        ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
+        ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
         .{
-            aggregate.lazy_plan_ns,    aggregate.lazy_command_ns, aggregate.lazy_wire_ns, aggregate.optimal_plan_ns, aggregate.optimal_index_ns,    aggregate.optimal_search_ns, aggregate.optimal_reconstruct_ns, aggregate.optimal_command_ns,
-            aggregate.optimal_wire_ns, aggregate.selection_ns,    aggregate.total_ns,     stage_ns,                  aggregate.total_ns - stage_ns,
+            fixed.optimal_match_length_calls, fixed.optimal_valid_match_candidates, fixed.optimal_length_choices_built, fixed.optimal_candidate_budget_stops,
+            aggregate.lazy_plan_ns,           aggregate.lazy_command_ns,            aggregate.lazy_wire_ns,             aggregate.optimal_plan_ns,
+            aggregate.optimal_index_ns,       aggregate.optimal_search_ns,          aggregate.optimal_reconstruct_ns,   aggregate.optimal_command_ns,
+            aggregate.optimal_wire_ns,        aggregate.selection_ns,               aggregate.total_ns,                 stage_ns,
+            aggregate.total_ns - stage_ns,
         },
     );
     try provenance.writeCsvFields(writer);
@@ -94,6 +102,16 @@ fn expectSameShape(expected: vort.BrotliRatioEncodeProfile, actual: vort.BrotliR
         "optimal_chain_nodes",          "optimal_prefix_rejections",      "optimal_bound_rejections", "optimal_match_length_calls", "optimal_valid_match_candidates",
         "optimal_length_choices_built", "optimal_candidate_budget_stops",
     }) |field| if (@field(expected, field) != @field(actual, field)) return error.ProfileShapeMismatch;
+    if (!std.mem.eql(usize, &expected.optimal_bound_length_histogram, &actual.optimal_bound_length_histogram) or
+        !std.mem.eql(usize, &expected.optimal_bound_distance_cost_histogram, &actual.optimal_bound_distance_cost_histogram) or
+        !std.mem.eql(usize, &expected.optimal_bound_slack_histogram, &actual.optimal_bound_slack_histogram)) return error.ProfileShapeMismatch;
+}
+
+fn writeHistogram(writer: *std.Io.Writer, histogram: []const usize) !void {
+    for (histogram, 0..) |count, index| {
+        if (index != 0) try writer.writeByte(';');
+        try writer.print("{d}", .{count});
+    }
 }
 
 fn addTimings(total: *vort.BrotliRatioEncodeProfile, sample: vort.BrotliRatioEncodeProfile) void {

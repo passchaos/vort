@@ -12722,6 +12722,14 @@ reuse, so production keeps the simpler independently owned plans.
   lower-bound rejections, and only 65,215 full match-length calls. This narrows
   the next optimization target to collision/bound handling inside the search,
   rather than the roughly 12% combined lazy/optimal wire construction.
+  The profiler now further partitions every lower-bound rejection into known-
+  prefix length, distance-cost, and rejection-slack histograms, with independent
+  sum checks against the parent counter. On the 32 KiB source row, 432,858 of
+  700,227 rejections (61.8%) use a 4--15-byte known prefix and 589,052 (84.1%)
+  use 4--31 bytes; fixed distance costs 13--17 dominate, while 163,923 cases
+  (23.4%) have at least eight bits of slack. The distribution is broad rather
+  than concentrated at one length or a zero/one-bit boundary, ruling out a
+  narrow special case as the next credible optimization.
   Marking that measured 91.5%-taken lower-bound branch as likely was rejected.
   The hint changed no counters, tokens, or wire bytes, but eleven fixed-CPU-2
   source32k pairs measured `0.9807x` with 0/11 wins. LLVM's resulting block

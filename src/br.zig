@@ -2149,6 +2149,9 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
     profile.optimal_chain_nodes = optimal_profile.chain_nodes;
     profile.optimal_prefix_rejections = optimal_profile.prefix_rejections;
     profile.optimal_bound_rejections = optimal_profile.bound_rejections;
+    profile.optimal_bound_length_histogram = optimal_profile.bound_length_histogram;
+    profile.optimal_bound_distance_cost_histogram = optimal_profile.bound_distance_cost_histogram;
+    profile.optimal_bound_slack_histogram = optimal_profile.bound_slack_histogram;
     profile.optimal_match_length_calls = optimal_profile.match_length_calls;
     profile.optimal_valid_match_candidates = optimal_profile.valid_match_candidates;
     profile.optimal_length_choices_built = optimal_profile.length_choices_built;
@@ -12035,6 +12038,15 @@ test "br ratio block profile reproduces the production wire" {
     try std.testing.expect(profile.optimal_chain_nodes >= profile.optimal_match_length_calls);
     try std.testing.expect(profile.optimal_match_length_calls >= profile.optimal_valid_match_candidates);
     try std.testing.expect(profile.optimal_length_choices_built > 0);
+    var length_total: usize = 0;
+    for (profile.optimal_bound_length_histogram) |count| length_total += count;
+    var distance_total: usize = 0;
+    for (profile.optimal_bound_distance_cost_histogram) |count| distance_total += count;
+    var slack_total: usize = 0;
+    for (profile.optimal_bound_slack_histogram) |count| slack_total += count;
+    try std.testing.expectEqual(profile.optimal_bound_rejections, length_total);
+    try std.testing.expectEqual(profile.optimal_bound_rejections, distance_total);
+    try std.testing.expectEqual(profile.optimal_bound_rejections, slack_total);
 }
 
 test "br ratio block profile preserves stored fallback without optimal search" {

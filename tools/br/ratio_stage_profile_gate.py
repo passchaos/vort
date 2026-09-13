@@ -18,6 +18,8 @@ COLUMNS = [
     "optimal_tokens", "optimal_matches", "optimal_commands",
     "optimal_index_bytes", "optimal_positions", "optimal_chain_nodes",
     "optimal_prefix_rejections", "optimal_bound_rejections",
+    "optimal_bound_length_histogram", "optimal_bound_distance_cost_histogram",
+    "optimal_bound_slack_histogram",
     "optimal_match_length_calls", "optimal_valid_match_candidates",
     "optimal_length_choices_built", "optimal_candidate_budget_stops",
     "lazy_plan_ns", "lazy_command_ns", "lazy_wire_ns",
@@ -40,6 +42,13 @@ def integer(row: dict[str, str], key: str) -> int:
         raise AssertionError(f"invalid {key}: {row}") from exc
 
 
+def histogram(row: dict[str, str], key: str, length: int) -> list[int]:
+    values = [int(value) for value in row[key].split(";")]
+    assert len(values) == length, (key, row[key])
+    assert all(value >= 0 for value in values), (key, row[key])
+    return values
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, required=True)
@@ -54,9 +63,6 @@ def main() -> int:
     assert len(rows) == len(CASES) and set(by_case) == set(CASES), sorted(by_case)
     validate_provenance(rows, executable=args.executable, codec_thread_policy="single")
     assert len({row["reference_version"] for row in rows}) == 1, rows
-    assert integer(rows[0], "reference_version") > 0, rows[0]
-    assert len({row["input_sha256"] for row in rows}) == len(rows), rows
-    assert len({row["encoded_sha256"] for row in rows}) == len(rows), rows
     assert integer(rows[0], "reference_version") > 0, rows[0]
     assert len({row["input_sha256"] for row in rows}) == len(rows), rows
     assert len({row["encoded_sha256"] for row in rows}) == len(rows), rows
@@ -95,6 +101,9 @@ def main() -> int:
         bound = integer(row, "optimal_bound_rejections")
         matches = integer(row, "optimal_match_length_calls")
         assert prefix + bound + matches == chain_nodes, row
+        assert sum(histogram(row, "optimal_bound_length_histogram", 6)) == bound, row
+        assert sum(histogram(row, "optimal_bound_distance_cost_histogram", 15)) == bound, row
+        assert sum(histogram(row, "optimal_bound_slack_histogram", 9)) == bound, row
         assert integer(row, "optimal_valid_match_candidates") == matches, row
         assert integer(row, "optimal_candidate_budget_stops") <= input_bytes, row
     print(f"br_ratio_stage_profile_gate=ok rows={len(rows)}")

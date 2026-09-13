@@ -44,12 +44,19 @@ pub const PlanStats = struct {
 };
 
 pub const OptimalSearchProfile = struct {
+    pub const bound_length_bucket_count = 6;
+    pub const distance_cost_bucket_count = 15;
+    pub const bound_slack_bucket_count = 9;
+
     input_bytes: usize = 0,
     index_bytes: usize = 0,
     positions: usize = 0,
     chain_nodes: usize = 0,
     prefix_rejections: usize = 0,
     bound_rejections: usize = 0,
+    bound_length_histogram: [bound_length_bucket_count]usize = @splat(0),
+    bound_distance_cost_histogram: [distance_cost_bucket_count]usize = @splat(0),
+    bound_slack_histogram: [bound_slack_bucket_count]usize = @splat(0),
     match_length_calls: usize = 0,
     valid_match_candidates: usize = 0,
     length_choices_built: usize = 0,
@@ -1273,7 +1280,13 @@ inline fn optimalPlanReuseWithIndex(
                 input[candidate + choices_built_through] != input[rev_i + choices_built_through] and
                 optimalLengthChoiceCost(scratch.index.best_length_choices[choices_built_through]) + distance_cost >= costs[rev_i])
             {
-                if (comptime collect_profile) profile.bound_rejections += 1;
+                if (comptime collect_profile) {
+                    profile.bound_rejections += 1;
+                    profile.bound_length_histogram[optimalBoundLengthBucket(choices_built_through)] += 1;
+                    profile.bound_distance_cost_histogram[distance_cost - 5] += 1;
+                    const slack = optimalLengthChoiceCost(scratch.index.best_length_choices[choices_built_through]) + distance_cost - costs[rev_i];
+                    profile.bound_slack_histogram[@min(slack, profile.bound_slack_histogram.len - 1)] += 1;
+                }
                 candidates_seen += 1;
                 if (candidates_seen >= candidate_limit) {
                     if (comptime collect_profile) profile.candidate_budget_stops += 1;
@@ -1347,6 +1360,11 @@ inline fn optimalPlanReuseWithIndex(
 fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
     const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
     return if (ns <= 0) 0 else @intCast(ns);
+}
+
+fn optimalBoundLengthBucket(length: usize) usize {
+    std.debug.assert(length >= 4 and length <= max_match_len);
+    return if (length < 8) 0 else if (length < 16) 1 else if (length < 32) 2 else if (length < 64) 3 else if (length < 128) 4 else 5;
 }
 
 fn extendOptimalLengthChoices(
