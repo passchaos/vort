@@ -12867,6 +12867,14 @@ reuse, so production keeps the simpler independently owned plans.
   remained exact, and the parser body shrank from `0xa75` to `0xa65`. Twenty-one
   fixed-CPU-8 JSON stage pairs improved only `1.0066x` at the median (16/21
   wins), so the explicit defensive validation remains.
+  Reusing the indexed match's already-computed `distance == rep0` predicate and
+  passing a known distance cost into the state-transition helper was rejected.
+  It removed one comparison/table lookup, kept all 18 single-state tests and
+  candidate bytes exact, shrank the parser body from `0xa75` to `0xa65`, and
+  improved 21 fixed-CPU-8 JSON stage pairs by `1.0216x` with 21/21 wins. But 31
+  independent complete level-1 JSON pairs measured only `0.9886x` with 3/31
+  wins, so the original helper-local cost calculation retains the better whole-
+  encoder layout.
   Replacing single-state indexed matching's per-candidate distance bounds with
   one saturated `position - 32768` lower bound was rejected. Query-before-insert
   proves nonzero distance and the two comparisons are equivalent; all 18
