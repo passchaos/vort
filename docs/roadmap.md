@@ -13001,3 +13001,22 @@ reuse, so production keeps the simpler independently owned plans.
   643-byte frame but measured only `1.0033x` geometrically with a `0.9953x`
   floor. The common trial loop remains because eliminating one fixed iteration
   does not justify a dedicated branch.
+  The single-state beam now rejects short match transitions before computing
+  their exact length/distance cost when an occupied target is already no worse
+  than the format-derived minimum: eight bits for a repeat match or sixteen
+  bits for a direct match. The shortcut is limited to the profiled short-match
+  hot path below 68 bytes, leaving text's dominant long matches branch-free;
+  equal costs preserve the earlier path and deterministic tie behavior. An exhaustive
+  transition oracle covers match-length cost boundaries through 258, repeat and
+  direct distances through 32 KiB, occupied/unoccupied targets, and low/high
+  source and target costs. Compile-time-only profiling found that the bound
+  rejects 29,050 of 29,388 failed primary JSON indexed transitions and all
+  22,355 failed primary binary transitions; text remains dominated by long
+  matches. Twenty-one fixed-CPU-2 stage pairs preserve all candidate bytes and
+  improve JSON/binary medians by `1.0398x`/`1.0573x`, with text at `1.0006x`.
+  Thirty independent complete-frame matrix pairs preserve every one of 20 frame
+  sizes and checksums: JSON levels 1/3 improve by `1.0100x`/`1.0180x`, the
+  row-median geometric mean is `1.0012x`, and the weakest median is text level
+  3 at `0.9940x`. The stage CSV now retains literal/indexed/recent-offset empty
+  insert, replacement, and rejection counts plus minimum-cost rejection counts
+  so future transition work can be evidence-driven.

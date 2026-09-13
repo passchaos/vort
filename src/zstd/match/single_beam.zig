@@ -19,6 +19,18 @@ pub const Profile = struct {
     pub const length_bucket_count = 6;
 
     positions: usize = 0,
+    literal_empty_inserts: usize = 0,
+    literal_replacements: usize = 0,
+    literal_rejections: usize = 0,
+    indexed_empty_inserts: usize = 0,
+    indexed_replacements: usize = 0,
+    indexed_rejections: usize = 0,
+    indexed_min_cost_rejections: usize = 0,
+    indexed_short_min_cost_rejections: usize = 0,
+    rep0_empty_inserts: usize = 0,
+    rep0_replacements: usize = 0,
+    rep0_rejections: usize = 0,
+    rep0_min_cost_rejections: usize = 0,
     indexed_searches: usize = 0,
     indexed_chain_nodes: usize = 0,
     indexed_prefix_rejections: usize = 0,
@@ -35,6 +47,18 @@ pub const Profile = struct {
     pub fn add(self: *Profile, other: Profile) void {
         inline for (.{
             "positions",
+            "literal_empty_inserts",
+            "literal_replacements",
+            "literal_rejections",
+            "indexed_empty_inserts",
+            "indexed_replacements",
+            "indexed_rejections",
+            "indexed_min_cost_rejections",
+            "indexed_short_min_cost_rejections",
+            "rep0_empty_inserts",
+            "rep0_replacements",
+            "rep0_rejections",
+            "rep0_min_cost_rejections",
             "indexed_searches",
             "indexed_chain_nodes",
             "indexed_prefix_rejections",
@@ -114,12 +138,12 @@ fn planReuseWithChainLimit(
         if (comptime collect_profile) profile.positions += 1;
         std.debug.assert(occupied[position] != 0);
         const state = states[position];
-        insertState(states, occupied, position + 1, .{
+        insertStateProfiled(states, occupied, position + 1, .{
             .cost = state.cost + literalCost(input[position]),
             .rep0 = state.rep0,
             .previous_position = @intCast(position),
             .token = .{ .literal = input[position] },
-        });
+        }, .literal, collect_profile, profile);
 
         if (position + min_match > input.len) {
             scratch.prev.items[position] = empty;
@@ -132,7 +156,7 @@ fn planReuseWithChainLimit(
         scratch.head[hash] = @intCast(position);
         const indexed_match = firstIndexedMatch(scratch, input, position, first_candidate, anchor, chain_limit, collect_profile, profile);
         if (indexed_match) |match|
-            extendMatch(states, occupied, position, state, match);
+            extendMatchProfiled(states, occupied, position, state, match, .indexed, collect_profile, profile);
         const indexed_rep0 = if (indexed_match) |match| match.distance == state.rep0 else false;
         if (state.rep0 <= position and !indexed_rep0) {
             if (comptime collect_profile) profile.rep0_probes += 1;
@@ -142,10 +166,10 @@ fn planReuseWithChainLimit(
                     profile.rep0_matches += 1;
                     profile.rep0_length_histogram[matchLengthBucket(length)] += 1;
                 }
-                extendMatch(states, occupied, position, state, .{
+                extendMatchProfiled(states, occupied, position, state, .{
                     .length = @intCast(length),
                     .distance = state.rep0,
-                });
+                }, .rep0, collect_profile, profile);
             } else if (comptime collect_profile) {
                 profile.rep0_prefix_rejections += 1;
                 const candidate = position - state.rep0;
@@ -224,6 +248,26 @@ fn matchLengthBucket(length: usize) usize {
 }
 
 fn extendMatch(states: []State, occupied: []u8, position: usize, state: State, match: lz77.Token.Match) void {
+    const target = position + match.length;
+    // Every repeat match costs at least 7 + 1 bits and every direct match at
+    // least 7 + 5 + 4 bits. Apply that lower bound to the profiled short-match
+    // hot path, while leaving text's dominant long matches branch-free. Avoid
+    // the distance lookup and State construction when the bound cannot improve
+    // the reached target. Equal costs retain the earlier path.
+    if (match.length < 68) {
+        const minimum_transition_cost: u32 = if (match.distance == state.rep0) 8 else 16;
+        if (occupied[target] != 0 and state.cost + minimum_transition_cost >= states[target].cost) return;
+    }
+    const distance_cost: u32 = if (match.distance == state.rep0) 1 else @intCast(distanceCost(match.distance) + 4);
+    insertState(states, occupied, target, .{
+        .cost = state.cost + lengthCost(match.length) + distance_cost,
+        .rep0 = match.distance,
+        .previous_position = @intCast(position),
+        .token = .{ .match = match },
+    });
+}
+
+fn extendMatchReference(states: []State, occupied: []u8, position: usize, state: State, match: lz77.Token.Match) void {
     const distance_cost: u32 = if (match.distance == state.rep0) 1 else @intCast(distanceCost(match.distance) + 4);
     insertState(states, occupied, position + match.length, .{
         .cost = state.cost + lengthCost(match.length) + distance_cost,
@@ -233,8 +277,83 @@ fn extendMatch(states: []State, occupied: []u8, position: usize, state: State, m
     });
 }
 
+const TransitionKind = enum { literal, indexed, rep0 };
+
+fn extendMatchProfiled(
+    states: []State,
+    occupied: []u8,
+    position: usize,
+    state: State,
+    match: lz77.Token.Match,
+    comptime kind: TransitionKind,
+    comptime collect_profile: bool,
+    profile: if (collect_profile) *Profile else void,
+) void {
+    if (!collect_profile) return extendMatch(states, occupied, position, state, match);
+    const distance_cost: u32 = if (match.distance == state.rep0) 1 else @intCast(distanceCost(match.distance) + 4);
+    const target = position + match.length;
+    const minimum_transition_cost: u32 = if (match.distance == state.rep0) 8 else 16;
+    if (occupied[target] != 0 and state.cost + minimum_transition_cost >= states[target].cost) {
+        switch (kind) {
+            .literal => unreachable,
+            .indexed => {
+                profile.indexed_min_cost_rejections += 1;
+                profile.indexed_short_min_cost_rejections += @intFromBool(match.length < 68);
+            },
+            .rep0 => profile.rep0_min_cost_rejections += 1,
+        }
+    }
+    insertStateProfiled(states, occupied, position + match.length, .{
+        .cost = state.cost + lengthCost(match.length) + distance_cost,
+        .rep0 = match.distance,
+        .previous_position = @intCast(position),
+        .token = .{ .match = match },
+    }, kind, true, profile);
+}
+
 fn insertState(states: []State, occupied: []u8, position: usize, candidate: State) void {
     if (occupied[position] == 0 or candidate.cost < states[position].cost) {
+        states[position] = candidate;
+        occupied[position] = 1;
+    }
+}
+
+fn insertStateProfiled(
+    states: []State,
+    occupied: []u8,
+    position: usize,
+    candidate: State,
+    comptime kind: TransitionKind,
+    comptime collect_profile: bool,
+    profile: if (collect_profile) *Profile else void,
+) void {
+    if (!collect_profile) return insertState(states, occupied, position, candidate);
+    const is_empty = occupied[position] == 0;
+    const replaces = !is_empty and candidate.cost < states[position].cost;
+    switch (kind) {
+        .literal => if (is_empty) {
+            profile.literal_empty_inserts += 1;
+        } else if (replaces) {
+            profile.literal_replacements += 1;
+        } else {
+            profile.literal_rejections += 1;
+        },
+        .indexed => if (is_empty) {
+            profile.indexed_empty_inserts += 1;
+        } else if (replaces) {
+            profile.indexed_replacements += 1;
+        } else {
+            profile.indexed_rejections += 1;
+        },
+        .rep0 => if (is_empty) {
+            profile.rep0_empty_inserts += 1;
+        } else if (replaces) {
+            profile.rep0_replacements += 1;
+        } else {
+            profile.rep0_rejections += 1;
+        },
+    }
+    if (is_empty or replaces) {
         states[position] = candidate;
         occupied[position] = 1;
     }
@@ -292,6 +411,31 @@ test "single-state shared distance cost matches scalar formula" {
     }
 }
 
+test "profiled single-state short transition lower bound preserves reference insertion" {
+    const lengths = [_]u16{ 4, 10, 11, 18, 19, 34, 35, 66, 67, 68, 130, 258 };
+    const distances = [_]u16{ 1, 2, 4, 5, 31, 32, 255, 32_768 };
+    const state_costs = [_]u32{ 0, 17, max_input_len * 9 };
+    const target_costs = [_]u32{ 0, 7, 8, 15, 16, 31, 127, 1024, std.math.maxInt(u16), max_input_len * 9 + 32 };
+    for (lengths) |length| for (distances) |distance| for (state_costs) |state_cost| for (target_costs) |target_cost| for ([_]bool{ false, true }) |target_occupied| {
+        const position: usize = 1;
+        const target = position + length;
+        const state: State = .{ .cost = state_cost, .rep0 = if (distance & 1 == 0) distance else 3 };
+        const match: lz77.Token.Match = .{ .length = length, .distance = distance };
+        var expected_states: [260]State = @splat(.{});
+        var actual_states = expected_states;
+        var expected_occupied: [260]u8 = @splat(0);
+        var actual_occupied = expected_occupied;
+        expected_states[target] = .{ .cost = target_cost };
+        actual_states[target] = .{ .cost = target_cost };
+        expected_occupied[target] = @intFromBool(target_occupied);
+        actual_occupied[target] = @intFromBool(target_occupied);
+        extendMatchReference(&expected_states, &expected_occupied, position, state, match);
+        extendMatch(&actual_states, &actual_occupied, position, state, match);
+        try std.testing.expectEqualSlices(u8, &expected_occupied, &actual_occupied);
+        try std.testing.expectEqualSlices(State, &expected_states, &actual_states);
+    };
+}
+
 test "single-state repeat beam replays bounded input" {
     const input = ("abcdefgh-abcdefgh-" ** 128) ++ ("0123456789abcdef" ** 64);
     var scratch: Scratch = .{};
@@ -315,6 +459,18 @@ test "profiled single-state repeat beam preserves tokens and accounting" {
     try std.testing.expectEqual(expected_stats, actual_stats);
     try std.testing.expect(tokenSlicesEqual(expected.reversed.items, actual.reversed.items));
     try std.testing.expectEqual(input.len, profile.positions);
+    try std.testing.expectEqual(
+        profile.positions,
+        profile.literal_empty_inserts + profile.literal_replacements + profile.literal_rejections,
+    );
+    try std.testing.expectEqual(
+        profile.indexed_matches,
+        profile.indexed_empty_inserts + profile.indexed_replacements + profile.indexed_rejections,
+    );
+    try std.testing.expectEqual(
+        profile.rep0_matches,
+        profile.rep0_empty_inserts + profile.rep0_replacements + profile.rep0_rejections,
+    );
     try std.testing.expectEqual(
         profile.indexed_chain_nodes,
         profile.indexed_prefix_rejections + profile.indexed_matches + profile.indexed_window_stops,

@@ -124,7 +124,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.print("case,level,input_bytes,input_sha256,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,single_positions,single_indexed_searches,single_chain_nodes,single_prefix_rejections,single_matches,single_window_stops,single_chain_limit_stops,single_indexed_length_histogram,single_rep0_probes,single_rep0_prefix_rejections,single_rep0_prefix_mismatch_histogram,single_rep0_matches,single_rep0_length_histogram,iterations,rounds,warmup,median_ns,ns_per_block,checksum,{s}\n", .{benchmark_provenance.csv_columns});
+    try csv.writer.print("case,level,input_bytes,input_sha256,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,single_positions,single_literal_empty_inserts,single_literal_replacements,single_literal_rejections,single_indexed_empty_inserts,single_indexed_replacements,single_indexed_rejections,single_indexed_min_cost_rejections,single_indexed_short_min_cost_rejections,single_rep0_empty_inserts,single_rep0_replacements,single_rep0_rejections,single_rep0_min_cost_rejections,single_indexed_searches,single_chain_nodes,single_prefix_rejections,single_matches,single_window_stops,single_chain_limit_stops,single_indexed_length_histogram,single_rep0_probes,single_rep0_prefix_rejections,single_rep0_prefix_mismatch_histogram,single_rep0_matches,single_rep0_length_histogram,iterations,rounds,warmup,median_ns,ns_per_block,checksum,{s}\n", .{benchmark_provenance.csv_columns});
     var selected_rows: usize = 0;
     for (cases.items) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -233,7 +233,7 @@ fn writeMeasuredRow(
     const blocks_per_sample = blockCount(case.payload.len, candidate.block_size) * options.iterations;
     const ns_per_block = if (blocks_per_sample == 0) 0 else median.ns / blocks_per_sample;
     const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
-    try csv.print("{s},{d},{d},{s},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}", .{
+    try csv.print("{s},{d},{d},{s},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d}", .{
         case.name,
         options.level,
         case.payload.len,
@@ -248,7 +248,21 @@ fn writeMeasuredRow(
         aggregate.encoded_len,
         aggregate.literals_bytes,
         aggregate.sequence_bytes,
+    });
+    try csv.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}", .{
         aggregate.single_beam_profile.positions,
+        aggregate.single_beam_profile.literal_empty_inserts,
+        aggregate.single_beam_profile.literal_replacements,
+        aggregate.single_beam_profile.literal_rejections,
+        aggregate.single_beam_profile.indexed_empty_inserts,
+        aggregate.single_beam_profile.indexed_replacements,
+        aggregate.single_beam_profile.indexed_rejections,
+        aggregate.single_beam_profile.indexed_min_cost_rejections,
+        aggregate.single_beam_profile.indexed_short_min_cost_rejections,
+        aggregate.single_beam_profile.rep0_empty_inserts,
+        aggregate.single_beam_profile.rep0_replacements,
+        aggregate.single_beam_profile.rep0_rejections,
+        aggregate.single_beam_profile.rep0_min_cost_rejections,
         aggregate.single_beam_profile.indexed_searches,
         aggregate.single_beam_profile.indexed_chain_nodes,
         aggregate.single_beam_profile.indexed_prefix_rejections,

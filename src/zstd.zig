@@ -12293,6 +12293,18 @@ test "zstd profiled single beam preserves production tokens and accounting" {
     try std.testing.expect(nativeMatchTokenSlicesEqual(expected.reversed.items, scratch.single_beam.reversed.items));
     try std.testing.expectEqual(payload.len, profile.positions);
     try std.testing.expectEqual(
+        profile.positions,
+        profile.literal_empty_inserts + profile.literal_replacements + profile.literal_rejections,
+    );
+    try std.testing.expectEqual(
+        profile.indexed_matches,
+        profile.indexed_empty_inserts + profile.indexed_replacements + profile.indexed_rejections,
+    );
+    try std.testing.expectEqual(
+        profile.rep0_matches,
+        profile.rep0_empty_inserts + profile.rep0_replacements + profile.rep0_rejections,
+    );
+    try std.testing.expectEqual(
         profile.indexed_chain_nodes,
         profile.indexed_prefix_rejections + profile.indexed_matches + profile.indexed_window_stops,
     );
