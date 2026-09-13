@@ -12786,6 +12786,13 @@ reuse, so production keeps the simpler independently owned plans.
   the median, with 0/11 wins and a `0.9792x`--`0.9819x` range. Repeated shifted
   literal/distance additions cost more than the shifts removed from expanded
   length choices, so raw DP costs remain in production.
+  Prepacking each fixed length cost and inverted tie rank into a `u16` table was
+  rejected. On 64-bit this replaced the hot choice expression's cost addition
+  with a wider table lookup; the 32-bit two-array path remained unchanged. The
+  randomized/all-tie choice oracle, 32-bit compile check, ratio profile shape,
+  wires, and checksums were exact, but eleven fixed-CPU-2 `source32k` pairs
+  measured only `0.9948x` with 0/11 wins (`0.9939x`--`0.9959x`). The original
+  compact `u8` cost table and arithmetic remain faster on this CPU.
   Caching only the raw cost of the longest already-built length choice was also
   rejected after a promising target-only result. It removes the packed-choice
   reload and shift from lower-bound rejections, and exact optimal tests, the
