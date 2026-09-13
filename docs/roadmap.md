@@ -12682,3 +12682,16 @@ reuse, so production keeps the simpler independently owned plans.
   but dictionary/mixed fell to `0.9304x`/`0.9556x`; ordinary JSON was only
   `1.0021x`, for a `0.9787x` four-row median geometric mean. The explicit
   per-position hash retains the better complete-binary layout.
+  Compacting the <=32 KiB lazy-lookahead parser's 4,096-entry head and 32 KiB
+  predecessor arrays from `isize` to exact signed `i16` positions was also
+  rejected. A maximum-boundary oracle compared every token, statistic, head,
+  and initialized predecessor with the old representation, and all selected
+  Brotli wires/checksums were unchanged. Applying the compact tables to both
+  allocating and reusable paths improved the 32 KiB Brotli ratio row by
+  `1.0124x` and log by `1.2905x`, with an eight-row median geometric mean of
+  `1.0358x`, but Zstd's reusable lazy text-primary stage fell to `0.9769x`. A
+  Brotli-config-only branch and an allocating-only specialization both kept the
+  target near `1.011x` while reducing short dictionary/JSON controls as far as
+  `0.9230x`/`0.8643x`. The compact tables and boundary oracle were removed;
+  retain the established `isize` tiny-lazy layout until it can be isolated in a
+  separately linked object without perturbing either caller family.
