@@ -12867,6 +12867,13 @@ reuse, so production keeps the simpler independently owned plans.
   remained exact, and the parser body shrank from `0xa75` to `0xa65`. Twenty-one
   fixed-CPU-8 JSON stage pairs improved only `1.0066x` at the median (16/21
   wins), so the explicit defensive validation remains.
+  Replacing single-state indexed matching's per-candidate distance bounds with
+  one saturated `position - 32768` lower bound was rejected. Query-before-insert
+  proves nonzero distance and the two comparisons are equivalent; all 18
+  single-state tests and stage output remained exact, while the parser body
+  shrank from `0xa75` to `0xa29`. Twenty-one fixed-CPU-8 JSON stage pairs still
+  measured only `0.9965x` with 1/21 wins, so the original distance/window check
+  remains faster on this target.
   Single-state beam now reuses the shared optimal parser's exact 1...32,768
   fixed-distance cost table instead of recomputing `log2(distance - 1)` for
   every non-repcode transition. A complete distance-range oracle matches the
