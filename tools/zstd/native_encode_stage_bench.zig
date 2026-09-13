@@ -408,7 +408,7 @@ fn evaluateAllBlocks(
             single_beam_profile.add(block_profile);
         } else if (stage == .optimal) {
             var block_profile: vort.zstd.NativeOptimalSearchProfile = .{};
-            const stats = try vort.zstd.benchmarkNativeOptimalProfile(io, allocator, block, scratch, &block_profile);
+            const stats = try vort.zstd.benchmarkNativeOptimalProfile(io, allocator, block, search_budget, scratch, &block_profile);
             if (stats.matches != result.sequence_count) return error.ProfileShapeMismatch;
             optimal_profile.add(block_profile);
         }

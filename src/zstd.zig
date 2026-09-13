@@ -116,6 +116,10 @@ const decisive_wide_match_min_search_budget = 16;
 // block without repeat-beam consensus. Other budgets retain strict consensus.
 const fastest_wide_match_search_budget = 16;
 const fast_wide_match_search_budget = 64;
+// The fastest policy spends one fewer useful-chain candidate in the exact
+// optimal fallback; higher levels retain the established ratio budget.
+const fastest_optimal_candidate_budget = 7;
+const default_optimal_candidate_budget = 8;
 // Level 1 already evaluates greedy and optimal hash plans. A third lazy pass
 // preserves its locked wires but cannot improve them, so begin that extra ratio
 // work at level 2's 32-state budget.
@@ -11293,6 +11297,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
             last,
             &optimal_scratch,
             sequence_scratch,
+            zstdOptimalCandidateBudget(match_search_budget),
         );
         try retainShortestCandidate(allocator, optimal_ok, candidate.items, &best);
     }
@@ -11515,10 +11520,11 @@ pub fn benchmarkNativeOptimalProfile(
     io: std.Io,
     allocator: std.mem.Allocator,
     block: []const u8,
+    match_search_budget: usize,
     scratch: *NativeMatchStageScratch,
     profile: *NativeOptimalSearchProfile,
 ) Error!lz77.PlanStats {
-    return try lz77.optimalPlanReuseProfiled(&scratch.optimal, allocator, block, zstdHashParserOptions(block.len), io, profile);
+    return try lz77.optimalPlanReuseProfiled(&scratch.optimal, allocator, block, zstdOptimalParserOptions(block.len, match_search_budget), io, profile);
 }
 
 fn duplicateIndexInputFingerprint(block: []const u8) u64 {
@@ -11599,7 +11605,7 @@ pub fn benchmarkNativeMatchStage(
         else
             false,
         .optimal => blk: {
-            const stats = try lz77.optimalPlanReuse(&scratch.optimal, allocator, block, zstdHashParserOptions(block.len));
+            const stats = try lz77.optimalPlanReuse(&scratch.optimal, allocator, block, zstdOptimalParserOptions(block.len, match_search_budget));
             sequence_count = stats.matches;
             break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, scratch.optimal.tokens.items, stats, &scratch.large_sequences);
         },
@@ -11649,7 +11655,7 @@ fn zstdHashParserOptions(block_len: usize) lz77.GreedyOptions {
         .window_len = @min(block_len, lz77.default_window_len),
         .max_chain = 128,
         .nice_len = 258,
-        .max_candidates = 8,
+        .max_candidates = default_optimal_candidate_budget,
         .min_match = 4,
         .max_match = lz77.max_match_len,
         .min_savings_bits = 0,
@@ -11659,6 +11665,117 @@ fn zstdHashParserOptions(block_len: usize) lz77.GreedyOptions {
         .new_distance_penalty_bits = 4,
         .lazy_min_gain = 1,
     };
+}
+
+fn zstdOptimalParserOptions(block_len: usize, match_search_budget: usize) lz77.GreedyOptions {
+    var options = zstdHashParserOptions(block_len);
+    options.max_candidates = zstdOptimalCandidateBudget(match_search_budget);
+    return options;
+}
+
+inline fn zstdOptimalCandidateBudget(match_search_budget: usize) usize {
+    return if (match_search_budget == fastest_wide_match_search_budget)
+        fastest_optimal_candidate_budget
+    else
+        default_optimal_candidate_budget;
+}
+
+test "zstd optimal candidate budget is level-one-only" {
+    try std.testing.expectEqual(@as(usize, fastest_optimal_candidate_budget), zstdOptimalCandidateBudget(fastest_wide_match_search_budget));
+    try std.testing.expectEqual(@as(usize, default_optimal_candidate_budget), zstdOptimalCandidateBudget(0));
+    try std.testing.expectEqual(@as(usize, default_optimal_candidate_budget), zstdOptimalCandidateBudget(fast_wide_match_search_budget));
+    try std.testing.expectEqual(@as(usize, default_optimal_candidate_budget), zstdOptimalCandidateBudget(96));
+}
+
+test "zstd fastest optimal candidate budget audits generated block sizes" {
+    var changed: usize = 0;
+    var larger: usize = 0;
+    var smaller: usize = 0;
+    var total_fastest: usize = 0;
+    var total_default: usize = 0;
+    var worst_extra: usize = 0;
+    for (0..32) |seed| {
+        const length = 8 * 1024 + (seed % 8) * 8 * 1024;
+        const payload = try std.testing.allocator.alloc(u8, length);
+        defer std.testing.allocator.free(payload);
+        var random_state: u32 = @truncate(0x6a09_e667 +% seed *% 0x0100_0193);
+        for (payload, 0..) |*byte, position| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @truncate(random_state >> 24),
+                1 => @intCast('a' + (position / 7 + seed) % 23),
+                2 => if (position % 64 < 56) @intCast(' ' + (position + seed) % 64) else @truncate(random_state >> 24),
+                else => @truncate((position * 37 + (position / 11) * 17 + seed) & 0xff),
+            };
+        }
+        if (seed % 3 == 0) {
+            const copy_len = payload.len / 4;
+            @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+        }
+
+        var fastest_scratch: lz77.OptimalScratch = .{};
+        defer fastest_scratch.deinit(std.testing.allocator);
+        const fastest_stats = try lz77.optimalPlanReuse(
+            &fastest_scratch,
+            std.testing.allocator,
+            payload,
+            zstdOptimalParserOptions(payload.len, fastest_wide_match_search_budget),
+        );
+        const fastest_replay = try lz77.replayAlloc(std.testing.allocator, fastest_scratch.tokens.items);
+        defer std.testing.allocator.free(fastest_replay);
+        try std.testing.expectEqualSlices(u8, payload, fastest_replay);
+        var fastest: std.ArrayList(u8) = .empty;
+        defer fastest.deinit(std.testing.allocator);
+        const fastest_ok = try emitHashTokenSequenceBlock(
+            std.testing.allocator,
+            &fastest,
+            payload,
+            true,
+            fastest_scratch.tokens.items,
+            fastest_stats,
+        );
+
+        var default_scratch: lz77.OptimalScratch = .{};
+        defer default_scratch.deinit(std.testing.allocator);
+        const default_stats = try lz77.optimalPlanReuse(
+            &default_scratch,
+            std.testing.allocator,
+            payload,
+            zstdOptimalParserOptions(payload.len, fast_wide_match_search_budget),
+        );
+        const default_replay = try lz77.replayAlloc(std.testing.allocator, default_scratch.tokens.items);
+        defer std.testing.allocator.free(default_replay);
+        try std.testing.expectEqualSlices(u8, payload, default_replay);
+        var default: std.ArrayList(u8) = .empty;
+        defer default.deinit(std.testing.allocator);
+        const default_ok = try emitHashTokenSequenceBlock(
+            std.testing.allocator,
+            &default,
+            payload,
+            true,
+            default_scratch.tokens.items,
+            default_stats,
+        );
+
+        const fastest_len = if (fastest_ok) fastest.items.len else payload.len + 3;
+        const default_len = if (default_ok) default.items.len else payload.len + 3;
+        changed += @intFromBool(fastest_len != default_len);
+        larger += @intFromBool(fastest_len > default_len);
+        smaller += @intFromBool(fastest_len < default_len);
+        total_fastest += fastest_len;
+        total_default += default_len;
+        worst_extra = @max(worst_extra, fastest_len -| default_len);
+    }
+    std.debug.print(
+        "fastest optimal budget audit: changed={d} larger={d} smaller={d} total={d}/{d} worst_extra={d}\n",
+        .{ changed, larger, smaller, total_fastest, total_default, worst_extra },
+    );
+    try std.testing.expectEqual(@as(usize, 3), changed);
+    try std.testing.expectEqual(@as(usize, 0), larger);
+    try std.testing.expectEqual(@as(usize, 3), smaller);
+    try std.testing.expectEqual(@as(usize, 230_779), total_fastest);
+    try std.testing.expectEqual(@as(usize, 230_784), total_default);
+    try std.testing.expectEqual(@as(usize, 0), worst_extra);
 }
 
 fn retainShortestCandidate(allocator: std.mem.Allocator, ok: bool, candidate: []const u8, best: *std.ArrayList(u8)) Error!void {
@@ -11760,6 +11877,7 @@ fn emitOptimalHashMatchCompressedBlockReuse(
         last,
         scratch,
         &sequence_scratch,
+        default_optimal_candidate_budget,
     );
 }
 
@@ -11770,17 +11888,10 @@ fn emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch(
     last: bool,
     scratch: *lz77.OptimalScratch,
     sequence_scratch: *LargeSequenceScratch,
+    max_candidates: usize,
 ) Error!bool {
-    const parser_options: lz77.GreedyOptions = .{
-        .window_len = @min(block.len, lz77.default_window_len),
-        .max_chain = 128,
-        .nice_len = 258,
-        .max_candidates = 8,
-        .min_match = 4,
-        .max_match = lz77.max_match_len,
-        .min_savings_bits = 0,
-        .lazy_min_gain = 1,
-    };
+    var parser_options = zstdHashParserOptions(block.len);
+    parser_options.max_candidates = max_candidates;
     const stats = try lz77.optimalPlanReuse(scratch, allocator, block, parser_options);
     return try emitHashTokenSequenceBlockReuse(allocator, out, block, last, scratch.tokens.items, stats, sequence_scratch);
 }
@@ -12340,7 +12451,7 @@ test "zstd profiled optimal stage preserves production tokens and accounting" {
     var scratch: NativeMatchStageScratch = .{};
     defer scratch.deinit(std.testing.allocator);
     var profile: NativeOptimalSearchProfile = .{};
-    const actual_stats = try benchmarkNativeOptimalProfile(std.testing.io, std.testing.allocator, payload, &scratch, &profile);
+    const actual_stats = try benchmarkNativeOptimalProfile(std.testing.io, std.testing.allocator, payload, fast_wide_match_search_budget, &scratch, &profile);
     try std.testing.expectEqual(expected_stats, actual_stats);
     try std.testing.expect(nativeMatchTokenSlicesEqual(expected.tokens.items, scratch.optimal.tokens.items));
     try std.testing.expectEqual(payload.len, profile.input_bytes);
@@ -24371,7 +24482,7 @@ test "zstd level one bounded single-state chain preserves candidate bytes" {
         total_deep += if (deep_ok) deep.items.len else payload.len + 3;
     }
     try std.testing.expectEqual(@as(usize, 0), changed);
-    try std.testing.expectEqual(@as(usize, 649_782), total_fast);
+    try std.testing.expectEqual(@as(usize, 649_786), total_fast);
     try std.testing.expectEqual(total_fast, total_deep);
 }
 

@@ -13040,3 +13040,24 @@ reuse, so production keeps the simpler independently owned plans.
   budget. Search takes about 17.90 ms of the 18.47 ms profiled plan, identifying
   candidate traversal rather than index construction or token reconstruction as
   the next large-source target.
+  Zstd's fastest-level exact optimal fallback now stops after seven useful
+  candidates per position instead of eight; every higher search budget and all
+  non-Zstd users retain eight. A 4/6/7/8 sweep over four 80--128 KiB real source
+  files selected seven as the narrow Pareto point. A 32-shape generated audit
+  spanning 8--64 KiB random, periodic, sparse-noise, and copied-tail inputs
+  replays both token streams exactly; three candidate wires change, all three
+  become smaller, and the aggregate moves from 230,784 to 230,779 bytes. On
+  twelve 128 KiB Silesia prefixes, thirty fixed-CPU-2 complete-frame pairs give
+  a `1.0167x` row-median geometric mean with every file at or above `1.0056x`.
+  Six wires are unchanged, one shrinks by nine bytes, and five grow; aggregate
+  size changes from 574,892 to 575,562 bytes (`+0.1165%`) while remaining below
+  libzstd 1.5.5's 632,131 bytes. The worst ratio tradeoff is `nci`, up 109 bytes
+  (`+1.033%`) but still 468 bytes smaller than libzstd. Fifteen fixed-CPU-2
+  optimal-stage pairs on Ghostty `Terminal.zig`, README, the roadmap, and
+  `src/zstd.zig` improve by `1.0373x`/`1.0350x`/`1.0412x`/`1.0456x`, all with
+  15/15 wins. A thirty-pair complete 20-row matrix keeps every locked wire and
+  checksum, reaches a `1.0025x` row-median geometric mean, and has a `0.9939x`
+  floor; JSON level 1 improves by `1.0144x`. The pre-existing 128-shape
+  level-1 single-beam audit changes by four bytes in aggregate (`649,782` to
+  `649,786`, about `0.0006%`) while its bounded/deep-parser equivalence remains
+  exact; that golden total now records the deliberate fastest-policy change.
