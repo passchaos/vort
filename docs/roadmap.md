@@ -12932,6 +12932,14 @@ reuse, so production keeps the simpler independently owned plans.
   a `0x1bc` bounded helper and a `0x1e9` fixed helper, and 21 fixed-CPU-8 JSON
   stage pairs measured only `0.9892x` with 4/21 wins. The one shared bounded
   helper remains.
+  Applying that new distribution as a one-byte recent-offset prefilter was
+  rejected by the complete encoder. It skipped the existing u32 check for the
+  93.09%/100%/84.43% first-byte JSON/text/binary rejects, preserved all 20
+  focused tests and candidate fields, shrank the parser from `0xa75` to `0x958`,
+  and improved 30-pair stage medians by `1.0312x`/`1.0121x`/`1.0332x`. Yet 31
+  independent complete level-1 JSON pairs measured only `0.9851x` with 3/31
+  wins. The original u32 prefix check remains because its whole-encoder layout
+  is materially better.
   Forcing the single-state beam's shared 32-byte match extender inline was
   rejected at the focused gate. The mismatch-boundary oracle, all 19 focused
   tests, stage counters, and candidate bytes stayed exact, but the parser grew
