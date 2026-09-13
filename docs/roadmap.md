@@ -12584,3 +12584,21 @@ reuse, so production keeps the simpler independently owned plans.
   splitting only with a design that avoids perturbing the existing ratio-path
   binary layout or that wins enough real-corpus bytes to justify a separately
   dispatched implementation.
+  Shared optimal LZ77 length selection now packs each cached minimum cost and
+  its longest-on-tie match length into one `usize` key on 64-bit targets. The
+  low nine bits store an inverted 3...258 length, so one unsigned comparison
+  replaces the former cost/length branch and the hot loop reads and writes one
+  array instead of two. The original two-array algorithm remains the 32-bit
+  fallback, and the unused 64-bit length array is deliberately retained to keep
+  the shared `HashIndex` layout stable for unrelated short encoders. A 64-shape
+  oracle covers min-match 3/4, nonzero suffix offsets, incremental 37/131/258
+  extensions, randomized costs, and all-costs-equal longest-tie selection; the
+  complete optimal token oracle and x86 32-bit compile check also pass. Eleven
+  fixed-CPU-2 independent-binary pairs preserved all eight Brotli ratio wires
+  and checksums while improving the 32 KiB source row by `1.1263x` with 11/11
+  wins. The eight row medians had a `1.0326x` geometric mean and a `0.9924x`
+  floor on the 11-byte uppercase timer; a separate 15-pair, 5,000-iteration
+  run measured that row at `1.0151x`. The shared Zstd consumer preserved every
+  token/statistic/wire/checksum across its nine text/JSON/binary optimal-stage
+  rows; seven fixed-CPU-2 pairs improved every row by `1.1889x`--`1.3422x`,
+  with a `1.2490x` row-median geometric mean.

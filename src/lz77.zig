@@ -11,6 +11,7 @@ const hash_head_table_size: usize = 1 << 15;
 const hash_head_init_words: usize = hash_head_table_size / 64;
 const tiny_hash_head_table_size: usize = 4096;
 const tiny_hash_head_init_words: usize = tiny_hash_head_table_size / 64;
+const packed_optimal_length_choices = @bitSizeOf(usize) >= 64;
 const HashAnchor = enum { three, four };
 // Keep inputs through 64 KiB on the full predecessor table so common binary
 // and image blocks retain their established allocation/cache behavior. Larger
@@ -234,7 +235,10 @@ pub const HashIndex = struct {
     head: std.ArrayList(isize) = .empty,
     prev: std.ArrayList(isize) = .empty,
     head_initialized: [hash_head_init_words]u64 = @splat(0),
-    best_length_costs: [max_match_len + 1]usize = undefined,
+    best_length_choices: [max_match_len + 1]usize = undefined,
+    // Retain this storage on 64-bit targets even though the packed choice holds
+    // the length too. The stable shared-index layout avoids moving unrelated
+    // encoder state; 32-bit targets use the array as the portable fallback.
     best_lengths: [max_match_len + 1]u16 = undefined,
     input_len: usize = 0,
 
@@ -1136,6 +1140,11 @@ fn optimalPlanReuseInternal(
     comptime enable_prefix_bound: bool,
 ) !PlanStats {
     const n = input.len;
+    // A literal-only path costs at most nine bits per byte. This bound is far
+    // above any addressable allocation on supported targets and keeps the
+    // packed length-choice key's shift defined.
+    if (comptime packed_optimal_length_choices)
+        if (n > (std.math.maxInt(usize) >> optimal_length_bits) / 9) return error.InvalidBlockPlan;
     try scratch.costs.resize(allocator, n + 1);
     try scratch.steps.resize(allocator, n);
     scratch.tokens.clearRetainingCapacity();
@@ -1204,7 +1213,7 @@ inline fn optimalPlanReuseWithIndex(
                 choices_built_through >= minimum and
                 choices_built_through < max_len and
                 input[candidate + choices_built_through] != input[rev_i + choices_built_through] and
-                scratch.index.best_length_costs[choices_built_through] + distance_cost >= costs[rev_i])
+                optimalLengthChoiceCost(scratch.index.best_length_choices[choices_built_through]) + distance_cost >= costs[rev_i])
             {
                 candidates_seen += 1;
                 if (candidates_seen >= candidate_limit) break;
@@ -1220,14 +1229,15 @@ inline fn optimalPlanReuseWithIndex(
                     minimum,
                     choices_built_through,
                     length,
-                    &scratch.index.best_length_costs,
+                    &scratch.index.best_length_choices,
                     &scratch.index.best_lengths,
                 );
                 choices_built_through = @max(choices_built_through, length);
-                const cost = scratch.index.best_length_costs[length] + distance_cost;
+                const choice = scratch.index.best_length_choices[length];
+                const cost = optimalLengthChoiceCost(choice) + distance_cost;
                 if (cost < costs[rev_i]) {
                     costs[rev_i] = cost;
-                    steps[rev_i] = .{ .match = .{ .length = scratch.index.best_lengths[length], .distance = @intCast(distance) } };
+                    steps[rev_i] = .{ .match = .{ .length = optimalLengthChoiceLength(choice, &scratch.index.best_lengths, length), .distance = @intCast(distance) } };
                 }
                 candidates_seen += 1;
                 if (length == max_len) break;
@@ -1264,55 +1274,90 @@ fn extendOptimalLengthChoices(
     minimum: usize,
     built_through: usize,
     maximum: usize,
-    best_costs: *[max_match_len + 1]usize,
+    best_choices: *[max_match_len + 1]usize,
     best_lengths: *[max_match_len + 1]u16,
 ) void {
     if (maximum <= built_through) return;
-    var best_cost: usize = std.math.maxInt(usize);
-    var best_length: u16 = 0;
-    if (built_through >= minimum) {
-        best_cost = best_costs[built_through];
-        best_length = best_lengths[built_through];
-    }
+    var best_choice = if (built_through >= minimum) best_choices[built_through] else std.math.maxInt(usize);
+    var best_length: u16 = if (comptime packed_optimal_length_choices) 0 else if (built_through >= minimum) best_lengths[built_through] else 0;
     var length = @max(minimum, built_through + 1);
     while (length <= maximum) : (length += 1) {
         const cost = fixed_length_costs[length] + costs[position + length];
-        // The reference scans from longest to shortest and updates only on a
-        // strict improvement, so equal costs select the longest length.
-        if (cost < best_cost or (cost == best_cost and length > best_length)) {
-            best_cost = cost;
+        if (comptime packed_optimal_length_choices) {
+            const choice = optimalLengthChoice(cost, length);
+            // The low bits rank longer lengths first, so one unsigned
+            // comparison preserves minimum-cost / longest-on-tie ordering.
+            if (choice < best_choice) best_choice = choice;
+        } else if (cost < best_choice or (cost == best_choice and length > best_length)) {
+            best_choice = cost;
             best_length = @intCast(length);
         }
-        best_costs[length] = best_cost;
-        best_lengths[length] = best_length;
+        best_choices[length] = best_choice;
+        if (comptime !packed_optimal_length_choices) best_lengths[length] = best_length;
     }
 }
 
+const optimal_length_bits = 9;
+const optimal_length_mask: usize = (@as(usize, 1) << optimal_length_bits) - 1;
+
+inline fn optimalLengthChoice(cost: usize, length: usize) usize {
+    comptime std.debug.assert(packed_optimal_length_choices);
+    std.debug.assert(length <= max_match_len);
+    std.debug.assert(cost <= std.math.maxInt(usize) >> optimal_length_bits);
+    return (cost << optimal_length_bits) | (max_match_len - length);
+}
+
+inline fn optimalLengthChoiceCost(choice: usize) usize {
+    return if (comptime packed_optimal_length_choices) choice >> optimal_length_bits else choice;
+}
+
+inline fn optimalLengthChoiceLength(choice: usize, best_lengths: *const [max_match_len + 1]u16, index: usize) u16 {
+    return if (comptime packed_optimal_length_choices)
+        @intCast(max_match_len - (choice & optimal_length_mask))
+    else
+        best_lengths[index];
+}
+
 test "optimal length prefix choices match descending reference" {
-    var suffix_costs: [max_match_len + 1]usize = undefined;
+    var suffix_costs: [max_match_len + 17]usize = undefined;
     var state: u32 = 0x9e37_79b9;
-    for (&suffix_costs) |*cost| {
-        state = state *% 1_664_525 +% 1_013_904_223;
-        cost.* = (state >> 16) % 97;
-    }
-    var best_costs: [max_match_len + 1]usize = undefined;
-    var best_lengths: [max_match_len + 1]u16 = undefined;
-    extendOptimalLengthChoices(&suffix_costs, 0, 4, 3, 37, &best_costs, &best_lengths);
-    extendOptimalLengthChoices(&suffix_costs, 0, 4, 37, 131, &best_costs, &best_lengths);
-    extendOptimalLengthChoices(&suffix_costs, 0, 4, 131, max_match_len, &best_costs, &best_lengths);
-    for (4..max_match_len + 1) |maximum| {
-        var expected_cost: usize = std.math.maxInt(usize);
-        var expected_length: usize = 0;
-        var length = maximum;
-        while (length >= 4) : (length -= 1) {
-            const cost = fixedLengthSymbolCost(length) + suffix_costs[length];
-            if (cost < expected_cost) {
-                expected_cost = cost;
-                expected_length = length;
-            }
+    for (0..64) |case_index| {
+        for (&suffix_costs) |*cost| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            cost.* = (state >> 16) % 257;
         }
-        try std.testing.expectEqual(expected_cost, best_costs[maximum]);
-        try std.testing.expectEqual(@as(u16, @intCast(expected_length)), best_lengths[maximum]);
+        const position = case_index % 17;
+        const minimum: usize = 3 + case_index % 2;
+        var best_choices: [max_match_len + 1]usize = undefined;
+        var best_lengths: [max_match_len + 1]u16 = undefined;
+        extendOptimalLengthChoices(&suffix_costs, position, minimum, minimum - 1, 37, &best_choices, &best_lengths);
+        extendOptimalLengthChoices(&suffix_costs, position, minimum, 37, 131, &best_choices, &best_lengths);
+        extendOptimalLengthChoices(&suffix_costs, position, minimum, 131, max_match_len, &best_choices, &best_lengths);
+        for (minimum..max_match_len + 1) |maximum| {
+            var expected_cost: usize = std.math.maxInt(usize);
+            var expected_length: usize = 0;
+            var length = maximum;
+            while (length >= minimum) : (length -= 1) {
+                const cost = fixedLengthSymbolCost(length) + suffix_costs[position + length];
+                if (cost < expected_cost) {
+                    expected_cost = cost;
+                    expected_length = length;
+                }
+            }
+            try std.testing.expectEqual(expected_cost, optimalLengthChoiceCost(best_choices[maximum]));
+            try std.testing.expectEqual(@as(u16, @intCast(expected_length)), optimalLengthChoiceLength(best_choices[maximum], &best_lengths, maximum));
+        }
+    }
+
+    var tied_costs: [max_match_len + 1]usize = @splat(0);
+    for (min_match_len..max_match_len + 1) |length|
+        tied_costs[length] = 20 - fixed_length_costs[length];
+    var tied_choices: [max_match_len + 1]usize = undefined;
+    var tied_lengths: [max_match_len + 1]u16 = undefined;
+    extendOptimalLengthChoices(&tied_costs, 0, min_match_len, min_match_len - 1, max_match_len, &tied_choices, &tied_lengths);
+    for (min_match_len..max_match_len + 1) |maximum| {
+        try std.testing.expectEqual(@as(usize, 20), optimalLengthChoiceCost(tied_choices[maximum]));
+        try std.testing.expectEqual(@as(u16, @intCast(maximum)), optimalLengthChoiceLength(tied_choices[maximum], &tied_lengths, maximum));
     }
 }
 
