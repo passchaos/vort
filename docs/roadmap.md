@@ -12712,3 +12712,15 @@ reuse, so production keeps the simpler independently owned plans.
   lower-bound rejections, and only 65,215 full match-length calls. This narrows
   the next optimization target to collision/bound handling inside the search,
   rather than the roughly 12% combined lazy/optimal wire construction.
+  Reordering the lower-bound conjunction to compare cached cost before reading
+  the candidate's mismatching byte was rejected as neutral. Eleven fixed-CPU-2
+  independent-binary pairs preserved the 6,472-byte 32 KiB source wire and
+  checksum, but measured only `0.9998x` at the median with 4/11 wins. The
+  existing byte-first predicate remains.
+  Comparing the packed length-choice key directly against a shifted
+  distance-adjusted threshold was also rejected. An exhaustive predicate oracle
+  covered every 3...258 length and representative zero/boundary/high costs, and
+  all optimal token/profile gates stayed exact. Eleven fixed-CPU-2 pairs still
+  reduced the 32 KiB source target to `0.9483x`; dictionary/mixed were
+  `0.9405x`/`0.9575x`, while JSON was neutral at `1.0028x`. The original
+  right-shift plus addition remains faster in the generated loop.
