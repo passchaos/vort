@@ -48,6 +48,7 @@ pub const OptimalSearchProfile = struct {
     pub const bound_length_bucket_count = 6;
     pub const distance_cost_bucket_count = 15;
     pub const bound_slack_bucket_count = 9;
+    pub const length_extension_bucket_count = 9;
 
     input_bytes: usize = 0,
     index_bytes: usize = 0,
@@ -62,6 +63,7 @@ pub const OptimalSearchProfile = struct {
     match_length_calls: usize = 0,
     valid_match_candidates: usize = 0,
     length_choices_built: usize = 0,
+    length_extension_histogram: [length_extension_bucket_count]usize = @splat(0),
     candidate_budget_stops: usize = 0,
     index_ns: u64 = 0,
     search_ns: u64 = 0,
@@ -1307,8 +1309,10 @@ inline fn optimalPlanReuseWithIndex(
             const length = matchLength(input, candidate, rev_i, max_len);
             if (length >= minimum) {
                 if (comptime collect_profile) {
+                    const added_choices = length -| choices_built_through;
                     profile.valid_match_candidates += 1;
-                    profile.length_choices_built += length -| choices_built_through;
+                    profile.length_choices_built += added_choices;
+                    profile.length_extension_histogram[optimalLengthExtensionBucket(added_choices)] += 1;
                 }
                 extendOptimalLengthChoices(
                     costs,
@@ -1372,6 +1376,32 @@ fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
 fn optimalBoundLengthBucket(length: usize) usize {
     std.debug.assert(length >= 4 and length <= max_match_len);
     return if (length < 8) 0 else if (length < 16) 1 else if (length < 32) 2 else if (length < 64) 3 else if (length < 128) 4 else 5;
+}
+
+fn optimalLengthExtensionBucket(added_choices: usize) usize {
+    return if (added_choices == 0) 0 else if (added_choices == 1) 1 else if (added_choices < 4) 2 else if (added_choices < 8) 3 else if (added_choices < 16) 4 else if (added_choices < 32) 5 else if (added_choices < 64) 6 else if (added_choices < 128) 7 else 8;
+}
+
+test "optimal length extension buckets cover exact boundaries" {
+    const cases = [_][2]usize{
+        .{ 0, 0 },
+        .{ 1, 1 },
+        .{ 2, 2 },
+        .{ 3, 2 },
+        .{ 4, 3 },
+        .{ 7, 3 },
+        .{ 8, 4 },
+        .{ 15, 4 },
+        .{ 16, 5 },
+        .{ 31, 5 },
+        .{ 32, 6 },
+        .{ 63, 6 },
+        .{ 64, 7 },
+        .{ 127, 7 },
+        .{ 128, 8 },
+        .{ 256, 8 },
+    };
+    for (cases) |case| try std.testing.expectEqual(case[1], optimalLengthExtensionBucket(case[0]));
 }
 
 fn extendOptimalLengthChoices(
@@ -3146,6 +3176,9 @@ test "profiled optimal parser preserves tokens and search accounting" {
     var prefix_mismatch_total: usize = 0;
     for (profile.prefix_mismatch_histogram) |count| prefix_mismatch_total += count;
     try std.testing.expectEqual(profile.prefix_rejections, prefix_mismatch_total);
+    var extension_total: usize = 0;
+    for (profile.length_extension_histogram) |count| extension_total += count;
+    try std.testing.expectEqual(profile.valid_match_candidates, extension_total);
     try std.testing.expect(profile.match_length_calls >= profile.valid_match_candidates);
     try std.testing.expect(profile.index_ns + profile.search_ns + profile.reconstruct_ns <= profile.total_ns);
 }

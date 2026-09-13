@@ -48,6 +48,7 @@ pub const RatioEncodeProfile = struct {
     optimal_match_length_calls: usize = 0,
     optimal_valid_match_candidates: usize = 0,
     optimal_length_choices_built: usize = 0,
+    optimal_length_extension_histogram: [9]usize = @splat(0),
     optimal_candidate_budget_stops: usize = 0,
     lazy_plan_ns: u64 = 0,
     lazy_command_ns: u64 = 0,

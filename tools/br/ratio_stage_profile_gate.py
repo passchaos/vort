@@ -21,6 +21,7 @@ COLUMNS = [
     "optimal_prefix_mismatch_histogram",
     "optimal_bound_length_histogram", "optimal_bound_distance_cost_histogram",
     "optimal_bound_slack_histogram",
+    "optimal_length_extension_histogram",
     "optimal_match_length_calls", "optimal_valid_match_candidates",
     "optimal_length_choices_built", "optimal_candidate_budget_stops",
     "lazy_plan_ns", "lazy_command_ns", "lazy_wire_ns",
@@ -107,6 +108,11 @@ def main() -> int:
         assert sum(histogram(row, "optimal_bound_distance_cost_histogram", 15)) == bound, row
         assert sum(histogram(row, "optimal_bound_slack_histogram", 9)) == bound, row
         assert integer(row, "optimal_valid_match_candidates") == matches, row
+        extensions = histogram(row, "optimal_length_extension_histogram", 9)
+        assert sum(extensions) == matches, row
+        extension_min = sum(count * minimum for count, minimum in zip(extensions, (0, 1, 2, 4, 8, 16, 32, 64, 128)))
+        extension_max = sum(count * maximum for count, maximum in zip(extensions, (0, 1, 3, 7, 15, 31, 63, 127, 255)))
+        assert extension_min <= integer(row, "optimal_length_choices_built") <= extension_max, row
         assert integer(row, "optimal_candidate_budget_stops") <= input_bytes, row
     print(f"br_ratio_stage_profile_gate=ok rows={len(rows)}")
     return 0

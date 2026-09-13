@@ -2156,6 +2156,7 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
     profile.optimal_match_length_calls = optimal_profile.match_length_calls;
     profile.optimal_valid_match_candidates = optimal_profile.valid_match_candidates;
     profile.optimal_length_choices_built = optimal_profile.length_choices_built;
+    profile.optimal_length_extension_histogram = optimal_profile.length_extension_histogram;
     profile.optimal_candidate_budget_stops = optimal_profile.candidate_budget_stops;
     profile.optimal_index_ns = optimal_profile.index_ns;
     profile.optimal_search_ns = optimal_profile.search_ns;
@@ -12041,6 +12042,8 @@ test "br ratio block profile reproduces the production wire" {
     try std.testing.expect(profile.optimal_length_choices_built > 0);
     var prefix_mismatch_total: usize = 0;
     for (profile.optimal_prefix_mismatch_histogram) |count| prefix_mismatch_total += count;
+    var extension_total: usize = 0;
+    for (profile.optimal_length_extension_histogram) |count| extension_total += count;
     var length_total: usize = 0;
     for (profile.optimal_bound_length_histogram) |count| length_total += count;
     var distance_total: usize = 0;
@@ -12048,6 +12051,7 @@ test "br ratio block profile reproduces the production wire" {
     var slack_total: usize = 0;
     for (profile.optimal_bound_slack_histogram) |count| slack_total += count;
     try std.testing.expectEqual(profile.optimal_prefix_rejections, prefix_mismatch_total);
+    try std.testing.expectEqual(profile.optimal_valid_match_candidates, extension_total);
     try std.testing.expectEqual(profile.optimal_bound_rejections, length_total);
     try std.testing.expectEqual(profile.optimal_bound_rejections, distance_total);
     try std.testing.expectEqual(profile.optimal_bound_rejections, slack_total);

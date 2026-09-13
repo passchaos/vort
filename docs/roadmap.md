@@ -12740,6 +12740,16 @@ reuse, so production keeps the simpler independently owned plans.
   byte-for-byte unchanged. This rules out a wider three-byte hash as a useful
   response to most rejected nodes, while confirming that the already-rejected
   fourth-byte-first and packed-fingerprint designs target the dominant case.
+  A second compile-time-only histogram now measures how many new cached length
+  choices each fully compared candidate adds. On the 32 KiB source row its
+  0/1/2--3/4--7/8--15/16--31/32--63/64--127/128--255 buckets are
+  `19469;9522;8578;10009;7738;4535;2911;1359;1094`: 29.85% of candidates add
+  nothing and 57.61% add at most three choices, but 8.23% add at least 32 and
+  the 756,818 total choices still average 11.60 per full match. The gate checks
+  both candidate-count equality and lower/upper bounds on the recorded choice
+  total. Production `.text` and `.rodata` remain byte-identical, so this points
+  toward range-based work reduction for the long tail rather than unconditional
+  short-loop expansion.
   Marking that measured 91.5%-taken lower-bound branch as likely was rejected.
   The hint changed no counters, tokens, or wire bytes, but eleven fixed-CPU-2
   source32k pairs measured `0.9807x` with 0/11 wins. LLVM's resulting block
