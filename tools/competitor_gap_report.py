@@ -388,11 +388,11 @@ def brotli_encode_metrics(rows: list[dict[str, str]], source: str) -> list[Metri
             metrics.append(speed_metric(
                 "brotli", profile, case, number(row, speed_column, source),
                 ref_speed, "libbrotli", version, input_bytes, source, "encode",
-                vort_bytes, ref_bytes,
+                vort_bytes, ref_bytes, row.get("input_sha256"),
             ))
             metrics.append(size_metric(
                 "brotli", profile, case, vort_bytes, ref_bytes, "libbrotli",
-                version, input_bytes, source,
+                version, input_bytes, source, row.get("input_sha256"),
             ))
     return metrics
 
@@ -706,7 +706,7 @@ def load_metrics(args: argparse.Namespace) -> tuple[list[Metric], list[dict[str,
             metrics.append(size_metric(
                 "lz4", "block", row["case"], integer(row, "vort_encoded_bytes", "lz4"),
                 integer(row, "encoded_bytes", "lz4"), "liblz4", version_text(row["reference_version"]),
-                integer(row, "input_bytes", "lz4"), "lz4",
+                integer(row, "input_bytes", "lz4"), "lz4", row.get("input_sha256"),
             ))
             size_count += 1
         next(item for item in inputs if item["name"] == "lz4")["metrics"] += size_count

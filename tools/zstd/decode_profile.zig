@@ -1,7 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const libzstd = @import("libzstd_runtime.zig");
-const benchmark_provenance = @import("benchmark_provenance.zig");
+const benchmark_provenance = @import("benchmark_provenance");
 
 const Case = struct { name: []const u8, payload: []const u8, level: c_int = 1 };
 const Options = struct { iterations: usize = 1000, only_case: ?[]const u8 = null, csv_path: ?[]const u8 = null };

@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const libsnappy = @import("libsnappy_runtime.zig");
+const benchmark_provenance = @import("benchmark_provenance");
 
 const Case = struct {
     name: []const u8,
@@ -10,6 +11,7 @@ const Case = struct {
 const Row = struct {
     case_name: []const u8,
     input_bytes: usize,
+    input_sha256: [std.crypto.hash.sha2.Sha256.digest_length * 2]u8,
     encoded_bytes: usize,
     iterations: usize,
     vort_ns: u64,
@@ -45,6 +47,13 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const options = try parseOptions(&args);
+    const provenance = try benchmark_provenance.capture(
+        init.io,
+        init.gpa,
+        init.minimal.args,
+        "single",
+    );
+    defer provenance.deinit(init.gpa);
     var runtime = try libsnappy.Runtime.open();
     defer runtime.deinit();
 
@@ -86,7 +95,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try writeCsv(&csv.writer, rows.items);
+    try writeCsv(&csv.writer, rows.items, provenance);
     if (options.csv_path) |path| {
         try std.Io.Dir.cwd().writeFile(
             init.io,
@@ -200,6 +209,7 @@ fn measureCase(
     return .{
         .case_name = case.name,
         .input_bytes = case.payload.len,
+        .input_sha256 = benchmark_provenance.sha256Hex(case.payload),
         .encoded_bytes = encoded.len,
         .iterations = iterations,
         .vort_ns = vort_ns,
@@ -283,16 +293,22 @@ fn mibPerSecond(bytes: usize, ns: u64) f64 {
     return mib / (@as(f64, @floatFromInt(ns)) / 1_000_000_000);
 }
 
-fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll(
-        "case,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,literal_count,literal_bytes,copy_count,copy_bytes,copy1_count,copy2_count,copy4_count\n",
+fn writeCsv(
+    writer: *std.Io.Writer,
+    rows: []const Row,
+    provenance: benchmark_provenance.Info,
+) !void {
+    try writer.print(
+        "case,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,literal_count,literal_bytes,copy_count,copy_bytes,copy1_count,copy2_count,copy4_count,{s}\n",
+        .{benchmark_provenance.csv_columns},
     );
     for (rows) |row| {
         try writer.print(
-            "{s},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{d},{d},{d}\n",
+            "{s},{d},{s},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{d},{d},{d}",
             .{
                 row.case_name,
                 row.input_bytes,
+                &row.input_sha256,
                 row.encoded_bytes,
                 row.iterations,
                 row.vort_ns,
@@ -310,6 +326,8 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
                 row.copy4_count,
             },
         );
+        try provenance.writeCsvFields(writer);
+        try writer.writeByte('\n');
     }
 }
 

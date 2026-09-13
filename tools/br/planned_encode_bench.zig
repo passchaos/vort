@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const libbrotli = @import("libbrotli_runtime.zig");
+const benchmark_provenance = @import("benchmark_provenance");
 
 const json_payload = "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48;
 const source_payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
@@ -44,6 +45,13 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     var options = try parseOptions(init.gpa, &args);
     defer options.deinit(init.gpa);
+    const provenance = try benchmark_provenance.capture(
+        init.io,
+        init.gpa,
+        init.minimal.args,
+        "single",
+    );
+    defer provenance.deinit(init.gpa);
     var reference = try libbrotli.Runtime.open();
     defer reference.deinit();
     var cases: std.ArrayList(Case) = .empty;
@@ -85,7 +93,7 @@ pub fn main(init: std.process.Init) !void {
     }
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,reference_version,quality,input_bytes,extended_dictionary_probes,vort_bytes,lazy_bytes,ratio_bytes,ratio_dictionary_copies,ratio_dictionary_bytes,reference_bytes,iterations,vort_ns,lazy_ns,ratio_ns,reference_ns,vort_mib_s,lazy_mib_s,ratio_mib_s,reference_mib_s,vort_over_reference,lazy_over_reference,ratio_over_reference,vort_size_over_reference,lazy_size_over_reference,ratio_size_over_reference,checksum\n");
+    try csv.writer.print("case,reference_version,quality,input_bytes,input_sha256,extended_dictionary_probes,vort_bytes,lazy_bytes,ratio_bytes,ratio_dictionary_copies,ratio_dictionary_bytes,reference_bytes,iterations,vort_ns,lazy_ns,ratio_ns,reference_ns,vort_mib_s,lazy_mib_s,ratio_mib_s,reference_mib_s,vort_over_reference,lazy_over_reference,ratio_over_reference,vort_size_over_reference,lazy_size_over_reference,ratio_size_over_reference,checksum,{s}\n", .{benchmark_provenance.csv_columns});
     var selected_cases: usize = 0;
     for (cases.items) |case| {
         if (options.case_filter) |filter|
@@ -121,11 +129,13 @@ pub fn main(init: std.process.Init) !void {
         const reference_rate = mibPerSecond(total_bytes, samples.reference.ns);
         const lazy_rate = mibPerSecond(total_bytes, lazy_sample.ns);
         const ratio_rate = mibPerSecond(total_bytes, ratio_sample.ns);
-        try csv.writer.print("{s},{x},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d}\n", .{
+        const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
+        try csv.writer.print("{s},{x},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d}", .{
             case.name,
             reference.version(),
             quality,
             case.payload.len,
+            &input_sha256,
             extended_dictionary_probes,
             vort_encoded.len,
             lazy_encoded.len,
@@ -150,6 +160,8 @@ pub fn main(init: std.process.Init) !void {
             @as(f64, @floatFromInt(ratio_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)),
             samples.vort.mix +% lazy_sample.mix +% ratio_sample.mix +% samples.reference.mix,
         });
+        try provenance.writeCsvFields(&csv.writer);
+        try csv.writer.writeByte('\n');
     }
     if (selected_cases == 0) return error.InvalidBlockPlan;
     if (options.csv_path) |path| {

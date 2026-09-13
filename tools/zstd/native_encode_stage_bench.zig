@@ -1,6 +1,6 @@
 const std = @import("std");
 const vort = @import("vort");
-const benchmark_provenance = @import("benchmark_provenance.zig");
+const benchmark_provenance = @import("benchmark_provenance");
 
 const Case = struct {
     name: []const u8,

@@ -12438,3 +12438,20 @@ reuse, so production keeps the simpler independently owned plans.
   all-loaded-sources condition. Its 63-check smoke covers partial and complete
   provenance plus missing columns, inconsistent rows, Debug data, invalid CPU
   counts, unsafe commands, and malformed executable/input hashes.
+  The same capture code is now a codec-neutral build module used by the formal
+  LZ4, Snappy, Brotli encode, and Brotli decode comparison executables as well
+  as Zstd. Those four builds are pinned to ReleaseFast, append exact per-case
+  input hashes and the common provenance tuple, and pass their exact Zig
+  artifact to the gate for an independent executable SHA-256 check. A shared
+  Python validator keeps the provenance rules identical across the four gates;
+  its 13-check smoke covers positive validation, cross-row inconsistency,
+  artifact tampering, malformed hashes, CPU affinity ranges/counts, thread
+  policy, and CSV-safe commands. The unified report smoke now performs 64
+  checks, and a fixed-CPU-8 real report contains 274 metrics in 25 groups with
+  all 134 metrics from the six Zig benchmark sources carrying input hashes.
+  Provenance coverage is therefore 6/8 rather than the prior 2/8. The two
+  remaining Deflate inputs use Python orchestration, a Vort executable, and a
+  generated Cargo release runner over local fdeflate/miniz_oxide sources; they
+  must use a verifiable artifact-set manifest in the next slice instead of
+  misleadingly assigning the existing single-executable digest to only one
+  component.

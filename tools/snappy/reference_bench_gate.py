@@ -5,11 +5,16 @@ from __future__ import annotations
 
 import argparse
 import csv
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from benchmark_provenance_gate import PROVENANCE_COLUMNS, validate_provenance
 
 EXPECTED_COLUMNS = [
     "case",
     "input_bytes",
+    "input_sha256",
     "encoded_bytes",
     "iterations",
     "vort_ns",
@@ -25,7 +30,7 @@ EXPECTED_COLUMNS = [
     "copy1_count",
     "copy2_count",
     "copy4_count",
-]
+] + PROVENANCE_COLUMNS
 EXPECTED_CASES = {
     "tiny",
     "text",
@@ -39,6 +44,7 @@ EXPECTED_CASES = {
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, required=True)
+    parser.add_argument("--executable", type=Path)
     args = parser.parse_args()
 
     with args.csv.open(newline="") as file:
@@ -46,6 +52,9 @@ def main() -> int:
         if reader.fieldnames != EXPECTED_COLUMNS:
             raise AssertionError(f"bad columns: {reader.fieldnames!r}")
         rows = list(reader)
+    validate_provenance(
+        rows, executable=args.executable, codec_thread_policy="single"
+    )
 
     by_case = {row["case"]: row for row in rows}
     if len(rows) != len(EXPECTED_CASES) or set(by_case) != EXPECTED_CASES:

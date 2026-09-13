@@ -1,3 +1,4 @@
+//! Shared reproducibility metadata for cross-codec benchmark CSVs.
 const std = @import("std");
 const builtin = @import("builtin");
 

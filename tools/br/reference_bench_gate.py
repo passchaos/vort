@@ -3,10 +3,14 @@
 
 import argparse
 import csv
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from benchmark_provenance_gate import PROVENANCE_COLUMNS, validate_provenance
+
 COLUMNS = [
-    "case", "reference_version", "input_bytes", "encoded_bytes",
+    "case", "reference_version", "input_bytes", "input_sha256", "encoded_bytes",
     "iterations", "vort_ns", "reference_ns", "vort_mib_s",
     "reference_mib_s", "vort_over_reference", "checksum", "size_ns",
     "alloc_ns", "exact_alloc_ns", "dictionary_cases",
@@ -19,7 +23,7 @@ COLUMNS = [
     "literal_utf8_bytes", "literal_signed_bytes",
     "max_literal_context_trees", "max_command_block_types",
     "max_distance_context_trees",
-]
+] + PROVENANCE_COLUMNS
 CASES = {
     "tiny", "text", "structured", "repetitive", "random4k",
     "text_q3", "structured_q3", "repetitive_q3",
@@ -32,6 +36,7 @@ CASES = {
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, required=True)
+    parser.add_argument("--executable", type=Path)
     parser.add_argument("--enforce-throughput", action="store_true")
     args = parser.parse_args()
     with args.csv.open(newline="") as file:
@@ -39,6 +44,9 @@ def main() -> int:
         if reader.fieldnames != COLUMNS:
             raise AssertionError(f"bad columns: {reader.fieldnames!r}")
         rows = list(reader)
+    validate_provenance(
+        rows, executable=args.executable, codec_thread_policy="single"
+    )
     by_case = {row["case"]: row for row in rows}
     if len(rows) != len(CASES) or set(by_case) != CASES:
         raise AssertionError(f"bad cases: {sorted(by_case)!r}")

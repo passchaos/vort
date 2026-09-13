@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const libbrotli = @import("libbrotli_runtime.zig");
+const benchmark_provenance = @import("benchmark_provenance");
 
 const Case = struct {
     name: []const u8,
@@ -24,6 +25,13 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const options = try parseOptions(&args);
+    const provenance = try benchmark_provenance.capture(
+        init.io,
+        init.gpa,
+        init.minimal.args,
+        "single",
+    );
+    defer provenance.deinit(init.gpa);
     var runtime = try libbrotli.Runtime.open();
     defer runtime.deinit();
     const dictionary_cases = if (options.vort_only) 0 else try checkDictionaryTransforms(runtime);
@@ -60,7 +68,7 @@ pub fn main(init: std.process.Init) !void {
     const writer = &csv.writer;
     if (options.vort_only) {
         try writer.writeAll("case,input_bytes,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum\n");
-    } else try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,alloc_ns,exact_alloc_ns,dictionary_cases,static_dictionary_copies,static_dictionary_bytes,lz77_copies,lz77_bytes,non_overlapping_lz77_copies,non_overlapping_lz77_bytes,short_non_overlapping_lz77_copies,short_non_overlapping_lz77_bytes,literal_lsb6_bytes,literal_msb6_bytes,literal_utf8_bytes,literal_signed_bytes,max_literal_context_trees,max_command_block_types,max_distance_context_trees\n");
+    } else try writer.print("case,reference_version,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,alloc_ns,exact_alloc_ns,dictionary_cases,static_dictionary_copies,static_dictionary_bytes,lz77_copies,lz77_bytes,non_overlapping_lz77_copies,non_overlapping_lz77_bytes,short_non_overlapping_lz77_copies,short_non_overlapping_lz77_bytes,literal_lsb6_bytes,literal_msb6_bytes,literal_utf8_bytes,literal_signed_bytes,max_literal_context_trees,max_command_block_types,max_distance_context_trees,{s}\n", .{benchmark_provenance.csv_columns});
     for (&cases) |case| {
         if (options.only_case) |wanted| {
             if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -99,10 +107,13 @@ pub fn main(init: std.process.Init) !void {
         const exact_sample = try measureExactAlloc(init.io, init.gpa, encoded, case.payload.len, iterations);
         const vort_mib_s = mibPerSecond(case.payload.len * iterations, vort_sample.elapsed_ns);
         const reference_mib_s = mibPerSecond(case.payload.len * iterations, reference_sample.elapsed_ns);
+        const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
         try writer.print(
-            "{s},{x},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n",
-            .{ case.name, runtime.version(), case.payload.len, encoded.len, iterations, vort_sample.elapsed_ns, reference_sample.elapsed_ns, vort_mib_s, reference_mib_s, vort_mib_s / reference_mib_s, vort_sample.mix +% reference_sample.mix, size_sample.elapsed_ns, alloc_sample.elapsed_ns, exact_sample.elapsed_ns, dictionary_cases, summary.static_dictionary_copy_count, summary.static_dictionary_bytes, summary.lz77_copy_count, summary.lz77_copy_bytes, summary.non_overlapping_lz77_copy_count, summary.non_overlapping_lz77_copy_bytes, summary.short_non_overlapping_lz77_copy_count, summary.short_non_overlapping_lz77_copy_bytes, summary.literal_context_mode_bytes[0], summary.literal_context_mode_bytes[1], summary.literal_context_mode_bytes[2], summary.literal_context_mode_bytes[3], summary.max_literal_context_trees, summary.max_command_block_types, summary.max_distance_context_trees },
+            "{s},{x},{d},{s},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
+            .{ case.name, runtime.version(), case.payload.len, &input_sha256, encoded.len, iterations, vort_sample.elapsed_ns, reference_sample.elapsed_ns, vort_mib_s, reference_mib_s, vort_mib_s / reference_mib_s, vort_sample.mix +% reference_sample.mix, size_sample.elapsed_ns, alloc_sample.elapsed_ns, exact_sample.elapsed_ns, dictionary_cases, summary.static_dictionary_copy_count, summary.static_dictionary_bytes, summary.lz77_copy_count, summary.lz77_copy_bytes, summary.non_overlapping_lz77_copy_count, summary.non_overlapping_lz77_copy_bytes, summary.short_non_overlapping_lz77_copy_count, summary.short_non_overlapping_lz77_copy_bytes, summary.literal_context_mode_bytes[0], summary.literal_context_mode_bytes[1], summary.literal_context_mode_bytes[2], summary.literal_context_mode_bytes[3], summary.max_literal_context_trees, summary.max_command_block_types, summary.max_distance_context_trees },
         );
+        try provenance.writeCsvFields(writer);
+        try writer.writeByte('\n');
     }
     if (options.csv_path) |path| {
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });

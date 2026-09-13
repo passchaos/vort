@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """Validate planner-backed Brotli encoding A/B evidence."""
-import argparse, csv
+import argparse, csv, sys
 from pathlib import Path
 
-COLUMNS = ["case", "reference_version", "quality", "input_bytes", "extended_dictionary_probes", "vort_bytes", "lazy_bytes", "ratio_bytes", "ratio_dictionary_copies", "ratio_dictionary_bytes", "reference_bytes", "iterations", "vort_ns", "lazy_ns", "ratio_ns", "reference_ns", "vort_mib_s", "lazy_mib_s", "ratio_mib_s", "reference_mib_s", "vort_over_reference", "lazy_over_reference", "ratio_over_reference", "vort_size_over_reference", "lazy_size_over_reference", "ratio_size_over_reference", "checksum"]
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from benchmark_provenance_gate import PROVENANCE_COLUMNS, validate_provenance
+
+COLUMNS = ["case", "reference_version", "quality", "input_bytes", "input_sha256", "extended_dictionary_probes", "vort_bytes", "lazy_bytes", "ratio_bytes", "ratio_dictionary_copies", "ratio_dictionary_bytes", "reference_bytes", "iterations", "vort_ns", "lazy_ns", "ratio_ns", "reference_ns", "vort_mib_s", "lazy_mib_s", "ratio_mib_s", "reference_mib_s", "vort_over_reference", "lazy_over_reference", "ratio_over_reference", "vort_size_over_reference", "lazy_size_over_reference", "ratio_size_over_reference", "checksum"] + PROVENANCE_COLUMNS
 CASES = {"json", "source", "log", "dictionary", "mixed", "uppercase", "incompressible", "source32k"}
 DICTIONARY_CASES = {"dictionary", "mixed", "uppercase"}
 MAX_LAZY_BYTES = {"json": 62, "source": 84, "log": 82}
 MAX_RATIO_BYTES = {"dictionary": 24, "mixed": 29, "uppercase": 11, "incompressible": 38}
 
 def main():
-    p=argparse.ArgumentParser(); p.add_argument("--csv", type=Path, required=True); a=p.parse_args()
+    p=argparse.ArgumentParser(); p.add_argument("--csv", type=Path, required=True); p.add_argument("--executable", type=Path); a=p.parse_args()
     with a.csv.open(newline="") as f: r=csv.DictReader(f); assert r.fieldnames == COLUMNS; rows=list(r)
     assert {x["case"] for x in rows} == CASES and len(rows) == len(CASES)
+    validate_provenance(rows, executable=a.executable, codec_thread_policy="single")
     by_case = {row["case"]: row for row in rows}
     for row in rows:
         for key in ("input_bytes","vort_bytes","lazy_bytes","ratio_bytes","reference_bytes","iterations","vort_ns","lazy_ns","ratio_ns","reference_ns","checksum"):

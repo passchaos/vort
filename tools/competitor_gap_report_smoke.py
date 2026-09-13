@@ -103,19 +103,19 @@ def write_core_fixtures(root: Path) -> None:
     )
     write_csv(
         root / "vort-lz4-reference-bench.csv",
-        [{"case": "alpha", "input_bytes": 1000, "reference_version": "10904", "encoded_bytes": 100, "vort_encoded_bytes": 100, "vort_mib_s": 140, "reference_mib_s": 100}],
+        [{"case": "alpha", "input_bytes": 1000, "input_sha256": "3" * 64, "reference_version": "10904", "encoded_bytes": 100, "vort_encoded_bytes": 100, "vort_mib_s": 140, "reference_mib_s": 100} | PROVENANCE],
     )
     write_csv(
         root / "vort-snappy-reference-bench.csv",
-        [{"case": "alpha", "input_bytes": 1000, "encoded_bytes": 100, "vort_mib_s": 130, "reference_mib_s": 100}],
+        [{"case": "alpha", "input_bytes": 1000, "input_sha256": "4" * 64, "encoded_bytes": 100, "vort_mib_s": 130, "reference_mib_s": 100} | PROVENANCE],
     )
     write_csv(
         root / "vort-br-planned-encode-bench.csv",
-        [{"case": "alpha", "quality": 3, "input_bytes": 1000, "reference_version": 1001000, "vort_bytes": 110, "lazy_bytes": 100, "ratio_bytes": 90, "reference_bytes": 100, "vort_mib_s": 200, "lazy_mib_s": 120, "ratio_mib_s": 80, "reference_mib_s": 100}],
+        [{"case": "alpha", "quality": 3, "input_bytes": 1000, "input_sha256": "5" * 64, "reference_version": 1001000, "vort_bytes": 110, "lazy_bytes": 100, "ratio_bytes": 90, "reference_bytes": 100, "vort_mib_s": 200, "lazy_mib_s": 120, "ratio_mib_s": 80, "reference_mib_s": 100} | PROVENANCE],
     )
     write_csv(
         root / "vort-br-reference-bench.csv",
-        [{"case": "alpha", "input_bytes": 1000, "reference_version": 1001000, "vort_mib_s": 150, "reference_mib_s": 100}],
+        [{"case": "alpha", "input_bytes": 1000, "input_sha256": "6" * 64, "reference_version": 1001000, "vort_mib_s": 150, "reference_mib_s": 100} | PROVENANCE],
     )
 
 
@@ -155,7 +155,7 @@ def main() -> int:
         assert payload["coverage"]["empty_sources"] == 0
         assert payload["coverage"]["real_corpus"] is False
         assert payload["coverage"]["benchmark_environment_recorded"] is False
-        assert payload["coverage"]["benchmark_environment_source_count"] == 2
+        assert payload["coverage"]["benchmark_environment_source_count"] == 6
         assert payload["coverage"]["benchmark_environment_total_sources"] == 8
         zstd_input = next(item for item in payload["inputs"] if item["name"] == "zstd_encode")
         assert zstd_input["benchmark_provenance"] == PROVENANCE
@@ -186,15 +186,20 @@ def main() -> int:
         checks += 7
 
         assert "| zstd | encode | level-1 |" in rendered
-        assert "Benchmark provenance: `2/8`" in rendered
+        assert "Benchmark provenance: `6/8`" in rendered
         assert "ReleaseFast; zig 0.16.0; x86_64-linux-gnu" in rendered
         assert "`111111111111`" in rendered
         assert f"{float(zstd['speed_geomean_x']):.3f}x" in rendered
         assert len(payload["metrics"]) == payload["coverage"]["metric_count"]
         assert {row["input_sha256"] for row in payload["metrics"] if row["source"] == "zstd_encode"} == {"1" * 64, "2" * 64}
+        assert all(
+            row["input_sha256"] is not None
+            for row in payload["metrics"]
+            if row["source"] in {"lz4", "snappy", "brotli_encode", "brotli_decode"}
+        )
         ranking = rendered.split("## Highest-priority gaps", 1)[1].split("## Current weakest cases", 1)[0]
         assert "zlib-best-speed" not in ranking
-        checks += 7
+        checks += 8
 
         for path in root.glob("*.csv"):
             add_provenance(path)

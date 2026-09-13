@@ -14,6 +14,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = .ReleaseFast,
     });
+    const benchmark_provenance_mod = b.createModule(.{
+        .root_source_file = b.path("tools/benchmark_provenance.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
 
     const lib = b.addLibrary(.{
         .name = "vort",
@@ -932,7 +937,10 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = .ReleaseFast,
             .link_libc = true,
-            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
         }),
     });
     const run_br_planned_encode_bench = b.addRunArtifact(br_planned_encode_bench_exe);
@@ -942,6 +950,8 @@ pub fn build(b: *std.Build) void {
     const run_br_planned_encode_bench_csv = b.addRunArtifact(br_planned_encode_bench_exe);
     run_br_planned_encode_bench_csv.addArgs(&.{ "--iterations", "100", "--csv", "zig-out/vort-br-planned-encode-bench.csv" });
     const br_planned_encode_bench_gate = b.addSystemCommand(&.{ "python3", "tools/br/planned_encode_bench_gate.py", "--csv", "zig-out/vort-br-planned-encode-bench.csv" });
+    br_planned_encode_bench_gate.addArg("--executable");
+    br_planned_encode_bench_gate.addArtifactArg(br_planned_encode_bench_exe);
     br_planned_encode_bench_gate.step.dependOn(&run_br_planned_encode_bench_csv.step);
     const br_planned_encode_bench_gate_step = b.step("run-br-planned-encode-bench-gate", "Validate planner-backed Brotli encode A/B CSV");
     br_planned_encode_bench_gate_step.dependOn(&br_planned_encode_bench_gate.step);
@@ -955,6 +965,12 @@ pub fn build(b: *std.Build) void {
     const br_planned_encode_path_gate = b.addSystemCommand(&.{
         "python3", "tools/br/planned_encode_path_gate.py",
         "--csv",   "zig-out/vort-br-planned-encode-path.csv",
+    });
+    br_planned_encode_path_gate.addArg("--executable");
+    br_planned_encode_path_gate.addArtifactArg(br_planned_encode_bench_exe);
+    br_planned_encode_path_gate.addArgs(&.{
+        "--input", "corpus/native-library-bench-small.txt",
+        "--limit", "32768",
     });
     br_planned_encode_path_gate.step.dependOn(&run_br_planned_encode_path_csv.step);
     const br_planned_encode_path_gate_step = b.step("run-br-planned-encode-path-gate", "Validate file-backed Brotli encode A/B CSV");
@@ -2611,10 +2627,11 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/snappy/reference_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .link_libc = true,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
             },
         }),
     });
@@ -2643,6 +2660,8 @@ pub fn build(b: *std.Build) void {
         "--csv",
         "zig-out/vort-snappy-reference-bench.csv",
     });
+    snappy_reference_bench_gate.addArg("--executable");
+    snappy_reference_bench_gate.addArtifactArg(snappy_reference_bench_exe);
     snappy_reference_bench_gate.step.dependOn(
         &run_snappy_reference_bench_gate_csv.step,
     );
@@ -2659,10 +2678,11 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/lz4/reference_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .link_libc = true,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
             },
         }),
     });
@@ -2689,6 +2709,8 @@ pub fn build(b: *std.Build) void {
         "--csv",
         "zig-out/vort-lz4-reference-bench.csv",
     });
+    lz4_reference_bench_gate.addArg("--executable");
+    lz4_reference_bench_gate.addArtifactArg(lz4_reference_bench_exe);
     lz4_reference_bench_gate.step.dependOn(
         &run_lz4_reference_bench_gate_csv.step,
     );
@@ -2741,10 +2763,11 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/br/reference_bench.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .link_libc = true,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
             },
         }),
     });
@@ -2765,7 +2788,8 @@ pub fn build(b: *std.Build) void {
         "python3", "tools/br/reference_bench_gate.py",
         "--csv",   "zig-out/vort-br-reference-bench.csv",
     });
-    if (optimize == .ReleaseFast) br_reference_bench_gate.addArg("--enforce-throughput");
+    br_reference_bench_gate.addArgs(&.{ "--enforce-throughput", "--executable" });
+    br_reference_bench_gate.addArtifactArg(br_reference_bench_exe);
     br_reference_bench_gate.step.dependOn(&run_br_reference_bench_gate_csv.step);
     const br_reference_bench_gate_step = b.step(
         "run-br-reference-bench-gate",
@@ -2940,20 +2964,24 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
             .imports = &.{
                 .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
             },
         }),
     });
-    const zstd_benchmark_provenance_tests = b.addTest(.{
-        .name = "vort-zstd-benchmark-provenance-tests",
+    const benchmark_provenance_tests = b.addTest(.{
+        .name = "vort-benchmark-provenance-tests",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("tools/zstd/benchmark_provenance.zig"),
+            .root_source_file = b.path("tools/benchmark_provenance.zig"),
             .target = target,
             .optimize = .ReleaseFast,
         }),
     });
-    const run_zstd_benchmark_provenance_tests = b.addRunArtifact(zstd_benchmark_provenance_tests);
-    const zstd_benchmark_provenance_test_step = b.step("test-zstd-benchmark-provenance", "Test Zstd benchmark provenance capture");
-    zstd_benchmark_provenance_test_step.dependOn(&run_zstd_benchmark_provenance_tests.step);
+    const run_benchmark_provenance_tests = b.addRunArtifact(benchmark_provenance_tests);
+    const benchmark_provenance_test_step = b.step("test-benchmark-provenance", "Test shared benchmark provenance capture");
+    benchmark_provenance_test_step.dependOn(&run_benchmark_provenance_tests.step);
+    const benchmark_provenance_gate_smoke = b.addSystemCommand(&.{ "python3", "tools/benchmark_provenance_gate_smoke.py" });
+    const benchmark_provenance_gate_smoke_step = b.step("run-benchmark-provenance-gate-smoke", "Validate shared benchmark provenance gate positive and negative paths");
+    benchmark_provenance_gate_smoke_step.dependOn(&benchmark_provenance_gate_smoke.step);
     const run_zstd_reference_bench =
         b.addRunArtifact(zstd_reference_bench_exe);
     if (b.args) |args| run_zstd_reference_bench.addArgs(args);
@@ -2995,6 +3023,7 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
             .imports = &.{
                 .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
             },
         }),
     });
@@ -3031,7 +3060,10 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = .ReleaseFast,
             .link_libc = true,
-            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
         }),
     });
     const run_zstd_encode_bench = b.addRunArtifact(zstd_encode_bench_exe);
@@ -3056,7 +3088,10 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("tools/zstd/level_schedule_bench.zig"),
             .target = target,
             .optimize = .ReleaseFast,
-            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
         }),
     });
     const run_zstd_level_schedule_bench = b.addRunArtifact(zstd_level_schedule_bench_exe);
@@ -3077,7 +3112,10 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("tools/zstd/native_encode_stage_bench.zig"),
             .target = target,
             .optimize = .ReleaseFast,
-            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
         }),
     });
     const run_zstd_native_encode_stage_bench = b.addRunArtifact(zstd_native_encode_stage_bench_exe);
@@ -4063,7 +4101,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&lz4_decode_profile_exe.step);
     check_step.dependOn(&br_compressed_header_profile_exe.step);
     check_step.dependOn(&zstd_reference_bench_exe.step);
-    check_step.dependOn(&zstd_benchmark_provenance_tests.step);
+    check_step.dependOn(&benchmark_provenance_tests.step);
     check_step.dependOn(&zstd_decode_profile_exe.step);
     check_step.dependOn(&zstd_encode_bench_exe.step);
     check_step.dependOn(&zstd_level_schedule_bench_exe.step);
@@ -4149,7 +4187,8 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zstd_native_probe_step);
     ci_smoke_step.dependOn(zstd_encode_bench_path_smoke_step);
     ci_smoke_step.dependOn(zstd_native_encode_stage_bench_path_smoke_step);
-    ci_smoke_step.dependOn(zstd_benchmark_provenance_test_step);
+    ci_smoke_step.dependOn(benchmark_provenance_test_step);
+    ci_smoke_step.dependOn(benchmark_provenance_gate_smoke_step);
     ci_smoke_step.dependOn(zstd_decodecorpus_gate_smoke_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_timeout_smoke_step);

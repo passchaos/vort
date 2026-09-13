@@ -12,6 +12,8 @@ zig build bench-checksum -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-snappy-report-gate
 zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate
+zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
+zig build -Doptimize=ReleaseFast run-br-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-path-smoke
@@ -118,11 +120,17 @@ The native stage benchmark accepts the same `--path`/`--limit` pair and records
 `input_bytes` in every row. This is the preferred way to isolate match-family
 costs on real 128 KiB prefixes before running a complete frame A/B.
 The Zstd encode, decode-reference, decode-profile, candidate-stage, and
-level-schedule CSVs also record the exact input SHA-256, `ReleaseFast` mode, Zig
-version, target triple and CPU, host CPU model, process CPU affinity, benchmark
-thread count, codec thread policy, executable SHA-256, and percent-encoded
-command line. Their gates reject missing or inconsistent provenance and verify
-the recorded executable digest against the artifact supplied by the build.
+level-schedule CSVs, plus the LZ4, Snappy, and Brotli reference benchmarks used
+by the unified competitor report, record the exact input SHA-256, `ReleaseFast`
+mode, Zig version, target triple and CPU, host CPU model, process CPU affinity,
+benchmark thread count, codec thread policy, executable SHA-256, and
+percent-encoded command line. Their gates reject missing or inconsistent
+provenance and verify the recorded executable digest against the exact artifact
+supplied by the build. These formal benchmark executables are pinned to
+ReleaseFast even when the outer build uses another optimization mode. The
+shared provenance gate has a 13-check positive/negative smoke covering artifact
+tampering, malformed hashes, invalid or overlapping affinity ranges, thread
+policy, command escaping, and cross-row consistency.
 
 ## Unified competitor gap report
 
@@ -161,6 +169,15 @@ validated instead of inferred from the aggregation machine. Real-corpus
 coverage becomes true only when usable standard-corpus comparisons were loaded;
 peak-memory comparison remains false until a common cross-library memory harness
 exists.
+The current generated core report has complete provenance for six of its eight
+loaded sources: both Zstd sources, LZ4, Snappy, and both Brotli sources. Their
+134 normalized metrics also retain per-input hashes. The two remaining Deflate
+sources are intentionally still reported without provenance because their Python
+drivers execute a Vort artifact plus a generated Cargo release runner backed by
+local fdeflate/miniz_oxide checkouts; representing that chain honestly requires
+an artifact-set manifest rather than reusing the single-executable field. Until
+those two producers migrate, the report remains `6/8` and
+`benchmark_environment_recorded=false`.
 `run-competitor-gap-report-smoke` uses temporary synthetic CSVs to test
 aggregation, dynamic reference selection, mixed-status rules, independent and
 wire-explicit standard-corpus measurements, strict and explicit-path behavior,
