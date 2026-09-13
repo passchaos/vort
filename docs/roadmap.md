@@ -12940,6 +12940,13 @@ reuse, so production keeps the simpler independently owned plans.
   independent complete level-1 JSON pairs measured only `0.9851x` with 3/31
   wins. The original u32 prefix check remains because its whole-encoder layout
   is materially better.
+  Moving that first-byte prefilter inside the existing `matchAtDistance` helper
+  was rejected too. It preserved all 19 focused tests and candidate fields while
+  improving 30-pair stage medians by `1.0276x` JSON, `1.0145x` binary, and
+  `1.0038x` text. The parser still shrank to `0x958`, however, and 31 independent
+  complete level-1 JSON pairs measured only `0.9929x` with 7/31 wins. This route
+  remains closed until the complete single-beam section can be placed without
+  perturbing adjacent encoder code.
   Forcing the single-state beam's shared 32-byte match extender inline was
   rejected at the focused gate. The mismatch-boundary oracle, all 19 focused
   tests, stage counters, and candidate bytes stayed exact, but the parser grew
