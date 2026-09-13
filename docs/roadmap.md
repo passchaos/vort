@@ -12669,3 +12669,16 @@ reuse, so production keeps the simpler independently owned plans.
   preserve every short control. All code and temporary tests were removed; a
   future retry requires a genuinely separate linked object or stable function-
   layout control rather than another in-module specialization.
+  Keeping each reverse-DP position's current best cost and match token in local
+  scalars before one final array write was rejected independently. Although no
+  later position can observe those values before the candidate loop completes
+  and all optimal token tests stayed exact, seven fixed-CPU-2 pairs reduced
+  32 KiB source to `0.9887x` and ordinary JSON to `0.9531x`; dictionary/mixed
+  were `0.9971x`/`0.9929x`. The existing immediate cost/step writes produce the
+  better register and stack layout.
+  Replacing the compact optimal index builder's three-byte key assembly with a
+  rolling 24-bit key was rejected too. The existing full index/token oracle
+  stayed exact, and seven fixed-CPU-2 pairs improved 32 KiB source by `1.0300x`,
+  but dictionary/mixed fell to `0.9304x`/`0.9556x`; ordinary JSON was only
+  `1.0021x`, for a `0.9787x` four-row median geometric mean. The explicit
+  per-position hash retains the better complete-binary layout.
