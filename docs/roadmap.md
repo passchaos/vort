@@ -12861,6 +12861,12 @@ reuse, so production keeps the simpler independently owned plans.
   from `0xa85` to `0x9f9`. Yet 31 independent complete level-1 JSON pairs
   measured `0.9942x` with only 4/31 wins. The scalar ranges remain because their
   whole-encoder layout is better despite the isolated parser result.
+  Removing the recent-offset match helper's redundant distance validity branch
+  was rejected below threshold. Its sole caller already proves nonzero `rep0`
+  is within the current position, all 18 single-state tests and candidate bytes
+  remained exact, and the parser body shrank from `0xa75` to `0xa65`. Twenty-one
+  fixed-CPU-8 JSON stage pairs improved only `1.0066x` at the median (16/21
+  wins), so the explicit defensive validation remains.
   Single-state beam now reuses the shared optimal parser's exact 1...32,768
   fixed-distance cost table instead of recomputing `log2(distance - 1)` for
   every non-repcode transition. A complete distance-range oracle matches the
