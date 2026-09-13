@@ -12602,3 +12602,47 @@ reuse, so production keeps the simpler independently owned plans.
   token/statistic/wire/checksum across its nine text/JSON/binary optimal-stage
   rows; seven fixed-CPU-2 pairs improved every row by `1.1889x`--`1.3422x`,
   with a `1.2490x` row-median geometric mean.
+  Resuming optimal match extension after its already validated four-byte prefix
+  was evaluated next and rejected. A mismatch-at-every-offset oracle proved the
+  resumed matcher identical, and all optimal parser tests plus Brotli wires and
+  checksums remained exact. Seven fixed-CPU-2 independent-binary pairs improved
+  the 32 KiB source target by only `1.0054x`, however, while ordinary ratio JSON
+  fell to `0.9559x` with 0/7 wins; dictionary and mixed were also slightly
+  negative at `0.9973x` and `0.9956x`. The four-row median geometric mean was
+  `0.9884x`. The special extension and its oracle were removed; the shared
+  match-length routine continues to scan from byte zero.
+  Loading the next optimal predecessor before prefix validation was rejected as
+  well. It preserved every focused token and wire, but seven fixed-CPU-2 pairs
+  reduced the 32 KiB source target to `0.9949x`, dictionary to `0.9347x`, and
+  mixed to `0.9460x`; ordinary JSON was only `1.0037x`. Moving the mandatory
+  random load earlier exposed latency instead of hiding it on this workload, so
+  the predecessor read remains at the loop tail.
+  Removing the post-extension minimum-length guard only after a successful
+  four-byte prefix check was rejected too. The implication is exact and all
+  optimal token tests plus Brotli wires/checksums passed, but seven fixed-CPU-2
+  pairs improved the 32 KiB source target by only `1.0064x` while ordinary JSON
+  fell to `0.9562x` with 0/7 wins. Dictionary/mixed were `0.9880x`/`0.9928x`
+  and the four-row median geometric mean was `0.9857x`. The explicit generic
+  length guard remains in production.
+  A narrow optimal-index prototype reused the existing aligned `u32` backing
+  allocations as `u16` storage for inputs through 65,536 bytes, reserving
+  65,535 as the empty sentinel and retaining the established `OptimalScratch`
+  field layout. A full-boundary oracle compared every initialized head and
+  predecessor against the `u32` index, and all optimal token tests passed. The
+  smaller 64 KiB predecessor working set still lost in seven fixed-CPU-2 pairs:
+  32 KiB source was `0.9975x`, JSON `0.9560x`, dictionary `0.9811x`, and mixed
+  `0.9918x`, with no row winning a majority of samples. The generic index
+  specialization and oracle were removed; the existing absolute `u32` optimal
+  index remains the best measured representation.
+  Hoisting `rev_i -| window_len` once per optimal position and comparing each
+  predecessor directly against that earliest valid position was rejected. The
+  strictly descending chain makes it equivalent to the existing distance check,
+  but seven fixed-CPU-2 pairs traded a `1.0303x` 32 KiB source improvement for
+  dictionary/mixed regressions of `0.9399x`/`0.9607x`; ordinary JSON was
+  `0.9966x`, and the four-row median geometric mean was `0.9813x`. The original
+  subtraction and window comparison remain.
+  Removing only optimal search's impossible zero-distance condition was neutral
+  and therefore rejected. Seven fixed-CPU-2 pairs preserved all wires, but the
+  32 KiB source target moved only `1.0006x`; dictionary/mixed/JSON measured
+  `0.9965x`/`1.0012x`/`1.0003x`, for a `0.9997x` four-row median geometric
+  mean. The defensive condition remains.
