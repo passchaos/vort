@@ -12854,3 +12854,10 @@ reuse, so production keeps the simpler independently owned plans.
   stage pairs improved by `1.0291x` at the median (18/21 wins), but 31
   independent complete-encoder pairs reached only `1.0089x` (25/31 wins), below
   the 1% retention bar. The defensive generic bounds remain.
+  Replacing single-state beam's fixed match-length branch ladder with an exact
+  259-byte lookup table was rejected after stage and complete-frame comparison.
+  The all-length oracle and 18 single-state tests passed; 21 fixed-CPU-8 stage
+  pairs improved JSON by `1.0398x` with 21/21 wins and shrank the parser body
+  from `0xa85` to `0x9f9`. Yet 31 independent complete level-1 JSON pairs
+  measured `0.9942x` with only 4/31 wins. The scalar ranges remain because their
+  whole-encoder layout is better despite the isolated parser result.
