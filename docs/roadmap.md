@@ -12525,3 +12525,25 @@ reuse, so production keeps the simpler independently owned plans.
   `13,356.35/34,052.81 MiB/s` for Vort raw alloc/into versus `6,988.75` for
   miniz_oxide raw; only the owned-result rows are direct allocator-semantic
   comparisons.
+  Profiled the remaining Zstd `binary_mixed` caller-buffer gap against the
+  fixed-CPU ReleaseFast decode profile. Its four compressed blocks are not one
+  uniform first-block shape: block zero is raw-literal FSE/FSE/RLE with 2,044
+  sequences, while blocks one through three are raw-literal FSE/RLE/RLE with
+  2,048 sequences each. Hardware counters measured roughly 2.65 billion cycles,
+  12.56 billion instructions, and only 0.24% branch misses across 5,000 decodes;
+  the call graph attributed the dominant cost to the generic reverse-bit/FSE
+  sequence loop, not match copying. A dedicated FSE/RLE/RLE raw-literal loop
+  removed per-sequence mode dispatch and unused OF/ML state updates while
+  preserving checked literal/match boundaries, repeat offsets, terminal bits,
+  and retained tables. A direct generic-versus-specialized oracle covered output,
+  state, short output, and an invalid offset. Twenty target pairs initially
+  improved by a `1.3285x` median with 20/20 wins. However, three dispatch/layout
+  forms all failed the independent 13-row reference matrix: the first reached
+  `1.3494x` on `binary_mixed` but reduced tiny to `0.9758x`; section-isolating
+  the helper reached `1.3815x` but reduced `huffman80k` to `0.9744x` with 0/30
+  wins; preserving both existing fast dispatches byte-for-byte and appending a
+  cold new condition still left `huffman80k` at `0.9796x` with 1/30 wins while
+  the target reached `1.3402x`. All production and oracle code was removed. A
+  future FSE/RLE/RLE optimization needs a dispatch boundary that demonstrably
+  preserves the generic raw-literal all-FSE loop's placement; do not repeat the
+  three local-condition layouts above.
