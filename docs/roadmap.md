@@ -12776,3 +12776,16 @@ reuse, so production keeps the simpler independently owned plans.
   the median, with 0/11 wins and a `0.9792x`--`0.9819x` range. Repeated shifted
   literal/distance additions cost more than the shifts removed from expanded
   length choices, so raw DP costs remain in production.
+  Caching only the raw cost of the longest already-built length choice was also
+  rejected after a promising target-only result. It removes the packed-choice
+  reload and shift from lower-bound rejections, and exact optimal tests, the
+  32-bit compile check, all profiler counters/histograms, and every measured
+  wire remained unchanged. Eleven fixed-CPU-2 `source32k` pairs improved by
+  `1.0204x` with 11/11 wins, but the full eight-row matrix exposed stable
+  dictionary/source/mixed regressions of `0.9356x`/`0.9459x`/`0.9538x` and a
+  `0.9758x` median geometric mean. A >=16 KiB compile-time specialization
+  raised the long row to `1.0327x`, yet separate short-input instances still
+  measured only `0.9352x`/`0.9544x` on dictionary/mixed because their generated
+  layout changed. Reversing specialization order did not recover them
+  (`0.9409x`/`0.9585x`). The cache and specializations were removed; any future
+  retry needs separate-object layout isolation, not another in-module clone.
