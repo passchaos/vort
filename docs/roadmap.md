@@ -12758,6 +12758,14 @@ reuse, so production keeps the simpler independently owned plans.
   fixed-CPU-2 `source32k` pairs nevertheless measured `0.9768x` with 0/11 wins
   (`0.9762x`--`0.9779x`); extra range control flow overwhelms the avoided compact
   table loads, so the single loop remains.
+  Unrolling that 64-bit loop by two only for additions of at least eight choices
+  was locally effective but rejected by the full encoder matrix. The choice
+  oracle, 12 optimal tests, 32-bit compile check, ratio profile, and all wires
+  remained exact; eleven fixed-CPU-2 target pairs improved `source32k` by
+  `1.0601x` with 11/11 wins. Seven-pair full-matrix medians instead reduced
+  JSON/source/dictionary/mixed to `0.9553x`/`0.9428x`/`0.9333x`/`0.9496x`, for
+  a `0.9811x` geometric mean. The unrolled code was removed rather than trading
+  broad short-input latency for one long-input gain.
   Marking that measured 91.5%-taken lower-bound branch as likely was rejected.
   The hint changed no counters, tokens, or wire bytes, but eleven fixed-CPU-2
   source32k pairs measured `0.9807x` with 0/11 wins. LLVM's resulting block
