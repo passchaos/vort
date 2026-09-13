@@ -12724,3 +12724,22 @@ reuse, so production keeps the simpler independently owned plans.
   reduced the 32 KiB source target to `0.9483x`; dictionary/mixed were
   `0.9405x`/`0.9575x`, while JSON was neutral at `1.0028x`. The original
   right-shift plus addition remains faster in the generated loop.
+  Replacing optimal search's 32 KiB `u8` distance-cost lookup with the exact
+  scalar `log2(distance - 1)` formula was rejected. The exhaustive distance-cost
+  oracle, optimal token tests, profile counters, and wire bytes stayed exact,
+  but eleven fixed-CPU-2 source32k pairs measured `0.9848x` with 0/11 wins. The
+  compact lookup table remains faster than repeated integer bit-width work.
+  A 20-entry inverse distance-cost table was rejected as below threshold. It
+  mapped the current-minus-prefix cost to the maximum distance that could still
+  improve, avoiding the 32 KiB cost-table read for lower-bound rejections without
+  carrying state between candidates. The exhaustive 1...32,768 predicate oracle,
+  optimal tokens, profile counters, wire bytes, and checksums were exact. Eleven
+  fixed-CPU-2 source32k pairs nevertheless improved only `1.0059x` at the median
+  (10/11 wins), so the added table and branch do not clear the 1% retention bar.
+  Caching the maximum distance that could pass that lower bound was rejected
+  despite avoiding the 32 KiB distance-cost table on the 700,227 rejected
+  source32k nodes. A full 1...32,768-distance threshold oracle and all token/
+  profile counts were exact, and eleven fixed-CPU-2 target pairs improved by
+  `1.0241x`. The complete control matrix fell to a `0.9638x` median geometric
+  mean, however: dictionary/source/mixed were `0.9373x`/`0.9432x`/`0.9477x`.
+  The cached threshold state and oracle were removed.
