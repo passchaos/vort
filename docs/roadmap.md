@@ -12924,6 +12924,11 @@ reuse, so production keeps the simpler independently owned plans.
   a `0x1bc` bounded helper and a `0x1e9` fixed helper, and 21 fixed-CPU-8 JSON
   stage pairs measured only `0.9892x` with 4/21 wins. The one shared bounded
   helper remains.
+  Forcing the single-state beam's shared 32-byte match extender inline was
+  rejected at the focused gate. The mismatch-boundary oracle, all 19 focused
+  tests, stage counters, and candidate bytes stayed exact, but the parser grew
+  from `0xa75` to `0xae8` and 21 fixed-CPU-8 JSON stage pairs measured only
+  `0.9422x` with 1/21 wins. The compact out-of-line helper remains.
   Giving the outer Zstd match selector a reusable `TinyGreedyScratch` was also
   rejected. The existing scratch API preserved greedy tokens, statistics, and
   candidate bytes while replacing its roughly 288 KiB stack tables and 32 KiB
