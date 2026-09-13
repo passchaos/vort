@@ -12475,3 +12475,19 @@ reuse, so production keeps the simpler independently owned plans.
   benchmark run. The formal unified-report build now depends on all eight
   benchmark gates; use fixed affinity with `-j1` so it cannot consume stale
   artifacts or overlap benchmark producers.
+  Reusing repeat-beam's previous indexed match length at the next position was
+  evaluated and rejected. The reuse is exact only when the next predecessor is
+  the previous candidate plus one and the prior match ended at a real mismatch
+  rather than the 258-byte or input-tail cap. That condition covered about
+  89.8% of indexed JSON matches and 96.9% of binary matches, but only 0.68% of
+  text matches because 99.3% of those hit the maximum length. All 15 focused
+  repeat-beam tests and every stage/frame byte/checksum remained exact. The
+  first cached-Match form improved 11-pair isolated JSON/binary stages by
+  `1.1103x`/`1.0546x` while text fell to `0.9505x`; its 30-pair complete
+  20-row matrix reached `1.0090x` by row-median geometric mean, but level-1
+  JSON improved only `1.0061x` and binary level 1 was `0.9925x`. A compact
+  next-candidate/next-length form measured `1.0996x`/`1.0690x` for JSON/binary
+  stages, but an 11-pair full matrix reached only `1.0036x` and reduced text
+  levels 1/22 to `0.9858x`/`0.9867x`. Both forms were removed: the extra cache
+  state and branch perturb production rows that cannot use the recurrence, and
+  the target gain does not clear the 1% retention bar.
