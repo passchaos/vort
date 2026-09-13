@@ -12547,3 +12547,21 @@ reuse, so production keeps the simpler independently owned plans.
   future FSE/RLE/RLE optimization needs a dispatch boundary that demonstrably
   preserves the generic raw-literal all-FSE loop's placement; do not repeat the
   three local-condition layouts above.
+  A Brotli high-tree regular-distance reservoir fusion was evaluated and
+  rejected. The candidate combined the existing fast reader's refill,
+  extra-bit extraction, and RFC distance arithmetic behind one out-of-line
+  boundary. A temporary exhaustive oracle covered all four NPOSTFIX values,
+  every encodable NDIRECT value, every regular distance symbol, zero/maximum/
+  mixed extra values, all eight starting bit alignments, exact cursor advance,
+  and one-bit-short truncation. Returning the distance through the error union
+  was slightly negative on the target. A caller-owned result variant improved
+  fifteen fixed-CPU-2 independent-binary `clustered_q8` pairs by `1.0067x` at
+  the median with 15/15 wins, but the complete 13-row matrix reduced ordinary
+  structured decode to `0.9908x`. Placing the helper in a dedicated ELF text
+  section still produced only a `1.0069x` target median and left structured at
+  `0.9906x`, with several q3/q11 controls around `0.993x`--`0.997x`. Every
+  candidate preserved encoded size and checksum, and the formal libbrotli gate
+  passed, but the target gain was below 1% and the control regression violated
+  the established floor. The helper, routing, and oracle were removed; retain
+  the shared regular-distance path until a design changes more than its call
+  boundary or code placement.
