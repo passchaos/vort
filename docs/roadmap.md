@@ -12902,6 +12902,20 @@ reuse, so production keeps the simpler independently owned plans.
   actual single-duplicate evaluation was only noise-positive at `1.0010x`/
   `1.0054x`. Clearing twice the storage plus per-hit decoding costs more than
   the original separate pending bytes and uninitialized predecessor words.
+  The native Zstd stage profiler now includes compile-time-only single-state
+  beam search counters. Its `rep_beam_single` rows report indexed searches,
+  visited chain nodes, four-byte prefix rejects, successful matches, window and
+  16-node stops, recent-offset probes/rejects/matches, and separate indexed and
+  recent match-length histograms. A direct profiled-vs-production test compares
+  every token and statistic, while the 100-row gate checks the search and
+  histogram identities. On the 32 KiB primary inputs, text has 37,300 indexed
+  matches almost entirely at length 258; JSON has 31,661 matches, about 80% at
+  length 12--67, only 1,616 prefix rejects and 21 chain-limit stops; binary has
+  23,063 matches below length 68 and 18,113 prefix rejects. Recent-offset probes
+  reject every time on text/binary and match only 466 times on JSON. The normal
+  encoder's `.text` and `.rodata` remain byte-identical to the pre-profile binary,
+  localizing the next work to successful match extension/state insertion rather
+  than wider hashes or deeper chains.
   Giving the outer Zstd match selector a reusable `TinyGreedyScratch` was also
   rejected. The existing scratch API preserved greedy tokens, statistics, and
   candidate bytes while replacing its roughly 288 KiB stack tables and 32 KiB
@@ -12910,3 +12924,16 @@ reuse, so production keeps the simpler independently owned plans.
   however, and 31 fixed-CPU-8 complete level-1 JSON pairs measured only
   `0.9983x` with 12/31 wins. Production keeps token-only reuse and the simpler
   full-clear parser body.
+  The native Zstd stage profiler now gives the single-state repeat beam a
+  compile-time-only search profile. Its CSV records indexed searches, visited
+  chain nodes, prefix rejects, matches, window and 16-node stops, recent-offset
+  probes/rejects/matches, and separate indexed/recent match-length histograms.
+  A direct production-vs-profiled token/stat oracle plus gate identities cover
+  the counters, while the normal encode binary's `.text` and `.rodata` remain
+  byte-identical. On the 32 KiB rows, text has 37,300 indexed matches almost all
+  at length 258; JSON has 31,661 indexed matches, about 80% at length 12--67,
+  only 1,616 prefix collisions and 21 chain-limit stops; binary has 23,063
+  indexed matches, all below length 68, plus 18,113 prefix collisions. Recent-
+  offset probes reject every time on text/binary and match only 466 times on
+  JSON. This rules out wider chains as the next priority and localizes remaining
+  work to successful match extension and state insertion.

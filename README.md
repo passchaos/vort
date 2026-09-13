@@ -103,6 +103,7 @@ zig build -Doptimize=ReleaseFast ci-smoke
 zig build run -- --help
 zig build -Doptimize=ReleaseFast run-zstd-dictionary-trainer-compare -j1
 zig build -Doptimize=ReleaseFast run-dictionary-train-bench-gate -j1
+zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench-gate
 zig build run -- checksum "hello vort"
 zig build run -- store-roundtrip "hello vort"
 zig build run -- vort-deflate-roundtrip "hello vort"
@@ -394,6 +395,7 @@ zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate  # optional run
 zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate  # optional runtime liblz4 comparison
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate  # optional runtime libzstd comparison
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-gate  # libzstd encode comparison and level-policy gate
+zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench-gate  # match-family timings plus single-beam search histograms
 zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate  # parallel-vs-serial multi-block scheduling
 zig build run-zstd-large-sequence-probe  # >512-sequence single/cross-block encode plus Vort/libzstd decode
 zig build run-zstd-compat-probe  # optional system-libzstd decode matrix

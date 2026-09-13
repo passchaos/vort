@@ -34,7 +34,14 @@ const Options = struct {
 };
 const Candidate = struct { name: []const u8, block_size: usize };
 const Sample = struct { ns: u64, mix: usize };
-const Aggregate = struct { available_blocks: usize, encoded_len: usize, sequence_count: usize, literals_bytes: usize, sequence_bytes: usize };
+const Aggregate = struct {
+    available_blocks: usize,
+    encoded_len: usize,
+    sequence_count: usize,
+    literals_bytes: usize,
+    sequence_bytes: usize,
+    single_beam_profile: vort.zstd.NativeSingleBeamProfile = .{},
+};
 
 const stages = [_]vort.zstd.NativeMatchStage{
     .mixed,
@@ -117,7 +124,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.print("case,level,input_bytes,input_sha256,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,iterations,rounds,warmup,median_ns,ns_per_block,checksum,{s}\n", .{benchmark_provenance.csv_columns});
+    try csv.writer.print("case,level,input_bytes,input_sha256,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,single_positions,single_indexed_searches,single_chain_nodes,single_prefix_rejections,single_matches,single_window_stops,single_chain_limit_stops,single_indexed_length_histogram,single_rep0_probes,single_rep0_prefix_rejections,single_rep0_matches,single_rep0_length_histogram,iterations,rounds,warmup,median_ns,ns_per_block,checksum,{s}\n", .{benchmark_provenance.csv_columns});
     var selected_rows: usize = 0;
     for (cases.items) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -161,14 +168,14 @@ fn benchmarkCandidate(
     if (!case.primary_double_fast_only and stageSelected(options.only_stage, "duplicate_index")) {
         const indexed_block_count = try prepareAllBlocks(allocator, case.payload, candidate.block_size, search_budget, &scratch);
         vort.zstd.benchmarkInvalidateNativeMatchStageScratch(&scratch);
-        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, provenance, .index, indexed_block_count, 0, 0, 0, 0, &scratch);
+        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, provenance, .index, .{ .available_blocks = indexed_block_count, .encoded_len = 0, .sequence_count = 0, .literals_bytes = 0, .sequence_bytes = 0 }, &scratch);
         selected_rows += 1;
     }
     for (stages) |stage| {
         if (!stageSelected(options.only_stage, @tagName(stage))) continue;
         if (case.primary_double_fast_only and stage != .double_fast) continue;
         const probe = try evaluateAllBlocks(allocator, case.payload, candidate.block_size, search_budget, stage, &scratch);
-        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, provenance, .{ .candidate = stage }, probe.available_blocks, probe.sequence_count, probe.encoded_len, probe.literals_bytes, probe.sequence_bytes, &scratch);
+        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, provenance, .{ .candidate = stage }, probe, &scratch);
         selected_rows += 1;
     }
     return selected_rows;
@@ -201,11 +208,7 @@ fn writeMeasuredRow(
     options: Options,
     provenance: benchmark_provenance.Info,
     stage: MeasuredStage,
-    available_blocks: usize,
-    sequence_count: usize,
-    encoded_len: usize,
-    literals_bytes: usize,
-    sequence_bytes: usize,
+    aggregate: Aggregate,
     scratch: *vort.zstd.NativeMatchStageScratch,
 ) !void {
     var warmup_mix: usize = 0;
@@ -230,7 +233,7 @@ fn writeMeasuredRow(
     const blocks_per_sample = blockCount(case.payload.len, candidate.block_size) * options.iterations;
     const ns_per_block = if (blocks_per_sample == 0) 0 else median.ns / blocks_per_sample;
     const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
-    try csv.print("{s},{d},{d},{s},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}", .{
+    try csv.print("{s},{d},{d},{s},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}", .{
         case.name,
         options.level,
         case.payload.len,
@@ -240,11 +243,28 @@ fn writeMeasuredRow(
         blockCount(case.payload.len, candidate.block_size),
         search_budget,
         stage.name(),
-        available_blocks,
-        sequence_count,
-        encoded_len,
-        literals_bytes,
-        sequence_bytes,
+        aggregate.available_blocks,
+        aggregate.sequence_count,
+        aggregate.encoded_len,
+        aggregate.literals_bytes,
+        aggregate.sequence_bytes,
+        aggregate.single_beam_profile.positions,
+        aggregate.single_beam_profile.indexed_searches,
+        aggregate.single_beam_profile.indexed_chain_nodes,
+        aggregate.single_beam_profile.indexed_prefix_rejections,
+        aggregate.single_beam_profile.indexed_matches,
+        aggregate.single_beam_profile.indexed_window_stops,
+        aggregate.single_beam_profile.indexed_chain_limit_stops,
+    });
+    try csv.writeByte(',');
+    try writeHistogram(csv, &aggregate.single_beam_profile.indexed_length_histogram);
+    try csv.print(",{d},{d},{d},", .{
+        aggregate.single_beam_profile.rep0_probes,
+        aggregate.single_beam_profile.rep0_prefix_rejections,
+        aggregate.single_beam_profile.rep0_matches,
+    });
+    try writeHistogram(csv, &aggregate.single_beam_profile.rep0_length_histogram);
+    try csv.print(",{d},{d},{d},{d},{d},{d}", .{
         options.iterations,
         options.rounds,
         options.warmup,
@@ -254,6 +274,13 @@ fn writeMeasuredRow(
     });
     try provenance.writeCsvFields(csv);
     try csv.writeByte('\n');
+}
+
+fn writeHistogram(writer: *std.Io.Writer, histogram: []const usize) !void {
+    for (histogram, 0..) |count, index| {
+        if (index != 0) try writer.writeByte(';');
+        try writer.print("{d}", .{count});
+    }
 }
 
 fn measureStagePass(
@@ -317,6 +344,7 @@ fn evaluateAllBlocks(
     var sequence_count: usize = 0;
     var literals_bytes: usize = 0;
     var sequence_bytes: usize = 0;
+    var single_beam_profile: vort.zstd.NativeSingleBeamProfile = .{};
     var offset: usize = 0;
     while (offset < payload.len) {
         const end = @min(payload.len, offset + block_size);
@@ -328,9 +356,15 @@ fn evaluateAllBlocks(
         sequence_count +%= result.sequence_count;
         literals_bytes +%= result.literals_bytes;
         sequence_bytes +%= result.sequence_bytes;
+        if (stage == .rep_beam_single) {
+            var block_profile: vort.zstd.NativeSingleBeamProfile = .{};
+            const stats = try vort.zstd.benchmarkNativeSingleBeamProfile(allocator, block, scratch, &block_profile);
+            if (stats.matches != result.sequence_count) return error.ProfileShapeMismatch;
+            single_beam_profile.add(block_profile);
+        }
         offset = end;
     }
-    return .{ .available_blocks = available_blocks, .encoded_len = encoded_len, .sequence_count = sequence_count, .literals_bytes = literals_bytes, .sequence_bytes = sequence_bytes };
+    return .{ .available_blocks = available_blocks, .encoded_len = encoded_len, .sequence_count = sequence_count, .literals_bytes = literals_bytes, .sequence_bytes = sequence_bytes, .single_beam_profile = single_beam_profile };
 }
 
 fn blockCount(input_len: usize, block_size: usize) usize {

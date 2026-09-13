@@ -10,7 +10,12 @@ PROVENANCE_COLUMNS = ["provenance_version", "optimize", "zig_version", "target_a
 COLUMNS = [
     "case", "level", "input_bytes", "input_sha256", "candidate", "block_size", "block_count", "search_budget",
     "stage", "available_blocks", "sequences", "encoded_bytes",
-    "literals_bytes", "sequence_bytes", "iterations",
+    "literals_bytes", "sequence_bytes",
+    "single_positions", "single_indexed_searches", "single_chain_nodes",
+    "single_prefix_rejections", "single_matches", "single_window_stops",
+    "single_chain_limit_stops", "single_indexed_length_histogram",
+    "single_rep0_probes", "single_rep0_prefix_rejections", "single_rep0_matches",
+    "single_rep0_length_histogram", "iterations",
     "rounds", "warmup", "median_ns", "ns_per_block", "checksum",
 ] + PROVENANCE_COLUMNS
 CASES = {"text", "json", "binary"}
@@ -125,6 +130,29 @@ def main() -> int:
             assert encoded_bytes <= REP_BEAM_MAX_BYTES[(row["case"], row["candidate"])], row
         if row["stage"] == "rep_beam_single":
             assert encoded_bytes <= SINGLE_BEAM_MAX_BYTES[(row["case"], row["candidate"])], row
+            positions = int(row["single_positions"])
+            indexed_nodes = int(row["single_chain_nodes"])
+            indexed_prefix = int(row["single_prefix_rejections"])
+            indexed_matches = int(row["single_matches"])
+            indexed_window_stops = int(row["single_window_stops"])
+            assert positions == int(row["input_bytes"]), row
+            assert indexed_prefix + indexed_matches + indexed_window_stops == indexed_nodes, row
+            assert sum(int(value) for value in row["single_indexed_length_histogram"].split(";")) == indexed_matches, row
+            rep0_probes = int(row["single_rep0_probes"])
+            rep0_prefix = int(row["single_rep0_prefix_rejections"])
+            rep0_matches = int(row["single_rep0_matches"])
+            assert rep0_prefix + rep0_matches == rep0_probes, row
+            assert sum(int(value) for value in row["single_rep0_length_histogram"].split(";")) == rep0_matches, row
+        else:
+            for key in (
+                "single_positions", "single_indexed_searches", "single_chain_nodes",
+                "single_prefix_rejections", "single_matches", "single_window_stops",
+                "single_chain_limit_stops", "single_rep0_probes",
+                "single_rep0_prefix_rejections", "single_rep0_matches",
+            ):
+                assert int(row[key]) == 0, row
+            assert row["single_indexed_length_histogram"] == "0;0;0;0;0;0", row
+            assert row["single_rep0_length_histogram"] == "0;0;0;0;0;0", row
 
     # The current level-9 policy is the subject of this benchmark. Pinning its
     # candidate labels to 128 KiB/4 KiB/8 KiB makes policy drift visible instead

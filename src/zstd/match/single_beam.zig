@@ -15,6 +15,40 @@ const head_size = 4096;
 const empty = std.math.maxInt(u16);
 const max_chain = 16;
 
+pub const Profile = struct {
+    pub const length_bucket_count = 6;
+
+    positions: usize = 0,
+    indexed_searches: usize = 0,
+    indexed_chain_nodes: usize = 0,
+    indexed_prefix_rejections: usize = 0,
+    indexed_matches: usize = 0,
+    indexed_window_stops: usize = 0,
+    indexed_chain_limit_stops: usize = 0,
+    indexed_length_histogram: [length_bucket_count]usize = @splat(0),
+    rep0_probes: usize = 0,
+    rep0_prefix_rejections: usize = 0,
+    rep0_matches: usize = 0,
+    rep0_length_histogram: [length_bucket_count]usize = @splat(0),
+
+    pub fn add(self: *Profile, other: Profile) void {
+        inline for (.{
+            "positions",
+            "indexed_searches",
+            "indexed_chain_nodes",
+            "indexed_prefix_rejections",
+            "indexed_matches",
+            "indexed_window_stops",
+            "indexed_chain_limit_stops",
+            "rep0_probes",
+            "rep0_prefix_rejections",
+            "rep0_matches",
+        }) |field| @field(self, field) += @field(other, field);
+        for (&self.indexed_length_histogram, other.indexed_length_histogram) |*total, count| total.* += count;
+        for (&self.rep0_length_histogram, other.rep0_length_histogram) |*total, count| total.* += count;
+    }
+};
+
 const State = struct {
     cost: u32 = std.math.maxInt(u32),
     rep0: u16 = 1,
@@ -43,11 +77,16 @@ pub const Scratch = struct {
 };
 
 pub noinline fn planReuse(scratch: *Scratch, allocator: std.mem.Allocator, input: []const u8) linksection(text_section) !lz77.PlanStats {
-    return planReuseWithChainLimit(scratch, allocator, input, max_chain);
+    return planReuseWithChainLimit(scratch, allocator, input, max_chain, false, undefined);
+}
+
+pub noinline fn planReuseProfiled(scratch: *Scratch, allocator: std.mem.Allocator, input: []const u8, profile: *Profile) !lz77.PlanStats {
+    profile.* = .{};
+    return planReuseWithChainLimit(scratch, allocator, input, max_chain, true, profile);
 }
 
 pub fn planDeepReferenceReuse(scratch: *Scratch, allocator: std.mem.Allocator, input: []const u8) !lz77.PlanStats {
-    return planReuseWithChainLimit(scratch, allocator, input, 128);
+    return planReuseWithChainLimit(scratch, allocator, input, 128, false, undefined);
 }
 
 fn planReuseWithChainLimit(
@@ -55,6 +94,8 @@ fn planReuseWithChainLimit(
     allocator: std.mem.Allocator,
     input: []const u8,
     comptime chain_limit: usize,
+    comptime collect_profile: bool,
+    profile: if (collect_profile) *Profile else void,
 ) !lz77.PlanStats {
     if (input.len == 0 or input.len > max_input_len) return error.InvalidBlockPlan;
     try scratch.prev.resize(allocator, input.len);
@@ -68,6 +109,7 @@ fn planReuseWithChainLimit(
     occupied[0] = 1;
 
     for (0..input.len) |position| {
+        if (comptime collect_profile) profile.positions += 1;
         std.debug.assert(occupied[position] != 0);
         const state = states[position];
         insertState(states, occupied, position + 1, .{
@@ -86,16 +128,23 @@ fn planReuseWithChainLimit(
         const first_candidate = scratch.head[hash];
         scratch.prev.items[position] = first_candidate;
         scratch.head[hash] = @intCast(position);
-        const indexed_match = firstIndexedMatch(scratch, input, position, first_candidate, anchor, chain_limit);
+        const indexed_match = firstIndexedMatch(scratch, input, position, first_candidate, anchor, chain_limit, collect_profile, profile);
         if (indexed_match) |match|
             extendMatch(states, occupied, position, state, match);
         const indexed_rep0 = if (indexed_match) |match| match.distance == state.rep0 else false;
         if (state.rep0 <= position and !indexed_rep0) {
+            if (comptime collect_profile) profile.rep0_probes += 1;
             const length = matchAtDistance(input, position, state.rep0, anchor);
-            if (length != 0) extendMatch(states, occupied, position, state, .{
-                .length = @intCast(length),
-                .distance = state.rep0,
-            });
+            if (length != 0) {
+                if (comptime collect_profile) {
+                    profile.rep0_matches += 1;
+                    profile.rep0_length_histogram[matchLengthBucket(length)] += 1;
+                }
+                extendMatch(states, occupied, position, state, .{
+                    .length = @intCast(length),
+                    .distance = state.rep0,
+                });
+            } else if (comptime collect_profile) profile.rep0_prefix_rejections += 1;
         }
     }
 
@@ -127,23 +176,44 @@ fn firstIndexedMatch(
     first_candidate: u16,
     anchor: u32,
     comptime chain_limit: usize,
+    comptime collect_profile: bool,
+    profile: if (collect_profile) *Profile else void,
 ) ?lz77.Token.Match {
     var candidate_i = first_candidate;
     var checked: usize = 0;
     const maximum = @min(lz77.max_match_len, input.len - position);
     const window_len = @min(input.len, lz77.default_window_len);
+    if (comptime collect_profile) profile.indexed_searches += @intFromBool(first_candidate != empty);
     while (candidate_i != empty and checked < chain_limit) : (checked += 1) {
+        if (comptime collect_profile) profile.indexed_chain_nodes += 1;
         const candidate: usize = candidate_i;
         const distance = position - candidate;
-        if (distance == 0 or distance > window_len) break;
-        if (std.mem.readInt(u32, input[candidate..][0..4], .little) == anchor)
+        if (distance == 0 or distance > window_len) {
+            if (comptime collect_profile) profile.indexed_window_stops += 1;
+            break;
+        }
+        if (std.mem.readInt(u32, input[candidate..][0..4], .little) == anchor) {
+            const length = matchLengthAfterPrefix(input, candidate, position, maximum, min_match);
+            if (comptime collect_profile) {
+                profile.indexed_matches += 1;
+                profile.indexed_length_histogram[matchLengthBucket(length)] += 1;
+            }
             return .{
-                .length = @intCast(matchLengthAfterPrefix(input, candidate, position, maximum, min_match)),
+                .length = @intCast(length),
                 .distance = @intCast(distance),
             };
+        }
+        if (comptime collect_profile) profile.indexed_prefix_rejections += 1;
         candidate_i = scratch.prev.items[candidate];
     }
+    if (comptime collect_profile)
+        profile.indexed_chain_limit_stops += @intFromBool(candidate_i != empty and checked >= chain_limit);
     return null;
+}
+
+fn matchLengthBucket(length: usize) usize {
+    std.debug.assert(length >= min_match and length <= lz77.max_match_len);
+    return if (length < 12) 0 else if (length < 36) 1 else if (length < 68) 2 else if (length < 132) 3 else if (length < 258) 4 else 5;
 }
 
 fn extendMatch(states: []State, occupied: []u8, position: usize, state: State, match: lz77.Token.Match) void {
@@ -226,6 +296,31 @@ test "single-state repeat beam replays bounded input" {
     try std.testing.expectEqual(input.len, stats.literals + stats.matched_bytes);
 }
 
+test "profiled single-state repeat beam preserves tokens and accounting" {
+    const input = ("abcdefgh-abcdefgh-" ** 128) ++ ("0123456789abcdef" ** 64);
+    var expected: Scratch = .{};
+    defer expected.deinit(std.testing.allocator);
+    const expected_stats = try planReuse(&expected, std.testing.allocator, input);
+    var actual: Scratch = .{};
+    defer actual.deinit(std.testing.allocator);
+    var profile: Profile = .{};
+    const actual_stats = try planReuseProfiled(&actual, std.testing.allocator, input, &profile);
+    try std.testing.expectEqual(expected_stats, actual_stats);
+    try std.testing.expect(tokenSlicesEqual(expected.reversed.items, actual.reversed.items));
+    try std.testing.expectEqual(input.len, profile.positions);
+    try std.testing.expectEqual(
+        profile.indexed_chain_nodes,
+        profile.indexed_prefix_rejections + profile.indexed_matches + profile.indexed_window_stops,
+    );
+    var indexed_length_total: usize = 0;
+    for (profile.indexed_length_histogram) |count| indexed_length_total += count;
+    try std.testing.expectEqual(profile.indexed_matches, indexed_length_total);
+    var rep0_length_total: usize = 0;
+    for (profile.rep0_length_histogram) |count| rep0_length_total += count;
+    try std.testing.expectEqual(profile.rep0_matches, rep0_length_total);
+    try std.testing.expectEqual(profile.rep0_probes, profile.rep0_prefix_rejections + profile.rep0_matches);
+}
+
 test "single-state fused index matches prebuilt predecessor chains" {
     var input: [8192]u8 = undefined;
     var random_state: u32 = 0x243f_6a88;
@@ -305,8 +400,8 @@ test "single-state bounded chain preserves generated plan cost" {
             @memcpy(input[input.len - copy_len ..], input[input.len / 4 ..][0..copy_len]);
         }
 
-        const fast_stats = try planReuseWithChainLimit(&fast, std.testing.allocator, input, max_chain);
-        const deep_stats = try planReuseWithChainLimit(&deep, std.testing.allocator, input, 128);
+        const fast_stats = try planReuseWithChainLimit(&fast, std.testing.allocator, input, max_chain, false, undefined);
+        const deep_stats = try planReuseWithChainLimit(&deep, std.testing.allocator, input, 128, false, undefined);
         try std.testing.expectEqual(input.len, fast_stats.literals + fast_stats.matched_bytes);
         try std.testing.expectEqual(input.len, deep_stats.literals + deep_stats.matched_bytes);
         const fast_cost = planCost(fast.reversed.items);

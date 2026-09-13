@@ -11434,6 +11434,8 @@ pub const NativeMatchStageResult = struct {
     sequence_bytes: usize = 0,
 };
 
+pub const NativeSingleBeamProfile = single_beam_match.Profile;
+
 pub const NativeMatchStageScratch = struct {
     candidate: std.ArrayList(u8) = .empty,
     greedy_tokens: std.ArrayList(lz77.Token) = .empty,
@@ -11497,6 +11499,15 @@ pub fn benchmarkInvalidateNativeMatchStageScratch(scratch: *NativeMatchStageScra
     scratch.duplicate_index_input_ptr = null;
     scratch.duplicate_index_input_len = 0;
     scratch.duplicate_index_fingerprint = 0;
+}
+
+pub fn benchmarkNativeSingleBeamProfile(
+    allocator: std.mem.Allocator,
+    block: []const u8,
+    scratch: *NativeMatchStageScratch,
+    profile: *NativeSingleBeamProfile,
+) Error!lz77.PlanStats {
+    return try single_beam_match.planReuseProfiled(&scratch.single_beam, allocator, block, profile);
 }
 
 fn duplicateIndexInputFingerprint(block: []const u8) u64 {
@@ -12266,6 +12277,32 @@ test "zstd rep beam stage retains reusable scratch capacities" {
         scratch.single_beam.occupied.capacity,
         scratch.single_beam.reversed.capacity,
     });
+}
+
+test "zstd profiled single beam preserves production tokens and accounting" {
+    const payload = ("{\"service\":\"vort\",\"message\":\"profiled single beam\"}\n" ** 256);
+    var expected: single_beam_match.Scratch = .{};
+    defer expected.deinit(std.testing.allocator);
+    const expected_stats = try single_beam_match.planReuse(&expected, std.testing.allocator, payload);
+
+    var scratch: NativeMatchStageScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    var profile: NativeSingleBeamProfile = .{};
+    const actual_stats = try benchmarkNativeSingleBeamProfile(std.testing.allocator, payload, &scratch, &profile);
+    try std.testing.expectEqual(expected_stats, actual_stats);
+    try std.testing.expect(nativeMatchTokenSlicesEqual(expected.reversed.items, scratch.single_beam.reversed.items));
+    try std.testing.expectEqual(payload.len, profile.positions);
+    try std.testing.expectEqual(
+        profile.indexed_chain_nodes,
+        profile.indexed_prefix_rejections + profile.indexed_matches + profile.indexed_window_stops,
+    );
+    var indexed_length_total: usize = 0;
+    for (profile.indexed_length_histogram) |count| indexed_length_total += count;
+    try std.testing.expectEqual(profile.indexed_matches, indexed_length_total);
+    var rep0_length_total: usize = 0;
+    for (profile.rep0_length_histogram) |count| rep0_length_total += count;
+    try std.testing.expectEqual(profile.rep0_matches, rep0_length_total);
+    try std.testing.expectEqual(profile.rep0_probes, profile.rep0_prefix_rejections + profile.rep0_matches);
 }
 
 test "zstd double-fast diagnostic stage round trips structured input" {
