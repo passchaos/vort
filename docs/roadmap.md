@@ -12894,3 +12894,11 @@ reuse, so production keeps the simpler independently owned plans.
   `1.0072x`/`1.0064x`, the 20-row geometric mean is `1.0008x`, and the weakest
   median is `0.9907x`. The native stage gate, 20-row libzstd 1.5.5 encode gate,
   and 273-case bidirectional compatibility probe all pass.
+  Combining bounded duplicate-index pending state and predecessor positions into
+  one zero-initialized `u16` table was rejected at the focused gate. Encoding
+  `position + 1` preserved the exact pair order, all 11 duplicate-index tests,
+  all six indexed-single lower-bound tests, and every measured stage field.
+  Thirty fixed-CPU-8 index-stage pairs reduced JSON/text to `0.9624x`/`0.9504x`;
+  actual single-duplicate evaluation was only noise-positive at `1.0010x`/
+  `1.0054x`. Clearing twice the storage plus per-hit decoding costs more than
+  the original separate pending bytes and uninitialized predecessor words.
