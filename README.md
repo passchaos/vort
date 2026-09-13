@@ -1121,7 +1121,8 @@ corpora as the default levels.
 `brProfilePlannedRatioBlockAlloc` is the explicit diagnostic counterpart for
 default-window 4--32 KiB ratio blocks. It reproduces the production wire while
 reporting lazy/optimal plan, command, wire, and selection timings plus optimal
-chain/search counters and lower-bound length/distance-cost/slack histograms;
+chain/search counters, first-prefix-mismatch buckets, and lower-bound
+length/distance-cost/slack histograms;
 normal encode entrypoints do not enable those counters.
 `run-br-ratio-stage-profile-gate` writes and validates the corresponding
 three-size source profile at `zig-out/vort-br-ratio-stage-profile.csv`, including

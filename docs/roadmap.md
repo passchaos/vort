@@ -12730,6 +12730,16 @@ reuse, so production keeps the simpler independently owned plans.
   (23.4%) have at least eight bits of slack. The distribution is broad rather
   than concentrated at one length or a zero/one-bit boundary, ruling out a
   narrow special case as the next credible optimization.
+  The profiler now also records the first mismatching byte for each rejected
+  four-byte prefix. On the 32 KiB source row, 473,915 of 482,477 rejections
+  (98.23%) match the indexed three-byte anchor and differ only at byte four;
+  the remaining 8,562 (1.77%) already differ at byte one, with zero byte-two or
+  byte-three buckets. The 4/16/32 KiB histograms sum independently to their
+  prefix-rejection counters, and the profiling additions leave the production
+  benchmark's `.text`, `.rodata`, section sizes, and key function addresses
+  byte-for-byte unchanged. This rules out a wider three-byte hash as a useful
+  response to most rejected nodes, while confirming that the already-rejected
+  fourth-byte-first and packed-fingerprint designs target the dominant case.
   Marking that measured 91.5%-taken lower-bound branch as likely was rejected.
   The hint changed no counters, tokens, or wire bytes, but eleven fixed-CPU-2
   source32k pairs measured `0.9807x` with 0/11 wins. LLVM's resulting block

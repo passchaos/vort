@@ -18,6 +18,7 @@ COLUMNS = [
     "optimal_tokens", "optimal_matches", "optimal_commands",
     "optimal_index_bytes", "optimal_positions", "optimal_chain_nodes",
     "optimal_prefix_rejections", "optimal_bound_rejections",
+    "optimal_prefix_mismatch_histogram",
     "optimal_bound_length_histogram", "optimal_bound_distance_cost_histogram",
     "optimal_bound_slack_histogram",
     "optimal_match_length_calls", "optimal_valid_match_candidates",
@@ -101,6 +102,7 @@ def main() -> int:
         bound = integer(row, "optimal_bound_rejections")
         matches = integer(row, "optimal_match_length_calls")
         assert prefix + bound + matches == chain_nodes, row
+        assert sum(histogram(row, "optimal_prefix_mismatch_histogram", 4)) == prefix, row
         assert sum(histogram(row, "optimal_bound_length_histogram", 6)) == bound, row
         assert sum(histogram(row, "optimal_bound_distance_cost_histogram", 15)) == bound, row
         assert sum(histogram(row, "optimal_bound_slack_histogram", 9)) == bound, row

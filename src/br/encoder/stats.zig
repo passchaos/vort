@@ -40,6 +40,7 @@ pub const RatioEncodeProfile = struct {
     optimal_positions: usize = 0,
     optimal_chain_nodes: usize = 0,
     optimal_prefix_rejections: usize = 0,
+    optimal_prefix_mismatch_histogram: [4]usize = @splat(0),
     optimal_bound_rejections: usize = 0,
     optimal_bound_length_histogram: [6]usize = @splat(0),
     optimal_bound_distance_cost_histogram: [15]usize = @splat(0),

@@ -44,6 +44,7 @@ pub const PlanStats = struct {
 };
 
 pub const OptimalSearchProfile = struct {
+    pub const prefix_mismatch_bucket_count = 4;
     pub const bound_length_bucket_count = 6;
     pub const distance_cost_bucket_count = 15;
     pub const bound_slack_bucket_count = 9;
@@ -53,6 +54,7 @@ pub const OptimalSearchProfile = struct {
     positions: usize = 0,
     chain_nodes: usize = 0,
     prefix_rejections: usize = 0,
+    prefix_mismatch_histogram: [prefix_mismatch_bucket_count]usize = @splat(0),
     bound_rejections: usize = 0,
     bound_length_histogram: [bound_length_bucket_count]usize = @splat(0),
     bound_distance_cost_histogram: [distance_cost_bucket_count]usize = @splat(0),
@@ -1267,7 +1269,12 @@ inline fn optimalPlanReuseWithIndex(
                 std.mem.readInt(u32, input[candidate..][0..4], .little) !=
                     std.mem.readInt(u32, input[rev_i..][0..4], .little))
             {
-                if (comptime collect_profile) profile.prefix_rejections += 1;
+                if (comptime collect_profile) {
+                    profile.prefix_rejections += 1;
+                    const candidate_prefix = std.mem.readInt(u32, input[candidate..][0..4], .little);
+                    const current_prefix = std.mem.readInt(u32, input[rev_i..][0..4], .little);
+                    profile.prefix_mismatch_histogram[@ctz(candidate_prefix ^ current_prefix) / 8] += 1;
+                }
                 chain_i = prev[candidate];
                 continue;
             }
@@ -3136,6 +3143,9 @@ test "profiled optimal parser preserves tokens and search accounting" {
         profile.chain_nodes,
         profile.prefix_rejections + profile.bound_rejections + profile.match_length_calls,
     );
+    var prefix_mismatch_total: usize = 0;
+    for (profile.prefix_mismatch_histogram) |count| prefix_mismatch_total += count;
+    try std.testing.expectEqual(profile.prefix_rejections, prefix_mismatch_total);
     try std.testing.expect(profile.match_length_calls >= profile.valid_match_candidates);
     try std.testing.expect(profile.index_ns + profile.search_ns + profile.reconstruct_ns <= profile.total_ns);
 }
