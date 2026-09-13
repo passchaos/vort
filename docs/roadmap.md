@@ -12902,3 +12902,11 @@ reuse, so production keeps the simpler independently owned plans.
   actual single-duplicate evaluation was only noise-positive at `1.0010x`/
   `1.0054x`. Clearing twice the storage plus per-hit decoding costs more than
   the original separate pending bytes and uninitialized predecessor words.
+  Giving the outer Zstd match selector a reusable `TinyGreedyScratch` was also
+  rejected. The existing scratch API preserved greedy tokens, statistics, and
+  candidate bytes while replacing its roughly 288 KiB stack tables and 32 KiB
+  head clear with an 8 KiB head, 512-byte initialized bitmap, and 64 KiB heap
+  predecessor buffer. The selector instance grew from `0x2316` to `0x2c0c`,
+  however, and 31 fixed-CPU-8 complete level-1 JSON pairs measured only
+  `0.9983x` with 12/31 wins. Production keeps token-only reuse and the simpler
+  full-clear parser body.
