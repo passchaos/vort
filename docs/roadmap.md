@@ -12990,3 +12990,14 @@ reuse, so production keeps the simpler independently owned plans.
   from `0xa75` to `0x928`, but 30 fixed-CPU-8 stage pairs reduced JSON/binary to
   `0.9830x`/`0.9879x`; only text improved to `1.0089x`. The shared insertion
   helper retains the better short/medium-match schedule.
+  A zero-extra-bit shortcut in the encoded-offset resolver was rejected below
+  the complete-frame retention threshold. The first direct version exposed an
+  important transactional invariant: `resolveSequenceOffset` may rotate the
+  repeat-offset history before a target mismatch is known, so even the
+  zero-bit case must operate on a local history and commit only after a match.
+  A corrected reference oracle covered successful and failing targets with
+  zero/nonzero literal lengths. Fifteen interleaved independent-binary,
+  fixed-CPU-2 JSON level-1 pairs (20 iterations, 9 rounds) preserved the
+  643-byte frame but measured only `1.0033x` geometrically with a `0.9953x`
+  floor. The common trial loop remains because eliminating one fixed iteration
+  does not justify a dedicated branch.
