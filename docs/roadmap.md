@@ -12646,3 +12646,26 @@ reuse, so production keeps the simpler independently owned plans.
   32 KiB source target moved only `1.0006x`; dictionary/mixed/JSON measured
   `0.9965x`/`1.0012x`/`1.0003x`, for a `0.9997x` four-row median geometric
   mean. The defensive condition remains.
+  Converting optimal search's ascending checked counter into a remaining-budget
+  countdown was rejected. It preserved all focused tokens and wires, but seven
+  fixed-CPU-2 pairs improved 32 KiB source by only `1.0061x`; dictionary and
+  mixed fell to `0.9337x` and `0.9574x`, while JSON was `1.0031x`. The four-row
+  median geometric mean was `0.9746x`, so the established counter form remains.
+  A ranked four-byte optimal index was then evaluated and rejected after several
+  bounded-work and isolation variants. It paired a four-byte candidate chain
+  with each position's original three-byte-bucket predecessor and rank, charging
+  rank deltas so the existing 256-node search budget and exact token choice were
+  preserved. Temporary oracles covered 24 generated distributions, the complete
+  65,536-byte `u16` boundary, every indexed predecessor/rank transition, and
+  full token/stat equality. The initial full-hash prototype improved 32 KiB
+  source by `1.1771x`; an isolated version retained `1.1267x` and a `0.9937x`
+  eight-row floor, but did not strictly bound physical collision walks. A
+  bounded four-bit subbucket version still improved the target by about
+  `1.104x`--`1.111x`, but its production layouts reduced ordinary JSON/source
+  as far as `0.9196x`/`0.9108x` and mixed as far as `0.9456x`. Applying the
+  original ranked design to shared Zstd optimal search regressed all nine stage
+  rows (`0.7886x`--`0.9789x`). Reintroducing the generic parser below 16 KiB,
+  isolating the ranked kernel, and isolating its allocating wrapper could not
+  preserve every short control. All code and temporary tests were removed; a
+  future retry requires a genuinely separate linked object or stable function-
+  layout control rather than another in-module specialization.
