@@ -12977,3 +12977,9 @@ reuse, so production keeps the simpler independently owned plans.
   `1.0036x` row-median geometric mean, and keep the weakest median at `0.9961x`.
   The 100-row native stage gate, 20-row libzstd 1.5.5 encode gate, and 273-case
   bidirectional compatibility probe all pass.
+  Expanding single-state beam's always-present literal transition instead of
+  passing a complete `State` through the shared insertion helper was rejected.
+  All 19 focused tests and stage fields remained exact and the parser shrank
+  from `0xa75` to `0x928`, but 30 fixed-CPU-8 stage pairs reduced JSON/binary to
+  `0.9830x`/`0.9879x`; only text improved to `1.0089x`. The shared insertion
+  helper retains the better short/medium-match schedule.
