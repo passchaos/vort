@@ -59,7 +59,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.print("case,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum,block_count,compressed_blocks,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,{s}\n", .{benchmark_provenance.csv_columns});
+    try csv.writer.print("case,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum,block_count,compressed_blocks,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,total_sequences,literal_bytes,match_bytes,zero_literal_sequences,overlapping_matches,overlapping_match_bytes,non_overlapping_matches,non_overlapping_match_bytes,vector32_eligible_matches,vector32_eligible_bytes,match_length_histogram,offset_histogram,medium_length_histogram,{s}\n", .{benchmark_provenance.csv_columns});
     var selected: usize = 0;
     for (cases) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -73,6 +73,7 @@ pub fn main(init: std.process.Init) !void {
         const block = try vort.zstdInspectNativeFrameFirstBlock(encoded);
         const shape = try vort.zstdInspectNativeFrameBlockSequenceModes(encoded, block);
         const summary = try vort.zstdSummarizeNativeFrameBlocks(encoded);
+        const copy_profile = try vort.zstd.benchmarkNativeSequenceCopyProfile(encoded);
         var mix: u64 = 0;
         const start = std.Io.Clock.awake.now(init.io);
         for (0..options.iterations) |_| {
@@ -87,6 +88,23 @@ pub fn main(init: std.process.Init) !void {
             summary.block_count,                 summary.compressed_block_count, @tagName(shape.literals_kind),                                   shape.sequence_count,
             @tagName(shape.literal_length_mode), @tagName(shape.offset_mode),    @tagName(shape.match_length_mode),
         });
+        try csv.writer.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},", .{
+            copy_profile.sequence_count,
+            copy_profile.literal_bytes,
+            copy_profile.match_bytes,
+            copy_profile.zero_literal_sequences,
+            copy_profile.overlapping_matches,
+            copy_profile.overlapping_match_bytes,
+            copy_profile.non_overlapping_matches,
+            copy_profile.non_overlapping_match_bytes,
+            copy_profile.vector32_eligible_matches,
+            copy_profile.vector32_eligible_bytes,
+        });
+        try writeHistogram(&csv.writer, &copy_profile.match_length_histogram);
+        try csv.writer.writeByte(',');
+        try writeHistogram(&csv.writer, &copy_profile.offset_histogram);
+        try csv.writer.writeByte(',');
+        try writeHistogram(&csv.writer, &copy_profile.medium_length_histogram);
         try provenance.writeCsvFields(&csv.writer);
         try csv.writer.writeByte('\n');
     }
@@ -98,6 +116,13 @@ pub fn main(init: std.process.Init) !void {
         var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
         try stdout.interface.writeAll(csv.written());
         try stdout.interface.flush();
+    }
+}
+
+fn writeHistogram(writer: *std.Io.Writer, histogram: []const usize) !void {
+    for (histogram, 0..) |count, index| {
+        if (index != 0) try writer.writeByte(';');
+        try writer.print("{d}", .{count});
     }
 }
 

@@ -13100,3 +13100,16 @@ reuse, so production keeps the simpler independently owned plans.
   `huffman80k` at `0.9704x`, `numbered_json` at `0.9867x`, and `large_json` at
   `0.9984x`, for a `0.9977x` row-median geometric mean. The compact exact
   `memcpy` match path remains.
+  The pure Zstd decode-profile tool now walks every compressed block through the
+  production sequence parser outside the timed decode loop and records literal/
+  match bytes, zero-literal sequences, overlapping/non-overlapping match counts
+  and bytes, vector-copy eligibility, coarse length/offset histograms, and exact
+  32--127-byte match lengths. The five-row gate verifies sequence, byte, and
+  histogram identities. The ordinary 13-row reference benchmark's `.text` and
+  `.rodata` are byte-identical with and without the profiler. The 512 KiB
+  `large_json` frame has 7,299 non-overlapping matches covering 515,977 bytes;
+  7,295/515,907 qualify for a 32-byte copy, and 6,059 matches are exactly 71
+  bytes. `binary_mixed` has 8,188 non-overlapping, vector-eligible matches
+  covering 393,085 bytes, of which 8,121 are exactly 48 bytes. The all-FSE/raw
+  `huffman80k` control has zero vector-eligible matches. This narrows follow-up
+  work to compact fixed-71/fixed-48 kernels rather than another general loop.

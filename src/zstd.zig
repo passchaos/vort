@@ -6882,6 +6882,27 @@ pub const NativeSequenceModeSummary = struct {
     match_length_mode: NativeSequenceTableMode,
 };
 
+pub const NativeSequenceCopyProfile = struct {
+    pub const length_bucket_count = 8;
+    pub const offset_bucket_count = 9;
+    pub const medium_length_min = 32;
+    pub const medium_length_max = 127;
+
+    sequence_count: usize = 0,
+    literal_bytes: usize = 0,
+    match_bytes: usize = 0,
+    zero_literal_sequences: usize = 0,
+    overlapping_matches: usize = 0,
+    overlapping_match_bytes: usize = 0,
+    non_overlapping_matches: usize = 0,
+    non_overlapping_match_bytes: usize = 0,
+    vector32_eligible_matches: usize = 0,
+    vector32_eligible_bytes: usize = 0,
+    match_length_histogram: [length_bucket_count]usize = @splat(0),
+    offset_histogram: [offset_bucket_count]usize = @splat(0),
+    medium_length_histogram: [medium_length_max - medium_length_min + 1]usize = @splat(0),
+};
+
 pub const NativeSequenceTableMode = enum {
     predefined,
     rle,
@@ -9606,6 +9627,116 @@ pub fn inspectNativeFrameBlockSequenceModes(frame: []const u8, block: NativeFram
     if (block.block_type != .compressed) return nativeSequenceModeSummaryForLiteralBlock(block);
     var frame_state = try replayNativeFrameBlockInspectState(frame, block.header_offset, .{});
     return try inspectNativeFrameBlockSequenceModesWithState(frame, block, &frame_state);
+}
+
+/// Inspect decoded sequence-copy shapes without executing output writes. This
+/// diagnostic is intentionally kept out of the production decode loop.
+pub fn benchmarkNativeSequenceCopyProfile(frame: []const u8) Error!NativeSequenceCopyProfile {
+    if (frame.len < 4 or std.mem.readInt(u32, frame[0..4], .little) != frame_magic_u32) return error.InvalidMagic;
+    var offset: usize = 4;
+    const header = try parseRawOrRleFrameHeader(frame, &offset);
+    var frame_state: SequenceFrameState = .{};
+    var profile: NativeSequenceCopyProfile = .{};
+    var produced: usize = 0;
+
+    while (true) {
+        if (frame.len - offset < 3) return error.TruncatedFrame;
+        const block_header = std.mem.readInt(u24, frame[offset..][0..3], .little);
+        offset += 3;
+        const last = block_header & 1 != 0;
+        const block_type = (block_header >> 1) & 3;
+        const block_len: usize = @intCast(block_header >> 3);
+        try validateBlockSize(header, block_type, block_len);
+        switch (block_type) {
+            0 => {
+                if (frame.len - offset < block_len) return error.TruncatedFrame;
+                offset += block_len;
+                produced = try checkedAdd(produced, block_len);
+            },
+            1 => {
+                if (frame.len - offset < 1) return error.TruncatedFrame;
+                offset += 1;
+                produced = try checkedAdd(produced, block_len);
+            },
+            2 => {
+                if (frame.len - offset < block_len) return error.TruncatedFrame;
+                const block = frame[offset..][0..block_len];
+                const section = try parseLiteralsSection(block, &frame_state);
+                if (section.regenerated_size > header.block_size_max) return error.CorruptFrame;
+                try validateSupportedLiteralSection(section);
+                profile.literal_bytes = try checkedAdd(profile.literal_bytes, section.regenerated_size);
+                if (section.sequence_count == 0) {
+                    try expectConsumedBlock(section.sequence_payload_offset, block.len);
+                    try validateHuffmanLiteralsConsumed(block, section);
+                    produced = try checkedAdd(produced, section.regenerated_size);
+                } else {
+                    var sequence_offset = section.sequence_payload_offset;
+                    const parsed_spec = try parseSequenceModeSpec(block, &sequence_offset, section.sequence_count);
+                    const spec = try resolveSequenceModeSpec(parsed_spec, frame_state.previous_tables);
+                    try expectConsumedBlock(sequence_offset, block.len);
+                    var state = try initSequenceDecodeState(
+                        spec,
+                        section.sequence_count,
+                        try ReverseBitReader.init(block[spec.bitstream_offset..]),
+                        frame_state.repeated_offsets,
+                    );
+                    var literal_offset: usize = 0;
+                    while (state.remaining != 0) {
+                        const sequence = try readModeSequence(&state);
+                        if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < sequence.literal_len) return error.CorruptFrame;
+                        literal_offset = try checkedAdd(literal_offset, sequence.literal_len);
+                        produced = try checkedAdd(produced, sequence.literal_len);
+                        if (sequence.match_offset == 0 or sequence.match_offset > produced) return error.InvalidMatch;
+                        profile.sequence_count += 1;
+                        profile.zero_literal_sequences += @intFromBool(sequence.literal_len == 0);
+                        profile.match_bytes = try checkedAdd(profile.match_bytes, sequence.match_len);
+                        profile.match_length_histogram[sequenceCopyLengthBucket(sequence.match_len)] += 1;
+                        profile.offset_histogram[sequenceCopyOffsetBucket(sequence.match_offset)] += 1;
+                        if (sequence.match_len >= NativeSequenceCopyProfile.medium_length_min and
+                            sequence.match_len <= NativeSequenceCopyProfile.medium_length_max)
+                        {
+                            profile.medium_length_histogram[sequence.match_len - NativeSequenceCopyProfile.medium_length_min] += 1;
+                        }
+                        if (sequence.match_len > sequence.match_offset) {
+                            profile.overlapping_matches += 1;
+                            profile.overlapping_match_bytes = try checkedAdd(profile.overlapping_match_bytes, sequence.match_len);
+                        } else {
+                            profile.non_overlapping_matches += 1;
+                            profile.non_overlapping_match_bytes = try checkedAdd(profile.non_overlapping_match_bytes, sequence.match_len);
+                            if (sequence.match_offset >= 32 and sequence.match_len >= 32) {
+                                profile.vector32_eligible_matches += 1;
+                                profile.vector32_eligible_bytes = try checkedAdd(profile.vector32_eligible_bytes, sequence.match_len);
+                            }
+                        }
+                        produced = try checkedAdd(produced, sequence.match_len);
+                    }
+                    if (section.regenerated_size < literal_offset) return error.CorruptFrame;
+                    produced = try checkedAdd(produced, section.regenerated_size - literal_offset);
+                    try validateHuffmanLiteralsConsumed(block, section);
+                    frame_state.previous_tables = spec.tables();
+                    frame_state.repeated_offsets = state.repeated_offsets;
+                }
+                offset += block_len;
+            },
+            else => return error.CorruptFrame,
+        }
+        if (last) break;
+    }
+    if (header.content_size) |expected| if (try checkedUsizeToU64(produced) != expected) return error.SizeMismatch;
+    if (header.has_checksum) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        offset += 4;
+    }
+    if (offset != frame.len) return error.TrailingData;
+    return profile;
+}
+
+fn sequenceCopyLengthBucket(length: usize) usize {
+    return if (length < 4) 0 else if (length < 8) 1 else if (length < 16) 2 else if (length < 32) 3 else if (length < 64) 4 else if (length < 128) 5 else if (length < 256) 6 else 7;
+}
+
+fn sequenceCopyOffsetBucket(offset: usize) usize {
+    return if (offset < 4) 0 else if (offset < 8) 1 else if (offset < 16) 2 else if (offset < 32) 3 else if (offset < 64) 4 else if (offset < 256) 5 else if (offset < 1024) 6 else if (offset < 4096) 7 else 8;
 }
 
 pub fn inspectNativeFrameBlockSequenceModesWithDictionary(frame: []const u8, block: NativeFrameBlockHeader, dictionary: NativeDictionary) Error!NativeSequenceModeSummary {
