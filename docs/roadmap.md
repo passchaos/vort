@@ -13087,3 +13087,16 @@ reuse, so production keeps the simpler independently owned plans.
   `large_json` to `0.9944x`; `huffman80k`, `binary_mixed`, `numbered_json`, and
   `ascii64k` were noise-neutral. The local state copy remains because its better
   loop locality outweighs five copies per 512 KiB frame.
+  An upstream-style 32-byte vector copy for long non-overlapping matches was
+  rejected after enforcing Vort's caller-buffer boundary. A speculative
+  wildcopy first improved the five-row profile, but could overwrite up to 31
+  bytes beyond the logical decoded length when the caller supplied extra
+  capacity, so it was not an acceptable public API implementation. The corrected
+  kernel copied complete vectors plus an exact tail, with an exhaustive
+  1--258-byte/distance oracle that also verified untouched suffix bytes. Inline,
+  it improved `large_json`/`binary_mixed` by `1.0573x`/`1.0295x` but reduced
+  `huffman80k` to `0.9857x`. Moving its 97-byte body to an independent text
+  section did not fix the formal 13-row path: twenty-one fixed-CPU-2 pairs put
+  `huffman80k` at `0.9704x`, `numbered_json` at `0.9867x`, and `large_json` at
+  `0.9984x`, for a `0.9977x` row-median geometric mean. The compact exact
+  `memcpy` match path remains.
