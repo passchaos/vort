@@ -13215,3 +13215,21 @@ reuse, so production keeps the simpler independently owned plans.
   and a `0.9987x` floor on `binary_mixed`. Both the fusion and temporary section
   were removed; this separates the small real builder saving from the much
   larger, unstable layout effects seen in the unisolated binaries.
+  Requiring every sequence-interleaved Huffman table to pass the existing
+  complete-prefix builder, then using unchecked lookup without a stored proof
+  bit or rescan, was rejected on attribution grounds. Focused valid and malformed
+  Huffman tests passed, and twenty-one fixed-CPU-2 five-row pairs reached a
+  `1.0117x` row-median geometric mean with a `0.9953x` floor. However, the
+  intended `large_json` path itself was `0.9953x` with only 7/21 wins; the
+  apparent gains were `huffman80k` `1.0259x` and `binary_mixed` `1.0377x`, whose
+  raw literal sections never execute the changed lookup. The result is therefore
+  a code-layout artifact, not evidence for removing the defensive partial-table
+  fallback.
+  Replacing the retained 71-byte copy's exact seven-byte tail with one exact
+  eight-byte vector load/store starting at byte 63 was rejected. The overlap is
+  semantically safe because byte 63 was already written by the second 32-byte
+  vector, and the existing full-buffer oracle confirmed that no byte beyond the
+  logical match changed. The generated helper grew by two bytes, however, and
+  twenty-one fixed-CPU-2 five-row pairs reduced `large_json` to `0.9876x` with
+  only 4/21 wins; the row-median geometric mean was `0.9983x`. LLVM's current
+  overlapping 4+4-byte implementation of the seven-byte tail remains faster.
