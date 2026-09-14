@@ -14,8 +14,11 @@ from benchmark_provenance_gate import PROVENANCE_COLUMNS, validate_provenance
 COLUMNS = [
     "case", "reference_version", "input_bytes", "input_sha256", "encoded_sha256", "iterations",
     "selected_bytes", "lazy_bytes", "optimal_bytes", "stored_bytes",
-    "optimal_attempted", "optimal_selected", "lazy_tokens", "lazy_matches", "lazy_commands",
-    "optimal_tokens", "optimal_matches", "optimal_commands",
+    "optimal_attempted", "optimal_selected",
+    "lazy_tokens", "lazy_literals", "lazy_matches", "lazy_matched_bytes", "lazy_fixed_bits",
+    "lazy_commands", "lazy_recent_distances", "lazy_last_distances",
+    "optimal_tokens", "optimal_literals", "optimal_matches", "optimal_matched_bytes", "optimal_fixed_bits",
+    "optimal_commands", "optimal_recent_distances", "optimal_last_distances",
     "optimal_index_bytes", "optimal_positions", "optimal_chain_nodes",
     "optimal_prefix_rejections", "optimal_bound_rejections",
     "optimal_prefix_mismatch_histogram",
@@ -78,8 +81,9 @@ def main() -> int:
         assert integer(row, "iterations") > 0, row
         for key in (
             "selected_bytes", "lazy_bytes", "optimal_bytes", "stored_bytes",
-            "lazy_tokens", "lazy_matches", "lazy_commands",
+            "lazy_tokens", "lazy_literals", "lazy_matches", "lazy_matched_bytes", "lazy_fixed_bits", "lazy_commands",
             "optimal_tokens", "optimal_matches", "optimal_commands",
+            "optimal_literals", "optimal_matched_bytes", "optimal_fixed_bits",
             "optimal_index_bytes", "optimal_positions", "optimal_chain_nodes",
             "optimal_match_length_calls", "optimal_valid_match_candidates",
             "optimal_length_choices_built", "total_ns", "stage_ns",
@@ -90,6 +94,12 @@ def main() -> int:
         assert integer(row, "optimal_attempted") == 1, row
         assert integer(row, "optimal_selected") in (0, 1), row
         assert integer(row, "optimal_positions") == input_bytes, row
+        assert integer(row, "lazy_tokens") == integer(row, "lazy_literals") + integer(row, "lazy_matches"), row
+        assert integer(row, "lazy_literals") + integer(row, "lazy_matched_bytes") == input_bytes, row
+        assert integer(row, "optimal_tokens") == integer(row, "optimal_literals") + integer(row, "optimal_matches"), row
+        assert integer(row, "optimal_literals") + integer(row, "optimal_matched_bytes") == input_bytes, row
+        assert 0 <= integer(row, "lazy_last_distances") <= integer(row, "lazy_recent_distances") <= integer(row, "lazy_commands"), row
+        assert 0 <= integer(row, "optimal_last_distances") <= integer(row, "optimal_recent_distances") <= integer(row, "optimal_commands"), row
         assert integer(row, "selected_bytes") == min(
             integer(row, "lazy_bytes"), integer(row, "optimal_bytes"), integer(row, "stored_bytes")
         ), row
@@ -117,6 +127,9 @@ def main() -> int:
     records = by_case["records_q8"]
     assert integer(records, "selected_bytes") == integer(records, "lazy_bytes"), records
     assert integer(records, "optimal_bytes") > integer(records, "lazy_bytes"), records
+    assert integer(records, "optimal_fixed_bits") > integer(records, "lazy_fixed_bits"), records
+    assert integer(records, "optimal_matched_bytes") < integer(records, "lazy_matched_bytes"), records
+    assert integer(records, "optimal_literals") > integer(records, "lazy_literals"), records
     assert integer(records, "optimal_selected") == 0, records
     print(f"br_ratio_stage_profile_gate=ok rows={len(rows)}")
     return 0

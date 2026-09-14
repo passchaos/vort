@@ -13488,10 +13488,17 @@ reuse, so production keeps the simpler independently owned plans.
   variant was removed, so the inverse-transition result remains evidence-only.
   Added a deterministic 32 KiB Brotli `records_q8` workload to both the
   libbrotli encode gate and ratio-stage profile. Production emits 3,459 bytes
-  versus libbrotli 1.1.0 q8's 3,117 bytes; the generic fixed-bit optimal
-  proposal is 3,504 bytes, so exact-wire arbitration correctly retains the
-  3,459-byte lazy plan. This locks a concrete Brotli cost-model gap that the
-  existing source-only profile did not expose. An upstream-style q8 parser
+  versus libbrotli 1.1.0 q8's 3,117 bytes; the four-byte optimal proposal is
+  3,504 bytes because it leaves 1,284 literals / 31,484 matched bytes versus
+  lazy's 1,258 / 31,510, emits 1,293 versus 1,253 commands, and has a worse
+  fixed proxy at 38,520 versus 38,188 bits. It has more recent-distance/code-0
+  hits (413/284 versus 374/269), so distance reuse alone does not explain the
+  loss. Exact-wire arbitration correctly retains the 3,459-byte lazy plan.
+  This locks a concrete Brotli command-fragmentation gap that the existing
+  source-only profile did not expose. A three-byte optimal sweep at
+  16/32/64/128 candidates produced 3,982/3,835/3,637/3,503 bytes and was
+  removed: low budgets created up to 1,754 commands, while the full budget
+  converged to the four-byte result. An upstream-style q8 parser
   prototype reduced the row to 2,674 bytes and improved 17 of 96 Silesia
   16/32 KiB slices without a size regression, but equivalent-harness controls
   missed the 0.99 speed floor (down to 0.9587 at row median). Multiple helper,

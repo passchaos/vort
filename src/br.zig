@@ -2099,7 +2099,10 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
     defer lazy_plan.deinit(allocator);
     profile.lazy_plan_ns = elapsedNs(stage_start, io);
     profile.lazy_token_count = lazy_plan.tokens.len;
+    profile.lazy_literal_count = lazy_plan.stats.literals;
     profile.lazy_match_count = lazy_plan.stats.matches;
+    profile.lazy_matched_bytes = lazy_plan.stats.matched_bytes;
+    profile.lazy_fixed_bits = lz77.fixedBitCost(lazy_plan.tokens);
     if (lazy_plan.stats.matches == 0) {
         stage_start = std.Io.Clock.awake.now(io);
         const stored = try encodeStoredStreamAlloc(allocator, input);
@@ -2116,6 +2119,9 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
     defer lazy_commands.deinit(allocator);
     profile.lazy_command_ns = elapsedNs(stage_start, io);
     profile.lazy_command_count = lazy_commands.commands.len;
+    const lazy_recent = recentDistanceStats(lazy_commands.commands);
+    profile.lazy_recent_distance_count = lazy_recent.recent;
+    profile.lazy_last_distance_count = lazy_recent.last;
 
     var wire_stats: encoder_stats.PlannedEncodeStats = .{};
     stage_start = std.Io.Clock.awake.now(io);
@@ -2143,7 +2149,10 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
     defer optimal_plan.deinit(allocator);
     profile.optimal_plan_ns = elapsedNs(stage_start, io);
     profile.optimal_token_count = optimal_plan.tokens.len;
+    profile.optimal_literal_count = optimal_plan.stats.literals;
     profile.optimal_match_count = optimal_plan.stats.matches;
+    profile.optimal_matched_bytes = optimal_plan.stats.matched_bytes;
+    profile.optimal_fixed_bits = lz77.fixedBitCost(optimal_plan.tokens);
     profile.optimal_index_bytes = optimal_profile.index_bytes;
     profile.optimal_positions = optimal_profile.positions;
     profile.optimal_chain_nodes = optimal_profile.chain_nodes;
@@ -2168,6 +2177,9 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
         defer optimal_commands.deinit(allocator);
         profile.optimal_command_ns = elapsedNs(stage_start, io);
         profile.optimal_command_count = optimal_commands.commands.len;
+        const optimal_recent = recentDistanceStats(optimal_commands.commands);
+        profile.optimal_recent_distance_count = optimal_recent.recent;
+        profile.optimal_last_distance_count = optimal_recent.last;
 
         stage_start = std.Io.Clock.awake.now(io);
         const optimal_candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, optimal_commands.commands, null, &wire_stats, .{
@@ -3322,6 +3334,23 @@ fn countReusableRecentDistances(commands: []const command_plan.Command) usize {
         if (symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
     return count;
+}
+
+const RecentDistanceStats = struct { recent: usize = 0, last: usize = 0 };
+
+fn recentDistanceStats(commands: []const command_plan.Command) RecentDistanceStats {
+    var last_distances = initial_last_distances;
+    var stats: RecentDistanceStats = .{};
+    for (commands) |command| {
+        if (!command.has_copy or command.dictionary_output_len != 0) continue;
+        const symbol = recentDistanceSymbol(command.distance, &last_distances);
+        if (symbol) |recent| {
+            stats.recent += 1;
+            stats.last += @intFromBool(recent == 0);
+        }
+        if (symbol != 0) pushLastDistance(&last_distances, command.distance);
+    }
+    return stats;
 }
 
 fn recentDistanceSymbol(distance: usize, last_distances: *const [4]usize) ?u4 {
@@ -11246,6 +11275,7 @@ test "br recent-distance candidate tracks the RFC distance ring" {
         .{ .insert_start = 18, .insert_len = 0, .copy_len = 2, .distance = 9, .has_copy = true },
     };
     try std.testing.expectEqual(@as(usize, 4), countReusableRecentDistances(&commands));
+    try std.testing.expectEqual(RecentDistanceStats{ .recent = 4, .last = 3 }, recentDistanceStats(&commands));
     const initial = initial_last_distances;
     try std.testing.expectEqual(@as(?u4, 0), recentDistanceSymbol(4, &initial));
     try std.testing.expectEqual(@as(?u4, 1), recentDistanceSymbol(11, &initial));

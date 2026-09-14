@@ -2020,13 +2020,24 @@ ReleaseFast single-thread gate, Vort fast/balanced/ratio emit
 4,479/3,912/3,459 bytes versus libbrotli 1.1.0 q8 at 3,117 bytes. Ratio mode is
 10.97% larger and measures 3.96 MiB/s versus 79.49 MiB/s.
 
-The stage profile exposes a cost-model counterexample rather than merely a
-larger search budget: the shared fixed-bit optimal proposal is 3,504 bytes,
-45 bytes larger than the selected 3,459-byte lazy wire, while optimal planning
-uses about 86% of the measured 31.18 ms aggregate over three encodes. The gate
-requires lazy selection on this row, retains all search-counter identities, and
-independently decodes the result with libbrotli. This complements `source32k`,
-where optimal remains the exact-wire winner.
+The stage profile exposes a command-fragmentation counterexample rather than
+merely a larger search budget. The four-byte optimal proposal emits 1,293
+commands, covers 31,484 bytes with 1,284 literals, and costs 38,520 fixed-proxy
+bits. The lazy plan emits only 1,253 commands, covers 31,510 bytes with 1,258
+literals, and costs 38,188 bits. Optimal even has more recent-distance hits
+(413 versus 374) and code-zero last-distance hits (284 versus 269), so simply
+adding recent-distance probes cannot explain the loss. Its 3,504-byte wire is
+45 bytes larger than lazy's selected 3,459-byte wire despite spending about
+86% of the measured 31.18 ms aggregate over three encodes. The gate locks
+these relationships, all search-counter identities, and independent libbrotli
+decoding. This complements `source32k`, where four-byte optimal remains the
+exact-wire winner.
+
+A diagnostic three-byte optimal sweep at 16/32/64/128 candidates emitted
+3,982/3,835/3,637/3,503 bytes. At low budget it covered more bytes but created
+up to 1,754 commands; at full budget it converged back to the four-byte shape.
+The probe was removed. The next useful experiment is therefore an explicit
+Brotli command-fragmentation cost in the DP, not a lower minimum-match length.
 
 An upstream-inspired q8 parser was evaluated but not retained. The prototype
 used four-byte hashes, Brotli length/distance scoring, ten recent-distance
