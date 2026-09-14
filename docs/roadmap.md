@@ -13207,3 +13207,11 @@ reuse, so production keeps the simpler independently owned plans.
   floor; `huffman80k` was neutral at `1.0016x` and `binary_mixed` rose to
   `1.0264x`. Section isolation therefore cannot be assumed neutral in this
   executable and was removed.
+  A final causality check compared the fused builder with the unchanged builder
+  while both occupied that same temporary section. This kept the downstream
+  `decodeAllFseHuffmanSequences` address and size identical and confirmed only
+  a sub-threshold gain: thirty-one fixed-CPU-2 pairs measured `large_json`/
+  `huffman80k` at `1.0033x`/`1.0052x`, a five-row geometric mean of `1.0021x`,
+  and a `0.9987x` floor on `binary_mixed`. Both the fusion and temporary section
+  were removed; this separates the small real builder saving from the much
+  larger, unstable layout effects seen in the unisolated binaries.
