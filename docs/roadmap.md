@@ -13283,3 +13283,12 @@ reuse, so production keeps the simpler independently owned plans.
   The five-row geometric mean was `1.0033x` with a `0.9969x` floor, so the
   explicit local guard remains as useful defensive documentation rather than
   retaining an unmeasurable layout change.
+  An upstream-style eight-sequence lookahead queue for the long-distance all-
+  FSE/Huffman decoder was rejected at the first target gate. It decoded FSE
+  states and repeat offsets in original order, retained actual literal/match
+  execution order, and prefetched only two cache lines already inside the
+  currently initialized frame output. All 35 focused native-decoder tests
+  passed, but the helper grew from 4,082 to 6,945 bytes. Nine fixed-CPU-2,
+  500-iteration `large_json` pairs measured only `0.8731x` with 0/9 wins. The
+  queue management and lost loop locality overwhelm any hidden memory latency,
+  so production keeps the single-sequence decode/execute loop.
