@@ -13466,3 +13466,10 @@ reuse, so production keeps the simpler independently owned plans.
   fifteen fixed-CPU-2 source-stage pairs reached only `0.9995x` geometrically,
   with three of four row medians below one. The native tagged `Token` table
   remains.
+  Isolating only `planLargeCompressedSequenceCodes`, while leaving the complete
+  >512-sequence emitter in place, was also rejected as a matched-layout base.
+  The unchanged chain builder preserved the 2,044-sequence wire and moved about
+  1.6 KiB from ordinary `.text` into the FSE section, but 21 fixed-CPU-2
+  complete-matrix pairs reached only `0.9973x` geometrically; text level 1
+  fell to `0.9824x` and JSON level 3 to `0.9947x`. This final placement
+  variant was removed, so the inverse-transition result remains evidence-only.
