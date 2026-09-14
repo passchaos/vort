@@ -13399,3 +13399,12 @@ reuse, so production keeps the simpler independently owned plans.
   with a `0.9771x` floor. Both variants were removed. A future retry needs a
   matched-layout isolation of the complete large planner, not another local
   transition substitution.
+  Forcing the borrowed large-sequence symbol resolver inline was rejected as
+  another layout-sensitive local win. The existing large-plan, borrowed-field,
+  and 2,044-sequence interoperability tests stayed byte-exact. Fifteen fixed-
+  CPU-2 pairs improved all twelve double-fast/greedy/optimal 128 KiB source
+  stage rows, with a `1.0425x` geometric mean and `1.0144x` floor. The
+  21-pair complete 20-row matrix instead reached only `0.9976x` geometrically:
+  text levels 3/9/22 fell to `0.9837x`/`0.9823x`/`0.9832x` and binary
+  level 1 to `0.9836x`. Keep the out-of-line resolver until the entire
+  >512-sequence encoder can be isolated without moving shorter hot paths.
