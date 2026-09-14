@@ -13189,3 +13189,13 @@ reuse, so production keeps the simpler independently owned plans.
   rose to `1.0234x`/`1.0280x`. The checked packed-entry test remains in the
   sequence-interleaved literal loop; only the separately isolated whole-section
   decoder uses `lookupAssumeComplete`.
+  Fusing the large-table FSE builder's normalized-total scan with initialization
+  of its 256-entry `symbol_next` array was rejected. The table oracle and corrupt-
+  input tests stayed exact, and eliminating the explicit zero fill plus second
+  values pass shrank `fse_builder.build` from 1,760 to 1,257 bytes. That size
+  change moved the downstream all-FSE/Huffman helper by 496 bytes, however. In
+  twenty-one fixed-CPU-2 five-row pairs, `large_json`/`huffman80k` fell to
+  `0.9778x`/`0.9699x`, both with 0/21 wins; `binary_mixed` and `numbered_json`
+  rose to `1.0352x`/`1.0155x`, confirming a mixed layout effect rather than a
+  safe aggregate win. Keep the current two-pass initialization until the builder
+  can be compared in an isolated text layout.
