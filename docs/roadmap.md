@@ -13560,3 +13560,9 @@ reuse, so production keeps the simpler independently owned plans.
   pairs. Penalizing only non-row distances retained 3,347 bytes and fell to
   `0.8525x`. Both were removed; avoid adding scalar branches to the object
   search loop without a separately proven hot-kernel design.
+  A width-two beam with one shared ordinary match per position still reached
+  2,648 bytes and improved 465/480 record variants with zero hazards, but the
+  full-position/state walk measured only `0.6025x` over five fixed-CPU-2 target
+  pairs. It was removed without testing wider ordinary candidate sets. Future
+  stateful work should reuse the reverse DP output and refine sparse command
+  boundaries instead of rescanning every input position in a forward beam.

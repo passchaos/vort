@@ -2139,6 +2139,17 @@ further to `0.8525x`, showing that the extra per-candidate branch/code shape is
 itself expensive. Scalar two-parameter costs are therefore not a production
 substitute for a compact state representation.
 
+A second width-two beam moved the ordinary hash-chain search outside the state
+loop: each position computed one shared longest ordinary match, while each of
+the two `rep0` states additionally probed only its repeat distance and the row
+distance. This kept most of the ratio gain (`2,648` bytes), improved 465 of 480
+record variants with zero arbitration hazards, and emitted 1,721 commands. It
+was much slower, however: five fixed-CPU-2 target pairs measured `0.6025x`. The
+cost is the forward visit to every byte/state plus repeat probes, not repeated
+ordinary-candidate enumeration. Do not enlarge this beam to two or four shared
+ordinary candidates; the next viable design should reuse the existing reverse
+DP path and refine only sparse command boundaries.
+
 An upstream-inspired q8 parser was evaluated but not retained. The prototype
 used four-byte hashes, Brotli length/distance scoring, ten recent-distance
 probes, four delayed literals, and a bounded 16-hop predecessor chain. Exact
