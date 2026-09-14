@@ -13458,6 +13458,12 @@ reuse, so production keeps the simpler independently owned plans.
   complete matrix was only `0.9998x`, however, and reduced JSON level 3 to
   `0.9842x` plus text level 22 to `0.9869x`. Keep the by-value container
   call; LLVM's current return/call layout is better for short inputs.
+  Removing the four-byte optimal kernel's logically redundant `nice_len`
+  branch was rejected as unmeasurable. The fixed contract sets
+  `nice_len == max_match == 258`, and the preceding `length == max_len`
+  exit proves the branch cannot fire; the complete token/cost/profile/OOM and
+  32-bit checks remained exact. Fifteen fixed-CPU-2 source-stage pairs measured
+  only `1.0005x` geometrically, so the explicit generic-shaped guard remains.
   Reusing the four-byte optimal parser's existing `Token` backing allocation
   as a compact `u32` decision table was rejected. Literal and 9-bit-length /
   15-bit-distance match packing covered all field boundaries, and the 128-shape
