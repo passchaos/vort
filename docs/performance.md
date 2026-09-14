@@ -2174,6 +2174,30 @@ row-median floor and `1.0001x` matrix geomean. A narrower `rep1` distance
 probe was also rejected: it reached only 3,207 bytes, so the extra per-match
 branch was not justified despite neutral short-A/B throughput.
 
+A retained reconstruction pass now extends each already-proven DP match only
+from its original endpoint, using the same distance and the existing 258-byte
+copy limit. Because an extension can skip later DP boundaries and alter global
+entropy, the alternate path is selected only when it creates at least four
+additional literal/token boundaries; otherwise reconstruction repeats the
+original steps. This moves `records_q8` from 3,187 to 3,134 bytes (`-53`,
+`-1.66%`), just 17 bytes (`0.55%`) above libbrotli q8, with 2,661 tokens, 1,368
+literals, and the same 1,293 matches/commands. The original 480-row grid has
+215 improvements, 265 unchanged rows, and zero regressions under the gate; an
+independent 2,592-row grid across 4...64 KiB, 32...1024-byte rows, three
+mutation densities, and 32 new seeds has 969 improvements, 1,623 unchanged,
+and zero regressions. Eleven fixed-CPU-2 target pairs measured `0.9997x`
+median/geomean with 5/11 wins. A 12-row 64 KiB Silesia control remained
+bit-exact with a `0.9909x` row-median floor and `0.9932x` geomean.
+
+Bit-level comparison explains the former 3,187-versus-3,117 gap: Vort spent
+110 more header bits, 249 more command bits, 43 more length-extra bits, and
+626 more distance bits, partly offset by 463 fewer literal bits. Both streams
+use NPOSTFIX=0/NDIRECT=0 and one block/tree per symbol family. Fixed NDIRECT=4
+was rejected despite reaching 3,182 bytes because it enlarged 23 of 1,152
+independent record variants. Upstream-style literal-count RLE smoothing reached
+only 3,184 bytes, and a local attempt to copy libbrotli's first command boundary
+regressed to 3,191 bytes; neither is retained.
+
 A second width-two beam moved the ordinary hash-chain search outside the state
 loop: each position computed one shared longest ordinary match, while each of
 the two `rep0` states additionally probed only its repeat distance and the row

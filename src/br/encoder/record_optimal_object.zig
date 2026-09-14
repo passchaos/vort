@@ -88,8 +88,9 @@ export fn vortBrRecordOptimalPlan(
         }
     }
 
-    stats.* = .{};
+    const base_token_count = countPlanTokens(steps, input_len);
     position = 0;
+    stats.* = .{};
     while (position < input_len) {
         const step = steps[position];
         if (step == 0) {
@@ -97,8 +98,9 @@ export fn vortBrRecordOptimalPlan(
             stats.literal_count += 1;
             position += 1;
         } else {
-            const length: u16 = @intCast(step >> 16);
+            const base_length: usize = step >> 16;
             const distance: u16 = @truncate(step);
+            const length = extendedMatchLength(input, position, base_length, distance);
             tokens[stats.token_count] = .{ .kind = 1, .literal = 0, .length = length, .distance = distance };
             stats.match_count += 1;
             stats.matched_bytes += length;
@@ -106,7 +108,55 @@ export fn vortBrRecordOptimalPlan(
         }
         stats.token_count += 1;
     }
+    // A longer copy can land between the original DP's chosen boundaries.
+    // Retain that alternate path only when it changes the plan materially;
+    // smaller changes did not predict exact-wire wins across the record audit.
+    if (!selectExtendedPlan(base_token_count, stats.token_count)) {
+        position = 0;
+        stats.* = .{};
+        while (position < input_len) {
+            const step = steps[position];
+            if (step == 0) {
+                tokens[stats.token_count] = .{ .kind = 0, .literal = input[position], .length = 0, .distance = 0 };
+                stats.literal_count += 1;
+                position += 1;
+            } else {
+                const length: u16 = @intCast(step >> 16);
+                const distance: u16 = @truncate(step);
+                tokens[stats.token_count] = .{ .kind = 1, .literal = 0, .length = length, .distance = distance };
+                stats.match_count += 1;
+                stats.matched_bytes += length;
+                position += length;
+            }
+            stats.token_count += 1;
+        }
+    }
     return 1;
+}
+
+fn extendedMatchLength(input: []const u8, position: usize, base_length: usize, distance: u16) u16 {
+    const maximum = @min(abi.max_match_len, input.len - position);
+    var length: u16 = @intCast(base_length);
+    // The DP already proved the base match. Compare only its tail so this
+    // reconstruction never repeats work for unchanged copies.
+    if (base_length < maximum and input[position - distance + base_length] == input[position + base_length])
+        length += @intCast(1 + matchLength(input, position - distance + base_length + 1, position + base_length + 1, maximum - base_length - 1));
+    return length;
+}
+
+inline fn selectExtendedPlan(base_token_count: usize, extended_token_count: usize) bool {
+    return extended_token_count >= base_token_count + 4;
+}
+
+fn countPlanTokens(steps: []const u32, input_len: usize) usize {
+    var count: usize = 0;
+    var position: usize = 0;
+    while (position < input_len) {
+        const length = steps[position] >> 16;
+        position += if (length == 0) 1 else length;
+        count += 1;
+    }
+    return count;
 }
 
 /// Preserve the chosen literal/match boundaries while replacing a copy with
@@ -228,4 +278,15 @@ test "rep0 refinement rejects literal mismatch" {
         .{ .kind = 0, .literal = 'x', .length = 0, .distance = 0 },
     };
     try std.testing.expectEqual(@as(u8, 0), vortBrRefineRecordDistances(input.ptr, input.len, &tokens, tokens.len));
+}
+
+test "record reconstruction extends only the unverified match tail" {
+    const input = "abcdabcdabcdX";
+    try std.testing.expectEqual(@as(u16, 8), extendedMatchLength(input, 4, 4, 4));
+    try std.testing.expectEqual(@as(u16, 4), extendedMatchLength(input, 4, 4, 3));
+}
+
+test "record reconstruction requires a material token delta" {
+    try std.testing.expect(!selectExtendedPlan(100, 103));
+    try std.testing.expect(selectExtendedPlan(100, 104));
 }

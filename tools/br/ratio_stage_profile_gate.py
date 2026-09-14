@@ -139,7 +139,7 @@ def main() -> int:
     records = by_case["records_q8"]
     assert integer(records, "record_optimal_attempted") == 1, records
     assert integer(records, "record_optimal_selected") == 1, records
-    assert integer(records, "record_optimal_bytes") <= 3187, records
+    assert integer(records, "record_optimal_bytes") <= 3134, records
     assert integer(records, "selected_bytes") == integer(records, "record_optimal_bytes"), records
     assert integer(records, "record_optimal_bytes") < integer(records, "lazy_bytes"), records
     assert integer(records, "optimal_fixed_bits") > integer(records, "lazy_fixed_bits"), records

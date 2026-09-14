@@ -13583,6 +13583,21 @@ reuse, so production keeps the simpler independently owned plans.
   `1.0001x` geomean. Existing entropy-split proposals were wire-neutral. A
   `rep1`-only distance probe reached merely 3,207 bytes and was rejected as too
   little ratio gain for another per-match branch.
+  Retained a gated reconstruction refinement that extends each DP-selected
+  match only beyond its already-proven endpoint at the same distance. The
+  alternate path is used only when it adds at least four token/literal
+  boundaries, a cheap structural signal that avoided every exact-wire
+  regression in both the original 480-row grid and an independent 2,592-row
+  grid. The target falls 3,187 -> 3,134 bytes (`-1.66%`), only 17 bytes / 0.55%
+  above libbrotli q8. Eleven fixed-CPU-2 target pairs measured `0.9997x` median
+  and geomean throughput; a 12-row Silesia control retained bit-exact output
+  sizes/checksums with a `0.9909x` floor and `0.9932x` geomean. The original
+  grid has 215 improvements / 265 unchanged / zero regressions, while the new
+  grid has 969 / 1,623 / zero. Wire accounting attributes the prior 70-byte
+  gap to +110 header, +249 command, +43 length-extra, and +626 distance bits,
+  offset by -463 literal bits. Fixed NDIRECT=4, literal-count RLE smoothing,
+  and a libbrotli-like leading-boundary rewrite were rejected after reaching
+  3,182 / 3,184 / 3,191 bytes respectively without robust enough tradeoffs.
   A width-two beam with one shared ordinary match per position still reached
   2,648 bytes and improved 465/480 record variants with zero hazards, but the
   full-position/state walk measured only `0.6025x` over five fixed-CPU-2 target
