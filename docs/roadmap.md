@@ -13225,6 +13225,18 @@ reuse, so production keeps the simpler independently owned plans.
   raw literal sections never execute the changed lookup. The result is therefore
   a code-layout artifact, not evidence for removing the defensive partial-table
   fallback.
+  A Zstd-only optimal-search instance that checked the fourth byte before the
+  full four-byte prefix was rejected. The compact index hashes three bytes but
+  does not guarantee equality because buckets collide, so the candidate retained
+  the full comparison after a fourth-byte hit and kept candidate order, budgets,
+  tokens, search-profile counters, wire bytes, and checksums exact. On the first
+  128 KiB of Ghostty `Terminal.zig`, 1,215,417 of 1,243,327 prefix rejects
+  (97.8%) differ first at byte four. Even with the change isolated from Deflate
+  and Brotli through a compile-time Zstd instance, fifteen fixed-CPU-2 optimal-
+  stage pairs lost on all four real source targets: Terminal, README, roadmap,
+  and `src/zstd.zig` measured `0.9792x`/`0.9784x`/`0.9809x`/`0.9788x`. The
+  staged dependency costs more than the avoided wide comparisons, so the single
+  u32 check remains.
   Replacing the retained 71-byte copy's exact seven-byte tail with one exact
   eight-byte vector load/store starting at byte 63 was rejected. The overlap is
   semantically safe because byte 63 was already written by the second 32-byte
