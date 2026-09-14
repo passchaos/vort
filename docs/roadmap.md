@@ -13416,3 +13416,11 @@ reuse, so production keeps the simpler independently owned plans.
   check all passed. The enlarged generated loop nevertheless reduced all four
   128 KiB source stages, with 0/15 wins and a `0.9452x` geometric mean. The
   compact shared bounded extender remains faster than fixed-loop unrolling.
+  Isolating the complete >512-sequence emitter and its compressed-plan builder
+  into the existing wide-sequence section was rejected as a matched-layout
+  foundation for the inverse-transition experiment. The unchanged chain
+  algorithm retained every wire and moved about 9.4 KiB from ordinary `.text`,
+  but fifteen fixed-CPU-2 complete-matrix pairs reached only `0.9995x`
+  geometrically and reduced JSON level 3 to `0.9818x`. Section isolation is
+  therefore not neutral enough to rescue the otherwise fast inverse builder;
+  both placement changes were removed.
