@@ -2009,6 +2009,42 @@ compatibility probe, five-row decode profile, 9,900-frame decodecorpus gate,
 237-case native-frame probe, 2,044-sequence large-block probe, all 1,543 tests,
 and all 85 compile-check targets pass.
 
+## Zstd decisive single-duplicate lower bound (2026-09-15)
+
+Ratio-level structured blocks already let a decisive repeat beam cancel the
+expensive mixed planner, but cancellation still required an exact
+single-duplicate search to prove that the remaining primitive family was at
+least 24 times larger. The retained path first finds the maximum match length
+available in the existing paired duplicate index. Because one single-match
+candidate can remove only one interval of at most that length, at least
+`frequency[symbol] - maximum_match_length` occurrences of every symbol must
+remain literal. The optimal 11-bit-limited Huffman cost of those independently
+guaranteed counts is a conservative lower bound for any real retained literal
+stream. Tree bytes, four-stream markers and padding, sequence bits, and the
+block header are deliberately omitted. When even that weakened bound is at
+least `repeat_beam_bytes * 24`, the exact single-duplicate scorer cannot affect
+the winner or the existing mixed-cancellation decision and is skipped.
+
+The proof is compiled only into the mixed-dominance specialization. Ordinary
+level-1/3 and non-cancellation paths retain the original selector body; this
+compile-time split was required because earlier runtime-only layouts created
+repeatable short-text regressions despite never executing the new proof. The
+locked 32,797-byte JSON case hits the lower bound once and remains exactly 640
+bytes. Disabling the bound and running the complete exact single search emits
+the same block; 24 generated structured streams repeat that fast/exact wire
+comparison, and a separate 32-shape oracle checks every successful dominance
+proof against the exact selected single candidate.
+
+Independent ReleaseFast binaries on the i9-13900K, fixed to CPU 2 and run in
+eleven alternating pairs, improve complete JSON level-9 encoding by `1.2930x`
+at the median and `1.2943x` geometrically, with 11/11 wins and identical
+640-byte output. Sixteen non-target text, binary, level-3-tradeoff, and
+multiblock level-1/3/9/22 rows retain identical sizes and checksums; their
+row-median floor is `0.9911x` and geometric mean is `0.9967x`. The 20-row
+libzstd 1.5.5 encode gate, runtime-libzstd compatibility probe (256 checked
+cases), comparison and block-sweep gates, all 1,558 tests, and all 93 compile
+checks pass.
+
 ## Brotli q8 fixed-width record baseline (2026-09-14)
 
 The planned-encode and ratio-stage gates now include a deterministic 32 KiB

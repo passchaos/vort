@@ -60,6 +60,7 @@ pub const default_compression_level: c_int = 1;
 pub const min_compression_level: c_int = 0;
 pub const max_compression_level: c_int = 22;
 var test_disable_indexed_single_lower_bound = false;
+var test_decisive_single_lower_bound_hits: usize = 0;
 var test_disable_four_byte_optimal = false;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
@@ -10855,7 +10856,7 @@ fn emitNativeMatchCompressedBlockImpl(
             // arbitrate the exact same mixed candidate below.
             const non_mixed_budget = mixed_match_min_search_budget - 1;
             var mixed_dominated = false;
-            const non_mixed_ok = try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
+            const non_mixed_ok = try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, true, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
             if (mixed_dominated) return non_mixed_ok;
 
             var mixed: std.ArrayList(u8) = .empty;
@@ -10882,7 +10883,7 @@ fn emitNativeMatchCompressedBlockImpl(
         if (std.Thread.spawn(.{}, MixedBlockCandidate.run, .{&mixed_candidate})) |thread| {
             const non_mixed_budget = mixed_match_min_search_budget - 1;
             var mixed_dominated = false;
-            const non_mixed_ok = emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch) catch |err| {
+            const non_mixed_ok = emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, true, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch) catch |err| {
                 cancel_mixed.store(true, .release);
                 thread.join();
                 if (mixed_candidate.frame) |frame| std.heap.smp_allocator.free(frame);
@@ -10904,7 +10905,7 @@ fn emitNativeMatchCompressedBlockImpl(
         // Thread creation is an optimization only. If the platform refuses a
         // worker, fall through to the byte-identical serial selector below.
     }
-    return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null, precomputed_rep_beam_stats, large_sequence_scratch);
+    return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, false, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null, precomputed_rep_beam_stats, large_sequence_scratch);
 }
 
 inline fn shouldProbeDecisiveWideMatch(block: []const u8, match_search_budget: usize, rep_beam_search: bool) bool {
@@ -11123,7 +11124,9 @@ fn findPrefixTailDuplicateMatch(block: []const u8) ?DuplicateMatch {
 }
 
 fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, enable_rep_beam: bool, reusable_rep_beam: ?*lz77.RepBeamScratch, mixed_dominated: ?*bool) Error!bool {
-    return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(false, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, undefined, null);
+    if (mixed_dominated) |value|
+        return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(false, true, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, value, undefined, null);
+    return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(false, false, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, null, undefined, null);
 }
 
 fn emitNativeMatchCompressedBlockSerialWithTwoStateBeamReference(
@@ -11135,6 +11138,7 @@ fn emitNativeMatchCompressedBlockSerialWithTwoStateBeamReference(
     reusable_rep_beam: ?*lz77.RepBeamScratch,
 ) Error!bool {
     return try emitNativeMatchCompressedBlockSerialWithBeamImpl(
+        false,
         false,
         allocator,
         out,
@@ -11167,6 +11171,7 @@ fn emitNativeMatchCompressedBlockSerialWithDeepSingleBeamReference(
     try beam_scratch.reversed.appendSlice(allocator, single_scratch.reversed.items);
     return try emitNativeMatchCompressedBlockSerialWithBeamImpl(
         true,
+        false,
         allocator,
         out,
         block,
@@ -11182,6 +11187,7 @@ fn emitNativeMatchCompressedBlockSerialWithDeepSingleBeamReference(
 
 inline fn emitNativeMatchCompressedBlockSerialWithBeamDispatch(
     comptime has_precomputed_rep_beam: bool,
+    comptime prove_mixed_dominance: bool,
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     block: []const u8,
@@ -11195,10 +11201,10 @@ inline fn emitNativeMatchCompressedBlockSerialWithBeamDispatch(
 ) Error!bool {
     if (match_search_budget == 0) return false;
     if (match_search_budget < multi_duplicate_min_search_budget)
-        return try emitNativeMatchCompressedBlockSerialWithSingleStateBeam(has_precomputed_rep_beam, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
+        return try emitNativeMatchCompressedBlockSerialWithSingleStateBeam(has_precomputed_rep_beam, prove_mixed_dominance, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
     if (!has_precomputed_rep_beam and enable_rep_beam and shouldTryLevelThreeSingleBeam(block, match_search_budget))
-        return try emitNativeMatchCompressedBlockSerialWithFastLevelThree(allocator, out, block, last, match_search_budget, reusable_rep_beam, mixed_dominated, large_sequence_scratch);
-    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
+        return try emitNativeMatchCompressedBlockSerialWithFastLevelThree(prove_mixed_dominance, allocator, out, block, last, match_search_budget, reusable_rep_beam, mixed_dominated, large_sequence_scratch);
+    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, prove_mixed_dominance, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
 }
 
 inline fn shouldTryLevelThreeSingleBeam(block: []const u8, match_search_budget: usize) bool {
@@ -11226,6 +11232,7 @@ inline fn acceptLevelThreeSingleBeam(
 
 noinline fn emitNativeMatchCompressedBlockSerialWithSingleStateBeam(
     comptime has_precomputed_rep_beam: bool,
+    comptime prove_mixed_dominance: bool,
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     block: []const u8,
@@ -11238,22 +11245,23 @@ noinline fn emitNativeMatchCompressedBlockSerialWithSingleStateBeam(
     large_sequence_scratch: ?*LargeSequenceScratch,
 ) linksection(fast_encode_helper_text_section) Error!bool {
     if (has_precomputed_rep_beam or !enable_rep_beam)
-        return try emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
+        return try emitNativeMatchCompressedBlockSerialWithBeamImpl(has_precomputed_rep_beam, prove_mixed_dominance, allocator, out, block, last, match_search_budget, enable_rep_beam, reusable_rep_beam, mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
     var local_rep_beam: lz77.RepBeamScratch = .{};
     defer if (reusable_rep_beam == null) local_rep_beam.deinit(allocator);
     const beam_scratch = reusable_rep_beam orelse &local_rep_beam;
     var single_scratch: single_beam_match.Scratch = .{};
     defer single_scratch.deinit(allocator);
     const single_stats = single_beam_match.planReuse(&single_scratch, allocator, block) catch |err| switch (err) {
-        error.InvalidBlockPlan => return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, allocator, out, block, last, match_search_budget, false, beam_scratch, mixed_dominated, undefined, large_sequence_scratch),
+        error.InvalidBlockPlan => return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, prove_mixed_dominance, allocator, out, block, last, match_search_budget, false, beam_scratch, mixed_dominated, undefined, large_sequence_scratch),
         else => return err,
     };
     beam_scratch.reversed.clearRetainingCapacity();
     try beam_scratch.reversed.appendSlice(allocator, single_scratch.reversed.items);
-    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(true, allocator, out, block, last, match_search_budget, true, beam_scratch, mixed_dominated, single_stats, large_sequence_scratch);
+    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(true, prove_mixed_dominance, allocator, out, block, last, match_search_budget, true, beam_scratch, mixed_dominated, single_stats, large_sequence_scratch);
 }
 
 noinline fn emitNativeMatchCompressedBlockSerialWithFastLevelThree(
+    comptime prove_mixed_dominance: bool,
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     block: []const u8,
@@ -11269,7 +11277,7 @@ noinline fn emitNativeMatchCompressedBlockSerialWithFastLevelThree(
         var single_scratch: single_beam_match.Scratch = .{};
         defer single_scratch.deinit(allocator);
         const single_stats = single_beam_match.planReuse(&single_scratch, allocator, block) catch |err| switch (err) {
-            error.InvalidBlockPlan => return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, allocator, out, block, last, match_search_budget, true, reusable_rep_beam, mixed_dominated, undefined, large_sequence_scratch),
+            error.InvalidBlockPlan => return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, prove_mixed_dominance, allocator, out, block, last, match_search_budget, true, reusable_rep_beam, mixed_dominated, undefined, large_sequence_scratch),
             else => return err,
         };
         var local_large_sequence_scratch: LargeSequenceScratch = .{};
@@ -11282,7 +11290,7 @@ noinline fn emitNativeMatchCompressedBlockSerialWithFastLevelThree(
         var double_fast_tokens: std.ArrayList(lz77.Token) = .empty;
         defer double_fast_tokens.deinit(allocator);
         _ = double_fast_match.planReuse(&double_fast_tokens, allocator, block, zstdHashParserOptions(block.len)) catch |err| switch (err) {
-            error.InvalidBlockPlan => return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, allocator, out, block, last, match_search_budget, true, reusable_rep_beam, mixed_dominated, undefined, sequence_scratch),
+            error.InvalidBlockPlan => return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, prove_mixed_dominance, allocator, out, block, last, match_search_budget, true, reusable_rep_beam, mixed_dominated, undefined, sequence_scratch),
             else => return err,
         };
         if (single_ok and acceptLevelThreeSingleBeam(
@@ -11296,11 +11304,12 @@ noinline fn emitNativeMatchCompressedBlockSerialWithFastLevelThree(
             return true;
         }
     }
-    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, allocator, out, block, last, match_search_budget, true, reusable_rep_beam, mixed_dominated, undefined, large_sequence_scratch);
+    return try emitNativeMatchCompressedBlockSerialWithBeamImpl(false, prove_mixed_dominance, allocator, out, block, last, match_search_budget, true, reusable_rep_beam, mixed_dominated, undefined, large_sequence_scratch);
 }
 
 fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     comptime has_precomputed_rep_beam: bool,
+    comptime prove_mixed_dominance: bool,
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     block: []const u8,
@@ -11313,7 +11322,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     large_sequence_scratch: ?*LargeSequenceScratch,
 ) Error!bool {
     if (match_search_budget == 0) return false;
-    if (mixed_dominated) |value| value.* = false;
+    if (comptime prove_mixed_dominance) mixed_dominated.?.* = false;
 
     // The bootstrap match emitters are intentionally independent heuristics.
     // Reuse one scratch buffer and retain only the current winner so a broad
@@ -11476,7 +11485,10 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
         // retained this exact query in `early_single`, so repeating it here
         // would scan and score the complete block for a value never consumed.
         first_duplicate = if (duplicate_index_ptr) |index|
-            try findBestDuplicateMatchIndexed(block, 0, index)
+            if (comptime prove_mixed_dominance)
+                try findBestDecisiveSingleDuplicate(block, index, rep_beam_len, best.items.len, repeated_len)
+            else
+                try findBestDuplicateMatchIndexed(block, 0, index)
         else
             try findBestDuplicateMatch(block);
     }
@@ -11515,7 +11527,8 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     }
 
     if (best.items.len == 0) return false;
-    if (mixed_dominated) |value| {
+    if (comptime prove_mixed_dominance) {
+        const value = mixed_dominated.?;
         if (beam_is_decisive and rep_beam_len != null and best.items.len == rep_beam_len.?) {
             const rep_len = rep_beam_len.?;
             const repeated_is_dominated = repeated_len == null or rep_len <= repeated_len.? / decisive_mixed_dominance_ratio;
@@ -11535,6 +11548,25 @@ fn shouldSearchMultiDuplicate(block_len: usize, match_search_budget: usize, beam
 
 fn shouldQueryDecisiveSingleDuplicate(early_single_tested: bool, beam_is_decisive: bool, is_rle: bool) bool {
     return !early_single_tested and beam_is_decisive and !is_rle;
+}
+
+noinline fn findBestDecisiveSingleDuplicate(
+    block: []const u8,
+    index: *DuplicateMatchIndex,
+    rep_beam_len: ?usize,
+    best_len: usize,
+    repeated_len: ?usize,
+) linksection(fast_encode_helper_text_section) Error!?DuplicateMatch {
+    if (rep_beam_len != null and best_len == rep_beam_len.? and
+        (repeated_len == null or rep_beam_len.? <= repeated_len.? / decisive_mixed_dominance_ratio))
+    {
+        const dominance_limit = std.math.mul(usize, rep_beam_len.?, decisive_mixed_dominance_ratio) catch std.math.maxInt(usize);
+        if (indexedSingleMatchDominatedBy(block, index, dominance_limit)) {
+            if (comptime builtin.is_test) test_decisive_single_lower_bound_hits += 1;
+            return null;
+        }
+    }
+    return try findBestDuplicateMatchIndexed(block, 0, index);
 }
 
 test "zstd decisive single lookup reuses the level one result" {
@@ -12805,6 +12837,7 @@ test "zstd decisive beam cancels dominated mixed search without changing wire" {
     var expected: std.ArrayList(u8) = .empty;
     defer expected.deinit(std.testing.allocator);
     var mixed_dominated = false;
+    test_decisive_single_lower_bound_hits = 0;
     try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
         std.testing.allocator,
         &expected,
@@ -12816,6 +12849,26 @@ test "zstd decisive beam cancels dominated mixed search without changing wire" {
         &mixed_dominated,
     ));
     try std.testing.expect(mixed_dominated);
+    try std.testing.expectEqual(@as(usize, 1), test_decisive_single_lower_bound_hits);
+
+    var exact: std.ArrayList(u8) = .empty;
+    defer exact.deinit(std.testing.allocator);
+    var exact_mixed_dominated = false;
+    test_disable_indexed_single_lower_bound = true;
+    defer test_disable_indexed_single_lower_bound = false;
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+        std.testing.allocator,
+        &exact,
+        payload.items,
+        true,
+        96,
+        true,
+        null,
+        &exact_mixed_dominated,
+    ));
+    test_disable_indexed_single_lower_bound = false;
+    try std.testing.expect(exact_mixed_dominated);
+    try std.testing.expectEqualSlices(u8, exact.items, expected.items);
 
     var actual: std.ArrayList(u8) = .empty;
     defer actual.deinit(std.testing.allocator);
@@ -12834,6 +12887,7 @@ test "zstd decisive beam cancels dominated mixed search without changing wire" {
 
 test "zstd decisive beam cancellation preserves generated structured winners" {
     var cancelled_cases: usize = 0;
+    test_decisive_single_lower_bound_hits = 0;
     for (0..24) |seed| {
         var payload: std.ArrayList(u8) = .empty;
         defer payload.deinit(std.testing.allocator);
@@ -12876,6 +12930,25 @@ test "zstd decisive beam cancellation preserves generated structured winners" {
         ));
         cancelled_cases += @intFromBool(mixed_dominated);
 
+        var exact_non_mixed: std.ArrayList(u8) = .empty;
+        defer exact_non_mixed.deinit(std.testing.allocator);
+        var exact_mixed_dominated = false;
+        test_disable_indexed_single_lower_bound = true;
+        defer test_disable_indexed_single_lower_bound = false;
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+            std.testing.allocator,
+            &exact_non_mixed,
+            payload.items,
+            true,
+            mixed_match_min_search_budget - 1,
+            true,
+            null,
+            &exact_mixed_dominated,
+        ));
+        test_disable_indexed_single_lower_bound = false;
+        try std.testing.expectEqual(mixed_dominated, exact_mixed_dominated);
+        try std.testing.expectEqualSlices(u8, exact_non_mixed.items, non_mixed.items);
+
         var actual: std.ArrayList(u8) = .empty;
         defer actual.deinit(std.testing.allocator);
         try std.testing.expect(try emitNativeMatchCompressedBlock(
@@ -12890,6 +12963,7 @@ test "zstd decisive beam cancellation preserves generated structured winners" {
         try std.testing.expectEqualSlices(u8, expected.items, actual.items);
     }
     try std.testing.expect(cancelled_cases != 0);
+    try std.testing.expect(test_decisive_single_lower_bound_hits != 0);
 }
 
 test "zstd decisive match block beats literal-only lower bound" {
@@ -19742,6 +19816,73 @@ noinline fn indexedSingleMatchCannotBeat(
     return true;
 }
 
+noinline fn indexedSingleMatchDominatedBy(
+    block: []const u8,
+    index: *DuplicateMatchIndex,
+    total_len_limit: usize,
+) linksection(fast_encode_helper_text_section) bool {
+    if (comptime builtin.is_test) if (test_disable_indexed_single_lower_bound) return false;
+    if (total_len_limit == 0) return false;
+    if (block.len <= duplicate_exact_hash_input_max or block.len > duplicate_index_max_input_len or block.len < 24) return false;
+    var maximum_match_len: usize = 0;
+    for (index.candidate_positions[0..index.candidate_position_count], 0..) |candidate_position, row| {
+        const second: usize = candidate_position;
+        if (block.len - second <= maximum_match_len) break;
+        const first: usize = index.predecessors[row];
+        const cached_len = index.match_lengths[row];
+        const len: usize = if (cached_len == duplicate_index_invalid) blk: {
+            const computed = duplicateMatchLength(block, first, second);
+            index.match_lengths[row] = @intCast(computed);
+            break :blk computed;
+        } else cached_len;
+        if (len >= 8) maximum_match_len = @max(maximum_match_len, len);
+    }
+
+    // Every single-match candidate removes one interval of at most
+    // `maximum_match_len` bytes. Therefore at least `frequency - max_match`
+    // occurrences of each symbol must remain literal, regardless of where the
+    // interval lies. The optimal length-limited Huffman cost of those
+    // independently guaranteed counts is a lower bound for every real literal
+    // stream: restricting any real code to this symbol subset remains a valid
+    // prefix code. Omitting the tree, stream markers, sequence payload, and
+    // block header only weakens the bound, so equality is enough to prove that
+    // no exact single candidate can beat `total_len_limit`.
+    var frequencies: [256]u32 = @splat(0);
+    var byte_frequencies: [256]u16 = @splat(0);
+    for (block) |byte| byte_frequencies[byte] += 1;
+    var active_symbols: [256]u8 = undefined;
+    var active_count: usize = 0;
+    var guaranteed_literals: usize = 0;
+    for (byte_frequencies, 0..) |frequency, symbol| {
+        const guaranteed = @as(usize, frequency) -| maximum_match_len;
+        if (guaranteed == 0) continue;
+        frequencies[symbol] = @intCast(guaranteed);
+        active_symbols[active_count] = @intCast(symbol);
+        active_count += 1;
+        guaranteed_literals += guaranteed;
+    }
+    // With fewer than two guaranteed symbols the retained stream could still
+    // be RLE, whose one-byte payload defeats this Huffman lower bound.
+    if (active_count < 2) return false;
+    const lengths = huffman.treeCodeLengthsKnownActive(
+        256,
+        &frequencies,
+        11,
+        active_symbols[0..active_count],
+    );
+    var huffman_bits: usize = 0;
+    for (active_symbols[0..active_count]) |symbol| {
+        huffman_bits = std.math.add(
+            usize,
+            huffman_bits,
+            std.math.mul(usize, frequencies[symbol], lengths[symbol]) catch return false,
+        ) catch return false;
+    }
+    const huffman_payload_lower_bound = (huffman_bits + 7) / 8;
+    const literal_payload_lower_bound = @min(guaranteed_literals, huffman_payload_lower_bound);
+    return literal_payload_lower_bound >= total_len_limit;
+}
+
 noinline fn indexedSingleMatchCannotBeatFullScan(
     block: []const u8,
     index: *DuplicateMatchIndex,
@@ -19752,7 +19893,6 @@ noinline fn indexedSingleMatchCannotBeatFullScan(
     for (index.candidate_positions[0..index.candidate_position_count], 0..) |candidate_position, row| {
         const second: usize = candidate_position;
         if (block.len - second <= maximum_len) break;
-        if (block.len - second <= maximum_len) continue;
         const cached_len = index.match_lengths[row];
         const len: usize = if (cached_len == duplicate_index_invalid) blk: {
             const computed = duplicateMatchLength(block, index.predecessors[row], second);
@@ -20255,7 +20395,6 @@ test "zstd bounded duplicate index preserves large-block search" {
 
 test "zstd indexed duplicate lower bound preserves competitive winners" {
     var payload: [8192]u8 = undefined;
-    var pruned_cases: usize = 0;
     var retained_cases: usize = 0;
     for (0..16) |seed| {
         var state: u32 = @truncate(0x9e37_79b9 +% seed *% 0x0100_0193);
@@ -20280,8 +20419,44 @@ test "zstd indexed duplicate lower bound preserves competitive winners" {
             index.buildBounded(&payload);
             const reference = indexedSingleMatchCannotBeatFullScan(&payload, &index, limit);
             try std.testing.expectEqual(reference, actual);
-            pruned_cases += @intFromBool(actual);
             retained_cases += @intFromBool(!actual);
+        }
+    }
+    try std.testing.expect(retained_cases != 0);
+}
+
+test "zstd decisive single dominance bound preserves competitive winners" {
+    var payload: [32 * 1024]u8 = undefined;
+    var pruned_cases: usize = 0;
+    var retained_cases: usize = 0;
+    for (0..32) |seed| {
+        var state: u32 = @truncate(0x510e_527f +% seed *% 0x0100_0193);
+        for (&payload, 0..) |*byte, i| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @intCast('a' + (i + seed) % 23),
+                1 => if (i % 64 < 52) @intCast('A' + (i + seed) % 26) else @truncate(state >> 24),
+                2 => @intCast((i * 17 + seed * 13) & 127),
+                else => @truncate(state >> 24),
+            };
+        }
+        if (seed % 3 != 0) {
+            const copy_len = 256 + seed * 31;
+            @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+        }
+
+        var index: DuplicateMatchIndex = undefined;
+        index.buildBounded(&payload);
+        const expected = try findBestDuplicateMatchIndexed(&payload, 0, &index);
+        for ([_]usize{ 128, 512, 2048, 8192, 16 * 1024 }) |limit| {
+            index.buildBounded(&payload);
+            const dominated = indexedSingleMatchDominatedBy(&payload, &index, limit);
+            if (dominated) {
+                pruned_cases += 1;
+                if (expected) |match| try std.testing.expect(match.payload_len + 3 >= limit);
+            } else {
+                retained_cases += 1;
+            }
         }
     }
     try std.testing.expect(pruned_cases != 0);
@@ -25163,6 +25338,7 @@ test "zstd level three single-state policy rolls back every allocation failure" 
             defer output.deinit(allocator);
             try output.appendSlice(allocator, "prefix");
             const result = emitNativeMatchCompressedBlockSerialWithFastLevelThree(
+                false,
                 allocator,
                 &output,
                 payload.items,

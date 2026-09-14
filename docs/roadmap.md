@@ -13621,3 +13621,20 @@ reuse, so production keeps the simpler independently owned plans.
   pairs. It was removed without testing wider ordinary candidate sets. Future
   stateful work should reuse the reverse DP output and refine sparse command
   boundaries instead of rescanning every input position in a forward beam.
+  Retained a Zstd ratio-level lower bound that lets a decisive repeat beam prove
+  the first single-duplicate family at least 24 times larger without exact
+  entropy scoring. The proof scans the existing paired index for the maximum
+  removable interval, subtracts that maximum independently from the whole-block
+  byte frequencies, and computes the optimal 11-bit Huffman cost of the bytes
+  that must remain. Omitting tree, stream, sequence, and block overhead keeps
+  the result conservative. It is compile-time-specialized only into callers
+  requesting mixed-dominance proof; runtime-only placement variants were
+  rejected after producing stable short-text layout regressions. The 32,797-byte
+  JSON level-9 frame stays bit-exact at 640 bytes and improves by `1.2930x`
+  median / `1.2943x` geomean over eleven fixed-CPU-2 independent-binary pairs,
+  all wins. Twenty-four generated structured streams match the forced exact
+  path byte-for-byte, and a 32-shape oracle rejects every false dominance
+  proof. Sixteen non-target level-1/3/9/22 rows retain exact sizes/checksums with
+  a `0.9911x` row-median floor and `0.9967x` geomean. The 20-row libzstd 1.5.5
+  encode gate, 256-case runtime compatibility probe, comparison/block-sweep
+  gates, all 1,558 tests, and all 93 compile checks pass.
