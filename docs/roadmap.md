@@ -13149,3 +13149,9 @@ reuse, so production keeps the simpler independently owned plans.
   5,161 total. The extra 29-counter diagnostic changed the formal reference
   binary's `.text`/`.rodata` layout, so it was removed after collecting the
   evidence rather than becoming a permanent profiler field.
+  A fixed `(match_len=8, offset=7)` overlapping-copy specialization was also
+  rejected. All 2,574 eight-byte `huffman80k` matches have that exact offset,
+  and a direct 7-byte-load/eight-byte-store oracle preserved the full output
+  tail. Twenty-one fixed-CPU-2 five-row pairs nevertheless left `huffman80k` at
+  only `0.9951x` and reduced `large_json` to `0.9854x`; the generic seed-and-
+  doubling copy remains.
