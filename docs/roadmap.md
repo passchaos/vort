@@ -13237,6 +13237,25 @@ reuse, so production keeps the simpler independently owned plans.
   and `src/zstd.zig` measured `0.9792x`/`0.9784x`/`0.9809x`/`0.9788x`. The
   staged dependency costs more than the avoided wide comparisons, so the single
   u32 check remains.
+  Hoisting the current-position u32 prefix load out of the optimal candidate
+  chain was rejected below threshold even when isolated to a compile-time Zstd
+  instance, leaving Deflate and Brotli code generation unchanged. A generated
+  min-match-four oracle and the real-source profiler preserved every token,
+  statistic, candidate wire, and checksum. Fifteen fixed-CPU-2 optimal-stage
+  pairs were consistently positive on Ghostty `Terminal.zig`, README, roadmap,
+  and `src/zstd.zig` (`1.0042x`/`1.0058x`/`1.0039x`/`1.0066x`), but the
+  `1.0051x` geometric mean does not clear the 1% retention bar. LLVM already
+  keeps the current address live, so eliminating the repeated memory operand is
+  too small to justify another shared-parser instance.
+  Caching `best_length_choices[choices_built_through]` in the optimal search
+  loop was rejected. The value changes only when a newly compared match extends
+  the constructed length range, so the generated bound/token oracle and real-
+  source profile retained identical choices, all counters, candidate bytes, and
+  checksums. The extra live scalar increased register pressure: fifteen fixed-
+  CPU-2 optimal-stage pairs reduced Ghostty `Terminal.zig`, README, roadmap, and
+  `src/zstd.zig` to `0.9779x`/`0.9690x`/`0.9633x`/`0.9743x`. The direct array
+  load remains because its address is cheap and its shorter live range schedules
+  better.
   Replacing the retained 71-byte copy's exact seven-byte tail with one exact
   eight-byte vector load/store starting at byte 63 was rejected. The overlap is
   semantically safe because byte 63 was already written by the second 32-byte
