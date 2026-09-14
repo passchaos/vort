@@ -1949,3 +1949,32 @@ separate candidate/baseline check pinned to two efficiency cores. Geometric-mean
 speedups were `1.109x` at level 1 (4/5 files faster) and `1.087x` at level 3
 (3/5 faster); the slowest individual rows were about `0.975x` and `0.970x`, so
 this is an aggregate scheduling gain rather than a claim that every file wins.
+
+## Zstd level-1 four-byte optimal search (2026-09-14)
+
+Level-1 blocks above 64 KiB use a dedicated four-byte optimal hash-chain kernel.
+It is isolated in an object-format-specific text section and leaves the shared
+LZ77 parser in place for Deflate, Brotli, shorter Zstd blocks, and higher Zstd
+levels. The route is limited to the measured seven-candidate level-1 policy and
+the standard 128 KiB Zstd block bound.
+
+Fifteen interleaved fixed-CPU-2 pairs against an independent `3294719c` binary
+improve the isolated optimal stage by `1.4534x` geometrically across 128 KiB
+prefixes of Ghostty `Terminal.zig`, README, the roadmap, and `src/zstd.zig`; the
+slowest row is `1.3372x`, and all four win 15/15 samples. End-to-end level-1
+frame encoding improves `1.1694x` geometrically on the same inputs, with a
+`1.0019x` floor and aggregate output shrinking from 113,545 to 113,524 bytes.
+Twelve 128 KiB Silesia prefixes improve `1.1408x` geometrically with a `0.9998x`
+floor; aggregate output shrinks from 575,562 to 575,231 bytes versus libzstd
+1.5.5's 632,131 bytes. The only larger file is `sao`, up four bytes.
+
+The built-in 20-row level-1/3/9/22 control matrix keeps every encoded size
+unchanged, measures `1.0027x` geometrically, and retains a `0.9964x` floor. A
+31-pair longer JSON level-1 confirmation is `0.9975x`. Correctness coverage
+includes 128 generated large-block plan comparisons with no fixed-cost increase,
+a 32-frame full-wire audit, exact 64 KiB routing boundaries, replay, profiler
+accounting, allocation-failure enumeration and recovery, plus 32-bit compilation.
+The final source also passes the 100-row native-stage and 20-row libzstd 1.5.5
+encode gates, the 273-case compatibility probe, five-row decode profile,
+9,900-frame decodecorpus gate, 131,072-byte large-sequence probe, 237-case
+native-frame probe, and the complete `zig build test` / `zig build check` suite.

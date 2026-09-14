@@ -22,6 +22,7 @@ const incremental_history = @import("zstd/incremental/encoder/history.zig");
 const incremental_history_index = @import("zstd/incremental/encoder/history_index.zig");
 const double_fast_match = @import("zstd/match/double_fast.zig");
 const single_beam_match = @import("zstd/match/single_beam.zig");
+const optimal_four_match = @import("zstd/match/optimal_four.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
 
@@ -59,6 +60,7 @@ pub const default_compression_level: c_int = 1;
 pub const min_compression_level: c_int = 0;
 pub const max_compression_level: c_int = 22;
 var test_disable_indexed_single_lower_bound = false;
+var test_disable_four_byte_optimal = false;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
 const frame_magic_u32: u32 = 0xfd2fb528;
@@ -311,6 +313,7 @@ pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(Incrementa
 
 test {
     _ = double_fast_match;
+    _ = optimal_four_match;
     _ = incremental_tests;
     _ = incremental_history;
     _ = incremental_history_index;
@@ -11426,15 +11429,27 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
             (pre_beam_best_len != 0 and rep_beam_len != null and rep_beam_len.? * 32 <= pre_beam_best_len * 31));
     if (!beam_is_decisive) {
         candidate.clearRetainingCapacity();
-        const optimal_ok = try emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch(
-            allocator,
-            &candidate,
-            block,
-            last,
-            &optimal_scratch,
-            sequence_scratch,
-            zstdOptimalCandidateBudget(match_search_budget),
-        );
+        const optimal_candidates = zstdOptimalCandidateBudget(match_search_budget);
+        const optimal_ok = if (useFourByteOptimal(block.len, optimal_candidates))
+            try emitFourByteOptimalHashMatchCompressedBlockReuseWithSequenceScratch(
+                allocator,
+                &candidate,
+                block,
+                last,
+                &optimal_scratch,
+                sequence_scratch,
+                optimal_candidates,
+            )
+        else
+            try emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch(
+                allocator,
+                &candidate,
+                block,
+                last,
+                &optimal_scratch,
+                sequence_scratch,
+                optimal_candidates,
+            );
         try retainShortestCandidate(allocator, optimal_ok, candidate.items, &best);
     }
 
@@ -11660,7 +11675,11 @@ pub fn benchmarkNativeOptimalProfile(
     scratch: *NativeMatchStageScratch,
     profile: *NativeOptimalSearchProfile,
 ) Error!lz77.PlanStats {
-    return try lz77.optimalPlanReuseProfiled(&scratch.optimal, allocator, block, zstdOptimalParserOptions(block.len, match_search_budget), io, profile);
+    const options = zstdOptimalParserOptions(block.len, match_search_budget);
+    return if (useFourByteOptimal(block.len, options.max_candidates))
+        try optimal_four_match.planReuseProfiled(&scratch.optimal, allocator, block, options, io, profile)
+    else
+        try lz77.optimalPlanReuseProfiled(&scratch.optimal, allocator, block, options, io, profile);
 }
 
 fn duplicateIndexInputFingerprint(block: []const u8) u64 {
@@ -11741,7 +11760,11 @@ pub fn benchmarkNativeMatchStage(
         else
             false,
         .optimal => blk: {
-            const stats = try lz77.optimalPlanReuse(&scratch.optimal, allocator, block, zstdOptimalParserOptions(block.len, match_search_budget));
+            const options = zstdOptimalParserOptions(block.len, match_search_budget);
+            const stats = if (useFourByteOptimal(block.len, options.max_candidates))
+                try optimal_four_match.planReuse(&scratch.optimal, allocator, block, options)
+            else
+                try lz77.optimalPlanReuse(&scratch.optimal, allocator, block, options);
             sequence_count = stats.matches;
             break :blk try emitHashTokenSequenceBlockReuse(allocator, &scratch.candidate, block, last, scratch.optimal.tokens.items, stats, &scratch.large_sequences);
         },
@@ -11814,6 +11837,73 @@ inline fn zstdOptimalCandidateBudget(match_search_budget: usize) usize {
         fastest_optimal_candidate_budget
     else
         default_optimal_candidate_budget;
+}
+
+inline fn useFourByteOptimal(block_len: usize, max_candidates: usize) bool {
+    if (comptime builtin.is_test) if (test_disable_four_byte_optimal) return false;
+    return block_len >= optimal_four_match.min_input_len and
+        block_len <= optimal_four_match.max_input_len and
+        max_candidates == optimal_four_match.candidate_count;
+}
+
+test "zstd four-byte optimal route is limited to large fastest blocks" {
+    try std.testing.expect(!useFourByteOptimal(64 * 1024, fastest_optimal_candidate_budget));
+    try std.testing.expect(useFourByteOptimal(64 * 1024 + 1, fastest_optimal_candidate_budget));
+    try std.testing.expect(useFourByteOptimal(128 * 1024, fastest_optimal_candidate_budget));
+    try std.testing.expect(!useFourByteOptimal(128 * 1024 + 1, fastest_optimal_candidate_budget));
+    try std.testing.expect(!useFourByteOptimal(128 * 1024, default_optimal_candidate_budget));
+}
+
+test "zstd four-byte optimal route preserves generated frame quality" {
+    test_disable_four_byte_optimal = false;
+    defer test_disable_four_byte_optimal = false;
+    var baseline_total: usize = 0;
+    var candidate_total: usize = 0;
+    var changed: usize = 0;
+    var larger: usize = 0;
+    var worst_extra: usize = 0;
+    for (0..32) |seed| {
+        const length = optimal_four_match.min_input_len + (seed % 4) * 16 * 1024;
+        const payload = try std.testing.allocator.alloc(u8, length);
+        defer std.testing.allocator.free(payload);
+        var random_state: u32 = @truncate(0x6a09_e667 +% seed *% 0x0100_0193);
+        for (payload, 0..) |*byte, position| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @truncate(random_state >> 24),
+                1 => @intCast('a' + (position / (3 + seed)) % 23),
+                2 => if (position % 64 < 56) @truncate(position * 17 + seed) else @truncate(random_state >> 24),
+                else => @truncate((position * 37 + (position / 11) * 17 + seed) & 0xff),
+            };
+        }
+        if (seed % 3 == 0) {
+            const copied = payload.len / 4;
+            @memcpy(payload[payload.len - copied ..], payload[payload.len / 4 ..][0..copied]);
+        }
+
+        test_disable_four_byte_optimal = true;
+        const baseline = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, try nativeFrameOptionsForLevel(1, .{}));
+        defer std.testing.allocator.free(baseline.frame);
+        test_disable_four_byte_optimal = false;
+        const candidate = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, try nativeFrameOptionsForLevel(1, .{}));
+        defer std.testing.allocator.free(candidate.frame);
+        baseline_total += baseline.frame.len;
+        candidate_total += candidate.frame.len;
+        changed += @intFromBool(baseline.frame.len != candidate.frame.len);
+        if (candidate.frame.len > baseline.frame.len) {
+            larger += 1;
+            worst_extra = @max(worst_extra, candidate.frame.len - baseline.frame.len);
+        }
+        const decoded = try decodeNativeFrameAlloc(std.testing.allocator, candidate.frame);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+    std.debug.print(
+        "four-byte optimal frame audit: changed={d} larger={d} total={d}/{d} worst_extra={d}\n",
+        .{ changed, larger, candidate_total, baseline_total, worst_extra },
+    );
+    try std.testing.expect(candidate_total <= baseline_total);
+    try std.testing.expect(worst_extra <= 8);
 }
 
 test "zstd optimal candidate budget is level-one-only" {
@@ -12029,6 +12119,21 @@ fn emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch(
     var parser_options = zstdHashParserOptions(block.len);
     parser_options.max_candidates = max_candidates;
     const stats = try lz77.optimalPlanReuse(scratch, allocator, block, parser_options);
+    return try emitHashTokenSequenceBlockReuse(allocator, out, block, last, scratch.tokens.items, stats, sequence_scratch);
+}
+
+noinline fn emitFourByteOptimalHashMatchCompressedBlockReuseWithSequenceScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    scratch: *lz77.OptimalScratch,
+    sequence_scratch: *LargeSequenceScratch,
+    max_candidates: usize,
+) linksection(optimal_four_match.text_section) Error!bool {
+    var parser_options = zstdHashParserOptions(block.len);
+    parser_options.max_candidates = max_candidates;
+    const stats = try optimal_four_match.planReuse(scratch, allocator, block, parser_options);
     return try emitHashTokenSequenceBlockReuse(allocator, out, block, last, scratch.tokens.items, stats, sequence_scratch);
 }
 

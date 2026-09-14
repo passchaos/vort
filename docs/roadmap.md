@@ -13292,3 +13292,37 @@ reuse, so production keeps the simpler independently owned plans.
   500-iteration `large_json` pairs measured only `0.8731x` with 0/9 wins. The
   queue management and lost loop locality overwhelm any hidden memory latency,
   so production keeps the single-sequence decode/execute loop.
+  Level-1 optimal parsing for 65,537--131,072-byte blocks now uses a dedicated
+  four-byte hash-chain kernel in `zstd/match/optimal_four.zig`. The ordinary
+  shared LZ77 parser and every shorter or higher-level Zstd block retain the
+  established three-byte index. This revisits the previously profitable but
+  layout-sensitive four-byte experiment with a genuinely separate object-format
+  text section and a 257-byte noinline emission wrapper, rather than adding
+  another generic instantiation to `lz77.zig` or inflating its old wrapper. The
+  15-bit hash still verifies all four input bytes after collisions;
+  candidate budget, DP cost/tie policy, 32 KiB distance window, and final exact-
+  size candidate arbitration are unchanged. A 128-shape, 65--128 KiB generated
+  oracle replays every plan, requires no fixed-bit-cost regression, and records
+  two improvements (`30,487,549` versus `30,487,553` aggregate bits). A separate
+  32-frame public encoder audit is byte-neutral in aggregate (`590,165` bytes),
+  while boundary tests pin the 65,536/65,537-byte route and allocation-failure
+  coverage verifies both complete failure enumeration and same-scratch recovery.
+  On four 128 KiB real source prefixes, fifteen fixed-CPU-2 optimal-stage pairs
+  improve by `1.4210x`/`1.4158x`/`1.6584x`/`1.3372x` (15/15 wins each), for a
+  `1.4534x` row-median geometric mean; candidate sizes change from
+  31,832/20,193/34,329/21,806 to 31,812/20,193/34,328/21,794 bytes. Complete
+  level-1 frame medians are `1.2043x`/`1.1853x`/`1.3078x`/`1.0019x`, with a
+  `1.1694x` geometric mean and aggregate size 113,545 to 113,524 bytes. Across
+  all twelve 128 KiB Silesia prefixes, the complete-frame geometric mean is
+  `1.1408x`, the floor is `0.9998x`, and every file wins at least 7/15 pairs;
+  aggregate size falls from 575,562 to 575,231 bytes. Only `sao` grows, by four
+  bytes (`97,828` to `97,832`) while remaining 14.2% smaller than libzstd 1.5.5.
+  A separate 15-pair 20-row built-in matrix keeps every wire unchanged, reaches
+  `1.0027x` geometrically, and has a `0.9964x` floor; a longer 31-pair JSON
+  level-1 confirmation is `0.9975x`. Normalized disassembly confirms the old
+  small-block optimal wrapper retains the same instruction sequence apart from
+  relocated constant addresses. The final 100-row native-stage and 20-row
+  libzstd 1.5.5 encode gates pass, as do the 273-case compatibility probe,
+  five-row decode profile, nine-campaign/9,900-frame decodecorpus gate,
+  131,072-byte large-sequence probe, 237-case native-frame probe, complete test
+  suite, and all 85 compile-check targets.
