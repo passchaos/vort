@@ -29,7 +29,7 @@ COLUMNS = [
     "optimal_reconstruct_ns", "optimal_command_ns", "optimal_wire_ns",
     "selection_ns", "total_ns", "stage_ns", "unaccounted_ns",
 ] + PROVENANCE_COLUMNS
-CASES = {"source4k": 4 * 1024, "source16k": 16 * 1024, "source32k": 32 * 1024}
+CASES = {"source4k": 4 * 1024, "source16k": 16 * 1024, "source32k": 32 * 1024, "records_q8": 32 * 1024}
 TIMINGS = [
     "lazy_plan_ns", "lazy_command_ns", "lazy_wire_ns",
     "optimal_plan_ns", "optimal_command_ns", "optimal_wire_ns",
@@ -114,6 +114,10 @@ def main() -> int:
         extension_max = sum(count * maximum for count, maximum in zip(extensions, (0, 1, 3, 7, 15, 31, 63, 127, 255)))
         assert extension_min <= integer(row, "optimal_length_choices_built") <= extension_max, row
         assert integer(row, "optimal_candidate_budget_stops") <= input_bytes, row
+    records = by_case["records_q8"]
+    assert integer(records, "selected_bytes") == integer(records, "lazy_bytes"), records
+    assert integer(records, "optimal_bytes") > integer(records, "lazy_bytes"), records
+    assert integer(records, "optimal_selected") == 0, records
     print(f"br_ratio_stage_profile_gate=ok rows={len(rows)}")
     return 0
 

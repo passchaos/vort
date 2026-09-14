@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 const libbrotli = @import("libbrotli_runtime.zig");
 const benchmark_provenance = @import("benchmark_provenance");
+const q8_records_fixture = @import("q8_records_fixture.zig");
 
 const Case = struct { name: []const u8, payload: []const u8 };
 const Options = struct { iterations: usize = 3, csv_path: ?[]const u8 = null };
@@ -18,10 +19,13 @@ pub fn main(init: std.process.Init) !void {
     const source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br.zig", init.gpa, .limited(2 * 1024 * 1024));
     defer init.gpa.free(source);
     if (source.len < 32 * 1024) return error.InputTooSmall;
+    var records_q8: [q8_records_fixture.input_len]u8 = undefined;
+    q8_records_fixture.fill(&records_q8);
     const cases = [_]Case{
         .{ .name = "source4k", .payload = source[0 .. 4 * 1024] },
         .{ .name = "source16k", .payload = source[0 .. 16 * 1024] },
         .{ .name = "source32k", .payload = source[0 .. 32 * 1024] },
+        .{ .name = "records_q8", .payload = &records_q8 },
     };
 
     var csv: std.Io.Writer.Allocating = .init(init.gpa);

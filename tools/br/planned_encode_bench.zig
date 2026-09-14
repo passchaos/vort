@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 const libbrotli = @import("libbrotli_runtime.zig");
 const benchmark_provenance = @import("benchmark_provenance");
+const q8_records_fixture = @import("q8_records_fixture.zig");
 
 const json_payload = "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48;
 const source_payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
@@ -55,11 +56,13 @@ pub fn main(init: std.process.Init) !void {
     var reference = try libbrotli.Runtime.open();
     defer reference.deinit();
     var cases: std.ArrayList(Case) = .empty;
+    var records_q8: [q8_records_fixture.input_len]u8 = undefined;
     defer {
         for (cases.items) |case| case.deinit(init.gpa);
         cases.deinit(init.gpa);
     }
     if (options.paths.items.len == 0) {
+        q8_records_fixture.fill(&records_q8);
         try cases.append(init.gpa, .{ .name = "json", .payload = json_payload });
         try cases.append(init.gpa, .{ .name = "source", .payload = source_payload });
         try cases.append(init.gpa, .{ .name = "log", .payload = log_payload });
@@ -67,6 +70,7 @@ pub fn main(init: std.process.Init) !void {
         try cases.append(init.gpa, .{ .name = "mixed", .payload = mixed_payload });
         try cases.append(init.gpa, .{ .name = "uppercase", .payload = uppercase_payload });
         try cases.append(init.gpa, .{ .name = "incompressible", .payload = incompressible_payload });
+        try cases.append(init.gpa, .{ .name = "records_q8", .payload = &records_q8, .quality = 8 });
         const source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br.zig", init.gpa, .limited(2 * 1024 * 1024));
         defer init.gpa.free(source);
         const source_file = try init.gpa.dupe(u8, source[0 .. 32 * 1024]);

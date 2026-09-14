@@ -13486,3 +13486,15 @@ reuse, so production keeps the simpler independently owned plans.
   complete-matrix pairs reached only `0.9973x` geometrically; text level 1
   fell to `0.9824x` and JSON level 3 to `0.9947x`. This final placement
   variant was removed, so the inverse-transition result remains evidence-only.
+  Added a deterministic 32 KiB Brotli `records_q8` workload to both the
+  libbrotli encode gate and ratio-stage profile. Production emits 3,459 bytes
+  versus libbrotli 1.1.0 q8's 3,117 bytes; the generic fixed-bit optimal
+  proposal is 3,504 bytes, so exact-wire arbitration correctly retains the
+  3,459-byte lazy plan. This locks a concrete Brotli cost-model gap that the
+  existing source-only profile did not expose. An upstream-style q8 parser
+  prototype reduced the row to 2,674 bytes and improved 17 of 96 Silesia
+  16/32 KiB slices without a size regression, but equivalent-harness controls
+  missed the 0.99 speed floor (down to 0.9587 at row median). Multiple helper,
+  wrapper, compile-time, and text-section isolation layouts failed to make the
+  complete matrix neutral, so production code was removed and only the
+  reproducible workload/profile evidence remains.

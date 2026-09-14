@@ -2008,3 +2008,33 @@ The 100-row native-stage and 20-row libzstd 1.5.5 encode gates, 273-case
 compatibility probe, five-row decode profile, 9,900-frame decodecorpus gate,
 237-case native-frame probe, 2,044-sequence large-block probe, all 1,543 tests,
 and all 85 compile-check targets pass.
+
+## Brotli q8 fixed-width record baseline (2026-09-14)
+
+The planned-encode and ratio-stage gates now include a deterministic 32 KiB
+`records_q8` workload: 128-byte fixed-width records with eight reproducible
+mutations per row. One shared fixture helper feeds both tools, so the end-to-end
+libbrotli comparison and internal parser profile use identical input bytes
+(`SHA-256 57838ff8...74a45`) without an external corpus. On the i9-13900K
+ReleaseFast single-thread gate, Vort fast/balanced/ratio emit
+4,479/3,912/3,459 bytes versus libbrotli 1.1.0 q8 at 3,117 bytes. Ratio mode is
+10.97% larger and measures 3.96 MiB/s versus 79.49 MiB/s.
+
+The stage profile exposes a cost-model counterexample rather than merely a
+larger search budget: the shared fixed-bit optimal proposal is 3,504 bytes,
+45 bytes larger than the selected 3,459-byte lazy wire, while optimal planning
+uses about 86% of the measured 31.18 ms aggregate over three encodes. The gate
+requires lazy selection on this row, retains all search-counter identities, and
+independently decodes the result with libbrotli. This complements `source32k`,
+where optimal remains the exact-wire winner.
+
+An upstream-inspired q8 parser was evaluated but not retained. The prototype
+used four-byte hashes, Brotli length/distance scoring, ten recent-distance
+probes, four delayed literals, and a bounded 16-hop predecessor chain. Exact
+wire arbitration reduced `records_q8` from 3,459 to 2,674 bytes and Silesia
+`nci` from 2,688 to 2,637 bytes; across 96 independent 16/32 KiB Silesia
+slices it improved 17 and enlarged none. Target throughput was about 0.953x of
+baseline, but an equivalent-harness control matrix had a 0.9587 row-median
+floor. Helper, wrapper, compile-time, and text-section isolation did not restore
+the required 0.99 non-target floor, so all production parser code was removed.
+Future work should integrate Brotli-aware costs behind a layout-stable boundary.

@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from benchmark_provenance_gate import PROVENANCE_COLUMNS, validate_provenance
 
 COLUMNS = ["case", "reference_version", "quality", "input_bytes", "input_sha256", "extended_dictionary_probes", "vort_bytes", "lazy_bytes", "ratio_bytes", "ratio_dictionary_copies", "ratio_dictionary_bytes", "reference_bytes", "iterations", "vort_ns", "lazy_ns", "ratio_ns", "reference_ns", "vort_mib_s", "lazy_mib_s", "ratio_mib_s", "reference_mib_s", "vort_over_reference", "lazy_over_reference", "ratio_over_reference", "vort_size_over_reference", "lazy_size_over_reference", "ratio_size_over_reference", "checksum"] + PROVENANCE_COLUMNS
-CASES = {"json", "source", "log", "dictionary", "mixed", "uppercase", "incompressible", "source32k"}
+CASES = {"json", "source", "log", "dictionary", "mixed", "uppercase", "incompressible", "records_q8", "source32k"}
 DICTIONARY_CASES = {"dictionary", "mixed", "uppercase"}
 MAX_LAZY_BYTES = {"json": 62, "source": 84, "log": 82}
 MAX_RATIO_BYTES = {"dictionary": 24, "mixed": 29, "uppercase": 11, "incompressible": 38}
@@ -43,6 +43,11 @@ def main():
     assert int(source32k["quality"]) == 8, source32k
     assert int(source32k["ratio_bytes"]) <= int(source32k["lazy_bytes"]) - 100, source32k
     assert float(source32k["ratio_size_over_reference"]) <= 1.02, source32k
+    records_q8 = by_case["records_q8"]
+    assert int(records_q8["input_bytes"]) == 32 * 1024, records_q8
+    assert int(records_q8["quality"]) == 8, records_q8
+    assert int(records_q8["ratio_bytes"]) <= 3459, records_q8
+    assert int(records_q8["reference_bytes"]) <= int(records_q8["lazy_bytes"]) - 200, records_q8
     print(f"br_planned_encode_bench_gate=ok rows={len(rows)}")
     return 0
 
