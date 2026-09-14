@@ -13326,3 +13326,21 @@ reuse, so production keeps the simpler independently owned plans.
   five-row decode profile, nine-campaign/9,900-frame decodecorpus gate,
   131,072-byte large-sequence probe, 237-case native-frame probe, complete test
   suite, and all 85 compile-check targets.
+  The isolated four-byte kernel now reuses the shared 259-entry compile-time
+  fixed match-length cost table instead of executing its local range ladder for
+  every newly constructed DP length. Exposing the existing table through a tiny
+  inline LZ77 accessor avoids duplicating constants: independent binaries have
+  byte-identical `.rodata`, unchanged ordinary `.text` address/size, and the
+  dedicated four-byte section shrinks from `0x893` to `0x842` bytes. Twenty-one
+  interleaved fixed-CPU-2 pairs preserve all candidate/frame bytes and checksums.
+  Four real-source optimal-stage rows improve `1.0838x`/`1.0685x`/`1.0376x`/
+  `1.1556x` (15/15 wins each), a `1.0855x` geometric mean. Their complete
+  level-1 frames improve `1.0879x`/`1.0171x`/`1.0551x`/`1.0004x`, or
+  `1.0396x` geometrically. Twelve 128 KiB Silesia prefixes reach `1.0129x`
+  with a `0.9983x` floor and 200/252 pair wins; the 20-row level-1/3/9/22
+  control matrix is `0.9999x` geometrically with a `0.9930x` floor.
+  Scalar two-way unrolling (`0.9393x`), four-lane SIMD prefix-min (`0.8434x`),
+  cached and on-demand distance thresholds (`0.9631x`/`0.9807x`), and a
+  64K-bucket index (`0.9949x`) were rejected on the same four-source stage
+  gate. Reducing the physical chain limit to 96, 112, or 120 failed the
+  generated quality oracle; 124 preserved it but improved only `1.0072x`.

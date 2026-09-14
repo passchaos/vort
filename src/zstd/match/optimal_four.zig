@@ -211,10 +211,6 @@ inline fn literalCost(byte: u8) usize {
     return if (byte <= 143) 8 else 9;
 }
 
-inline fn lengthCost(length: usize) usize {
-    return if (length <= 10) 7 else if (length <= 18) 8 else if (length <= 34) 9 else if (length <= 66) 10 else if (length <= 130) 11 else if (length <= 257) 12 else 8;
-}
-
 inline fn packedChoice(cost: usize, length: usize) usize {
     if (comptime @bitSizeOf(usize) >= 64) return (cost << length_bits) | (max_match - length);
     return cost;
@@ -241,7 +237,7 @@ fn extendLengthChoices(
     var best_length: u16 = if (comptime @bitSizeOf(usize) >= 64) 0 else if (built_through >= min_match) lengths[built_through] else 0;
     var length = @max(min_match, built_through + 1);
     while (length <= maximum) : (length += 1) {
-        const cost = lengthCost(length) + costs[position + length];
+        const cost = lz77.fixedLengthCost(length) + costs[position + length];
         if (comptime @bitSizeOf(usize) >= 64) {
             const candidate = packedChoice(cost, length);
             if (candidate < best_choice) best_choice = candidate;

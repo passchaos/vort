@@ -28,6 +28,11 @@ pub inline fn fixedDistanceCost(distance: usize) usize {
     return fixed_distance_costs[distance];
 }
 
+pub inline fn fixedLengthCost(length: usize) usize {
+    std.debug.assert(length >= min_match_len and length <= max_match_len);
+    return fixed_length_costs[length];
+}
+
 pub const Token = union(enum) {
     literal: u8,
     match: Match,

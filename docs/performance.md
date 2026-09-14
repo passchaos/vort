@@ -1978,3 +1978,16 @@ The final source also passes the 100-row native-stage and 20-row libzstd 1.5.5
 encode gates, the 273-case compatibility probe, five-row decode profile,
 9,900-frame decodecorpus gate, 131,072-byte large-sequence probe, 237-case
 native-frame probe, and the complete `zig build test` / `zig build check` suite.
+
+The dedicated four-byte kernel now also reuses the shared compile-time
+259-entry fixed match-length cost table instead of repeating a branch ladder for
+each newly constructed dynamic-programming length. No second table is emitted:
+the final baseline/candidate binaries have byte-identical `.rodata`, identical
+ordinary `.text` address/size, and the isolated four-byte section shrinks from
+`0x893` to `0x842` bytes. Twenty-one interleaved fixed-CPU-2 pairs against
+the independent `8a394685` binary preserve every output size and checksum.
+The isolated stage improves `1.0855x` geometrically across the four real-source
+rows with a `1.0376x` floor and 15/15 wins per row. Complete level-1 frames
+improve `1.0396x` geometrically with a `1.0004x` floor; twelve Silesia
+prefixes improve `1.0129x` with a `0.9983x` floor. The 20-row level-1/3/9/22
+control matrix is neutral at `0.9999x` geometrically with a `0.9930x` floor.
