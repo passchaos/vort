@@ -13344,3 +13344,17 @@ reuse, so production keeps the simpler independently owned plans.
   64K-bucket index (`0.9949x`) were rejected on the same four-source stage
   gate. Reducing the physical chain limit to 96, 112, or 120 failed the
   generated quality oracle; 124 preserved it but improved only `1.0072x`.
+  Reusing one whole-block literal histogram across the unindexed large-block
+  single-duplicate search was rejected despite a strong isolated result. Each
+  candidate subtracted and restored exactly its matched interval, rebuilt the
+  same Huffman plan, and still scanned the two retained literal spans for exact
+  four-stream bit counts; a 16-shape 65,537/131,072-byte oracle matched the old
+  selected positions, lengths, and payload scores exactly. Four real-source
+  single-candidate rows improved `1.3005x`/`1.5402x`/`1.2455x`/`1.2254x`,
+  all with 15/15 wins. Three production layouts nevertheless disturbed short
+  paths: a direct selector split gave a 20-row floor of `0.9840x`; moving the
+  finder, scorer, and dedicated two-span bit counter into the existing isolated
+  section still reduced text levels 1/3/9/22 to roughly `0.980--0.988x`; and
+  moving both old/new hashed finders behind one symmetric out-of-line wrapper
+  left a `0.9885x` floor. All variants were removed rather than exchanging a
+  large unused-candidate win for stable non-target regressions.
