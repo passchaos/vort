@@ -13166,3 +13166,15 @@ reuse, so production keeps the simpler independently owned plans.
   `0.9899x`/`0.9887x`/`0.9991x`/`1.0015x`; the row-median geometric mean was
   `0.9854x`. The hardware demand load is preferable to adding branches and two
   software prefetches in this loop.
+  Special-casing one-byte Huffman literal runs in that helper was rejected too.
+  A temporary benchmark-only histogram showed that 6,831 of `large_json`'s
+  7,299 sequences (93.6%) have `literal_len == 1`, while 5,155 of
+  `huffman80k`'s 5,161 sequences have zero literals and 8,121 of
+  `binary_mixed`'s 8,188 sequences have at least sixteen. Routing the one-byte
+  case through a fixed-length slice nevertheless duplicated the inlined lookup
+  and error paths, growing `decodeAllFseHuffmanSequences` by 485 bytes. In
+  twenty-one fixed-CPU-2 interleaved five-row pairs, `large_json` fell to
+  `0.9851x` with 3/21 wins and `huffman80k` to `0.9875x`; the row-median
+  geometric mean was only `1.0018x`, despite an unrelated layout gain on
+  `binary_mixed`. The temporary histogram was removed and the compact runtime-
+  length literal loop remains.
