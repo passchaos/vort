@@ -13415,6 +13415,13 @@ reuse, so production keeps the simpler independently owned plans.
   the former shared-parser layout confounder. Even so, all four 128 KiB source
   stage rows lost, with 0/15 wins and a `0.9837x` geometric mean. Starting the
   compact vector matcher at byte zero remains faster on this CPU.
+  Hoisting the current-position prefix load was likewise retested inside the
+  isolated four-byte kernel, removing the earlier shared-parser layout concern.
+  The complete token/cost/profile/OOM and 32-bit checks remained exact, but
+  fifteen fixed-CPU-2 pairs reduced all four 128 KiB source stages: medians were
+  `0.9972x`/`0.9960x`/`0.9963x`/`0.9924x`, a `0.9955x` geometric mean.
+  LLVM's existing loop placement is still preferable, so the source-level load
+  stays.
   A fixed-258-byte match-extension specialization inside the isolated four-byte
   optimal kernel was rejected at the focused gate. It used eight fixed 32-byte
   vector comparisons plus an exact two-byte tail for all non-tail positions;
