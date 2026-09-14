@@ -13079,3 +13079,11 @@ reuse, so production keeps the simpler independently owned plans.
   pairs fell to a `0.9957x` row-median geometric mean with a `0.9873x` floor on
   JSON level 1; that target won only 2/30 pairs. The seven-candidate Pareto point
   remains, and budgets six/four are closed absent a separately isolated layout.
+  Borrowing the caller's parsed `HuffmanLiteralDecodeState` in the all-FSE/
+  Huffman sequence helper was rejected at the focused decode gate. It removes
+  the roughly 5.1 KiB by-value block-entry copy and shrinks the helper by three
+  bytes, but makes the hot loop reach its cursor/tree/lookup through a pointer.
+  Twenty-one fixed-CPU-2 pairs kept every decoded checksum while reducing
+  `large_json` to `0.9944x`; `huffman80k`, `binary_mixed`, `numbered_json`, and
+  `ascii64k` were noise-neutral. The local state copy remains because its better
+  loop locality outweighs five copies per 512 KiB frame.
