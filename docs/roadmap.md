@@ -13113,3 +13113,16 @@ reuse, so production keeps the simpler independently owned plans.
   covering 393,085 bytes, of which 8,121 are exactly 48 bytes. The all-FSE/raw
   `huffman80k` control has zero vector-eligible matches. This narrows follow-up
   work to compact fixed-71/fixed-48 kernels rather than another general loop.
+  The all-FSE/Huffman sequence loop now handles its dominant 71-byte,
+  non-overlapping match with two exact 32-byte vector copies and a seven-byte
+  tail. The route requires an in-frame offset of at least 71 and retains the
+  public caller-buffer contract: it checks the exact remaining match length and
+  never writes beyond the logical decoded end. A direct module oracle compares
+  the specialized and generic copies while also checking every untouched suffix
+  byte. Twenty-one fixed-CPU-2 pairs against an independent `b274d982` binary
+  improve the five-row decode-profile median by `1.1888x` on `large_json`;
+  `huffman80k`, `binary_mixed`, `numbered_json`, and `ascii64k` stay at
+  `1.0053x`/`0.9977x`/`0.9974x`/`1.0006x`. The complete 13-row reference
+  benchmark confirms `large_json` at `1.1752x` with 21/21 wins, a `1.0116x`
+  row-median geometric mean, and a `0.9910x` floor on `numbered_json`; every
+  compressed input size and decoded checksum remains identical.
