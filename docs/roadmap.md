@@ -13133,3 +13133,9 @@ reuse, so production keeps the simpler independently owned plans.
   wins, but the adjacent `large_json` control fell to `0.9884x`. The 71-byte
   path remains isolated to the all-FSE/Huffman loop; adding both fixed shapes
   perturbs that profitable loop beyond the control floor.
+  Expanding the retained 71-byte helper to the adjacent 68--71-byte cluster was
+  rejected even though it covered another 1,228 `large_json` matches. The two
+  fixed vector stores plus variable 4--7-byte tail passed the exact copy/suffix
+  oracle, but twenty-one fixed-CPU-2 five-row pairs reduced `large_json` to
+  `0.9379x` and `huffman80k` to `0.9725x`; only `binary_mixed` improved to
+  `1.0171x`. The exact 71-byte code shape is retained.
