@@ -13611,7 +13611,10 @@ reuse, so production keeps the simpler independently owned plans.
   Generalizing the selector to the record command and distance trees was
   wire-neutral at 3,132 bytes: their 15/18 active symbols are below the
   upstream smoother's 28-symbol floor. Keep the production option scoped to
-  the literal tree until a small-alphabet header optimizer proves a win.
+  the literal tree until a small-alphabet header optimizer proves a win. A
+  final equal-length `rep1` probe after match-tail extension reached 3,129
+  bytes but regressed target throughput to `0.9907x` median / `0.9899x`
+  geomean with 0/11 wins, so it was removed.
   A width-two beam with one shared ordinary match per position still reached
   2,648 bytes and improved 465/480 record variants with zero hazards, but the
   full-position/state walk measured only `0.6025x` over five fixed-CPU-2 target

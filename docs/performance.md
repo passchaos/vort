@@ -2212,7 +2212,10 @@ candidate stream.
 Generalizing the same selector to the 15-symbol command and 18-symbol distance
 trees was wire-neutral at 3,132 bytes because upstream's smoothing deliberately
 does not alter alphabets with fewer than 28 active symbols; that broader option
-was not retained.
+was not retained. Reapplying an equal-length `rep1` probe after match-tail
+extension reached 3,129 bytes, but eleven fixed-CPU-2 pairs measured only
+`0.9907x` median / `0.9899x` geomean with 0/11 wins, so the extra per-match
+comparison was rejected.
 
 A second width-two beam moved the ordinary hash-chain search outside the state
 loop: each position computed one shared longest ordinary match, while each of
