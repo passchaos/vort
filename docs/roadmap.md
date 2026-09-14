@@ -13449,6 +13449,15 @@ reuse, so production keeps the simpler independently owned plans.
   only `1.0077x` geometrically, and the complete 20-row matrix fell to
   `0.9976x` with multiblock level 3 at `0.9879x`. The five independently
   grown arrays remain because their end-to-end layout is measurably better.
+  Passing all three complete `LargeSequenceTablePlanAlternatives` containers
+  into the final selector by pointer was also rejected. This is narrower than
+  the earlier caller-owned-return experiment: the established return ABI and
+  per-plan borrowing remain, while only the selector's three inputs changed.
+  Large-plan and 2,044-sequence wire probes passed; twelve real-source stage
+  rows improved `1.0103x` geometrically with a `1.0029x` floor. The 21-pair
+  complete matrix was only `0.9998x`, however, and reduced JSON level 3 to
+  `0.9842x` plus text level 22 to `0.9869x`. Keep the by-value container
+  call; LLVM's current return/call layout is better for short inputs.
   Reusing the four-byte optimal parser's existing `Token` backing allocation
   as a compact `u32` decision table was rejected. Literal and 9-bit-length /
   15-bit-distance match packing covered all field boundaries, and the 128-shape
