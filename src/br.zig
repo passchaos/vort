@@ -2122,7 +2122,7 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
     defer lazy_commands.deinit(allocator);
     profile.lazy_command_ns = elapsedNs(stage_start, io);
     profile.lazy_command_count = lazy_commands.commands.len;
-    const lazy_shape = commandShapeStats(lazy_commands.commands);
+    const lazy_shape = try commandShapeStats(allocator, lazy_commands.commands);
     profile.lazy_recent_distance_count = lazy_shape.recent;
     profile.lazy_last_distance_count = lazy_shape.last;
     profile.lazy_explicit_distance_count = lazy_shape.explicit;
@@ -2186,7 +2186,7 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
         defer optimal_commands.deinit(allocator);
         profile.optimal_command_ns = elapsedNs(stage_start, io);
         profile.optimal_command_count = optimal_commands.commands.len;
-        const optimal_shape = commandShapeStats(optimal_commands.commands);
+        const optimal_shape = try commandShapeStats(allocator, optimal_commands.commands);
         profile.optimal_recent_distance_count = optimal_shape.recent;
         profile.optimal_last_distance_count = optimal_shape.last;
         profile.optimal_explicit_distance_count = optimal_shape.explicit;
@@ -2219,7 +2219,7 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
         defer record_plan.deinit(allocator);
         const record_commands = try command_plan.buildAlloc(allocator, input, record_plan.tokens);
         defer record_commands.deinit(allocator);
-        const record_shape = commandShapeStats(record_commands.commands);
+        const record_shape = try commandShapeStats(allocator, record_commands.commands);
         const record = try encodeCommandPlanWithOptionsAlloc(allocator, input, record_commands.commands, null, &wire_stats, .{
             .use_recent_distances = true,
             .use_utf8_text_contexts = true,
@@ -3468,7 +3468,7 @@ const CommandShapeStats = struct {
 };
 const RecentDistanceStats = struct { recent: usize = 0, last: usize = 0 };
 
-fn commandShapeStats(commands: []const command_plan.Command) CommandShapeStats {
+fn commandShapeStats(allocator: std.mem.Allocator, commands: []const command_plan.Command) Error!CommandShapeStats {
     var last_distances = initial_last_distances;
     var stats: CommandShapeStats = .{};
     for (commands) |command| {
@@ -3485,19 +3485,16 @@ fn commandShapeStats(commands: []const command_plan.Command) CommandShapeStats {
         } else stats.explicit += 1;
         if (symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
-    for (commands, 0..) |command, index| {
+    const distance_counts = try allocator.alloc(u16, lz77.max_window_len + 1);
+    defer allocator.free(distance_counts);
+    @memset(distance_counts, 0);
+    for (commands) |command| {
         if (!command.has_copy or command.dictionary_output_len != 0) continue;
-        var already_counted = false;
-        for (commands[0..index]) |prior| {
-            if (prior.has_copy and prior.dictionary_output_len == 0 and prior.distance == command.distance) {
-                already_counted = true;
-                break;
-            }
-        }
-        if (already_counted) continue;
-        var count: usize = 0;
-        for (commands[index..]) |candidate|
-            count += @intFromBool(candidate.has_copy and candidate.dictionary_output_len == 0 and candidate.distance == command.distance);
+        if (command.distance > lz77.max_window_len) return error.InvalidBlockPlan;
+        distance_counts[command.distance] += 1;
+    }
+    for (distance_counts, 0..) |count, distance| {
+        if (count == 0) continue;
         var slot: usize = 0;
         while (slot < stats.top_distance_counts.len and count <= stats.top_distance_counts[slot]) : (slot += 1) {}
         if (slot == stats.top_distance_counts.len) continue;
@@ -3507,7 +3504,7 @@ fn commandShapeStats(commands: []const command_plan.Command) CommandShapeStats {
             stats.top_distances[move] = stats.top_distances[move - 1];
         }
         stats.top_distance_counts[slot] = count;
-        stats.top_distances[slot] = command.distance;
+        stats.top_distances[slot] = distance;
     }
     return stats;
 }

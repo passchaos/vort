@@ -2114,6 +2114,19 @@ near-tie preferences with zero through four proxy bits of slack. The missing
 choices are therefore not equivalent-distance ties available after the current
 DP; they require carrying distance history through path selection.
 
+A width-two forward beam that tracked only the newest distance confirmed that
+stateful conclusion without restoring the rejected full q8 parser. It reused
+the same three-byte hash index, 256-hop chain, and bounded 16 ordinary matches
+per position, plus direct probes for `rep0` and the record width. On
+`records_q8` it reduced the exact wire to 2,630 bytes and raised code-zero hits
+to 1,587, but emitted 1,794 commands and made distance 896 more frequent than
+distance 128. The 480-row family audit improved 465 cases, rejected 14 losing
+proposals, and found zero arbitration hazards. It was still removed: five
+fixed-CPU-2 target pairs measured only `0.9149x` median throughput versus the
+retained 3,442-byte parser. The next stateful design must constrain command
+growth or run as a selectively admitted second pass; merely adding beam states
+trades too much encode speed for the ratio gain.
+
 An upstream-inspired q8 parser was evaluated but not retained. The prototype
 used four-byte hashes, Brotli length/distance scoring, ten recent-distance
 probes, four delayed literals, and a bounded 16-hop predecessor chain. Exact

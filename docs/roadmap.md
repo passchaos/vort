@@ -13547,3 +13547,9 @@ reuse, so production keeps the simpler independently owned plans.
   bit row-distance near-tie preferences were all wire-neutral at 3,442 bytes,
   confirming that the remaining gain requires path-level history state rather
   than a local tie-break.
+  A width-two forward beam tracking only the newest distance then reached
+  2,630 bytes and improved 465 of 480 fixed-record variants with zero
+  arbitration hazards, but emitted 1,794 commands, shifted the dominant
+  distance from 128 to 896, and measured only `0.9149x` median throughput over
+  five fixed-CPU-2 target pairs. The prototype was removed. Any next beam must
+  explicitly limit command growth or be admitted as a selective second pass.
