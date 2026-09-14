@@ -2039,6 +2039,34 @@ up to 1,754 commands; at full budget it converged back to the four-byte shape.
 The probe was removed. The next useful experiment is therefore an explicit
 Brotli command-fragmentation cost in the DP, not a lower minimum-match length.
 
+Follow-up cost-model experiments refined that conclusion. Charging every match
+a fixed 1...12-bit command tax left the `records_q8` path unchanged; 16...32
+bits removed only one command and enlarged the proposal from 3,504 to 3,507
+bytes, while larger penalties degraded rapidly. Matching the lazy candidate's
+`NDIRECT=15` layout improved the internal proposal to 3,491 bytes, but exact
+public arbitration did not improve 4/16/32 KiB source inputs and a two-layout
+wire trial missed the throughput floor (roughly 0.79x/0.92x/0.95x in the
+screening runs). Both variants were removed.
+
+Literal cost was the effective missing variable. Replacing the fixed 8/9-bit
+literal proxy with a uniform seven-bit alphabet-width proxy changed the record
+distance choices, raised recent-distance/code-zero hits from 413/284 to
+464/308, and reduced the exact wire from 3,459 to 3,442 bytes. A six-bit proxy
+reached 3,387 bytes and a four-bit proxy reached 3,362 bytes, demonstrating that
+the previous command fragmentation was partly a consequence of overpricing
+printable-record literals. Unconditionally enabling alphabet-width costs was
+not safe: a 12-row 64 KiB Silesia audit improved `nci`/`xml` by 50/29 bytes but
+enlarged five rows, including Dickens by 57 bytes and Samba by 54 bytes. A
+strict fixed-width-record classifier restored all 12 Silesia rows bit-exact and
+kept the 3,442-byte target, but every attempted integration changed shared
+optimal-parser or ratio hot-code layout: the best complete 12-row fixed-CPU-2
+control matrix still had a 0.9802 row-median floor, and copied/noinline/text-
+section variants produced isolated `nci` medians as low as about 0.82...0.97.
+All production code was removed. The next implementation should place the
+record-aware literal-cost parser in an independent module or compilation
+boundary, preserving the generic optimal loop's machine-code layout, then
+repeat the exact-size and fixed-CPU controls before retention.
+
 An upstream-inspired q8 parser was evaluated but not retained. The prototype
 used four-byte hashes, Brotli length/distance scoring, ten recent-distance
 probes, four delayed literals, and a bounded 16-hop predecessor chain. Exact

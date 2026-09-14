@@ -13505,3 +13505,20 @@ reuse, so production keeps the simpler independently owned plans.
   wrapper, compile-time, and text-section isolation layouts failed to make the
   complete matrix neutral, so production code was removed and only the
   reproducible workload/profile evidence remains.
+  Follow-up cost-model probes showed that a fixed per-command tax is not the
+  missing variable: 1...12 bits did not change the record path, 16...32 bits
+  removed one command but enlarged the proposal to 3,507 bytes, and larger
+  penalties degraded sharply. `NDIRECT=15` reduced the internal proposal to
+  3,491 bytes but gave no public source-size win and a dual-layout wire trial
+  missed the throughput floor. An alphabet-width literal proxy was materially
+  better: seven-bit printable-record literals changed recent/code-zero hits
+  from 413/284 to 464/308 and reduced `records_q8` from 3,459 to 3,442 bytes
+  (six/four-bit diagnostic constants reached 3,387/3,362 bytes). It cannot be
+  enabled globally: a 12-row 64 KiB Silesia audit enlarged five rows, with
+  Dickens +57 bytes and Samba +54 bytes. A strict fixed-width ASCII-record gate
+  restored those 12 rows bit-exact, but shared-loop and isolated/copied parser
+  integration layouts still missed the 0.99 control floor (best full-matrix
+  row median 0.9802; isolated `nci` probes about 0.82...0.97). Those prototypes
+  were removed. Continue with an independently compiled record-aware parser so
+  the generic optimal hot loop remains machine-code stable, then require exact
+  wire arbitration and the full fixed-CPU control matrix before retention.
