@@ -13061,3 +13061,11 @@ reuse, so production keeps the simpler independently owned plans.
   level-1 single-beam audit changes by four bytes in aggregate (`649,782` to
   `649,786`, about `0.0006%`) while its bounded/deep-parser equivalence remains
   exact; that golden total now records the deliberate fastest-policy change.
+  Relaxing the fastest wide double-fast direct-return threshold beyond the
+  retained `4/15` ratio was rejected by a 16-file real-data size screen before
+  timing. At `3/10`, the 128 KiB Silesia `mr` prefix grew from 32,676 to 37,918
+  bytes (`+16.04%`) and became 1.088 times libzstd 1.5.5's 34,863-byte result.
+  At `5/16`, Ghostty `Terminal.zig` and README additionally grew by 24.55% and
+  22.02%, both exceeding libzstd; `1/3` also grew the roadmap prefix by 26.16%
+  to 1.111 times libzstd. The existing `4/15` gate is therefore a real quality
+  boundary rather than an arbitrary conservative constant.
