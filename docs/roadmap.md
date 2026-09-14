@@ -13199,3 +13199,11 @@ reuse, so production keeps the simpler independently owned plans.
   rose to `1.0352x`/`1.0155x`, confirming a mixed layout effect rather than a
   safe aggregate win. Keep the current two-pass initialization until the builder
   can be compared in an isolated text layout.
+  Moving the unchanged large-table FSE builder into its own object-format text
+  section was tested as that isolation boundary and rejected. It preserved the
+  1,760-byte builder and every decoded checksum, but moving the function itself
+  also shifted the downstream all-FSE/Huffman helper. Twenty-one fixed-CPU-2
+  five-row pairs put `large_json` at `0.9857x` with 4/21 wins, below the control
+  floor; `huffman80k` was neutral at `1.0016x` and `binary_mixed` rose to
+  `1.0264x`. Section isolation therefore cannot be assumed neutral in this
+  executable and was removed.
