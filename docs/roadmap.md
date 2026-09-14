@@ -13424,3 +13424,12 @@ reuse, so production keeps the simpler independently owned plans.
   geometrically and reduced JSON level 3 to `0.9818x`. Section isolation is
   therefore not neutral enough to rescue the otherwise fast inverse builder;
   both placement changes were removed.
+  Reusing already validated canonical codes to score dynamic >512-sequence
+  compressed tables was rejected despite another consistent target win. A
+  default/non-default repcode oracle matched the stateful LL/OF/ML scorer's
+  table bytes and total bit counts, and all twelve double-fast/greedy/optimal
+  source stage rows improved with a `1.0661x` geometric mean and `1.0268x`
+  floor. The inline production form narrowly missed the control floor
+  (`0.9991x` geometric mean, text level 22 `0.9890x`); placing the helper
+  in the wide section was worse at `0.9960x` with a `0.9873x` floor. Both
+  were removed; large-table scoring keeps the authoritative stateful pass.
