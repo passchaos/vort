@@ -2086,6 +2086,34 @@ control stayed byte-for-byte identical; its fixed-CPU-2 row-median floor was
 remain on the generic parser so the specialized object's fixed 32 KiB history
 cannot violate advertised window limits.
 
+A follow-up `run-br-record-optimal-shape-gate` separates lazy, generic optimal,
+and record-optimal command structure without changing production selection. On
+`records_q8`, generic and record optimal both emit 1,293 commands, so the
+3,504-to-3,442-byte improvement is not a command-count reduction. Instead, the
+record plan converts 51 explicit distances into recent-distance symbols
+(880 to 829 explicit, 413 to 464 recent), including 24 additional code-zero
+uses (284 to 308). Distance 128, exactly one record width, rises from 461 to
+514 matches and dominates all other distances; lazy uses it 394 times. The
+insert/copy code histograms and top-eight distance/count pairs are now gated
+alongside token coverage and recent/explicit conservation identities.
+
+This evidence motivated a bounded row-distance cost sweep inside an isolated
+worktree. Charging distance 128 as 1 bit produced a 2,779-byte wire, and a
+2-bit proxy produced 3,110 bytes, seven bytes smaller than libbrotli 1.1.0 q8's
+3,117-byte output on this workload. Costs 3...9 emitted 3,320/3,340/3,347/
+3,349/3,361/3,368/3,387 bytes. None was retained: fixed-CPU-2 three-pair
+screening stayed around 0.94...0.96x of the 3,442-byte baseline because the
+cheap row distance caused a command-count phase change. A length-16 eligibility
+threshold saved only four bytes (3,438) and fell to about 0.87x. The next model
+must therefore represent recent-distance reuse without making every row-width
+match locally cheap; a bounded stateful beam or a two-pass cost refinement is
+more promising than another scalar distance discount.
+Rewriting an already chosen match to the row distance when the copied bytes
+were identical was wire-neutral at 3,442 bytes, as were row-distance tie and
+near-tie preferences with zero through four proxy bits of slack. The missing
+choices are therefore not equivalent-distance ties available after the current
+DP; they require carrying distance history through path selection.
+
 An upstream-inspired q8 parser was evaluated but not retained. The prototype
 used four-byte hashes, Brotli length/distance scoring, ten recent-distance
 probes, four delayed literals, and a bounded 16-hop predecessor chain. Exact

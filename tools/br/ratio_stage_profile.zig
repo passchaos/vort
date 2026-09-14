@@ -121,16 +121,33 @@ fn writeCase(init: std.process.Init, reference: libbrotli.Runtime, writer: *std.
 
 fn expectSameShape(expected: vort.BrotliRatioEncodeProfile, actual: vort.BrotliRatioEncodeProfile) !void {
     inline for (.{
-        "input_bytes",                  "lazy_token_count",               "lazy_literal_count",           "lazy_match_count",               "lazy_matched_bytes",
-        "lazy_fixed_bits",              "lazy_command_count",             "lazy_recent_distance_count",   "lazy_last_distance_count",       "lazy_bytes",
-        "optimal_attempted",            "optimal_token_count",            "optimal_match_count",          "optimal_command_count",          "optimal_bytes",
-        "optimal_literal_count",        "optimal_matched_bytes",          "optimal_fixed_bits",           "optimal_recent_distance_count",  "optimal_last_distance_count",
-        "optimal_selected",             "record_optimal_attempted",       "record_optimal_selected",      "record_optimal_bytes",           "record_optimal_token_count",
-        "record_optimal_literal_count", "record_optimal_match_count",     "record_optimal_matched_bytes", "stored_bytes",                   "selected_bytes",
-        "optimal_index_bytes",          "optimal_positions",              "optimal_chain_nodes",          "optimal_prefix_rejections",      "optimal_bound_rejections",
-        "optimal_match_length_calls",   "optimal_valid_match_candidates", "optimal_length_choices_built", "optimal_candidate_budget_stops",
+        "input_bytes",                    "lazy_token_count",                "lazy_literal_count",                   "lazy_match_count",                   "lazy_matched_bytes",
+        "lazy_fixed_bits",                "lazy_command_count",              "lazy_recent_distance_count",           "lazy_last_distance_count",           "lazy_explicit_distance_count",
+        "lazy_bytes",                     "optimal_attempted",               "optimal_token_count",                  "optimal_match_count",                "optimal_command_count",
+        "optimal_bytes",                  "optimal_literal_count",           "optimal_matched_bytes",                "optimal_fixed_bits",                 "optimal_recent_distance_count",
+        "optimal_last_distance_count",    "optimal_explicit_distance_count", "optimal_selected",                     "record_optimal_attempted",           "record_optimal_selected",
+        "record_optimal_bytes",           "record_optimal_token_count",      "record_optimal_literal_count",         "record_optimal_match_count",         "record_optimal_matched_bytes",
+        "record_optimal_fixed_bits",      "record_optimal_command_count",    "record_optimal_recent_distance_count", "record_optimal_last_distance_count", "record_optimal_explicit_distance_count",
+        "stored_bytes",                   "selected_bytes",                  "optimal_index_bytes",                  "optimal_positions",                  "optimal_chain_nodes",
+        "optimal_prefix_rejections",      "optimal_bound_rejections",        "optimal_match_length_calls",           "optimal_valid_match_candidates",     "optimal_length_choices_built",
+        "optimal_candidate_budget_stops",
     }) |field| if (@field(expected, field) != @field(actual, field)) return error.ProfileShapeMismatch;
     if (!std.mem.eql(usize, &expected.optimal_prefix_mismatch_histogram, &actual.optimal_prefix_mismatch_histogram) or
+        !std.mem.eql(usize, &expected.lazy_insert_code_histogram, &actual.lazy_insert_code_histogram) or
+        !std.mem.eql(usize, &expected.lazy_copy_code_histogram, &actual.lazy_copy_code_histogram) or
+        !std.mem.eql(usize, &expected.lazy_recent_symbol_histogram, &actual.lazy_recent_symbol_histogram) or
+        !std.mem.eql(usize, &expected.optimal_insert_code_histogram, &actual.optimal_insert_code_histogram) or
+        !std.mem.eql(usize, &expected.optimal_copy_code_histogram, &actual.optimal_copy_code_histogram) or
+        !std.mem.eql(usize, &expected.optimal_recent_symbol_histogram, &actual.optimal_recent_symbol_histogram) or
+        !std.mem.eql(usize, &expected.record_optimal_insert_code_histogram, &actual.record_optimal_insert_code_histogram) or
+        !std.mem.eql(usize, &expected.record_optimal_copy_code_histogram, &actual.record_optimal_copy_code_histogram) or
+        !std.mem.eql(usize, &expected.record_optimal_recent_symbol_histogram, &actual.record_optimal_recent_symbol_histogram) or
+        !std.mem.eql(usize, &expected.lazy_top_distances, &actual.lazy_top_distances) or
+        !std.mem.eql(usize, &expected.lazy_top_distance_counts, &actual.lazy_top_distance_counts) or
+        !std.mem.eql(usize, &expected.optimal_top_distances, &actual.optimal_top_distances) or
+        !std.mem.eql(usize, &expected.optimal_top_distance_counts, &actual.optimal_top_distance_counts) or
+        !std.mem.eql(usize, &expected.record_optimal_top_distances, &actual.record_optimal_top_distances) or
+        !std.mem.eql(usize, &expected.record_optimal_top_distance_counts, &actual.record_optimal_top_distance_counts) or
         !std.mem.eql(usize, &expected.optimal_bound_length_histogram, &actual.optimal_bound_length_histogram) or
         !std.mem.eql(usize, &expected.optimal_bound_distance_cost_histogram, &actual.optimal_bound_distance_cost_histogram) or
         !std.mem.eql(usize, &expected.optimal_bound_slack_histogram, &actual.optimal_bound_slack_histogram) or

@@ -2122,9 +2122,15 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
     defer lazy_commands.deinit(allocator);
     profile.lazy_command_ns = elapsedNs(stage_start, io);
     profile.lazy_command_count = lazy_commands.commands.len;
-    const lazy_recent = recentDistanceStats(lazy_commands.commands);
-    profile.lazy_recent_distance_count = lazy_recent.recent;
-    profile.lazy_last_distance_count = lazy_recent.last;
+    const lazy_shape = commandShapeStats(lazy_commands.commands);
+    profile.lazy_recent_distance_count = lazy_shape.recent;
+    profile.lazy_last_distance_count = lazy_shape.last;
+    profile.lazy_explicit_distance_count = lazy_shape.explicit;
+    profile.lazy_insert_code_histogram = lazy_shape.insert_codes;
+    profile.lazy_copy_code_histogram = lazy_shape.copy_codes;
+    profile.lazy_recent_symbol_histogram = lazy_shape.recent_symbols;
+    profile.lazy_top_distances = lazy_shape.top_distances;
+    profile.lazy_top_distance_counts = lazy_shape.top_distance_counts;
 
     var wire_stats: encoder_stats.PlannedEncodeStats = .{};
     stage_start = std.Io.Clock.awake.now(io);
@@ -2180,9 +2186,15 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
         defer optimal_commands.deinit(allocator);
         profile.optimal_command_ns = elapsedNs(stage_start, io);
         profile.optimal_command_count = optimal_commands.commands.len;
-        const optimal_recent = recentDistanceStats(optimal_commands.commands);
-        profile.optimal_recent_distance_count = optimal_recent.recent;
-        profile.optimal_last_distance_count = optimal_recent.last;
+        const optimal_shape = commandShapeStats(optimal_commands.commands);
+        profile.optimal_recent_distance_count = optimal_shape.recent;
+        profile.optimal_last_distance_count = optimal_shape.last;
+        profile.optimal_explicit_distance_count = optimal_shape.explicit;
+        profile.optimal_insert_code_histogram = optimal_shape.insert_codes;
+        profile.optimal_copy_code_histogram = optimal_shape.copy_codes;
+        profile.optimal_recent_symbol_histogram = optimal_shape.recent_symbols;
+        profile.optimal_top_distances = optimal_shape.top_distances;
+        profile.optimal_top_distance_counts = optimal_shape.top_distance_counts;
 
         stage_start = std.Io.Clock.awake.now(io);
         const optimal_candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, optimal_commands.commands, null, &wire_stats, .{
@@ -2203,19 +2215,39 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
     if (vortBrStableFixedWidthRecord(input.ptr, input.len) != 0) {
         profile.record_optimal_attempted = true;
         stage_start = std.Io.Clock.awake.now(io);
-        const record = (try encodeRecordOptimalCandidateWithOptionsAlloc(allocator, input, default_window_bits, "", &wire_stats)) orelse return error.InvalidBlockPlan;
+        const record_plan = (try recordOptimalPlanAlloc(allocator, input)) orelse return error.InvalidBlockPlan;
+        defer record_plan.deinit(allocator);
+        const record_commands = try command_plan.buildAlloc(allocator, input, record_plan.tokens);
+        defer record_commands.deinit(allocator);
+        const record_shape = commandShapeStats(record_commands.commands);
+        const record = try encodeCommandPlanWithOptionsAlloc(allocator, input, record_commands.commands, null, &wire_stats, .{
+            .use_recent_distances = true,
+            .use_utf8_text_contexts = true,
+            .utf8_context_cutoff = 48,
+            .ndirect = 0,
+        });
         profile.record_optimal_ns = elapsedNs(stage_start, io);
-        profile.record_optimal_bytes = record.encoded.len;
-        profile.record_optimal_token_count = record.token_count;
-        profile.record_optimal_literal_count = record.literal_count;
-        profile.record_optimal_match_count = record.match_count;
-        profile.record_optimal_matched_bytes = record.matched_bytes;
-        if (record.encoded.len < selected.len) {
+        profile.record_optimal_bytes = record.len;
+        profile.record_optimal_token_count = record_plan.tokens.len;
+        profile.record_optimal_literal_count = record_plan.stats.literals;
+        profile.record_optimal_match_count = record_plan.stats.matches;
+        profile.record_optimal_matched_bytes = record_plan.stats.matched_bytes;
+        profile.record_optimal_command_count = record_commands.commands.len;
+        profile.record_optimal_fixed_bits = lz77.fixedBitCost(record_plan.tokens);
+        profile.record_optimal_recent_distance_count = record_shape.recent;
+        profile.record_optimal_last_distance_count = record_shape.last;
+        profile.record_optimal_explicit_distance_count = record_shape.explicit;
+        profile.record_optimal_insert_code_histogram = record_shape.insert_codes;
+        profile.record_optimal_copy_code_histogram = record_shape.copy_codes;
+        profile.record_optimal_recent_symbol_histogram = record_shape.recent_symbols;
+        profile.record_optimal_top_distances = record_shape.top_distances;
+        profile.record_optimal_top_distance_counts = record_shape.top_distance_counts;
+        if (record.len < selected.len) {
             allocator.free(selected);
-            selected = record.encoded;
+            selected = record;
             profile.record_optimal_selected = true;
             profile.optimal_selected = false;
-        } else allocator.free(record.encoded);
+        } else allocator.free(record);
     }
 
     stage_start = std.Io.Clock.awake.now(io);
@@ -2396,39 +2428,26 @@ fn recordOptimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8) Error
 
 fn selectRecordOptimalRatioCandidate(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
     const record = (try encodeRecordOptimalCandidateWithOptionsAlloc(allocator, input, window_bits, metadata, stats)) orelse return;
-    if (record.encoded.len < baseline.*.len) {
+    if (record.len < baseline.*.len) {
         allocator.free(baseline.*);
-        baseline.* = record.encoded;
-    } else allocator.free(record.encoded);
+        baseline.* = record;
+    } else allocator.free(record);
 }
 
-const RecordOptimalCandidate = struct {
-    encoded: []u8,
-    token_count: usize,
-    literal_count: usize,
-    match_count: usize,
-    matched_bytes: usize,
-};
-
-fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8, stats: *encoder_stats.PlannedEncodeStats) Error!?RecordOptimalCandidate {
+fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8, stats: *encoder_stats.PlannedEncodeStats) Error!?[]u8 {
     const plan = (try recordOptimalPlanAlloc(allocator, input)) orelse return null;
     defer plan.deinit(allocator);
     const commands = try command_plan.buildAlloc(allocator, input, plan.tokens);
     defer commands.deinit(allocator);
-    return .{
-        .encoded = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands.commands, null, stats, .{
-            .use_recent_distances = true,
-            .use_utf8_text_contexts = true,
-            .utf8_context_cutoff = 48,
-            .ndirect = 0,
-            .window_bits = window_bits,
-            .metadata = metadata,
-        }),
-        .token_count = plan.tokens.len,
-        .literal_count = plan.stats.literals,
-        .match_count = plan.stats.matches,
-        .matched_bytes = plan.stats.matched_bytes,
-    };
+    const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands.commands, null, stats, .{
+        .use_recent_distances = true,
+        .use_utf8_text_contexts = true,
+        .utf8_context_cutoff = 48,
+        .ndirect = 0,
+        .window_bits = window_bits,
+        .metadata = metadata,
+    });
+    return encoded;
 }
 
 fn chooseStoredIfSmaller(allocator: std.mem.Allocator, input: []const u8, compressed: []u8) Error![]u8 {
@@ -3437,7 +3456,61 @@ fn countReusableRecentDistances(commands: []const command_plan.Command) usize {
     return count;
 }
 
+const CommandShapeStats = struct {
+    recent: usize = 0,
+    last: usize = 0,
+    explicit: usize = 0,
+    insert_codes: [24]usize = @splat(0),
+    copy_codes: [24]usize = @splat(0),
+    recent_symbols: [16]usize = @splat(0),
+    top_distances: [8]usize = @splat(0),
+    top_distance_counts: [8]usize = @splat(0),
+};
 const RecentDistanceStats = struct { recent: usize = 0, last: usize = 0 };
+
+fn commandShapeStats(commands: []const command_plan.Command) CommandShapeStats {
+    var last_distances = initial_last_distances;
+    var stats: CommandShapeStats = .{};
+    for (commands) |command| {
+        const insert_code = lengthCodeForValue(command.insert_len, true) orelse continue;
+        const copy_code = lengthCodeForValue(command.copy_len, false) orelse continue;
+        stats.insert_codes[insert_code] += 1;
+        stats.copy_codes[copy_code] += 1;
+        if (!command.has_copy or command.dictionary_output_len != 0) continue;
+        const symbol = recentDistanceSymbol(command.distance, &last_distances);
+        if (symbol) |recent| {
+            stats.recent += 1;
+            stats.last += @intFromBool(recent == 0);
+            stats.recent_symbols[recent] += 1;
+        } else stats.explicit += 1;
+        if (symbol != 0) pushLastDistance(&last_distances, command.distance);
+    }
+    for (commands, 0..) |command, index| {
+        if (!command.has_copy or command.dictionary_output_len != 0) continue;
+        var already_counted = false;
+        for (commands[0..index]) |prior| {
+            if (prior.has_copy and prior.dictionary_output_len == 0 and prior.distance == command.distance) {
+                already_counted = true;
+                break;
+            }
+        }
+        if (already_counted) continue;
+        var count: usize = 0;
+        for (commands[index..]) |candidate|
+            count += @intFromBool(candidate.has_copy and candidate.dictionary_output_len == 0 and candidate.distance == command.distance);
+        var slot: usize = 0;
+        while (slot < stats.top_distance_counts.len and count <= stats.top_distance_counts[slot]) : (slot += 1) {}
+        if (slot == stats.top_distance_counts.len) continue;
+        var move = stats.top_distance_counts.len - 1;
+        while (move > slot) : (move -= 1) {
+            stats.top_distance_counts[move] = stats.top_distance_counts[move - 1];
+            stats.top_distances[move] = stats.top_distances[move - 1];
+        }
+        stats.top_distance_counts[slot] = count;
+        stats.top_distances[slot] = command.distance;
+    }
+    return stats;
+}
 
 fn recentDistanceStats(commands: []const command_plan.Command) RecentDistanceStats {
     var last_distances = initial_last_distances;

@@ -13531,3 +13531,19 @@ reuse, so production keeps the simpler independently owned plans.
   optimal lost a smaller wire. All Vort/libbrotli round trips passed. The 12-row
   64 KiB Silesia control remained byte-exact with a `1.0051x` row-median floor
   and `1.0143x` matrix geomean.
+  Added a dedicated record-plan shape gate. Record and generic optimal both
+  emit 1,293 commands on `records_q8`; the 62-byte proposal win comes from
+  distance-history rearrangement instead: explicit distances fall 880 -> 829,
+  recent hits rise 413 -> 464, code-zero rises 284 -> 308, and distance 128
+  appears 514 versus 461 times. An isolated row-distance cost sweep demonstrated
+  substantial remaining ratio headroom: costs 1...9 produced 2,779/3,110/
+  3,320/3,340/3,347/3,349/3,361/3,368/3,387 bytes, with cost 2 beating
+  libbrotli q8 by seven bytes on this single fixture. All variants were removed
+  because fixed-CPU-2 target screening stayed around 0.94...0.96x; a length-16
+  gate saved only four bytes and measured about 0.87x. Do not repeat scalar
+  row-distance discounts. Continue with bounded distance-history state or
+  two-pass command-cost refinement while preserving the isolated object ABI.
+  Post-parse replacement with an equivalent row-distance copy and zero-to-four
+  bit row-distance near-tie preferences were all wire-neutral at 3,442 bytes,
+  confirming that the remaining gain requires path-level history state rather
+  than a local tie-break.
