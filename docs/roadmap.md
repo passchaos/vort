@@ -13523,8 +13523,8 @@ reuse, so production keeps the simpler independently owned plans.
   independently compiled Zig object with caller-owned scratch and token
   buffers, leaving the generic LZ77 hot loop unchanged. A strict 4...64 KiB
   fixed-width printable-record classifier gates the path; explicit non-default
-  Brotli windows stay generic. Production `records_q8` is now 3,442 bytes
-  (`-17`, `-0.49%`) and fixed-CPU-2 independent-binary A/B measured `1.0372x`
+  Brotli windows stay generic. This first stage moved `records_q8` to 3,442
+  bytes (`-17`, `-0.49%`) and fixed-CPU-2 independent-binary A/B measured `1.0372x`
   median throughput (11/11 wins, about 4.12 versus 3.97 MiB/s). A 480-case
   record family audit improved 134 cases, rejected 301 losing record proposals
   through exact-wire arbitration, and found zero cases where skipping generic
@@ -13560,6 +13560,17 @@ reuse, so production keeps the simpler independently owned plans.
   pairs. Penalizing only non-row distances retained 3,347 bytes and fell to
   `0.8525x`. Both were removed; avoid adding scalar branches to the object
   search loop without a separately proven hot-kernel design.
+  Retained a sparse, allocation-free `rep0` refinement after the record DP: it
+  keeps all 2,630 token / 1,293 command boundaries fixed and substitutes the
+  current last distance only when it reproduces the full copy. On `records_q8`
+  recent/code-zero hits rise 464/308 -> 542/504, explicit distances fall
+  829 -> 751, and production shrinks 3,442 -> 3,209 bytes (`-6.77%`, only
+  2.95% above libbrotli q8). Eleven fixed-CPU-2 pairs measured `1.0096x` median
+  throughput (4.14 versus 4.12 MiB/s) with 10/11 wins. The 480-case audit improved 448 cases, rejected
+  28 losing proposals, and found zero hazards; the 12-row Silesia control was
+  byte-exact with a `0.9919x` row-median floor and `1.0016x` geomean. Future
+  distance-only refinements may test older cache slots only with a hot-path
+  design that avoids multiple full-copy validations per match.
   A width-two beam with one shared ordinary match per position still reached
   2,648 bytes and improved 465/480 record variants with zero hazards, but the
   full-position/state walk measured only `0.6025x` over five fixed-CPU-2 target

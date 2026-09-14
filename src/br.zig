@@ -24,6 +24,7 @@ const distance_block_split = @import("br/encoder/distance_block_split.zig");
 const record_optimal_abi = @import("br/encoder/record_optimal_abi.zig");
 extern fn vortBrStableFixedWidthRecord(input: [*]const u8, input_len: usize) callconv(.c) u8;
 extern fn vortBrRecordOptimalPlan(input: [*]const u8, input_len: usize, head: [*]u32, head_initialized: [*]u64, prev: [*]u32, costs: [*]u32, steps: [*]u32, tokens: [*]record_optimal_abi.Token, stats: *record_optimal_abi.Stats) callconv(.c) u8;
+extern fn vortBrRefineRecordDistances(input: [*]const u8, input_len: usize, tokens: [*]record_optimal_abi.Token, token_count: usize) callconv(.c) u8;
 const header_profile = @import("br/header_profile.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
@@ -2406,6 +2407,7 @@ fn recordOptimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8) Error
     defer allocator.free(abi_tokens);
     var abi_stats: record_optimal_abi.Stats = .{};
     if (vortBrRecordOptimalPlan(input.ptr, input.len, head.ptr, head_initialized.ptr, prev.ptr, costs.ptr, steps.ptr, abi_tokens.ptr, &abi_stats) == 0) return null;
+    if (vortBrRefineRecordDistances(input.ptr, input.len, abi_tokens.ptr, abi_stats.token_count) == 0) return error.InvalidBlockPlan;
     if (abi_stats.token_count > input.len or abi_stats.literal_count + abi_stats.matched_bytes != input.len or abi_stats.literal_count + abi_stats.match_count != abi_stats.token_count) return error.InvalidBlockPlan;
     const tokens = try allocator.alloc(lz77.Token, abi_stats.token_count);
     errdefer allocator.free(tokens);

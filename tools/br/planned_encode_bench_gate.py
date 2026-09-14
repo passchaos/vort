@@ -46,7 +46,7 @@ def main():
     records_q8 = by_case["records_q8"]
     assert int(records_q8["input_bytes"]) == 32 * 1024, records_q8
     assert int(records_q8["quality"]) == 8, records_q8
-    assert int(records_q8["ratio_bytes"]) <= 3442, records_q8
+    assert int(records_q8["ratio_bytes"]) <= 3209, records_q8
     assert int(records_q8["reference_bytes"]) <= int(records_q8["lazy_bytes"]) - 200, records_q8
     print(f"br_planned_encode_bench_gate=ok rows={len(rows)}")
     return 0

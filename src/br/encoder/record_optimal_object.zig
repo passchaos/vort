@@ -109,6 +109,31 @@ export fn vortBrRecordOptimalPlan(
     return 1;
 }
 
+/// Preserve the chosen literal/match boundaries while replacing a copy with
+/// the current last distance when it reproduces the same bytes. This is a
+/// single forward pass with no additional state allocation.
+export fn vortBrRefineRecordDistances(input_ptr: [*]const u8, input_len: usize, tokens_ptr: [*]abi.Token, token_count: usize) callconv(.c) u8 {
+    if (token_count == 0 or token_count > input_len) return 0;
+    const input = input_ptr[0..input_len];
+    const tokens = tokens_ptr[0..token_count];
+    var rep0: u16 = 4;
+    var input_position: usize = 0;
+    for (tokens) |*token| {
+        if (token.kind == 0) {
+            if (input_position >= input_len or token.literal != input[input_position]) return 0;
+            input_position += 1;
+            continue;
+        }
+        if (token.kind != 1 or token.length < 4 or token.distance == 0 or token.distance > input_position or input_position + token.length > input_len) return 0;
+        if (rep0 <= input_position and rep0 <= 32 * 1024 and rep0 != token.distance and matchLength(input, input_position - rep0, input_position, token.length) == token.length)
+            token.distance = rep0
+        else if (token.distance != rep0)
+            rep0 = token.distance;
+        input_position += token.length;
+    }
+    return @intFromBool(input_position == input_len);
+}
+
 fn extendLengthChoices(costs: []const u32, position: usize, built_through: usize, maximum: usize, best_choices: *[abi.max_match_len + 1]u32) void {
     var best_choice = if (built_through >= 4) best_choices[built_through] else std.math.maxInt(u32);
     var length = @max(@as(usize, 4), built_through + 1);
@@ -170,4 +195,37 @@ fn fixedLengthCost(length: usize) usize {
 fn fixedDistanceCost(distance: usize) usize {
     if (distance <= 4) return 5;
     return 4 + std.math.log2_int(usize, distance - 1);
+}
+
+test "rep0 refinement preserves token boundaries" {
+    const input = "abcdabcdabcd";
+    var tokens = [_]abi.Token{
+        .{ .kind = 0, .literal = 'a', .length = 0, .distance = 0 },
+        .{ .kind = 0, .literal = 'b', .length = 0, .distance = 0 },
+        .{ .kind = 0, .literal = 'c', .length = 0, .distance = 0 },
+        .{ .kind = 0, .literal = 'd', .length = 0, .distance = 0 },
+        .{ .kind = 1, .literal = 0, .length = 4, .distance = 4 },
+        .{ .kind = 1, .literal = 0, .length = 4, .distance = 8 },
+    };
+    try std.testing.expectEqual(@as(u8, 1), vortBrRefineRecordDistances(input.ptr, input.len, &tokens, tokens.len));
+    try std.testing.expectEqual(@as(u16, 4), tokens[5].distance);
+    try std.testing.expectEqual(@as(u16, 4), tokens[5].length);
+}
+
+test "rep0 refinement keeps a non-equivalent distance" {
+    const input = "abcdefghabcdefg";
+    var tokens: [9]abi.Token = undefined;
+    for (input[0..8], 0..) |byte, index| tokens[index] = .{ .kind = 0, .literal = byte, .length = 0, .distance = 0 };
+    tokens[8] = .{ .kind = 1, .literal = 0, .length = 7, .distance = 8 };
+    tokens[0].literal = 'a';
+    try std.testing.expectEqual(@as(u8, 1), vortBrRefineRecordDistances(input.ptr, input.len, &tokens, tokens.len));
+    try std.testing.expectEqual(@as(u16, 8), tokens[8].distance);
+}
+
+test "rep0 refinement rejects literal mismatch" {
+    const input = "abcd";
+    var tokens = [_]abi.Token{
+        .{ .kind = 0, .literal = 'x', .length = 0, .distance = 0 },
+    };
+    try std.testing.expectEqual(@as(u8, 0), vortBrRefineRecordDistances(input.ptr, input.len, &tokens, tokens.len));
 }

@@ -2072,9 +2072,9 @@ four-byte prefix guard, a 256-hop chain, and 128 valid candidates, while its
 literal proxy is the uniform bit width of the record byte alphabet. Exact wire
 arbitration against the existing lazy plan remains mandatory.
 
-On `records_q8`, production ratio output is now 3,442 bytes instead of 3,459
-bytes (`-17`, `-0.49%`), versus libbrotli q8 at 3,117 bytes (remaining gap
-10.43%). Fixed-CPU-2 independent-binary A/B over eleven interleaved pairs
+In the first retained stage, `records_q8` ratio output reached 3,442 bytes
+instead of 3,459 bytes (`-17`, `-0.49%`), versus libbrotli q8 at 3,117 bytes.
+Fixed-CPU-2 independent-binary A/B over eleven interleaved pairs
 measured 4.12 versus 3.97 MiB/s at the median (`1.0372x`, 11/11 wins). A
 deterministic 480-row family audit spanning 4/8/16/32/64 KiB, 32/64/128/256-
 byte rows, three mutation densities, and eight seeds improved 134 rows, found
@@ -2138,6 +2138,25 @@ penalizing only other distances preserved the same 3,347-byte shape but fell
 further to `0.8525x`, showing that the extra per-candidate branch/code shape is
 itself expensive. Scalar two-parameter costs are therefore not a production
 substitute for a compact state representation.
+
+The retained follow-up avoids search-time state entirely. After the isolated
+record DP fixes every literal/match boundary, a linear pass tracks only the
+current Brotli last distance. For each existing match, it substitutes `rep0`
+only when that distance reproduces the complete copy; otherwise it keeps the
+original distance and updates `rep0`. No command, literal, or copy length can
+change, and the pass allocates no additional state. On `records_q8`, token and
+command counts remain 2,630 / 1,293, while recent hits rise 464 -> 542, code-zero
+hits rise 308 -> 504, and explicit distances fall 829 -> 751. The exact wire
+shrinks from 3,442 to 3,209 bytes (`-233`, `-6.77%`), leaving only a 2.95% gap
+to libbrotli q8's 3,117 bytes. Fixed-CPU-2 independent-binary A/B over eleven
+interleaved pairs measured 4.14 versus 4.12 MiB/s (`1.0096x` median) with
+10/11 wins. The
+480-row record audit improved 448 cases, rejected 28 losing proposals, and
+found zero arbitration hazards. A 12-row 64 KiB Silesia control remained
+byte-exact with a `0.9919x` row-median floor and `1.0016x` matrix geomean.
+The next distance-only refinement can consider the older three cache slots,
+but must avoid reintroducing per-match multi-candidate validation: the retained
+code-zero pass performs at most one additional full-copy comparison.
 
 A second width-two beam moved the ordinary hash-chain search outside the state
 loop: each position computed one shared longest ordinary match, while each of

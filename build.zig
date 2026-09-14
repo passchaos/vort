@@ -39,6 +39,15 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_br_record_classifier_tests = b.addRunArtifact(br_record_classifier_tests);
+    const br_record_optimal_object_tests = b.addTest(.{
+        .name = "vort-br-record-optimal-object-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/br/encoder/record_optimal_object.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_br_record_optimal_object_tests = b.addRunArtifact(br_record_optimal_object_tests);
     vort_mod.addObject(br_record_optimal_obj);
     vort_mod_releasefast.addObject(br_record_optimal_releasefast_obj);
     const benchmark_provenance_mod = b.createModule(.{
@@ -69,6 +78,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run vort unit tests");
     test_step.dependOn(&run_tests.step);
     test_step.dependOn(&run_br_record_classifier_tests.step);
+    test_step.dependOn(&run_br_record_optimal_object_tests.step);
 
     const cli_exe = b.addExecutable(.{
         .name = "vort",
@@ -4171,6 +4181,7 @@ pub fn build(b: *std.Build) void {
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);
     check_step.dependOn(&br_record_classifier_tests.step);
+    check_step.dependOn(&br_record_optimal_object_tests.step);
     check_step.dependOn(&cli_exe.step);
     check_step.dependOn(&bench_exe.step);
     check_step.dependOn(&deflate_bench_exe.step);
