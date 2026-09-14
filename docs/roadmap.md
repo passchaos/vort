@@ -13449,3 +13449,11 @@ reuse, so production keeps the simpler independently owned plans.
   only `1.0077x` geometrically, and the complete 20-row matrix fell to
   `0.9976x` with multiblock level 3 at `0.9879x`. The five independently
   grown arrays remain because their end-to-end layout is measurably better.
+  Reusing the four-byte optimal parser's existing `Token` backing allocation
+  as a compact `u32` decision table was rejected. Literal and 9-bit-length /
+  15-bit-distance match packing covered all field boundaries, and the 128-shape
+  token/cost audit, OOM recovery, profile identities, and 32-bit compile check
+  passed. The intended write-working-set reduction did not improve the target:
+  fifteen fixed-CPU-2 source-stage pairs reached only `0.9995x` geometrically,
+  with three of four row medians below one. The native tagged `Token` table
+  remains.
