@@ -28,6 +28,45 @@ pub fn writeWithStopIndex(allocator: std.mem.Allocator, writer: anytype, alphabe
         writeWithStorage(704, allocator, writer, lengths, stop_index);
 }
 
+/// Exact number of bits produced by `writeWithStopIndex`, used to compare
+/// alternate code-length plans without encoding the complete Brotli stream.
+pub fn bitCost(allocator: std.mem.Allocator, alphabet_size: usize, lengths: []const u4, stop_index: usize) !usize {
+    const CountingWriter = struct {
+        bits: usize = 0,
+
+        pub fn writeBits(self: *@This(), _: std.mem.Allocator, _: u64, count: u6) !void {
+            self.bits += count;
+        }
+
+        pub fn writeHuffmanBits(self: *@This(), _: std.mem.Allocator, _: u16, count: u4) !void {
+            self.bits += count;
+        }
+    };
+    var writer: CountingWriter = .{};
+    try writeWithStopIndex(allocator, &writer, alphabet_size, lengths, stop_index);
+    return writer.bits;
+}
+
+test "bit cost matches emitted complex prefix" {
+    const CountingWriter = struct {
+        bits: usize = 0,
+        pub fn writeBits(self: *@This(), _: std.mem.Allocator, _: u64, count: u6) !void {
+            self.bits += count;
+        }
+        pub fn writeHuffmanBits(self: *@This(), _: std.mem.Allocator, _: u16, count: u4) !void {
+            self.bits += count;
+        }
+    };
+    var lengths: [256]u4 = @splat(0);
+    lengths['a'] = 2;
+    lengths['b'] = 2;
+    lengths['c'] = 2;
+    lengths['d'] = 2;
+    var writer: CountingWriter = .{};
+    try writeWithStopIndex(std.testing.allocator, &writer, lengths.len, &lengths, 'd' + 1);
+    try std.testing.expectEqual(writer.bits, try bitCost(std.testing.allocator, lengths.len, &lengths, 'd' + 1));
+}
+
 fn writeWithStorage(comptime storage_len: usize, allocator: std.mem.Allocator, writer: anytype, lengths: []const u4, stop_index: usize) !void {
     var rle_storage: [storage_len]code_length_rle.Token = undefined;
     var code_length_freqs: [18]u32 = undefined;

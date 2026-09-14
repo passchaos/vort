@@ -13595,9 +13595,19 @@ reuse, so production keeps the simpler independently owned plans.
   grid has 215 improvements / 265 unchanged / zero regressions, while the new
   grid has 969 / 1,623 / zero. Wire accounting attributes the prior 70-byte
   gap to +110 header, +249 command, +43 length-extra, and +626 distance bits,
-  offset by -463 literal bits. Fixed NDIRECT=4, literal-count RLE smoothing,
-  and a libbrotli-like leading-boundary rewrite were rejected after reaching
-  3,182 / 3,184 / 3,191 bytes respectively without robust enough tradeoffs.
+  offset by -463 literal bits. Fixed NDIRECT=4, unconditional literal-count RLE
+  smoothing, and a libbrotli-like leading-boundary rewrite were rejected after
+  reaching 3,182 / 3,184 / 3,191 bytes respectively without robust enough
+  tradeoffs.
+  Retained a narrower form of upstream Huffman-count smoothing for the one-tree
+  record literal alphabet. It constructs original and smoothed code lengths,
+  selects by exact tree-header plus original-frequency payload bit cost, and
+  emits only the winner instead of performing the previously rejected second
+  full wire encode. `records_q8` moves 3,134 -> 3,132 bytes (15 bytes / 0.48%
+  above libbrotli q8); the 480-row grid has 397 improvements, 83 unchanged, and
+  zero regressions. Eleven fixed-CPU-2 pairs measured `1.0076x` median /
+  `1.0090x` geomean with 11/11 wins, while the Silesia control remained
+  bit-exact with a `0.9972x` floor and `1.0001x` geomean.
   A width-two beam with one shared ordinary match per position still reached
   2,648 bytes and improved 465/480 record variants with zero hazards, but the
   full-position/state walk measured only `0.6025x` over five fixed-CPU-2 target

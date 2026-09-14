@@ -14,6 +14,7 @@ const long_distance = @import("br/encoder/long_distance.zig");
 const short_match_candidates = @import("br/encoder/short_match_candidates.zig");
 const encoder_distance = @import("br/encoder/distance.zig");
 const complex_prefix = @import("br/encoder/complex_prefix.zig");
+const huffman_rle_counts = @import("br/encoder/huffman_rle_counts.zig");
 const code_length_rle = @import("br/encoder/code_length_rle.zig");
 const small_huffman = @import("br/encoder/small_huffman.zig");
 const encoder_stats = @import("br/encoder/stats.zig");
@@ -2226,6 +2227,7 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
             // Fixed-width record literals share one stable alphabet. A second
             // UTF-8 context tree adds more header cost than payload savings.
             .use_utf8_text_contexts = false,
+            .optimize_literal_tree_wire = true,
             .utf8_context_cutoff = 48,
             .ndirect = 0,
         });
@@ -2448,6 +2450,7 @@ fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, in
         // The record classifier already proves a stable field layout; one
         // literal tree is smaller across the audited record family.
         .use_utf8_text_contexts = false,
+        .optimize_literal_tree_wire = true,
         .utf8_context_cutoff = 48,
         .ndirect = 0,
         .window_bits = window_bits,
@@ -2631,6 +2634,7 @@ const CommandPlanEncodeOptions = struct {
     metadata: []const u8 = "",
     write_stream_prefix: bool = true,
     final_meta_block: bool = true,
+    optimize_literal_tree_wire: bool = false,
 };
 const min_recent_distance_candidate_count: usize = 64;
 const planned_command_symbol_cache_capacity: usize = 128;
@@ -3585,7 +3589,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
             }
         } else if (split.third_split != null or split.alternate_two_types or split.reuse_first_for_fourth) return error.InvalidBlockPlan;
     }
-    var literal_frequencies: [256]u32 = undefined;
+    var literal_frequencies: [256]u32 = if (options.optimize_literal_tree_wire) @splat(0) else undefined;
     var literal_seen: [4]u64 = @splat(0);
     var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
     literal_alphabet.len = 0;
@@ -3705,7 +3709,10 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     try writeCompressedMetaBlockHeader(allocator, writer, input.len, options.final_meta_block);
     const distance_alphabet_size = 16 + @as(usize, options.ndirect) + 48;
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const literal_lengths = if (options.literal_split == null) try literal_alphabet.codeLengths(&literal_frequencies) else undefined;
+    const literal_lengths = if (options.literal_split == null)
+        try chooseLiteralTreeLengths(allocator, &literal_frequencies, &literal_alphabet, options.optimize_literal_tree_wire)
+    else
+        undefined;
     const literal_context_lengths = if (options.use_utf8_text_contexts) blk: {
         var lengths: [2][256]u4 = undefined;
         for (&lengths, &literal_context_alphabets, &literal_context_frequencies) |*tree_lengths, *alphabet, *frequencies| tree_lengths.* = try alphabet.codeLengths(frequencies);
@@ -3881,6 +3888,29 @@ fn byteRatioAtMost(numerator: usize, denominator: usize, percent: usize) bool {
 fn allZeroFrequencies(comptime len: usize, frequencies: *const [len]u32) bool {
     for (frequencies) |frequency| if (frequency != 0) return false;
     return true;
+}
+
+fn literalTreeWireBitCost(allocator: std.mem.Allocator, frequencies: *const [256]u32, alphabet: *const command_plan.PrefixAlphabetFor(256), lengths: *const [256]u4) Error!u64 {
+    var payload: u64 = 0;
+    for (frequencies, lengths) |frequency, length| payload += @as(u64, frequency) * length;
+    var highest: usize = 0;
+    for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
+    return payload + try complex_prefix.bitCost(allocator, 256, lengths, highest + 1);
+}
+
+fn chooseLiteralTreeLengths(allocator: std.mem.Allocator, frequencies: *const [256]u32, alphabet: *command_plan.PrefixAlphabetFor(256), optimize_wire: bool) Error![256]u4 {
+    const baseline_lengths = try alphabet.codeLengths(frequencies);
+    if (!optimize_wire or alphabet.len <= 4) return baseline_lengths;
+    var candidate_frequencies = frequencies.*;
+    huffman_rle_counts.optimize(&candidate_frequencies);
+    var candidate_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(256, &candidate_alphabet, &candidate_frequencies);
+    const candidate_lengths = try candidate_alphabet.codeLengths(&candidate_frequencies);
+    const baseline_cost = try literalTreeWireBitCost(allocator, frequencies, alphabet, &baseline_lengths);
+    const candidate_cost = try literalTreeWireBitCost(allocator, frequencies, &candidate_alphabet, &candidate_lengths);
+    if (candidate_cost >= baseline_cost) return baseline_lengths;
+    alphabet.* = candidate_alphabet;
+    return candidate_lengths;
 }
 
 fn commandWireDistance(command: command_plan.Command) usize {
@@ -12268,6 +12298,26 @@ test "br record ratio uses one literal context tree" {
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br record literal tree optimization never raises exact local bit cost" {
+    var state: u32 = 0x243f_6a88;
+    for (0..128) |_| {
+        var frequencies: [256]u32 = @splat(0);
+        for (32..128) |symbol| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            frequencies[symbol] = if (state & 7 == 0) 0 else 1 + (state >> 24);
+        }
+        var alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+        try command_plan.alphabetFromFrequenciesInto(256, &alphabet, &frequencies);
+        const baseline_lengths = try alphabet.codeLengths(&frequencies);
+        const baseline_cost = try literalTreeWireBitCost(std.testing.allocator, &frequencies, &alphabet, &baseline_lengths);
+        const selected_lengths = try chooseLiteralTreeLengths(std.testing.allocator, &frequencies, &alphabet, true);
+        const selected_cost = try literalTreeWireBitCost(std.testing.allocator, &frequencies, &alphabet, &selected_lengths);
+        try std.testing.expect(selected_cost <= baseline_cost);
+        for (frequencies, selected_lengths) |frequency, length|
+            if (frequency != 0) try std.testing.expect(length != 0);
+    }
 }
 
 test "br record optimal object respects advertised small windows" {

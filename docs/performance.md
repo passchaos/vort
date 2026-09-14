@@ -2194,9 +2194,21 @@ Bit-level comparison explains the former 3,187-versus-3,117 gap: Vort spent
 626 more distance bits, partly offset by 463 fewer literal bits. Both streams
 use NPOSTFIX=0/NDIRECT=0 and one block/tree per symbol family. Fixed NDIRECT=4
 was rejected despite reaching 3,182 bytes because it enlarged 23 of 1,152
-independent record variants. Upstream-style literal-count RLE smoothing reached
-only 3,184 bytes, and a local attempt to copy libbrotli's first command boundary
-regressed to 3,191 bytes; neither is retained.
+independent record variants. Unconditionally applying upstream-style
+literal-count RLE smoothing reached only 3,184 bytes, and a local attempt to
+copy libbrotli's first command boundary regressed to 3,191 bytes; neither is
+retained in those forms.
+The smoothing idea becomes viable when it is not a second full-stream
+candidate: record encoding now constructs the original and smoothed literal
+trees together, computes each tree's exact header plus original-frequency
+payload bit cost, and emits only the cheaper one. This trims 3,134 -> 3,132
+bytes, leaving 15 bytes (`0.48%`) over libbrotli q8. The original 480-row grid
+improves in 397 cases and is unchanged in 83, with no regressions. Eleven
+fixed-CPU-2 pairs measured `1.0076x` median / `1.0090x` geomean and 11/11 wins;
+the Silesia control remained bit-exact with a `0.9972x` floor and `1.0001x`
+geomean. This supersedes the rejected whole-stream smoothing experiment: the
+new path performs one bounded 256-symbol decision and never encodes a losing
+candidate stream.
 
 A second width-two beam moved the ordinary hash-chain search outside the state
 loop: each position computed one shared longest ordinary match, while each of
