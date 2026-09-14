@@ -13139,3 +13139,8 @@ reuse, so production keeps the simpler independently owned plans.
   oracle, but twenty-one fixed-CPU-2 five-row pairs reduced `large_json` to
   `0.9379x` and `huffman80k` to `0.9725x`; only `binary_mixed` improved to
   `1.0171x`. The exact 71-byte code shape is retained.
+  A temporary exact 3--31-byte match histogram identified `huffman80k`'s two
+  dominant lengths: 2,575 matches at 23 bytes and 2,574 at eight bytes, out of
+  5,161 total. The extra 29-counter diagnostic changed the formal reference
+  binary's `.text`/`.rodata` layout, so it was removed after collecting the
+  evidence rather than becoming a permanent profiler field.
