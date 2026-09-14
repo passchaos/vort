@@ -13061,6 +13061,11 @@ reuse, so production keeps the simpler independently owned plans.
   level-1 single-beam audit changes by four bytes in aggregate (`649,782` to
   `649,786`, about `0.0006%`) while its bounded/deep-parser equivalence remains
   exact; that golden total now records the deliberate fastest-policy change.
+  A fixed 23-byte non-overlapping copy for the other half of `huffman80k`'s
+  match distribution was rejected. The exact 16+4+2+1-byte kernel preserved
+  the caller-buffer suffix, but twenty-one fixed-CPU-2 five-row pairs improved
+  the target by only `0.9977x` and reduced `large_json` to `0.9846x`. The
+  generic match copier remains for this length.
   Relaxing the fastest wide double-fast direct-return threshold beyond the
   retained `4/15` ratio was rejected by a 16-file real-data size screen before
   timing. At `3/10`, the 128 KiB Silesia `mr` prefix grew from 32,676 to 37,918
