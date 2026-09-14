@@ -13582,9 +13582,9 @@ fn emitLargeSequenceCompressedBlockWithState(
     try scratch.payload.appendSlice(allocator, scratch.literals_prefix.items);
     try emitSequenceCount(allocator, &scratch.payload, sequence_count);
     try scratch.payload.append(allocator, largeSequenceModeByte(plan.plan));
-    try appendLargeSequenceTablePayload(allocator, &scratch.payload, plan.plan.literal);
-    try appendLargeSequenceTablePayload(allocator, &scratch.payload, plan.plan.offset);
-    try appendLargeSequenceTablePayload(allocator, &scratch.payload, plan.plan.match);
+    try appendLargeSequenceTablePayload(allocator, &scratch.payload, &plan.plan.literal);
+    try appendLargeSequenceTablePayload(allocator, &scratch.payload, &plan.plan.offset);
+    try appendLargeSequenceTablePayload(allocator, &scratch.payload, &plan.plan.match);
 
     scratch.sequence_bits.clearRetainingCapacity();
     var writer: ReverseBitstreamWriter = .{};
@@ -13593,7 +13593,7 @@ fn emitLargeSequenceCompressedBlockWithState(
     // their extra-bit values before writing the bitstream in reverse order.
     const offset_extras = scratch.offset_extras.items;
     for (0..sequence_count) |sequence_index| {
-        const offset_symbol = try largeSequenceTableSymbol(plan.plan.offset, .offset, sequence_index);
+        const offset_symbol = try largeSequenceTableSymbol(&plan.plan.offset, .offset, sequence_index);
         offset_extras[sequence_index] = try sequenceOffsetExtraForEncodedOffset(
             offset_symbol,
             literal_lens[sequence_index],
@@ -13604,22 +13604,22 @@ fn emitLargeSequenceCompressedBlockWithState(
     var i = sequence_count;
     while (i > 0) {
         i -= 1;
-        const literal_symbol = try largeSequenceTableSymbol(plan.plan.literal, .literal, i);
-        const offset_symbol = try largeSequenceTableSymbol(plan.plan.offset, .offset, i);
-        const match_symbol = try largeSequenceTableSymbol(plan.plan.match, .match, i);
+        const literal_symbol = try largeSequenceTableSymbol(&plan.plan.literal, .literal, i);
+        const offset_symbol = try largeSequenceTableSymbol(&plan.plan.offset, .offset, i);
+        const match_symbol = try largeSequenceTableSymbol(&plan.plan.match, .match, i);
 
         if (i + 1 < sequence_count) {
-            try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, plan.plan.offset, .offset, i);
-            try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, plan.plan.match, .match, i);
-            try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, plan.plan.literal, .literal, i);
+            try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.offset, .offset, i);
+            try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.match, .match, i);
+            try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.literal, .literal, i);
         }
         try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, literal_lens[i] - literal_symbol.base, literal_symbol.additional_bits);
         try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, match_lens[i] - match_symbol.base, match_symbol.additional_bits);
         try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, offset_extras[i], offset_symbol.additional_bits);
     }
-    try appendLargeInitialSequenceStateBits(&writer, allocator, &scratch.sequence_bits, plan.plan.match, .match);
-    try appendLargeInitialSequenceStateBits(&writer, allocator, &scratch.sequence_bits, plan.plan.offset, .offset);
-    try appendLargeInitialSequenceStateBits(&writer, allocator, &scratch.sequence_bits, plan.plan.literal, .literal);
+    try appendLargeInitialSequenceStateBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.match, .match);
+    try appendLargeInitialSequenceStateBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.offset, .offset);
+    try appendLargeInitialSequenceStateBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.literal, .literal);
     try writer.finish(allocator, &scratch.sequence_bits);
     try scratch.payload.appendSlice(allocator, scratch.sequence_bits.items);
     if (scratch.payload.items.len != plan.payload_len) return error.CorruptFrame;
@@ -16207,17 +16207,17 @@ fn bestLargeSequenceTablePlan(
     var literal_costs: [4]?SequenceTableBitCost = @splat(null);
     var offset_costs: [4]?SequenceTableBitCost = @splat(null);
     var match_costs: [4]?SequenceTableBitCost = @splat(null);
-    for (literal_alternatives.items[0..literal_alternatives.len], 0..) |plan, i|
+    for (literal_alternatives.items[0..literal_alternatives.len], 0..) |*plan, i|
         literal_costs[i] = try largeSequenceTablePlanBitCost(plan, .literal, literal_lens, literal_lens, offsets, initial_offsets);
-    for (offset_alternatives.items[0..offset_alternatives.len], 0..) |plan, i|
+    for (offset_alternatives.items[0..offset_alternatives.len], 0..) |*plan, i|
         offset_costs[i] = try largeSequenceTablePlanBitCost(plan, .offset, offsets, literal_lens, offsets, initial_offsets);
-    for (match_alternatives.items[0..match_alternatives.len], 0..) |plan, i|
+    for (match_alternatives.items[0..match_alternatives.len], 0..) |*plan, i|
         match_costs[i] = try largeSequenceTablePlanBitCost(plan, .match, match_lens, literal_lens, offsets, initial_offsets);
 
     var best: ?LargeSequenceCombinedPlanCandidate = null;
-    for (literal_alternatives.items[0..literal_alternatives.len], 0..) |literal_plan, literal_i| {
-        for (offset_alternatives.items[0..offset_alternatives.len], 0..) |offset_plan, offset_i| {
-            for (match_alternatives.items[0..match_alternatives.len], 0..) |match_plan, match_i| {
+    for (literal_alternatives.items[0..literal_alternatives.len], 0..) |*literal_plan, literal_i| {
+        for (offset_alternatives.items[0..offset_alternatives.len], 0..) |*offset_plan, offset_i| {
+            for (match_alternatives.items[0..match_alternatives.len], 0..) |*match_plan, match_i| {
                 const literal_cost = literal_costs[literal_i] orelse continue;
                 const offset_cost = offset_costs[offset_i] orelse continue;
                 const match_cost = match_costs[match_i] orelse continue;
@@ -16228,7 +16228,7 @@ fn bestLargeSequenceTablePlan(
                 const bit_count = std.math.add(usize, 1 + literal_cost.bit_count, offset_cost.bit_count + match_cost.bit_count) catch return error.IntegerOverflow;
                 payload_len = std.math.add(usize, payload_len, (bit_count + 7) / 8) catch return error.IntegerOverflow;
                 if (best == null or payload_len < best.?.payload_len) best = .{
-                    .plan = .{ .literal = literal_plan, .offset = offset_plan, .match = match_plan },
+                    .plan = .{ .literal = literal_plan.*, .offset = offset_plan.*, .match = match_plan.* },
                     .payload_len = payload_len,
                 };
             }
@@ -16238,7 +16238,7 @@ fn bestLargeSequenceTablePlan(
 }
 
 fn largeSequenceTablePlanBitCost(
-    plan: LargeSequenceTableEmitPlan,
+    plan: *const LargeSequenceTableEmitPlan,
     kind: SequenceTableKind,
     values: []const usize,
     literal_lens: []const usize,
@@ -16246,7 +16246,7 @@ fn largeSequenceTablePlanBitCost(
     initial_offsets: [3]usize,
 ) Error!?SequenceTableBitCost {
     try validateLargeSequenceTablePlanLen(plan, values.len);
-    var bit_count: usize = switch (plan) {
+    var bit_count: usize = switch (plan.*) {
         .rle => 0,
         .predefined => predefinedInitialStateBits(kind),
         .compressed => |compressed| compressed.accuracy_log,
@@ -16257,7 +16257,7 @@ fn largeSequenceTablePlanBitCost(
         const symbol = try largeSequenceTableSymbol(plan, kind, i);
         if (!try sequenceSymbolAcceptsValue(symbol, kind, value, literal_lens[i], offsets[i], &repeated_offsets)) return null;
         bit_count = std.math.add(usize, bit_count, symbol.additional_bits) catch return error.IntegerOverflow;
-        if (i + 1 < values.len) bit_count = std.math.add(usize, bit_count, switch (plan) {
+        if (i + 1 < values.len) bit_count = std.math.add(usize, bit_count, switch (plan.*) {
             .rle => 0,
             .predefined => symbol.state_bits,
             .compressed => |compressed| compressed.transition_bits[i],
@@ -17706,8 +17706,8 @@ fn appendSequenceTablePayloadBorrowed(allocator: std.mem.Allocator, out: *std.Ar
     }
 }
 
-fn appendLargeSequenceTablePayload(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: LargeSequenceTableEmitPlan) Error!void {
-    switch (plan) {
+fn appendLargeSequenceTablePayload(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: *const LargeSequenceTableEmitPlan) Error!void {
+    switch (plan.*) {
         .rle => |code| try out.append(allocator, code),
         .predefined => {},
         .compressed => |compressed| try out.appendSlice(allocator, compressed.table_payload[0..compressed.table_payload_len]),
@@ -17724,8 +17724,8 @@ fn sequenceTablePayloadLen(plan: SequenceTableEmitPlan) usize {
     };
 }
 
-fn largeSequenceTablePayloadLen(plan: LargeSequenceTableEmitPlan) usize {
-    return switch (plan) {
+fn largeSequenceTablePayloadLen(plan: *const LargeSequenceTableEmitPlan) usize {
+    return switch (plan.*) {
         .rle => 1,
         .predefined => 0,
         .compressed => |compressed| compressed.table_payload_len,
@@ -17733,8 +17733,8 @@ fn largeSequenceTablePayloadLen(plan: LargeSequenceTableEmitPlan) usize {
     };
 }
 
-fn validateLargeSequenceTablePlanLen(plan: LargeSequenceTableEmitPlan, len: usize) Error!void {
-    switch (plan) {
+fn validateLargeSequenceTablePlanLen(plan: *const LargeSequenceTableEmitPlan, len: usize) Error!void {
+    switch (plan.*) {
         .rle => {},
         .predefined => |states| if (states.len != len) return error.CorruptFrame,
         .compressed => |compressed| if (compressed.codes.len != len or
@@ -17746,8 +17746,8 @@ fn validateLargeSequenceTablePlanLen(plan: LargeSequenceTableEmitPlan, len: usiz
     }
 }
 
-fn largeSequenceTableSymbol(plan: LargeSequenceTableEmitPlan, kind: SequenceTableKind, index: usize) Error!SequenceSymbol {
-    return switch (plan) {
+fn largeSequenceTableSymbol(plan: *const LargeSequenceTableEmitPlan, kind: SequenceTableKind, index: usize) Error!SequenceSymbol {
+    return switch (plan.*) {
         .rle => |code| sequenceRleSymbol(kind, code),
         .predefined => |states| blk: {
             if (index >= states.len) return error.CorruptFrame;
@@ -17778,10 +17778,10 @@ fn appendLargeInitialSequenceStateBits(
     writer: *ReverseBitstreamWriter,
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
-    plan: LargeSequenceTableEmitPlan,
+    plan: *const LargeSequenceTableEmitPlan,
     kind: SequenceTableKind,
 ) Error!void {
-    switch (plan) {
+    switch (plan.*) {
         .rle => {},
         .predefined => |states| {
             if (states.len == 0) return error.CorruptFrame;
@@ -17800,11 +17800,11 @@ fn appendLargeSequenceTransitionBits(
     writer: *ReverseBitstreamWriter,
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
-    plan: LargeSequenceTableEmitPlan,
+    plan: *const LargeSequenceTableEmitPlan,
     kind: SequenceTableKind,
     index: usize,
 ) Error!void {
-    switch (plan) {
+    switch (plan.*) {
         .rle => {},
         .predefined => |states| {
             if (index + 1 >= states.len) return error.CorruptFrame;

@@ -13368,3 +13368,21 @@ reuse, so production keeps the simpler independently owned plans.
   full-arbitration frame while slowing encoding to `0.1989x`. The preflight is
   therefore not generally dead above the beam limit; it independently implements
   the documented level-1 speed/ratio policy and remains enabled.
+  Large sequence-table plans now remain borrowed throughout table scoring and
+  final bitstream emission. The dynamic plan union contains a 64-byte normalized-
+  count payload plus multiple slices; passing it by pointer avoids copying and
+  reopening that tagged value for each of more than 512 symbols and transition
+  fields. Existing compressed-transition scan-reference, 450/499/500/512 borrowed-
+  emitter boundaries, large-table selection, and the 2,044-sequence libzstd probe
+  preserve every state, bit field, and wire byte. Fifteen fixed-CPU-2 stage pairs
+  across double-fast, greedy, and optimal on four 128 KiB source files improve all
+  twelve rows by `1.0429x`--`1.1340x`, a `1.1035x` row-median geometric mean.
+  Twenty-one complete-frame pairs improve the four sources by `1.0717x`
+  geometrically with a `1.0391x` floor; twelve Silesia prefixes improve
+  `1.0755x` geometrically with a `1.0046x` floor and 249/252 pair wins.
+  The 20-row level-1/3/9/22 control matrix keeps all sizes/checksums, reaches
+  `0.9998x` geometrically with a `0.9932x` floor, and the ReleaseFast binary's
+  ordinary `.text` shrinks by 3,072 bytes. The 100-row stage and 20-row
+  libzstd 1.5.5 encode gates, 273-case compatibility probe, five-row decode
+  profile, 9,900-frame decodecorpus gate, 237-case native-frame probe, all
+  1,543 tests, and all 85 compile-check targets pass.

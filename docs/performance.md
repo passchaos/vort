@@ -1991,3 +1991,20 @@ rows with a `1.0376x` floor and 15/15 wins per row. Complete level-1 frames
 improve `1.0396x` geometrically with a `1.0004x` floor; twelve Silesia
 prefixes improve `1.0129x` with a `0.9983x` floor. The 20-row level-1/3/9/22
 control matrix is neutral at `0.9999x` geometrically with a `0.9930x` floor.
+
+Large sequence-table plans now stay borrowed through scoring and final bitstream
+emission instead of copying `LargeSequenceTableEmitPlan` at each symbol,
+transition, payload-length, and validation helper call. This affects only blocks
+with more than 512 sequences and preserves every selected plan and wire byte.
+Fifteen fixed-CPU-2 stage pairs across double-fast, greedy, and optimal on four
+128 KiB source files improve all twelve rows, with a `1.1035x` row-median
+geometric mean and a `1.0429x` floor. Twenty-one complete-frame pairs improve
+the four source files by `1.0391x`--`1.1467x` (`1.0717x` geometric mean)
+and twelve Silesia prefixes by `1.0046x`--`1.1320x` (`1.0755x` geometric
+mean, 249/252 pair wins). The 20-row level-1/3/9/22 control matrix keeps every
+size and checksum, measures `0.9998x` geometrically, and retains a `0.9932x`
+floor. The ReleaseFast executable's ordinary `.text` shrinks by 3,072 bytes.
+The 100-row native-stage and 20-row libzstd 1.5.5 encode gates, 273-case
+compatibility probe, five-row decode profile, 9,900-frame decodecorpus gate,
+237-case native-frame probe, 2,044-sequence large-block probe, all 1,543 tests,
+and all 85 compile-check targets pass.
