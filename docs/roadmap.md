@@ -13358,3 +13358,13 @@ reuse, so production keeps the simpler independently owned plans.
   moving both old/new hashed finders behind one symmetric out-of-line wrapper
   left a `0.9885x` floor. All variants were removed rather than exchanging a
   large unused-candidate win for stable non-target regressions.
+  Bounding the wide double-fast preflight to the two-state beam's 65,535-byte
+  input limit was also rejected after exposing a false premise in the shortcut.
+  On three 128 KiB source files where the preflight eventually discarded its
+  candidate, the bound improved complete level-1 medians by
+  `1.1968x`/`1.1836x`/`1.1988x`. However, a current `src/zstd.zig`
+  prefix passes the pre-beam fastest-policy `4/15` threshold: disabling the
+  preflight changed its 27,178-byte speed candidate to a much smaller 21,803-byte
+  full-arbitration frame while slowing encoding to `0.1989x`. The preflight is
+  therefore not generally dead above the beam limit; it independently implements
+  the documented level-1 speed/ratio policy and remains enabled.
