@@ -13178,3 +13178,14 @@ reuse, so production keeps the simpler independently owned plans.
   geometric mean was only `1.0018x`, despite an unrelated layout gain on
   `binary_mixed`. The temporary histogram was removed and the compact runtime-
   length literal loop remains.
+  Hoisting the complete-Huffman lookup proof to block dispatch instead of
+  checking a proof bit per literal was also rejected. Storing the proof in the
+  state's tail padding shrank the specialized helper by 14 bytes, but changed
+  state field placement; twenty-one fixed-CPU-2 pairs left `large_json` neutral
+  at `0.9998x` and reduced `huffman80k` to `0.9828x`. Revalidating all lookup
+  entries once before dispatch preserved the state layout and again shortened
+  the helper by 14 bytes, but moved surrounding code: `large_json` fell to
+  `0.9727x` with 0/21 wins, while unrelated `huffman80k`/`binary_mixed` rows
+  rose to `1.0234x`/`1.0280x`. The checked packed-entry test remains in the
+  sequence-interleaved literal loop; only the separately isolated whole-section
+  decoder uses `lookupAssumeComplete`.
