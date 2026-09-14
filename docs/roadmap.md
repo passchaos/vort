@@ -13608,6 +13608,10 @@ reuse, so production keeps the simpler independently owned plans.
   zero regressions. Eleven fixed-CPU-2 pairs measured `1.0076x` median /
   `1.0090x` geomean with 11/11 wins, while the Silesia control remained
   bit-exact with a `0.9972x` floor and `1.0001x` geomean.
+  Generalizing the selector to the record command and distance trees was
+  wire-neutral at 3,132 bytes: their 15/18 active symbols are below the
+  upstream smoother's 28-symbol floor. Keep the production option scoped to
+  the literal tree until a small-alphabet header optimizer proves a win.
   A width-two beam with one shared ordinary match per position still reached
   2,648 bytes and improved 465/480 record variants with zero hazards, but the
   full-position/state walk measured only `0.6025x` over five fixed-CPU-2 target

@@ -2209,6 +2209,10 @@ the Silesia control remained bit-exact with a `0.9972x` floor and `1.0001x`
 geomean. This supersedes the rejected whole-stream smoothing experiment: the
 new path performs one bounded 256-symbol decision and never encodes a losing
 candidate stream.
+Generalizing the same selector to the 15-symbol command and 18-symbol distance
+trees was wire-neutral at 3,132 bytes because upstream's smoothing deliberately
+does not alter alphabets with fewer than 28 active symbols; that broader option
+was not retained.
 
 A second width-two beam moved the ordinary hash-chain search outside the state
 loop: each position computed one shared longest ordinary match, while each of
