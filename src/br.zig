@@ -2223,7 +2223,9 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
         const record_shape = try commandShapeStats(allocator, record_commands.commands);
         const record = try encodeCommandPlanWithOptionsAlloc(allocator, input, record_commands.commands, null, &wire_stats, .{
             .use_recent_distances = true,
-            .use_utf8_text_contexts = true,
+            // Fixed-width record literals share one stable alphabet. A second
+            // UTF-8 context tree adds more header cost than payload savings.
+            .use_utf8_text_contexts = false,
             .utf8_context_cutoff = 48,
             .ndirect = 0,
         });
@@ -2443,7 +2445,9 @@ fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, in
     defer commands.deinit(allocator);
     const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands.commands, null, stats, .{
         .use_recent_distances = true,
-        .use_utf8_text_contexts = true,
+        // The record classifier already proves a stable field layout; one
+        // literal tree is smaller across the audited record family.
+        .use_utf8_text_contexts = false,
         .utf8_context_cutoff = 48,
         .ndirect = 0,
         .window_bits = window_bits,
@@ -12239,6 +12243,31 @@ test "br record optimal object returns caller-owned replayable tokens" {
     const replayed = try lz77.replayAlloc(std.testing.allocator, plan.tokens);
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, &payload, replayed);
+}
+
+test "br record ratio uses one literal context tree" {
+    var payload: [32 * 128]u8 = undefined;
+    var row: [128]u8 = undefined;
+    @memset(&row, 'a');
+    row[127] = '\n';
+    var state: u32 = 0x9e37_79b9;
+    for (0..32) |row_index| {
+        const output = payload[row_index * row.len ..][0..row.len];
+        @memcpy(output, &row);
+        for (0..8) |mutation| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const column = (mutation * 11 + 4) % (row.len - 1);
+            output[column] = 32 + @as(u8, @truncate((state >> 16) % 95));
+        }
+    }
+    const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 1), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 1), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
 }
 
 test "br record optimal object respects advertised small windows" {

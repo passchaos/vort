@@ -30,7 +30,7 @@ def main():
         assert counts == sorted(counts, reverse=True), row
         assert all(count > 0 for count in counts) and sum(counts) <= ints["matches"], row
     lazy, optimal, record = by["lazy"], by["optimal"], by["record"]
-    assert int(record["wire_bytes"]) <= 3209 < int(lazy["wire_bytes"]) < int(optimal["wire_bytes"]), rows
+    assert int(record["wire_bytes"]) <= 3187 < int(lazy["wire_bytes"]) < int(optimal["wire_bytes"]), rows
     assert int(record["recent"]) > int(optimal["recent"]) > int(lazy["recent"]), rows
     assert int(record["last"]) > int(optimal["last"]) > int(lazy["last"]), rows
     assert hist(lazy, "top_distances", 8)[0] == 128 and hist(optimal, "top_distances", 8)[0] == 128, rows

@@ -13571,6 +13571,18 @@ reuse, so production keeps the simpler independently owned plans.
   byte-exact with a `0.9919x` row-median floor and `1.0016x` geomean. Future
   distance-only refinements may test older cache slots only with a hot-path
   design that avoids multiple full-copy validations per match.
+  Compared the retained stream structure with libbrotli q8 and removed UTF-8
+  literal contexts only from classifier-approved record candidates: libbrotli
+  uses one literal tree on the target while Vort previously emitted two. This
+  leaves token/command/distance choices unchanged and moves `records_q8`
+  3,209 -> 3,187 bytes (`-0.69%`, 70 bytes / 2.25% above libbrotli q8). The
+  single-tree form beat the prior two-tree wire in all 480 audited record rows
+  by 1...32 bytes (9,901 bytes total). Eleven fixed-CPU-2 target pairs measured
+  `1.0041x` median / `1.0039x` geomean throughput with 9/11 wins; the 12-row
+  Silesia control retained bit-exact sizes/checksums with a `0.9995x` floor and
+  `1.0001x` geomean. Existing entropy-split proposals were wire-neutral. A
+  `rep1`-only distance probe reached merely 3,207 bytes and was rejected as too
+  little ratio gain for another per-match branch.
   A width-two beam with one shared ordinary match per position still reached
   2,648 bytes and improved 465/480 record variants with zero hazards, but the
   full-position/state walk measured only `0.6025x` over five fixed-CPU-2 target

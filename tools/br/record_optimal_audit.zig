@@ -53,7 +53,8 @@ pub fn main(init: std.process.Init) !void {
     }
     var buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
-    try stdout.interface.print("br_record_optimal_audit={s} rows={d} improved={d} record_loses={d} arbitration_hazards={d} total_saved={d} best_saved={d}\n", .{ if (record_beats_lazy_but_loses_optimal == 0) "ok" else "failed", rows, improved, regressed, record_beats_lazy_but_loses_optimal, total_saved, best_saved });
+    const passed = rows == 480 and improved == rows and regressed == 0 and record_beats_lazy_but_loses_optimal == 0;
+    try stdout.interface.print("br_record_optimal_audit={s} rows={d} improved={d} record_loses={d} arbitration_hazards={d} total_saved={d} best_saved={d}\n", .{ if (passed) "ok" else "failed", rows, improved, regressed, record_beats_lazy_but_loses_optimal, total_saved, best_saved });
     try stdout.interface.flush();
-    if (record_beats_lazy_but_loses_optimal != 0) return error.RecordOptimalRegression;
+    if (!passed) return error.RecordOptimalRegression;
 }

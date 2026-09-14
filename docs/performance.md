@@ -2158,6 +2158,22 @@ The next distance-only refinement can consider the older three cache slots,
 but must avoid reintroducing per-match multi-candidate validation: the retained
 code-zero pass performs at most one additional full-copy comparison.
 
+The next retained wire refinement removes UTF-8 literal context modeling only
+for classifier-approved fixed-width record plans. Inspecting the decoded
+meta-block shape showed that libbrotli q8 uses one literal tree for the target,
+whereas Vort was paying for two; the existing literal/command/distance split
+proposals were all wire-neutral. A single-tree record candidate reduces
+`records_q8` from 3,209 to 3,187 bytes (`-22`, `-0.69%`) without changing any
+token, command, or distance decision, leaving 70 bytes (`2.25%`) over
+libbrotli q8. Across the complete 480-row record grid it improved every row
+relative to the former two-tree encoding, by 1...32 bytes and 9,901 bytes in
+aggregate. Fixed-CPU-2 independent-binary A/B over eleven interleaved target
+pairs measured `1.0041x` median / `1.0039x` geomean with 9/11 wins. The 12-row
+64 KiB Silesia control remained bit-exact in size and checksum with a `0.9995x`
+row-median floor and `1.0001x` matrix geomean. A narrower `rep1` distance
+probe was also rejected: it reached only 3,207 bytes, so the extra per-match
+branch was not justified despite neutral short-A/B throughput.
+
 A second width-two beam moved the ordinary hash-chain search outside the state
 loop: each position computed one shared longest ordinary match, while each of
 the two `rep0` states additionally probed only its repeat distance and the row
