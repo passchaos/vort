@@ -13256,6 +13256,16 @@ reuse, so production keeps the simpler independently owned plans.
   `src/zstd.zig` to `0.9779x`/`0.9690x`/`0.9633x`/`0.9743x`. The direct array
   load remains because its address is cheap and its shorter live range schedules
   better.
+  Widening the two-state Zstd repeat beam from `u16` to `u32` positions was
+  rejected after a 128 KiB real-source probe. The unchanged algorithm completed
+  all nineteen beam tests and produced candidates roughly 1.8--2.4 times faster
+  than the exact optimal search, but it was dominated by the existing greedy
+  candidate on every input. Ghostty `Terminal.zig`, README, roadmap, and
+  `src/zstd.zig` produced 35,325/22,073/37,529/25,464-byte beam candidates
+  versus 34,304/21,802/37,420/23,842 bytes from greedy, and the wider beam was
+  slower as well. Expanding its state/index memory therefore cannot replace or
+  safely skip the much smaller 31,832/20,193/34,329/21,778-byte optimal
+  candidates; the compact 65,535-byte limit remains.
   Replacing the retained 71-byte copy's exact seven-byte tail with one exact
   eight-byte vector load/store starting at byte 63 was rejected. The overlap is
   semantically safe because byte 63 was already written by the second 32-byte
