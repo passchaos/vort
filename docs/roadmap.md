@@ -13069,3 +13069,13 @@ reuse, so production keeps the simpler independently owned plans.
   22.02%, both exceeding libzstd; `1/3` also grew the roadmap prefix by 26.16%
   to 1.111 times libzstd. The existing `4/15` gate is therefore a real quality
   boundary rather than an arbitrary conservative constant.
+  Lowering the fastest optimal candidate budget again from seven to six was
+  rejected after the real-corpus screen. Across twelve 128 KiB Silesia prefixes,
+  fifteen fixed-CPU-2 pairs improved by `1.0119x` geometrically, but six of the
+  twelve row medians were below the seven-candidate baseline. The sixteen-file
+  size screen grew by another `0.1569%`; the largest incremental case was `nci`
+  at `+0.535%`, bringing its cumulative change from the original eight-candidate
+  policy to about `+1.57%`. More decisively, thirty independent 20-row frame
+  pairs fell to a `0.9957x` row-median geometric mean with a `0.9873x` floor on
+  JSON level 1; that target won only 2/30 pairs. The seven-candidate Pareto point
+  remains, and budgets six/four are closed absent a separately isolated layout.
