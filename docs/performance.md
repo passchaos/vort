@@ -2127,6 +2127,18 @@ retained 3,442-byte parser. The next stateful design must constrain command
 growth or run as a selectively admitted second pass; merely adding beam states
 trades too much encode speed for the ratio gain.
 
+A two-parameter follow-up combined the one-bit row-distance proxy with a fixed
+per-match penalty to limit that command growth. Penalties 2/4/6/8/10 produced
+3,110/3,320/3,340/3,347/3,347 bytes and 1,511/1,332/1,303/1,295/1,295
+commands. The eight-bit penalty is the first structural Pareto point: it saves
+95 bytes while adding only two commands, with 554 recent and 346 code-zero
+hits. It was nevertheless removed because five fixed-CPU-2 target pairs
+measured only `0.9491x`. Keeping row distance at its original fixed cost while
+penalizing only other distances preserved the same 3,347-byte shape but fell
+further to `0.8525x`, showing that the extra per-candidate branch/code shape is
+itself expensive. Scalar two-parameter costs are therefore not a production
+substitute for a compact state representation.
+
 An upstream-inspired q8 parser was evaluated but not retained. The prototype
 used four-byte hashes, Brotli length/distance scoring, ten recent-distance
 probes, four delayed literals, and a bounded 16-hop predecessor chain. Exact

@@ -13553,3 +13553,10 @@ reuse, so production keeps the simpler independently owned plans.
   distance from 128 to 896, and measured only `0.9149x` median throughput over
   five fixed-CPU-2 target pairs. The prototype was removed. Any next beam must
   explicitly limit command growth or be admitted as a selective second pass.
+  A row-distance-cost plus match-penalty grid did constrain commands: penalties
+  2/4/6/8/10 yielded 3,110/3,320/3,340/3,347/3,347 bytes and
+  1,511/1,332/1,303/1,295/1,295 commands. The penalty-eight point saved 95
+  bytes with only two extra commands, but measured `0.9491x` over five target
+  pairs. Penalizing only non-row distances retained 3,347 bytes and fell to
+  `0.8525x`. Both were removed; avoid adding scalar branches to the object
+  search loop without a separately proven hot-kernel design.
