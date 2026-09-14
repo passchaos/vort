@@ -13408,6 +13408,13 @@ reuse, so production keeps the simpler independently owned plans.
   text levels 3/9/22 fell to `0.9837x`/`0.9823x`/`0.9832x` and binary
   level 1 to `0.9836x`. Keep the out-of-line resolver until the entire
   >512-sequence encoder can be isolated without moving shorter hot paths.
+  Resuming four-byte optimal match extension after its already verified four-byte
+  prefix was retested inside the independently linked large-block kernel. An
+  exhaustive mismatch-position oracle, the 128-shape cost/token audit, OOM
+  recovery, profile identities, and 32-bit compile check all passed, eliminating
+  the former shared-parser layout confounder. Even so, all four 128 KiB source
+  stage rows lost, with 0/15 wins and a `0.9837x` geometric mean. Starting the
+  compact vector matcher at byte zero remains faster on this CPU.
   A fixed-258-byte match-extension specialization inside the isolated four-byte
   optimal kernel was rejected at the focused gate. It used eight fixed 32-byte
   vector comparisons plus an exact two-byte tail for all non-tail positions;
