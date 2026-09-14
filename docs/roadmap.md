@@ -13408,3 +13408,11 @@ reuse, so production keeps the simpler independently owned plans.
   text levels 3/9/22 fell to `0.9837x`/`0.9823x`/`0.9832x` and binary
   level 1 to `0.9836x`. Keep the out-of-line resolver until the entire
   >512-sequence encoder can be isolated without moving shorter hot paths.
+  A fixed-258-byte match-extension specialization inside the isolated four-byte
+  optimal kernel was rejected at the focused gate. It used eight fixed 32-byte
+  vector comparisons plus an exact two-byte tail for all non-tail positions;
+  an exhaustive mismatch-at-every-offset oracle, the 128-shape cost/token
+  audit, allocation-failure recovery, profile identities, and 32-bit compile
+  check all passed. The enlarged generated loop nevertheless reduced all four
+  128 KiB source stages, with 0/15 wins and a `0.9452x` geometric mean. The
+  compact shared bounded extender remains faster than fixed-loop unrolling.
