@@ -13621,6 +13621,21 @@ reuse, so production keeps the simpler independently owned plans.
   pairs. It was removed without testing wider ordinary candidate sets. Future
   stateful work should reuse the reverse DP output and refine sparse command
   boundaries instead of rescanning every input position in a forward beam.
+  Retained a Zstd ratio-level proof inside the existing mixed-cancellation
+  scheduler. An absolute-decisive repeat beam is encoded first; greedy and lazy
+  still parse, but their entropy emission is skipped if unmatched-literal
+  Huffman cost plus unavoidable LL/ML/OF extra bits already exceed the beam.
+  The bound minimizes extra widths across direct, repeat-aware, and predefined
+  representations and omits every positive tree/FSE/header cost. Locked JSON
+  bounds are 714/831 bytes versus a 633-byte beam. A 48-shape oracle checks 44
+  exact emitted wires (20 prunable), and fast/disabled-bound tests preserve the
+  target plus 24 generated structured frames byte-for-byte. Twenty-one
+  fixed-CPU-2 level-9 pairs improve `1.1175x` median / `1.1182x` geomean, all
+  wins, at the same 640 bytes. The 20-row level matrix keeps all wire sizes and
+  checksums; non-target floor/geomean are `0.9931x`/`1.0036x`. All Zstd gates,
+  1,560 tests, and 93 compile checks pass. Keep this out of the ordinary
+  selector: an in-body prototype had a `0.9835x` floor. Literal-cost hoisting
+  (`0.9651x`) and 16-to-12-byte beam-state packing (`0.9791x`) were rejected.
   Retained a Zstd ratio-level lower bound that lets a decisive repeat beam prove
   the first single-duplicate family at least 24 times larger without exact
   entropy scoring. The proof scans the existing paired index for the maximum

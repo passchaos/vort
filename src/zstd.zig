@@ -61,6 +61,8 @@ pub const min_compression_level: c_int = 0;
 pub const max_compression_level: c_int = 22;
 var test_disable_indexed_single_lower_bound = false;
 var test_decisive_single_lower_bound_hits: usize = 0;
+var test_disable_hash_token_lower_bound = false;
+var test_hash_token_lower_bound_hits: usize = 0;
 var test_disable_four_byte_optimal = false;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
@@ -10856,6 +10858,18 @@ fn emitNativeMatchCompressedBlockImpl(
             // arbitrate the exact same mixed candidate below.
             const non_mixed_budget = mixed_match_min_search_budget - 1;
             var mixed_dominated = false;
+            if (!has_precomputed_rep_beam) {
+                if (try emitAbsoluteDecisiveBeamFirst(
+                    allocator,
+                    out,
+                    block,
+                    last,
+                    non_mixed_budget,
+                    rep_beam_scratch,
+                    &mixed_dominated,
+                    large_sequence_scratch,
+                )) |fast_ok| return fast_ok;
+            }
             const non_mixed_ok = try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, true, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch);
             if (mixed_dominated) return non_mixed_ok;
 
@@ -10906,6 +10920,62 @@ fn emitNativeMatchCompressedBlockImpl(
         // worker, fall through to the byte-identical serial selector below.
     }
     return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, false, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null, precomputed_rep_beam_stats, large_sequence_scratch);
+}
+
+noinline fn emitAbsoluteDecisiveBeamFirst(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    match_search_budget: usize,
+    reusable_rep_beam: ?*lz77.RepBeamScratch,
+    mixed_dominated: *bool,
+    large_sequence_scratch: ?*LargeSequenceScratch,
+) linksection(fast_encode_helper_text_section) Error!?bool {
+    if (match_search_budget != mixed_match_min_search_budget - 1 or
+        block.len <= 32 * 1024 or block.len > duplicate_index_max_input_len) return null;
+
+    var local_rep_beam: lz77.RepBeamScratch = .{};
+    defer if (reusable_rep_beam == null) local_rep_beam.deinit(allocator);
+    const beam_scratch = reusable_rep_beam orelse &local_rep_beam;
+    const beam_stats = lz77.optimalRepBeamPlanZstdReuse(beam_scratch, allocator, block) catch |err| switch (err) {
+        error.InvalidBlockPlan => return null,
+        else => return err,
+    };
+    var local_sequence_scratch: LargeSequenceScratch = .{};
+    defer if (large_sequence_scratch == null) local_sequence_scratch.deinit(allocator);
+    const sequence_scratch = large_sequence_scratch orelse &local_sequence_scratch;
+    var beam: std.ArrayList(u8) = .empty;
+    defer beam.deinit(allocator);
+    if (!try emitHashTokenSequenceBlockReuse(allocator, &beam, block, last, beam_scratch.reversed.items, beam_stats, sequence_scratch) or
+        beam.items.len * 32 > block.len) return null;
+
+    const parser_options = zstdHashParserOptions(block.len);
+    const greedy = try lz77.hashGreedyPlanAutoTinyAlloc(allocator, block, parser_options);
+    defer greedy.deinit(allocator);
+    if (!try hashTokenSequenceCannotBeat(block, greedy.tokens, greedy.stats, beam.items.len)) return null;
+    const lazy = try lz77.lazyGreedyPlanAlloc(allocator, block, parser_options);
+    defer lazy.deinit(allocator);
+    if (!try hashTokenSequenceCannotBeat(block, lazy.tokens, lazy.stats, beam.items.len)) return null;
+
+    var repeated: std.ArrayList(u8) = .empty;
+    defer repeated.deinit(allocator);
+    const repeated_ok = try emitRepeatedPatternCompressedBlock(allocator, &repeated, block, last);
+    if (repeated_ok and beam.items.len > repeated.items.len / decisive_mixed_dominance_ratio) return null;
+
+    var duplicate_index: DuplicateMatchIndex = undefined;
+    duplicate_index.build(block);
+    if (try findBestDecisiveSingleDuplicate(
+        block,
+        &duplicate_index,
+        beam.items.len,
+        beam.items.len,
+        if (repeated_ok) repeated.items.len else null,
+    ) != null) return null;
+
+    mixed_dominated.* = true;
+    try out.appendSlice(allocator, beam.items);
+    return true;
 }
 
 inline fn shouldProbeDecisiveWideMatch(block: []const u8, match_search_budget: usize, rep_beam_search: bool) bool {
@@ -12838,6 +12908,7 @@ test "zstd decisive beam cancels dominated mixed search without changing wire" {
     defer expected.deinit(std.testing.allocator);
     var mixed_dominated = false;
     test_decisive_single_lower_bound_hits = 0;
+    test_hash_token_lower_bound_hits = 0;
     try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
         std.testing.allocator,
         &expected,
@@ -12851,27 +12922,9 @@ test "zstd decisive beam cancels dominated mixed search without changing wire" {
     try std.testing.expect(mixed_dominated);
     try std.testing.expectEqual(@as(usize, 1), test_decisive_single_lower_bound_hits);
 
-    var exact: std.ArrayList(u8) = .empty;
-    defer exact.deinit(std.testing.allocator);
-    var exact_mixed_dominated = false;
-    test_disable_indexed_single_lower_bound = true;
-    defer test_disable_indexed_single_lower_bound = false;
-    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
-        std.testing.allocator,
-        &exact,
-        payload.items,
-        true,
-        96,
-        true,
-        null,
-        &exact_mixed_dominated,
-    ));
-    test_disable_indexed_single_lower_bound = false;
-    try std.testing.expect(exact_mixed_dominated);
-    try std.testing.expectEqualSlices(u8, exact.items, expected.items);
-
     var actual: std.ArrayList(u8) = .empty;
     defer actual.deinit(std.testing.allocator);
+    test_hash_token_lower_bound_hits = 0;
     try std.testing.expect(try emitNativeMatchCompressedBlock(
         std.testing.allocator,
         &actual,
@@ -12881,13 +12934,72 @@ test "zstd decisive beam cancels dominated mixed search without changing wire" {
         true,
         null,
     ));
+    try std.testing.expectEqual(@as(usize, 2), test_hash_token_lower_bound_hits);
     try std.testing.expect(actual.items.len * 32 <= payload.items.len);
     try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+
+    var exact: std.ArrayList(u8) = .empty;
+    defer exact.deinit(std.testing.allocator);
+    test_disable_indexed_single_lower_bound = true;
+    test_disable_hash_token_lower_bound = true;
+    defer {
+        test_disable_hash_token_lower_bound = false;
+        test_disable_indexed_single_lower_bound = false;
+    }
+    try std.testing.expect(try emitNativeMatchCompressedBlock(
+        std.testing.allocator,
+        &exact,
+        payload.items,
+        true,
+        96,
+        true,
+        null,
+    ));
+    test_disable_hash_token_lower_bound = false;
+    test_disable_indexed_single_lower_bound = false;
+    try std.testing.expectEqualSlices(u8, exact.items, actual.items);
+}
+
+test "zstd hash-token lower bound separates structured candidates" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = payload.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{index});
+        try payload.appendSlice(std.testing.allocator, formatted);
+    }
+
+    const greedy = try lz77.hashGreedyPlanAutoTinyAlloc(std.testing.allocator, payload.items, zstdHashParserOptions(payload.items.len));
+    defer greedy.deinit(std.testing.allocator);
+    const lazy = try lz77.lazyGreedyPlanAlloc(std.testing.allocator, payload.items, zstdHashParserOptions(payload.items.len));
+    defer lazy.deinit(std.testing.allocator);
+    var beam: lz77.RepBeamScratch = .{};
+    defer beam.deinit(std.testing.allocator);
+    const beam_stats = try lz77.optimalRepBeamPlanZstdReuse(&beam, std.testing.allocator, payload.items);
+
+    const greedy_bound = (try hashTokenSequenceBlockLowerBound(payload.items, greedy.tokens, greedy.stats)) orelse return error.CorruptFrame;
+    const lazy_bound = (try hashTokenSequenceBlockLowerBound(payload.items, lazy.tokens, lazy.stats)) orelse return error.CorruptFrame;
+    const beam_bound = (try hashTokenSequenceBlockLowerBound(payload.items, beam.reversed.items, beam_stats)) orelse return error.CorruptFrame;
+    var beam_wire: std.ArrayList(u8) = .empty;
+    defer beam_wire.deinit(std.testing.allocator);
+    try std.testing.expect(try emitHashTokenSequenceBlock(
+        std.testing.allocator,
+        &beam_wire,
+        payload.items,
+        true,
+        beam.reversed.items,
+        beam_stats,
+    ));
+    try std.testing.expect(greedy_bound > beam_wire.items.len);
+    try std.testing.expect(lazy_bound > beam_wire.items.len);
+    try std.testing.expect(beam_bound <= beam_wire.items.len);
 }
 
 test "zstd decisive beam cancellation preserves generated structured winners" {
     var cancelled_cases: usize = 0;
     test_decisive_single_lower_bound_hits = 0;
+    test_hash_token_lower_bound_hits = 0;
     for (0..24) |seed| {
         var payload: std.ArrayList(u8) = .empty;
         defer payload.deinit(std.testing.allocator);
@@ -12934,7 +13046,11 @@ test "zstd decisive beam cancellation preserves generated structured winners" {
         defer exact_non_mixed.deinit(std.testing.allocator);
         var exact_mixed_dominated = false;
         test_disable_indexed_single_lower_bound = true;
-        defer test_disable_indexed_single_lower_bound = false;
+        test_disable_hash_token_lower_bound = true;
+        defer {
+            test_disable_hash_token_lower_bound = false;
+            test_disable_indexed_single_lower_bound = false;
+        }
         try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
             std.testing.allocator,
             &exact_non_mixed,
@@ -12945,6 +13061,7 @@ test "zstd decisive beam cancellation preserves generated structured winners" {
             null,
             &exact_mixed_dominated,
         ));
+        test_disable_hash_token_lower_bound = false;
         test_disable_indexed_single_lower_bound = false;
         try std.testing.expectEqual(mixed_dominated, exact_mixed_dominated);
         try std.testing.expectEqualSlices(u8, exact_non_mixed.items, non_mixed.items);
@@ -13410,6 +13527,115 @@ fn emitHashTokenSequenceBlockReuseWithState(
     };
     if (position != block.len or count < 2) return false;
     return try emitBestSequenceCompressedBlock(allocator, out, block, last, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], literal_start);
+}
+
+fn hashTokenSequenceBlockLowerBound(
+    block: []const u8,
+    tokens: []const lz77.Token,
+    stats: lz77.PlanStats,
+) Error!?usize {
+    if (stats.matches < 2 or stats.matches > max_native_sequence_count) return null;
+
+    var frequencies: [256]u32 = @splat(0);
+    var active_symbols: [256]u8 = undefined;
+    var active_count: usize = 0;
+    var position: usize = 0;
+    var sequence_count: usize = 0;
+    var sequence_extra_bits: usize = 0;
+    var literal_len: usize = 0;
+    var repeated_offsets = initial_repeated_offsets;
+    for (tokens) |token| switch (token) {
+        .literal => |literal| {
+            if (position >= block.len or block[position] != literal) return error.CorruptFrame;
+            frequencies[literal] += 1;
+            position += 1;
+            literal_len += 1;
+        },
+        .match => |match| {
+            if (match.length < lz77.min_match_len or match.distance == 0 or match.distance > position or
+                match.length > block.len - position) return error.CorruptFrame;
+            const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
+            const match_code = try sequenceCodeForValue(match.length, &ml_base, &ml_bits);
+            const offset_code = try chooseOffsetSequenceCode(literal_len, match.distance, &repeated_offsets);
+            const literal_extra_bits = @min(
+                ll_bits[literal_code],
+                minimumPredefinedSequenceExtraBits(literal_len, &sequence_predefined.literal_symbols, 0),
+            );
+            const match_extra_bits = @min(
+                ml_bits[match_code],
+                minimumPredefinedSequenceExtraBits(match.length, &sequence_predefined.match_symbols, 0),
+            );
+            const direct_offset_code = try sequenceCodeForValue(match.distance, &of_base, &of_bits);
+            const offset_extra_bits = @min(
+                @min(of_bits[offset_code], of_bits[direct_offset_code]),
+                minimumPredefinedSequenceExtraBits(match.distance, &sequence_predefined.offset_symbols, 2),
+            );
+            sequence_extra_bits = std.math.add(usize, sequence_extra_bits, literal_extra_bits) catch return error.IntegerOverflow;
+            sequence_extra_bits = std.math.add(usize, sequence_extra_bits, match_extra_bits) catch return error.IntegerOverflow;
+            sequence_extra_bits = std.math.add(usize, sequence_extra_bits, offset_extra_bits) catch return error.IntegerOverflow;
+            position += match.length;
+            sequence_count += 1;
+            literal_len = 0;
+        },
+    };
+    if (position != block.len or sequence_count != stats.matches) return error.CorruptFrame;
+
+    var regenerated_literals: usize = 0;
+    for (frequencies, 0..) |frequency, symbol| {
+        regenerated_literals += frequency;
+        if (frequency == 0) continue;
+        active_symbols[active_count] = @intCast(symbol);
+        active_count += 1;
+    }
+    var literal_payload_lower_bound: usize = regenerated_literals;
+    if (active_count == 1) {
+        literal_payload_lower_bound = 1;
+    } else if (active_count > 1) {
+        const lengths = huffman.treeCodeLengthsKnownActive(
+            256,
+            &frequencies,
+            11,
+            active_symbols[0..active_count],
+        );
+        var huffman_bits: usize = 0;
+        for (active_symbols[0..active_count]) |symbol| {
+            huffman_bits = std.math.add(
+                usize,
+                huffman_bits,
+                std.math.mul(usize, frequencies[symbol], lengths[symbol]) catch return error.IntegerOverflow,
+            ) catch return error.IntegerOverflow;
+        }
+        literal_payload_lower_bound = @min(literal_payload_lower_bound, (huffman_bits + 7) / 8);
+    }
+
+    var lower_bound: usize = 3; // Compressed block header.
+    lower_bound = std.math.add(usize, lower_bound, literal_payload_lower_bound) catch return error.IntegerOverflow;
+    lower_bound = std.math.add(usize, lower_bound, try sequenceCountLen(sequence_count)) catch return error.IntegerOverflow;
+    lower_bound = std.math.add(usize, lower_bound, 1) catch return error.IntegerOverflow; // Sequence mode byte.
+    lower_bound = std.math.add(usize, lower_bound, (sequence_extra_bits + 1 + 7) / 8) catch return error.IntegerOverflow;
+    return lower_bound;
+}
+
+fn minimumPredefinedSequenceExtraBits(value: usize, symbols: []const SequenceSymbol, min_additional_bits: u8) u8 {
+    var minimum: u8 = std.math.maxInt(u8);
+    for (symbols) |symbol| {
+        if (predefinedSymbolCanEncode(symbol, value, min_additional_bits))
+            minimum = @min(minimum, symbol.additional_bits);
+    }
+    return minimum;
+}
+
+fn hashTokenSequenceCannotBeat(
+    block: []const u8,
+    tokens: []const lz77.Token,
+    stats: lz77.PlanStats,
+    best_len: usize,
+) Error!bool {
+    if (comptime builtin.is_test) if (test_disable_hash_token_lower_bound) return false;
+    const lower_bound = (try hashTokenSequenceBlockLowerBound(block, tokens, stats)) orelse return false;
+    const cannot_beat = lower_bound > best_len;
+    if (comptime builtin.is_test) test_hash_token_lower_bound_hits += @intFromBool(cannot_beat);
+    return cannot_beat;
 }
 
 fn emitLargeHashTokenSequenceBlock(
@@ -20461,6 +20687,46 @@ test "zstd decisive single dominance bound preserves competitive winners" {
     }
     try std.testing.expect(pruned_cases != 0);
     try std.testing.expect(retained_cases != 0);
+}
+
+test "zstd hash-token block lower bound never exceeds exact wire" {
+    var checked: usize = 0;
+    var pruned: usize = 0;
+    for (0..48) |seed| {
+        const payload_len = 8 * 1024 + seed * 511;
+        const payload = try std.testing.allocator.alloc(u8, payload_len);
+        defer std.testing.allocator.free(payload);
+        var state: u32 = @truncate(0x6a09_e667 +% seed *% 0x0100_0193);
+        for (payload, 0..) |*byte, i| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @intCast('a' + (i + seed) % 23),
+                1 => if (i % 64 < 52) @intCast('A' + (i + seed) % 26) else @truncate(state >> 24),
+                2 => @intCast((i * 17 + seed * 13) & 127),
+                else => @truncate(state >> 24),
+            };
+        }
+        if (seed % 3 != 0) {
+            const copy_len = payload.len / 4;
+            @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+        }
+
+        var tokens: std.ArrayList(lz77.Token) = .empty;
+        defer tokens.deinit(std.testing.allocator);
+        const stats = if (seed & 1 == 0)
+            try lz77.hashGreedyPlanAutoTinyReuse(&tokens, std.testing.allocator, payload, zstdHashParserOptions(payload.len))
+        else
+            try lz77.hashLazyGreedyPlanTinyReuse(&tokens, std.testing.allocator, payload, zstdHashParserOptions(payload.len));
+        const lower_bound = (try hashTokenSequenceBlockLowerBound(payload, tokens.items, stats)) orelse continue;
+        var exact: std.ArrayList(u8) = .empty;
+        defer exact.deinit(std.testing.allocator);
+        if (!try emitHashTokenSequenceBlock(std.testing.allocator, &exact, payload, true, tokens.items, stats)) continue;
+        try std.testing.expect(lower_bound <= exact.items.len);
+        checked += 1;
+        pruned += @intFromBool(lower_bound > 633);
+    }
+    try std.testing.expectEqual(@as(usize, 44), checked);
+    try std.testing.expectEqual(@as(usize, 20), pruned);
 }
 
 test "zstd level one indexed single lower bound preserves generated block winners" {

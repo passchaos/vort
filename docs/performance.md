@@ -2045,6 +2045,42 @@ libzstd 1.5.5 encode gate, runtime-libzstd compatibility probe (256 checked
 cases), comparison and block-sweep gates, all 1,558 tests, and all 93 compile
 checks pass.
 
+## Zstd decisive beam-first entropy pruning (2026-09-15)
+
+After removing decisive single-duplicate scoring, `perf` attributes about
+22.1% of complete JSON level-9 cycles to the repeat-beam parser, while the
+remaining selector still serializes the losing greedy and lazy token plans.
+The retained mixed-cancellation specialization now evaluates the repeat beam
+first only for the existing 95-state non-mixed pass. If its block is already
+within the existing absolute 1/32 threshold, it parses greedy and lazy but
+skips their entropy encoding when a conservative wire lower bound is larger.
+
+For each fixed token stream, the bound counts its unmatched literals, uses the
+optimal 11-bit-limited Huffman cost for that histogram (or one-byte RLE), and
+adds only unavoidable LL/ML/OF extra bits. Per-value extra-bit widths take the
+minimum across direct, repeat-aware, and predefined representations; tree
+descriptions, FSE states/transitions, markers, padding, and other positive
+overhead are omitted. Target bounds are 714 bytes for greedy and 831 bytes for
+lazy versus the 633-byte beam. Original tie priority remains when the proof is
+inconclusive.
+
+The scheduler is an out-of-line helper: an earlier in-body prototype produced
+a `0.9835x` non-target floor despite not executing there. The isolated version
+improves the 32,797-byte JSON level-9 frame by `1.1175x` median / `1.1182x`
+geomean over 21 fixed-CPU-2 alternating pairs, with 21/21 wins and identical
+640-byte output. A 20-row level-1/3/9/22 control matrix preserves all sizes and
+checksums; excluding the matching JSON ratio rows, its row-median floor is
+`0.9931x` and geomean is `1.0036x`. A 48-shape generated oracle checks 44
+emitted greedy/lazy candidates and confirms the bound never exceeds exact wire
+length; 20 are prunable at the locked 633-byte limit. Fast/disabled-bound tests
+also preserve the target and 24 generated structured frames byte-for-byte.
+
+The ReleaseFast 20-row libzstd 1.5.5 gate reports JSON level 9 at 640 versus
+677 bytes and about 31.20 versus 220.98 MiB/s. The 256-case compatibility,
+comparison and block-sweep gates, all 1,560 tests, and all 93 compile checks
+pass. Literal-cost hoisting (`0.9651x`) and shrinking beam states from 16 to 12
+bytes (`0.9791x`) were rejected after 0/21 stage wins.
+
 ## Brotli q8 fixed-width record baseline (2026-09-14)
 
 The planned-encode and ratio-stage gates now include a deterministic 32 KiB
