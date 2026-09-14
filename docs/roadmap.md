@@ -13126,3 +13126,10 @@ reuse, so production keeps the simpler independently owned plans.
   benchmark confirms `large_json` at `1.1752x` with 21/21 wins, a `1.0116x`
   row-median geometric mean, and a `0.9910x` floor on `numbered_json`; every
   compressed input size and decoded checksum remains identical.
+  The symmetric fixed-48-byte optimization for the FSE/FSE/RLE raw-literal
+  loop was rejected. Its exact 32+16-byte vector kernel passed the same suffix-
+  preserving module oracle and targets 8,121 of `binary_mixed`'s 8,188 matches.
+  Twenty-one fixed-CPU-2 pairs improved that target by `1.0225x` with 21/21
+  wins, but the adjacent `large_json` control fell to `0.9884x`. The 71-byte
+  path remains isolated to the all-FSE/Huffman loop; adding both fixed shapes
+  perturbs that profitable loop beyond the control floor.
