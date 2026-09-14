@@ -13386,3 +13386,16 @@ reuse, so production keeps the simpler independently owned plans.
   libzstd 1.5.5 encode gates, 273-case compatibility probe, five-row decode
   profile, 9,900-frame decodecorpus gate, 237-case native-frame probe, all
   1,543 tests, and all 85 compile-check targets pass.
+  Extending the retained inverse FSE compression-table transition builder from
+  <=512 sequences to the dynamic >512-sequence path was rejected despite a
+  strong target result. A 513/1,024/2,047-sequence oracle matched the existing
+  per-symbol-chain builder's initial state, next states, state widths, transition
+  values, and transition widths exactly, and the 2,044-sequence libzstd probe
+  retained its wire. Twelve double-fast/greedy/optimal real-source stage rows
+  improved `1.1868x` geometrically, all 15/15. But moving the inverse helper to
+  the FSE section changed the surrounding section placement and reduced the
+  20-row complete-frame matrix to `0.9921x` geometrically with a `0.9647x`
+  floor; inlining it into the original large planner reached only `0.9958x`
+  with a `0.9771x` floor. Both variants were removed. A future retry needs a
+  matched-layout isolation of the complete large planner, not another local
+  transition substitution.
