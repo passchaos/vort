@@ -27,7 +27,10 @@ const incremental_tests = @import("deflate/incremental/tests.zig");
 
 const incompressible_classifier_text_section = switch (builtin.object_format) {
     .elf => ".vort_deflate_incompressible",
-    .macho => "__TEXT,__vort_dfl_incomp",
+    // Mach-O section names are limited to 16 bytes (the segment name is
+    // separate). Keep the classifier isolated without asking LLVM to emit an
+    // invalid 17-byte section name.
+    .macho => "__TEXT,__vort_dfl_inc",
     .coff => ".text$vort_deflate_incompressible",
     else => ".text",
 };
