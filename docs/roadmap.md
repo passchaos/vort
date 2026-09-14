@@ -13233,3 +13233,12 @@ reuse, so production keeps the simpler independently owned plans.
   twenty-one fixed-CPU-2 five-row pairs reduced `large_json` to `0.9876x` with
   only 4/21 wins; the row-median geometric mean was `0.9983x`. LLVM's current
   overlapping 4+4-byte implementation of the seven-byte tail remains faster.
+  Removing the fixed-71 dispatch's repeated `frame_output_start <= written`
+  guard was rejected below threshold. The enclosing block decoder proves this
+  invariant before parsing sequences, and `written` then grows monotonically;
+  all 32 focused native-decoder tests and the match-copy suffix oracle passed.
+  The generated helper nevertheless grew by two bytes, and twenty-one fixed-
+  CPU-2 five-row pairs left `large_json` neutral at `0.9997x` with 9/21 wins.
+  The five-row geometric mean was `1.0033x` with a `0.9969x` floor, so the
+  explicit local guard remains as useful defensive documentation rather than
+  retaining an unmeasurable layout change.
