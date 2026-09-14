@@ -13155,3 +13155,14 @@ reuse, so production keeps the simpler independently owned plans.
   tail. Twenty-one fixed-CPU-2 five-row pairs nevertheless left `huffman80k` at
   only `0.9951x` and reduced `large_json` to `0.9854x`; the generic seed-and-
   doubling copy remains.
+  Prefetching long-distance match sources while the all-FSE/Huffman loop decoded
+  the preceding literals was rejected. The candidate targeted the 6,420 of
+  7,299 `large_json` matches whose offsets are at least 4 KiB and prefetched two
+  cache lines only when both addresses were already-produced, frame-local
+  history; it did not change any decoded checksum or profile statistic. It grew
+  `decodeAllFseHuffmanSequences` by 49 bytes, however, and twenty-one
+  fixed-CPU-2 interleaved five-row pairs reduced `large_json` to `0.9486x` with
+  0/21 wins. `huffman80k`, `binary_mixed`, `numbered_json`, and `ascii64k` were
+  `0.9899x`/`0.9887x`/`0.9991x`/`1.0015x`; the row-median geometric mean was
+  `0.9854x`. The hardware demand load is preferable to adding branches and two
+  software prefetches in this loop.
