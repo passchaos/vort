@@ -13433,3 +13433,12 @@ reuse, so production keeps the simpler independently owned plans.
   (`0.9991x` geometric mean, text level 22 `0.9890x`); placing the helper
   in the wide section was worse at `0.9960x` with a `0.9873x` floor. Both
   were removed; large-table scoring keeps the authoritative stateful pass.
+  Combining the five equal-length `u8` arrays in `LargeSequenceScratch` into
+  one backing allocation was rejected after resource and performance validation.
+  It reduced first-use allocation calls by four while preserving reuse, OOM
+  recovery, and every large-sequence wire; allocator capacity rounding cost 512
+  extra bytes, leaving frame-level reuse at nine fewer allocations and 75,970
+  fewer bytes than the no-scratch path. Twelve real-source stage rows improved
+  only `1.0077x` geometrically, and the complete 20-row matrix fell to
+  `0.9976x` with multiblock level 3 at `0.9879x`. The five independently
+  grown arrays remain because their end-to-end layout is measurably better.
