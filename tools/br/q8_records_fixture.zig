@@ -5,23 +5,28 @@ pub const input_len = 32 * 1024;
 /// on an external corpus file.
 pub fn fill(payload: []u8) void {
     std.debug.assert(payload.len == input_len);
-    var row: [128]u8 = undefined;
-    var row_state: u32 = 0x243f_6a88;
-    for (&row, 0..) |*byte, index| {
+    fillVariant(payload, 128, 8, 0x243f_6a88, 0x9e37_79b9);
+}
+
+pub fn fillVariant(payload: []u8, row_len: usize, mutations: usize, row_seed: u32, mutation_seed: u32) void {
+    std.debug.assert(row_len >= 2 and row_len <= 1024 and payload.len % row_len == 0 and mutations < row_len);
+    var row_storage: [1024]u8 = undefined;
+    const row = row_storage[0..row_len];
+    var row_state = row_seed;
+    for (row, 0..) |*byte, index| {
         row_state = row_state *% 1_664_525 +% 1_013_904_223;
-        byte.* = if (index + 1 == row.len) '\n' else 32 + @as(u8, @truncate((row_state >> 16) % 95));
+        byte.* = if (index + 1 == row_len) '\n' else 32 + @as(u8, @truncate((row_state >> 16) % 95));
     }
-    var state: u32 = 0x9e37_79b9;
+    var state = mutation_seed;
     var position: usize = 0;
     while (position < payload.len) {
-        const length = @min(row.len, payload.len - position);
-        @memcpy(payload[position..][0..length], row[0..length]);
-        for (0..8) |mutation| {
+        @memcpy(payload[position..][0..row_len], row);
+        for (0..mutations) |mutation| {
             state = state *% 1_664_525 +% 1_013_904_223;
-            const column = (mutation * 11 + 4) % length;
+            const column = (mutation * 11 + 4) % (row_len - 1);
             payload[position + column] = 32 + @as(u8, @truncate((state >> 16) % 95));
         }
-        position += length;
+        position += row_len;
     }
 }
 

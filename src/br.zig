@@ -21,6 +21,9 @@ const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.
 const literal_block_split = @import("br/encoder/literal_block_split.zig");
 const command_block_split = @import("br/encoder/command_block_split.zig");
 const distance_block_split = @import("br/encoder/distance_block_split.zig");
+const record_optimal_abi = @import("br/encoder/record_optimal_abi.zig");
+extern fn vortBrStableFixedWidthRecord(input: [*]const u8, input_len: usize) callconv(.c) u8;
+extern fn vortBrRecordOptimalPlan(input: [*]const u8, input_len: usize, head: [*]u32, head_initialized: [*]u64, prev: [*]u32, costs: [*]u32, steps: [*]u32, tokens: [*]record_optimal_abi.Token, stats: *record_optimal_abi.Stats) callconv(.c) u8;
 const header_profile = @import("br/header_profile.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
@@ -2077,7 +2080,7 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
 /// `encodePlannedStreamRatioAlloc`; timing is intentionally isolated from the
 /// production entry point so normal callers pay no instrumentation overhead.
 pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []const u8, io: std.Io, profile: *RatioEncodeProfile) Error![]u8 {
-    if (input.len < 4 * 1024 or input.len > 32 * 1024) return error.InvalidBlockPlan;
+    if (input.len < 4 * 1024 or input.len > 64 * 1024) return error.InvalidBlockPlan;
     profile.* = .{ .input_bytes = input.len };
     const total_start = std.Io.Clock.awake.now(io);
     const parser_options = PlannedParserOptions{
@@ -2197,6 +2200,24 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
         } else allocator.free(optimal_candidate);
     }
 
+    if (vortBrStableFixedWidthRecord(input.ptr, input.len) != 0) {
+        profile.record_optimal_attempted = true;
+        stage_start = std.Io.Clock.awake.now(io);
+        const record = (try encodeRecordOptimalCandidateWithOptionsAlloc(allocator, input, default_window_bits, "", &wire_stats)) orelse return error.InvalidBlockPlan;
+        profile.record_optimal_ns = elapsedNs(stage_start, io);
+        profile.record_optimal_bytes = record.encoded.len;
+        profile.record_optimal_token_count = record.token_count;
+        profile.record_optimal_literal_count = record.literal_count;
+        profile.record_optimal_match_count = record.match_count;
+        profile.record_optimal_matched_bytes = record.matched_bytes;
+        if (record.encoded.len < selected.len) {
+            allocator.free(selected);
+            selected = record.encoded;
+            profile.record_optimal_selected = true;
+            profile.optimal_selected = false;
+        } else allocator.free(record.encoded);
+    }
+
     stage_start = std.Io.Clock.awake.now(io);
     profile.stored_bytes = try encodedStoredStreamBound(input.len);
     selected_owned = false;
@@ -2208,6 +2229,9 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
 }
 
 fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
+    const use_record_optimal = (options.window_bits == null or options.window_bits.? == default_window_bits) and
+        input.len >= 4 * 1024 and input.len <= 64 * 1024 and
+        input[input.len - 1] == '\n' and vortBrStableFixedWidthRecord(input.ptr, input.len) != 0;
     const explicit_window_bits = options.window_bits;
     const window_bits = options.window_bits orelse default_window_bits;
     const window_len = try plannedWindowLen(.ratio, window_bits);
@@ -2269,8 +2293,12 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     // then retain it solely when exact wire encoding beats the lazy baseline.
     // This makes the new search monotonic in output size and keeps large-input
     // memory/latency on the existing path.
-    if (input.len >= 4 * 1024 and input.len <= 64 * 1024)
-        try selectOptimalRatioCandidates(allocator, input, parser_options, window_bits, options.metadata, &stats, &baseline);
+    if (input.len >= 4 * 1024 and input.len <= 64 * 1024) {
+        if (use_record_optimal)
+            try selectRecordOptimalRatioCandidate(allocator, input, window_bits, options.metadata, &stats, &baseline)
+        else
+            try selectOptimalRatioCandidates(allocator, input, parser_options, window_bits, options.metadata, &stats, &baseline);
+    }
     if (input.len <= ratio_static_dictionary_max_input_len) return selectRatioStaticDictionaryAlloc(allocator, input, plan.commands, baseline, window_bits, options.metadata);
     if (options.extended_dictionary_probes != 0)
         try selectExtendedRatioStaticDictionary(allocator, input, plan.commands, window_bits, options.metadata, options.extended_dictionary_probes, &baseline);
@@ -2328,6 +2356,79 @@ fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8,
         allocator.free(baseline.*);
         baseline.* = candidate;
     } else allocator.free(candidate);
+}
+
+fn recordOptimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8) Error!?lz77.GreedyPlan {
+    if (input.len < 4 * 1024 or input.len > 64 * 1024) return null;
+    const head = try allocator.alloc(u32, record_optimal_abi.hash_head_len);
+    defer allocator.free(head);
+    const head_initialized = try allocator.alloc(u64, record_optimal_abi.hash_head_init_words);
+    defer allocator.free(head_initialized);
+    const prev = try allocator.alloc(u32, input.len);
+    defer allocator.free(prev);
+    const costs = try allocator.alloc(u32, input.len + 1);
+    defer allocator.free(costs);
+    const steps = try allocator.alloc(u32, input.len);
+    defer allocator.free(steps);
+    const abi_tokens = try allocator.alloc(record_optimal_abi.Token, input.len);
+    defer allocator.free(abi_tokens);
+    var abi_stats: record_optimal_abi.Stats = .{};
+    if (vortBrRecordOptimalPlan(input.ptr, input.len, head.ptr, head_initialized.ptr, prev.ptr, costs.ptr, steps.ptr, abi_tokens.ptr, &abi_stats) == 0) return null;
+    if (abi_stats.token_count > input.len or abi_stats.literal_count + abi_stats.matched_bytes != input.len or abi_stats.literal_count + abi_stats.match_count != abi_stats.token_count) return error.InvalidBlockPlan;
+    const tokens = try allocator.alloc(lz77.Token, abi_stats.token_count);
+    errdefer allocator.free(tokens);
+    for (tokens, abi_tokens[0..abi_stats.token_count]) |*token, abi_token| {
+        token.* = switch (abi_token.kind) {
+            0 => .{ .literal = abi_token.literal },
+            1 => .{ .match = .{ .length = abi_token.length, .distance = abi_token.distance } },
+            else => return error.InvalidBlockPlan,
+        };
+    }
+    return .{
+        .tokens = tokens,
+        .stats = .{
+            .literals = abi_stats.literal_count,
+            .matches = abi_stats.match_count,
+            .matched_bytes = abi_stats.matched_bytes,
+        },
+    };
+}
+
+fn selectRecordOptimalRatioCandidate(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
+    const record = (try encodeRecordOptimalCandidateWithOptionsAlloc(allocator, input, window_bits, metadata, stats)) orelse return;
+    if (record.encoded.len < baseline.*.len) {
+        allocator.free(baseline.*);
+        baseline.* = record.encoded;
+    } else allocator.free(record.encoded);
+}
+
+const RecordOptimalCandidate = struct {
+    encoded: []u8,
+    token_count: usize,
+    literal_count: usize,
+    match_count: usize,
+    matched_bytes: usize,
+};
+
+fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8, stats: *encoder_stats.PlannedEncodeStats) Error!?RecordOptimalCandidate {
+    const plan = (try recordOptimalPlanAlloc(allocator, input)) orelse return null;
+    defer plan.deinit(allocator);
+    const commands = try command_plan.buildAlloc(allocator, input, plan.tokens);
+    defer commands.deinit(allocator);
+    return .{
+        .encoded = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands.commands, null, stats, .{
+            .use_recent_distances = true,
+            .use_utf8_text_contexts = true,
+            .utf8_context_cutoff = 48,
+            .ndirect = 0,
+            .window_bits = window_bits,
+            .metadata = metadata,
+        }),
+        .token_count = plan.tokens.len,
+        .literal_count = plan.stats.literals,
+        .match_count = plan.stats.matches,
+        .matched_bytes = plan.stats.matched_bytes,
+    };
 }
 
 fn chooseStoredIfSmaller(allocator: std.mem.Allocator, input: []const u8, compressed: []u8) Error![]u8 {
@@ -12044,6 +12145,49 @@ test "br ratio planner keeps an exact optimal candidate for source blocks" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "br record optimal object returns caller-owned replayable tokens" {
+    var payload: [32 * 128]u8 = undefined;
+    var row: [128]u8 = undefined;
+    @memset(&row, 'a');
+    row[127] = '\n';
+    var state: u32 = 0x9e37_79b9;
+    for (0..32) |row_index| {
+        const output = payload[row_index * row.len ..][0..row.len];
+        @memcpy(output, &row);
+        for (0..8) |mutation| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const column = (mutation * 11 + 4) % (row.len - 1);
+            output[column] = 32 + @as(u8, @truncate((state >> 16) % 95));
+        }
+    }
+    const plan = (try recordOptimalPlanAlloc(std.testing.allocator, &payload)) orelse return error.TestExpectedEqual;
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expect(plan.stats.matches > 0);
+    try std.testing.expectEqual(payload.len, plan.stats.literals + plan.stats.matched_bytes);
+    const replayed = try lz77.replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, &payload, replayed);
+}
+
+test "br record optimal object respects advertised small windows" {
+    var payload: [32 * 128]u8 = undefined;
+    for (0..32) |row_index| {
+        const row = payload[row_index * 128 ..][0..128];
+        @memset(row, 'A');
+        row[7] = @intCast('0' + row_index % 10);
+        row[127] = '\n';
+    }
+    // Explicit non-default windows stay on the generic optimal parser; the
+    // fixed-record object is specialized for the default 32 KiB history.
+    const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, .{ .level = .ratio, .window_bits = 12 });
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(u5, 12), summary.window_bits);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
 test "br ratio block profile reproduces the production wire" {
     const payload = @embedFile("br.zig")[0 .. 32 * 1024];
     const expected = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
@@ -12109,7 +12253,7 @@ test "br ratio block profile preserves stored fallback without optimal search" {
 
     var ignored: RatioEncodeProfile = .{};
     try std.testing.expectError(error.InvalidBlockPlan, profilePlannedRatioBlockAlloc(std.testing.allocator, payload[0 .. 4 * 1024 - 1], std.testing.io, &ignored));
-    const oversized = "x" ** (32 * 1024 + 1);
+    const oversized = "x" ** (64 * 1024 + 1);
     try std.testing.expectError(error.InvalidBlockPlan, profilePlannedRatioBlockAlloc(std.testing.allocator, oversized, std.testing.io, &ignored));
 }
 

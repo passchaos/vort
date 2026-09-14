@@ -13519,6 +13519,15 @@ reuse, so production keeps the simpler independently owned plans.
   restored those 12 rows bit-exact, but shared-loop and isolated/copied parser
   integration layouts still missed the 0.99 control floor (best full-matrix
   row median 0.9802; isolated `nci` probes about 0.82...0.97). Those prototypes
-  were removed. Continue with an independently compiled record-aware parser so
-  the generic optimal hot loop remains machine-code stable, then require exact
-  wire arbitration and the full fixed-CPU control matrix before retention.
+  were removed. The successful follow-up moved the record-aware parser into an
+  independently compiled Zig object with caller-owned scratch and token
+  buffers, leaving the generic LZ77 hot loop unchanged. A strict 4...64 KiB
+  fixed-width printable-record classifier gates the path; explicit non-default
+  Brotli windows stay generic. Production `records_q8` is now 3,442 bytes
+  (`-17`, `-0.49%`) and fixed-CPU-2 independent-binary A/B measured `1.0372x`
+  median throughput (11/11 wins, about 4.12 versus 3.97 MiB/s). A 480-case
+  record family audit improved 134 cases, rejected 301 losing record proposals
+  through exact-wire arbitration, and found zero cases where skipping generic
+  optimal lost a smaller wire. All Vort/libbrotli round trips passed. The 12-row
+  64 KiB Silesia control remained byte-exact with a `1.0051x` row-median floor
+  and `1.0143x` matrix geomean.

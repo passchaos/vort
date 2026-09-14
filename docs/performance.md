@@ -2062,10 +2062,29 @@ kept the 3,442-byte target, but every attempted integration changed shared
 optimal-parser or ratio hot-code layout: the best complete 12-row fixed-CPU-2
 control matrix still had a 0.9802 row-median floor, and copied/noinline/text-
 section variants produced isolated `nci` medians as low as about 0.82...0.97.
-All production code was removed. The next implementation should place the
-record-aware literal-cost parser in an independent module or compilation
-boundary, preserving the generic optimal loop's machine-code layout, then
-repeat the exact-size and fixed-CPU controls before retention.
+The retained implementation now places that record-aware parser in an
+independently compiled Zig object behind a narrow caller-owned-buffer ABI. A
+strict classifier admits only 4...64 KiB printable ASCII/tab records with
+32...1024-byte fixed rows, at least 16 rows, and at least 87.5% template-column
+stability. The generic shared LZ77 module and its hot loop remain unchanged.
+The object uses lazy hash-head initialization, packed `u32` suffix costs, a
+four-byte prefix guard, a 256-hop chain, and 128 valid candidates, while its
+literal proxy is the uniform bit width of the record byte alphabet. Exact wire
+arbitration against the existing lazy plan remains mandatory.
+
+On `records_q8`, production ratio output is now 3,442 bytes instead of 3,459
+bytes (`-17`, `-0.49%`), versus libbrotli q8 at 3,117 bytes (remaining gap
+10.43%). Fixed-CPU-2 independent-binary A/B over eleven interleaved pairs
+measured 4.12 versus 3.97 MiB/s at the median (`1.0372x`, 11/11 wins). A
+deterministic 480-row family audit spanning 4/8/16/32/64 KiB, 32/64/128/256-
+byte rows, three mutation densities, and eight seeds improved 134 rows, found
+301 record proposals that exact-wire arbitration correctly rejected, and found
+zero cases where record output beat lazy but lost to the generic optimal plan.
+All rows decoded with both Vort and libbrotli. The 12-row 64 KiB Silesia
+control stayed byte-for-byte identical; its fixed-CPU-2 row-median floor was
+1.0051x and matrix geomean was 1.0143x. Explicit non-default Brotli windows
+remain on the generic parser so the specialized object's fixed 32 KiB history
+cannot violate advertised window limits.
 
 An upstream-inspired q8 parser was evaluated but not retained. The prototype
 used four-byte hashes, Brotli length/distance scoring, ten recent-distance

@@ -13,12 +13,13 @@ from benchmark_provenance_gate import PROVENANCE_COLUMNS, validate_provenance
 
 COLUMNS = [
     "case", "reference_version", "input_bytes", "input_sha256", "encoded_sha256", "iterations",
-    "selected_bytes", "lazy_bytes", "optimal_bytes", "stored_bytes",
-    "optimal_attempted", "optimal_selected",
+    "selected_bytes", "lazy_bytes", "optimal_bytes", "record_optimal_bytes", "stored_bytes",
+    "optimal_attempted", "optimal_selected", "record_optimal_attempted", "record_optimal_selected",
     "lazy_tokens", "lazy_literals", "lazy_matches", "lazy_matched_bytes", "lazy_fixed_bits",
     "lazy_commands", "lazy_recent_distances", "lazy_last_distances",
     "optimal_tokens", "optimal_literals", "optimal_matches", "optimal_matched_bytes", "optimal_fixed_bits",
     "optimal_commands", "optimal_recent_distances", "optimal_last_distances",
+    "record_optimal_tokens", "record_optimal_literals", "record_optimal_matches", "record_optimal_matched_bytes",
     "optimal_index_bytes", "optimal_positions", "optimal_chain_nodes",
     "optimal_prefix_rejections", "optimal_bound_rejections",
     "optimal_prefix_mismatch_histogram",
@@ -29,13 +30,13 @@ COLUMNS = [
     "optimal_length_choices_built", "optimal_candidate_budget_stops",
     "lazy_plan_ns", "lazy_command_ns", "lazy_wire_ns",
     "optimal_plan_ns", "optimal_index_ns", "optimal_search_ns",
-    "optimal_reconstruct_ns", "optimal_command_ns", "optimal_wire_ns",
+    "optimal_reconstruct_ns", "optimal_command_ns", "optimal_wire_ns", "record_optimal_ns",
     "selection_ns", "total_ns", "stage_ns", "unaccounted_ns",
 ] + PROVENANCE_COLUMNS
 CASES = {"source4k": 4 * 1024, "source16k": 16 * 1024, "source32k": 32 * 1024, "records_q8": 32 * 1024}
 TIMINGS = [
     "lazy_plan_ns", "lazy_command_ns", "lazy_wire_ns",
-    "optimal_plan_ns", "optimal_command_ns", "optimal_wire_ns",
+    "optimal_plan_ns", "optimal_command_ns", "optimal_wire_ns", "record_optimal_ns",
     "selection_ns",
 ]
 
@@ -93,6 +94,8 @@ def main() -> int:
             assert integer(row, key) >= 0, (key, row)
         assert integer(row, "optimal_attempted") == 1, row
         assert integer(row, "optimal_selected") in (0, 1), row
+        assert integer(row, "record_optimal_attempted") in (0, 1), row
+        assert integer(row, "record_optimal_selected") in (0, 1), row
         assert integer(row, "optimal_positions") == input_bytes, row
         assert integer(row, "lazy_tokens") == integer(row, "lazy_literals") + integer(row, "lazy_matches"), row
         assert integer(row, "lazy_literals") + integer(row, "lazy_matched_bytes") == input_bytes, row
@@ -100,10 +103,19 @@ def main() -> int:
         assert integer(row, "optimal_literals") + integer(row, "optimal_matched_bytes") == input_bytes, row
         assert 0 <= integer(row, "lazy_last_distances") <= integer(row, "lazy_recent_distances") <= integer(row, "lazy_commands"), row
         assert 0 <= integer(row, "optimal_last_distances") <= integer(row, "optimal_recent_distances") <= integer(row, "optimal_commands"), row
-        assert integer(row, "selected_bytes") == min(
-            integer(row, "lazy_bytes"), integer(row, "optimal_bytes"), integer(row, "stored_bytes")
+        candidates = [integer(row, "lazy_bytes"), integer(row, "optimal_bytes"), integer(row, "stored_bytes")]
+        if integer(row, "record_optimal_attempted"):
+            candidates.append(integer(row, "record_optimal_bytes"))
+            assert integer(row, "record_optimal_tokens") == integer(row, "record_optimal_literals") + integer(row, "record_optimal_matches"), row
+            assert integer(row, "record_optimal_literals") + integer(row, "record_optimal_matched_bytes") == input_bytes, row
+        else:
+            for key in ("record_optimal_bytes", "record_optimal_tokens", "record_optimal_literals", "record_optimal_matches", "record_optimal_matched_bytes", "record_optimal_ns"):
+                assert integer(row, key) == 0, (key, row)
+        assert integer(row, "selected_bytes") == min(candidates), row
+        assert integer(row, "optimal_selected") == (
+            integer(row, "optimal_bytes") < integer(row, "lazy_bytes") and
+            (not integer(row, "record_optimal_selected"))
         ), row
-        assert integer(row, "optimal_selected") == (integer(row, "optimal_bytes") < integer(row, "lazy_bytes")), row
         assert integer(row, "stage_ns") == sum(integer(row, key) for key in TIMINGS), row
         assert integer(row, "stage_ns") + integer(row, "unaccounted_ns") == integer(row, "total_ns"), row
         inner_ns = sum(integer(row, key) for key in ("optimal_index_ns", "optimal_search_ns", "optimal_reconstruct_ns"))
@@ -125,12 +137,18 @@ def main() -> int:
         assert extension_min <= integer(row, "optimal_length_choices_built") <= extension_max, row
         assert integer(row, "optimal_candidate_budget_stops") <= input_bytes, row
     records = by_case["records_q8"]
-    assert integer(records, "selected_bytes") == integer(records, "lazy_bytes"), records
-    assert integer(records, "optimal_bytes") > integer(records, "lazy_bytes"), records
+    assert integer(records, "record_optimal_attempted") == 1, records
+    assert integer(records, "record_optimal_selected") == 1, records
+    assert integer(records, "record_optimal_bytes") <= 3442, records
+    assert integer(records, "selected_bytes") == integer(records, "record_optimal_bytes"), records
+    assert integer(records, "record_optimal_bytes") < integer(records, "lazy_bytes"), records
     assert integer(records, "optimal_fixed_bits") > integer(records, "lazy_fixed_bits"), records
     assert integer(records, "optimal_matched_bytes") < integer(records, "lazy_matched_bytes"), records
     assert integer(records, "optimal_literals") > integer(records, "lazy_literals"), records
     assert integer(records, "optimal_selected") == 0, records
+    for name, row in by_case.items():
+        if name != "records_q8":
+            assert integer(row, "record_optimal_attempted") == 0, row
     print(f"br_ratio_stage_profile_gate=ok rows={len(rows)}")
     return 0
 

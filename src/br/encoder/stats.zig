@@ -19,7 +19,7 @@ pub const PlannedEncodeStats = struct {
     wire_ns: u64 = 0,
 };
 
-/// Timed diagnostics for the bounded 4...32 KiB Brotli ratio pipeline. These
+/// Timed diagnostics for the bounded 4...64 KiB Brotli ratio pipeline. These
 /// fields are populated only by the explicit profiling API; normal encoders do
 /// not carry counters or clock reads through their hot paths.
 pub const RatioEncodeProfile = struct {
@@ -44,6 +44,13 @@ pub const RatioEncodeProfile = struct {
     optimal_last_distance_count: usize = 0,
     optimal_bytes: usize = 0,
     optimal_selected: bool = false,
+    record_optimal_attempted: bool = false,
+    record_optimal_bytes: usize = 0,
+    record_optimal_token_count: usize = 0,
+    record_optimal_literal_count: usize = 0,
+    record_optimal_match_count: usize = 0,
+    record_optimal_matched_bytes: usize = 0,
+    record_optimal_selected: bool = false,
     stored_bytes: usize = 0,
     selected_bytes: usize = 0,
     optimal_index_bytes: usize = 0,
@@ -69,12 +76,14 @@ pub const RatioEncodeProfile = struct {
     optimal_reconstruct_ns: u64 = 0,
     optimal_command_ns: u64 = 0,
     optimal_wire_ns: u64 = 0,
+    record_optimal_ns: u64 = 0,
     selection_ns: u64 = 0,
     total_ns: u64 = 0,
 
     pub fn stageNs(self: RatioEncodeProfile) u64 {
         return self.lazy_plan_ns + self.lazy_command_ns + self.lazy_wire_ns +
             self.optimal_plan_ns + self.optimal_command_ns + self.optimal_wire_ns +
+            self.record_optimal_ns +
             self.selection_ns;
     }
 };

@@ -14,6 +14,33 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = .ReleaseFast,
     });
+    const br_record_optimal_obj = b.addObject(.{
+        .name = "vort-br-record-optimal",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/br/encoder/record_optimal_object.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const br_record_optimal_releasefast_obj = b.addObject(.{
+        .name = "vort-br-record-optimal-releasefast",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/br/encoder/record_optimal_object.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+        }),
+    });
+    const br_record_classifier_tests = b.addTest(.{
+        .name = "vort-br-record-classifier-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/br/encoder/record_classifier.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_br_record_classifier_tests = b.addRunArtifact(br_record_classifier_tests);
+    vort_mod.addObject(br_record_optimal_obj);
+    vort_mod_releasefast.addObject(br_record_optimal_releasefast_obj);
     const benchmark_provenance_mod = b.createModule(.{
         .root_source_file = b.path("tools/benchmark_provenance.zig"),
         .target = target,
@@ -31,6 +58,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    tests_mod.addObject(br_record_optimal_obj);
 
     const tests = b.addTest(.{
         .name = "vort-tests",
@@ -40,6 +68,7 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run vort unit tests");
     test_step.dependOn(&run_tests.step);
+    test_step.dependOn(&run_br_record_classifier_tests.step);
 
     const cli_exe = b.addExecutable(.{
         .name = "vort",
@@ -1024,6 +1053,19 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+    const br_record_optimal_audit_exe = b.addExecutable(.{
+        .name = "vort-br-record-optimal-audit",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/record_optimal_audit.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_br_record_optimal_audit = b.addRunArtifact(br_record_optimal_audit_exe);
+    const br_record_optimal_audit_step = b.step("run-br-record-optimal-audit", "Audit fixed-record Brotli optimal candidates");
+    br_record_optimal_audit_step.dependOn(&run_br_record_optimal_audit.step);
     const run_br_ratio_stage_profile = b.addRunArtifact(br_ratio_stage_profile_exe);
     if (b.args) |args| run_br_ratio_stage_profile.addArgs(args);
     const br_ratio_stage_profile_step = b.step("run-br-ratio-stage-profile", "Profile Brotli ratio candidate stages and optimal search");
@@ -4111,6 +4153,7 @@ pub fn build(b: *std.Build) void {
 
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);
+    check_step.dependOn(&br_record_classifier_tests.step);
     check_step.dependOn(&cli_exe.step);
     check_step.dependOn(&bench_exe.step);
     check_step.dependOn(&deflate_bench_exe.step);
@@ -4148,6 +4191,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_planned_chunks_bench_exe.step);
     check_step.dependOn(&br_planned_stage_profile_exe.step);
     check_step.dependOn(&br_ratio_stage_profile_exe.step);
+    check_step.dependOn(&br_record_optimal_audit_exe.step);
     check_step.dependOn(&br_planned_stage_bench_exe.step);
     check_step.dependOn(&br_lazy_sweep_exe.step);
     check_step.dependOn(&br_command_lut_bench_exe.step);
@@ -4222,6 +4266,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_planned_corpus_step);
     ci_smoke_step.dependOn(br_planned_node_diff_step);
     ci_smoke_step.dependOn(br_ratio_stage_profile_gate_step);
+    ci_smoke_step.dependOn(br_record_optimal_audit_step);
     ci_smoke_step.dependOn(br_planned_chunks_bench_gate_step);
     ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
     ci_smoke_step.dependOn(br_real_corpus_diff_step);
