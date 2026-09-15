@@ -13557,19 +13557,10 @@ fn hashTokenSequenceBlockLowerBound(
             const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
             const match_code = try sequenceCodeForValue(match.length, &ml_base, &ml_bits);
             const offset_code = try chooseOffsetSequenceCode(literal_len, match.distance, &repeated_offsets);
-            const literal_extra_bits = @min(
-                ll_bits[literal_code],
-                minimumPredefinedSequenceExtraBits(literal_len, &sequence_predefined.literal_symbols, 0),
-            );
-            const match_extra_bits = @min(
-                ml_bits[match_code],
-                minimumPredefinedSequenceExtraBits(match.length, &sequence_predefined.match_symbols, 0),
-            );
+            const literal_extra_bits = ll_bits[literal_code];
+            const match_extra_bits = ml_bits[match_code];
             const direct_offset_code = try sequenceCodeForValue(match.distance, &of_base, &of_bits);
-            const offset_extra_bits = @min(
-                @min(of_bits[offset_code], of_bits[direct_offset_code]),
-                minimumPredefinedSequenceExtraBits(match.distance, &sequence_predefined.offset_symbols, 2),
-            );
+            const offset_extra_bits = @min(of_bits[offset_code], of_bits[direct_offset_code]);
             sequence_extra_bits = std.math.add(usize, sequence_extra_bits, literal_extra_bits) catch return error.IntegerOverflow;
             sequence_extra_bits = std.math.add(usize, sequence_extra_bits, match_extra_bits) catch return error.IntegerOverflow;
             sequence_extra_bits = std.math.add(usize, sequence_extra_bits, offset_extra_bits) catch return error.IntegerOverflow;
@@ -13623,6 +13614,33 @@ fn minimumPredefinedSequenceExtraBits(value: usize, symbols: []const SequenceSym
             minimum = @min(minimum, symbol.additional_bits);
     }
     return minimum;
+}
+
+test "zstd direct sequence codes lower-bound predefined extra bits" {
+    for (0..std.math.maxInt(u17) + 1) |value| {
+        const code = sequenceCodeForValue(value, &ll_base, &ll_bits) catch continue;
+        try std.testing.expect(ll_bits[code] <= minimumPredefinedSequenceExtraBits(
+            value,
+            &sequence_predefined.literal_symbols,
+            0,
+        ));
+    }
+    for (lz77.min_match_len..lz77.max_match_len + 1) |value| {
+        const code = try sequenceCodeForValue(value, &ml_base, &ml_bits);
+        try std.testing.expect(ml_bits[code] <= minimumPredefinedSequenceExtraBits(
+            value,
+            &sequence_predefined.match_symbols,
+            0,
+        ));
+    }
+    for (1..lz77.default_window_len + 1) |value| {
+        const code = try sequenceCodeForValue(value, &of_base, &of_bits);
+        try std.testing.expect(of_bits[code] <= minimumPredefinedSequenceExtraBits(
+            value,
+            &sequence_predefined.offset_symbols,
+            2,
+        ));
+    }
 }
 
 fn hashTokenSequenceCannotBeat(

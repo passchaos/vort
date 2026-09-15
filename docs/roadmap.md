@@ -13636,6 +13636,15 @@ reuse, so production keeps the simpler independently owned plans.
   1,560 tests, and 93 compile checks pass. Keep this out of the ordinary
   selector: an in-body prototype had a `0.9835x` floor. Literal-cost hoisting
   (`0.9651x`) and 16-to-12-byte beam-state packing (`0.9791x`) were rejected.
+  Removed the lower-bound helper's per-sequence scans over predefined LL/ML/OF
+  states. Exhaustive format-range tests prove direct LL/ML/OF extra-bit widths
+  never exceed the minimum predefined width, so direct widths (and the smaller
+  repeat-aware OF width) are equally conservative. This removes about 4.1% of
+  the profiled complete encoder. Relative to the first beam-first version, 21
+  fixed-CPU-2 JSON level-9 pairs improve `1.0671x` median / `1.0663x` geomean,
+  all wins, at the same 640 bytes. The 20-row control stays bit-exact with a
+  `0.9973x` non-target floor and `1.0016x` geomean; all 1,561 tests, 93 compile
+  checks, and four Zstd gates pass.
   Retained a Zstd ratio-level lower bound that lets a decisive repeat beam prove
   the first single-duplicate family at least 24 times larger without exact
   entropy scoring. The proof scans the existing paired index for the maximum

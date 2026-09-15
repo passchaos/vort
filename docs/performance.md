@@ -2081,6 +2081,20 @@ comparison and block-sweep gates, all 1,560 tests, and all 93 compile checks
 pass. Literal-cost hoisting (`0.9651x`) and shrinking beam states from 16 to 12
 bytes (`0.9791x`) were rejected after 0/21 stage wins.
 
+The lower-bound hot loop no longer scans all predefined LL/ML/OF states for
+every sequence. Exhaustive format-range tests prove that the direct LL and ML
+code widths are no greater than the minimum predefined width for every encodable
+literal length through `u17` and every match length through 258; the same holds
+for direct OF codes through the 32 KiB window. The bound therefore uses direct
+LL/ML widths and the minimum of repeat-aware/direct OF widths without becoming
+stronger than any supported table representation. This removes the profile's
+roughly 4.1% predefined-symbol scan. Against the preceding beam-first binary,
+21 fixed-CPU-2 JSON level-9 pairs improve `1.0671x` median / `1.0663x` geomean,
+all wins, with 640-byte output. The complete 20-row control remains bit-exact;
+excluding JSON ratio rows, its floor is `0.9973x` and geomean is `1.0016x`.
+The final formal run passes 1,561 tests, all 93 compile checks, and the same four
+Zstd gates.
+
 ## Brotli q8 fixed-width record baseline (2026-09-14)
 
 The planned-encode and ratio-stage gates now include a deterministic 32 KiB
