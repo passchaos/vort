@@ -720,6 +720,7 @@ def main() -> int:
         assert native_allocation_smoke["schema"] == "vort.native_allocation_smoke"
         assert native_allocation_smoke["schema_version"] == 1
         assert native_allocation_smoke["ok"] is True
+        assert native_allocation_smoke["seekable_reuse_matched"] is True
         assert native_allocation_smoke["required_zero_allocation_cases"] >= 1
         assert native_allocation_smoke["cases"]
         validate_value_against_manifest(native_allocation_smoke, schemas_def)
@@ -1893,6 +1894,9 @@ def main() -> int:
         assert dashboard["native_allocation_negative_present"] is True
         assert dashboard["native_allocation_markdown_present"] is True
         assert dashboard["native_allocation_healthy"] is True
+        assert dashboard["native_allocation_seekable_reuse_matched"] is True
+        assert dashboard["native_allocation_seekable_reuse_report_matched"] is True
+        assert dashboard["native_allocation_seekable_reuse_smoke_matched"] is True
         assert dashboard["native_allocation_report_case_count"] == native_allocation["case_count"]
         assert dashboard["native_allocation_report_rows"] == len(native_allocation["cases"])
         assert dashboard["native_allocation_report_count_mismatch"] == 0

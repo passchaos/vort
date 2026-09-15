@@ -10132,8 +10132,8 @@ fn nativeSeekableFrameCount(input_len: usize, frame_size: usize) Error!usize {
 }
 
 /// Reusable native seekable-stream encoder. It retains both per-frame codec
-/// scratch and the seek-entry array across calls; callers retain ownership of
-/// the final output through the append/into methods.
+/// scratch, the seek-entry array, and optional scratch output across calls.
+/// Caller-owned destinations remain available through the append/into methods.
 pub const NativeSeekableStreamEncoder = struct {
     allocator: std.mem.Allocator,
     frame_encoder: NativeFrameEncoder,
@@ -22818,14 +22818,38 @@ test "zstd reusable seekable encoder retains frame and table scratch" {
     const entry_capacity = encoder.entries.capacity;
     const output_capacity = encoder.output_scratch.capacity;
     const frame_capacity = encoder.frame_encoder.output_scratch.capacity;
+    const first_deallocations = counting.deallocations;
+    const first_allocated_bytes = counting.allocated_bytes;
+    const first_freed_bytes = counting.freed_bytes;
 
     const second = try encoder.encodeScratch(payload, options);
     const second_allocations = counting.allocations - first_allocations;
+    const second_deallocations = counting.deallocations - first_deallocations;
+    const second_allocated_bytes = counting.allocated_bytes - first_allocated_bytes;
+    const second_freed_bytes = counting.freed_bytes - first_freed_bytes;
     try std.testing.expectEqualSlices(u8, expected, second);
     try std.testing.expectEqual(entry_capacity, encoder.entries.capacity);
     try std.testing.expectEqual(output_capacity, encoder.output_scratch.capacity);
     try std.testing.expectEqual(frame_capacity, encoder.frame_encoder.output_scratch.capacity);
     try std.testing.expectEqual(first_allocations - 3, second_allocations);
+    try std.testing.expectEqual(second_allocations, second_deallocations);
+    try std.testing.expectEqual(second_allocated_bytes, second_freed_bytes);
+
+    {
+        const dictionary = NativeDictionary.init(0x4455, "reusable seekable zstd frame payload-");
+        const dictionary_set = NativeDictionarySet.init(&.{dictionary});
+        const expected_with_dictionary = try encodeNativeSeekableStreamWithDictionaryAlloc(std.testing.allocator, payload, options, dictionary);
+        defer std.testing.allocator.free(expected_with_dictionary);
+        const allocated_with_set = try encoder.encodeWithDictionarySetAlloc(payload, options, dictionary_set, dictionary.id);
+        defer counting.allocator().free(allocated_with_set);
+        try std.testing.expectEqualSlices(u8, expected_with_dictionary, allocated_with_set);
+        const scratch_with_set = try encoder.encodeScratchWithDictionarySet(payload, options, dictionary_set, dictionary.id);
+        try std.testing.expectEqualSlices(u8, expected_with_dictionary, scratch_with_set);
+        var appended_with_set: std.ArrayList(u8) = .empty;
+        defer appended_with_set.deinit(counting.allocator());
+        try encoder.encodeAppendWithDictionarySet(&appended_with_set, payload, options, dictionary_set, dictionary.id);
+        try std.testing.expectEqualSlices(u8, expected_with_dictionary, appended_with_set.items);
+    }
 
     counting.fail_index = counting.alloc_index;
     try std.testing.expectError(error.OutOfMemory, encoder.encodeScratch(payload ++ payload, options));

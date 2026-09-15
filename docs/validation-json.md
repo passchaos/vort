@@ -3223,6 +3223,9 @@ Top-level fields:
   `native_allocation_budget_duplicate_cases`,
   `native_allocation_budget_report_matched`,
   `native_allocation_budget_report_unmatched`,
+  `native_allocation_seekable_reuse_matched`,
+  `native_allocation_seekable_reuse_report_matched`,
+  `native_allocation_seekable_reuse_smoke_matched`,
   `native_allocation_smoke_classified_cases`,
   `native_allocation_smoke_classification_overlap`,
   `native_allocation_smoke_classification_missing`,
@@ -4139,6 +4142,9 @@ Example:
   "native_allocation_negative_present": false,
   "native_allocation_markdown_present": false,
   "native_allocation_healthy": false,
+  "native_allocation_seekable_reuse_matched": false,
+  "native_allocation_seekable_reuse_report_matched": false,
+  "native_allocation_seekable_reuse_smoke_matched": false,
   "native_allocation_report_case_count": 0,
   "native_allocation_report_rows": 0,
   "native_allocation_report_count_mismatch": 0,
@@ -11288,7 +11294,7 @@ Produced by:
 zig build run-native-allocation-report-dashboard
 ```
 
-This report records allocator activity for representative native decode paths so
+This report records allocator activity for representative native encode/decode paths so
 caller-owned APIs and allocation preflight optimizations have a retained
 regression baseline. It includes AnyDecoder, ZlibDecoder, GzipDecoder, deflate,
 LDM, and dictionary-deflate range plus validation rows that prove caller-owned index,
@@ -11296,6 +11302,8 @@ payload, and patch scratch buffers
 sized through the public range and validation preflight helpers keep full-frame,
 embedded/sidecar partial, auto, and self-contained range decode plus embedded
 and sidecar deflate/LDM validation/report-producing validation paths allocation-free.
+It also records one-shot and warmed reusable native Zstd seekable encoding so
+retained frame/output/table scratch savings remain visible.
 
 Top-level fields:
 
@@ -11374,12 +11382,13 @@ Top-level fields:
 | --- | --- | --- |
 | `schema` | string | Always `vort.native_allocation_smoke`. |
 | `schema_version` | integer | Currently `1`. |
-| `ok` | boolean | True when every required zero-allocation case matched. |
+| `ok` | boolean | True when every required zero-allocation and bounded-allocation case matched and the reusable Zstd seekable comparison improved. |
 | `report` | string | Native allocation report path that was checked. |
 | `required_zero_allocation_cases` | integer | Number of zero-allocation case rows checked. |
 | `required_budget_cases` | integer | Number of allocation-budget case rows checked. |
 | `cases` | list | Per-case zero-allocation gate results. |
 | `budget_cases` | list | Per-case allocation-budget gate results. |
+| `seekable_reuse_matched` | boolean | True when the warmed reusable Zstd seekable encoder preserves input/output sizes, balances temporary allocations, and uses at least two fewer allocation calls and fewer allocated bytes than one-shot caller-buffer encoding. |
 
 Each `cases` item includes:
 
@@ -11414,6 +11423,7 @@ Example:
   "report": "zig-out/vort-native-allocation-report.json",
   "required_zero_allocation_cases": 1,
   "required_budget_cases": 1,
+  "seekable_reuse_matched": true,
   "cases": [
     {
       "case": "concat_into",

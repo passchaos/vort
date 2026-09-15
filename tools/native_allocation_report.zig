@@ -115,6 +115,8 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureSidecarLdmValidationWithBuffers(allocator));
     try rows.append(allocator, try measureDictionaryDeflateValidationWithBuffers(allocator, dict_deflate_indexed_stream));
     try rows.append(allocator, try measureDictionaryDeflateValidationReportWithBuffers(allocator, dict_deflate_indexed_stream));
+    try rows.append(allocator, try measureZstdSeekableInto(allocator));
+    try rows.append(allocator, try measureZstdSeekableReusableWarmInto(allocator));
 
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
@@ -1949,6 +1951,53 @@ fn measureDictionaryDeflateValidationReportWithBuffers(backing: std.mem.Allocato
     });
     try std.testing.expect(report.ok);
     return stats("dictionary_deflate_validation_report_with_buffers", stream.len, 0, failing);
+}
+
+const zstd_seekable_allocation_payload = ("reusable seekable zstd frame payload-" ** 96);
+const zstd_seekable_allocation_options: vort.ZstdNativeSeekableOptions = .{
+    .frame_size = 1024,
+    .frame_options = .{ .selection = .literal_only, .content_checksum = true },
+    .seek_checksums = true,
+};
+
+fn measureZstdSeekableInto(backing: std.mem.Allocator) !CaseStats {
+    const bound = try vort.zstdEncodedNativeSeekableStreamBound(zstd_seekable_allocation_payload.len, zstd_seekable_allocation_options);
+    const output = try backing.alloc(u8, bound);
+    defer backing.free(output);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const written = try vort.zstdEncodeNativeSeekableStreamIntoSlice(failing.allocator(), zstd_seekable_allocation_payload, zstd_seekable_allocation_options, output);
+    try verifyZstdSeekableOutput(backing, output[0..written]);
+    return stats("zstd_seekable_into", zstd_seekable_allocation_payload.len, written, failing);
+}
+
+fn measureZstdSeekableReusableWarmInto(backing: std.mem.Allocator) !CaseStats {
+    const bound = try vort.zstdEncodedNativeSeekableStreamBound(zstd_seekable_allocation_payload.len, zstd_seekable_allocation_options);
+    const output = try backing.alloc(u8, bound);
+    defer backing.free(output);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    var encoder = vort.ZstdNativeSeekableStreamEncoder.init(failing.allocator());
+    defer encoder.deinit();
+    _ = try encoder.encodeIntoSlice(zstd_seekable_allocation_payload, zstd_seekable_allocation_options, output);
+    const before = stats("before", 0, 0, failing);
+    const written = try encoder.encodeIntoSlice(zstd_seekable_allocation_payload, zstd_seekable_allocation_options, output);
+    try verifyZstdSeekableOutput(backing, output[0..written]);
+    return .{
+        .name = "zstd_seekable_reusable_warm_into",
+        .input_bytes = zstd_seekable_allocation_payload.len,
+        .output_bytes = written,
+        .allocations = failing.allocations - before.allocations,
+        .deallocations = failing.deallocations - before.deallocations,
+        .allocated_bytes = failing.allocated_bytes - before.allocated_bytes,
+        .freed_bytes = failing.freed_bytes - before.freed_bytes,
+    };
+}
+
+fn verifyZstdSeekableOutput(allocator: std.mem.Allocator, stream: []const u8) !void {
+    const decoded = try vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, stream);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, zstd_seekable_allocation_payload, decoded);
+    const table = try vort.zstdInspectNativeSeekTable(stream);
+    try std.testing.expectEqual(@as(u64, zstd_seekable_allocation_payload.len), table.decompressed_size);
 }
 
 fn stats(name: []const u8, input_len: usize, output_len: usize, failing: std.testing.FailingAllocator) CaseStats {

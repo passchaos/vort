@@ -80,6 +80,13 @@ def main() -> int:
         find_case(imbalanced, "concat_alloc")["deallocations"] = 0
         cases.append(run_bad_report("imbalanced_deallocation", imbalanced, "concat_alloc", tmp))
 
+        seekable_reuse_regression = clone_report()
+        one_shot = find_case(seekable_reuse_regression, "zstd_seekable_into")
+        warmed = find_case(seekable_reuse_regression, "zstd_seekable_reusable_warm_into")
+        warmed["allocations"] = one_shot["allocations"]
+        warmed["deallocations"] = one_shot["deallocations"]
+        cases.append(run_bad_report("seekable_reuse_regression", seekable_reuse_regression, "seekable_reuse_matched", tmp))
+
     summary = {
         "schema": "vort.native_allocation_negative_smoke",
         "schema_version": 1,

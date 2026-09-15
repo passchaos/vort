@@ -5988,6 +5988,7 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
     negative_present = isinstance(negative, dict)
     required_zero_cases = int_field(smoke, "required_zero_allocation_cases")
     required_budget_cases = int_field(smoke, "required_budget_cases")
+    seekable_reuse_smoke_matched = isinstance(smoke, dict) and smoke.get("seekable_reuse_matched") is True
     negative_case_count = int_field(negative, "case_count")
     zero_report_matched, zero_report_unmatched = smoke_rows_match_report(cases, require_zero=True, require_budget=False)
     zero_report_unmatched += abs(required_zero_cases - len(cases))
@@ -5996,6 +5997,23 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
     zero_case_names = {str(row.get("case") or "") for row in cases if isinstance(row, dict)}
     budget_case_names = {str(row.get("case") or "") for row in budget_cases if isinstance(row, dict)}
     report_case_names = set(report_by_case)
+    seekable_one_shot = report_by_case.get("zstd_seekable_into")
+    seekable_warmed = report_by_case.get("zstd_seekable_reusable_warm_into")
+    seekable_reuse_report_matched = isinstance(seekable_one_shot, dict) and isinstance(seekable_warmed, dict)
+    if seekable_reuse_report_matched:
+        seekable_reuse_report_matched = (
+            row_int(seekable_one_shot, "input_bytes") == row_int(seekable_warmed, "input_bytes")
+            and row_int(seekable_one_shot, "output_bytes") == row_int(seekable_warmed, "output_bytes")
+            and report_row_balanced(seekable_one_shot)
+            and report_row_balanced(seekable_warmed)
+            and row_int(seekable_warmed, "allocations") is not None
+            and row_int(seekable_one_shot, "allocations") is not None
+            and row_int(seekable_warmed, "allocations") + 2 <= row_int(seekable_one_shot, "allocations")
+            and row_int(seekable_warmed, "allocated_bytes") is not None
+            and row_int(seekable_one_shot, "allocated_bytes") is not None
+            and row_int(seekable_warmed, "allocated_bytes") < row_int(seekable_one_shot, "allocated_bytes")
+        )
+    seekable_reuse_matched = seekable_reuse_smoke_matched and seekable_reuse_report_matched
     smoke_classified_cases = len((zero_case_names | budget_case_names) & report_case_names)
     smoke_classification_overlap = len(zero_case_names & budget_case_names)
     smoke_classification_missing = len(report_case_names - (zero_case_names | budget_case_names))
@@ -6062,6 +6080,7 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
         and budget_matched == required_budget_cases
         and budget_report_matched == required_budget_cases
         and budget_report_unmatched == 0
+        and seekable_reuse_matched
         and smoke_classified_cases == report_rows
         and smoke_classification_overlap == 0
         and smoke_classification_missing == 0
@@ -6099,6 +6118,9 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
         "budget_duplicate_cases": budget_duplicate_cases,
         "budget_report_matched": budget_report_matched,
         "budget_report_unmatched": budget_report_unmatched,
+        "seekable_reuse_matched": seekable_reuse_matched,
+        "seekable_reuse_report_matched": seekable_reuse_report_matched,
+        "seekable_reuse_smoke_matched": seekable_reuse_smoke_matched,
         "smoke_classified_cases": smoke_classified_cases,
         "smoke_classification_overlap": smoke_classification_overlap,
         "smoke_classification_missing": smoke_classification_missing,
@@ -8831,6 +8853,7 @@ def main() -> int:
             f"| zero/report drift | {native_allocation['zero_report_matched']}/{native_allocation['required_zero_allocation_cases']} | unmatched {native_allocation['zero_report_unmatched']} |",
             f"| budget cases | {native_allocation['budget_matched']}/{native_allocation['required_budget_cases']} | healthy `{native_allocation['healthy']}`, duplicate cases {len(native_allocation['budget_duplicate_cases'])} |",
             f"| budget/report drift | {native_allocation['budget_report_matched']}/{native_allocation['required_budget_cases']} | unmatched {native_allocation['budget_report_unmatched']} |",
+            f"| Zstd seekable reuse | {int(native_allocation['seekable_reuse_matched'])}/1 | report `{native_allocation['seekable_reuse_report_matched']}`, smoke `{native_allocation['seekable_reuse_smoke_matched']}` |",
             f"| smoke classification | {native_allocation['smoke_classified_cases']}/{native_allocation['report_rows']} | overlap {native_allocation['smoke_classification_overlap']}, missing {native_allocation['smoke_classification_missing']}, extra {native_allocation['smoke_classification_extra']} |",
             f"| negative smoke cases | {native_allocation['negative_matched']}/{native_allocation['negative_case_count']} | present `{native_allocation['negative_present']}`, duplicate names {len(native_allocation['negative_duplicate_names'])}, unmatched {native_allocation['negative_unmatched']} |",
             f"| Markdown rows | {native_allocation['markdown_matched']}/{native_allocation['markdown_rows']} | present `{native_allocation['markdown_present']}`, unmatched {native_allocation['markdown_unmatched']}, malformed {native_allocation['markdown_malformed_rows']}, duplicate {len(native_allocation['markdown_duplicate_cases'])}, unknown {len(native_allocation['markdown_unknown_cases'])} |",
@@ -9875,6 +9898,9 @@ def main() -> int:
                 "native_allocation_budget_duplicate_cases": native_allocation["budget_duplicate_cases"],
                 "native_allocation_budget_report_matched": native_allocation["budget_report_matched"],
                 "native_allocation_budget_report_unmatched": native_allocation["budget_report_unmatched"],
+                "native_allocation_seekable_reuse_matched": native_allocation["seekable_reuse_matched"],
+                "native_allocation_seekable_reuse_report_matched": native_allocation["seekable_reuse_report_matched"],
+                "native_allocation_seekable_reuse_smoke_matched": native_allocation["seekable_reuse_smoke_matched"],
                 "native_allocation_smoke_classified_cases": native_allocation["smoke_classified_cases"],
                 "native_allocation_smoke_classification_overlap": native_allocation["smoke_classification_overlap"],
                 "native_allocation_smoke_classification_missing": native_allocation["smoke_classification_missing"],

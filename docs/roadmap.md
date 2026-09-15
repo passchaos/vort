@@ -13743,6 +13743,10 @@ reuse, so production keeps the simpler independently owned plans.
   dictionary-set streams. A counting-allocator regression proves that a second
   same-shape encode removes three allocation calls while preserving exact bytes,
   and an injected OOM followed by successful reuse covers rollback and teardown.
+  The native allocation report separately locks one-shot caller-buffer encoding
+  at 174 calls / 911,692 bytes and warmed reusable encoding at 172 calls /
+  911,334 bytes; positive, negative-drift, schema, and aggregate dashboard gates
+  validate the relationship.
   Rejected two follow-up representations for the adjacent-match reuse state in
   Zstd's single-state beam. Splitting the optional match into two `u16` values
   improved the isolated JSON parser by about `1.028x`, but moved following hot

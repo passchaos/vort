@@ -1155,7 +1155,10 @@
             "native_allocation_present",
             "native_allocation_smoke_present",
             "native_allocation_negative_present",
-            "native_allocation_markdown_present"
+            "native_allocation_markdown_present",
+            "native_allocation_seekable_reuse_matched",
+            "native_allocation_seekable_reuse_report_matched",
+            "native_allocation_seekable_reuse_smoke_matched"
           ],
           "positive": [
             "native_allocation_report_case_count",
@@ -2204,6 +2207,9 @@
         "native_allocation_smoke_present": "bool",
         "native_allocation_negative_present": "bool",
         "native_allocation_healthy": "bool",
+        "native_allocation_seekable_reuse_matched": "bool",
+        "native_allocation_seekable_reuse_report_matched": "bool",
+        "native_allocation_seekable_reuse_smoke_matched": "bool",
         "native_allocation_report_case_count": "int",
         "native_allocation_required_zero_allocation_cases": "int",
         "native_allocation_zero_allocation_matched": "int",
@@ -6519,7 +6525,8 @@
         "required_budget_cases": "int",
         "required_zero_allocation_cases": "int",
         "schema": "str",
-        "schema_version": "int"
+        "schema_version": "int",
+        "seekable_reuse_matched": "bool"
       },
       "item_collection": "cases",
       "item_fields": {

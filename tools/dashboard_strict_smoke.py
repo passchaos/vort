@@ -3436,11 +3436,13 @@ def write_native_allocation_artifacts(root: Path) -> None:
     report = {
         "schema": "vort.native_allocation_report",
         "schema_version": 1,
-        "case_count": 3,
+        "case_count": 5,
         "cases": [
             {"case": "zero_decode", "input_bytes": 16, "output_bytes": 16, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
             {"case": "zero_range", "input_bytes": 32, "output_bytes": 8, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
             {"case": "budgeted_index", "input_bytes": 64, "output_bytes": 16, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80},
+            {"case": "zstd_seekable_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 174, "deallocations": 174, "allocated_bytes": 911692, "freed_bytes": 911692},
+            {"case": "zstd_seekable_reusable_warm_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 172, "deallocations": 172, "allocated_bytes": 911334, "freed_bytes": 911334},
         ],
     }
     smoke = {
@@ -3449,13 +3451,16 @@ def write_native_allocation_artifacts(root: Path) -> None:
         "ok": True,
         "report": str(root / NATIVE_ALLOCATION_REPORT_ARTIFACT),
         "required_zero_allocation_cases": 2,
-        "required_budget_cases": 1,
+        "required_budget_cases": 3,
+        "seekable_reuse_matched": True,
         "cases": [
             {"case": "zero_decode", "present": True, "matched": True, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
             {"case": "zero_range", "present": True, "matched": True, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
         ],
         "budget_cases": [
             {"case": "budgeted_index", "present": True, "matched": True, "balanced": True, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80, "max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
+            {"case": "zstd_seekable_into", "present": True, "matched": True, "balanced": True, "allocations": 174, "deallocations": 174, "allocated_bytes": 911692, "freed_bytes": 911692, "max_allocations": 174, "max_deallocations": 174, "max_allocated_bytes": 911692, "max_freed_bytes": 911692},
+            {"case": "zstd_seekable_reusable_warm_into", "present": True, "matched": True, "balanced": True, "allocations": 172, "deallocations": 172, "allocated_bytes": 911334, "freed_bytes": 911334, "max_allocations": 172, "max_deallocations": 172, "max_allocated_bytes": 911334, "max_freed_bytes": 911334},
         ],
     }
     negative = {
@@ -7351,15 +7356,16 @@ def main() -> int:
                 [
                     "## Native allocation coverage",
                     "| category | count | detail |",
-                    "| report cases | 3 | present `True` |",
-                    "| report rows | 3/3 | balanced 3, count mismatch 0, duplicate rows 0, duplicate names 0, unbalanced 0 |",
+                    "| report cases | 5 | present `True` |",
+                    "| report rows | 5/5 | balanced 5, count mismatch 0, duplicate rows 0, duplicate names 0, unbalanced 0 |",
                     "| zero-allocation cases | 2/2 | smoke present `True`, duplicate cases 0 |",
                     "| zero/report drift | 2/2 | unmatched 0 |",
-                    "| budget cases | 1/1 | healthy `True`, duplicate cases 0 |",
-                    "| budget/report drift | 1/1 | unmatched 0 |",
-                    "| smoke classification | 3/3 | overlap 0, missing 0, extra 0 |",
+                    "| budget cases | 3/3 | healthy `True`, duplicate cases 0 |",
+                    "| budget/report drift | 3/3 | unmatched 0 |",
+                    "| Zstd seekable reuse | 1/1 | report `True`, smoke `True` |",
+                    "| smoke classification | 5/5 | overlap 0, missing 0, extra 0 |",
                     "| negative smoke cases | 1/1 | present `True`, duplicate names 0, unmatched 0 |",
-                    "| Markdown rows | 3/3 | present `True`, unmatched 0, malformed 0, duplicate 0, unknown 0 |",
+                    "| Markdown rows | 5/5 | present `True`, unmatched 0, malformed 0, duplicate 0, unknown 0 |",
                 ],
             )
         )
@@ -14983,6 +14989,30 @@ def main() -> int:
                 native_allocation_budget_result.returncode,
                 "dashboard_index_validation_unhealthy=native_allocation_failed",
                 native_allocation_budget_result.stdout,
+            )
+        )
+
+        native_allocation_seekable_result, native_allocation_seekable_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-seekable-reuse",
+            mutate_smoke=lambda payload: payload.__setitem__("seekable_reuse_matched", False),
+        )
+        native_allocation_seekable_matched = (
+            native_allocation_seekable_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_seekable_result.stdout
+            and native_allocation_seekable_manifest["validation_healthy"] is False
+            and native_allocation_seekable_manifest["native_allocation_healthy"] is False
+            and native_allocation_seekable_manifest["native_allocation_seekable_reuse_matched"] is False
+        )
+        checks.append(
+            check_row(
+                "native_allocation_seekable_reuse_unmatched",
+                "strict-validation-health",
+                True,
+                native_allocation_seekable_matched,
+                native_allocation_seekable_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_seekable_result.stdout,
             )
         )
 

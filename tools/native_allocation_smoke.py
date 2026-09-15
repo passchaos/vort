@@ -75,7 +75,14 @@ ALLOCATION_BUDGETS = {
     "indexed_range_into_full_deflate": {"max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
     "batch_range_into_fast_paths": {"max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
     "embedded_validation_borrowed_dict": {"max_allocations": 8, "max_deallocations": 8, "max_allocated_bytes": 2081, "max_freed_bytes": 2081},
+    "zstd_seekable_into": {"max_allocations": 174, "max_deallocations": 174, "max_allocated_bytes": 911692, "max_freed_bytes": 911692},
+    "zstd_seekable_reusable_warm_into": {"max_allocations": 172, "max_deallocations": 172, "max_allocated_bytes": 911334, "max_freed_bytes": 911334},
 }
+
+SEEKABLE_REUSE_CASES = (
+    "zstd_seekable_into",
+    "zstd_seekable_reusable_warm_into",
+)
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -169,15 +176,32 @@ def main() -> int:
             ),
         })
 
+    seekable_rows = [rows.get(name) for name in SEEKABLE_REUSE_CASES]
+    seekable_reuse_matched = all(row is not None for row in seekable_rows)
+    if seekable_reuse_matched:
+        one_shot, warmed = seekable_rows
+        assert one_shot is not None and warmed is not None
+        seekable_reuse_matched = (
+            int_value(one_shot, "input_bytes") == int_value(warmed, "input_bytes")
+            and int_value(one_shot, "output_bytes") == int_value(warmed, "output_bytes")
+            and int_value(one_shot, "allocations") == int_value(one_shot, "deallocations")
+            and int_value(one_shot, "allocated_bytes") == int_value(one_shot, "freed_bytes")
+            and int_value(warmed, "allocations") == int_value(warmed, "deallocations")
+            and int_value(warmed, "allocated_bytes") == int_value(warmed, "freed_bytes")
+            and int_value(warmed, "allocations") + 2 <= int_value(one_shot, "allocations")
+            and int_value(warmed, "allocated_bytes") < int_value(one_shot, "allocated_bytes")
+        )
+
     summary = {
         "schema": "vort.native_allocation_smoke",
         "schema_version": 1,
-        "ok": all(bool(row["matched"]) for row in case_rows) and all(bool(row["matched"]) for row in budget_rows),
+        "ok": all(bool(row["matched"]) for row in case_rows) and all(bool(row["matched"]) for row in budget_rows) and seekable_reuse_matched,
         "report": report_path.as_posix(),
         "required_zero_allocation_cases": len(case_rows),
         "required_budget_cases": len(budget_rows),
         "cases": case_rows,
         "budget_cases": budget_rows,
+        "seekable_reuse_matched": seekable_reuse_matched,
     }
 
     if args.summary:
