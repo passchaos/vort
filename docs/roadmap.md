@@ -9794,6 +9794,15 @@ reuse, so production keeps the simpler independently owned plans.
   block-stream cursor when a compressed block exceeds the caller's current
   output slice, preserving prior output/history and avoiding the old whole-frame
   decoded-scratch fallback.
+  Updated the native-library benchmark smoke to enforce that retained behavior.
+  Its linked two-block and dictionary-set/skippable cases had continued to
+  require the removed whole-frame scratch after production and focused tests
+  moved to the resumable cursor. The gate now checks cursor activation, zero
+  decoded-buffer length and capacity, completion-only streamed-block counts,
+  linked history across a 64 KiB raw prefix, and exact split output. The 93-row
+  Debug library gate passes again; three independent pre-change benchmark
+  binaries reproduced the stale assertion, confirming this was gate drift rather
+  than a decoder regression.
   Replaced the cursor's byte-at-a-time match replay with bounded prefix copies
   plus doubling copies from the current output span. A nine-pair ReleaseFast A/B
   run against commit `72609544` on a 256 KiB repetitive frame measured median

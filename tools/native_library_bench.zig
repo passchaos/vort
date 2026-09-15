@@ -98,7 +98,7 @@ pub fn main(init: std.process.Init) !void {
     try addBuiltinCases(init.gpa, &cases);
     try addPathCases(init.io, init.gpa, &cases, options.paths.items, options.path_limit);
 
-    try smokeLz4LinkedDirectFallback(init.gpa);
+    try smokeLz4LinkedDirectCursor(init.gpa);
     try smokeLz4DeepHashChain(init.gpa);
     try smokeLz4LinkedDeepHashChain(init.gpa);
     try smokeLz4ChainDepthBudget(init.gpa);
@@ -1877,7 +1877,7 @@ fn timeDecodeZstdIncrementalFallback(io: std.Io, allocator: std.mem.Allocator, e
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
 }
 
-fn smokeLz4LinkedDirectFallback(allocator: std.mem.Allocator) !void {
+fn smokeLz4LinkedDirectCursor(allocator: std.mem.Allocator) !void {
     var payload: [64 * 1024 + 4096]u8 = undefined;
     var state: u32 = 0x1234_abcd;
     for (payload[0 .. 64 * 1024]) |*byte| {
@@ -1904,12 +1904,16 @@ fn smokeLz4LinkedDirectFallback(allocator: std.mem.Allocator) !void {
     if (!std.mem.eql(u8, decoder.diagnostics().phase_name, "direct_output")) return error.SizeMismatch;
     const first = try decoder.step("", decoded[0 .. 64 * 1024]);
     if (first.status != .need_output or first.progress.output_written != 64 * 1024) return error.SizeMismatch;
-    if (decoder.decoded_scratch.items.len != 0) return error.SizeMismatch;
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
     const partial = try decoder.step("", decoded[64 * 1024 ..][0..127]);
     if (partial.status != .need_output or partial.progress.output_written != 127) return error.SizeMismatch;
-    if (decoder.decoded_scratch.items.len != payload.len) return error.SizeMismatch;
+    if (!decoder.isCompressedBlockStreaming()) return error.SizeMismatch;
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
+    if (decoder.streamedCompressedBlockCount() != 0) return error.SizeMismatch;
     const done = try decoder.step("", decoded[64 * 1024 + 127 ..]);
     if (done.status != .done) return error.SizeMismatch;
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
+    if (decoder.streamedCompressedBlockCount() != 1) return error.SizeMismatch;
     if (!std.mem.eql(u8, &payload, &decoded)) return error.SizeMismatch;
 
     const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 5, "linked-direct");
@@ -1940,12 +1944,16 @@ fn smokeLz4LinkedDirectFallback(allocator: std.mem.Allocator) !void {
     if (!std.mem.eql(u8, fallback_decoder.diagnostics().phase_name, "direct_output")) return error.SizeMismatch;
     const fallback_first = try fallback_decoder.step("", decoded[0 .. 64 * 1024]);
     if (fallback_first.status != .need_output or fallback_first.progress.output_written != 64 * 1024) return error.SizeMismatch;
-    if (fallback_decoder.decoded_scratch.items.len != 0) return error.SizeMismatch;
+    if (fallback_decoder.decodedBufferedBytes() != 0 or fallback_decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
     const fallback_progress = try fallback_decoder.step("", decoded[64 * 1024 ..][0..127]);
     if (fallback_progress.status != .need_output or fallback_progress.progress.output_written != 127) return error.SizeMismatch;
-    if (fallback_decoder.decoded_scratch.items.len != payload.len) return error.SizeMismatch;
+    if (!fallback_decoder.isCompressedBlockStreaming()) return error.SizeMismatch;
+    if (fallback_decoder.decodedBufferedBytes() != 0 or fallback_decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
+    if (fallback_decoder.streamedCompressedBlockCount() != 0) return error.SizeMismatch;
     const fallback_done = try fallback_decoder.step("", decoded[64 * 1024 + 127 ..]);
     if (fallback_done.status != .done) return error.SizeMismatch;
+    if (fallback_decoder.decodedBufferedBytes() != 0 or fallback_decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
+    if (fallback_decoder.streamedCompressedBlockCount() != 1) return error.SizeMismatch;
     if (!std.mem.eql(u8, &payload, &decoded)) return error.SizeMismatch;
 }
 
@@ -2177,10 +2185,14 @@ fn smokeLz4DictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
 
     const first = try vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, lz4_dictionary_set_first_payload, options, dictionary_set, first_dict.id);
     defer allocator.free(first);
+    const first_block = (try vort.lz4InspectNativeFrameFirstBlock(first)) orelse return error.SizeMismatch;
+    if (!first_block.is_compressed) return error.SizeMismatch;
     const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 6, "dict-fallback");
     defer allocator.free(skip);
     const second = try vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, lz4_dictionary_set_second_payload, options, dictionary_set, second_dict.id);
     defer allocator.free(second);
+    const second_block = (try vort.lz4InspectNativeFrameFirstBlock(second)) orelse return error.SizeMismatch;
+    if (!second_block.is_compressed) return error.SizeMismatch;
     const stream = try std.mem.concat(allocator, u8, &.{ first, skip, second });
     defer allocator.free(stream);
 
@@ -2199,7 +2211,8 @@ fn smokeLz4DictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
     const direct_done = try direct_decoder.step("", &output);
     if (direct_done.status != .done) return error.SizeMismatch;
     if (!std.mem.eql(u8, lz4_dictionary_set_payload, &output)) return error.SizeMismatch;
-    if (direct_decoder.decoded_scratch.items.len != 0) return error.SizeMismatch;
+    if (direct_decoder.decodedBufferedBytes() != 0 or direct_decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
+    if (direct_decoder.streamedCompressedBlockCount() != 0) return error.SizeMismatch;
 
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
         .expected_output_len = lz4_dictionary_set_payload.len,
@@ -2212,7 +2225,9 @@ fn smokeLz4DictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
     const first_len = @max(@as(usize, 1), output.len / 32);
     const first_step = try decoder.step("", output[0..first_len]);
     if (first_step.status != .need_output or first_step.progress.output_written != first_len) return error.SizeMismatch;
-    if (decoder.decoded_scratch.items.len == 0) return error.SizeMismatch;
+    if (!decoder.isCompressedBlockStreaming()) return error.SizeMismatch;
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
+    if (decoder.streamedCompressedBlockCount() != 0) return error.SizeMismatch;
 
     var written = first_step.progress.output_written;
     while (true) {
@@ -2222,6 +2237,10 @@ fn smokeLz4DictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
         if (result.status != .need_output or result.progress.output_written == 0) return error.SizeMismatch;
     }
     if (written != output.len or !std.mem.eql(u8, lz4_dictionary_set_payload, &output)) return error.SizeMismatch;
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
+    // The tiny first drain forces frame one onto the cursor. Frame two then
+    // sees the remaining caller buffer and completes through direct output.
+    if (decoder.streamedCompressedBlockCount() != 1) return error.SizeMismatch;
 }
 
 fn smokeZstdDictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
@@ -2925,7 +2944,9 @@ fn decodeLz4IncrementalFallback(allocator: std.mem.Allocator, encoded: []const u
         .max_decoded_buffer_len = decoded.len,
     });
     defer decoder.deinit();
-    try drainIncrementalFallback(&decoder, encoded, decoded, expected, true);
+    try drainIncrementalFallback(&decoder, encoded, decoded, expected);
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
+    if (decoder.streamedCompressedBlockCount() == 0) return error.SizeMismatch;
 }
 
 fn decodeZstdIncrementalFallback(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8, expected: []const u8) !void {
@@ -2934,7 +2955,7 @@ fn decodeZstdIncrementalFallback(allocator: std.mem.Allocator, encoded: []const 
         .max_decoded_buffer_len = decoded.len,
     });
     defer decoder.deinit();
-    try drainIncrementalFallback(&decoder, encoded, decoded, expected, false);
+    try drainIncrementalFallback(&decoder, encoded, decoded, expected);
     if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
 }
 
@@ -2998,7 +3019,9 @@ fn decodeLz4DictionarySetFallback(
             .max_decoded_buffer_len = decoded.len,
         });
     defer decoder.deinit();
-    try drainIncrementalFallback(&decoder, encoded, decoded, lz4_dictionary_set_payload, use_dictionary_set);
+    try drainIncrementalFallback(&decoder, encoded, decoded, lz4_dictionary_set_payload);
+    if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
+    if (use_dictionary_set and decoder.streamedCompressedBlockCount() == 0) return error.SizeMismatch;
 }
 
 fn decodeZstdDictionarySetFallback(
@@ -3019,11 +3042,11 @@ fn decodeZstdDictionarySetFallback(
             .max_decoded_buffer_len = decoded.len,
         });
     defer decoder.deinit();
-    try drainIncrementalFallback(&decoder, encoded, decoded, zstd_dictionary_set_payload, false);
+    try drainIncrementalFallback(&decoder, encoded, decoded, zstd_dictionary_set_payload);
     if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.SizeMismatch;
 }
 
-fn drainIncrementalFallback(decoder: anytype, encoded: []const u8, decoded: []u8, expected: []const u8, require_scratch_fallback: bool) !void {
+fn drainIncrementalFallback(decoder: anytype, encoded: []const u8, decoded: []u8, expected: []const u8) !void {
     const initial = try decoder.step(encoded, decoded[0..0]);
     if (initial.status != .need_output) return error.SizeMismatch;
 
@@ -3032,10 +3055,6 @@ fn drainIncrementalFallback(decoder: anytype, encoded: []const u8, decoded: []u8
     const first = try decoder.step("", decoded[0..first_len]);
     written += first.progress.output_written;
     if (first.status != .need_output or written != first_len) return error.SizeMismatch;
-    // LZ4 still exercises its decoded-scratch fallback here. Zstd passes false
-    // and independently asserts its resumable small-output path stays scratch-free.
-    if (require_scratch_fallback and decoder.decoded_scratch.items.len == 0) return error.SizeMismatch;
-
     while (true) {
         const result = try decoder.step("", decoded[written..]);
         written += result.progress.output_written;
