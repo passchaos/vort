@@ -3441,8 +3441,8 @@ def write_native_allocation_artifacts(root: Path) -> None:
             {"case": "zero_decode", "input_bytes": 16, "output_bytes": 16, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
             {"case": "zero_range", "input_bytes": 32, "output_bytes": 8, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
             {"case": "budgeted_index", "input_bytes": 64, "output_bytes": 16, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80},
-            {"case": "zstd_seekable_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 168, "deallocations": 168, "allocated_bytes": 910486, "freed_bytes": 910486},
-            {"case": "zstd_seekable_reusable_warm_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 164, "deallocations": 164, "allocated_bytes": 909726, "freed_bytes": 909726},
+            {"case": "zstd_seekable_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 132, "deallocations": 132, "allocated_bytes": 245440, "freed_bytes": 245440},
+            {"case": "zstd_seekable_reusable_warm_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 116, "deallocations": 116, "allocated_bytes": 18094, "freed_bytes": 18094},
         ],
     }
     smoke = {
@@ -3459,8 +3459,8 @@ def write_native_allocation_artifacts(root: Path) -> None:
         ],
         "budget_cases": [
             {"case": "budgeted_index", "present": True, "matched": True, "balanced": True, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80, "max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
-            {"case": "zstd_seekable_into", "present": True, "matched": True, "balanced": True, "allocations": 168, "deallocations": 168, "allocated_bytes": 910486, "freed_bytes": 910486, "max_allocations": 168, "max_deallocations": 168, "max_allocated_bytes": 910486, "max_freed_bytes": 910486},
-            {"case": "zstd_seekable_reusable_warm_into", "present": True, "matched": True, "balanced": True, "allocations": 164, "deallocations": 164, "allocated_bytes": 909726, "freed_bytes": 909726, "max_allocations": 164, "max_deallocations": 164, "max_allocated_bytes": 909726, "max_freed_bytes": 909726},
+            {"case": "zstd_seekable_into", "present": True, "matched": True, "balanced": True, "allocations": 132, "deallocations": 132, "allocated_bytes": 245440, "freed_bytes": 245440, "max_allocations": 132, "max_deallocations": 132, "max_allocated_bytes": 245440, "max_freed_bytes": 245440},
+            {"case": "zstd_seekable_reusable_warm_into", "present": True, "matched": True, "balanced": True, "allocations": 116, "deallocations": 116, "allocated_bytes": 18094, "freed_bytes": 18094, "max_allocations": 116, "max_deallocations": 116, "max_allocated_bytes": 18094, "max_freed_bytes": 18094},
         ],
     }
     negative = {
@@ -15022,7 +15022,7 @@ def main() -> int:
             mutate_report=lambda payload: next(
                 row for row in payload["cases"]
                 if row.get("case") == "zstd_seekable_reusable_warm_into"
-            ).update({"allocations": 165, "deallocations": 165}),
+            ).update({"allocations": 117, "deallocations": 117}),
         )
         native_allocation_seekable_report_matched = (
             native_allocation_seekable_report_result.returncode != 0

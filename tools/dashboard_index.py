@@ -6008,7 +6008,7 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
             and report_row_balanced(seekable_warmed)
             and row_int(seekable_warmed, "allocations") is not None
             and row_int(seekable_one_shot, "allocations") is not None
-            and row_int(seekable_warmed, "allocations") + 4 <= row_int(seekable_one_shot, "allocations")
+            and row_int(seekable_warmed, "allocations") + 16 <= row_int(seekable_one_shot, "allocations")
             and row_int(seekable_warmed, "allocated_bytes") is not None
             and row_int(seekable_one_shot, "allocated_bytes") is not None
             and row_int(seekable_warmed, "allocated_bytes") < row_int(seekable_one_shot, "allocated_bytes")

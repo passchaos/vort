@@ -13758,6 +13758,20 @@ reuse, so production keeps the simpler independently owned plans.
   the 27,517-byte wire and checksum exact while measuring `0.9983x` median /
   `0.9982x` geomean, so the retained claim is allocation reuse rather than a
   broad one-shot throughput gain.
+  Extended the reusable block context to retain the nested greedy/lazy token
+  lists, optimal-parser DP and compact hash-index storage, and inner match
+  candidate buffers. Allocation-stack profiling attributed 40 of the remaining
+  warmed calls and about 0.89 MiB to rebuilding those parser workspaces once per
+  frame. The formal four-frame report now drops one-shot encoding to 132 calls /
+  245,440 bytes and warmed encoding to 116 calls / 18,094 bytes, preserving the
+  305-byte stream; the gate requires the full 16-call / 227,346-byte warmed
+  advantage. Thirty-one alternating independent-binary warmed A/B pairs (100
+  encodes per side) measured `1.0034x` median / `1.0096x` geomean with 18/31
+  wins. A 21-pair complete 129 KiB multi-block level-3 control preserved the
+  27,517-byte wire and checksum and measured `1.0028x` median / `1.0035x`
+  geomean with 13/21 wins. Relative to the preceding reusable implementation,
+  the warmed allocation count falls another 29.3% and transient requested bytes
+  fall 98.0%; retained capacity is released by encoder teardown.
   Rejected two follow-up representations for the adjacent-match reuse state in
   Zstd's single-state beam. Splitting the optional match into two `u16` values
   improved the isolated JSON parser by about `1.028x`, but moved following hot
