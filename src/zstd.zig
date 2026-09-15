@@ -73,6 +73,8 @@ var test_disable_indexed_single_lower_bound = false;
 var test_decisive_single_lower_bound_hits: usize = 0;
 var test_disable_small_single_emit_prune = false;
 var test_small_single_emit_prune_hits: usize = 0;
+var test_disable_single_sequence_winner_only = false;
+var test_single_sequence_winner_only_hits: usize = 0;
 var test_disable_hash_token_lower_bound = false;
 var test_hash_token_lower_bound_hits: usize = 0;
 var test_disable_four_byte_optimal = false;
@@ -15341,6 +15343,66 @@ fn emitBestSequenceCompressedBlock(
     defer literals_prefix.deinit(allocator);
     _ = try emitSequenceLiteralsSection(allocator, &literals_prefix, block, literal_lens, literal_ends, tail_start);
 
+    if (literal_lens.len == 1 and offsets.len == 1 and match_lens.len == 1 and
+        (!builtin.is_test or !test_disable_single_sequence_winner_only))
+    {
+        if (comptime builtin.is_test) test_single_sequence_winner_only_hits += 1;
+        const rle_payload_len = try rleSequencePayloadLenForValuesWithLiteralsLen(
+            literal_lens,
+            offsets,
+            match_lens,
+            literals_prefix.items.len,
+        );
+        const predefined_payload_len: ?usize = predefinedSequencePayloadLenWithLiteralsLen(
+            literal_lens,
+            offsets,
+            match_lens,
+            literals_prefix.items.len,
+        ) catch |err| switch (err) {
+            // The generic path treats values outside the predefined tables as
+            // an unavailable candidate and keeps the valid RLE candidate.
+            error.CorruptFrame => null,
+            else => return err,
+        };
+        // Preserve the existing arbitration order: equal-sized candidates
+        // keep the RLE representation that was emitted first.
+        const use_predefined = if (predefined_payload_len) |payload_len|
+            payload_len < rle_payload_len
+        else
+            false;
+        const selected_payload_len = if (use_predefined) predefined_payload_len.? else rle_payload_len;
+        const encoded_len = std.math.add(usize, selected_payload_len, 3) catch return error.IntegerOverflow;
+        const raw_block_len = std.math.add(usize, block.len, 3) catch return error.IntegerOverflow;
+        if (encoded_len >= raw_block_len) return false;
+
+        // The selected emitter appends the header only after constructing its
+        // private payload. Reserve the whole result now so a later append
+        // cannot leave a partial block in the caller's output on OOM.
+        try out.ensureUnusedCapacity(allocator, encoded_len);
+        if (use_predefined) {
+            return try emitMultiSequencePredefinedCompressedBlockWithLiterals(
+                allocator,
+                out,
+                block,
+                last,
+                literals_prefix.items,
+                literal_lens,
+                offsets,
+                match_lens,
+            );
+        }
+        return try emitRleSequenceCompressedBlockWithLiterals(
+            allocator,
+            out,
+            block,
+            last,
+            literals_prefix.items,
+            literal_lens,
+            offsets,
+            match_lens,
+        );
+    }
+
     var candidate_block: std.ArrayList(u8) = .empty;
     defer candidate_block.deinit(allocator);
     var best_block: std.ArrayList(u8) = .empty;
@@ -15438,6 +15500,130 @@ fn emitBestSequenceCompressedBlockWithStackStorage(
     if (!ok) return false;
     try out.appendSlice(allocator, encoded.items);
     return true;
+}
+
+test "zstd single sequence winner-only emission preserves generic wire" {
+    test_disable_single_sequence_winner_only = false;
+    test_single_sequence_winner_only_hits = 0;
+    defer {
+        test_disable_single_sequence_winner_only = false;
+        test_single_sequence_winner_only_hits = 0;
+    }
+
+    var successful_hits: usize = 0;
+    var predefined_wins: usize = 0;
+    var ties: usize = 0;
+    var tie_rle_modes: usize = 0;
+    for (0..64) |seed| {
+        const period = 1 + (seed * 7) % 48;
+        const repeats = 3 + seed % 13;
+        const tail_len = (seed * 5) % 17;
+        const match_len = period * repeats;
+        const len = period + match_len + tail_len;
+        var block: [848]u8 = undefined;
+        var random_state: u32 = @truncate(0x243f_6a88 +% seed *% 0x9e37_79b9);
+        for (block[0..period]) |*byte| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            byte.* = @truncate(random_state >> 24);
+        }
+        for (period..period + match_len) |i| block[i] = block[i - period];
+        for (block[period + match_len .. len]) |*byte| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            byte.* = @truncate(random_state >> 24);
+        }
+
+        const literal_lens = [_]usize{period};
+        const offsets = [_]usize{period};
+        const match_lens = [_]usize{match_len};
+        const literal_ends = [_]usize{period + match_len};
+        const literals_len = try sequenceLiteralsPayloadSectionLen(
+            block[0..len],
+            &literal_lens,
+            &literal_ends,
+            literal_ends[0],
+        );
+        const rle_len = try rleSequencePayloadLenForValuesWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_len);
+        const predefined_len = try predefinedSequencePayloadLenWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_len);
+        if (predefined_len < rle_len)
+            predefined_wins += 1
+        else if (predefined_len == rle_len)
+            ties += 1;
+
+        const hits_before = test_single_sequence_winner_only_hits;
+        var optimized: std.ArrayList(u8) = .empty;
+        defer optimized.deinit(std.testing.allocator);
+        const optimized_ok = try emitBestSequenceCompressedBlock(
+            std.testing.allocator,
+            &optimized,
+            block[0..len],
+            seed & 1 == 0,
+            &literal_lens,
+            &offsets,
+            &match_lens,
+            &literal_ends,
+            literal_ends[0],
+        );
+        try std.testing.expectEqual(hits_before + 1, test_single_sequence_winner_only_hits);
+        successful_hits += @intFromBool(optimized_ok);
+        if (optimized_ok and predefined_len == rle_len) {
+            var frame_state: SequenceFrameState = .{};
+            const section = try parseLiteralsSection(optimized.items[3..], &frame_state);
+            try std.testing.expectEqual(@as(u8, 0x54), optimized.items[3 + section.sequence_payload_offset]);
+            tie_rle_modes += 1;
+        }
+
+        test_disable_single_sequence_winner_only = true;
+        var reference: std.ArrayList(u8) = .empty;
+        defer reference.deinit(std.testing.allocator);
+        const reference_ok = try emitBestSequenceCompressedBlock(
+            std.testing.allocator,
+            &reference,
+            block[0..len],
+            seed & 1 == 0,
+            &literal_lens,
+            &offsets,
+            &match_lens,
+            &literal_ends,
+            literal_ends[0],
+        );
+        test_disable_single_sequence_winner_only = false;
+
+        try std.testing.expectEqual(reference_ok, optimized_ok);
+        try std.testing.expectEqualSlices(u8, reference.items, optimized.items);
+    }
+    try std.testing.expect(successful_hits != 0);
+    try std.testing.expect(predefined_wins != 0);
+    try std.testing.expect(ties != 0);
+    try std.testing.expect(tie_rle_modes != 0);
+
+    const AllocationFailureTest = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const block = "abcd" ** 32;
+            const literal_lens = [_]usize{4};
+            const offsets = [_]usize{4};
+            const match_lens = [_]usize{block.len - 4};
+            const literal_ends = [_]usize{block.len};
+            var output = try std.ArrayList(u8).initCapacity(allocator, "prefix".len);
+            defer output.deinit(allocator);
+            output.appendSliceAssumeCapacity("prefix");
+            const emitted = emitBestSequenceCompressedBlock(
+                allocator,
+                &output,
+                block,
+                true,
+                &literal_lens,
+                &offsets,
+                &match_lens,
+                &literal_ends,
+                block.len,
+            ) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix", output.items);
+                return err;
+            };
+            try std.testing.expect(emitted);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, AllocationFailureTest.run, .{});
 }
 
 test "zstd small sequence stack scratch preserves caller OOM and heap fallback" {
@@ -23102,7 +23288,7 @@ test "zstd reusable seekable encoder retains frame and table scratch" {
     try std.testing.expectEqual(optimal_compact_prev_capacity, encoder.frame_encoder.block_scratch.optimal.compact_prev.capacity);
     try std.testing.expectEqual(optimal_tokens_capacity, encoder.frame_encoder.block_scratch.optimal.tokens.capacity);
     try std.testing.expectEqual(first_allocations - 17, second_allocations);
-    try std.testing.expectEqual(@as(usize, 28), second_allocations);
+    try std.testing.expectEqual(@as(usize, 12), second_allocations);
     try std.testing.expectEqual(second_allocations, second_deallocations);
     try std.testing.expectEqual(second_allocated_bytes, second_freed_bytes);
 

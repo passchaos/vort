@@ -13802,6 +13802,25 @@ reuse, so production keeps the simpler independently owned plans.
   hash, frame size, and checksum while measuring a `1.0060x` row-median
   geomean, 16/20 positive rows, and a `0.9955x` floor. Sixty-one warmed seekable
   pairs measured `1.0028x` median with 43/61 wins and `0.9997x` geomean.
+  Added exact winner-only emission for single-sequence blocks without adding a
+  new helper or changing the multi-sequence path. The shared literals section
+  is built once, the existing RLE and predefined length models select one
+  emitter, and equal lengths retain the original RLE-first wire. The selected
+  block length is reserved before emission so allocator failure cannot leave a
+  partial caller output. A forced-generic oracle over 64 deterministic valid
+  shapes records real optimized-path hits, covers predefined wins and RLE ties,
+  and requires byte-identical output; an allocation-failure sweep also checks
+  output atomicity. The four-frame allocation report falls from 44/28 calls and
+  231,722/4,376 bytes to 28/12 calls and 229,122/1,776 bytes for
+  one-shot/warmed encoding, preserving the 305-byte stream. Fifteen paired
+  runs of the complete 20-row encode matrix preserved every input hash, frame
+  size, and checksum with a `1.0037x` row-median geomean; two sub-`0.99x` rows
+  observed under a system load above 30 were retested independently for 61
+  pairs and measured `1.0215x` (text level 3) and `0.9960x` (binary level 1)
+  medians. Sixty-one warmed seekable pairs measured `1.0016x` median,
+  `0.9990x` geomean, and 36/61 wins, so the retained claim is a 57.1% warmed
+  allocation-call reduction and 59.4% transient-byte reduction with neutral
+  end-to-end throughput.
   Rejected two follow-up representations for the adjacent-match reuse state in
   Zstd's single-state beam. Splitting the optional match into two `u16` values
   improved the isolated JSON parser by about `1.028x`, but moved following hot
