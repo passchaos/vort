@@ -61,6 +61,9 @@ const huffman_build_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const small_sequence_stack_input_max = 1024;
+const small_sequence_stack_scratch_len = 4096;
+
 pub const Error = core.Error || std.mem.Allocator.Error;
 
 pub const default_compression_level: c_int = 1;
@@ -13771,6 +13774,10 @@ fn emitHashTokenSequenceBlockReuseWithState(
         },
     };
     if (position != block.len or count < 2) return false;
+    if (block.len <= small_sequence_stack_input_max) {
+        @branchHint(.unlikely);
+        return try emitBestSequenceCompressedBlockSmall(allocator, out, block, last, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], literal_start);
+    }
     return try emitBestSequenceCompressedBlock(allocator, out, block, last, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], literal_start);
 }
 
@@ -15272,6 +15279,102 @@ fn emitBestSequenceCompressedBlock(
     if (best_block.items.len == 0) return false;
     try out.appendSlice(allocator, best_block.items);
     return true;
+}
+
+noinline fn emitBestSequenceCompressedBlockSmall(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) linksection(fast_encode_helper_text_section) Error!bool {
+    var storage: [small_sequence_stack_scratch_len]u8 align(@alignOf(usize)) = undefined;
+    return try emitBestSequenceCompressedBlockWithStackStorage(allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, &storage);
+}
+
+fn emitBestSequenceCompressedBlockWithStackStorage(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    storage: []u8,
+) Error!bool {
+    var fixed = std.heap.FixedBufferAllocator.init(storage);
+    var encoded: std.ArrayList(u8) = .empty;
+    const ok = emitBestSequenceCompressedBlock(fixed.allocator(), &encoded, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start) catch |err| switch (err) {
+        error.OutOfMemory => return try emitBestSequenceCompressedBlock(allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start),
+        else => return err,
+    };
+    if (!ok) return false;
+    try out.appendSlice(allocator, encoded.items);
+    return true;
+}
+
+test "zstd small sequence stack scratch preserves caller OOM and heap fallback" {
+    const literal_lens = [_]usize{ 4, 4, 4 };
+    const offsets = [_]usize{ 4, 4, 4 };
+    const match_lens = [_]usize{ 4, 4, 4 };
+    const literal_ends = [_]usize{ 8, 16, 24 };
+    const payload = "abcdabcdwxyzwxyzABCDABCD";
+
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var output = try std.ArrayList(u8).initCapacity(failing.allocator(), "prefix".len);
+    defer output.deinit(failing.allocator());
+    output.appendSliceAssumeCapacity("prefix");
+    failing.fail_index = failing.alloc_index;
+    failing.resize_fail_index = failing.resize_index;
+    try std.testing.expectError(error.OutOfMemory, emitBestSequenceCompressedBlockSmall(
+        failing.allocator(),
+        &output,
+        payload,
+        true,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        payload.len,
+    ));
+    try std.testing.expectEqualSlices(u8, "prefix", output.items);
+
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitBestSequenceCompressedBlock(
+        std.testing.allocator,
+        &expected,
+        payload,
+        true,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        payload.len,
+    ));
+
+    var tiny_storage: [1]u8 = undefined;
+    var fallback: std.ArrayList(u8) = .empty;
+    defer fallback.deinit(std.testing.allocator);
+    try std.testing.expect(try emitBestSequenceCompressedBlockWithStackStorage(
+        std.testing.allocator,
+        &fallback,
+        payload,
+        true,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        payload.len,
+        &tiny_storage,
+    ));
+    try std.testing.expectEqualSlices(u8, expected.items, fallback.items);
 }
 
 fn emitRleSequenceCompressedBlock(
@@ -22878,6 +22981,7 @@ test "zstd reusable seekable encoder retains frame and table scratch" {
     try std.testing.expectEqual(optimal_compact_prev_capacity, encoder.frame_encoder.block_scratch.optimal.compact_prev.capacity);
     try std.testing.expectEqual(optimal_tokens_capacity, encoder.frame_encoder.block_scratch.optimal.tokens.capacity);
     try std.testing.expectEqual(first_allocations - 17, second_allocations);
+    try std.testing.expectEqual(@as(usize, 56), second_allocations);
     try std.testing.expectEqual(second_allocations, second_deallocations);
     try std.testing.expectEqual(second_allocated_bytes, second_freed_bytes);
 

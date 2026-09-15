@@ -3441,8 +3441,8 @@ def write_native_allocation_artifacts(root: Path) -> None:
             {"case": "zero_decode", "input_bytes": 16, "output_bytes": 16, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
             {"case": "zero_range", "input_bytes": 32, "output_bytes": 8, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
             {"case": "budgeted_index", "input_bytes": 64, "output_bytes": 16, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80},
-            {"case": "zstd_seekable_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 132, "deallocations": 132, "allocated_bytes": 245440, "freed_bytes": 245440},
-            {"case": "zstd_seekable_reusable_warm_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 116, "deallocations": 116, "allocated_bytes": 18094, "freed_bytes": 18094},
+            {"case": "zstd_seekable_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 72, "deallocations": 72, "allocated_bytes": 236098, "freed_bytes": 236098},
+            {"case": "zstd_seekable_reusable_warm_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 56, "deallocations": 56, "allocated_bytes": 8752, "freed_bytes": 8752},
         ],
     }
     smoke = {
@@ -3459,8 +3459,8 @@ def write_native_allocation_artifacts(root: Path) -> None:
         ],
         "budget_cases": [
             {"case": "budgeted_index", "present": True, "matched": True, "balanced": True, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80, "max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
-            {"case": "zstd_seekable_into", "present": True, "matched": True, "balanced": True, "allocations": 132, "deallocations": 132, "allocated_bytes": 245440, "freed_bytes": 245440, "max_allocations": 132, "max_deallocations": 132, "max_allocated_bytes": 245440, "max_freed_bytes": 245440},
-            {"case": "zstd_seekable_reusable_warm_into", "present": True, "matched": True, "balanced": True, "allocations": 116, "deallocations": 116, "allocated_bytes": 18094, "freed_bytes": 18094, "max_allocations": 116, "max_deallocations": 116, "max_allocated_bytes": 18094, "max_freed_bytes": 18094},
+            {"case": "zstd_seekable_into", "present": True, "matched": True, "balanced": True, "allocations": 72, "deallocations": 72, "allocated_bytes": 236098, "freed_bytes": 236098, "max_allocations": 72, "max_deallocations": 72, "max_allocated_bytes": 236098, "max_freed_bytes": 236098},
+            {"case": "zstd_seekable_reusable_warm_into", "present": True, "matched": True, "balanced": True, "allocations": 56, "deallocations": 56, "allocated_bytes": 8752, "freed_bytes": 8752, "max_allocations": 56, "max_deallocations": 56, "max_allocated_bytes": 8752, "max_freed_bytes": 8752},
         ],
     }
     negative = {
@@ -15021,8 +15021,19 @@ def main() -> int:
             "native-allocation-seekable-report-reuse",
             mutate_report=lambda payload: next(
                 row for row in payload["cases"]
-                if row.get("case") == "zstd_seekable_reusable_warm_into"
-            ).update({"allocations": 117, "deallocations": 117}),
+                if row.get("case") == "zstd_seekable_into"
+            ).update({"allocations": 71, "deallocations": 71}),
+            mutate_smoke=lambda payload: next(
+                row for row in payload["budget_cases"]
+                if row.get("case") == "zstd_seekable_into"
+            ).update({"allocations": 71, "deallocations": 71}),
+            mutate_markdown=lambda path: path.write_text(
+                path.read_text().replace(
+                    "| zstd_seekable_into | 3552 | 305 | 72 | 72 | 236098 | 236098 |",
+                    "| zstd_seekable_into | 3552 | 305 | 71 | 71 | 236098 | 236098 |",
+                    1,
+                )
+            ),
         )
         native_allocation_seekable_report_matched = (
             native_allocation_seekable_report_result.returncode != 0

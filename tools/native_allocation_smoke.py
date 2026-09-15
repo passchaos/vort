@@ -75,8 +75,8 @@ ALLOCATION_BUDGETS = {
     "indexed_range_into_full_deflate": {"max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
     "batch_range_into_fast_paths": {"max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
     "embedded_validation_borrowed_dict": {"max_allocations": 8, "max_deallocations": 8, "max_allocated_bytes": 2081, "max_freed_bytes": 2081},
-    "zstd_seekable_into": {"max_allocations": 132, "max_deallocations": 132, "max_allocated_bytes": 245440, "max_freed_bytes": 245440},
-    "zstd_seekable_reusable_warm_into": {"max_allocations": 116, "max_deallocations": 116, "max_allocated_bytes": 18094, "max_freed_bytes": 18094},
+    "zstd_seekable_into": {"max_allocations": 72, "max_deallocations": 72, "max_allocated_bytes": 236098, "max_freed_bytes": 236098},
+    "zstd_seekable_reusable_warm_into": {"max_allocations": 56, "max_deallocations": 56, "max_allocated_bytes": 8752, "max_freed_bytes": 8752},
 }
 
 SEEKABLE_REUSE_CASES = (

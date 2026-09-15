@@ -83,10 +83,10 @@ def main() -> int:
         seekable_reuse_regression = clone_report()
         one_shot = find_case(seekable_reuse_regression, "zstd_seekable_into")
         warmed = find_case(seekable_reuse_regression, "zstd_seekable_reusable_warm_into")
-        # Preserve balance and a fifteen-call improvement so this specifically
-        # proves that the sixteen-call reuse floor is enforced.
-        warmed["allocations"] = one_shot["allocations"] - 15
-        warmed["deallocations"] = one_shot["deallocations"] - 15
+        # Stay within both absolute budgets while reducing the relative gain
+        # to fifteen calls, proving that the sixteen-call floor is independent.
+        one_shot["allocations"] = warmed["allocations"] + 15
+        one_shot["deallocations"] = warmed["deallocations"] + 15
         cases.append(run_bad_report("seekable_reuse_regression", seekable_reuse_regression, "seekable_reuse_matched", tmp))
 
     summary = {

@@ -13772,6 +13772,25 @@ reuse, so production keeps the simpler independently owned plans.
   geomean with 13/21 wins. Relative to the preceding reusable implementation,
   the warmed allocation count falls another 29.3% and transient requested bytes
   fall 98.0%; retained capacity is released by encoder teardown.
+  Added a bounded stack path for hash-token sequence candidates up to 1 KiB. It
+  uses an isolated 4 KiB arena for the five short-lived emission buffers and
+  transparently retries through the existing allocator if that bound is too
+  small; other candidate families and larger blocks keep their prior code path.
+  The formal report falls from 132/116 calls and 245,440/18,094 bytes to 72/56
+  calls and 236,098/8,752 bytes for one-shot/warmed encoding, with the same
+  305-byte stream. A first
+  retained-buffer prototype achieved 101/80 calls but was rejected because the
+  complete 129 KiB level-3 control regressed to `0.9805x` median / `0.9784x`
+  geomean. A broader wrapper that also routed non-hash sequence emitters through
+  the stack path reached zero warmed allocations but remained about 0.5--0.8%
+  slower on repeated multi-block controls and was rejected. The final compact
+  call-site-only version measured a `1.0032x` row-median geomean across 15 paired
+  runs of the complete 20-row encode matrix, with 13/20 positive rows and a
+  `0.9960x` floor; all input hashes, frame sizes, and checksums remain exact. A
+  31-pair multi-block confirmation measured `0.9952x`, while the warmed seekable
+  target measured `1.0015x`. The retained claim is therefore a 51.7%
+  allocation-call reduction and 51.6% transient-byte reduction, not a direct
+  latency win.
   Rejected two follow-up representations for the adjacent-match reuse state in
   Zstd's single-state beam. Splitting the optional match into two `u16` values
   improved the isolated JSON parser by about `1.028x`, but moved following hot
