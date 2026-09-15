@@ -7,6 +7,10 @@ pub const Entry = packed struct {
     padding: u3 = 0,
 };
 
+comptime {
+    std.debug.assert(@sizeOf(Entry) == 2);
+}
+
 pub fn Table(comptime max_bits: u4) type {
     return struct {
         pub const len = @as(usize, 1) << max_bits;
@@ -58,15 +62,35 @@ pub fn Table(comptime max_bits: u4) type {
                 // full initialization without a separate cleared bitmap.
                 if (start != next_start or count > len - start) return false;
                 next_start += count;
-                for (self.entries[start..][0..count]) |*entry| {
-                    entry.* = .{
-                        .symbol = node.symbol,
-                        .bit_count = bit_count,
-                        .valid = true,
-                    };
-                }
+                fillCompleteRange(self.entries[start..][0..count], .{
+                    .symbol = node.symbol,
+                    .bit_count = bit_count,
+                    .valid = true,
+                });
             }
             return next_start == len;
+        }
+
+        inline fn fillCompleteRange(dest: []Entry, entry: Entry) void {
+            switch (dest.len) {
+                1 => dest[0] = entry,
+                2 => {
+                    dest[0] = entry;
+                    dest[1] = entry;
+                },
+                4 => {
+                    const wide: *align(1) [4]Entry = @ptrCast(dest.ptr);
+                    wide.* = @splat(entry);
+                },
+                else => {
+                    std.debug.assert(dest.len >= 8 and dest.len % 8 == 0);
+                    var index: usize = 0;
+                    while (index < dest.len) : (index += 8) {
+                        const wide: *align(1) [8]Entry = @ptrCast(dest[index..].ptr);
+                        wide.* = @splat(entry);
+                    }
+                },
+            }
         }
 
         pub inline fn lookup(self: *const @This(), bits: usize) ?Entry {
@@ -207,4 +231,72 @@ test "complete Huffman lookup rejects excessive weights" {
     };
     var table: Table(3) = undefined;
     try std.testing.expect(!table.buildComplete(tree));
+}
+
+test "complete Huffman lookup matches reference fill for randomized canonical trees" {
+    const Node = struct { symbol: u8, prefix: u16, weight: u4 };
+    const Tree = struct {
+        max_bit_count: u4,
+        symbol_count_minus_one: u8,
+        nodes: [64]Node,
+    };
+    const Leaf = struct { prefix: u16, depth: u4 };
+
+    var prng = std.Random.DefaultPrng.init(0x4855_4646_4d41_4e31);
+    const random = prng.random();
+    for (0..256) |_| {
+        var leaves: [64]Leaf = undefined;
+        leaves[0] = .{ .prefix = 0, .depth = 0 };
+        var leaf_count: usize = 1;
+        const target_count = random.intRangeAtMost(usize, 2, leaves.len);
+        while (leaf_count < target_count) {
+            var splittable: [64]usize = undefined;
+            var splittable_count: usize = 0;
+            for (leaves[0..leaf_count], 0..) |leaf, index| {
+                if (leaf.depth < 11) {
+                    splittable[splittable_count] = index;
+                    splittable_count += 1;
+                }
+            }
+            if (splittable_count == 0) break;
+            const split_index = splittable[random.uintLessThan(usize, splittable_count)];
+            const split = leaves[split_index];
+            std.mem.copyBackwards(
+                Leaf,
+                leaves[split_index + 2 .. leaf_count + 1],
+                leaves[split_index + 1 .. leaf_count],
+            );
+            leaves[split_index] = .{
+                .prefix = split.prefix << 1,
+                .depth = split.depth + 1,
+            };
+            leaves[split_index + 1] = .{
+                .prefix = (split.prefix << 1) | 1,
+                .depth = split.depth + 1,
+            };
+            leaf_count += 1;
+        }
+
+        var max_depth: u4 = 0;
+        for (leaves[0..leaf_count]) |leaf| max_depth = @max(max_depth, leaf.depth);
+        var tree: Tree = undefined;
+        tree.max_bit_count = max_depth;
+        tree.symbol_count_minus_one = @intCast(leaf_count - 1);
+        for (leaves[0..leaf_count], 0..) |leaf, index| {
+            tree.nodes[index] = .{
+                .symbol = @intCast(index),
+                .prefix = leaf.prefix,
+                .weight = max_depth + 1 - leaf.depth,
+            };
+        }
+
+        const reference = Table(11).build(&tree);
+        var actual: Table(11) = undefined;
+        try std.testing.expect(actual.buildComplete(&tree));
+        try std.testing.expectEqualSlices(
+            u8,
+            std.mem.asBytes(&reference.entries),
+            std.mem.asBytes(&actual.entries),
+        );
+    }
 }

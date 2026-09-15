@@ -13846,6 +13846,26 @@ reuse, so production keeps the simpler independently owned plans.
   lone `0.9574x` outlier (multiblock level 9) recovered to `1.0010x` median /
   `0.9956x` geomean over 61 independent pairs. Sixty-one warmed seekable pairs
   measured `0.9992x` median / `0.9991x` geomean, confirming neutral throughput.
+  Batched complete Zstd Huffman lookup construction around the table's packed
+  two-byte entry. Canonical ranges of one and two entries retain direct stores,
+  four-entry ranges use one 64-bit vector store, and every larger power-of-two
+  range is filled eight entries at a time with 16-byte stores. This mirrors the
+  width-specialized fill strategy in upstream zstd while preserving the existing
+  adjacency, coverage, and bounds proof; an attempted `@memset` spelling was
+  rejected because Zig 0.16 still emitted a scalar 16-bit loop. A deterministic
+  oracle generates 256 complete canonical trees and compares every lookup byte
+  against the original reference builder, in addition to the existing malformed
+  tree tests. Fifteen alternating independent-binary pairs at 100,000 decodes
+  each improve the 1,290-byte `numbered_json` target by `1.1422x` median with
+  15/15 wins. A separate 15-pair five-row profile at 10,000 decodes per run
+  measures `1.1481x` on `numbered_json`, `1.0043x` on `huffman80k`, `1.0105x`
+  on `ascii64k`, `1.0209x` on `large_json`, and `0.9995x` on `binary_mixed`.
+  The 21-pair complete 13-row reference matrix improves `1.0202x` by the
+  geometric mean of row medians; its lone noisy sub-`0.99x` short-sample row,
+  `repetitive` at `0.9880x`, recovers to `1.0115x` median over 31 independent
+  100,000-decode pairs. The full 9,900-frame upstream decodecorpus suite covers
+  all 64 LL/OF/ML mode tuples, and the 276-case libzstd 1.5.7 compatibility
+  matrix reports zero unsupported frames.
   Rejected two follow-up representations for the adjacent-match reuse state in
   Zstd's single-state beam. Splitting the optional match into two `u16` values
   improved the isolated JSON parser by about `1.028x`, but moved following hot
