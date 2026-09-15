@@ -16,7 +16,7 @@ COLUMNS = [
     "single_indexed_min_cost_rejections", "single_indexed_short_min_cost_rejections",
     "single_rep0_empty_inserts", "single_rep0_replacements", "single_rep0_rejections", "single_rep0_min_cost_rejections",
     "single_indexed_searches", "single_chain_nodes",
-    "single_prefix_rejections", "single_matches", "single_window_stops",
+    "single_prefix_rejections", "single_matches", "single_shifted_matches", "single_window_stops",
     "single_chain_limit_stops", "single_indexed_length_histogram",
     "single_rep0_probes", "single_rep0_prefix_rejections", "single_rep0_prefix_mismatch_histogram", "single_rep0_matches",
     "single_rep0_length_histogram",
@@ -147,6 +147,7 @@ def main() -> int:
             indexed_nodes = int(row["single_chain_nodes"])
             indexed_prefix = int(row["single_prefix_rejections"])
             indexed_matches = int(row["single_matches"])
+            shifted_matches = int(row["single_shifted_matches"])
             assert sum(int(row[key]) for key in (
                 "single_indexed_empty_inserts", "single_indexed_replacements", "single_indexed_rejections",
             )) == indexed_matches, row
@@ -156,6 +157,7 @@ def main() -> int:
             assert positions == int(row["input_bytes"]), row
             assert indexed_prefix + indexed_matches + indexed_window_stops == indexed_nodes, row
             assert sum(int(value) for value in row["single_indexed_length_histogram"].split(";")) == indexed_matches, row
+            assert 0 <= shifted_matches <= indexed_matches, row
             rep0_probes = int(row["single_rep0_probes"])
             rep0_prefix = int(row["single_rep0_prefix_rejections"])
             rep0_matches = int(row["single_rep0_matches"])
@@ -173,7 +175,7 @@ def main() -> int:
                 "single_indexed_min_cost_rejections", "single_indexed_short_min_cost_rejections",
                 "single_rep0_empty_inserts", "single_rep0_replacements", "single_rep0_rejections", "single_rep0_min_cost_rejections",
                 "single_indexed_searches", "single_chain_nodes",
-                "single_prefix_rejections", "single_matches", "single_window_stops",
+                "single_prefix_rejections", "single_matches", "single_shifted_matches", "single_window_stops",
                 "single_chain_limit_stops", "single_rep0_probes",
                 "single_rep0_prefix_rejections", "single_rep0_matches",
             ):
@@ -218,6 +220,14 @@ def main() -> int:
             assert row["optimal_bound_distance_cost_histogram"] == "0;0;0;0;0;0;0;0;0;0;0;0;0;0;0", row
             assert row["optimal_bound_slack_histogram"] == "0;0;0;0;0;0;0;0;0", row
             assert row["optimal_length_extension_histogram"] == "0;0;0;0;0;0;0;0;0", row
+
+    shifted_by_shape = {
+        (row["case"], row["candidate"]): int(row["single_shifted_matches"])
+        for row in rows
+        if row["stage"] == "rep_beam_single"
+    }
+    assert shifted_by_shape[("json", "primary")] > 0, shifted_by_shape
+    assert shifted_by_shape[("binary", "primary")] > 0, shifted_by_shape
 
     # The current level-9 policy is the subject of this benchmark. Pinning its
     # candidate labels to 128 KiB/4 KiB/8 KiB makes policy drift visible instead

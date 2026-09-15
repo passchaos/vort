@@ -13694,6 +13694,12 @@ reuse, so production keeps the simpler independently owned plans.
   compatibility probe now reports 276 cases, including three raw-dictionary
   cases; the 25-case dictionary probe and four upstream dictionary campaigns
   (4,200 frames, 2,118 block-stream cases, all 64 LL/OF/ML mode tuples) pass.
+  Seekable streams now complete the same explicit-dictionary contract. Four new
+  public scan/index × into/alloc range APIs carry one caller-selected dictionary
+  across every intersecting frame, allowing ID-less raw dictionaries without
+  weakening set-based routing. A two-frame range crossing the frame boundary
+  checks every API, every frame header remains ID zero, no-dictionary decode
+  fails, and a wrong dictionary is detected by the seek-entry checksum.
   Retained a Zstd ratio-level lower bound that lets a decisive repeat beam prove
   the first single-duplicate family at least 24 times larger without exact
   entropy scoring. The proof scans the existing paired index for the maximum
@@ -13711,3 +13717,17 @@ reuse, so production keeps the simpler independently owned plans.
   a `0.9911x` row-median floor and `0.9967x` geomean. The 20-row libzstd 1.5.5
   encode gate, 256-case runtime compatibility probe, comparison/block-sweep
   gates, all 1,558 tests, and all 93 compile checks pass.
+  Reused exact sub-258-byte indexed match lengths across adjacent single-state
+  beam positions when their selected distance is unchanged. The previous match
+  proves both the shifted `L-1` prefix and its terminating mismatch; capped
+  258-byte matches retain vector extension to protect the text-heavy control. A
+  64-shape optimized/reference oracle compares tokens and statistics and requires
+  a real reuse hit. The stage CSV adds `single_shifted_matches`; primary JSON
+  hits 28,448 times out of 31,661 indexed matches and binary hits 22,356/23,063,
+  versus only 253/37,300 on max-length-heavy text. Twenty-one fixed-CPU-2
+  independent-binary JSON level-3 pairs improve `1.0254x` median / `1.0282x`
+  geomean with 21/21 wins and identical 643-byte output. A 15-pair, 20-row
+  matrix preserves every size/checksum, reaches a `1.0012x` row-median geomean,
+  and keeps a `0.9926x` floor. The formal libzstd 1.5.5 gate reports about
+  100.05 MiB/s versus 1445.50 MiB/s, so the broader standard-encoder throughput
+  gap remains open.

@@ -125,7 +125,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.print("case,level,input_bytes,input_sha256,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,single_positions,single_literal_empty_inserts,single_literal_replacements,single_literal_rejections,single_indexed_empty_inserts,single_indexed_replacements,single_indexed_rejections,single_indexed_min_cost_rejections,single_indexed_short_min_cost_rejections,single_rep0_empty_inserts,single_rep0_replacements,single_rep0_rejections,single_rep0_min_cost_rejections,single_indexed_searches,single_chain_nodes,single_prefix_rejections,single_matches,single_window_stops,single_chain_limit_stops,single_indexed_length_histogram,single_rep0_probes,single_rep0_prefix_rejections,single_rep0_prefix_mismatch_histogram,single_rep0_matches,single_rep0_length_histogram,optimal_input_bytes,optimal_index_bytes,optimal_positions,optimal_chain_nodes,optimal_prefix_rejections,optimal_prefix_mismatch_histogram,optimal_bound_rejections,optimal_bound_length_histogram,optimal_bound_distance_cost_histogram,optimal_bound_slack_histogram,optimal_match_length_calls,optimal_valid_match_candidates,optimal_length_choices_built,optimal_length_extension_histogram,optimal_candidate_budget_stops,optimal_index_ns,optimal_search_ns,optimal_reconstruct_ns,optimal_total_ns,iterations,rounds,warmup,median_ns,ns_per_block,checksum,{s}\n", .{benchmark_provenance.csv_columns});
+    try csv.writer.print("case,level,input_bytes,input_sha256,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,literals_bytes,sequence_bytes,single_positions,single_literal_empty_inserts,single_literal_replacements,single_literal_rejections,single_indexed_empty_inserts,single_indexed_replacements,single_indexed_rejections,single_indexed_min_cost_rejections,single_indexed_short_min_cost_rejections,single_rep0_empty_inserts,single_rep0_replacements,single_rep0_rejections,single_rep0_min_cost_rejections,single_indexed_searches,single_chain_nodes,single_prefix_rejections,single_matches,single_shifted_matches,single_window_stops,single_chain_limit_stops,single_indexed_length_histogram,single_rep0_probes,single_rep0_prefix_rejections,single_rep0_prefix_mismatch_histogram,single_rep0_matches,single_rep0_length_histogram,optimal_input_bytes,optimal_index_bytes,optimal_positions,optimal_chain_nodes,optimal_prefix_rejections,optimal_prefix_mismatch_histogram,optimal_bound_rejections,optimal_bound_length_histogram,optimal_bound_distance_cost_histogram,optimal_bound_slack_histogram,optimal_match_length_calls,optimal_valid_match_candidates,optimal_length_choices_built,optimal_length_extension_histogram,optimal_candidate_budget_stops,optimal_index_ns,optimal_search_ns,optimal_reconstruct_ns,optimal_total_ns,iterations,rounds,warmup,median_ns,ns_per_block,checksum,{s}\n", .{benchmark_provenance.csv_columns});
     var selected_rows: usize = 0;
     for (cases.items) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -250,7 +250,7 @@ fn writeMeasuredRow(
         aggregate.literals_bytes,
         aggregate.sequence_bytes,
     });
-    try csv.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}", .{
+    try csv.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}", .{
         aggregate.single_beam_profile.positions,
         aggregate.single_beam_profile.literal_empty_inserts,
         aggregate.single_beam_profile.literal_replacements,
@@ -268,6 +268,7 @@ fn writeMeasuredRow(
         aggregate.single_beam_profile.indexed_chain_nodes,
         aggregate.single_beam_profile.indexed_prefix_rejections,
         aggregate.single_beam_profile.indexed_matches,
+        aggregate.single_beam_profile.shifted_indexed_matches,
         aggregate.single_beam_profile.indexed_window_stops,
         aggregate.single_beam_profile.indexed_chain_limit_stops,
     });

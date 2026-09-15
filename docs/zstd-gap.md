@@ -225,7 +225,9 @@ Current interpretation:
   `NativeDictionary.initRawContent`; non-zero IDs still require a matching
   `NativeDictionary`. Dictionary-aware alloc/append/into/scratch/size APIs can
   use either raw-content or full-dictionary preset bytes as match history for the
-  native sequence subset. Dictionary-set decode APIs can resolve per-frame Dictionary_ID
+  native sequence subset. Seekable scan/index range decoders expose equivalent
+  explicit-dictionary into/alloc variants for ID-less random access.
+  Dictionary-set decode APIs can resolve per-frame Dictionary_ID
   values in concatenated native streams without caller-side frame splitting,
   chunk-joined decode helpers accept split compressed input with caller-owned
   join scratch, incremental decoder facades expose the shared StepResult

@@ -2361,3 +2361,30 @@ baseline, but an equivalent-harness control matrix had a 0.9587 row-median
 floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
+
+## Zstd shifted single-beam match reuse (2026-09-15)
+
+The speed-oriented one-state Zstd parser now reuses the exact length of an
+indexed match when the immediately preceding position selected the same
+distance. A length-`L` match proves `L-1` equal bytes at the shifted position;
+when `L < 258`, the mismatch that ended the prior match proves the shifted
+length cannot extend. Capped 258-byte matches deliberately keep the established
+vector extension path because they dominate the text fixture and an initial
+broader form reduced its complete-frame medians below the 0.99 control floor.
+Candidate order, costs, recent-offset state, and tie behavior are unchanged.
+
+A 64-shape generated oracle compares the optimized and full-extension planners
+token-for-token and statistic-for-statistic, and requires the reuse path to be
+exercised. The stage profile and its 100-row gate now expose
+`single_shifted_matches`: primary JSON reuses 28,448 of 31,661 successful
+indexed matches and primary binary reuses 22,356 of 23,063, while primary text
+reuses only 253 of 37,300 because almost all its matches reach length 258.
+
+Independent ReleaseFast binaries fixed to CPU 2 improve complete JSON level-3
+encoding by `1.0254x` median / `1.0282x` geometric mean over 21 alternating
+pairs, with 21/21 wins and identical 643-byte frames and checksums. A separate
+15-pair, 20-row level/input matrix keeps every size and checksum identical,
+reaches a `1.0012x` row-median geometric mean, and has a `0.9926x` weakest row.
+The formal libzstd gate reports about 100.05 MiB/s at 643 bytes versus libzstd
+1.5.5's 1445.50 MiB/s at 912 bytes, so this is a measured parser improvement,
+not an overall Zstd encoder parity claim.
