@@ -13821,6 +13821,20 @@ reuse, so production keeps the simpler independently owned plans.
   `0.9990x` geomean, and 36/61 wins, so the retained claim is a 57.1% warmed
   allocation-call reduction and 59.4% transient-byte reduction with neutral
   end-to-end throughput.
+  Extended the existing reusable block scratch to retain the single-sequence
+  literals, selected payload, and reverse-bitstream buffers used by the
+  repeated-pattern candidate. Non-reusable call sites keep locally owned
+  buffers, and multi-sequence selection is unchanged. The four-frame report
+  falls from 28/12 calls and 229,122/1,776 bytes to 19/0 calls and
+  227,790/0 bytes for one-shot/warmed encoding, while retaining the exact
+  305-byte stream. The reusable encoder test locks all three capacities across
+  calls and requires a zero-allocation warm pass. Fifteen paired runs of the
+  complete 20-row encode matrix measured a `1.0012x` row-median geomean; three
+  noisy sub-`0.99x` rows were each retested for 61 pairs and measured
+  `1.0000x` (multiblock level 9), `0.9938x` (JSON level 22), and `0.9903x`
+  (text level 9) medians. Sixty-one warmed seekable pairs measured `0.9995x`
+  median, `1.0029x` geomean, and 30/61 wins. The retained claim is zero
+  transient allocations after warm-up, with neutral end-to-end throughput.
   Rejected two follow-up representations for the adjacent-match reuse state in
   Zstd's single-state beam. Splitting the optional match into two `u16` values
   improved the isolated JSON parser by about `1.028x`, but moved following hot

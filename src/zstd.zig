@@ -10843,6 +10843,7 @@ const NativeBlockEncodeScratch = struct {
     greedy_tokens: std.ArrayList(lz77.Token) = .empty,
     lazy_tokens: std.ArrayList(lz77.Token) = .empty,
     optimal: lz77.OptimalScratch = .{},
+    single_sequence_emit: SingleSequenceEmitScratch = .{},
 
     fn clearRetainingCapacity(self: *NativeBlockEncodeScratch) void {
         self.candidate.clearRetainingCapacity();
@@ -10857,6 +10858,7 @@ const NativeBlockEncodeScratch = struct {
     }
 
     fn deinit(self: *NativeBlockEncodeScratch, allocator: std.mem.Allocator) void {
+        self.single_sequence_emit.deinit(allocator);
         self.optimal.deinit(allocator);
         self.lazy_tokens.deinit(allocator);
         self.greedy_tokens.deinit(allocator);
@@ -10864,6 +10866,25 @@ const NativeBlockEncodeScratch = struct {
         self.match_candidate.deinit(allocator);
         self.best.deinit(allocator);
         self.candidate.deinit(allocator);
+        self.* = .{};
+    }
+};
+
+const SingleSequenceEmitScratch = struct {
+    literals_prefix: std.ArrayList(u8) = .empty,
+    payload: std.ArrayList(u8) = .empty,
+    sequence_bits: std.ArrayList(u8) = .empty,
+
+    fn clearRetainingCapacity(self: *SingleSequenceEmitScratch) void {
+        self.literals_prefix.clearRetainingCapacity();
+        self.payload.clearRetainingCapacity();
+        self.sequence_bits.clearRetainingCapacity();
+    }
+
+    fn deinit(self: *SingleSequenceEmitScratch, allocator: std.mem.Allocator) void {
+        self.sequence_bits.deinit(allocator);
+        self.payload.deinit(allocator);
+        self.literals_prefix.deinit(allocator);
         self.* = .{};
     }
 };
@@ -11785,7 +11806,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     }
 
     candidate.clearRetainingCapacity();
-    const repeated_ok = try emitRepeatedPatternCompressedBlock(allocator, candidate, block, last);
+    const repeated_ok = try emitRepeatedPatternCompressedBlockWithScratch(allocator, candidate, block, last, &match_scratch.single_sequence_emit);
     const repeated_len: ?usize = if (repeated_ok) candidate.items.len else null;
     try retainShortestCandidate(allocator, repeated_ok, candidate.items, best);
 
@@ -15339,9 +15360,39 @@ fn emitBestSequenceCompressedBlock(
     literal_ends: []const usize,
     tail_start: usize,
 ) Error!bool {
-    var literals_prefix: std.ArrayList(u8) = .empty;
-    defer literals_prefix.deinit(allocator);
-    _ = try emitSequenceLiteralsSection(allocator, &literals_prefix, block, literal_lens, literal_ends, tail_start);
+    return try emitBestSequenceCompressedBlockWithScratch(
+        allocator,
+        out,
+        block,
+        last,
+        literal_lens,
+        offsets,
+        match_lens,
+        literal_ends,
+        tail_start,
+        null,
+    );
+}
+
+fn emitBestSequenceCompressedBlockWithScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    single_scratch: ?*SingleSequenceEmitScratch,
+) Error!bool {
+    var local_literals_prefix: std.ArrayList(u8) = .empty;
+    defer if (single_scratch == null) local_literals_prefix.deinit(allocator);
+    const literals_prefix = if (single_scratch) |scratch| blk: {
+        scratch.clearRetainingCapacity();
+        break :blk &scratch.literals_prefix;
+    } else &local_literals_prefix;
+    _ = try emitSequenceLiteralsSection(allocator, literals_prefix, block, literal_lens, literal_ends, tail_start);
 
     if (literal_lens.len == 1 and offsets.len == 1 and match_lens.len == 1 and
         (!builtin.is_test or !test_disable_single_sequence_winner_only))
@@ -15380,7 +15431,7 @@ fn emitBestSequenceCompressedBlock(
         // cannot leave a partial block in the caller's output on OOM.
         try out.ensureUnusedCapacity(allocator, encoded_len);
         if (use_predefined) {
-            return try emitMultiSequencePredefinedCompressedBlockWithLiterals(
+            if (single_scratch) |scratch| return try emitMultiSequencePredefinedCompressedBlockWithLiteralsAndScratch(
                 allocator,
                 out,
                 block,
@@ -15389,9 +15440,11 @@ fn emitBestSequenceCompressedBlock(
                 literal_lens,
                 offsets,
                 match_lens,
-            );
+                &scratch.payload,
+                &scratch.sequence_bits,
+            ) else return try emitMultiSequencePredefinedCompressedBlockWithLiterals(allocator, out, block, last, literals_prefix.items, literal_lens, offsets, match_lens);
         }
-        return try emitRleSequenceCompressedBlockWithLiterals(
+        if (single_scratch) |scratch| return try emitRleSequenceCompressedBlockWithLiteralsAndScratch(
             allocator,
             out,
             block,
@@ -15400,7 +15453,9 @@ fn emitBestSequenceCompressedBlock(
             literal_lens,
             offsets,
             match_lens,
-        );
+            &scratch.payload,
+            &scratch.sequence_bits,
+        ) else return try emitRleSequenceCompressedBlockWithLiterals(allocator, out, block, last, literals_prefix.items, literal_lens, offsets, match_lens);
     }
 
     var candidate_block: std.ArrayList(u8) = .empty;
@@ -15711,8 +15766,40 @@ fn emitRleSequenceCompressedBlockWithLiterals(
     offsets: []const usize,
     match_lens: []const usize,
 ) Error!bool {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    var sequence_bits: std.ArrayList(u8) = .empty;
+    defer sequence_bits.deinit(allocator);
+    return try emitRleSequenceCompressedBlockWithLiteralsAndScratch(
+        allocator,
+        out,
+        block,
+        last,
+        literals_prefix,
+        literal_lens,
+        offsets,
+        match_lens,
+        &payload,
+        &sequence_bits,
+    );
+}
+
+fn emitRleSequenceCompressedBlockWithLiteralsAndScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literals_prefix: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    payload: *std.ArrayList(u8),
+    sequence_bits: *std.ArrayList(u8),
+) Error!bool {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return false;
     if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return false;
+    payload.clearRetainingCapacity();
+    sequence_bits.clearRetainingCapacity();
 
     const literal_code = try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits);
     const offset_code = try sequenceCodeForValue(offsets[0], &of_base, &of_bits);
@@ -15723,10 +15810,8 @@ fn emitRleSequenceCompressedBlockWithLiterals(
         if (try sequenceCodeForValue(match_lens[i], &ml_base, &ml_bits) != match_code) return false;
     }
 
-    var payload: std.ArrayList(u8) = .empty;
-    defer payload.deinit(allocator);
     try payload.appendSlice(allocator, literals_prefix);
-    try emitSequenceCount(allocator, &payload, literal_lens.len);
+    try emitSequenceCount(allocator, payload, literal_lens.len);
     try payload.append(allocator, 0x54); // LL, OF, and ML use RLE_Mode.
     try payload.append(allocator, literal_code);
     try payload.append(allocator, offset_code);
@@ -15744,9 +15829,7 @@ fn emitRleSequenceCompressedBlockWithLiterals(
         fields[field_count] = .{ .value = offsets[i] - of_base[offset_code], .bits = of_bits[offset_code] };
         field_count += 1;
     }
-    var sequence_bits: std.ArrayList(u8) = .empty;
-    defer sequence_bits.deinit(allocator);
-    try emitReverseBitstream(allocator, &sequence_bits, fields[0..field_count]);
+    try emitReverseBitstream(allocator, sequence_bits, fields[0..field_count]);
     try payload.appendSlice(allocator, sequence_bits.items);
 
     const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
@@ -16313,17 +16396,47 @@ fn emitMultiSequencePredefinedCompressedBlockWithLiterals(
     offsets: []const usize,
     match_lens: []const usize,
 ) Error!bool {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    var sequence_bits: std.ArrayList(u8) = .empty;
+    defer sequence_bits.deinit(allocator);
+    return try emitMultiSequencePredefinedCompressedBlockWithLiteralsAndScratch(
+        allocator,
+        out,
+        block,
+        last,
+        literals_prefix,
+        literal_lens,
+        offsets,
+        match_lens,
+        &payload,
+        &sequence_bits,
+    );
+}
+
+fn emitMultiSequencePredefinedCompressedBlockWithLiteralsAndScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literals_prefix: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    payload: *std.ArrayList(u8),
+    sequence_bits: *std.ArrayList(u8),
+) Error!bool {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return false;
     if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return false;
+    payload.clearRetainingCapacity();
+    sequence_bits.clearRetainingCapacity();
 
     const literal_plan = (try planPredefinedSequenceValues(literal_lens, &sequence_predefined.literal_symbols, 0)) orelse return false;
     const offset_plan = (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) orelse return false;
     const match_plan = (try planPredefinedSequenceValues(match_lens, &sequence_predefined.match_symbols, 0)) orelse return false;
 
-    var payload: std.ArrayList(u8) = .empty;
-    defer payload.deinit(allocator);
     try payload.appendSlice(allocator, literals_prefix);
-    try emitSequenceCount(allocator, &payload, literal_lens.len);
+    try emitSequenceCount(allocator, payload, literal_lens.len);
     try payload.append(allocator, 0x00); // LL, OF, and ML all use Predefined_Mode.
 
     var read_fields: [max_native_sequence_count * 6]BitField = undefined;
@@ -16337,9 +16450,7 @@ fn emitMultiSequencePredefinedCompressedBlockWithLiterals(
         match_lens,
     );
 
-    var sequence_bits: std.ArrayList(u8) = .empty;
-    defer sequence_bits.deinit(allocator);
-    try emitReverseBitstreamFromReadOrder(allocator, &sequence_bits, read_fields[0..read_field_count]);
+    try emitReverseBitstreamFromReadOrder(allocator, sequence_bits, read_fields[0..read_field_count]);
     try payload.appendSlice(allocator, sequence_bits.items);
 
     const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
@@ -21704,6 +21815,10 @@ fn repeatedPatternPayloadLenFrom(block: []const u8, segment: RepeatedPatternSegm
 }
 
 fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
+    return try emitRepeatedPatternCompressedBlockWithScratch(allocator, out, block, last, null);
+}
+
+fn emitRepeatedPatternCompressedBlockWithScratch(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, single_scratch: ?*SingleSequenceEmitScratch) Error!bool {
     if (rleByte(block) != null) return false;
     if (try emitMultiRepeatedPatternCompressedBlock(allocator, out, block, last)) return true;
     const pattern = findRepeatedPatternSegment(block) orelse return false;
@@ -21715,7 +21830,7 @@ fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.Ar
     const offsets = [_]usize{pattern.period};
     const match_lens = [_]usize{match_len};
     const literal_ends = [_]usize{tail_start};
-    return try emitBestSequenceCompressedBlock(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start);
+    return try emitBestSequenceCompressedBlockWithScratch(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start, single_scratch);
 }
 
 fn emitMultiRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
@@ -23263,6 +23378,12 @@ test "zstd reusable seekable encoder retains frame and table scratch" {
     const optimal_compact_head_capacity = encoder.frame_encoder.block_scratch.optimal.compact_head.capacity;
     const optimal_compact_prev_capacity = encoder.frame_encoder.block_scratch.optimal.compact_prev.capacity;
     const optimal_tokens_capacity = encoder.frame_encoder.block_scratch.optimal.tokens.capacity;
+    const single_literals_capacity = encoder.frame_encoder.block_scratch.single_sequence_emit.literals_prefix.capacity;
+    const single_payload_capacity = encoder.frame_encoder.block_scratch.single_sequence_emit.payload.capacity;
+    const single_bits_capacity = encoder.frame_encoder.block_scratch.single_sequence_emit.sequence_bits.capacity;
+    try std.testing.expect(single_literals_capacity != 0);
+    try std.testing.expect(single_payload_capacity != 0);
+    try std.testing.expect(single_bits_capacity != 0);
     const first_deallocations = counting.deallocations;
     const first_allocated_bytes = counting.allocated_bytes;
     const first_freed_bytes = counting.freed_bytes;
@@ -23287,8 +23408,11 @@ test "zstd reusable seekable encoder retains frame and table scratch" {
     try std.testing.expectEqual(optimal_compact_head_capacity, encoder.frame_encoder.block_scratch.optimal.compact_head.capacity);
     try std.testing.expectEqual(optimal_compact_prev_capacity, encoder.frame_encoder.block_scratch.optimal.compact_prev.capacity);
     try std.testing.expectEqual(optimal_tokens_capacity, encoder.frame_encoder.block_scratch.optimal.tokens.capacity);
-    try std.testing.expectEqual(first_allocations - 17, second_allocations);
-    try std.testing.expectEqual(@as(usize, 12), second_allocations);
+    try std.testing.expectEqual(single_literals_capacity, encoder.frame_encoder.block_scratch.single_sequence_emit.literals_prefix.capacity);
+    try std.testing.expectEqual(single_payload_capacity, encoder.frame_encoder.block_scratch.single_sequence_emit.payload.capacity);
+    try std.testing.expectEqual(single_bits_capacity, encoder.frame_encoder.block_scratch.single_sequence_emit.sequence_bits.capacity);
+    try std.testing.expectEqual(first_allocations - 20, second_allocations);
+    try std.testing.expectEqual(@as(usize, 0), second_allocations);
     try std.testing.expectEqual(second_allocations, second_deallocations);
     try std.testing.expectEqual(second_allocated_bytes, second_freed_bytes);
 
