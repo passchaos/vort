@@ -10070,37 +10070,39 @@ fn encodedNativeSeekableStreamBoundInternal(input_len: usize, options: NativeSee
 /// XXH64 as required by the seekable-format specification and are independent
 /// of each frame's optional content checksum setting.
 pub fn encodeNativeSeekableStreamAlloc(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions) Error![]u8 {
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
-    try encodeNativeSeekableStreamAppend(allocator, &out, input, options);
-    return out.toOwnedSlice(allocator);
+    var encoder = NativeSeekableStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeAlloc(input, options);
 }
 
 pub fn encodeNativeSeekableStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions) Error!void {
-    try validateNativeSeekableOptions(options);
-    return encodeNativeSeekableStreamAppendInternal(allocator, out, input, options, null);
+    var encoder = NativeSeekableStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeAppend(out, input, options);
 }
 
 pub fn encodeNativeSeekableStreamIntoSlice(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, output: []u8) Error!usize {
-    try validateNativeSeekableOptions(options);
-    return encodeNativeSeekableStreamIntoSliceInternal(allocator, input, options, null, output);
+    var encoder = NativeSeekableStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeIntoSlice(input, options, output);
 }
 
 pub fn encodeNativeSeekableStreamWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error![]u8 {
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
-    try encodeNativeSeekableStreamAppendWithDictionary(allocator, &out, input, options, dictionary);
-    return out.toOwnedSlice(allocator);
+    var encoder = NativeSeekableStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeWithDictionaryAlloc(input, options, dictionary);
 }
 
 pub fn encodeNativeSeekableStreamAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error!void {
-    try validateNativeSeekableOptions(options);
-    return encodeNativeSeekableStreamAppendInternal(allocator, out, input, options, dictionary);
+    var encoder = NativeSeekableStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeAppendWithDictionary(out, input, options, dictionary);
 }
 
 pub fn encodeNativeSeekableStreamIntoSliceWithDictionary(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary, output: []u8) Error!usize {
-    try validateNativeSeekableOptions(options);
-    return encodeNativeSeekableStreamIntoSliceInternal(allocator, input, options, dictionary, output);
+    var encoder = NativeSeekableStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeIntoSliceWithDictionary(input, options, dictionary, output);
 }
 
 pub fn encodeNativeSeekableStreamWithDictionarySetAlloc(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
@@ -10129,60 +10131,152 @@ fn nativeSeekableFrameCount(input_len: usize, frame_size: usize) Error!usize {
     return frame_count;
 }
 
-fn encodeNativeSeekableStreamAppendInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error!void {
-    const frame_count = try nativeSeekableFrameCount(input.len, options.frame_size);
-    const entries = try allocator.alloc(NativeSeekTableFrameSize, frame_count);
-    defer allocator.free(entries);
+/// Reusable native seekable-stream encoder. It retains both per-frame codec
+/// scratch and the seek-entry array across calls; callers retain ownership of
+/// the final output through the append/into methods.
+pub const NativeSeekableStreamEncoder = struct {
+    allocator: std.mem.Allocator,
+    frame_encoder: NativeFrameEncoder,
+    entries: std.ArrayList(NativeSeekTableFrameSize) = .empty,
+    output_scratch: std.ArrayList(u8) = .empty,
 
-    const original_len = out.items.len;
-    errdefer out.shrinkRetainingCapacity(original_len);
-    var encoder = NativeFrameEncoder.init(allocator);
-    defer encoder.deinit();
-    for (entries, 0..) |*entry_value, frame_index| {
-        const start = if (input.len == 0) 0 else frame_index * options.frame_size;
-        const end = if (input.len == 0) 0 else @min(input.len, start + options.frame_size);
-        const chunk = input[start..end];
-        const compressed_start = out.items.len;
-        if (dictionary) |dict|
-            _ = try encoder.encodeAppendWithDictionary(out, chunk, options.frame_options, dict)
-        else
-            _ = try encoder.encodeAppend(out, chunk, options.frame_options);
-        entry_value.* = .{
-            .compressed_size = try checkedUsizeToU32(out.items.len - compressed_start),
-            .decompressed_size = try checkedUsizeToU32(chunk.len),
-            .checksum = if (options.seek_checksums) @truncate(std.hash.XxHash64.hash(0, chunk)) else null,
-        };
+    pub fn init(allocator: std.mem.Allocator) NativeSeekableStreamEncoder {
+        return .{ .allocator = allocator, .frame_encoder = NativeFrameEncoder.init(allocator) };
     }
-    try encodeNativeSeekTableAppend(allocator, out, entries, options.seek_checksums);
-}
 
-fn encodeNativeSeekableStreamIntoSliceInternal(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary, output: []u8) Error!usize {
-    const frame_count = try nativeSeekableFrameCount(input.len, options.frame_size);
-    const entries = try allocator.alloc(NativeSeekTableFrameSize, frame_count);
-    defer allocator.free(entries);
-
-    var encoder = NativeFrameEncoder.init(allocator);
-    defer encoder.deinit();
-    var written: usize = 0;
-    for (entries, 0..) |*entry_value, frame_index| {
-        const start = if (input.len == 0) 0 else frame_index * options.frame_size;
-        const end = if (input.len == 0) 0 else @min(input.len, start + options.frame_size);
-        const chunk = input[start..end];
-        const encoded = if (dictionary) |dict|
-            try encoder.encodeScratchWithDictionary(chunk, options.frame_options, dict)
-        else
-            try encoder.encodeScratch(chunk, options.frame_options);
-        if (encoded.frame.len > output.len -| written) return error.OutputTooSmall;
-        @memcpy(output[written..][0..encoded.frame.len], encoded.frame);
-        written += encoded.frame.len;
-        entry_value.* = .{
-            .compressed_size = try checkedUsizeToU32(encoded.frame.len),
-            .decompressed_size = try checkedUsizeToU32(chunk.len),
-            .checksum = if (options.seek_checksums) @truncate(std.hash.XxHash64.hash(0, chunk)) else null,
-        };
+    pub fn deinit(self: *NativeSeekableStreamEncoder) void {
+        self.output_scratch.deinit(self.allocator);
+        self.entries.deinit(self.allocator);
+        self.frame_encoder.deinit();
+        self.* = undefined;
     }
-    written += try encodeNativeSeekTableInto(entries, options.seek_checksums, output[written..]);
-    return written;
+
+    pub fn encodeAlloc(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions) Error![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        try self.encodeAppend(&out, input, options);
+        return out.toOwnedSlice(self.allocator);
+    }
+
+    pub fn encodeWithDictionaryAlloc(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        try self.encodeAppendWithDictionary(&out, input, options, dictionary);
+        return out.toOwnedSlice(self.allocator);
+    }
+
+    pub fn encodeWithDictionarySetAlloc(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return self.encodeWithDictionaryAlloc(input, options, dictionary);
+    }
+
+    pub fn encodeScratch(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions) Error![]const u8 {
+        try validateNativeSeekableOptions(options);
+        return self.encodeScratchInternal(input, options, null);
+    }
+
+    pub fn encodeScratchWithDictionary(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error![]const u8 {
+        try validateNativeSeekableOptions(options);
+        return self.encodeScratchInternal(input, options, dictionary);
+    }
+
+    pub fn encodeScratchWithDictionarySet(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]const u8 {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return self.encodeScratchWithDictionary(input, options, dictionary);
+    }
+
+    pub fn encodeAppend(self: *NativeSeekableStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions) Error!void {
+        try validateNativeSeekableOptions(options);
+        return self.encodeAppendInternal(out, input, options, null);
+    }
+
+    pub fn encodeAppendWithDictionary(self: *NativeSeekableStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error!void {
+        try validateNativeSeekableOptions(options);
+        return self.encodeAppendInternal(out, input, options, dictionary);
+    }
+
+    pub fn encodeAppendWithDictionarySet(self: *NativeSeekableStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!void {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return self.encodeAppendWithDictionary(out, input, options, dictionary);
+    }
+
+    pub fn encodeIntoSlice(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, output: []u8) Error!usize {
+        try validateNativeSeekableOptions(options);
+        return self.encodeIntoSliceInternal(input, options, null, output);
+    }
+
+    pub fn encodeIntoSliceWithDictionary(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary, output: []u8) Error!usize {
+        try validateNativeSeekableOptions(options);
+        return self.encodeIntoSliceInternal(input, options, dictionary, output);
+    }
+
+    pub fn encodeIntoSliceWithDictionarySet(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32, output: []u8) Error!usize {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return self.encodeIntoSliceWithDictionary(input, options, dictionary, output);
+    }
+
+    fn prepareEntries(self: *NativeSeekableStreamEncoder, input_len: usize, frame_size: usize) Error![]NativeSeekTableFrameSize {
+        const frame_count = try nativeSeekableFrameCount(input_len, frame_size);
+        try self.entries.resize(self.allocator, frame_count);
+        return self.entries.items;
+    }
+
+    fn encodeScratchInternal(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error![]const u8 {
+        self.output_scratch.clearRetainingCapacity();
+        self.encodeAppendInternal(&self.output_scratch, input, options, dictionary) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        return self.output_scratch.items;
+    }
+
+    fn encodeAppendInternal(self: *NativeSeekableStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error!void {
+        const entries = try self.prepareEntries(input.len, options.frame_size);
+        const original_len = out.items.len;
+        errdefer out.shrinkRetainingCapacity(original_len);
+        for (entries, 0..) |*entry_value, frame_index| {
+            const start = if (input.len == 0) 0 else frame_index * options.frame_size;
+            const end = if (input.len == 0) 0 else @min(input.len, start + options.frame_size);
+            const chunk = input[start..end];
+            const compressed_start = out.items.len;
+            if (dictionary) |dict|
+                _ = try self.frame_encoder.encodeAppendWithDictionary(out, chunk, options.frame_options, dict)
+            else
+                _ = try self.frame_encoder.encodeAppend(out, chunk, options.frame_options);
+            entry_value.* = try nativeSeekableFrameSize(out.items.len - compressed_start, chunk, options.seek_checksums);
+        }
+        try encodeNativeSeekTableAppend(self.allocator, out, entries, options.seek_checksums);
+    }
+
+    fn encodeIntoSliceInternal(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary, output: []u8) Error!usize {
+        const entries = try self.prepareEntries(input.len, options.frame_size);
+        var written: usize = 0;
+        for (entries, 0..) |*entry_value, frame_index| {
+            const start = if (input.len == 0) 0 else frame_index * options.frame_size;
+            const end = if (input.len == 0) 0 else @min(input.len, start + options.frame_size);
+            const chunk = input[start..end];
+            const encoded = if (dictionary) |dict|
+                try self.frame_encoder.encodeScratchWithDictionary(chunk, options.frame_options, dict)
+            else
+                try self.frame_encoder.encodeScratch(chunk, options.frame_options);
+            if (encoded.frame.len > output.len -| written) return error.OutputTooSmall;
+            @memcpy(output[written..][0..encoded.frame.len], encoded.frame);
+            written += encoded.frame.len;
+            entry_value.* = try nativeSeekableFrameSize(encoded.frame.len, chunk, options.seek_checksums);
+        }
+        written += try encodeNativeSeekTableInto(entries, options.seek_checksums, output[written..]);
+        return written;
+    }
+};
+
+pub const SeekableStreamEncoder = NativeSeekableStreamEncoder;
+
+fn nativeSeekableFrameSize(compressed_len: usize, input: []const u8, with_checksum: bool) Error!NativeSeekTableFrameSize {
+    return .{
+        .compressed_size = try checkedUsizeToU32(compressed_len),
+        .decompressed_size = try checkedUsizeToU32(input.len),
+        .checksum = if (with_checksum) @truncate(std.hash.XxHash64.hash(0, input)) else null,
+    };
 }
 
 pub fn nativeSeekableRangeScratchLen(table: NativeSeekTable, offset: u64, length: usize) Error!usize {
@@ -22703,6 +22797,45 @@ test "zstd native seekable encoder applies a dictionary to every frame" {
         error.ChecksumMismatch,
         decodeNativeSeekableRangeIntoWithIndexAndDictionary(idless_index, range_start, &range_output, &range_scratch, wrong_raw_dictionary),
     );
+}
+
+test "zstd reusable seekable encoder retains frame and table scratch" {
+    const payload = ("reusable seekable zstd frame payload-" ** 96);
+    const options: NativeSeekableOptions = .{
+        .frame_size = 1024,
+        .frame_options = .{ .selection = .literal_only, .content_checksum = true },
+        .seek_checksums = true,
+    };
+    var counting = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var encoder = NativeSeekableStreamEncoder.init(counting.allocator());
+    var encoder_live = true;
+    defer if (encoder_live) encoder.deinit();
+
+    const first = try encoder.encodeScratch(payload, options);
+    const expected = try std.testing.allocator.dupe(u8, first);
+    defer std.testing.allocator.free(expected);
+    const first_allocations = counting.allocations;
+    const entry_capacity = encoder.entries.capacity;
+    const output_capacity = encoder.output_scratch.capacity;
+    const frame_capacity = encoder.frame_encoder.output_scratch.capacity;
+
+    const second = try encoder.encodeScratch(payload, options);
+    const second_allocations = counting.allocations - first_allocations;
+    try std.testing.expectEqualSlices(u8, expected, second);
+    try std.testing.expectEqual(entry_capacity, encoder.entries.capacity);
+    try std.testing.expectEqual(output_capacity, encoder.output_scratch.capacity);
+    try std.testing.expectEqual(frame_capacity, encoder.frame_encoder.output_scratch.capacity);
+    try std.testing.expectEqual(first_allocations - 3, second_allocations);
+
+    counting.fail_index = counting.alloc_index;
+    try std.testing.expectError(error.OutOfMemory, encoder.encodeScratch(payload ++ payload, options));
+    try std.testing.expectEqual(@as(usize, 0), encoder.output_scratch.items.len);
+    counting.fail_index = std.math.maxInt(usize);
+    const recovered = try encoder.encodeScratch(payload, options);
+    try std.testing.expectEqualSlices(u8, expected, recovered);
+    encoder.deinit();
+    encoder_live = false;
+    try std.testing.expectEqual(counting.allocated_bytes, counting.freed_bytes);
 }
 
 test "zstd raw/RLE native decoder accepts no-size raw frames" {

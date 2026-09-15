@@ -13737,6 +13737,12 @@ reuse, so production keeps the simpler independently owned plans.
   buffer and produce byte-exact output matching the existing allocating path
   for empty, checksum/plain,
   identified-dictionary, and ID-less raw-dictionary streams.
+  Added `NativeSeekableStreamEncoder` for repeated workloads. It retains the
+  per-frame encoder, final output buffer, and seek-entry array while exposing
+  alloc/scratch/append/into variants for plain, explicit-dictionary, and
+  dictionary-set streams. A counting-allocator regression proves that a second
+  same-shape encode removes three allocation calls while preserving exact bytes,
+  and an injected OOM followed by successful reuse covers rollback and teardown.
   Rejected two follow-up representations for the adjacent-match reuse state in
   Zstd's single-state beam. Splitting the optional match into two `u16` values
   improved the isolated JSON parser by about `1.028x`, but moved following hot

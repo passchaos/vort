@@ -597,6 +597,10 @@ fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
     try expect(seekable_set_bound == seekable_bound);
     const seekable_set_written = try vort.zstdEncodeNativeSeekableStreamIntoSliceWithDictionarySet(allocator, payload, seekable_options, dictionary_set, dict.id, seekable_into);
     try expectEqualSlices(seekable, seekable_into[0..seekable_set_written]);
+    var reusable_seekable = vort.ZstdNativeSeekableStreamEncoder.init(allocator);
+    defer reusable_seekable.deinit();
+    const reusable_seekable_written = try reusable_seekable.encodeIntoSliceWithDictionarySet(payload, seekable_options, dictionary_set, dict.id, seekable_into);
+    try expectEqualSlices(seekable, seekable_into[0..reusable_seekable_written]);
 
     const raw_dictionary = vort.ZstdNativeDictionary.initRawContent(dict.content);
     const idless = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, raw_dictionary);
