@@ -13740,13 +13740,24 @@ reuse, so production keeps the simpler independently owned plans.
   Added `NativeSeekableStreamEncoder` for repeated workloads. It retains the
   per-frame encoder, final output buffer, and seek-entry array while exposing
   alloc/scratch/append/into variants for plain, explicit-dictionary, and
-  dictionary-set streams. A counting-allocator regression proves that a second
-  same-shape encode removes three allocation calls while preserving exact bytes,
-  and an injected OOM followed by successful reuse covers rollback and teardown.
-  The native allocation report separately locks one-shot caller-buffer encoding
+  dictionary-set streams. A counting-allocator regression now proves that a
+  second same-shape encode removes five allocation calls while preserving exact
+  bytes, and an injected OOM followed by successful reuse covers rollback and
+  teardown.
+  The native allocation report separately locked one-shot caller-buffer encoding
   at 174 calls / 911,692 bytes and warmed reusable encoding at 172 calls /
   911,334 bytes; positive, negative-drift, schema, and aggregate dashboard gates
-  validate the relationship.
+  validate the relationship. The reusable native frame context now also retains
+  the two outer block-candidate arbitration buffers. Across the same four-frame
+  seekable workload this reduces one-shot encoding to 168 calls / 910,486 bytes
+  and warmed encoding to 164 calls / 909,726 bytes, while preserving the exact
+  305-byte stream. The stricter gate now requires the full four-call / 760-byte
+  warmed advantage. Thirty-one alternating independent-binary warmed A/B pairs
+  (100 encodes per side) measured `1.0046x` paired median / `1.0030x` geomean
+  with 21/31 wins. A 21-pair complete 129 KiB multi-block level-3 control kept
+  the 27,517-byte wire and checksum exact while measuring `0.9983x` median /
+  `0.9982x` geomean, so the retained claim is allocation reuse rather than a
+  broad one-shot throughput gain.
   Rejected two follow-up representations for the adjacent-match reuse state in
   Zstd's single-state beam. Splitting the optional match into two `u16` values
   improved the isolated JSON parser by about `1.028x`, but moved following hot

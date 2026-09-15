@@ -11388,7 +11388,7 @@ Top-level fields:
 | `required_budget_cases` | integer | Number of allocation-budget case rows checked. |
 | `cases` | list | Per-case zero-allocation gate results. |
 | `budget_cases` | list | Per-case allocation-budget gate results. |
-| `seekable_reuse_matched` | boolean | True when the warmed reusable Zstd seekable encoder preserves input/output sizes, balances temporary allocations, and uses at least two fewer allocation calls and fewer allocated bytes than one-shot caller-buffer encoding. |
+| `seekable_reuse_matched` | boolean | True when the warmed reusable Zstd seekable encoder preserves input/output sizes, balances temporary allocations, and uses at least four fewer allocation calls and fewer allocated bytes than one-shot caller-buffer encoding. |
 
 Each `cases` item includes:
 

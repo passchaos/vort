@@ -75,8 +75,8 @@ ALLOCATION_BUDGETS = {
     "indexed_range_into_full_deflate": {"max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
     "batch_range_into_fast_paths": {"max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
     "embedded_validation_borrowed_dict": {"max_allocations": 8, "max_deallocations": 8, "max_allocated_bytes": 2081, "max_freed_bytes": 2081},
-    "zstd_seekable_into": {"max_allocations": 174, "max_deallocations": 174, "max_allocated_bytes": 911692, "max_freed_bytes": 911692},
-    "zstd_seekable_reusable_warm_into": {"max_allocations": 172, "max_deallocations": 172, "max_allocated_bytes": 911334, "max_freed_bytes": 911334},
+    "zstd_seekable_into": {"max_allocations": 168, "max_deallocations": 168, "max_allocated_bytes": 910486, "max_freed_bytes": 910486},
+    "zstd_seekable_reusable_warm_into": {"max_allocations": 164, "max_deallocations": 164, "max_allocated_bytes": 909726, "max_freed_bytes": 909726},
 }
 
 SEEKABLE_REUSE_CASES = (
@@ -188,7 +188,7 @@ def main() -> int:
             and int_value(one_shot, "allocated_bytes") == int_value(one_shot, "freed_bytes")
             and int_value(warmed, "allocations") == int_value(warmed, "deallocations")
             and int_value(warmed, "allocated_bytes") == int_value(warmed, "freed_bytes")
-            and int_value(warmed, "allocations") + 2 <= int_value(one_shot, "allocations")
+            and int_value(warmed, "allocations") + 4 <= int_value(one_shot, "allocations")
             and int_value(warmed, "allocated_bytes") < int_value(one_shot, "allocated_bytes")
         )
 

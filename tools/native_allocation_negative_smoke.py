@@ -83,8 +83,10 @@ def main() -> int:
         seekable_reuse_regression = clone_report()
         one_shot = find_case(seekable_reuse_regression, "zstd_seekable_into")
         warmed = find_case(seekable_reuse_regression, "zstd_seekable_reusable_warm_into")
-        warmed["allocations"] = one_shot["allocations"]
-        warmed["deallocations"] = one_shot["deallocations"]
+        # Preserve balance and a three-call improvement so this specifically
+        # proves that the four-call reuse floor is enforced.
+        warmed["allocations"] = one_shot["allocations"] - 3
+        warmed["deallocations"] = one_shot["deallocations"] - 3
         cases.append(run_bad_report("seekable_reuse_regression", seekable_reuse_regression, "seekable_reuse_matched", tmp))
 
     summary = {

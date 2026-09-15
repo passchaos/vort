@@ -3441,8 +3441,8 @@ def write_native_allocation_artifacts(root: Path) -> None:
             {"case": "zero_decode", "input_bytes": 16, "output_bytes": 16, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
             {"case": "zero_range", "input_bytes": 32, "output_bytes": 8, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
             {"case": "budgeted_index", "input_bytes": 64, "output_bytes": 16, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80},
-            {"case": "zstd_seekable_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 174, "deallocations": 174, "allocated_bytes": 911692, "freed_bytes": 911692},
-            {"case": "zstd_seekable_reusable_warm_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 172, "deallocations": 172, "allocated_bytes": 911334, "freed_bytes": 911334},
+            {"case": "zstd_seekable_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 168, "deallocations": 168, "allocated_bytes": 910486, "freed_bytes": 910486},
+            {"case": "zstd_seekable_reusable_warm_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 164, "deallocations": 164, "allocated_bytes": 909726, "freed_bytes": 909726},
         ],
     }
     smoke = {
@@ -3459,8 +3459,8 @@ def write_native_allocation_artifacts(root: Path) -> None:
         ],
         "budget_cases": [
             {"case": "budgeted_index", "present": True, "matched": True, "balanced": True, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80, "max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
-            {"case": "zstd_seekable_into", "present": True, "matched": True, "balanced": True, "allocations": 174, "deallocations": 174, "allocated_bytes": 911692, "freed_bytes": 911692, "max_allocations": 174, "max_deallocations": 174, "max_allocated_bytes": 911692, "max_freed_bytes": 911692},
-            {"case": "zstd_seekable_reusable_warm_into", "present": True, "matched": True, "balanced": True, "allocations": 172, "deallocations": 172, "allocated_bytes": 911334, "freed_bytes": 911334, "max_allocations": 172, "max_deallocations": 172, "max_allocated_bytes": 911334, "max_freed_bytes": 911334},
+            {"case": "zstd_seekable_into", "present": True, "matched": True, "balanced": True, "allocations": 168, "deallocations": 168, "allocated_bytes": 910486, "freed_bytes": 910486, "max_allocations": 168, "max_deallocations": 168, "max_allocated_bytes": 910486, "max_freed_bytes": 910486},
+            {"case": "zstd_seekable_reusable_warm_into", "present": True, "matched": True, "balanced": True, "allocations": 164, "deallocations": 164, "allocated_bytes": 909726, "freed_bytes": 909726, "max_allocations": 164, "max_deallocations": 164, "max_allocated_bytes": 909726, "max_freed_bytes": 909726},
         ],
     }
     negative = {
@@ -15013,6 +15013,33 @@ def main() -> int:
                 native_allocation_seekable_result.returncode,
                 "dashboard_index_validation_unhealthy=native_allocation_failed",
                 native_allocation_seekable_result.stdout,
+            )
+        )
+
+        native_allocation_seekable_report_result, native_allocation_seekable_report_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-seekable-report-reuse",
+            mutate_report=lambda payload: next(
+                row for row in payload["cases"]
+                if row.get("case") == "zstd_seekable_reusable_warm_into"
+            ).update({"allocations": 165, "deallocations": 165}),
+        )
+        native_allocation_seekable_report_matched = (
+            native_allocation_seekable_report_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_seekable_report_result.stdout
+            and native_allocation_seekable_report_manifest["validation_healthy"] is False
+            and native_allocation_seekable_report_manifest["native_allocation_healthy"] is False
+            and native_allocation_seekable_report_manifest["native_allocation_seekable_reuse_report_matched"] is False
+        )
+        checks.append(
+            check_row(
+                "native_allocation_seekable_report_reuse_unmatched",
+                "strict-validation-health",
+                True,
+                native_allocation_seekable_report_matched,
+                native_allocation_seekable_report_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_seekable_report_result.stdout,
             )
         )
 
