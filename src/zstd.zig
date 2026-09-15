@@ -71,6 +71,8 @@ pub const min_compression_level: c_int = 0;
 pub const max_compression_level: c_int = 22;
 var test_disable_indexed_single_lower_bound = false;
 var test_decisive_single_lower_bound_hits: usize = 0;
+var test_disable_small_single_emit_prune = false;
+var test_small_single_emit_prune_hits: usize = 0;
 var test_disable_hash_token_lower_bound = false;
 var test_hash_token_lower_bound_hits: usize = 0;
 var test_disable_four_byte_optimal = false;
@@ -11838,8 +11840,16 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
             try emitSingleMatchCompressedBlockFromMatch(allocator, candidate, block, last, match)
         else if (beam_is_decisive)
             false
-        else
-            try emitSingleMatchCompressedBlock(allocator, candidate, block, last, duplicate_index_ptr);
+        else if (block.len <= duplicate_exact_hash_input_max and (!builtin.is_test or !test_disable_small_single_emit_prune)) blk: {
+            const match = try findBestDuplicateMatch(block) orelse break :blk false;
+            const estimated_total_len = std.math.add(usize, match.payload_len, 3) catch return error.IntegerOverflow;
+            single_len = estimated_total_len;
+            if (best.items.len != 0 and estimated_total_len >= best.items.len) {
+                if (comptime builtin.is_test) test_small_single_emit_prune_hits += 1;
+                break :blk false;
+            }
+            break :blk try emitSingleMatchCompressedBlockFromMatch(allocator, candidate, block, last, match);
+        } else try emitSingleMatchCompressedBlock(allocator, candidate, block, last, duplicate_index_ptr);
         if (single_duplicate_ok) single_len = candidate.items.len;
         try retainShortestCandidate(allocator, single_duplicate_ok, candidate.items, best);
     }
@@ -11892,6 +11902,117 @@ test "zstd decisive single lookup reuses the level one result" {
     try std.testing.expect(shouldQueryDecisiveSingleDuplicate(false, true, false));
     try std.testing.expect(!shouldQueryDecisiveSingleDuplicate(false, false, false));
     try std.testing.expect(!shouldQueryDecisiveSingleDuplicate(false, true, true));
+}
+
+test "zstd small single candidate length prune preserves selector wire" {
+    const payload = "reusable seekable zstd frame payload-" ** 96;
+    test_small_single_emit_prune_hits = 0;
+    test_disable_small_single_emit_prune = false;
+    defer {
+        test_disable_small_single_emit_prune = false;
+        test_small_single_emit_prune_hits = 0;
+    }
+
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const end = @min(payload.len, offset + small_sequence_stack_input_max);
+        const block = payload[offset..end];
+        var optimized: std.ArrayList(u8) = .empty;
+        defer optimized.deinit(std.testing.allocator);
+        const optimized_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+            std.testing.allocator,
+            &optimized,
+            block,
+            end == payload.len,
+            mixed_match_path_search_budget,
+            false,
+            null,
+            null,
+        );
+
+        test_disable_small_single_emit_prune = true;
+        var reference: std.ArrayList(u8) = .empty;
+        defer reference.deinit(std.testing.allocator);
+        const reference_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+            std.testing.allocator,
+            &reference,
+            block,
+            end == payload.len,
+            mixed_match_path_search_budget,
+            false,
+            null,
+            null,
+        );
+        test_disable_small_single_emit_prune = false;
+
+        try std.testing.expectEqual(reference_ok, optimized_ok);
+        try std.testing.expectEqualSlices(u8, reference.items, optimized.items);
+        offset = end;
+    }
+    try std.testing.expectEqual(@as(usize, 4), test_small_single_emit_prune_hits);
+
+    const budgets = [_]usize{ 16, 64, 96, mixed_match_path_search_budget };
+    var generated_prune_hits: usize = 0;
+    for (0..32) |seed| {
+        const len = 96 + seed * 29;
+        var generated: [small_sequence_stack_input_max]u8 = undefined;
+        var random_state: u32 = @truncate(0x9e37_79b9 +% seed *% 0x0100_0193);
+        for (generated[0..len], 0..) |*byte, i| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => "abcdefghijklmnop"[i & 15],
+                1 => @truncate(random_state >> 24),
+                2 => @intCast('a' + ((i * 7 + seed) % 23)),
+                else => @intCast('0' + ((i / 9 + seed) % 10)),
+            };
+        }
+        if ((seed & 3) == 1 and len >= 96) {
+            const copy_len = @min(@as(usize, 64), len / 3);
+            @memcpy(generated[len - copy_len .. len], generated[8..][0..copy_len]);
+        }
+        const block = generated[0..len];
+        if (try findBestDuplicateMatch(block)) |match| {
+            var single: std.ArrayList(u8) = .empty;
+            defer single.deinit(std.testing.allocator);
+            try std.testing.expect(try emitSingleMatchCompressedBlockFromMatch(std.testing.allocator, &single, block, true, match));
+            try std.testing.expectEqual(match.payload_len + 3, single.items.len);
+        }
+
+        for (budgets) |budget| for ([_]bool{ false, true }) |rep_beam_search| {
+            const hits_before = test_small_single_emit_prune_hits;
+            var optimized: std.ArrayList(u8) = .empty;
+            defer optimized.deinit(std.testing.allocator);
+            const optimized_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+                std.testing.allocator,
+                &optimized,
+                block,
+                true,
+                budget,
+                rep_beam_search,
+                null,
+                null,
+            );
+            generated_prune_hits += test_small_single_emit_prune_hits - hits_before;
+
+            test_disable_small_single_emit_prune = true;
+            var reference: std.ArrayList(u8) = .empty;
+            defer reference.deinit(std.testing.allocator);
+            const reference_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+                std.testing.allocator,
+                &reference,
+                block,
+                true,
+                budget,
+                rep_beam_search,
+                null,
+                null,
+            );
+            test_disable_small_single_emit_prune = false;
+            try std.testing.expectEqual(reference_ok, optimized_ok);
+            try std.testing.expectEqualSlices(u8, reference.items, optimized.items);
+        };
+    }
+    try std.testing.expect(generated_prune_hits != 0);
 }
 
 test "zstd level three single-state beam policy is bounded" {
@@ -22981,7 +23102,7 @@ test "zstd reusable seekable encoder retains frame and table scratch" {
     try std.testing.expectEqual(optimal_compact_prev_capacity, encoder.frame_encoder.block_scratch.optimal.compact_prev.capacity);
     try std.testing.expectEqual(optimal_tokens_capacity, encoder.frame_encoder.block_scratch.optimal.tokens.capacity);
     try std.testing.expectEqual(first_allocations - 17, second_allocations);
-    try std.testing.expectEqual(@as(usize, 56), second_allocations);
+    try std.testing.expectEqual(@as(usize, 28), second_allocations);
     try std.testing.expectEqual(second_allocations, second_deallocations);
     try std.testing.expectEqual(second_allocated_bytes, second_freed_bytes);
 

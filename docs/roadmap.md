@@ -13791,6 +13791,17 @@ reuse, so production keeps the simpler independently owned plans.
   target measured `1.0015x`. The retained claim is therefore a 51.7%
   allocation-call reduction and 51.6% transient-byte reduction, not a direct
   latency win.
+  Removed the remaining redundant small-block single-duplicate emission when
+  its exact precomputed payload length plus the block header cannot strictly
+  beat the already selected candidate. The existing tie order keeps the earlier
+  winner, so a 32-shape × four-budget × beam on/off oracle can force the old
+  path and require byte-identical output while recording real prune hits. The
+  four-frame allocation report drops again from 72/56 calls and 236,098/8,752
+  bytes to 44/28 calls and 231,722/4,376 bytes for one-shot/warmed encoding.
+  Fifteen paired runs of the complete 20-row encode matrix preserve every input
+  hash, frame size, and checksum while measuring a `1.0060x` row-median
+  geomean, 16/20 positive rows, and a `0.9955x` floor. Sixty-one warmed seekable
+  pairs measured `1.0028x` median with 43/61 wins and `0.9997x` geomean.
   Rejected two follow-up representations for the adjacent-match reuse state in
   Zstd's single-state beam. Splitting the optional match into two `u16` values
   improved the isolated JSON parser by about `1.028x`, but moved following hot
