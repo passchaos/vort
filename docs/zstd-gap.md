@@ -221,10 +221,11 @@ Current interpretation:
   both system zstd decode and Vort native decode, with `size-zstd-native-hex`
   preflight checked before each native decode. The native decoder accepts
   zero-valued Dictionary_ID fields without requiring a dictionary while still
-  returning `NeedDictionary` for non-zero IDs unless callers provide a matching
-  `NativeDictionary`; dictionary-aware alloc/append/into/scratch/size APIs now
-  validate the ID and can use the preset bytes as match history for the native
-  sequence subset. Dictionary-set decode APIs can resolve per-frame Dictionary_ID
+  allowing callers to explicitly provide an ID-less raw-content dictionary via
+  `NativeDictionary.initRawContent`; non-zero IDs still require a matching
+  `NativeDictionary`. Dictionary-aware alloc/append/into/scratch/size APIs can
+  use either raw-content or full-dictionary preset bytes as match history for the
+  native sequence subset. Dictionary-set decode APIs can resolve per-frame Dictionary_ID
   values in concatenated native streams without caller-side frame splitting,
   chunk-joined decode helpers accept split compressed input with caller-owned
   join scratch, incremental decoder facades expose the shared StepResult
@@ -286,7 +287,8 @@ Current interpretation:
   and incremental APIs when skippable concatenated streams contain a later frame
   whose Dictionary_ID is absent from the set. The
   native writer can emit Dictionary_ID fields for downstream
-  container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
+  container metadata, omit the field for explicit raw-content dictionaries, and
+  has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
   while remaining decodable through explicit dictionary APIs. Public helpers can
   now derive stable non-zero Dictionary_ID values from dictionary content, train

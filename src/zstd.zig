@@ -274,6 +274,7 @@ const IncrementalEncoderCodec = struct {
     pub const Dictionary = zstd.NativeDictionary;
     pub const State = LiteralOnlyEncoderState;
     pub const HistoryView = incremental_history.View;
+    pub const allow_zero_dictionary_id = true;
     pub const max_block_len = std.compress.zstd.block_size_max;
     pub fn validate(options: Options, expected_input_len: ?usize, dictionary_id: ?u32) zstd.Error!void {
         if (options.include_content_size != (expected_input_len != null)) return error.InvalidBlockPlan;
@@ -1333,6 +1334,14 @@ pub const NativeDictionary = struct {
         return .{ .id = id, .content = content };
     }
 
+    /// Borrow raw-content dictionary history without declaring a Dictionary_ID
+    /// in the Zstandard frame header. The caller must explicitly provide the
+    /// same dictionary when decoding because an ID-less frame cannot select it
+    /// from a dictionary set.
+    pub fn initRawContent(content: []const u8) NativeDictionary {
+        return init(0, content);
+    }
+
     /// Derive a stable 32-bit native Zstd Dictionary_ID from dictionary bytes.
     ///
     /// The Zstandard frame header treats a zero Dictionary_ID as absent, so fold
@@ -1688,7 +1697,6 @@ pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrame
 }
 
 pub fn encodedNativeFrameBoundWithDictionary(input_len: usize, options: NativeFrameOptions, dictionary: NativeDictionary) Error!usize {
-    if (dictionary.id == 0) return error.NeedDictionary;
     return try encodedNativeFrameBoundWithOptions(input_len, optionsWithNativeDictionary(options, dictionary));
 }
 
@@ -4551,7 +4559,8 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn resolveDirectDictionaryHistory(self: *const NativeIncrementalFrameDecoder, header: NativeFrameHeader) Error![]const u8 {
-        if (header.dictionary_id == 0) return &.{};
+        if (header.dictionary_id == 0)
+            return if (self.dictionary) |dictionary| dictionary.content else &.{};
         if (self.dictionary_set) |dictionary_set| {
             const dictionary = dictionary_set.find(header.dictionary_id) orelse return error.NeedDictionary;
             return dictionary.content;
@@ -4560,7 +4569,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn resolveDirectDictionary(self: *const NativeIncrementalFrameDecoder, header: NativeFrameHeader) ?NativeDictionary {
-        if (header.dictionary_id == 0) return null;
+        if (header.dictionary_id == 0) return self.dictionary;
         if (self.dictionary_set) |dictionary_set| return dictionary_set.find(header.dictionary_id);
         if (self.dictionary) |dictionary| if (dictionary.id == header.dictionary_id) return dictionary;
         return null;
@@ -6699,9 +6708,6 @@ pub const NativeFrameEncoder = struct {
         options: NativeFrameOptions,
         dictionary: ?NativeDictionary,
     ) Error!NativeFrameMode {
-        if (dictionary) |dict| {
-            if (dict.id == 0) return error.NeedDictionary;
-        }
         const frame_options = optionsWithNativeDictionary(options, dictionary);
         switch (options.selection) {
             .raw_or_rle => {
@@ -7106,7 +7112,8 @@ fn validateBlockSize(header: RawOrRleFrameHeader, block_type: u32, block_len: us
 }
 
 fn validateNativeDictionary(header: NativeFrameHeader, dictionary: ?NativeDictionary) Error![]const u8 {
-    if (header.dictionary_id == 0) return &.{};
+    if (header.dictionary_id == 0)
+        return if (dictionary) |dict| dict.content else &.{};
     const dict = dictionary orelse return error.NeedDictionary;
     if (dict.id != header.dictionary_id) return error.NeedDictionary;
     // The native subset currently uses preset dictionaries as external history
@@ -9841,7 +9848,7 @@ test "zstd native writer can reuse standard dictionary sequence tables" {
 
 fn dictionaryForInspectedFrame(frame: []const u8, dictionary: NativeDictionary) Error!?NativeDictionary {
     const header = try inspectNativeFrameHeader(frame);
-    if (header.dictionary_id == 0) return null;
+    if (header.dictionary_id == 0) return dictionary;
     if (dictionary.id != header.dictionary_id) return error.NeedDictionary;
     return dictionary;
 }
@@ -10283,10 +10290,12 @@ pub fn summarizeNativeStreamWithDictionarySet(frames: []const u8, dictionary_set
 }
 
 pub fn summarizeNativeStreamWithDictionary(frames: []const u8, dictionary: NativeDictionary) Error!NativeStreamSummary {
+    if (dictionary.id == 0) return try summarizeNativeStream(frames);
     return try summarizeNativeStreamWithDictionarySet(frames, NativeDictionarySet.init(&.{dictionary}));
 }
 
 pub fn summarizeNativeStreamWithDictionaryDiagnostics(frames: []const u8, dictionary: NativeDictionary, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeStreamSummary {
+    if (dictionary.id == 0) return try summarizeNativeStreamWithDiagnostics(frames, diagnostics);
     return try summarizeNativeStreamWithDictionarySetAndDiagnostics(frames, NativeDictionarySet.init(&.{dictionary}), diagnostics);
 }
 
@@ -22497,7 +22506,8 @@ test "zstd native seekable encoder applies a dictionary to every frame" {
     defer std.testing.allocator.free(selected);
     try std.testing.expectEqualSlices(u8, encoded, selected);
     try std.testing.expectError(error.NeedDictionary, encodeNativeSeekableStreamWithDictionarySetAlloc(std.testing.allocator, payload, options, dictionary_set, 0x9999));
-    try std.testing.expectError(error.NeedDictionary, encodeNativeSeekableStreamWithDictionaryAlloc(std.testing.allocator, payload, options, NativeDictionary.init(0, dictionary.content)));
+
+    try std.testing.expectError(error.NeedDictionary, encodeNativeSeekableStreamWithDictionaryAlloc(std.testing.allocator, payload, options, NativeDictionary.initRawContent(dictionary.content)));
 }
 
 test "zstd raw/RLE native decoder accepts no-size raw frames" {
@@ -31241,6 +31251,38 @@ test "zstd native dictionary decodes matches from preset history" {
     try std.testing.expectEqualSlices(u8, dict.content, &into);
 }
 
+test "zstd raw-content dictionary supports id-less preset history" {
+    const dict = NativeDictionary.initRawContent("wxyz");
+    try std.testing.expectEqual(@as(u32, 0), dict.id);
+    try std.testing.expectEqual(DictionaryKind.raw_content, dict.kind());
+    try std.testing.expectError(error.NeedDictionary, NativeDictionarySet.initChecked(&.{dict}));
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, 4, .{ .content_checksum = false });
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 7, true);
+    try frame.append(std.testing.allocator, 0); // No literals.
+    try frame.append(std.testing.allocator, 1); // One sequence.
+    try frame.append(std.testing.allocator, 0x54); // LL, OF, and ML use RLE_Mode.
+    try frame.appendSlice(std.testing.allocator, &.{ 0, 2, 1 }); // literal_len=0, offset=4, match_len=4.
+    try frame.append(std.testing.allocator, 0x07);
+
+    try std.testing.expectEqual(@as(u32, 0), (try inspectNativeFrameHeader(frame.items)).dictionary_id);
+    try std.testing.expectError(error.InvalidMatch, decodeNativeFrameAlloc(std.testing.allocator, frame.items));
+    try std.testing.expectError(error.InvalidMatch, decodedNativeFrameSize(frame.items));
+    try std.testing.expectEqual(@as(usize, dict.content.len), try decodedNativeFrameSizeWithDictionary(frame.items, dict));
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, frame.items, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, dict.content, decoded);
+    var output: [4]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, output.len), try decodeNativeFrameIntoWithDictionary(frame.items, &output, dict));
+    try std.testing.expectEqualSlices(u8, dict.content, &output);
+
+    const block = try inspectNativeFrameFirstBlock(frame.items);
+    const modes = try inspectNativeFrameBlockSequenceModesWithDictionary(frame.items, block, dict);
+    try std.testing.expectEqual(@as(usize, 1), modes.sequence_count);
+}
+
 test "zstd native writer uses preset dictionary history" {
     const dict = NativeDictionary.init(0x1234, "abcdefghijklmnopQRSTUVWXYZabcd");
     const payload = "pfx-abcdefghijklmnop-mid-QRSTUVWXYZabcd-tail";
@@ -31309,7 +31351,14 @@ test "zstd native writer uses preset dictionary history" {
     try std.testing.expectEqual(NativeFrameMode.literal_only, into_result.mode);
     try std.testing.expectEqualSlices(u8, encoded.frame, into[0..into_result.written]);
     try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, into[0 .. into_result.written - 1]));
-    try std.testing.expectError(error.NeedDictionary, encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, NativeDictionary.init(0, dict.content)));
+    const raw_dictionary = NativeDictionary.initRawContent(dict.content);
+    const raw_dictionary_encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, raw_dictionary);
+    defer std.testing.allocator.free(raw_dictionary_encoded.frame);
+    try std.testing.expectEqual(@as(u32, 0), (try inspectNativeFrameHeader(raw_dictionary_encoded.frame)).dictionary_id);
+    try std.testing.expectError(error.InvalidMatch, decodeNativeFrameAlloc(std.testing.allocator, raw_dictionary_encoded.frame));
+    const raw_dictionary_decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, raw_dictionary_encoded.frame, raw_dictionary);
+    defer std.testing.allocator.free(raw_dictionary_decoded);
+    try std.testing.expectEqualSlices(u8, payload, raw_dictionary_decoded);
 }
 
 test "zstd native writer emits RLE multi dictionary matches" {

@@ -57,6 +57,7 @@ pub fn main(init: std.process.Init) !void {
     var explicit_sequence_cases: usize = 0;
     var streaming_cases: usize = 0;
     var trained_dictionary_cases: usize = 0;
+    var raw_dictionary_cases: usize = 0;
     var decodecorpus_cases: usize = 0;
     var decodecorpus_incremental_cases: usize = 0;
     var decodecorpus_block_stream_cases: usize = 0;
@@ -124,6 +125,104 @@ pub fn main(init: std.process.Init) !void {
         checked += 1;
         advanced_cases += 1;
     }
+    var raw_dictionary: [32 * 1024]u8 = undefined;
+    var raw_dictionary_state: u32 = 0x243f_6a88;
+    for (&raw_dictionary) |*byte| {
+        raw_dictionary_state = raw_dictionary_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(raw_dictionary_state >> 24);
+    }
+    var raw_dictionary_payload: [16 * 1024]u8 = undefined;
+    @memcpy(&raw_dictionary_payload, raw_dictionary[raw_dictionary.len - raw_dictionary_payload.len ..]);
+    const raw_dictionary_frame = try runtime.encodeUsingDictAlloc(init.gpa, &raw_dictionary_payload, &raw_dictionary, 9);
+    defer init.gpa.free(raw_dictionary_frame);
+    const raw_dictionary_header = try vort.zstdInspectNativeFrameHeader(raw_dictionary_frame);
+    if (raw_dictionary_header.dictionary_id != 0) return error.InvalidDictionaryMetadata;
+    var raw_dictionary_reference_output: [raw_dictionary_payload.len]u8 = undefined;
+    try runtime.decodeUsingDict(raw_dictionary_frame, &raw_dictionary_reference_output, &raw_dictionary);
+    if (!std.mem.eql(u8, &raw_dictionary_payload, &raw_dictionary_reference_output)) return error.SizeMismatch;
+    if (runtime.decode(raw_dictionary_frame, &raw_dictionary_reference_output)) |_|
+        return error.ReferenceEncodeFailed
+    else |_| {}
+    if (vort.zstdDecodeFrameAlloc(init.gpa, raw_dictionary_frame)) |decoded_without_dictionary| {
+        defer init.gpa.free(decoded_without_dictionary);
+        return error.ReferenceEncodeFailed;
+    } else |_| {}
+    const raw_dictionary_view = vort.ZstdDictionary.initRawContent(&raw_dictionary);
+    try observeFrameWithDictionary(raw_dictionary_frame, raw_dictionary_view, &coverage);
+    const raw_dictionary_summary = try vort.zstdSummarizeNativeStreamWithDictionary(raw_dictionary_frame, raw_dictionary_view);
+    if (raw_dictionary_summary.frame_count != 1 or raw_dictionary_summary.dictionary_id_frame_count != 0) return error.InvalidDictionaryMetadata;
+    if (try vort.zstdDecodedFrameSizeWithDictionary(raw_dictionary_frame, raw_dictionary_view) != raw_dictionary_payload.len) return error.SizeMismatch;
+    const raw_dictionary_decoded = try vort.zstdDecodeFrameAllocWithDictionary(init.gpa, raw_dictionary_frame, raw_dictionary_view);
+    defer init.gpa.free(raw_dictionary_decoded);
+    if (!std.mem.eql(u8, &raw_dictionary_payload, raw_dictionary_decoded)) return error.SizeMismatch;
+    var raw_dictionary_into: [raw_dictionary_payload.len]u8 = undefined;
+    if (try vort.zstdDecodeFrameIntoWithDictionary(raw_dictionary_frame, &raw_dictionary_into, raw_dictionary_view) != raw_dictionary_payload.len or
+        !std.mem.eql(u8, &raw_dictionary_payload, &raw_dictionary_into)) return error.SizeMismatch;
+    var raw_dictionary_compressed_scratch: [64]u8 = undefined;
+    const raw_dictionary_chunks = [_][]const u8{ raw_dictionary_frame[0..3], raw_dictionary_frame[3..11], raw_dictionary_frame[11..] };
+    @memset(&raw_dictionary_into, 0);
+    if (try vort.zstdDecodeFrameChunksIntoWithDictionary(&raw_dictionary_chunks, &raw_dictionary_compressed_scratch, &raw_dictionary_into, raw_dictionary_view) != raw_dictionary_payload.len or
+        !std.mem.eql(u8, &raw_dictionary_payload, &raw_dictionary_into)) return error.SizeMismatch;
+    const raw_dictionary_incremental = try incrementalDecodeCorpusCase(init.gpa, raw_dictionary_frame, &raw_dictionary_payload, raw_dictionary_view);
+    if (raw_dictionary_incremental.max_compressed_buffered == 0) return error.ReferenceDecodeFailed;
+
+    const vort_raw_dictionary_frame = try vort.zstdEncodeFrameWithLevelAndOptionsAndDictionaryAlloc(
+        init.gpa,
+        &raw_dictionary_payload,
+        9,
+        .{ .content_checksum = true },
+        raw_dictionary_view,
+    );
+    defer init.gpa.free(vort_raw_dictionary_frame);
+    if ((try vort.zstdInspectNativeFrameHeader(vort_raw_dictionary_frame)).dictionary_id != 0) return error.InvalidDictionaryMetadata;
+    try observeFrameWithDictionary(vort_raw_dictionary_frame, raw_dictionary_view, &coverage);
+    try runtime.decodeUsingDict(vort_raw_dictionary_frame, &raw_dictionary_reference_output, &raw_dictionary);
+    if (!std.mem.eql(u8, &raw_dictionary_payload, &raw_dictionary_reference_output)) return error.SizeMismatch;
+    if (vort.zstdDecodeFrameAlloc(init.gpa, vort_raw_dictionary_frame)) |decoded_without_dictionary| {
+        defer init.gpa.free(decoded_without_dictionary);
+        return error.ReferenceEncodeFailed;
+    } else |_| {}
+    var wrong_raw_dictionary: [raw_dictionary.len]u8 = @splat(0);
+    const wrong_raw_dictionary_view = vort.ZstdDictionary.initRawContent(&wrong_raw_dictionary);
+    if (vort.zstdDecodeFrameAllocWithDictionary(init.gpa, vort_raw_dictionary_frame, wrong_raw_dictionary_view)) |wrong_decoded| {
+        defer init.gpa.free(wrong_decoded);
+        return error.ReferenceDecodeFailed;
+    } else |err| if (err != error.ChecksumMismatch) return err;
+
+    var raw_dictionary_incremental_encoder = try vort.ZstdNativeIncrementalFrameEncoder.initExactSizeWithPresetDictionary(
+        init.gpa,
+        .{ .include_content_size = true, .content_checksum = true, .selection = .literal_only },
+        raw_dictionary_payload.len,
+        raw_dictionary_view,
+    );
+    defer raw_dictionary_incremental_encoder.deinit();
+    var vort_raw_dictionary_incremental_frame: std.ArrayList(u8) = .empty;
+    defer vort_raw_dictionary_incremental_frame.deinit(init.gpa);
+    var raw_dictionary_input_offset: usize = 0;
+    var raw_dictionary_encode_scratch: [97]u8 = undefined;
+    while (raw_dictionary_input_offset < raw_dictionary_payload.len) {
+        const input_end = @min(raw_dictionary_payload.len, raw_dictionary_input_offset + 257);
+        const result = try raw_dictionary_incremental_encoder.step(
+            raw_dictionary_payload[raw_dictionary_input_offset..input_end],
+            &raw_dictionary_encode_scratch,
+        );
+        raw_dictionary_input_offset += result.progress.input_read;
+        try vort_raw_dictionary_incremental_frame.appendSlice(init.gpa, raw_dictionary_encode_scratch[0..result.progress.output_written]);
+    }
+    raw_dictionary_incremental_encoder.finish();
+    while (true) {
+        const result = try raw_dictionary_incremental_encoder.step("", &raw_dictionary_encode_scratch);
+        try vort_raw_dictionary_incremental_frame.appendSlice(init.gpa, raw_dictionary_encode_scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    if ((try vort.zstdInspectNativeFrameHeader(vort_raw_dictionary_incremental_frame.items)).dictionary_id != 0) return error.InvalidDictionaryMetadata;
+    try runtime.decodeUsingDict(vort_raw_dictionary_incremental_frame.items, &raw_dictionary_reference_output, &raw_dictionary);
+    if (!std.mem.eql(u8, &raw_dictionary_payload, &raw_dictionary_reference_output)) return error.SizeMismatch;
+    if (runtime.decode(vort_raw_dictionary_incremental_frame.items, &raw_dictionary_reference_output)) |_|
+        return error.ReferenceEncodeFailed
+    else |_| {}
+    checked += 3;
+    raw_dictionary_cases += 3;
     const random_sequence_counts = [_]usize{ 127, 128, 129, 1024, 8192 };
     for (random_sequence_counts, 0..) |sequence_count, case_index| {
         var payload: std.ArrayList(u8) = .empty;
@@ -436,8 +535,8 @@ pub fn main(init: std.process.Init) !void {
         return error.ReferenceEncodeFailed;
     const combined_mode_mask = coverage.sequence_mode_combinations | prior_mode_mask;
     std.debug.print(
-        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} ",
-        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity },
+        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} raw_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} ",
+        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, raw_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity },
     );
     std.debug.print(
         "decodecorpus_max_sequence_count={d} decodecorpus_max_block_count={d} decodecorpus_sequence_count_tiers=0x{x} decodecorpus_sequence_mode_combinations={d} decodecorpus_sequence_mode_mask=0x{x} decodecorpus_combined_mode_combinations={d} decodecorpus_combined_mode_mask=0x{x} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} sequence_mode_mask=0x{x} combined_mode_combinations={d} combined_mode_mask=0x{x} version={s}\n",

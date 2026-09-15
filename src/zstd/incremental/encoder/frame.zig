@@ -31,6 +31,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         skippable_only: bool = false,
 
         const Self = @This();
+        const allow_zero_dictionary_id = if (@hasDecl(Codec, "allow_zero_dictionary_id")) Codec.allow_zero_dictionary_id else false;
         pub const Error = Codec.Error;
         pub const Snapshot = struct {
             input_read: usize,
@@ -70,12 +71,12 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         /// Borrow preset history for the encoder lifetime. Entropy-coded blocks
         /// may reference these bytes, so they must outlive the encoder.
         pub fn initWithPresetDictionary(allocator: std.mem.Allocator, options: Codec.Options, dictionary: Codec.Dictionary) Error!Self {
-            if (dictionary.id == 0) return error.NeedDictionary;
+            if (dictionary.id == 0 and !allow_zero_dictionary_id) return error.NeedDictionary;
             try Codec.validate(options, null, dictionary.id);
             return .{ .allocator = allocator, .options = options, .dictionary_id = dictionary.id, .dictionary = dictionary };
         }
         pub fn initExactSizeWithPresetDictionary(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary: Codec.Dictionary) Error!Self {
-            if (dictionary.id == 0) return error.NeedDictionary;
+            if (dictionary.id == 0 and !allow_zero_dictionary_id) return error.NeedDictionary;
             try Codec.validate(options, expected_input_len, dictionary.id);
             return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len, .dictionary_id = dictionary.id, .dictionary = dictionary };
         }
@@ -132,7 +133,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         }
         pub fn nextFrameExactSizeWithPresetDictionary(self: *Self, options: Codec.Options, expected_input_len: usize, dictionary: Codec.Dictionary) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
-            if (dictionary.id == 0) return error.NeedDictionary;
+            if (dictionary.id == 0 and !allow_zero_dictionary_id) return error.NeedDictionary;
             try Codec.validate(options, expected_input_len, dictionary.id);
             self.resetFrame(options, expected_input_len, dictionary.id, dictionary);
         }

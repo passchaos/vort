@@ -13672,6 +13672,19 @@ reuse, so production keeps the simpler independently owned plans.
   native/frame probes pass. Rejected follow-ups include a shared-index pending
   bitset, which regressed unrelated rows to about `0.985x`, and retained index
   byte frequencies, whose focused A/B produced only `0.9989x` geomean.
+  Added interoperable ID-less raw-content dictionaries for Zstd.
+  `NativeDictionary.initRawContent` represents caller-supplied history whose
+  frames omit `Dictionary_ID`; explicit one-shot, caller-buffer, chunked,
+  incremental, and reusable encoder/decoder paths now retain that
+  history instead of treating ID zero as an instruction to discard it.
+  Dictionary sets still reject zero IDs because an ID-less frame cannot select
+  among multiple entries. A deterministic raw dictionary produces a 19-byte
+  libzstd 1.5.5 frame for a 16 KiB payload: both libraries reject it without
+  history and decode it byte-exactly with the explicit raw dictionary. Vort's
+  one-shot and incremental ID-less output also decodes through libzstd. The
+  compatibility probe now reports 276 cases, including three raw-dictionary
+  cases; the 25-case dictionary probe and four upstream dictionary campaigns
+  (4,200 frames, 2,118 block-stream cases, all 64 LL/OF/ML mode tuples) pass.
   Retained a Zstd ratio-level lower bound that lets a decisive repeat beam prove
   the first single-duplicate family at least 24 times larger without exact
   entropy scoring. The proof scans the existing paired index for the maximum

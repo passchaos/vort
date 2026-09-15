@@ -212,6 +212,25 @@ test "Zstd incremental frame encoder references preset dictionary history" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "Zstd incremental frame encoder supports raw-content dictionary without id" {
+    const dictionary = zstd.NativeDictionary.initRawContent("abcdefghijklmnop");
+    const payload = "pfx-abcdefghijklmnop-tail";
+    var encoder = try zstd.NativeIncrementalFrameEncoder.initWithPresetDictionary(std.testing.allocator, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .selection = .literal_only,
+    }, dictionary);
+    defer encoder.deinit();
+    const frame = try encodeSplit(&encoder, payload);
+    defer std.testing.allocator.free(frame);
+
+    try std.testing.expectEqual(@as(u32, 0), (try zstd.inspectNativeFrameHeader(frame)).dictionary_id);
+    try std.testing.expectError(error.InvalidMatch, zstd.decodeFrameAlloc(std.testing.allocator, frame));
+    const decoded = try zstd.decodeFrameAllocWithDictionary(std.testing.allocator, frame, dictionary);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
 test "Zstd incremental frame encoder matches previous blocks" {
     const first = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@";
     const payload = first ++ first;

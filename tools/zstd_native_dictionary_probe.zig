@@ -579,7 +579,15 @@ fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
     try expect(into_result.mode == .literal_only);
     try expectEqualSlices(encoded.frame, encoded_into[0..into_result.written]);
     try expectError(error.OutputTooSmall, vort.zstdEncodeNativeFrameIntoSliceWithDictionary(allocator, payload, options, dict, encoded_into[0 .. into_result.written - 1]));
-    try expectError(error.NeedDictionary, vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, vort.ZstdNativeDictionary.init(0, dict.content)));
+
+    const raw_dictionary = vort.ZstdNativeDictionary.initRawContent(dict.content);
+    const idless = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, raw_dictionary);
+    defer allocator.free(idless.frame);
+    try expect((try vort.zstdInspectNativeFrameHeader(idless.frame)).dictionary_id == 0);
+    try expectError(error.InvalidMatch, vort.zstdDecodeNativeFrameAlloc(allocator, idless.frame));
+    const idless_decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, idless.frame, raw_dictionary);
+    defer allocator.free(idless_decoded);
+    try expectEqualSlices(payload, idless_decoded);
 }
 
 fn checkDictionarySequenceHuffmanLiterals(allocator: std.mem.Allocator) !void {
