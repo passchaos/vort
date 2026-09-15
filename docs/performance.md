@@ -2110,6 +2110,28 @@ and checksum; excluding JSON ratio rows, its floor is `0.9918x` and geomean is
 35.21 MiB/s versus libzstd 1.5.5 at 677 bytes and 224.98 MiB/s; all four Zstd
 gates, 1,561 tests, and 93 compile checks pass.
 
+The dominance proof no longer needs to materialize that bounded index on its
+successful path. It now pairs the same truncated-hash occurrences in one pass,
+tracks only the maximum verified match length and byte frequencies, and applies
+the unchanged conservative Huffman lower bound directly. If the proof fails,
+the encoder still builds the ordinary bounded index and runs the exact
+single-match selector, preserving candidate and tie behavior. A 24-seed oracle
+over 4,097--64,288-byte inputs and six cost limits matches the indexed proof on
+every pruned and retained case; the existing target and 24 generated full-wire
+oracles remain exact. The helper has a separate text section because colocating
+it with unrelated fast helpers measurably perturbed non-target code layout.
+Against the preceding bounded-index binary, 21 fixed-CPU-2 complete-matrix pairs
+improve JSON level 9 by `1.0351x` median / `1.0312x` geomean (19/21 wins) and
+level 22 by `1.0294x` / `1.0333x` (21/21 wins). All 20 rows retain their sizes,
+input hashes, reference sizes, and checksums; excluding the four JSON rows, the
+row-median floor is `0.9926x` and geomean is `1.0001x`. The formal gate reports
+JSON level 9 at 640 bytes and about 37.56 MiB/s versus libzstd 1.5.5 at 677
+bytes and 233.29 MiB/s. All four Zstd gates, 1,562 tests, 93 compile checks, the
+328-case native probe, and the 237-case frame probe pass. A bitset in the shared
+bounded-index builder was rejected because the full matrix exposed non-target
+medians near `0.985x`; retaining byte frequencies in the large index was also
+rejected after a focused 21-pair A/B reached only `0.9989x` geomean.
+
 ## Brotli q8 fixed-width record baseline (2026-09-14)
 
 The planned-encode and ratio-stage gates now include a deterministic 32 KiB

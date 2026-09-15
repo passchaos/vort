@@ -13655,6 +13655,23 @@ reuse, so production keeps the simpler independently owned plans.
   non-target floor and `1.0007x` geomean; the formal row reaches about
   35.21 MiB/s versus libzstd 1.5.5's 224.98 MiB/s. All four Zstd gates, 1,561
   tests, and 93 compile checks pass.
+  Replaced that proof-only bounded index with a direct one-pass pairing scan on
+  the successful dominance path. It computes the same maximum verified match
+  length and byte frequencies without writing and rereading dense candidate
+  rows; failed proofs still construct the bounded index and run exact
+  single-match selection. A 24-seed, six-threshold oracle over 4,097--64,288
+  bytes matches the old indexed decision on both sides, while all target and
+  generated full-wire checks remain exact. The new helper lives in an isolated
+  text section to protect unrelated hot-code layout. Twenty-one fixed-CPU-2
+  complete-matrix pairs improve JSON level 9 by `1.0351x` median / `1.0312x`
+  geomean and level 22 by `1.0294x` / `1.0333x`; all 20 sizes, input hashes,
+  reference sizes, and checksums remain identical. The 16 non-JSON row medians
+  have a `0.9926x` floor and `1.0001x` geomean. The formal level-9 row reaches
+  about 37.56 MiB/s at 640 bytes versus libzstd 1.5.5's 233.29 MiB/s at 677
+  bytes. All four Zstd gates, 1,562 tests, 93 compile checks, and the 328/237-case
+  native/frame probes pass. Rejected follow-ups include a shared-index pending
+  bitset, which regressed unrelated rows to about `0.985x`, and retained index
+  byte frequencies, whose focused A/B produced only `0.9989x` geomean.
   Retained a Zstd ratio-level lower bound that lets a decisive repeat beam prove
   the first single-duplicate family at least 24 times larger without exact
   entropy scoring. The proof scans the existing paired index for the maximum

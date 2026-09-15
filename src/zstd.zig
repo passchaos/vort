@@ -47,6 +47,13 @@ const fse_encode_helper_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const dominance_helper_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_dominance",
+    .macho => "__TEXT,__vort_zstd_dom",
+    .coff => ".text$vort_zstd_dominance",
+    else => ".text",
+};
+
 const huffman_build_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_huffman_build",
     .macho => "__TEXT,__vort_zstd_hb",
@@ -10963,15 +10970,12 @@ noinline fn emitAbsoluteDecisiveBeamFirst(
     const repeated_ok = try emitRepeatedPatternCompressedBlock(allocator, &repeated, block, last);
     if (repeated_ok and beam.items.len > repeated.items.len / decisive_mixed_dominance_ratio) return null;
 
-    var duplicate_index: DuplicateMatchIndex = undefined;
-    duplicate_index.buildBounded(block);
-    if (try findBestDecisiveSingleDuplicate(
-        block,
-        &duplicate_index,
-        beam.items.len,
-        beam.items.len,
-        if (repeated_ok) repeated.items.len else null,
-    ) != null) return null;
+    const dominance_limit = std.math.mul(usize, beam.items.len, decisive_mixed_dominance_ratio) catch std.math.maxInt(usize);
+    if (!boundedSingleMatchDominatedBy(block, dominance_limit)) {
+        var duplicate_index: DuplicateMatchIndex = undefined;
+        duplicate_index.buildBounded(block);
+        if (try findBestDuplicateMatchIndexed(block, 0, &duplicate_index) != null) return null;
+    } else if (comptime builtin.is_test) test_decisive_single_lower_bound_hits += 1;
 
     mixed_dominated.* = true;
     try out.appendSlice(allocator, beam.items);
@@ -20082,6 +20086,49 @@ noinline fn indexedSingleMatchDominatedBy(
         if (len >= 8) maximum_match_len = @max(maximum_match_len, len);
     }
 
+    var byte_frequencies: [256]u16 = @splat(0);
+    for (block) |byte| byte_frequencies[byte] += 1;
+    return singleMatchDominatedByStatistics(&byte_frequencies, maximum_match_len, total_len_limit);
+}
+
+noinline fn boundedSingleMatchDominatedBy(
+    block: []const u8,
+    total_len_limit: usize,
+) linksection(dominance_helper_text_section) bool {
+    if (comptime builtin.is_test) if (test_disable_indexed_single_lower_bound) return false;
+    if (total_len_limit == 0) return false;
+    if (block.len <= duplicate_exact_hash_input_max or block.len > duplicate_index_max_input_len or block.len < 24) return false;
+
+    const pending_word_bits = @bitSizeOf(usize);
+    comptime std.debug.assert(duplicate_hash_table_len % pending_word_bits == 0);
+    var pending: [duplicate_hash_table_len / pending_word_bits]usize = @splat(0);
+    var paired_predecessors: [duplicate_hash_table_len]u16 = undefined;
+    var byte_frequencies: [256]u16 = @splat(0);
+    var maximum_match_len: usize = 0;
+    for (block, 0..) |byte, position| {
+        byte_frequencies[byte] += 1;
+        if (position + 8 > block.len or block.len - position <= maximum_match_len) continue;
+        const hash = duplicateHash8(block[position..][0..8]);
+        const pending_word = &pending[hash / pending_word_bits];
+        const pending_mask = @as(usize, 1) << @intCast(hash % pending_word_bits);
+        if (pending_word.* & pending_mask != 0) {
+            const len = duplicateMatchLength(block, paired_predecessors[hash], position);
+            if (len >= 8) maximum_match_len = @max(maximum_match_len, len);
+            pending_word.* &= ~pending_mask;
+        } else {
+            paired_predecessors[hash] = @intCast(position);
+            pending_word.* |= pending_mask;
+        }
+    }
+
+    return singleMatchDominatedByStatistics(&byte_frequencies, maximum_match_len, total_len_limit);
+}
+
+inline fn singleMatchDominatedByStatistics(
+    byte_frequencies: *const [256]u16,
+    maximum_match_len: usize,
+    total_len_limit: usize,
+) bool {
     // Every single-match candidate removes one interval of at most
     // `maximum_match_len` bytes. Therefore at least `frequency - max_match`
     // occurrences of each symbol must remain literal, regardless of where the
@@ -20092,12 +20139,10 @@ noinline fn indexedSingleMatchDominatedBy(
     // block header only weakens the bound, so equality is enough to prove that
     // no exact single candidate can beat `total_len_limit`.
     var frequencies: [256]u32 = @splat(0);
-    var byte_frequencies: [256]u16 = @splat(0);
-    for (block) |byte| byte_frequencies[byte] += 1;
     var active_symbols: [256]u8 = undefined;
     var active_count: usize = 0;
     var guaranteed_literals: usize = 0;
-    for (byte_frequencies, 0..) |frequency, symbol| {
+    for (byte_frequencies.*, 0..) |frequency, symbol| {
         const guaranteed = @as(usize, frequency) -| maximum_match_len;
         if (guaranteed == 0) continue;
         frequencies[symbol] = @intCast(guaranteed);
@@ -20695,12 +20740,49 @@ test "zstd decisive single dominance bound preserves competitive winners" {
         for ([_]usize{ 128, 512, 2048, 8192, 16 * 1024 }) |limit| {
             index.buildBounded(&payload);
             const dominated = indexedSingleMatchDominatedBy(&payload, &index, limit);
+            try std.testing.expectEqual(dominated, boundedSingleMatchDominatedBy(&payload, limit));
             if (dominated) {
                 pruned_cases += 1;
                 if (expected) |match| try std.testing.expect(match.payload_len + 3 >= limit);
             } else {
                 retained_cases += 1;
             }
+        }
+    }
+    try std.testing.expect(pruned_cases != 0);
+    try std.testing.expect(retained_cases != 0);
+}
+
+test "zstd direct bounded single dominance matches indexed oracle across lengths" {
+    var pruned_cases: usize = 0;
+    var retained_cases: usize = 0;
+    for (0..24) |seed| {
+        const payload_len = duplicate_exact_hash_input_max + 1 + seed * 2_617;
+        const payload = try std.testing.allocator.alloc(u8, payload_len);
+        defer std.testing.allocator.free(payload);
+        var state: u32 = @truncate(0xbb67_ae85 +% seed *% 0x0100_0193);
+        for (payload, 0..) |*byte, i| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @intCast('a' + (i + seed) % 23),
+                1 => if (i % 64 < 52) @intCast('A' + (i + seed) % 26) else @truncate(state >> 24),
+                2 => @intCast((i * 17 + seed * 13) & 127),
+                else => @truncate(state >> 24),
+            };
+        }
+        if (seed % 3 != 0) {
+            const copy_len = @min(payload.len / 4, 384 + seed * 47);
+            @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+        }
+
+        var index: DuplicateMatchIndex = undefined;
+        for ([_]usize{ 64, 128, 512, 2048, 8192, 16 * 1024 }) |limit| {
+            index.buildBounded(payload);
+            const indexed = indexedSingleMatchDominatedBy(payload, &index, limit);
+            const direct = boundedSingleMatchDominatedBy(payload, limit);
+            try std.testing.expectEqual(indexed, direct);
+            pruned_cases += @intFromBool(direct);
+            retained_cases += @intFromBool(!direct);
         }
     }
     try std.testing.expect(pruned_cases != 0);
