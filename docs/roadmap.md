@@ -13835,6 +13835,17 @@ reuse, so production keeps the simpler independently owned plans.
   (text level 9) medians. Sixty-one warmed seekable pairs measured `0.9995x`
   median, `1.0029x` geomean, and 30/61 wins. The retained claim is zero
   transient allocations after warm-up, with neutral end-to-end throughput.
+  Added a bounded 64-token initial reserve for the reusable greedy, lazy, and
+  optimal parser outputs. On the locked 1 KiB frame shape each parser finishes
+  with 35 tokens; reserving once replaces three identical 22-to-55 capacity
+  growth sequences without applying the allocating planner's much larger
+  4,096-token policy. The one-shot allocation report falls from 19 calls /
+  227,790 bytes to 16 calls / 227,556 bytes, while the warm pass remains at
+  zero allocations and the 305-byte stream is unchanged. Fifteen paired runs
+  of the complete 20-row matrix measured a `0.9999x` row-median geomean; the
+  lone `0.9574x` outlier (multiblock level 9) recovered to `1.0010x` median /
+  `0.9956x` geomean over 61 independent pairs. Sixty-one warmed seekable pairs
+  measured `0.9992x` median / `0.9991x` geomean, confirming neutral throughput.
   Rejected two follow-up representations for the adjacent-match reuse state in
   Zstd's single-state beam. Splitting the optional match into two `u16` values
   improved the isolated JSON parser by about `1.028x`, but moved following hot

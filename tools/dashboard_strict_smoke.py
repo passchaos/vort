@@ -3441,7 +3441,7 @@ def write_native_allocation_artifacts(root: Path) -> None:
             {"case": "zero_decode", "input_bytes": 16, "output_bytes": 16, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
             {"case": "zero_range", "input_bytes": 32, "output_bytes": 8, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
             {"case": "budgeted_index", "input_bytes": 64, "output_bytes": 16, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80},
-            {"case": "zstd_seekable_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 19, "deallocations": 19, "allocated_bytes": 227790, "freed_bytes": 227790},
+            {"case": "zstd_seekable_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 16, "deallocations": 16, "allocated_bytes": 227556, "freed_bytes": 227556},
             {"case": "zstd_seekable_reusable_warm_into", "input_bytes": 3552, "output_bytes": 305, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
         ],
     }
@@ -3459,7 +3459,7 @@ def write_native_allocation_artifacts(root: Path) -> None:
         ],
         "budget_cases": [
             {"case": "budgeted_index", "present": True, "matched": True, "balanced": True, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80, "max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
-            {"case": "zstd_seekable_into", "present": True, "matched": True, "balanced": True, "allocations": 19, "deallocations": 19, "allocated_bytes": 227790, "freed_bytes": 227790, "max_allocations": 19, "max_deallocations": 19, "max_allocated_bytes": 227790, "max_freed_bytes": 227790},
+            {"case": "zstd_seekable_into", "present": True, "matched": True, "balanced": True, "allocations": 16, "deallocations": 16, "allocated_bytes": 227556, "freed_bytes": 227556, "max_allocations": 16, "max_deallocations": 16, "max_allocated_bytes": 227556, "max_freed_bytes": 227556},
             {"case": "zstd_seekable_reusable_warm_into", "present": True, "matched": True, "balanced": True, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0, "max_allocations": 0, "max_deallocations": 0, "max_allocated_bytes": 0, "max_freed_bytes": 0},
         ],
     }
@@ -15029,8 +15029,8 @@ def main() -> int:
             ).update({"allocations": 15, "deallocations": 15}),
             mutate_markdown=lambda path: path.write_text(
                 path.read_text().replace(
-                    "| zstd_seekable_into | 3552 | 305 | 19 | 19 | 227790 | 227790 |",
-                    "| zstd_seekable_into | 3552 | 305 | 15 | 15 | 227790 | 227790 |",
+                    "| zstd_seekable_into | 3552 | 305 | 16 | 16 | 227556 | 227556 |",
+                    "| zstd_seekable_into | 3552 | 305 | 15 | 15 | 227556 | 227556 |",
                     1,
                 )
             ),

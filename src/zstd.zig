@@ -10870,6 +10870,12 @@ const NativeBlockEncodeScratch = struct {
     }
 };
 
+const reusable_hash_token_initial_capacity = 64;
+
+fn ensureReusableHashTokenCapacity(tokens: *std.ArrayList(lz77.Token), allocator: std.mem.Allocator, block_len: usize) Error!void {
+    try tokens.ensureTotalCapacityPrecise(allocator, @min(block_len, reusable_hash_token_initial_capacity));
+}
+
 const SingleSequenceEmitScratch = struct {
     literals_prefix: std.ArrayList(u8) = .empty,
     payload: std.ArrayList(u8) = .empty,
@@ -12546,6 +12552,7 @@ fn emitGreedyHashMatchCompressedBlockReuse(
     last: bool,
     tokens: *std.ArrayList(lz77.Token),
 ) Error!bool {
+    try ensureReusableHashTokenCapacity(tokens, allocator, block.len);
     const parser_options: lz77.GreedyOptions = .{
         .window_len = @min(block.len, lz77.default_window_len),
         .max_chain = 128,
@@ -12567,6 +12574,7 @@ fn emitLazyHashMatchCompressedBlockReuse(
     last: bool,
     tokens: *std.ArrayList(lz77.Token),
 ) Error!bool {
+    try ensureReusableHashTokenCapacity(tokens, allocator, block.len);
     const parser_options: lz77.GreedyOptions = .{
         .window_len = @min(block.len, lz77.default_window_len),
         .max_chain = 128,
@@ -12610,6 +12618,7 @@ fn emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch(
     sequence_scratch: *LargeSequenceScratch,
     max_candidates: usize,
 ) Error!bool {
+    try ensureReusableHashTokenCapacity(&scratch.tokens, allocator, block.len);
     var parser_options = zstdHashParserOptions(block.len);
     parser_options.max_candidates = max_candidates;
     const stats = try lz77.optimalPlanReuse(scratch, allocator, block, parser_options);
@@ -23411,7 +23420,7 @@ test "zstd reusable seekable encoder retains frame and table scratch" {
     try std.testing.expectEqual(single_literals_capacity, encoder.frame_encoder.block_scratch.single_sequence_emit.literals_prefix.capacity);
     try std.testing.expectEqual(single_payload_capacity, encoder.frame_encoder.block_scratch.single_sequence_emit.payload.capacity);
     try std.testing.expectEqual(single_bits_capacity, encoder.frame_encoder.block_scratch.single_sequence_emit.sequence_bits.capacity);
-    try std.testing.expectEqual(first_allocations - 20, second_allocations);
+    try std.testing.expectEqual(first_allocations - 17, second_allocations);
     try std.testing.expectEqual(@as(usize, 0), second_allocations);
     try std.testing.expectEqual(second_allocations, second_deallocations);
     try std.testing.expectEqual(second_allocated_bytes, second_freed_bytes);
