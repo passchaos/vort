@@ -10964,7 +10964,7 @@ noinline fn emitAbsoluteDecisiveBeamFirst(
     if (repeated_ok and beam.items.len > repeated.items.len / decisive_mixed_dominance_ratio) return null;
 
     var duplicate_index: DuplicateMatchIndex = undefined;
-    duplicate_index.build(block);
+    duplicate_index.buildBounded(block);
     if (try findBestDecisiveSingleDuplicate(
         block,
         &duplicate_index,

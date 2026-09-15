@@ -2095,6 +2095,21 @@ excluding JSON ratio rows, its floor is `0.9973x` and geomean is `1.0016x`.
 The final formal run passes 1,561 tests, all 93 compile checks, and the same four
 Zstd gates.
 
+The next profile moved the fast scheduler's duplicate-index build to the second
+largest cost: roughly 10.8% of complete encoding. That helper only runs the
+single-duplicate dominance proof, which consumes paired candidate positions,
+predecessors, cached match lengths, and byte-frequency summaries; it never uses
+the 65,535-entry cursor hash chain needed by mixed lookahead. It now calls the
+existing `buildBounded` variant. The 16-seed full-versus-bounded index oracle
+already checks candidate positions, predecessors, cached lengths, and selected
+matches; target and 24 generated cancellation tests remain byte-exact. Against
+the direct-bound baseline, 21 fixed-CPU-2 level-9 pairs improve `1.0558x` median
+/ `1.0567x` geomean with 21/21 wins. The full 20-row matrix keeps every size
+and checksum; excluding JSON ratio rows, its floor is `0.9918x` and geomean is
+`1.0007x`. The formal gate now reports JSON level 9 at 640 bytes and about
+35.21 MiB/s versus libzstd 1.5.5 at 677 bytes and 224.98 MiB/s; all four Zstd
+gates, 1,561 tests, and 93 compile checks pass.
+
 ## Brotli q8 fixed-width record baseline (2026-09-14)
 
 The planned-encode and ratio-stage gates now include a deterministic 32 KiB

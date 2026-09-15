@@ -13645,6 +13645,16 @@ reuse, so production keeps the simpler independently owned plans.
   all wins, at the same 640 bytes. The 20-row control stays bit-exact with a
   `0.9973x` non-target floor and `1.0016x` geomean; all 1,561 tests, 93 compile
   checks, and four Zstd gates pass.
+  Replaced the dedicated beam-first helper's full duplicate-index build with
+  the existing bounded build. This path only needs paired candidates for the
+  single-duplicate dominance proof and never reads the full cursor hash chain.
+  The 16-seed full/bounded index oracle plus target and 24 generated full-wire
+  tests preserve every relevant row and output. Twenty-one fixed-CPU-2 JSON
+  level-9 pairs improve `1.0558x` median / `1.0567x` geomean, all wins, at
+  640 bytes. The 20-row matrix is size/checksum exact with a `0.9918x`
+  non-target floor and `1.0007x` geomean; the formal row reaches about
+  35.21 MiB/s versus libzstd 1.5.5's 224.98 MiB/s. All four Zstd gates, 1,561
+  tests, and 93 compile checks pass.
   Retained a Zstd ratio-level lower bound that lets a decisive repeat beam prove
   the first single-duplicate family at least 24 times larger without exact
   entropy scoring. The proof scans the existing paired index for the maximum
