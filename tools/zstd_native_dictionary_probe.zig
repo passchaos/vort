@@ -580,6 +580,24 @@ fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
     try expectEqualSlices(encoded.frame, encoded_into[0..into_result.written]);
     try expectError(error.OutputTooSmall, vort.zstdEncodeNativeFrameIntoSliceWithDictionary(allocator, payload, options, dict, encoded_into[0 .. into_result.written - 1]));
 
+    const seekable_options: vort.ZstdNativeSeekableOptions = .{
+        .frame_size = 20,
+        .frame_options = options,
+        .seek_checksums = true,
+    };
+    const seekable = try vort.zstdEncodeNativeSeekableStreamWithDictionaryAlloc(allocator, payload, seekable_options, dict);
+    defer allocator.free(seekable);
+    const seekable_bound = try vort.zstdEncodedNativeSeekableStreamBoundWithDictionary(payload.len, seekable_options, dict);
+    try expect(seekable.len <= seekable_bound);
+    const seekable_into = try allocator.alloc(u8, seekable_bound);
+    defer allocator.free(seekable_into);
+    const seekable_written = try vort.zstdEncodeNativeSeekableStreamIntoSliceWithDictionary(allocator, payload, seekable_options, dict, seekable_into);
+    try expectEqualSlices(seekable, seekable_into[0..seekable_written]);
+    const seekable_set_bound = try vort.zstdEncodedNativeSeekableStreamBoundWithDictionarySet(payload.len, seekable_options, dictionary_set, dict.id);
+    try expect(seekable_set_bound == seekable_bound);
+    const seekable_set_written = try vort.zstdEncodeNativeSeekableStreamIntoSliceWithDictionarySet(allocator, payload, seekable_options, dictionary_set, dict.id, seekable_into);
+    try expectEqualSlices(seekable, seekable_into[0..seekable_set_written]);
+
     const raw_dictionary = vort.ZstdNativeDictionary.initRawContent(dict.content);
     const idless = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, raw_dictionary);
     defer allocator.free(idless.frame);

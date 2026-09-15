@@ -13731,3 +13731,17 @@ reuse, so production keeps the simpler independently owned plans.
   and keeps a `0.9926x` floor. The formal libzstd 1.5.5 gate reports about
   100.05 MiB/s versus 1445.50 MiB/s, so the broader standard-encoder throughput
   gap remains open.
+  Added conservative encoded bounds and caller-owned output APIs for native
+  Zstd seekable streams, including explicit dictionaries and dictionary-set
+  selection. The into variants accept the exact encoded length or any larger
+  buffer and produce byte-exact output matching the existing allocating path
+  for empty, checksum/plain,
+  identified-dictionary, and ID-less raw-dictionary streams.
+  Rejected two follow-up representations for the adjacent-match reuse state in
+  Zstd's single-state beam. Splitting the optional match into two `u16` values
+  improved the isolated JSON parser by about `1.028x`, but moved following hot
+  helpers and reduced the full text level-1 path to about `0.980x`; restoring
+  the old helper addresses left only about `1.004x` on full JSON. Packing the
+  pair into one `u32` with the same fixed layout measured about `0.998x` on
+  JSON and `0.990x` on text. Both prototypes were removed; future retries must
+  improve the complete encoder rather than only the isolated parser.

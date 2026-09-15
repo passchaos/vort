@@ -299,7 +299,9 @@ Current interpretation:
   IDs, build dictionary sets from validated metadata+bytes catalogs with either
   caller-provided scratch or allocator-owned catalog arrays, and compute
   dictionary- or dictionary-set-aware frame bounds for caller-owned output
-  buffers. Callers can inspect
+  buffers. Seekable writers expose the same bound/into symmetry for plain,
+  explicit-dictionary, and dictionary-set streams while preserving the existing
+  alloc/append output byte-for-byte. Callers can inspect
   Dictionary_ID metadata before decode, and trained owned dictionaries expose a
   shared `DictionaryMetadata` summary plus fixed-size versioned metadata
   records and counted catalog records (including prefix decode for containers
