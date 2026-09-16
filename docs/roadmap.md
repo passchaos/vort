@@ -14126,3 +14126,19 @@ reuse, so production keeps the simpler independently owned plans.
   `binary_mixed` control recovers to 0.9950x. The final Homebrew libzstd 1.5.7
   comparison reaches 4900.73 versus 6640.37 MiB/s (`0.7380x`) over 5,000
   iterations, and the gate raises the `large_json` floor from 0.55x to 0.65x.
+  Multi-sequence entropy arbitration now uses the existing exact RLE,
+  predefined, and mixed-table payload estimators to select the old winner and
+  tie order before serialization, then emits only that representation. A
+  test-only copy of the former three-emitter selector proves byte-identical
+  output on the built-in text/JSON/binary token streams, generated valid
+  sequences, and fixtures covering all three winner families; injected
+  allocation failures preserve the caller prefix. Independent `f95aadac` and
+  candidate binaries improve JSON level 1 by 1.0455x median / 1.0458x geometric
+  mean over 31 pairs with 31/31 wins and the same 643-byte frame. Fifteen paired
+  complete 20-row matrices preserve every input hash, output/reference size,
+  and checksum, improve by 1.0182x across row medians, and retain a 0.9982x
+  weakest median; binary level 1 improves by 1.0608x. A 31-pair longer
+  multi-block level-3 confirmation measures 0.9969x median / 0.9974x geometric
+  mean. The 100-row stage gate also now accepts zero timer resolution only for
+  unavailable stages and still requires positive timing for every available
+  result.

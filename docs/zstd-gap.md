@@ -423,6 +423,23 @@ Recommended next comparison steps:
   1.0010x, and a 31-pair, 5,000-decode `binary_mixed` confirmation recovers to
   0.9950x. A final 5,000-iteration libzstd 1.5.7 run measures 4900.73 versus
   6640.37 MiB/s (`0.7380x`), so the reference floor rises from 0.55x to 0.65x.
+  Multi-sequence candidate arbitration now computes the exact RLE, predefined,
+  and mixed-table payload lengths first, preserves the existing RLE-first tie
+  order, and emits only the selected wire instead of serializing and copying all
+  three alternatives. A test-only legacy selector matches the new path byte for
+  byte across the text/JSON/binary benchmark token streams, generated valid
+  sequence streams, and examples selecting every winner family; allocation
+  failure also leaves caller output unchanged. Against independent `f95aadac`
+  and candidate binaries, 31 interleaved JSON level-1 pairs improve by 1.0455x
+  median / 1.0458x geometric mean with 31/31 wins and the same 643-byte frame.
+  A separate 15-pair 20-row level matrix preserves every input hash, frame size,
+  reference size, and checksum while improving by 1.0182x across row medians;
+  its weakest row median is 0.9982x, and binary level 1 improves by 1.0608x.
+  The noisy multi-block level-3 control was repeated for 31 longer pairs and
+  measures 0.9969x median / 0.9974x geometric mean, within the 1% retention
+  threshold. The 100-row candidate-stage gate now also models unavailable
+  stages explicitly: a zero-duration sample is accepted only when no block was
+  available, while every available stage must still report positive time.
 
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded

@@ -112,6 +112,13 @@ const split_literal_decode_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const multi_sequence_winner_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_multi_sequence_winner",
+    .macho => "__TEXT,__vort_zstd_msw",
+    .coff => ".text$vort_zstd_multi_sequence_winner",
+    else => ".text",
+};
+
 const small_sequence_stack_input_max = 1024;
 const small_sequence_stack_scratch_len = 4096;
 
@@ -126,6 +133,9 @@ var test_disable_small_single_emit_prune = false;
 var test_small_single_emit_prune_hits: usize = 0;
 var test_disable_single_sequence_winner_only = false;
 var test_single_sequence_winner_only_hits: usize = 0;
+var test_disable_multi_sequence_winner_only = false;
+var test_multi_sequence_winner_only_hits: usize = 0;
+var test_multi_sequence_winner_hits: [3]usize = @splat(0);
 var test_disable_hash_token_lower_bound = false;
 var test_hash_token_lower_bound_hits: usize = 0;
 var test_disable_four_byte_optimal = false;
@@ -16337,47 +16347,10 @@ fn emitBestSequenceCompressedBlockWithScratch(
             &scratch.sequence_bits,
         ) else return try emitRleSequenceCompressedBlockWithLiterals(allocator, out, block, last, literals_prefix.items, literal_lens, offsets, match_lens);
     }
-
-    var candidate_block: std.ArrayList(u8) = .empty;
-    defer candidate_block.deinit(allocator);
-    var best_block: std.ArrayList(u8) = .empty;
-    defer best_block.deinit(allocator);
-
-    const rle_ok = try emitRleSequenceCompressedBlockWithLiterals(
-        allocator,
-        &candidate_block,
-        block,
-        last,
-        literals_prefix.items,
-        literal_lens,
-        offsets,
-        match_lens,
-    );
-    if (rle_ok) try best_block.appendSlice(allocator, candidate_block.items);
-
-    candidate_block.clearRetainingCapacity();
-    const predefined_ok = try emitMultiSequencePredefinedCompressedBlockWithLiterals(
-        allocator,
-        &candidate_block,
-        block,
-        last,
-        literals_prefix.items,
-        literal_lens,
-        offsets,
-        match_lens,
-    );
-    if (predefined_ok and (best_block.items.len == 0 or candidate_block.items.len < best_block.items.len)) {
-        best_block.clearRetainingCapacity();
-        try best_block.appendSlice(allocator, candidate_block.items);
-    }
-
-    candidate_block.clearRetainingCapacity();
-    // One sequence cannot amortize a compressed FSE table; its RLE and
-    // predefined representations are already emitted above.
-    const table_plan_ok = if (literal_lens.len > 1)
-        try emitTablePlanSequenceCompressedBlockWithLiterals(
+    if (builtin.is_test and (literal_lens.len == 1 or test_disable_multi_sequence_winner_only))
+        return try emitBestMultiSequenceCompressedBlockGeneric(
             allocator,
-            &candidate_block,
+            out,
             block,
             last,
             literals_prefix.items,
@@ -16386,9 +16359,156 @@ fn emitBestSequenceCompressedBlockWithScratch(
             match_lens,
             literal_ends,
             tail_start,
-        )
-    else
-        false;
+        );
+    return try emitBestMultiSequenceCompressedBlockWinnerOnly(
+        allocator,
+        out,
+        block,
+        last,
+        literals_prefix.items,
+        literal_lens,
+        offsets,
+        match_lens,
+        literal_ends,
+        tail_start,
+    );
+}
+
+noinline fn emitBestMultiSequenceCompressedBlockWinnerOnly(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literals_prefix: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) linksection(multi_sequence_winner_text_section) Error!bool {
+    const MultiSequenceWinner = enum { rle, predefined, table_plan };
+    var winner: ?MultiSequenceWinner = null;
+    var best_payload_len: usize = std.math.maxInt(usize);
+
+    if (rleSequencePayloadLenForValuesWithLiteralsLen(literal_lens, offsets, match_lens, literals_prefix.len)) |payload_len| {
+        winner = .rle;
+        best_payload_len = payload_len;
+    } else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+    if (predefinedSequencePayloadLenWithLiteralsLen(literal_lens, offsets, match_lens, literals_prefix.len)) |payload_len| {
+        if (winner == null or payload_len < best_payload_len) {
+            winner = .predefined;
+            best_payload_len = payload_len;
+        }
+    } else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+    const table_plan = try bestTablePlanSequenceWithLiteralsLen(literal_lens, offsets, match_lens, literals_prefix.len);
+    if (table_plan) |plan| {
+        if (winner == null or plan.payload_len < best_payload_len) {
+            winner = .table_plan;
+            best_payload_len = plan.payload_len;
+        }
+    }
+    const selected = winner orelse return false;
+    if (best_payload_len >= block.len) return false;
+    if (comptime builtin.is_test) {
+        test_multi_sequence_winner_only_hits += 1;
+        test_multi_sequence_winner_hits[@intFromEnum(selected)] += 1;
+    }
+
+    var candidate_block: std.ArrayList(u8) = .empty;
+    defer candidate_block.deinit(allocator);
+    const emitted = switch (selected) {
+        .rle => try emitRleSequenceCompressedBlockWithLiterals(
+            allocator,
+            &candidate_block,
+            block,
+            last,
+            literals_prefix,
+            literal_lens,
+            offsets,
+            match_lens,
+        ),
+        .predefined => try emitMultiSequencePredefinedCompressedBlockWithLiterals(
+            allocator,
+            &candidate_block,
+            block,
+            last,
+            literals_prefix,
+            literal_lens,
+            offsets,
+            match_lens,
+        ),
+        .table_plan => if (literal_lens.len >= wide_borrowed_sequence_plan_min)
+            try emitSequenceCompressedBlockWithTablePlansAndOffsetsBorrowed(
+                allocator,
+                &candidate_block,
+                block,
+                last,
+                literal_lens,
+                offsets,
+                match_lens,
+                literal_ends,
+                tail_start,
+                &table_plan.?.plan,
+                literals_prefix,
+                null,
+                initial_repeated_offsets,
+            )
+        else
+            try emitSequenceCompressedBlockWithTablePlans(
+                allocator,
+                &candidate_block,
+                block,
+                last,
+                literal_lens,
+                offsets,
+                match_lens,
+                literal_ends,
+                tail_start,
+                table_plan.?.plan,
+                literals_prefix,
+                null,
+            ),
+    };
+    if (!emitted or candidate_block.items.len != best_payload_len + 3) return error.CorruptFrame;
+    try out.appendSlice(allocator, candidate_block.items);
+    return true;
+}
+
+fn emitBestMultiSequenceCompressedBlockGeneric(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literals_prefix: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!bool {
+    var candidate_block: std.ArrayList(u8) = .empty;
+    defer candidate_block.deinit(allocator);
+    var best_block: std.ArrayList(u8) = .empty;
+    defer best_block.deinit(allocator);
+
+    const rle_ok = try emitRleSequenceCompressedBlockWithLiterals(allocator, &candidate_block, block, last, literals_prefix, literal_lens, offsets, match_lens);
+    if (rle_ok) try best_block.appendSlice(allocator, candidate_block.items);
+
+    candidate_block.clearRetainingCapacity();
+    const predefined_ok = try emitMultiSequencePredefinedCompressedBlockWithLiterals(allocator, &candidate_block, block, last, literals_prefix, literal_lens, offsets, match_lens);
+    if (predefined_ok and (best_block.items.len == 0 or candidate_block.items.len < best_block.items.len)) {
+        best_block.clearRetainingCapacity();
+        try best_block.appendSlice(allocator, candidate_block.items);
+    }
+
+    candidate_block.clearRetainingCapacity();
+    const table_plan_ok = try emitTablePlanSequenceCompressedBlockWithLiterals(allocator, &candidate_block, block, last, literals_prefix, literal_lens, offsets, match_lens, literal_ends, tail_start);
     if (table_plan_ok and (best_block.items.len == 0 or candidate_block.items.len < best_block.items.len)) {
         best_block.clearRetainingCapacity();
         try best_block.appendSlice(allocator, candidate_block.items);
@@ -16551,6 +16671,234 @@ test "zstd single sequence winner-only emission preserves generic wire" {
                 &match_lens,
                 &literal_ends,
                 block.len,
+            ) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix", output.items);
+                return err;
+            };
+            try std.testing.expect(emitted);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, AllocationFailureTest.run, .{});
+}
+
+test "zstd multi sequence winner-only emission preserves generic wire" {
+    const Test = struct {
+        fn compare(
+            block: []const u8,
+            literal_lens: []const usize,
+            offsets: []const usize,
+            match_lens: []const usize,
+            literal_ends: []const usize,
+            tail_start: usize,
+        ) !void {
+            const hits_before = test_multi_sequence_winner_only_hits;
+            var optimized: std.ArrayList(u8) = .empty;
+            defer optimized.deinit(std.testing.allocator);
+            const optimized_ok = try emitBestSequenceCompressedBlock(
+                std.testing.allocator,
+                &optimized,
+                block,
+                true,
+                literal_lens,
+                offsets,
+                match_lens,
+                literal_ends,
+                tail_start,
+            );
+            try std.testing.expectEqual(hits_before + @intFromBool(optimized_ok), test_multi_sequence_winner_only_hits);
+
+            test_disable_multi_sequence_winner_only = true;
+            var reference: std.ArrayList(u8) = .empty;
+            defer reference.deinit(std.testing.allocator);
+            const reference_ok = try emitBestSequenceCompressedBlock(
+                std.testing.allocator,
+                &reference,
+                block,
+                true,
+                literal_lens,
+                offsets,
+                match_lens,
+                literal_ends,
+                tail_start,
+            );
+            test_disable_multi_sequence_winner_only = false;
+
+            try std.testing.expectEqual(reference_ok, optimized_ok);
+            try std.testing.expectEqualSlices(u8, reference.items, optimized.items);
+            if (optimized_ok) {
+                var frame: std.ArrayList(u8) = .empty;
+                defer frame.deinit(std.testing.allocator);
+                try emitFrameHeader(std.testing.allocator, &frame, block.len, .{ .content_checksum = false });
+                try frame.appendSlice(std.testing.allocator, optimized.items);
+                const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+                defer std.testing.allocator.free(decoded);
+                try std.testing.expectEqualSlices(u8, block, decoded);
+            }
+        }
+    };
+
+    test_disable_multi_sequence_winner_only = false;
+    test_multi_sequence_winner_only_hits = 0;
+    test_multi_sequence_winner_hits = @splat(0);
+    defer {
+        test_disable_multi_sequence_winner_only = false;
+        test_multi_sequence_winner_only_hits = 0;
+        test_multi_sequence_winner_hits = @splat(0);
+    }
+
+    var numbered_json: std.ArrayList(u8) = .empty;
+    defer numbered_json.deinit(std.testing.allocator);
+    while (numbered_json.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = numbered_json.items.len / 64;
+        const formatted = try std.fmt.bufPrint(
+            &line,
+            "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n",
+            .{index},
+        );
+        try numbered_json.appendSlice(std.testing.allocator, formatted);
+    }
+
+    var binary: [32 * 1024]u8 = undefined;
+    var random_state: u32 = 0xfeed_beef;
+    for (&binary, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(random_state >> 16);
+    }
+
+    for ([_][]const u8{
+        "Zstandard encode benchmark text with repeated structure and punctuation.\n" ** 512,
+        numbered_json.items,
+        &binary,
+    }) |payload| {
+        var tokens: std.ArrayList(lz77.Token) = .empty;
+        defer tokens.deinit(std.testing.allocator);
+        const stats = try double_fast_match.planReuse(&tokens, std.testing.allocator, payload, zstdHashParserOptions(payload.len));
+        try std.testing.expect(stats.matches > 1);
+        var literal_lens: [max_native_sequence_count]usize = undefined;
+        var offsets: [max_native_sequence_count]usize = undefined;
+        var match_lens: [max_native_sequence_count]usize = undefined;
+        var literal_ends: [max_native_sequence_count]usize = undefined;
+        var position: usize = 0;
+        var literal_start: usize = 0;
+        var count: usize = 0;
+        for (tokens.items) |token| switch (token) {
+            .literal => position += 1,
+            .match => |match| {
+                literal_lens[count] = position - literal_start;
+                offsets[count] = match.distance;
+                match_lens[count] = match.length;
+                position += match.length;
+                literal_ends[count] = position;
+                literal_start = position;
+                count += 1;
+            },
+        };
+        try std.testing.expectEqual(payload.len, position);
+        try std.testing.expectEqual(stats.matches, count);
+        try Test.compare(payload, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], literal_start);
+    }
+
+    var rle_payload: std.ArrayList(u8) = .empty;
+    defer rle_payload.deinit(std.testing.allocator);
+    var rle_literal_lens: [128]usize = undefined;
+    var rle_offsets: [128]usize = undefined;
+    var rle_match_lens: [128]usize = undefined;
+    var rle_literal_ends: [128]usize = undefined;
+    const rle_lengths = [_]usize{ 1, 2, 4, 8, 16, 32, 64 };
+    const rle_matches = [_]usize{ 3, 4, 8, 16, 32, 64, 128, 258 };
+    const rle_counts = [_]usize{ 2, 4, 8, 16, 32, 64, 128 };
+    outer: for (rle_lengths) |literal_len| for (rle_matches) |match_len| for (rle_counts) |count| {
+        rle_payload.clearRetainingCapacity();
+        @memset(rle_literal_lens[0..count], literal_len);
+        @memset(rle_offsets[0..count], literal_len);
+        @memset(rle_match_lens[0..count], match_len);
+        random_state = 0x510e_527f;
+        for (0..count) |i| {
+            for (0..literal_len) |_| {
+                random_state = random_state *% 1_664_525 +% 1_013_904_223;
+                try rle_payload.append(std.testing.allocator, @truncate(random_state >> 24));
+            }
+            for (0..match_len) |_|
+                try rle_payload.append(std.testing.allocator, rle_payload.items[rle_payload.items.len - literal_len]);
+            rle_literal_ends[i] = rle_payload.items.len;
+        }
+        const rle_hits_before = test_multi_sequence_winner_hits[0];
+        try Test.compare(rle_payload.items, rle_literal_lens[0..count], rle_offsets[0..count], rle_match_lens[0..count], rle_literal_ends[0..count], rle_payload.items.len);
+        if (test_multi_sequence_winner_hits[0] != rle_hits_before) break :outer;
+    };
+
+    const predefined_literal_lens = [_]usize{ 4, 5, 6 };
+    const predefined_offsets = [_]usize{ 4, 8, 12 };
+    const predefined_match_lens = [_]usize{ 4, 5, 6 };
+    var predefined_literal_ends: [predefined_literal_lens.len]usize = undefined;
+    var predefined_payload: std.ArrayList(u8) = .empty;
+    defer predefined_payload.deinit(std.testing.allocator);
+    for (predefined_literal_lens, predefined_offsets, predefined_match_lens, 0..) |literal_len, offset, match_len, i| {
+        for (0..literal_len) |j| try predefined_payload.append(std.testing.allocator, @intCast('a' + (i * 7 + j) % 26));
+        for (0..match_len) |_|
+            try predefined_payload.append(std.testing.allocator, predefined_payload.items[predefined_payload.items.len - offset]);
+        predefined_literal_ends[i] = predefined_payload.items.len;
+    }
+    try Test.compare(predefined_payload.items, &predefined_literal_lens, &predefined_offsets, &predefined_match_lens, &predefined_literal_ends, predefined_payload.items.len);
+
+    for (0..32) |seed| {
+        var generated: std.ArrayList(u8) = .empty;
+        defer generated.deinit(std.testing.allocator);
+        var literal_lens: [64]usize = undefined;
+        var offsets: [64]usize = undefined;
+        var match_lens: [64]usize = undefined;
+        var literal_ends: [64]usize = undefined;
+        const count = 2 + seed % 31;
+        random_state = @truncate(0x6a09_e667 +% seed *% 0x0100_0193);
+        for (0..count) |i| {
+            const literal_len: usize = if (i == 0) 8 else (random_state >> 28) & 7;
+            literal_lens[i] = literal_len;
+            for (0..literal_len) |_| {
+                random_state = random_state *% 1_664_525 +% 1_013_904_223;
+                try generated.append(std.testing.allocator, @truncate(random_state >> 24));
+            }
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            offsets[i] = 1 + random_state % @min(generated.items.len, 32);
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            match_lens[i] = 3 + (random_state >> 27) % 30;
+            for (0..match_lens[i]) |_|
+                try generated.append(std.testing.allocator, generated.items[generated.items.len - offsets[i]]);
+            literal_ends[i] = generated.items.len;
+        }
+        const tail_start = generated.items.len;
+        for (0..seed % 9) |_| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            try generated.append(std.testing.allocator, @truncate(random_state >> 24));
+        }
+        try Test.compare(generated.items, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], tail_start);
+    }
+
+    try std.testing.expect(test_multi_sequence_winner_only_hits >= 36);
+    try std.testing.expect(test_multi_sequence_winner_hits[0] != 0);
+    try std.testing.expect(test_multi_sequence_winner_hits[1] != 0);
+    try std.testing.expect(test_multi_sequence_winner_hits[2] != 0);
+
+    const AllocationFailureTest = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const payload = "abcdabcdwxyzwxyzABCDABCD";
+            const literal_lens = [_]usize{ 4, 4, 4 };
+            const offsets = [_]usize{ 4, 4, 4 };
+            const match_lens = [_]usize{ 4, 4, 4 };
+            const literal_ends = [_]usize{ 8, 16, 24 };
+            var output = try std.ArrayList(u8).initCapacity(allocator, "prefix".len);
+            defer output.deinit(allocator);
+            output.appendSliceAssumeCapacity("prefix");
+            const emitted = emitBestSequenceCompressedBlock(
+                allocator,
+                &output,
+                payload,
+                true,
+                &literal_lens,
+                &offsets,
+                &match_lens,
+                &literal_ends,
+                payload.len,
             ) catch |err| {
                 try std.testing.expectEqualSlices(u8, "prefix", output.items);
                 return err;
