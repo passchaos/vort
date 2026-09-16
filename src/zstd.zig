@@ -105,6 +105,13 @@ const small_sequence_decode_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const split_literal_decode_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_split_literal_decode",
+    .macho => "__TEXT,__vort_zstd_sld",
+    .coff => ".text$vort_zstd_split_literal_decode",
+    else => ".text",
+};
+
 const small_sequence_stack_input_max = 1024;
 const small_sequence_stack_scratch_len = 4096;
 
@@ -122,6 +129,8 @@ var test_single_sequence_winner_only_hits: usize = 0;
 var test_disable_hash_token_lower_bound = false;
 var test_hash_token_lower_bound_hits: usize = 0;
 var test_disable_four_byte_optimal = false;
+var test_disable_split_huffman_decode = false;
+var test_split_huffman_decode_hits: usize = 0;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
 const frame_magic_u32: u32 = 0xfd2fb528;
@@ -9101,6 +9110,26 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
     var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+    if ((!builtin.is_test or !test_disable_split_huffman_decode) and
+        spec.ll_mode == .compressed and
+        spec.of_mode == .compressed and
+        spec.ml_mode == .compressed and
+        (section.kind == .compressed or section.kind == .treeless) and
+        section.sequence_count >= 1024 and
+        dictionary_history.len == 0 and
+        section.regenerated_size <= 4096)
+    {
+        if (try tryDecodeAllFseSplitHuffmanSequences(
+            section,
+            spec,
+            output,
+            written,
+            frame_output_start,
+            frame_state,
+            continuation,
+            &state,
+        )) return;
+    }
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
     if (spec.ll_mode == .compressed and
@@ -9253,6 +9282,26 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
     var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+    if ((!builtin.is_test or !test_disable_split_huffman_decode) and
+        spec.ll_mode == .compressed and
+        spec.of_mode == .compressed and
+        spec.ml_mode == .compressed and
+        (section.kind == .compressed or section.kind == .treeless) and
+        section.sequence_count >= 1024 and
+        dictionary_history.len == 0 and
+        section.regenerated_size <= 4096)
+    {
+        if (try tryDecodeAllFseSplitHuffmanSequences(
+            section,
+            spec,
+            output,
+            written,
+            frame_output_start,
+            frame_state,
+            continuation,
+            &state,
+        )) return;
+    }
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
     if (spec.ll_mode == .compressed and
@@ -9527,6 +9576,67 @@ noinline fn decodeAllFseHuffmanSequences(
         frame_state.previous_tables = spec.tables();
         frame_state.repeated_offsets = state.repeated_offsets;
     }
+}
+
+noinline fn tryDecodeAllFseSplitHuffmanSequences(
+    section: LiteralOnlySection,
+    spec: SequenceModeSpec,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+) linksection(split_literal_decode_text_section) Error!bool {
+    std.debug.assert(section.regenerated_size <= 4096);
+    if (section.huffman_streams != .four) return false;
+
+    var literals: [4096]u8 = undefined;
+    if (!try decodeLargeFourStreamHuffman(section, literals[0..section.regenerated_size])) return false;
+    if (builtin.is_test) test_split_huffman_decode_hits += 1;
+    var literal_offset: usize = 0;
+    while (state.remaining != 0) {
+        const ll_symbol = spec.literal_fse.symbolUnchecked(state.ll_state);
+        const of_symbol = spec.offset_fse.symbolUnchecked(state.of_state);
+        const ml_symbol = spec.match_fse.symbolUnchecked(state.ml_state);
+        const offset_extra = try state.reader.readSequenceField(of_symbol.additional_bits);
+        const match_len = @as(usize, ml_symbol.base) + try state.reader.readSequenceField(ml_symbol.additional_bits);
+        const literal_len = @as(usize, ll_symbol.base) + try state.reader.readSequenceField(ll_symbol.additional_bits);
+        const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
+        state.remaining -= 1;
+        if (state.remaining != 0) {
+            state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
+            state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
+            state.of_state = try nextSequenceState(&state.reader, of_symbol);
+        } else try state.reader.expectEnd();
+
+        if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
+        if (output.len - written.* < literal_len) return error.OutputTooSmall;
+        if (literal_len != 0) {
+            @memcpy(output[written.*..][0..literal_len], literals[literal_offset..][0..literal_len]);
+            written.* += literal_len;
+            literal_offset += literal_len;
+        }
+        if (match_len == 71 and match_offset >= 71 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
+            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
+        } else {
+            try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+        }
+    }
+    if (section.regenerated_size < literal_offset) return error.CorruptFrame;
+    const last_literals = section.regenerated_size - literal_offset;
+    if (output.len - written.* < last_literals) return error.OutputTooSmall;
+    @memcpy(
+        output[written.*..][0..last_literals],
+        literals[literal_offset..][0..last_literals],
+    );
+    written.* += last_literals;
+    if (continuation.retainsState()) {
+        frame_state.previous_tables = spec.tables();
+        frame_state.repeated_offsets = state.repeated_offsets;
+    }
+    return true;
 }
 
 noinline fn decodeFseFseRleSequences(
@@ -25322,6 +25432,19 @@ fn appendNumberedJsonPayload(allocator: std.mem.Allocator, out: *std.ArrayList(u
     }
 }
 
+fn appendStructuredZstdJsonPayload(allocator: std.mem.Allocator, out: *std.ArrayList(u8), min_len: usize) !void {
+    while (out.items.len < min_len) {
+        var line: [128]u8 = undefined;
+        const index = out.items.len / 64;
+        const formatted = try std.fmt.bufPrint(
+            &line,
+            "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd corpus payload\"}}\n",
+            .{index},
+        );
+        try out.appendSlice(allocator, formatted);
+    }
+}
+
 test "zstd native decoder accepts FSE compressed sequence tables" {
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(std.testing.allocator);
@@ -25561,6 +25684,131 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     }
     try std.testing.expect(mutation_cases >= 100);
     try std.testing.expect(saw_invalid_match);
+}
+
+test "zstd split Huffman all-FSE path matches generic decode" {
+    defer {
+        test_disable_split_huffman_decode = false;
+        test_split_huffman_decode_hits = 0;
+    }
+    const encoded_hex_file = @embedFile("zstd/testdata/libzstd-large-json-128k.frame.hex");
+    var encoded: [2874]u8 = undefined;
+    var encoded_len: usize = 0;
+    var encoded_lines = std.mem.tokenizeAny(u8, encoded_hex_file, " \r\n\t");
+    while (encoded_lines.next()) |line| {
+        if (line.len & 1 != 0 or encoded.len - encoded_len < line.len / 2) return error.InvalidLength;
+        _ = try std.fmt.hexToBytes(encoded[encoded_len..][0 .. line.len / 2], line);
+        encoded_len += line.len / 2;
+    }
+    try std.testing.expectEqual(encoded.len, encoded_len);
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    try appendStructuredZstdJsonPayload(std.testing.allocator, &payload, 128 * 1024);
+    const expected = payload.items[0 .. 128 * 1024];
+
+    const first_block = try inspectNativeFrameFirstBlock(&encoded);
+    try std.testing.expect(first_block.last);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    const block = encoded[first_block.payload_offset..][0..first_block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    var sequence_offset = section.sequence_payload_offset;
+    const spec = try resolveSequenceModeSpec(
+        try parseSequenceModeSpec(block, &sequence_offset, section.sequence_count),
+        null,
+    );
+    try std.testing.expect(section.huffman_streams == .four);
+    try std.testing.expect(section.regenerated_size <= 4096);
+    try std.testing.expect(section.sequence_count >= 1024);
+    try std.testing.expectEqual(SymbolMode.compressed, spec.ll_mode);
+    try std.testing.expectEqual(SymbolMode.compressed, spec.of_mode);
+    try std.testing.expectEqual(SymbolMode.compressed, spec.ml_mode);
+
+    const output_len = expected.len + 64;
+    const fast_output = try std.testing.allocator.alloc(u8, output_len);
+    defer std.testing.allocator.free(fast_output);
+    const generic_output = try std.testing.allocator.alloc(u8, output_len);
+    defer std.testing.allocator.free(generic_output);
+    @memset(fast_output, 0xa5);
+    @memset(generic_output, 0xa5);
+
+    test_disable_split_huffman_decode = false;
+    test_split_huffman_decode_hits = 0;
+    const fast_written = try decodeNativeFrameInto(&encoded, fast_output);
+    try std.testing.expectEqual(@as(usize, 1), test_split_huffman_decode_hits);
+    test_disable_split_huffman_decode = true;
+    defer test_disable_split_huffman_decode = false;
+    const generic_written = try decodeNativeFrameInto(&encoded, generic_output);
+
+    try std.testing.expectEqual(expected.len, fast_written);
+    try std.testing.expectEqual(fast_written, generic_written);
+    try std.testing.expectEqualSlices(u8, expected, fast_output[0..fast_written]);
+    try std.testing.expectEqualSlices(u8, fast_output, generic_output);
+
+    @memset(fast_output, 0x3c);
+    @memset(generic_output, 0x3c);
+    test_disable_split_huffman_decode = false;
+    try std.testing.expectError(error.OutputTooSmall, decodeNativeFrameInto(
+        &encoded,
+        fast_output[0 .. expected.len - 1],
+    ));
+    test_disable_split_huffman_decode = true;
+    try std.testing.expectError(error.OutputTooSmall, decodeNativeFrameInto(
+        &encoded,
+        generic_output[0 .. expected.len - 1],
+    ));
+    try std.testing.expectEqualSlices(u8, fast_output, generic_output);
+
+    const bitstream_start = first_block.payload_offset + spec.bitstream_offset;
+    const bitstream_bits = (encoded.len - bitstream_start) * 8;
+    try std.testing.expect(bitstream_bits >= 64);
+    for (0..64) |mutation_index| {
+        const bit = mutation_index * bitstream_bits / 64;
+        var mutated = try std.testing.allocator.dupe(u8, &encoded);
+        defer std.testing.allocator.free(mutated);
+        mutated[bitstream_start + bit / 8] ^= @as(u8, 1) << @as(u3, @intCast(bit & 7));
+        @memset(fast_output, 0xa5);
+        @memset(generic_output, 0xa5);
+
+        test_disable_split_huffman_decode = false;
+        const before_hits = test_split_huffman_decode_hits;
+        const fast_result = decodeNativeFrameInto(mutated, fast_output);
+        try std.testing.expectEqual(before_hits + 1, test_split_huffman_decode_hits);
+        test_disable_split_huffman_decode = true;
+        const generic_result = decodeNativeFrameInto(mutated, generic_output);
+        if (fast_result) |fast_len| {
+            const generic_len = try generic_result;
+            try std.testing.expectEqual(fast_len, generic_len);
+            try std.testing.expectEqualSlices(u8, fast_output[0..fast_len], generic_output[0..generic_len]);
+        } else |fast_err| {
+            try std.testing.expectError(fast_err, generic_result);
+        }
+    }
+
+    const literal_start = first_block.payload_offset + section.literal_payload_offset;
+    const literal_bits = section.compressed_size * 8;
+    try std.testing.expect(literal_bits >= 64);
+    for (0..64) |mutation_index| {
+        const bit = mutation_index * literal_bits / 64;
+        var mutated = try std.testing.allocator.dupe(u8, &encoded);
+        defer std.testing.allocator.free(mutated);
+        mutated[literal_start + bit / 8] ^= @as(u8, 1) << @as(u3, @intCast(bit & 7));
+        @memset(fast_output, 0xa5);
+        @memset(generic_output, 0xa5);
+
+        test_disable_split_huffman_decode = false;
+        const fast_result = decodeNativeFrameInto(mutated, fast_output);
+        test_disable_split_huffman_decode = true;
+        const generic_result = decodeNativeFrameInto(mutated, generic_output);
+        if (fast_result) |fast_len| {
+            const generic_len = try generic_result;
+            try std.testing.expectEqual(fast_len, generic_len);
+            try std.testing.expectEqualSlices(u8, fast_output[0..fast_len], generic_output[0..generic_len]);
+        } else |fast_err| {
+            try std.testing.expectError(fast_err, generic_result);
+        }
+    }
 }
 
 test "zstd native decoder preserves previous offsets for direct offsets" {

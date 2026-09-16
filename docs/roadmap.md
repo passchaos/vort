@@ -14098,3 +14098,21 @@ reuse, so production keeps the simpler independently owned plans.
   `0.439x`. The fixed 183-byte reference frame pins byte-exact generic/fast
   equivalence, terminal state, OutputTooSmall, content-size error precedence,
   zero-write misses, and all bit flips across the OF table plus sequence stream.
+  Added a bounded split-literal decoder for the remaining large structured-JSON
+  gap. Eligible dictionary-free all-FSE blocks have at least 1,024 sequences,
+  four-stream Huffman literals, and at most 4 KiB of regenerated literals. The
+  existing bulk four-stream decoder materializes that small literal set once on
+  the stack, after which sequence execution uses exact literal slices instead of
+  interleaving thousands of Huffman cursor reads. The helper lives in its own
+  object-format text section; raw-literal controls miss at the caller boundary.
+  Against an independent `548623fe` binary, final 21 serial interleaved target
+  pairs improve `large_json` by 1.0963x one-shot and 1.1235x reusable with
+  21/21 wins in both modes. Fifteen-pair five-row matrices measure
+  1.1039x/1.1353x on the target and retain median control floors of 0.9965x
+  one-shot and 0.9972x reusable; separate 100,000-decode numbered-JSON
+  controls measure 0.9935x and 0.9971x. Homebrew libzstd 1.5.7 at 5,000
+  iterations measures 4429.53 versus 6639.97 MiB/s (`0.6671x`) on the exact
+  524,307-byte input (`b0d873df...69fd27c95`). A fixed 2,874-byte, 128 KiB
+  single-block fixture directly compares fast and generic output, checks a
+  64-byte poison suffix and OutputTooSmall, and matches success bytes or errors
+  for 64 evenly spaced Huffman-payload mutations plus 64 sequence-bit mutations.

@@ -399,6 +399,21 @@ Recommended next comparison steps:
   up from about `0.439x`. A fixed 183-byte libzstd frame compares generic and
   specialized output, terminal state, OutputTooSmall behavior, caller suffixes,
   and every single-bit mutation across the offset table and sequence stream.
+  Large all-FSE/Huffman blocks with at least 1,024 sequences and no more than
+  4 KiB of four-stream literals now decode those literals once into bounded
+  stack scratch before executing sequences. This replaces thousands of
+  interleaved one-symbol Huffman reads with the established four-stream bulk
+  decoder while retaining exact output bounds and the generic fallback.
+  Relative to independent `548623fe` binaries, final 21-pair target runs improve
+  the locked 512 KiB `large_json` row by 1.0963x one-shot and 1.1235x reusable,
+  both with 21/21 wins. Final five-row matrices measure 1.1039x/1.1353x on the
+  target and retain 0.9965x/0.9972x control floors. Long `numbered_json`
+  controls retain 0.9935x one-shot and 0.9971x reusable medians. A
+  5,000-iteration libzstd 1.5.7 comparison measures 4429.53 versus 6639.97
+  MiB/s (`0.6671x`). A fixed 2,874-byte
+  single-block reference frame pins byte-exact fast/generic equivalence, a
+  64-byte untouched caller suffix, OutputTooSmall, and 64 mutations each in
+  the Huffman payload and sequence bitstream.
 
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded
