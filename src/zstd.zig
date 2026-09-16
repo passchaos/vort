@@ -9126,7 +9126,8 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
 
     var offset = description_start;
     var spec: SequenceModeSpec = undefined;
-    if (workspace.lookupInto(&spec, block, description_start, section.sequence_count)) {
+    if (workspace.find(block, description_start, section.sequence_count)) |cached| {
+        copyCachedSequenceModeSpec(&spec, cached.spec, description_start + cached.description_len);
         offset = block.len;
     } else {
         const parsed = try parseSequenceModeSpec(block, &offset, section.sequence_count);
@@ -9204,6 +9205,69 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         frame_state.previous_tables = spec.tables();
         frame_state.repeated_offsets = state.repeated_offsets;
     }
+}
+
+inline fn copyCachedSequenceModeSpec(
+    out: *SequenceModeSpec,
+    cached: *const SequenceModeSpec,
+    bitstream_offset: usize,
+) void {
+    out.ll_mode = cached.ll_mode;
+    out.of_mode = cached.of_mode;
+    out.ml_mode = cached.ml_mode;
+    out.literal_rle = cached.literal_rle;
+    out.offset_rle = cached.offset_rle;
+    out.match_rle = cached.match_rle;
+    out.bitstream_offset = bitstream_offset;
+
+    if (cached.ll_mode == .compressed) out.literal_fse = cached.literal_fse else {
+        out.literal_fse.len = 0;
+        out.literal_fse.accuracy_log = 0;
+    }
+    if (cached.of_mode == .compressed) out.offset_fse = cached.offset_fse else {
+        out.offset_fse.len = 0;
+        out.offset_fse.accuracy_log = 0;
+    }
+    if (cached.ml_mode == .compressed) out.match_fse = cached.match_fse else {
+        out.match_fse.len = 0;
+        out.match_fse.accuracy_log = 0;
+    }
+}
+
+test "cached sequence spec copies only active compressed tables" {
+    var cached: SequenceModeSpec = undefined;
+    cached.ll_mode = .predefined;
+    cached.of_mode = .compressed;
+    cached.ml_mode = .rle;
+    cached.literal_rle = null;
+    cached.offset_rle = null;
+    cached.match_rle = .{ .base = 17, .additional_bits = 2, .next_state = 0, .state_bits = 0 };
+    cached.literal_fse.len = 31;
+    cached.literal_fse.accuracy_log = 5;
+    cached.offset_fse.len = 2;
+    cached.offset_fse.accuracy_log = 1;
+    cached.offset_fse.entries[0] = .{ .base = 4, .additional_bits = 3, .next_state = 1, .state_bits = 1 };
+    cached.offset_fse.entries[1] = .{ .base = 8, .additional_bits = 4, .next_state = 0, .state_bits = 1 };
+    cached.match_fse.len = 63;
+    cached.match_fse.accuracy_log = 6;
+    cached.bitstream_offset = 77;
+
+    var actual: SequenceModeSpec = undefined;
+    @memset(std.mem.asBytes(&actual), 0xa5);
+    copyCachedSequenceModeSpec(&actual, &cached, 123);
+
+    try std.testing.expectEqual(SymbolMode.predefined, actual.ll_mode);
+    try std.testing.expectEqual(SymbolMode.compressed, actual.of_mode);
+    try std.testing.expectEqual(SymbolMode.rle, actual.ml_mode);
+    try std.testing.expectEqual(cached.match_rle, actual.match_rle);
+    try std.testing.expectEqual(@as(usize, 123), actual.bitstream_offset);
+    try std.testing.expectEqual(@as(usize, 0), actual.literal_fse.len);
+    try std.testing.expectEqual(@as(u8, 0), actual.literal_fse.accuracy_log);
+    try std.testing.expectEqual(cached.offset_fse.len, actual.offset_fse.len);
+    try std.testing.expectEqual(cached.offset_fse.accuracy_log, actual.offset_fse.accuracy_log);
+    try std.testing.expectEqualSlices(SequenceSymbol, cached.offset_fse.entries[0..cached.offset_fse.len], actual.offset_fse.entries[0..actual.offset_fse.len]);
+    try std.testing.expectEqual(@as(usize, 0), actual.match_fse.len);
+    try std.testing.expectEqual(@as(u8, 0), actual.match_fse.accuracy_log);
 }
 
 noinline fn decodeAllFseHuffmanSequences(
@@ -29278,8 +29342,7 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     var changed_block = try std.testing.allocator.dupe(u8, cached_block);
     defer std.testing.allocator.free(changed_block);
     changed_block[section.sequence_payload_offset] ^= 0x40;
-    var changed_spec: SequenceModeSpec = undefined;
-    try std.testing.expect(!cache.lookupInto(&changed_spec, changed_block, section.sequence_payload_offset, section.sequence_count));
+    try std.testing.expect(cache.find(changed_block, section.sequence_payload_offset, section.sequence_count) == null);
 
     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     var fallback_decoder = NativeFrameDecoder.init(failing.allocator());

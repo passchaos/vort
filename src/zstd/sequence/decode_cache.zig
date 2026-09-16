@@ -6,6 +6,7 @@ const slot_count = 4;
 pub fn Cache(comptime Spec: type) type {
     return struct {
         const Self = @This();
+        pub const Hit = struct { spec: *const Spec, description_len: usize };
         const Entry = struct {
             description: [max_description_len]u8 = undefined,
             description_len: usize = 0,
@@ -41,22 +42,19 @@ pub fn Cache(comptime Spec: type) type {
         next_slot: usize = 0,
         hit_count: usize = 0,
 
-        pub fn lookupInto(
+        pub fn find(
             self: *Self,
-            out: *Spec,
             block: []const u8,
             description_start: usize,
             sequence_count: usize,
-        ) bool {
-            if (description_start >= block.len) return false;
+        ) ?Hit {
+            if (description_start >= block.len) return null;
             for (&self.slots) |*slot| {
                 if (!slot.matches(block, description_start, sequence_count)) continue;
-                out.* = slot.spec;
-                out.bitstream_offset = description_start + slot.description_len;
                 self.hit_count += 1;
-                return true;
+                return .{ .spec = &slot.spec, .description_len = slot.description_len };
             }
-            return false;
+            return null;
         }
 
         pub fn store(
@@ -88,17 +86,14 @@ test "sequence decode cache requires an exact self-delimiting description" {
     const block = [_]u8{ 0xaa, 0xbb, 0xcc, 0x10, 0x20 };
     cache.store(&block, 1, 7, .{ .bitstream_offset = 3, .marker = 42 });
 
-    var hit: Spec = undefined;
-    try std.testing.expect(cache.lookupInto(&hit, &block, 1, 7));
-    try std.testing.expectEqual(@as(usize, 3), hit.bitstream_offset);
-    try std.testing.expectEqual(@as(u8, 42), hit.marker);
+    const hit = cache.find(&block, 1, 7) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, 2), hit.description_len);
+    try std.testing.expectEqual(@as(usize, 3), hit.spec.bitstream_offset);
+    try std.testing.expectEqual(@as(u8, 42), hit.spec.marker);
     try std.testing.expectEqual(@as(usize, 1), cache.hit_count);
 
     var changed = block;
     changed[2] ^= 1;
-    var missed = Spec{ .bitstream_offset = 99, .marker = 77 };
-    try std.testing.expect(!cache.lookupInto(&missed, &changed, 1, 7));
-    try std.testing.expectEqual(@as(usize, 99), missed.bitstream_offset);
-    try std.testing.expectEqual(@as(u8, 77), missed.marker);
-    try std.testing.expect(!cache.lookupInto(&missed, &block, 1, 8));
+    try std.testing.expect(cache.find(&changed, 1, 7) == null);
+    try std.testing.expect(cache.find(&block, 1, 8) == null);
 }

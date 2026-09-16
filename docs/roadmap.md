@@ -13922,3 +13922,22 @@ reuse, so production keeps the simpler independently owned plans.
   full reusable block wrapper noinline cut warmed throughput nearly in half.
   Future Huffman reuse needs a separately compiled decoder unit that can keep
   the ordinary decode text layout fixed, not another root-module cache field.
+  Made warmed cache hits mode-aware after `lookupInto` exposed that mixed-mode
+  blocks still materialized all three 4 KiB FSE tables. The cache now returns a
+  borrowed entry plus its self-delimiting description length; the decoder keeps
+  the same complete local `SequenceModeSpec`, but copies only tables whose
+  resolved mode is `compressed` and initializes inactive-table metadata to
+  zero. A dirty-destination oracle locks the mixed
+  LL=Predefined/OF=Compressed/ML=RLE case, active OF entries, RLE metadata, and
+  relocated bitstream offset. Against independent `26ae0cee` binaries,
+  twenty-one alternating 100,000-decode pairs improve warmed `numbered_json` by
+  `1.0318x` median with 21/21 wins. Fifteen five-row pairs keep every control
+  median at or above `0.9966x`; the 15-pair warmed 13-row matrix improves
+  `numbered_json` by `1.0315x` with a `1.00095x` row-median geometric mean and
+  a `0.99135x` non-tiny floor. The noisy tiny control recovers to `1.0022x`
+  warmed and `0.9988x` one-shot over separate 31-pair, 100,000-decode runs. The
+  complete one-shot 13-row matrix has a `1.0021x` row-median geometric mean and
+  a `0.9906x` non-tiny floor. All 578 Zstd tests, 1,572 repository tests, 93
+  compile checks, the native/frame/dictionary/large-sequence probes, the
+  26-case CLI diff, the 276-case compatibility matrix, and all 9,900 upstream
+  decodecorpus frames across 64/64 sequence-mode tuples pass.
