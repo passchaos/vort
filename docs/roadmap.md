@@ -14045,3 +14045,26 @@ reuse, so production keeps the simpler independently owned plans.
   lead, not a claim of broad Zstd decoder superiority. All 406 Zstd tests, the
   compile gate, the 237-case frame probe, 276-case compatibility matrix, and
   9,900-frame/64-mode upstream corpus pass.
+  Revisited the remaining 512 KiB `binary_mixed` decode gap with explicit code
+  layout boundaries. Its first raw-literal block uses FSE/FSE/RLE tables and
+  the following three use FSE/RLE/RLE; 8,121 of 8,188 matches are exact
+  non-overlapping 48-byte copies, and the latter blocks predominantly carry
+  16-byte literal runs. The FSE/FSE/RLE helper and a new FSE/RLE/RLE raw helper
+  now live in separate object-format text sections. Both use an exact 32+16-byte
+  match kernel, while the latter removes unused OF/ML state dispatch and uses
+  an exact 16-byte literal copy. The 48-byte copy oracle checks the entire
+  destination, including untouched suffix bytes; a 1,024-sequence direct oracle
+  compares the specialized FSE/RLE/RLE loop with the generic decoder and covers
+  retained table/repcode state, OutputTooSmall, and an invalid initial match.
+  Relative to independent `3cd5ae91` binaries, fifteen five-row pairs improve
+  `binary_mixed` by 2.2600x warmed and 2.1749x one-shot, both 15/15 wins; control
+  medians stay at or above 0.9939x warmed and 0.9967x one-shot. Eleven direct
+  warmed comparisons against Homebrew libzstd 1.5.7 measure 1.1696x median,
+  11/11 wins, with a 1.0782x--1.1881x range. Three 20,000-iteration one-shot
+  full-matrix samples put the same row at 1.0154x--1.0272x. All 408 Zstd tests,
+  the compile gate, 237-case frame probe, 276-case compatibility matrix, and
+  9,900-frame/64-mode corpus pass. The formal 13-row absolute reference gate
+  remained red only on the unrelated zero-sequence `ascii64k` row at
+  0.5970x--0.5994x versus its 0.60 floor under high system load; independent
+  candidate/baseline matrices place that untouched row at 0.9977x--1.0027x,
+  and the threshold was not weakened.

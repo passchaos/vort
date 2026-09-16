@@ -364,6 +364,15 @@ Recommended next comparison steps:
   libzstd 1.5.7 put this fixed row at 1.2631x median Vort/reference throughput
   with 11/11 wins. Broader FSE/Huffman and mixed-mode rows remain below the
   reference and are the next decode targets.
+  The four-block `binary_mixed` path now isolates both FSE/FSE/RLE and
+  FSE/RLE/RLE raw-literal loops, applies an exact 48-byte non-overlapping match
+  copy to both, and removes unused table dispatch from the latter. Its dominant
+  16-byte literal run is also copied exactly. Relative to `3cd5ae91`, final
+  independent-binary matrices improve this row by 2.2600x warmed and 2.1749x
+  one-shot, with control median floors of 0.9939x and 0.9967x. Eleven direct
+  warmed comparisons against libzstd 1.5.7 measure 1.1696x median with 11/11
+  wins; three long one-shot full matrices measure 1.0154x--1.0272x. This is a
+  second fixed decode shape above the current reference, not broad Zstd parity.
 
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded
