@@ -454,6 +454,18 @@ Recommended next comparison steps:
   decoded incrementally with a 128 KiB-plus-header compressed-input limit. All
   9,900 pass; 2,699 frames from the broad/dictionary campaigns exercise block
   streaming after including direct-path small-output switches.
+  The 5,700 dictionary-free frames additionally pass twice through one reusable
+  NativeFrameDecoder per campaign, with different output poison bytes before
+  each decode. This checks table replacement between frames as well as warm
+  decoding within a frame. The probe reports reusable case and exact-table-hit
+  counts separately; the gate requires every eligible frame and nonzero hits
+  for compressed campaigns. Dictionary APIs currently bypass this cache and
+  must report zero reusable coverage. The public diagnostic
+  reusableSequenceTableHitCount counts description matches over the decoder's
+  lifetime, including matches before a later decode error; it does not certify
+  successful frames. Focused tests compare warmed decoding against the stateless
+  path for every nonempty truncated prefix and every single-bit mutation of a
+  sequence bitstream, then require a successful complete-frame decode.
   Sequence-free raw/RLE/Huffman literal sections inside compressed blocks now
   retain a persistent literal/Huffman cursor and write directly into tiny caller
   buffers without `decoded_scratch`; the broad suite exercises 197 such blocks

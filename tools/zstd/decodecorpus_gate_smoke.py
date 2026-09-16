@@ -51,9 +51,11 @@ if '--libzstd' in sys.argv and not pathlib.Path(sys.argv[sys.argv.index('--libzs
     raise SystemExit('explicit libzstd path was not forwarded')
 mode = (1 << 64) - 1 if count == 500 else (0xa if '--decodecorpus-dictionary' in sys.argv else 0x5)
 combined = prior | mode
+reusable_cases = 0 if '--decodecorpus-dictionary' in sys.argv else count
+reusable_hits = int(bool(reusable_cases))
 print(
     f'zstd_compat_probe checked={count} unsupported=0 decodecorpus_cases={count} '
-    f'decodecorpus_incremental_cases={count} decodecorpus_block_stream_cases={count // 2} '
+    f'decodecorpus_incremental_cases={count} decodecorpus_reusable_cases={reusable_cases} decodecorpus_reusable_hits={reusable_hits} decodecorpus_block_stream_cases={count // 2} '
     f'decodecorpus_max_compressed_buffered=131104 '
     f'decodecorpus_max_compressed_capacity=131104 '
     f'decodecorpus_streamed_literal_blocks=3 '
@@ -134,6 +136,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
         fields = {
             "decodecorpus_cases": "200",
             "decodecorpus_incremental_cases": "200",
+            "decodecorpus_reusable_cases": "200",
+            "decodecorpus_reusable_hits": "1",
             "decodecorpus_block_stream_cases": "0",
             "decodecorpus_max_compressed_buffered": "64",
             "decodecorpus_max_compressed_capacity": "64",
@@ -159,6 +163,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
         fields = {
             "decodecorpus_cases": "200",
             "decodecorpus_incremental_cases": "200",
+            "decodecorpus_reusable_cases": "200",
+            "decodecorpus_reusable_hits": "1",
             "decodecorpus_block_stream_cases": "1",
             "decodecorpus_max_compressed_buffered": "64",
             "decodecorpus_max_compressed_capacity": "64",
@@ -184,6 +190,8 @@ class DecodeCorpusGateTests(unittest.TestCase):
         fields = {
             "decodecorpus_cases": "500",
             "decodecorpus_incremental_cases": "500",
+            "decodecorpus_reusable_cases": "500",
+            "decodecorpus_reusable_hits": "1",
             "decodecorpus_block_stream_cases": "0",
             "decodecorpus_max_compressed_buffered": "32",
             "decodecorpus_max_compressed_capacity": "64",
@@ -209,6 +217,56 @@ class DecodeCorpusGateTests(unittest.TestCase):
         )
         self.assertEqual(combined, gate.COMPLETE_MODE_MASK)
         self.assertEqual(block_stream_cases, 0)
+
+        campaign = gate.CAMPAIGNS_BY_NAME["compressed-16b-67867979"]
+        for field, value, message in (
+            ("decodecorpus_reusable_cases", "0", "reusable decoded"),
+            ("decodecorpus_reusable_cases", "499", "reusable decoded"),
+            ("decodecorpus_reusable_cases", "501", "reusable decoded"),
+            ("decodecorpus_reusable_hits", "0", "did not exercise reusable cache hits"),
+            ("decodecorpus_reusable_hits", "-1", "invalid reusable cache hits"),
+        ):
+            with self.subTest(field=field, value=value):
+                changed = fields | {field: value}
+                with self.assertRaisesRegex(RuntimeError, message):
+                    gate.validate_campaign_summary(changed, campaign, 0)
+        for field in ("decodecorpus_reusable_cases", "decodecorpus_reusable_hits"):
+            changed = fields.copy()
+            del changed[field]
+            with self.subTest(missing=field):
+                with self.assertRaisesRegex(RuntimeError, "malformed compat summary"):
+                    gate.validate_campaign_summary(changed, campaign, 0)
+
+        dictionary_campaign = gate.CAMPAIGNS_BY_NAME["dict-2027-64k"]
+        dictionary_fields = fields | {
+            "decodecorpus_cases": "200",
+            "decodecorpus_incremental_cases": "200",
+            "decodecorpus_reusable_cases": "0",
+            "decodecorpus_reusable_hits": "0",
+            "decodecorpus_block_stream_cases": "1",
+        }
+        gate.validate_campaign_summary(dictionary_fields, dictionary_campaign, 0)
+        for changed, message in (
+            (dictionary_fields | {"decodecorpus_reusable_cases": "200"}, "reusable decoded"),
+            (dictionary_fields | {"decodecorpus_reusable_hits": "1"}, "invalid reusable cache hits"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, message):
+                gate.validate_campaign_summary(changed, dictionary_campaign, 0)
+
+        raw_campaign = gate.CAMPAIGNS_BY_NAME["raw-8b-49979693"]
+        raw_fields = fields | {
+            "decodecorpus_cases": "2000",
+            "decodecorpus_incremental_cases": "2000",
+            "decodecorpus_reusable_cases": "2000",
+            "decodecorpus_reusable_hits": "0",
+            "decodecorpus_sequence_mode_mask": "0",
+            "decodecorpus_sequence_mode_combinations": "0",
+            "decodecorpus_combined_mode_mask": "0",
+            "decodecorpus_combined_mode_combinations": "0",
+        }
+        gate.validate_campaign_summary(raw_fields, raw_campaign, 0)
+        with self.assertRaisesRegex(RuntimeError, "invalid reusable cache hits"):
+            gate.validate_campaign_summary(raw_fields | {"decodecorpus_reusable_hits": "1"}, raw_campaign, 0)
 
     def test_driver_runs_and_cleans_success_and_failure_corpora(self) -> None:
         with tempfile.TemporaryDirectory(prefix="vort-zstd-gate-smoke-") as temp:
@@ -248,7 +306,7 @@ class DecodeCorpusGateTests(unittest.TestCase):
             self.assertIn("max_block_stream_decoded_buffered=0", success.stdout)
             self.assertIn("max_block_stream_decoded_capacity=0", success.stdout)
             self.assertIn("sequence_mode_mask=0x000000000000000f", success.stdout)
-            self.assertIn(f"reference_library={reference_library}", success.stdout)
+            self.assertIn(f"reference_library={reference_library.resolve()}", success.stdout)
             self.assertIn("reference_version=1.6.0-test", success.stdout)
             self.assertEqual(list(scratch.iterdir()), [])
 

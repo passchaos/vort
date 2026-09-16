@@ -13961,3 +13961,38 @@ reuse, so production keeps the simpler independently owned plans.
   large-sequence probes, the 26-case CLI diff, the 276-case compatibility
   matrix, and all 9,900 upstream decodecorpus frames across 64/64 sequence-mode
   tuples pass.
+
+  Audited reusable Zstd decoder validation on macOS/Apple M1 Pro. The upstream
+  corpus probe previously validated allocating and incremental APIs without
+  exercising the recent sequence-table cache. It now reuses one decoder across
+  every dictionary-free campaign and decodes each frame twice with independently
+  poisoned output. The gate requires all eligible cases plus actual table hits
+  in compressed campaigns; missing counters, short/excess counts, negative or
+  absent hits, and incorrectly attributed dictionary coverage are rejected.
+  The diagnostic hit accessor is public with explicit lifetime/error semantics.
+  Warm-cache unit coverage now compares every nonempty truncation and every
+  sequence-bitstream bit flip with the stateless API, checks OutputTooSmall,
+  and verifies recovery on the original frame. The gate smoke also resolves
+  reference-library paths before comparison on macOS, where /var resolves to
+  /private/var.
+  The final nine-campaign run passes all 9,900 upstream frames and all 64 mode
+  tuples, including 5,700 dictionary-free frames decoded twice and 2,240 exact
+  table hits. Dictionary campaigns retain their allocating/incremental checks
+  without falsely claiming cache coverage. Use
+  zig build -Doptimize=ReleaseFast run-zstd-decodecorpus-gate -j1 -- --libzstd
+  /opt/homebrew/opt/zstd/lib/libzstd.dylib on this host; the generator identifies
+  itself as v1.4.7-3063-gee650ef2 and the loaded library as 1.5.7.
+  An active-prefix FSE table-copy prototype was evaluated and removed. Against
+  independent 47fa6b01 baseline/candidate ReleaseFast binaries, eleven alternating
+  20,000-decode pairs measured numbered JSON at 1.00835x median with 10/11 wins.
+  The eleven-pair 13-row matrix at 1,000 decodes had a 0.97263x repetitive
+  median; an eleven-pair 100,000-decode repeat recovered to 0.99418x median and
+  1.00004x geometric mean. Input SHA-256, encoded sizes, and checksums matched.
+  macOS 26.4.1, Zig 0.16.0, Apple M1 Pro, and Homebrew libzstd 1.5.7 were used,
+  with one benchmark thread, no CPU affinity, five in-process timing samples,
+  and alternating process order. Significant unrelated background load prevents
+  treating these sub-percent changes as stable improvements; no production
+  table-copy change or performance-win claim is retained. Local raw CSVs,
+  independent binaries, and the reproduction driver are under
+  zig-out/zstd-active-prefix-20260916. Next work should use an idle host for
+  allocation/layout profiling before another cache-layout optimization.

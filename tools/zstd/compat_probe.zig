@@ -60,6 +60,8 @@ pub fn main(init: std.process.Init) !void {
     var raw_dictionary_cases: usize = 0;
     var decodecorpus_cases: usize = 0;
     var decodecorpus_incremental_cases: usize = 0;
+    var decodecorpus_reusable_cases: usize = 0;
+    var decodecorpus_reusable_hits: usize = 0;
     var decodecorpus_block_stream_cases: usize = 0;
     var decodecorpus_max_compressed_buffered: usize = 0;
     var decodecorpus_max_compressed_capacity: usize = 0;
@@ -479,6 +481,8 @@ pub fn main(init: std.process.Init) !void {
         else
             null;
         const case_count = if (decodecorpus_count == 0) 1 else decodecorpus_count;
+        var reusable_decoder = vort.ZstdNativeFrameDecoder.init(init.gpa);
+        defer reusable_decoder.deinit();
         for (0..case_count) |index| {
             var frame_path_buffer: [512]u8 = undefined;
             const frame_path = try std.fmt.bufPrint(&frame_path_buffer, "{s}/z{d:0>6}.zst", .{ frames_dir, index });
@@ -505,6 +509,15 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("zstd_decodecorpus_mismatch case={d} input={d} encoded={d} decoded={d}\n", .{ index, expected.len, encoded.len, resolved.len });
                 return error.SizeMismatch;
             }
+            // The dictionary API currently bypasses the sequence cache. Keep
+            // its coverage separate instead of counting it as a warmed hit.
+            if (decodecorpus_dictionary == null) {
+                reusableDecodeCorpusCase(init.gpa, &reusable_decoder, encoded, expected) catch |err| {
+                    std.debug.print("zstd_decodecorpus_reusable_fail case={d} input={d} encoded={d} error={s}\n", .{ index, expected.len, encoded.len, @errorName(err) });
+                    return err;
+                };
+                decodecorpus_reusable_cases += 1;
+            }
             const incremental = incrementalDecodeCorpusCase(
                 init.gpa,
                 encoded,
@@ -525,6 +538,7 @@ pub fn main(init: std.process.Init) !void {
             checked += 1;
             decodecorpus_cases += 1;
         }
+        decodecorpus_reusable_hits = reusable_decoder.reusableSequenceTableHitCount();
     }
     mergeCoverage(&coverage, decodecorpus_coverage);
     if (unsupported != 0) return error.UnsupportedZstdFeature;
@@ -535,13 +549,25 @@ pub fn main(init: std.process.Init) !void {
         return error.ReferenceEncodeFailed;
     const combined_mode_mask = coverage.sequence_mode_combinations | prior_mode_mask;
     std.debug.print(
-        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} raw_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} ",
-        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, raw_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity },
+        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} raw_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_reusable_cases={d} decodecorpus_reusable_hits={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} ",
+        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, raw_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_reusable_cases, decodecorpus_reusable_hits, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity },
     );
     std.debug.print(
         "decodecorpus_max_sequence_count={d} decodecorpus_max_block_count={d} decodecorpus_sequence_count_tiers=0x{x} decodecorpus_sequence_mode_combinations={d} decodecorpus_sequence_mode_mask=0x{x} decodecorpus_combined_mode_combinations={d} decodecorpus_combined_mode_mask=0x{x} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} sequence_mode_mask=0x{x} combined_mode_combinations={d} combined_mode_mask=0x{x} version={s}\n",
         .{ decodecorpus_coverage.max_sequence_count, decodecorpus_coverage.max_block_count, decodecorpus_coverage.sequence_count_tiers, @popCount(decodecorpus_coverage.sequence_mode_combinations), decodecorpus_coverage.sequence_mode_combinations, @popCount(decodecorpus_combined_mode_mask), decodecorpus_combined_mode_mask, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), coverage.sequence_mode_combinations, @popCount(combined_mode_mask), combined_mode_mask, runtime.version() },
     );
+}
+
+fn reusableDecodeCorpusCase(allocator: std.mem.Allocator, decoder: *vort.ZstdNativeFrameDecoder, encoded: []const u8, expected: []const u8) !void {
+    const output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(output);
+    // Reuse the decoder across different frames as well as within this frame.
+    // Poison the output so a missing write cannot pass on a prior decode.
+    for ([_]u8{ 0xa5, 0x5a }) |poison| {
+        @memset(output, poison);
+        const written = try decoder.decodeIntoSlice(encoded, output);
+        if (written != expected.len or !std.mem.eql(u8, expected, output)) return error.SizeMismatch;
+    }
 }
 
 fn mergeCoverage(target: *Coverage, source: Coverage) void {

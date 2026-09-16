@@ -4916,7 +4916,10 @@ pub const NativeFrameDecoder = struct {
         return try decodedRawOrRleFrameSizeLimitedWithDictionarySet(frame, max_output_len, dictionary_set);
     }
 
-    fn reusableSequenceTableHitCount(self: *const NativeFrameDecoder) usize {
+    /// Exact sequence-table description matches over this decoder's lifetime.
+    /// A hit does not imply the remainder of the frame decoded successfully.
+    /// Dictionary and allocating APIs currently bypass this cache.
+    pub fn reusableSequenceTableHitCount(self: *const NativeFrameDecoder) usize {
         return if (self.sequence_workspace) |workspace| workspace.hit_count else 0;
     }
 
@@ -29343,6 +29346,45 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     defer std.testing.allocator.free(changed_block);
     changed_block[section.sequence_payload_offset] ^= 0x40;
     try std.testing.expect(cache.find(changed_block, section.sequence_payload_offset, section.sequence_count) == null);
+
+    // Errors after a cache hit must match the stateless decoder and leave the
+    // reusable context valid for the next complete frame.
+    try std.testing.expectError(error.OutputTooSmall, reusable_decoder.decodeIntoSlice(frame.items, reusable_output[0 .. reusable_output.len - 1]));
+    for (1..frame.items.len) |prefix_len| {
+        const prefix = frame.items[0..prefix_len];
+        const expected_error = if (decodeNativeFrameInto(prefix, reusable_output)) |_|
+            return error.TestUnexpectedResult
+        else |err|
+            err;
+        try std.testing.expectError(expected_error, reusable_decoder.decodeIntoSlice(prefix, reusable_output));
+    }
+    const mutated_frame = try std.testing.allocator.dupe(u8, frame.items);
+    defer std.testing.allocator.free(mutated_frame);
+    const reference_output = try std.testing.allocator.alloc(u8, payload.items.len);
+    defer std.testing.allocator.free(reference_output);
+    const hit = cache.find(cached_block, section.sequence_payload_offset, section.sequence_count) orelse return error.TestUnexpectedResult;
+    const bitstream_start = first_block.payload_offset + section.sequence_payload_offset + hit.description_len;
+    const hits_before_mutation = reusable_decoder.reusableSequenceTableHitCount();
+    for (bitstream_start..frame.items.len) |byte_index| {
+        for (0..8) |bit_index| {
+            const mask = @as(u8, 1) << @as(u3, @intCast(bit_index));
+            mutated_frame[byte_index] ^= mask;
+            @memset(reference_output, 0xa5);
+            @memset(reusable_output, 0x5a);
+            if (decodeNativeFrameInto(mutated_frame, reference_output)) |reference_len| {
+                const actual_len = try reusable_decoder.decodeIntoSlice(mutated_frame, reusable_output);
+                try std.testing.expectEqual(reference_len, actual_len);
+                try std.testing.expectEqualSlices(u8, reference_output[0..reference_len], reusable_output[0..actual_len]);
+            } else |err| {
+                try std.testing.expectError(err, reusable_decoder.decodeIntoSlice(mutated_frame, reusable_output));
+            }
+            mutated_frame[byte_index] ^= mask;
+        }
+    }
+    try std.testing.expect(reusable_decoder.reusableSequenceTableHitCount() > hits_before_mutation);
+    @memset(reusable_output, 0);
+    try std.testing.expectEqual(payload.items.len, try reusable_decoder.decodeIntoSlice(frame.items, reusable_output));
+    try std.testing.expectEqualSlices(u8, payload.items, reusable_output);
 
     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     var fallback_decoder = NativeFrameDecoder.init(failing.allocator());

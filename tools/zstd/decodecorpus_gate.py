@@ -176,6 +176,8 @@ def validate_campaign_summary(
     try:
         decoded_cases = int(fields["decodecorpus_cases"], 0)
         incremental_cases = int(fields["decodecorpus_incremental_cases"], 0)
+        reusable_cases = int(fields["decodecorpus_reusable_cases"], 0)
+        reusable_hits = int(fields["decodecorpus_reusable_hits"], 0)
         block_stream_cases = int(fields["decodecorpus_block_stream_cases"], 0)
         max_compressed_buffered = int(fields["decodecorpus_max_compressed_buffered"], 0)
         max_compressed_capacity = int(fields["decodecorpus_max_compressed_capacity"], 0)
@@ -202,6 +204,16 @@ def validate_campaign_summary(
             f"{campaign.name} incrementally decoded {incremental_cases} generated cases; "
             f"expected {campaign.count}"
         )
+    expected_reusable_cases = campaign.count if campaign.dictionary_size is None else 0
+    if reusable_cases != expected_reusable_cases:
+        raise RuntimeError(
+            f"{campaign.name} reusable decoded {reusable_cases} generated cases; "
+            f"expected {expected_reusable_cases}"
+        )
+    if reusable_hits < 0 or ((campaign.dictionary_size is not None or mode_mask == 0) and reusable_hits != 0):
+        raise RuntimeError(f"{campaign.name} reported invalid reusable cache hits: {reusable_hits}")
+    if expected_reusable_cases and mode_mask and reusable_hits == 0:
+        raise RuntimeError(f"{campaign.name} did not exercise reusable cache hits")
     if campaign.require_block_stream and block_stream_cases == 0:
         raise RuntimeError(f"{campaign.name} did not exercise bounded block streaming")
     if not 0 < max_compressed_buffered <= BLOCK_STREAM_COMPRESSED_LIMIT:
@@ -305,6 +317,7 @@ def run_campaign(
         print(
             f"zstd_decodecorpus_campaign=ok name={campaign.name} seed={campaign.seed} "
             f"cases={campaign.count} dictionary_bytes={campaign.dictionary_size or 0} "
+            f"reusable_cases={fields['decodecorpus_reusable_cases']} reusable_hits={fields['decodecorpus_reusable_hits']} "
             f"block_stream_cases={block_stream_cases} max_compressed_buffered={max_compressed_buffered} "
             f"streamed_literal_blocks={streamed_literal_blocks} "
             f"streamed_sequence_blocks={streamed_sequence_blocks} "
