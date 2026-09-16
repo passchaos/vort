@@ -13874,3 +13874,26 @@ reuse, so production keeps the simpler independently owned plans.
   pair into one `u32` with the same fixed layout measured about `0.998x` on
   JSON and `0.990x` on text. Both prototypes were removed; future retries must
   improve the complete encoder rather than only the isolated parser.
+  Added an out-of-line sequence-table workspace to `NativeFrameDecoder` for
+  repeated caller-buffer decode. Four bounded cache slots retain resolved
+  LL/OF/ML tables behind exact self-delimiting table-description bytes;
+  Repeat_Mode remains frame-local, and execution still copies the resolved spec
+  into the established `SequenceDecodeState` layout. The workspace is allocated
+  only on the first compressed block, allocation failure transparently falls
+  back to the one-shot decoder, and raw/RLE frames use the existing zero-
+  allocation raw fast path. The public decoder handle stays at most 64 bytes and
+  the complete workspace at most 64 KiB. A cache oracle covers exact hits and
+  changed descriptions; integration tests cover a warm all-FSE hit, workspace
+  OOM fallback, teardown, and raw zero-allocation behavior. The reusable modes
+  added to both Zstd decode harnesses leave their default one-shot measurements
+  unchanged. Against an independent `0287d427` binary driven through the same
+  warmed `NativeFrameDecoder` API, eleven alternating 13-row pairs at 1,000
+  decodes per row improve `numbered_json` by `1.3026x`, 512 KiB JSON by
+  `1.1239x`, `huffman80k` by `1.0550x`, and mixed binary by `1.0554x`; every row
+  median is at least `1.0073x`. A separate strict same-harness one-shot matrix
+  has a `0.9996x` row-median geometric mean and a `0.9917x` median floor, so the
+  warmed gain does not trade away the existing stateless API. The final 577
+  Zstd tests, 1,571 repository tests, 93 compile checks, 328-case native probe,
+  237-case frame probe, 25-case dictionary probe, large-sequence probe, 26-case
+  CLI diff, 276-case compatibility matrix, and all 9,900 upstream decodecorpus
+  frames across 64/64 sequence-mode tuples pass.

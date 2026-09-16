@@ -44,6 +44,7 @@ const Options = struct {
     iterations: usize = 5000,
     csv_path: ?[]const u8 = null,
     only_case: ?[]const u8 = null,
+    reusable: bool = false,
 };
 
 const Sample = struct { elapsed_ns: u64, mix: u64 };
@@ -142,7 +143,7 @@ pub fn main(init: std.process.Init) !void {
         }
         try rows.append(
             init.gpa,
-            try measureCase(init, runtime, case, options.iterations),
+            try measureCase(init, runtime, case, options.iterations, options.reusable),
         );
     }
 
@@ -175,6 +176,8 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.csv_path = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--case")) {
             options.only_case = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--reusable")) {
+            options.reusable = true;
         } else return error.UnknownArgument;
     }
     if (options.iterations == 0) return error.InvalidBlockPlan;
@@ -186,6 +189,7 @@ fn measureCase(
     runtime: libzstd.Runtime,
     case: Case,
     iterations: usize,
+    reusable: bool,
 ) !Row {
     const encoded = try runtime.encodeAlloc(init.gpa, case.payload, case.level);
     defer init.gpa.free(encoded);
@@ -213,7 +217,19 @@ fn measureCase(
     defer init.gpa.free(alloc_output);
     if (!std.mem.eql(u8, case.payload, alloc_output)) return error.SizeMismatch;
 
-    const vort_sample = try measureRepeated(
+    const vort_sample = if (reusable) blk: {
+        var decoder = vort.ZstdNativeFrameDecoder.init(init.gpa);
+        defer decoder.deinit();
+        const warmed = try decoder.decodeIntoSlice(encoded, vort_output);
+        if (warmed != case.payload.len) return error.SizeMismatch;
+        break :blk try measureReusable(
+            init.io,
+            &decoder,
+            encoded,
+            vort_output,
+            iterations,
+        );
+    } else try measureRepeated(
         init.io,
         .vort,
         runtime,
@@ -297,6 +313,29 @@ fn measureCase(
 
 const Codec = enum { vort, reference };
 const InspectStage = enum { header, block, sequence };
+
+fn measureReusable(
+    io: std.Io,
+    decoder: *vort.ZstdNativeFrameDecoder,
+    encoded: []const u8,
+    output: []u8,
+    iterations: usize,
+) !Sample {
+    var best = Sample{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 };
+    for (0..5) |_| {
+        var mix: u64 = 0;
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| {
+            mix +%= try decoder.decodeIntoSlice(encoded, output);
+            if (output.len != 0) mix +%= output[0];
+        }
+        const elapsed_ns = elapsedNs(io, start);
+        if (elapsed_ns < best.elapsed_ns) {
+            best = .{ .elapsed_ns = elapsed_ns, .mix = mix };
+        }
+    }
+    return best;
+}
 
 fn measureRepeated(
     io: std.Io,

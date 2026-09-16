@@ -4,7 +4,12 @@ const libzstd = @import("libzstd_runtime.zig");
 const benchmark_provenance = @import("benchmark_provenance");
 
 const Case = struct { name: []const u8, payload: []const u8, level: c_int = 1 };
-const Options = struct { iterations: usize = 1000, only_case: ?[]const u8 = null, csv_path: ?[]const u8 = null };
+const Options = struct {
+    iterations: usize = 1000,
+    only_case: ?[]const u8 = null,
+    csv_path: ?[]const u8 = null,
+    reusable: bool = false,
+};
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -70,15 +75,28 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(output);
         const written = try vort.zstdDecodeFrameInto(encoded, output);
         if (written != case.payload.len or !std.mem.eql(u8, case.payload, output)) return error.SizeMismatch;
+        var decoder = vort.ZstdNativeFrameDecoder.init(init.gpa);
+        defer decoder.deinit();
+        if (options.reusable) {
+            const reused = try decoder.decodeIntoSlice(encoded, output);
+            if (reused != case.payload.len or !std.mem.eql(u8, case.payload, output)) return error.SizeMismatch;
+        }
         const block = try vort.zstdInspectNativeFrameFirstBlock(encoded);
         const shape = try vort.zstdInspectNativeFrameBlockSequenceModes(encoded, block);
         const summary = try vort.zstdSummarizeNativeFrameBlocks(encoded);
         const copy_profile = try vort.zstd.benchmarkNativeSequenceCopyProfile(encoded);
         var mix: u64 = 0;
         const start = std.Io.Clock.awake.now(init.io);
-        for (0..options.iterations) |_| {
-            mix +%= try vort.zstdDecodeFrameInto(encoded, output);
-            if (output.len != 0) mix +%= output[0];
+        if (options.reusable) {
+            for (0..options.iterations) |_| {
+                mix +%= try decoder.decodeIntoSlice(encoded, output);
+                if (output.len != 0) mix +%= output[0];
+            }
+        } else {
+            for (0..options.iterations) |_| {
+                mix +%= try vort.zstdDecodeFrameInto(encoded, output);
+                if (output.len != 0) mix +%= output[0];
+            }
         }
         const elapsed_ns = elapsedNs(init.io, start);
         const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
@@ -135,6 +153,8 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.only_case = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--csv"))
             options.csv_path = args.next() orelse return error.MissingCorpusPath
+        else if (std.mem.eql(u8, arg, "--reusable"))
+            options.reusable = true
         else
             return error.UnknownArgument;
     }

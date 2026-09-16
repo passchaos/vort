@@ -10,6 +10,7 @@ const single_predefined = @import("zstd/sequence/single_predefined.zig");
 const sequence_continuation = @import("zstd/sequence/continuation.zig");
 const sequence_match_copy = @import("zstd/sequence/match_copy.zig");
 const sequence_fse_builder = @import("zstd/sequence/fse_builder.zig");
+const sequence_decode_cache = @import("zstd/sequence/decode_cache.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
@@ -58,6 +59,13 @@ const huffman_build_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_huffman_build",
     .macho => "__TEXT,__vort_zstd_hb",
     .coff => ".text$vort_zstd_huffman_build",
+    else => ".text",
+};
+
+const reusable_decode_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_reusable_decode",
+    .macho => "__TEXT,__vort_zstd_rd",
+    .coff => ".text$vort_zstd_reusable_decode",
     else => ".text",
 };
 
@@ -2900,6 +2908,38 @@ fn decodeRawOrRleFrameIntoWithDictionaryInternal(
     return written;
 }
 
+fn decodeRawOrRleFrameIntoWithReusableDecoder(
+    frame: []const u8,
+    output: []u8,
+    decoder: *NativeFrameDecoder,
+) Error!usize {
+    var offset: usize = 0;
+    var written: usize = 0;
+    while (offset < frame.len) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        const magic = std.mem.readInt(u32, frame[offset..][0..4], .little);
+        offset += 4;
+        if (magic == frame_magic_u32) {
+            try decodeRawOrRleZstandardFrameIntoBufferWithSequenceWorkspace(
+                frame,
+                &offset,
+                output,
+                &written,
+                decoder,
+            );
+        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+            if (frame.len - offset < 4) return error.TruncatedFrame;
+            const skip_len: usize = @intCast(std.mem.readInt(u32, frame[offset..][0..4], .little));
+            offset += 4;
+            if (frame.len - offset < skip_len) return error.TruncatedFrame;
+            offset += skip_len;
+        } else {
+            return error.InvalidMagic;
+        }
+    }
+    return written;
+}
+
 pub const decodeNativeFrameAlloc = decodeRawOrRleFrameAlloc;
 pub const decodeNativeFrameAllocExactSize = decodeRawOrRleFrameAllocExactSize;
 pub const decodeNativeFrameAppend = decodeRawOrRleFrameAppend;
@@ -4658,12 +4698,16 @@ pub const IncrementalFrameDecoder = NativeIncrementalFrameDecoder;
 pub const NativeFrameDecoder = struct {
     allocator: std.mem.Allocator,
     scratch: std.ArrayList(u8) = .empty,
+    sequence_workspace: ?*SequenceDecodeWorkspace = null,
 
     pub fn init(allocator: std.mem.Allocator) NativeFrameDecoder {
         return .{ .allocator = allocator };
     }
 
     pub fn deinit(self: *NativeFrameDecoder) void {
+        if (self.sequence_workspace) |workspace| {
+            self.allocator.destroy(workspace);
+        }
         self.scratch.deinit(self.allocator);
         self.* = undefined;
     }
@@ -4789,8 +4833,17 @@ pub const NativeFrameDecoder = struct {
     }
 
     pub fn decodeIntoSlice(self: *NativeFrameDecoder, frame: []const u8, output: []u8) Error!usize {
-        _ = self;
-        return try decodeRawOrRleFrameInto(frame, output);
+        if (try raw_frame.tryDecode(frame, output)) |written| return written;
+        return try decodeRawOrRleFrameIntoWithReusableDecoder(frame, output, self);
+    }
+
+    fn sequenceWorkspace(self: *NativeFrameDecoder) ?*SequenceDecodeWorkspace {
+        if (self.sequence_workspace == null) {
+            const workspace = self.allocator.create(SequenceDecodeWorkspace) catch return null;
+            workspace.* = .{};
+            self.sequence_workspace = workspace;
+        }
+        return self.sequence_workspace;
     }
 
     pub fn decodeIntoSliceLimited(self: *NativeFrameDecoder, frame: []const u8, output: []u8, max_output_len: usize) Error!usize {
@@ -4861,6 +4914,10 @@ pub const NativeFrameDecoder = struct {
     pub fn decodedSizeLimitedWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary_set: NativeDictionarySet) Error!usize {
         _ = self;
         return try decodedRawOrRleFrameSizeLimitedWithDictionarySet(frame, max_output_len, dictionary_set);
+    }
+
+    fn reusableSequenceTableHitCount(self: *const NativeFrameDecoder) usize {
+        return if (self.sequence_workspace) |workspace| workspace.hit_count else 0;
     }
 
     pub fn decodeChunksAlloc(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
@@ -7310,6 +7367,94 @@ fn decodeRawOrRleZstandardFrameIntoBuffer(
     }
 }
 
+noinline fn decodeRawOrRleZstandardFrameIntoBufferWithSequenceWorkspace(
+    frame: []const u8,
+    offset: *usize,
+    output: []u8,
+    written: *usize,
+    decoder: *NativeFrameDecoder,
+) linksection(reusable_decode_text_section) Error!void {
+    const header = try parseRawOrRleFrameHeaderWithOptions(frame, offset, true);
+    const dictionary_history = try validateNativeDictionary(header, null);
+    const frame_out_start = written.*;
+    if (header.content_size) |size| {
+        const needed = try checkedU64ToUsize(size);
+        if (output.len - written.* < needed) return error.OutputTooSmall;
+    }
+    var frame_state: SequenceFrameState = .{};
+
+    while (true) {
+        if (frame.len - offset.* < 3) return error.TruncatedFrame;
+        const block_header = std.mem.readInt(u24, frame[offset.*..][0..3], .little);
+        offset.* += 3;
+        const last = (block_header & 0x1) != 0;
+        const block_type = (block_header >> 1) & 0x3;
+        const block_len: usize = @intCast(block_header >> 3);
+        try validateBlockSize(header, block_type, block_len);
+
+        switch (block_type) {
+            0 => {
+                if (frame.len - offset.* < block_len) return error.TruncatedFrame;
+                if (output.len - written.* < block_len) return error.OutputTooSmall;
+                @memcpy(output[written.*..][0..block_len], frame[offset.*..][0..block_len]);
+                written.* += block_len;
+                offset.* += block_len;
+            },
+            1 => {
+                if (frame.len - offset.* < 1) return error.TruncatedFrame;
+                if (output.len - written.* < block_len) return error.OutputTooSmall;
+                const byte = frame[offset.*];
+                offset.* += 1;
+                @memset(output[written.*..][0..block_len], byte);
+                written.* += block_len;
+            },
+            2 => {
+                if (frame.len - offset.* < block_len) return error.TruncatedFrame;
+                if (decoder.sequenceWorkspace()) |workspace| {
+                    try decodeLiteralOnlyCompressedBlockIntoBufferWithSequenceWorkspace(
+                        frame[offset.*..][0..block_len],
+                        output,
+                        written,
+                        header.block_size_max,
+                        frame_out_start,
+                        dictionary_history,
+                        &frame_state,
+                        sequence_continuation.forLastBlock(last),
+                        workspace,
+                    );
+                } else {
+                    try decodeLiteralOnlyCompressedBlockIntoBuffer(
+                        frame[offset.*..][0..block_len],
+                        output,
+                        written,
+                        header.block_size_max,
+                        frame_out_start,
+                        dictionary_history,
+                        &frame_state,
+                        sequence_continuation.forLastBlock(last),
+                    );
+                }
+                offset.* += block_len;
+            },
+            else => return error.CorruptFrame,
+        }
+
+        if (last) break;
+    }
+
+    const decoded = output[frame_out_start..written.*];
+    if (header.content_size) |size| {
+        if (try checkedUsizeToU64(decoded.len) != size) return error.SizeMismatch;
+    }
+    if (header.has_checksum) {
+        if (frame.len - offset.* < 4) return error.TruncatedFrame;
+        const expected = std.mem.readInt(u32, frame[offset.*..][0..4], .little);
+        const actual: u32 = @truncate(std.hash.XxHash64.hash(0, decoded));
+        if (actual != expected) return error.ChecksumMismatch;
+        offset.* += 4;
+    }
+}
+
 fn decodeLiteralOnlyCompressedBlockInto(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -7350,6 +7495,35 @@ fn decodeLiteralOnlyCompressedBlockIntoBuffer(
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
     try validateSupportedLiteralSection(section);
     if (section.sequence_count != 0) return try decodeRleSequencesCompressedBlockIntoBuffer(block, section, output, written, frame_output_start, dictionary_history, frame_state, continuation);
+    try expectConsumedBlock(section.sequence_payload_offset, block.len);
+    try copyLiteralsFromSection(block, section, 0, output, written, section.regenerated_size);
+}
+
+fn decodeLiteralOnlyCompressedBlockIntoBufferWithSequenceWorkspace(
+    block: []const u8,
+    output: []u8,
+    written: *usize,
+    block_size_max: usize,
+    frame_output_start: usize,
+    dictionary_history: []const u8,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    workspace: *SequenceDecodeWorkspace,
+) Error!void {
+    const section = try parseLiteralsSection(block, frame_state);
+    if (section.regenerated_size > block_size_max) return error.CorruptFrame;
+    try validateSupportedLiteralSection(section);
+    if (section.sequence_count != 0) return try decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
+        block,
+        section,
+        output,
+        written,
+        frame_output_start,
+        dictionary_history,
+        frame_state,
+        continuation,
+        workspace,
+    );
     try expectConsumedBlock(section.sequence_payload_offset, block.len);
     try copyLiteralsFromSection(block, section, 0, output, written, section.regenerated_size);
 }
@@ -8377,6 +8551,16 @@ const SequenceFrameState = struct {
     previous_huffman_tree: ?StdZstdHuffmanTree = null,
 };
 
+// Four entries retain every compressed block in the common 512 KiB frame. The
+// public decoder owns this workspace out of line so its stack-facing handle
+// stays compact and raw/RLE-only workloads never pay for it.
+const SequenceDecodeWorkspace = sequence_decode_cache.Cache(SequenceModeSpec);
+
+comptime {
+    std.debug.assert(@sizeOf(NativeFrameDecoder) <= 64);
+    std.debug.assert(@sizeOf(SequenceDecodeWorkspace) <= 64 * 1024);
+}
+
 const ResolvedSymbolTable = struct {
     mode: SymbolMode,
     rle: ?SequenceSymbol,
@@ -8869,6 +9053,119 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         (section.kind == .compressed or section.kind == .treeless) and
         section.sequence_count >= 1024 and
         dictionary_history.len == 0)
+    {
+        return try decodeAllFseHuffmanSequences(
+            section,
+            spec,
+            output,
+            written,
+            frame_output_start,
+            frame_state,
+            continuation,
+            &state,
+            huffman_literals orelse return error.CorruptFrame,
+        );
+    }
+    while (state.remaining != 0) {
+        const sequence = try readModeSequence(&state);
+        const literal_len = sequence.literal_len;
+        if (huffman_literals) |*huffman_state| {
+            if (output.len - written.* < literal_len) return error.OutputTooSmall;
+            try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..literal_len]);
+            written.* += literal_len;
+        } else {
+            try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
+        }
+        literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
+        try copyMatchFromHistory(output, written, frame_output_start, dictionary_history, sequence.match_offset, sequence.match_len);
+    }
+    if (section.regenerated_size < literal_offset) return error.CorruptFrame;
+    const last_literals = section.regenerated_size - literal_offset;
+    if (huffman_literals) |*huffman_state| {
+        if (output.len - written.* < last_literals) return error.OutputTooSmall;
+        try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..last_literals]);
+        written.* += last_literals;
+    } else {
+        try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
+    }
+    if (continuation.retainsState()) {
+        frame_state.previous_tables = spec.tables();
+        frame_state.repeated_offsets = state.repeated_offsets;
+    }
+}
+
+noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
+    block: []const u8,
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    dictionary_history: []const u8,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    workspace: *SequenceDecodeWorkspace,
+) linksection(reusable_decode_text_section) Error!void {
+    if (frame_output_start > written.*) return error.CorruptFrame;
+    const description_start = section.sequence_payload_offset;
+    if (section.sequence_count == 1 and
+        description_start < block.len and
+        sequence_predefined.isModeByte(block[description_start]))
+    {
+        return try decodeSinglePredefinedSequence(
+            block,
+            section,
+            description_start + 1,
+            output,
+            written,
+            frame_output_start,
+            dictionary_history,
+            frame_state,
+            continuation,
+        );
+    }
+
+    var offset = description_start;
+    const spec = if (workspace.lookup(block, description_start, section.sequence_count)) |cached| blk: {
+        offset = block.len;
+        break :blk cached;
+    } else blk: {
+        const parsed = try parseSequenceModeSpec(block, &offset, section.sequence_count);
+        const resolved = try resolveSequenceModeSpec(parsed, frame_state.previous_tables);
+        if (parsed.ll_mode != .repeat and parsed.of_mode != .repeat and parsed.ml_mode != .repeat)
+            workspace.store(block, description_start, section.sequence_count, resolved);
+        break :blk resolved;
+    };
+    try expectConsumedBlock(offset, block.len);
+    const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
+
+    var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+    var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
+    var literal_offset: usize = 0;
+    if (spec.ll_mode == .compressed and
+        spec.of_mode == .compressed and
+        spec.ml_mode == .rle and
+        section.kind == .raw and
+        section.sequence_count >= 1024)
+    {
+        return try decodeFseFseRleSequences(
+            block,
+            section,
+            spec,
+            output,
+            written,
+            frame_output_start,
+            dictionary_history,
+            frame_state,
+            continuation,
+            &state,
+            huffman_literals,
+        );
+    }
+    if (spec.ll_mode == .compressed and
+        spec.of_mode == .compressed and
+        spec.ml_mode == .compressed and
+        (section.kind == .compressed or section.kind == .treeless) and
+        section.sequence_count >= 1024)
     {
         return try decodeAllFseHuffmanSequences(
             section,
@@ -28965,6 +29262,45 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(std_decoded);
     try std.testing.expectEqualSlices(u8, payload.items, std_decoded);
+
+    const reusable_output = try std.testing.allocator.alloc(u8, payload.items.len);
+    defer std.testing.allocator.free(reusable_output);
+    var reusable_decoder = NativeFrameDecoder.init(std.testing.allocator);
+    defer reusable_decoder.deinit();
+    try std.testing.expectEqual(payload.items.len, try reusable_decoder.decodeIntoSlice(frame.items, reusable_output));
+    try std.testing.expectEqualSlices(u8, payload.items, reusable_output);
+    try std.testing.expectEqual(@as(usize, 0), reusable_decoder.reusableSequenceTableHitCount());
+    @memset(reusable_output, 0);
+    try std.testing.expectEqual(payload.items.len, try reusable_decoder.decodeIntoSlice(frame.items, reusable_output));
+    try std.testing.expectEqualSlices(u8, payload.items, reusable_output);
+    try std.testing.expectEqual(@as(usize, 1), reusable_decoder.reusableSequenceTableHitCount());
+    const cached_block = frame.items[first_block.payload_offset..][0..first_block.payload_len];
+    const cache = reusable_decoder.sequence_workspace orelse return error.CorruptFrame;
+    var changed_block = try std.testing.allocator.dupe(u8, cached_block);
+    defer std.testing.allocator.free(changed_block);
+    changed_block[section.sequence_payload_offset] ^= 0x40;
+    try std.testing.expect(cache.lookup(changed_block, section.sequence_payload_offset, section.sequence_count) == null);
+
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    var fallback_decoder = NativeFrameDecoder.init(failing.allocator());
+    defer fallback_decoder.deinit();
+    @memset(reusable_output, 0);
+    try std.testing.expectEqual(payload.items.len, try fallback_decoder.decodeIntoSlice(frame.items, reusable_output));
+    try std.testing.expectEqualSlices(u8, payload.items, reusable_output);
+    try std.testing.expectEqual(@as(usize, 0), fallback_decoder.reusableSequenceTableHitCount());
+
+    var raw_frame_bytes: std.ArrayList(u8) = .empty;
+    defer raw_frame_bytes.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &raw_frame_bytes, payload.items.len, .{ .content_checksum = false });
+    try emitRawBlock(std.testing.allocator, &raw_frame_bytes, payload.items, true);
+    var raw_counting = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var raw_decoder = NativeFrameDecoder.init(raw_counting.allocator());
+    defer raw_decoder.deinit();
+    @memset(reusable_output, 0);
+    try std.testing.expectEqual(payload.items.len, try raw_decoder.decodeIntoSlice(raw_frame_bytes.items, reusable_output));
+    try std.testing.expectEqualSlices(u8, payload.items, reusable_output);
+    try std.testing.expectEqual(@as(usize, 0), raw_counting.allocations);
+    try std.testing.expect(raw_decoder.sequence_workspace == null);
 
     var incremental = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = payload.items.len,
