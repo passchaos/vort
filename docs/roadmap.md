@@ -13996,3 +13996,15 @@ reuse, so production keeps the simpler independently owned plans.
   independent binaries, and the reproduction driver are under
   zig-out/zstd-active-prefix-20260916. Next work should use an idle host for
   allocation/layout profiling before another cache-layout optimization.
+  Made the Zstd reference benchmark and pure-Vort decode profiler accept
+  `--libzstd PATH`, matching the compatibility and decodecorpus tools. This is
+  required on macOS hosts where the Homebrew dylib is not on the process loader
+  path, and keeps the exact reference implementation in benchmark provenance.
+  A 20,000-iteration Apple M1 Pro survey against explicit libzstd 1.5.7 shows
+  that the old single-predefined-sequence priority is stale: text, structured,
+  repetitive, and RLE rows are already 2.88x--15.48x the reference throughput.
+  The remaining large gaps are multi-sequence entropy paths: `numbered_json`
+  0.435x, raw-literal all-FSE `huffman80k` 0.400x, `large_json` 0.620x, and
+  mixed binary 0.477x. The host load was elevated, so these figures establish
+  priority and order of magnitude rather than a fine-grained performance claim.
+  Next work should profile the 5,161-sequence raw-literal all-FSE loop first.

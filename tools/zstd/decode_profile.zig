@@ -9,6 +9,7 @@ const Options = struct {
     only_case: ?[]const u8 = null,
     csv_path: ?[]const u8 = null,
     reusable: bool = false,
+    reference_library_path: ?[]const u8 = null,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -18,7 +19,10 @@ pub fn main(init: std.process.Init) !void {
     const options = try parseOptions(&args);
     const provenance = try benchmark_provenance.capture(init.io, init.gpa, init.minimal.args, "single");
     defer provenance.deinit(init.gpa);
-    var runtime = try libzstd.Runtime.open();
+    var runtime = if (options.reference_library_path) |path|
+        try libzstd.Runtime.openPath(path)
+    else
+        try libzstd.Runtime.open();
     defer runtime.deinit();
 
     var numbered_json: std.ArrayList(u8) = .empty;
@@ -155,6 +159,8 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.csv_path = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--reusable"))
             options.reusable = true
+        else if (std.mem.eql(u8, arg, "--libzstd"))
+            options.reference_library_path = args.next() orelse return error.MissingCorpusPath
         else
             return error.UnknownArgument;
     }

@@ -45,6 +45,7 @@ const Options = struct {
     csv_path: ?[]const u8 = null,
     only_case: ?[]const u8 = null,
     reusable: bool = false,
+    reference_library_path: ?[]const u8 = null,
 };
 
 const Sample = struct { elapsed_ns: u64, mix: u64 };
@@ -61,7 +62,10 @@ pub fn main(init: std.process.Init) !void {
     const options = try parseOptions(&args);
     const provenance = try benchmark_provenance.capture(init.io, init.gpa, init.minimal.args, "single");
     defer provenance.deinit(init.gpa);
-    var runtime = try libzstd.Runtime.open();
+    var runtime = if (options.reference_library_path) |path|
+        try libzstd.Runtime.openPath(path)
+    else
+        try libzstd.Runtime.open();
     defer runtime.deinit();
     const raw_large_payload = try init.gpa.alloc(u8, 256 * 1024);
     defer init.gpa.free(raw_large_payload);
@@ -178,6 +182,8 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.only_case = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--reusable")) {
             options.reusable = true;
+        } else if (std.mem.eql(u8, arg, "--libzstd")) {
+            options.reference_library_path = args.next() orelse return error.MissingCorpusPath;
         } else return error.UnknownArgument;
     }
     if (options.iterations == 0) return error.InvalidBlockPlan;

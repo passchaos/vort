@@ -339,6 +339,16 @@ High-byte literal writer note:
 
 Recommended next comparison steps:
 
+- The reference benchmark and pure-Vort decode profiler accept an explicit
+  `--libzstd PATH`, so macOS/Homebrew runs no longer depend on dynamic-loader
+  search paths. A 20,000-iteration survey against libzstd 1.5.7 shows the
+  raw-literal single-predefined rows already ahead by 2.88x--15.48x; the next
+  decode target is therefore the 5,161-sequence raw-literal all-FSE row, which
+  remains near 0.40x reference throughput, followed by other multi-sequence
+  entropy-heavy rows. Treat these loaded-host numbers as prioritization
+  evidence and rerun A/B measurements on an idle machine before claiming small
+  changes.
+
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded
   allocator-backed metadata, FSE/predefined-state, and reverse-bitstream scratch up
