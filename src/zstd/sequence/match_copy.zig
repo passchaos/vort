@@ -51,6 +51,36 @@ pub inline fn appendNonOverlapping71(
     written.* += 71;
 }
 
+/// Expand the common eight-byte, distance-seven match with two exact four-byte
+/// copies. The second load observes the first byte just written, matching LZ
+/// overlap semantics without entering the generic seed-and-double loop.
+pub inline fn appendOverlapping8Offset7(
+    output: []u8,
+    written: *usize,
+) void {
+    const destination_start = written.*;
+    std.debug.assert(destination_start >= 7);
+    const repeat_start = destination_start - 7;
+    const first = output[repeat_start..][0..4].*;
+    output[destination_start..][0..4].* = first;
+    const second = output[repeat_start + 4 ..][0..4].*;
+    output[destination_start + 4 ..][0..4].* = second;
+    written.* += 8;
+}
+
+pub inline fn appendNonOverlapping23(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+) void {
+    const destination_start = written.*;
+    std.debug.assert(destination_start - repeat_start >= 23);
+    const first: @Vector(16, u8) = output[repeat_start..][0..16].*;
+    output[destination_start..][0..16].* = first;
+    @memcpy(output[destination_start + 16 ..][0..7], output[repeat_start + 16 ..][0..7]);
+    written.* += 23;
+}
+
 test "Zstd match copy preserves overlapping periods" {
     var output: [80]u8 = undefined;
     @memcpy(output[0..5], "abcde");
@@ -78,6 +108,30 @@ test "Zstd fixed 71-byte match copy preserves output tail" {
     var actual_written = expected_written;
     append(&expected, &expected_written, 17, 71);
     appendNonOverlapping71(&actual, &actual_written, 17);
+    try std.testing.expectEqual(expected_written, actual_written);
+    try std.testing.expectEqualSlices(u8, &expected, &actual);
+}
+
+test "Zstd fixed distance-seven match preserves overlap and output tail" {
+    var expected: [64]u8 = undefined;
+    for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+    var actual = expected;
+    var expected_written: usize = 23;
+    var actual_written = expected_written;
+    append(&expected, &expected_written, expected_written - 7, 8);
+    appendOverlapping8Offset7(&actual, &actual_written);
+    try std.testing.expectEqual(expected_written, actual_written);
+    try std.testing.expectEqualSlices(u8, &expected, &actual);
+}
+
+test "Zstd fixed 23-byte match preserves output tail" {
+    var expected: [96]u8 = undefined;
+    for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+    var actual = expected;
+    var expected_written: usize = 48;
+    var actual_written = expected_written;
+    append(&expected, &expected_written, 17, 23);
+    appendNonOverlapping23(&actual, &actual_written, 17);
     try std.testing.expectEqual(expected_written, actual_written);
     try std.testing.expectEqualSlices(u8, &expected, &actual);
 }

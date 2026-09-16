@@ -356,6 +356,14 @@ Recommended next comparison steps:
   OutputTooSmall, mutation parity, and recovery checks pin the selected path;
   the full 9,900-frame/64-mode corpus remains green. The target is now roughly
   0.60x libzstd throughput rather than 0.40x, so further work is still needed.
+  Exact kernels for the row's dominant `(length=8, offset=7)` overlapping
+  copies and 23-byte non-overlapping copies now run inside an isolated text
+  section. Relative to the preceding dedicated-loop commit, the final warmed
+  five-row matrix improves the target by 2.0473x with a 0.9973x control floor;
+  one-shot improves by 1.8825x with a 0.9987x floor. Eleven direct runs against
+  libzstd 1.5.7 put this fixed row at 1.2631x median Vort/reference throughput
+  with 11/11 wins. Broader FSE/Huffman and mixed-mode rows remain below the
+  reference and are the next decode targets.
 
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded

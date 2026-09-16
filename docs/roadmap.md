@@ -14028,3 +14028,20 @@ reuse, so production keeps the simpler independently owned plans.
   not eliminating the gap. All 404 Zstd tests, the compile gate, the 237-case
   frame probe, 276-case compatibility matrix, and all 9,900 upstream corpus
   frames across 64/64 sequence modes pass.
+  Specialized the two dominant exact match shapes inside the isolated
+  raw-literal all-FSE loop. A `(length=8, offset=7)` kernel performs two exact
+  four-byte copies, with the second load observing the first newly written byte
+  to preserve LZ overlap semantics. A non-overlapping 23-byte kernel performs
+  one 16-byte vector copy and an exact seven-byte tail. Both have direct oracles
+  that compare the entire output buffer, including untouched suffix bytes, with
+  the generic copier. Keeping the parent helper in its own object-format text
+  section isolates unrelated Huffman and mixed-mode loops from its code-size
+  changes. Against independent ReleaseFast binaries, the final 21-pair warmed
+  five-row matrix improves `huffman80k` by 2.0473x with 21/21 wins; all control
+  medians are at least 0.9973x. The 15-pair one-shot matrix improves the target
+  by 1.8825x with a 0.9987x control floor. Eleven same-process comparisons
+  against Homebrew libzstd 1.5.7 put Vort ahead on this fixed shape by 1.2631x
+  median, 11/11 wins, and a 1.2326x--1.2969x range. This is a shape-specific
+  lead, not a claim of broad Zstd decoder superiority. All 406 Zstd tests, the
+  compile gate, the 237-case frame probe, 276-case compatibility matrix, and
+  9,900-frame/64-mode upstream corpus pass.

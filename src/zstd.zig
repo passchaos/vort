@@ -69,6 +69,13 @@ const reusable_decode_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const raw_fse_decode_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_raw_fse_decode",
+    .macho => "__TEXT,__vort_zstd_rfd",
+    .coff => ".text$vort_zstd_raw_fse_decode",
+    else => ".text",
+};
+
 const small_sequence_stack_input_max = 1024;
 const small_sequence_stack_scratch_len = 4096;
 
@@ -9321,7 +9328,7 @@ noinline fn decodeAllFseRawSequences(
     frame_state: *SequenceFrameState,
     continuation: sequence_continuation.Context,
     state: *SequenceDecodeState,
-) Error!void {
+) linksection(raw_fse_decode_text_section) Error!void {
     std.debug.assert(section.kind == .raw);
     const literals = block[section.literal_payload_offset..][0..section.regenerated_size];
     var literal_offset: usize = 0;
@@ -9350,7 +9357,12 @@ noinline fn decodeAllFseRawSequences(
         if (frame_output_start > written.*) return error.CorruptFrame;
         if (match_offset == 0 or match_offset > written.* - frame_output_start) return error.InvalidMatch;
         if (output.len - written.* < match_len) return error.OutputTooSmall;
-        sequence_match_copy.append(output, written, written.* - match_offset, match_len);
+        if (match_len == 8 and match_offset == 7)
+            sequence_match_copy.appendOverlapping8Offset7(output, written)
+        else if (match_len == 23 and match_offset >= 23)
+            sequence_match_copy.appendNonOverlapping23(output, written, written.* - match_offset)
+        else
+            sequence_match_copy.append(output, written, written.* - match_offset, match_len);
     }
     const last_literals = literals.len - literal_offset;
     if (output.len - written.* < last_literals) return error.OutputTooSmall;
