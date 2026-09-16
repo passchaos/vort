@@ -373,6 +373,19 @@ Recommended next comparison steps:
   warmed comparisons against libzstd 1.5.7 measure 1.1696x median with 11/11
   wins; three long one-shot full matrices measure 1.0154x--1.0272x. This is a
   second fixed decode shape above the current reference, not broad Zstd parity.
+  The zero-sequence four-stream `ascii64k` path now keeps four persistent
+  64-bit reverse reservoirs and decodes five symbols per stream before a
+  refill, matching upstream's register/pointer model without reading across
+  stream boundaries. Dispatch occurs only after the block decoder has proved
+  there are no sequences; sequence-interleaved Huffman paths retain their
+  previous layout. Relative to a fresh `29734b27` ReleaseFast binary, final
+  15-pair matrices improve `ascii64k` by 1.5707x warmed and 1.5732x one-shot,
+  both 15/15 wins. Non-target medians remain at or above 0.9945x, and a
+  separate 100,000-decode `numbered_json` control is 1.0023x. A 50,000-
+  iteration same-process comparison against Homebrew libzstd 1.5.7 reaches
+  982.52 MiB/s versus 1042.21 MiB/s (`0.9427x`), up from about `0.598x`.
+  Reservoir oracles cover widths 1...11, all byte alignments, repeated reloads,
+  checked tail reconstruction, and untouched caller-output suffix bytes.
 
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded

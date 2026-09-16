@@ -14068,3 +14068,19 @@ reuse, so production keeps the simpler independently owned plans.
   0.5970x--0.5994x versus its 0.60 floor under high system load; independent
   candidate/baseline matrices place that untouched row at 0.9977x--1.0027x,
   and the threshold was not weakened.
+  Replaced that row's repeated five-prefix gathers with a persistent 64-bit
+  reverse reservoir per Huffman stream. The next bit remains at the register's
+  high end; after five symbols, trailing-zero state advances the input window
+  by at most seven bytes. The helper never reads outside an individual stream
+  and reconstructs the existing checked reader exactly before the irregular
+  tail. The fast dispatch moved to the already-zero-sequence block boundary so
+  `numbered_json` and other sequence paths do not acquire a new condition or
+  code-layout dependency. Relative to a fresh `29734b27` ReleaseFast binary,
+  fifteen independent pairs improve `ascii64k` by 1.5707x warmed and 1.5732x
+  one-shot, both 15/15 wins. Five-row control medians stay at or above 0.9945x;
+  a separate 15-pair, 100,000-decode `numbered_json` confirmation is 1.0023x.
+  Against Homebrew libzstd 1.5.7, a 50,000-iteration caller-owned run measures
+  982.52 versus 1042.21 MiB/s (`0.9427x`), materially closing the previous
+  roughly `0.598x` gap without claiming parity. Exhaustive reservoir tests
+  cover widths 1...11, byte alignments, repeated reloads and tail equivalence;
+  the large four-stream fixture also pins untouched caller-output suffix bytes.

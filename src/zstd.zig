@@ -14,6 +14,7 @@ const sequence_decode_cache = @import("zstd/sequence/decode_cache.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
+const huffman_reservoir = @import("zstd/literals/huffman_reservoir.zig");
 const seekable = @import("zstd/seekable.zig");
 const dictionary_format = @import("zstd/dictionary_format.zig");
 const incremental_encoder = @import("zstd/incremental/encoder/frame.zig");
@@ -87,6 +88,13 @@ const fse_rle_rle_decode_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_frr_decode",
     .macho => "__TEXT,__vort_zstd_frr",
     .coff => ".text$vort_zstd_frr_decode",
+    else => ".text",
+};
+
+const huffman_only_decode_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_huffman_only_decode",
+    .macho => "__TEXT,__vort_zstd_hod",
+    .coff => ".text$vort_zstd_huffman_only_decode",
     else => ".text",
 };
 
@@ -7520,6 +7528,13 @@ fn decodeLiteralOnlyCompressedBlockIntoBuffer(
     try validateSupportedLiteralSection(section);
     if (section.sequence_count != 0) return try decodeRleSequencesCompressedBlockIntoBuffer(block, section, output, written, frame_output_start, dictionary_history, frame_state, continuation);
     try expectConsumedBlock(section.sequence_payload_offset, block.len);
+    if (section.regenerated_size >= 16 * 1024 and section.huffman_streams == .four) {
+        if (output.len - written.* < section.regenerated_size) return error.OutputTooSmall;
+        if (try decodeLargeFourStreamHuffman(section, output[written.*..][0..section.regenerated_size])) {
+            written.* += section.regenerated_size;
+            return;
+        }
+    }
     try copyLiteralsFromSection(block, section, 0, output, written, section.regenerated_size);
 }
 
@@ -7549,6 +7564,13 @@ fn decodeLiteralOnlyCompressedBlockIntoBufferWithSequenceWorkspace(
         workspace,
     );
     try expectConsumedBlock(section.sequence_payload_offset, block.len);
+    if (section.regenerated_size >= 16 * 1024 and section.huffman_streams == .four) {
+        if (output.len - written.* < section.regenerated_size) return error.OutputTooSmall;
+        if (try decodeLargeFourStreamHuffman(section, output[written.*..][0..section.regenerated_size])) {
+            written.* += section.regenerated_size;
+            return;
+        }
+    }
     try copyLiteralsFromSection(block, section, 0, output, written, section.regenerated_size);
 }
 
@@ -7612,101 +7634,6 @@ fn copyHuffmanLiteralsFromSection(
     const lookup_complete = lookup.buildComplete(&huffman_tree);
     if (!lookup_complete)
         lookup = HuffmanLiteralLookup.build(&huffman_tree);
-    if (section.sequence_count == 0 and
-        section.regenerated_size >= 16 * 1024 and
-        section.huffman_streams == .four and
-        literal_offset == 0 and
-        dest.len == section.regenerated_size and
-        lookup_complete)
-    {
-        const segment_len = (section.regenerated_size + 3) / 4;
-        const streams = section.huffman_streams.four;
-        var readers = [4]ReverseBitReader{
-            try ReverseBitReader.init(streams[0]),
-            try ReverseBitReader.init(streams[1]),
-            try ReverseBitReader.init(streams[2]),
-            try ReverseBitReader.init(streams[3]),
-        };
-        var positions = [4]usize{ 0, segment_len, segment_len * 2, segment_len * 3 };
-        const ends = [4]usize{
-            segment_len,
-            segment_len * 2,
-            segment_len * 3,
-            section.regenerated_size,
-        };
-        const width = huffman_tree.max_bit_count;
-        const total_bits: u6 = @as(u6, width) * 5;
-        const mask = (@as(u64, 1) << width) - 1;
-        while (ends[3] - positions[3] >= 5 and
-            readers[0].available() >= total_bits and
-            readers[1].available() >= total_bits and
-            readers[2].available() >= total_bits and
-            readers[3].available() >= total_bits)
-        {
-            const bits = [4]u64{
-                readers[0].peekBulkHuffmanFive(width),
-                readers[1].peekBulkHuffmanFive(width),
-                readers[2].peekBulkHuffmanFive(width),
-                readers[3].peekBulkHuffmanFive(width),
-            };
-            var consumed: [4]u6 = @splat(0);
-            inline for (0..5) |symbol_index| {
-                inline for (0..4) |stream_index| {
-                    const shift = total_bits - width - consumed[stream_index];
-                    const prefix: usize = @intCast((bits[stream_index] >> @intCast(shift)) & mask);
-                    const entry = lookup.lookupAssumeComplete(prefix << @intCast(11 - width));
-                    dest[positions[stream_index] + symbol_index] = entry.symbol;
-                    consumed[stream_index] += entry.bit_count;
-                }
-            }
-            inline for (0..4) |stream_index| {
-                readers[stream_index].skipBulkHuffman(consumed[stream_index]);
-                positions[stream_index] += 5;
-            }
-        }
-        for (0..4) |stream_index| {
-            var stream_cursor = HuffmanLiteralCursor{
-                .streams = .one,
-                .reader = readers[stream_index],
-            };
-            var segment_start = positions[stream_index];
-            const segment_end = ends[stream_index];
-            while (segment_end - segment_start >= 5 and stream_cursor.reader.available() >= @as(usize, huffman_tree.max_bit_count) * 5) {
-                const bits = stream_cursor.reader.peekBulkHuffmanFive(width);
-                var consumed: u6 = 0;
-                inline for (0..5) |index| {
-                    const shift = total_bits - width - consumed;
-                    const prefix: usize = @intCast((bits >> @intCast(shift)) & mask);
-                    const entry = lookup.lookupAssumeComplete(prefix << @intCast(11 - width));
-                    dest[segment_start + index] = entry.symbol;
-                    consumed += entry.bit_count;
-                }
-                stream_cursor.reader.skipBulkHuffman(consumed);
-                segment_start += 5;
-            }
-            while (segment_end - segment_start >= 2 and stream_cursor.reader.available() >= @as(usize, huffman_tree.max_bit_count) * 2) {
-                const pair = stream_cursor.reader.peekBulkHuffmanPair(width);
-                const first = lookup.lookupAssumeComplete((pair >> width) << @intCast(11 - width));
-                const second_prefix = (pair >> @intCast(width - first.bit_count)) & ((@as(u32, 1) << width) - 1);
-                const second = lookup.lookupAssumeComplete(second_prefix << @intCast(11 - width));
-                stream_cursor.reader.skipBulkHuffman(@intCast(@as(u5, first.bit_count) + second.bit_count));
-                dest[segment_start] = first.symbol;
-                dest[segment_start + 1] = second.symbol;
-                segment_start += 2;
-            }
-            while (segment_start < segment_end and stream_cursor.reader.available() >= huffman_tree.max_bit_count) : (segment_start += 1) {
-                const prefix = stream_cursor.reader.peekBulkHuffman(width);
-                const entry = lookup.lookupAssumeComplete(prefix << @intCast(11 - width));
-                stream_cursor.reader.skipBulkHuffman(entry.bit_count);
-                dest[segment_start] = entry.symbol;
-            }
-            while (segment_start < segment_end) : (segment_start += 1) {
-                dest[segment_start] = try readHuffmanLiteralSymbolFromCursorCold(&stream_cursor, &huffman_tree);
-            }
-            try stream_cursor.expectEnd();
-        }
-        return;
-    }
     var cursor = try initHuffmanLiteralCursor(block, section);
     while (decoded_index < end) {
         // Large literal-only sections spend almost every cycle in lookup hits.
@@ -7721,6 +7648,122 @@ fn copyHuffmanLiteralsFromSection(
         decoded_index += 1;
     }
     if (end == section.regenerated_size) try cursor.expectEnd();
+}
+
+noinline fn decodeLargeFourStreamHuffman(
+    section: LiteralOnlySection,
+    dest: []u8,
+) linksection(huffman_only_decode_text_section) Error!bool {
+    const huffman_tree = section.huffman_tree orelse return false;
+    var lookup: HuffmanLiteralLookup = undefined;
+    if (!lookup.buildComplete(&huffman_tree)) return false;
+    const segment_len = (section.regenerated_size + 3) / 4;
+    const streams = section.huffman_streams.four;
+    var readers = [4]ReverseBitReader{
+        try ReverseBitReader.init(streams[0]),
+        try ReverseBitReader.init(streams[1]),
+        try ReverseBitReader.init(streams[2]),
+        try ReverseBitReader.init(streams[3]),
+    };
+    var positions = [4]usize{ 0, segment_len, segment_len * 2, segment_len * 3 };
+    const ends = [4]usize{
+        segment_len,
+        segment_len * 2,
+        segment_len * 3,
+        section.regenerated_size,
+    };
+    const width = huffman_tree.max_bit_count;
+    const total_bits: u6 = @as(u6, width) * 5;
+    const mask = (@as(u64, 1) << width) - 1;
+    if (readers[0].available() > 56 and
+        readers[1].available() > 56 and
+        readers[2].available() > 56 and
+        readers[3].available() > 56)
+    {
+        decodeFourStreamHuffmanReservoir(&readers, &positions, ends, width, &lookup, dest);
+    }
+    for (0..4) |stream_index| {
+        var stream_cursor = HuffmanLiteralCursor{
+            .streams = .one,
+            .reader = readers[stream_index],
+        };
+        var segment_start = positions[stream_index];
+        const segment_end = ends[stream_index];
+        while (segment_end - segment_start >= 5 and stream_cursor.reader.available() >= @as(usize, huffman_tree.max_bit_count) * 5) {
+            const bits = stream_cursor.reader.peekBulkHuffmanFive(width);
+            var consumed: u6 = 0;
+            inline for (0..5) |index| {
+                const shift = total_bits - width - consumed;
+                const prefix: usize = @intCast((bits >> @intCast(shift)) & mask);
+                const entry = lookup.lookupAssumeComplete(prefix << @intCast(11 - width));
+                dest[segment_start + index] = entry.symbol;
+                consumed += entry.bit_count;
+            }
+            stream_cursor.reader.skipBulkHuffman(consumed);
+            segment_start += 5;
+        }
+        while (segment_end - segment_start >= 2 and stream_cursor.reader.available() >= @as(usize, huffman_tree.max_bit_count) * 2) {
+            const pair = stream_cursor.reader.peekBulkHuffmanPair(width);
+            const first = lookup.lookupAssumeComplete((pair >> width) << @intCast(11 - width));
+            const second_prefix = (pair >> @intCast(width - first.bit_count)) & ((@as(u32, 1) << width) - 1);
+            const second = lookup.lookupAssumeComplete(second_prefix << @intCast(11 - width));
+            stream_cursor.reader.skipBulkHuffman(@intCast(@as(u5, first.bit_count) + second.bit_count));
+            dest[segment_start] = first.symbol;
+            dest[segment_start + 1] = second.symbol;
+            segment_start += 2;
+        }
+        while (segment_start < segment_end and stream_cursor.reader.available() >= huffman_tree.max_bit_count) : (segment_start += 1) {
+            const prefix = stream_cursor.reader.peekBulkHuffman(width);
+            const entry = lookup.lookupAssumeComplete(prefix << @intCast(11 - width));
+            stream_cursor.reader.skipBulkHuffman(entry.bit_count);
+            dest[segment_start] = entry.symbol;
+        }
+        while (segment_start < segment_end) : (segment_start += 1) {
+            dest[segment_start] = try readHuffmanLiteralSymbolFromCursorCold(&stream_cursor, &huffman_tree);
+        }
+        try stream_cursor.expectEnd();
+    }
+    return true;
+}
+
+noinline fn decodeFourStreamHuffmanReservoir(
+    readers: *[4]ReverseBitReader,
+    positions: *[4]usize,
+    ends: [4]usize,
+    width: u4,
+    lookup: *const HuffmanLiteralLookup,
+    dest: []u8,
+) linksection(huffman_only_decode_text_section) void {
+    var output_positions = positions.*;
+    var reservoirs = [4]huffman_reservoir.Reservoir{
+        huffman_reservoir.Reservoir.init(readers[0]) orelse unreachable,
+        huffman_reservoir.Reservoir.init(readers[1]) orelse unreachable,
+        huffman_reservoir.Reservoir.init(readers[2]) orelse unreachable,
+        huffman_reservoir.Reservoir.init(readers[3]) orelse unreachable,
+    };
+    while (ends[3] - output_positions[3] >= 5 and
+        reservoirs[0].canDecodeFive(width) and
+        reservoirs[1].canDecodeFive(width) and
+        reservoirs[2].canDecodeFive(width) and
+        reservoirs[3].canDecodeFive(width))
+    {
+        inline for (0..5) |symbol_index| {
+            inline for (0..4) |stream_index| {
+                const prefix = reservoirs[stream_index].peek(width);
+                const entry = lookup.lookupAssumeComplete(prefix << @intCast(11 - width));
+                dest[output_positions[stream_index] + symbol_index] = entry.symbol;
+                reservoirs[stream_index].consume(entry.bit_count);
+            }
+        }
+        inline for (0..4) |stream_index| {
+            reservoirs[stream_index].reload();
+            output_positions[stream_index] += 5;
+        }
+    }
+    inline for (0..4) |stream_index| {
+        readers[stream_index].remaining_bits = reservoirs[stream_index].remainingBits();
+        positions[stream_index] = output_positions[stream_index];
+    }
 }
 
 const HuffmanLiteralDecodeState = struct {
@@ -28216,6 +28259,13 @@ test "zstd literal-only writer emits large four-stream Huffman literals" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
+
+    var guarded_output = try std.testing.allocator.alloc(u8, payload.len + 64);
+    defer std.testing.allocator.free(guarded_output);
+    @memset(guarded_output, 0xa5);
+    try std.testing.expectEqual(payload.len, try decodeNativeFrameInto(encoded, guarded_output));
+    try std.testing.expectEqualSlices(u8, payload, guarded_output[0..payload.len]);
+    for (guarded_output[payload.len..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
 
     // The interleaved bulk path must validate every reverse-stream end marker,
     // including streams it no longer visits through the shared cursor.

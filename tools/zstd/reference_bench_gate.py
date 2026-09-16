@@ -111,7 +111,10 @@ def main() -> int:
         "raw256k": 0.85,
         # The FSE-weight linear Huffman-tree builder raised this row from the
         # former ~0.34x baseline to ~0.45x; retain conservative scheduler slack.
-        "numbered_json": 0.38, "huffman80k": 0.44, "ascii64k": 0.60,
+        # The isolated persistent-reservoir four-stream decoder raises the
+        # locked zero-sequence Huffman row from ~0.60x to ~0.94x. Retain
+        # scheduler slack without weakening any unrelated floor.
+        "numbered_json": 0.38, "huffman80k": 0.44, "ascii64k": 0.88,
         "large_text": 0.85, "large_json": 0.32, "binary_mixed": 0.36,
     }
     for name, floor in floors.items():
