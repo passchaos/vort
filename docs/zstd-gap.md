@@ -386,6 +386,19 @@ Recommended next comparison steps:
   982.52 MiB/s versus 1042.21 MiB/s (`0.9427x`), up from about `0.598x`.
   Reservoir oracles cover widths 1...11, all byte alignments, repeated reloads,
   checked tail reconstruction, and untouched caller-output suffix bytes.
+  The one-block `numbered_json` path now recognizes its exact small-frame
+  shape before entering the generic decoder: no dictionary/checksum, declared
+  content at most 4 KiB, 2...256 sequences, Huffman literals, and
+  LL=predefined/OF=compressed-FSE/ML=predefined (`0x20`). The isolated decoder
+  constructs only the dynamic offset table and reads LL/ML from the static
+  predefined tables. Relative to the independent `0f12fca6` binary, final
+  15-pair one-shot matrices improve the target by 1.5524x--1.5594x with
+  15/15 wins and a 0.9943x control floor; reusable rows, which intentionally
+  stay on the cached generic path, retain a 0.9963x floor. A 100,000-iteration
+  libzstd 1.5.7 comparison measures 449.80 versus 662.35 MiB/s (`0.6791x`),
+  up from about `0.439x`. A fixed 183-byte libzstd frame compares generic and
+  specialized output, terminal state, OutputTooSmall behavior, caller suffixes,
+  and every single-bit mutation across the offset table and sequence stream.
 
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded

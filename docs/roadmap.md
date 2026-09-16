@@ -14084,3 +14084,17 @@ reuse, so production keeps the simpler independently owned plans.
   roughly `0.598x` gap without claiming parity. Exhaustive reservoir tests
   cover widths 1...11, byte alignments, repeated reloads and tail equivalence;
   the large four-stream fixture also pins untouched caller-output suffix bytes.
+  Added an isolated caller-owned fast path for small, single-block, known-size
+  Zstd frames whose sequence mode is exactly LL=predefined, OF=compressed FSE,
+  ML=predefined. This is the locked 1,290-byte `numbered_json` shape: the path
+  builds only the dynamic offset table and reads the other symbols from the
+  static predefined tables, avoiding generic three-table state materialization.
+  A cheap `frame.len <= 4096` guard keeps large-frame hot paths out of the
+  recognizer, and every miss falls back before mutating caller output. Final
+  independent binaries improve `numbered_json` by 1.5524x--1.5594x across
+  15/15 one-shot pairs; the five-row one-shot control floor is 0.9943x and the
+  reusable floor is 0.9963x. A 100,000-iteration run against Homebrew libzstd
+  1.5.7 reaches 449.80 versus 662.35 MiB/s (`0.6791x`), up from roughly
+  `0.439x`. The fixed 183-byte reference frame pins byte-exact generic/fast
+  equivalence, terminal state, OutputTooSmall, content-size error precedence,
+  zero-write misses, and all bit flips across the OF table plus sequence stream.

@@ -114,7 +114,9 @@ def main() -> int:
         # The isolated persistent-reservoir four-stream decoder raises the
         # locked zero-sequence Huffman row from ~0.60x to ~0.94x. Retain
         # scheduler slack without weakening any unrelated floor.
-        "numbered_json": 0.38, "huffman80k": 0.44, "ascii64k": 0.88,
+        # The isolated small LL-predefined/OF-FSE/ML-predefined frame decoder
+        # raises the locked numbered-JSON row from ~0.44x to ~0.69x.
+        "numbered_json": 0.60, "huffman80k": 0.44, "ascii64k": 0.88,
         "large_text": 0.85, "large_json": 0.32, "binary_mixed": 0.36,
     }
     for name, floor in floors.items():

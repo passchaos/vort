@@ -98,6 +98,13 @@ const huffman_only_decode_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const small_sequence_decode_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_small_sequence_decode",
+    .macho => "__TEXT,__vort_zstd_ssd",
+    .coff => ".text$vort_zstd_small_sequence_decode",
+    else => ".text",
+};
+
 const small_sequence_stack_input_max = 1024;
 const small_sequence_stack_scratch_len = 4096;
 
@@ -2670,6 +2677,8 @@ pub const decodedNativeFrameSizeLimitedWithDictionarySet = decodedRawOrRleFrameS
 /// embedded/streaming callers preflight capacity and stay allocation-free while
 /// still receiving exact checksum, size, and unsupported-feature errors.
 pub fn decodeRawOrRleFrameInto(frame: []const u8, output: []u8) Error!usize {
+    if (frame.len <= 4096 and output.len <= 4096)
+        if (try tryDecodeSmallPredefinedOffsetFseFrame(frame, output)) |written| return written;
     return try decodeRawOrRleFrameIntoWithDictionaryInternal(frame, output, null);
 }
 
@@ -25391,6 +25400,169 @@ test "zstd native decoder accepts FSE compressed sequence tables" {
     }
 }
 
+test "zstd small predefined offset-FSE Huffman path matches generic decode" {
+    const encoded_hex_file = @embedFile("zstd/testdata/libzstd-numbered-json.frame.hex");
+    const encoded_hex = std.mem.trim(u8, encoded_hex_file, " \r\n\t");
+    var encoded: [(encoded_hex_file.len - 1) / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&encoded, encoded_hex);
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    try appendNumberedJsonPayload(std.testing.allocator, &payload, 20);
+    const first_block = try inspectNativeFrameFirstBlock(&encoded);
+    const block = encoded[first_block.payload_offset..][0..first_block.payload_len];
+
+    var generic_state: SequenceFrameState = .{};
+    const generic_section = try parseLiteralsSection(block, &generic_state);
+    try std.testing.expectEqual(@as(usize, 39), generic_section.sequence_count);
+    try std.testing.expectEqual(LiteralsKind.compressed, generic_section.kind);
+    try std.testing.expectEqual(@as(u8, 0x20), block[generic_section.sequence_payload_offset]);
+
+    var generic_output: [1290 + 64]u8 = @splat(0xa5);
+    var generic_written: usize = 0;
+    try decodeRleSequencesCompressedBlockIntoBuffer(
+        block,
+        generic_section,
+        &generic_output,
+        &generic_written,
+        0,
+        &.{},
+        &generic_state,
+        .terminal,
+    );
+
+    var specialized_state: SequenceFrameState = .{};
+    const specialized_section = try parseLiteralsSection(block, &specialized_state);
+    var specialized_output: [1290 + 64]u8 = @splat(0xa5);
+    var specialized_written: usize = 0;
+    try decodePredefinedOffsetFsePredefinedHuffman(
+        block,
+        &specialized_section,
+        specialized_section.sequence_payload_offset + 1,
+        &specialized_output,
+        &specialized_written,
+        0,
+        specialized_state.repeated_offsets,
+    );
+
+    try std.testing.expectEqual(payload.items.len, generic_written);
+    try std.testing.expectEqual(generic_written, specialized_written);
+    try std.testing.expectEqualSlices(u8, payload.items, generic_output[0..generic_written]);
+    try std.testing.expectEqualSlices(u8, &generic_output, &specialized_output);
+    try std.testing.expectEqual(@as(?SequenceTables, null), generic_state.previous_tables);
+    try std.testing.expectEqual(@as(?SequenceTables, null), specialized_state.previous_tables);
+    try std.testing.expectEqual(initial_repeated_offsets, generic_state.repeated_offsets);
+    try std.testing.expectEqual(initial_repeated_offsets, specialized_state.repeated_offsets);
+
+    var public_output: [1290 + 64]u8 = @splat(0xa5);
+    try std.testing.expectEqual(payload.items.len, try decodeFrameInto(&encoded, &public_output));
+    try std.testing.expectEqualSlices(u8, &specialized_output, &public_output);
+
+    var missed_frame = encoded;
+    missed_frame[first_block.payload_offset + generic_section.sequence_payload_offset] = 0;
+    var missed_output: [1290 + 64]u8 = @splat(0x5a);
+    try std.testing.expectEqual(@as(?usize, null), try tryDecodeSmallPredefinedOffsetFseFrame(&missed_frame, &missed_output));
+    for (&missed_output) |byte| try std.testing.expectEqual(@as(u8, 0x5a), byte);
+
+    var bad_content_size = encoded;
+    bad_content_size[5] -= 1;
+    var generic_bad_size_output: [1290 + 64]u8 = undefined;
+    try std.testing.expectError(error.SizeMismatch, decodeNativeFrameInto(&bad_content_size, &generic_bad_size_output));
+    var public_bad_size_output: [1290 + 64]u8 = undefined;
+    try std.testing.expectError(error.SizeMismatch, decodeFrameInto(&bad_content_size, &public_bad_size_output));
+
+    var generic_short: [1289]u8 = undefined;
+    var generic_short_written: usize = 0;
+    var generic_short_state: SequenceFrameState = .{};
+    const generic_short_section = try parseLiteralsSection(block, &generic_short_state);
+    try std.testing.expectError(error.OutputTooSmall, decodeRleSequencesCompressedBlockIntoBuffer(
+        block,
+        generic_short_section,
+        &generic_short,
+        &generic_short_written,
+        0,
+        &.{},
+        &generic_short_state,
+        .terminal,
+    ));
+
+    var specialized_short: [1289]u8 = undefined;
+    var specialized_short_written: usize = 0;
+    var specialized_short_state: SequenceFrameState = .{};
+    const specialized_short_section = try parseLiteralsSection(block, &specialized_short_state);
+    try std.testing.expectError(error.OutputTooSmall, decodePredefinedOffsetFsePredefinedHuffman(
+        block,
+        &specialized_short_section,
+        specialized_short_section.sequence_payload_offset + 1,
+        &specialized_short,
+        &specialized_short_written,
+        0,
+        specialized_short_state.repeated_offsets,
+    ));
+    try std.testing.expectEqual(generic_short_written, specialized_short_written);
+    try std.testing.expectEqualSlices(u8, generic_short[0..generic_short_written], specialized_short[0..specialized_short_written]);
+    try std.testing.expectError(error.OutputTooSmall, tryDecodeSmallPredefinedOffsetFseFrame(&encoded, &specialized_short));
+
+    var saw_invalid_match = false;
+    var mutation_cases: usize = 0;
+    for (generic_section.sequence_payload_offset + 1..block.len) |byte_index| {
+        for (0..8) |bit_index| {
+            var mutated = encoded;
+            mutated[first_block.payload_offset + byte_index] ^= @as(u8, 1) << @as(u3, @intCast(bit_index));
+            const mutated_block = mutated[first_block.payload_offset..][0..first_block.payload_len];
+            var mutated_generic_state: SequenceFrameState = .{};
+            const mutated_generic_section = try parseLiteralsSection(mutated_block, &mutated_generic_state);
+            var mutated_generic_output: [1290]u8 = undefined;
+            var mutated_generic_written: usize = 0;
+            const generic_result = decodeRleSequencesCompressedBlockIntoBuffer(
+                mutated_block,
+                mutated_generic_section,
+                &mutated_generic_output,
+                &mutated_generic_written,
+                0,
+                &.{},
+                &mutated_generic_state,
+                .terminal,
+            );
+            var mutated_specialized_state: SequenceFrameState = .{};
+            const mutated_specialized_section = try parseLiteralsSection(mutated_block, &mutated_specialized_state);
+            var mutated_specialized_output: [1290]u8 = undefined;
+            var mutated_specialized_written: usize = 0;
+            if (generic_result) |_| {
+                try decodePredefinedOffsetFsePredefinedHuffman(
+                    mutated_block,
+                    &mutated_specialized_section,
+                    mutated_specialized_section.sequence_payload_offset + 1,
+                    &mutated_specialized_output,
+                    &mutated_specialized_written,
+                    0,
+                    mutated_specialized_state.repeated_offsets,
+                );
+                try std.testing.expectEqual(mutated_generic_written, mutated_specialized_written);
+                try std.testing.expectEqualSlices(
+                    u8,
+                    mutated_generic_output[0..mutated_generic_written],
+                    mutated_specialized_output[0..mutated_specialized_written],
+                );
+            } else |err| {
+                try std.testing.expectError(err, decodePredefinedOffsetFsePredefinedHuffman(
+                    mutated_block,
+                    &mutated_specialized_section,
+                    mutated_specialized_section.sequence_payload_offset + 1,
+                    &mutated_specialized_output,
+                    &mutated_specialized_written,
+                    0,
+                    mutated_specialized_state.repeated_offsets,
+                ));
+                saw_invalid_match = saw_invalid_match or err == error.InvalidMatch;
+            }
+            mutation_cases += 1;
+        }
+    }
+    try std.testing.expect(mutation_cases >= 100);
+    try std.testing.expect(saw_invalid_match);
+}
+
 test "zstd native decoder preserves previous offsets for direct offsets" {
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(std.testing.allocator);
@@ -33771,4 +33943,113 @@ test "zstd native decoder accepts simple facade-generated predefined frame" {
     const written = try decodeNativeFrameInto(encoded, &into_buffer);
     try std.testing.expectEqual(payload.len, written);
     try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
+}
+
+noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
+    frame: []const u8,
+    output: []u8,
+) linksection(small_sequence_decode_text_section) Error!?usize {
+    if (frame.len > 4096 or frame.len < 9) return null;
+    if (std.mem.readInt(u32, frame[0..4], .little) != frame_magic_u32) return null;
+
+    var offset: usize = 4;
+    const header = parseRawOrRleFrameHeaderWithOptions(frame, &offset, false) catch return null;
+    if (header.has_checksum or header.content_size == null or header.content_size.? > 4096) return null;
+    const output_len: usize = @intCast(header.content_size.?);
+    if (output.len < output_len) return error.OutputTooSmall;
+    if (frame.len - offset < 3) return null;
+    const block_header = std.mem.readInt(u24, frame[offset..][0..3], .little);
+    offset += 3;
+    if ((block_header & 1) == 0 or ((block_header >> 1) & 0x3) != 2) return null;
+    const block_len: usize = @intCast(block_header >> 3);
+    if (frame.len - offset != block_len) return null;
+    if (block_len > header.block_size_max) return null;
+    const block = frame[offset..][0..block_len];
+
+    var frame_state: SequenceFrameState = .{};
+    const section = parseLiteralsSection(block, &frame_state) catch return null;
+    if (section.regenerated_size > header.block_size_max or
+        section.sequence_count < 2 or section.sequence_count > 256 or
+        (section.kind != .compressed and section.kind != .treeless) or
+        section.sequence_payload_offset >= block.len or
+        block[section.sequence_payload_offset] != 0x20) return null;
+
+    var written: usize = 0;
+    try decodePredefinedOffsetFsePredefinedHuffman(
+        block,
+        &section,
+        section.sequence_payload_offset + 1,
+        output,
+        &written,
+        0,
+        frame_state.repeated_offsets,
+    );
+    if (written != output_len) return error.SizeMismatch;
+    return written;
+}
+
+noinline fn decodePredefinedOffsetFsePredefinedHuffman(
+    block: []const u8,
+    section: *const LiteralOnlySection,
+    table_offset: usize,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    repeated_offsets: [3]usize,
+) linksection(small_sequence_decode_text_section) Error!void {
+    std.debug.assert(section.sequence_count >= 2 and section.sequence_count <= 256);
+    std.debug.assert(section.kind == .compressed or section.kind == .treeless);
+
+    var offset = table_offset;
+    var offset_fse: SequenceFseTable = undefined;
+    try readFseSequenceTableInto(
+        &offset_fse,
+        block,
+        &offset,
+        &of_base,
+        &of_bits,
+        sequence_table_symbol_count_max.offset,
+        sequence_table_accuracy_log_max.offset,
+    );
+    if (offset >= block.len) return error.TruncatedFrame;
+
+    var reader = try ReverseBitReader.init(block[offset..]);
+    var ll_state = try reader.readSmall(6);
+    var of_state = try reader.readSmall(@intCast(offset_fse.accuracy_log));
+    var ml_state = try reader.readSmall(6);
+    var repcodes = repeated_offsets;
+    var huffman_state = (try initHuffmanLiteralDecodeState(block, section.*)) orelse
+        return error.CorruptFrame;
+    var literal_offset: usize = 0;
+    var remaining = section.sequence_count;
+
+    while (remaining != 0) {
+        if (ll_state >= sequence_predefined.literal_symbols.len or
+            ml_state >= sequence_predefined.match_symbols.len or
+            of_state >= offset_fse.len) return error.CorruptFrame;
+        const ll_symbol = sequence_predefined.literal_symbols[ll_state];
+        const of_symbol = offset_fse.entries[of_state];
+        const ml_symbol = sequence_predefined.match_symbols[ml_state];
+        const offset_extra = try reader.readSequenceField(of_symbol.additional_bits);
+        const match_len = std.math.add(usize, ml_symbol.base, try reader.readSequenceField(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const literal_len = std.math.add(usize, ll_symbol.base, try reader.readSequenceField(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &repcodes);
+        remaining -= 1;
+        if (remaining != 0) {
+            ll_state = try nextSequenceState(&reader, ll_symbol);
+            ml_state = try nextSequenceState(&reader, ml_symbol);
+            of_state = try nextSequenceState(&reader, of_symbol);
+        } else try reader.expectEnd();
+
+        if (output.len - written.* < literal_len) return error.OutputTooSmall;
+        try copyLiteralsFromHuffmanState(&huffman_state, section, literal_offset, output[written.*..][0..literal_len]);
+        written.* += literal_len;
+        literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
+        try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+    }
+    if (section.regenerated_size < literal_offset) return error.CorruptFrame;
+    const last_literals = section.regenerated_size - literal_offset;
+    if (output.len - written.* < last_literals) return error.OutputTooSmall;
+    try copyLiteralsFromHuffmanState(&huffman_state, section, literal_offset, output[written.*..][0..last_literals]);
+    written.* += last_literals;
 }
