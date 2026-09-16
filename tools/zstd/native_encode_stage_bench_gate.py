@@ -105,15 +105,26 @@ def main() -> int:
         assert int(row["level"]) == 9, row
         expected_budget = 96 if row["candidate"] == "primary" else 64
         assert int(row["search_budget"]) == expected_budget, row
-        for key in ("input_bytes", "block_size", "block_count", "iterations", "rounds", "warmup", "median_ns"):
+        for key in ("input_bytes", "block_size", "block_count", "iterations", "rounds", "warmup"):
             assert int(row[key]) > 0, row
-        assert int(row["ns_per_block"]) >= 0, row
+        median_ns = int(row["median_ns"])
+        ns_per_block = int(row["ns_per_block"])
+        assert median_ns >= 0, row
+        measured_blocks = int(row["block_count"]) * int(row["iterations"])
+        assert ns_per_block == median_ns // measured_blocks, row
         available_blocks = int(row["available_blocks"])
         sequences = int(row["sequences"])
         encoded_bytes = int(row["encoded_bytes"])
         literals_bytes = int(row["literals_bytes"])
         sequence_bytes = int(row["sequence_bytes"])
         assert 0 <= available_blocks <= int(row["block_count"]), row
+        # Some candidate/block-size combinations reject every block before the
+        # clock advances (for example, a 4 KiB block cannot build the bounded
+        # large-block duplicate index).  Those rows are valid unavailable-stage
+        # evidence.  A stage that produced a usable result must still have a
+        # non-zero timing sample.
+        if available_blocks:
+            assert median_ns > 0, row
         if row["stage"] == "duplicate_index":
             assert sequences == 0, row
             assert encoded_bytes == 0, row
