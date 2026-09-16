@@ -9125,16 +9125,15 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
     }
 
     var offset = description_start;
-    const spec = if (workspace.lookup(block, description_start, section.sequence_count)) |cached| blk: {
+    var spec: SequenceModeSpec = undefined;
+    if (workspace.lookupInto(&spec, block, description_start, section.sequence_count)) {
         offset = block.len;
-        break :blk cached;
-    } else blk: {
+    } else {
         const parsed = try parseSequenceModeSpec(block, &offset, section.sequence_count);
-        const resolved = try resolveSequenceModeSpec(parsed, frame_state.previous_tables);
+        spec = try resolveSequenceModeSpec(parsed, frame_state.previous_tables);
         if (parsed.ll_mode != .repeat and parsed.of_mode != .repeat and parsed.ml_mode != .repeat)
-            workspace.store(block, description_start, section.sequence_count, resolved);
-        break :blk resolved;
-    };
+            workspace.store(block, description_start, section.sequence_count, spec);
+    }
     try expectConsumedBlock(offset, block.len);
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
@@ -29279,7 +29278,8 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     var changed_block = try std.testing.allocator.dupe(u8, cached_block);
     defer std.testing.allocator.free(changed_block);
     changed_block[section.sequence_payload_offset] ^= 0x40;
-    try std.testing.expect(cache.lookup(changed_block, section.sequence_payload_offset, section.sequence_count) == null);
+    var changed_spec: SequenceModeSpec = undefined;
+    try std.testing.expect(!cache.lookupInto(&changed_spec, changed_block, section.sequence_payload_offset, section.sequence_count));
 
     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     var fallback_decoder = NativeFrameDecoder.init(failing.allocator());

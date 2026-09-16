@@ -13897,3 +13897,28 @@ reuse, so production keeps the simpler independently owned plans.
   237-case frame probe, 25-case dictionary probe, large-sequence probe, 26-case
   CLI diff, 276-case compatibility matrix, and all 9,900 upstream decodecorpus
   frames across 64/64 sequence-mode tuples pass.
+  Tightened that reusable sequence cache's hit contract from a by-value result
+  to caller-owned `lookupInto`. The previous optional return first copied the
+  roughly 12 KiB `SequenceModeSpec` out of its cache slot and then copied it
+  again into the decode cursor; the cache now verifies the same exact
+  self-delimiting description and writes once into the caller's final local
+  spec, preserving the established by-value hot-loop layout. Twenty-one
+  alternating independent-binary pairs at 100,000 decodes improve warmed
+  `numbered_json` by `1.0973x` median with 20/21 wins. Fifteen five-row pairs
+  improve `numbered_json` by `1.1147x`; `huffman80k`, mixed binary, large JSON,
+  and zero-sequence ASCII stay at or above `0.9999x` at their medians. The
+  15-pair warmed 13-row matrix has a `1.0107x` row-median geometric mean and a
+  `0.9924x` floor after a noisy tiny row recovered to `1.0137x` over 31 pairs at
+  100,000 decodes. A separate 15-pair one-shot matrix has a `1.0028x`
+  row-median geometric mean and a `0.9902x` floor, while key decoder symbol
+  addresses remain identical. All 577 Zstd tests, 1,571 repository tests, 93
+  compile checks, the native/frame/dictionary/large-sequence probes, the
+  26-case CLI diff, the 276-case compatibility matrix, and all 9,900 upstream
+  decodecorpus frames across 64/64 sequence-mode tuples pass. A follow-up
+  reusable Huffman tree/lookup cache was rejected despite up to `1.50x` on
+  warmed `numbered_json`: adding a second decoder allocation reduced one-shot
+  `huffman80k` to `0.9839x`, while folding tree-only entries into the existing
+  workspace still reduced one-shot `numbered_json` to `0.9869x`; making the
+  full reusable block wrapper noinline cut warmed throughput nearly in half.
+  Future Huffman reuse needs a separately compiled decoder unit that can keep
+  the ordinary decode text layout fixed, not another root-module cache field.

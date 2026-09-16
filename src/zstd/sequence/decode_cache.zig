@@ -13,22 +13,19 @@ pub fn Cache(comptime Spec: type) type {
             spec: Spec = undefined,
             valid: bool = false,
 
-            fn lookup(
+            fn matches(
                 self: *const Entry,
                 block: []const u8,
                 description_start: usize,
                 sequence_count: usize,
-            ) ?Spec {
-                if (!self.valid or self.sequence_count != sequence_count) return null;
-                if (self.description_len > block.len - description_start) return null;
-                if (!std.mem.eql(
+            ) bool {
+                if (!self.valid or self.sequence_count != sequence_count) return false;
+                if (self.description_len > block.len - description_start) return false;
+                return std.mem.eql(
                     u8,
                     self.description[0..self.description_len],
                     block[description_start..][0..self.description_len],
-                )) return null;
-                var spec = self.spec;
-                spec.bitstream_offset = description_start + self.description_len;
-                return spec;
+                );
             }
 
             fn store(self: *Entry, description: []const u8, sequence_count: usize, spec: Spec) void {
@@ -44,19 +41,22 @@ pub fn Cache(comptime Spec: type) type {
         next_slot: usize = 0,
         hit_count: usize = 0,
 
-        pub fn lookup(
+        pub fn lookupInto(
             self: *Self,
+            out: *Spec,
             block: []const u8,
             description_start: usize,
             sequence_count: usize,
-        ) ?Spec {
-            if (description_start >= block.len) return null;
+        ) bool {
+            if (description_start >= block.len) return false;
             for (&self.slots) |*slot| {
-                const spec = slot.lookup(block, description_start, sequence_count) orelse continue;
+                if (!slot.matches(block, description_start, sequence_count)) continue;
+                out.* = slot.spec;
+                out.bitstream_offset = description_start + slot.description_len;
                 self.hit_count += 1;
-                return spec;
+                return true;
             }
-            return null;
+            return false;
         }
 
         pub fn store(
@@ -88,13 +88,17 @@ test "sequence decode cache requires an exact self-delimiting description" {
     const block = [_]u8{ 0xaa, 0xbb, 0xcc, 0x10, 0x20 };
     cache.store(&block, 1, 7, .{ .bitstream_offset = 3, .marker = 42 });
 
-    const hit = cache.lookup(&block, 1, 7) orelse return error.TestUnexpectedResult;
+    var hit: Spec = undefined;
+    try std.testing.expect(cache.lookupInto(&hit, &block, 1, 7));
     try std.testing.expectEqual(@as(usize, 3), hit.bitstream_offset);
     try std.testing.expectEqual(@as(u8, 42), hit.marker);
     try std.testing.expectEqual(@as(usize, 1), cache.hit_count);
 
     var changed = block;
     changed[2] ^= 1;
-    try std.testing.expect(cache.lookup(&changed, 1, 7) == null);
-    try std.testing.expect(cache.lookup(&block, 1, 8) == null);
+    var missed = Spec{ .bitstream_offset = 99, .marker = 77 };
+    try std.testing.expect(!cache.lookupInto(&missed, &changed, 1, 7));
+    try std.testing.expectEqual(@as(usize, 99), missed.bitstream_offset);
+    try std.testing.expectEqual(@as(u8, 77), missed.marker);
+    try std.testing.expect(!cache.lookupInto(&missed, &block, 1, 8));
 }
