@@ -13941,3 +13941,23 @@ reuse, so production keeps the simpler independently owned plans.
   compile checks, the native/frame/dictionary/large-sequence probes, the
   26-case CLI diff, the 276-case compatibility matrix, and all 9,900 upstream
   decodecorpus frames across 64/64 sequence-mode tuples pass.
+  Removed the empty literal-copy call from the reusable decoder's generic
+  compressed-sequence loop. The `huffman80k` profile has 5,155 zero-literal
+  sequences among 5,161 total, so preserving the existing Huffman-state branch
+  while skipping `copyLiteralsFromSection` only when the raw literal length is
+  zero avoids repeated no-op slice setup without changing the ordinary one-shot
+  decoder's code layout. Against independent `eff21c1e` binaries, twenty-one
+  alternating warmed pairs at 10,000 decodes improve `huffman80k` by `1.0790x`
+  median with 21/21 wins. Fifteen warmed five-row pairs measure `1.0797x` on
+  `huffman80k`, `1.0037x` on mixed binary, `0.9985x` on large JSON, `1.0094x`
+  on numbered JSON, and `0.9974x` on zero-sequence ASCII. The warmed 13-row
+  matrix has a `1.0095x` row-median geometric mean; its noisy short structured
+  row recovers to `1.0030x` over 31 independent 100,000-decode pairs. In the
+  one-shot matrix, noisy numbered JSON, tiny, and large-text controls recover
+  respectively to `0.9960x`, `0.9970x`, and `0.9994x` medians in long reruns.
+  Ordinary decoder symbols remain byte-identical between binaries. All 578
+  Zstd tests, 1,572 repository tests, 93 compile checks, the 328-case native,
+  237-case frame, 25-case dictionary, lib-generated, handcrafted, and
+  large-sequence probes, the 26-case CLI diff, the 276-case compatibility
+  matrix, and all 9,900 upstream decodecorpus frames across 64/64 sequence-mode
+  tuples pass.

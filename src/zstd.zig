@@ -9186,7 +9186,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
             if (output.len - written.* < literal_len) return error.OutputTooSmall;
             try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..literal_len]);
             written.* += literal_len;
-        } else {
+        } else if (literal_len != 0) {
             try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
         }
         literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
