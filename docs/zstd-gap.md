@@ -348,6 +348,14 @@ Recommended next comparison steps:
   entropy-heavy rows. Treat these loaded-host numbers as prioritization
   evidence and rerun A/B measurements on an idle machine before claiming small
   changes.
+  The raw-literal all-FSE target now has a dedicated large-sequence decoder.
+  Final independent-binary A/B runs improve its warmed median by 1.3558x
+  (15/15 wins; a separate 21-pair target run is 1.3567x with 21/21 wins) and
+  its one-shot median by 1.4272x. The complete five-row control floor is
+  0.9965x warmed and 0.9977x one-shot. A fixed libzstd 1.5.7 frame plus
+  OutputTooSmall, mutation parity, and recovery checks pin the selected path;
+  the full 9,900-frame/64-mode corpus remains green. The target is now roughly
+  0.60x libzstd throughput rather than 0.40x, so further work is still needed.
 
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded

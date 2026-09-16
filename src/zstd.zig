@@ -9032,6 +9032,25 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     var literal_offset: usize = 0;
     if (spec.ll_mode == .compressed and
         spec.of_mode == .compressed and
+        spec.ml_mode == .compressed and
+        section.kind == .raw and
+        section.sequence_count >= 1024 and
+        dictionary_history.len == 0)
+    {
+        return try decodeAllFseRawSequences(
+            block,
+            section,
+            spec,
+            output,
+            written,
+            frame_output_start,
+            frame_state,
+            continuation,
+            &state,
+        );
+    }
+    if (spec.ll_mode == .compressed and
+        spec.of_mode == .compressed and
         spec.ml_mode == .rle and
         section.kind == .raw and
         section.sequence_count >= 1024)
@@ -9144,6 +9163,25 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
     var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
+    if (spec.ll_mode == .compressed and
+        spec.of_mode == .compressed and
+        spec.ml_mode == .compressed and
+        section.kind == .raw and
+        section.sequence_count >= 1024 and
+        dictionary_history.len == 0)
+    {
+        return try decodeAllFseRawSequences(
+            block,
+            section,
+            spec,
+            output,
+            written,
+            frame_output_start,
+            frame_state,
+            continuation,
+            &state,
+        );
+    }
     if (spec.ll_mode == .compressed and
         spec.of_mode == .compressed and
         spec.ml_mode == .rle and
@@ -9271,6 +9309,57 @@ test "cached sequence spec copies only active compressed tables" {
     try std.testing.expectEqualSlices(SequenceSymbol, cached.offset_fse.entries[0..cached.offset_fse.len], actual.offset_fse.entries[0..actual.offset_fse.len]);
     try std.testing.expectEqual(@as(usize, 0), actual.match_fse.len);
     try std.testing.expectEqual(@as(u8, 0), actual.match_fse.accuracy_log);
+}
+
+noinline fn decodeAllFseRawSequences(
+    block: []const u8,
+    section: LiteralOnlySection,
+    spec: SequenceModeSpec,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+) Error!void {
+    std.debug.assert(section.kind == .raw);
+    const literals = block[section.literal_payload_offset..][0..section.regenerated_size];
+    var literal_offset: usize = 0;
+    while (state.remaining != 0) {
+        const ll_symbol = spec.literal_fse.symbolUnchecked(state.ll_state);
+        const of_symbol = spec.offset_fse.symbolUnchecked(state.of_state);
+        const ml_symbol = spec.match_fse.symbolUnchecked(state.ml_state);
+        const offset_extra = try state.reader.readSequenceField(of_symbol.additional_bits);
+        const match_len = @as(usize, ml_symbol.base) + try state.reader.readSequenceField(ml_symbol.additional_bits);
+        const literal_len = @as(usize, ll_symbol.base) + try state.reader.readSequenceField(ll_symbol.additional_bits);
+        const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
+        state.remaining -= 1;
+        if (state.remaining != 0) {
+            state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
+            state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
+            state.of_state = try nextSequenceState(&state.reader, of_symbol);
+        } else try state.reader.expectEnd();
+
+        if (literal_offset > literals.len or literals.len - literal_offset < literal_len) return error.CorruptFrame;
+        if (output.len - written.* < literal_len) return error.OutputTooSmall;
+        if (literal_len != 0) {
+            @memcpy(output[written.*..][0..literal_len], literals[literal_offset..][0..literal_len]);
+            written.* += literal_len;
+            literal_offset += literal_len;
+        }
+        if (frame_output_start > written.*) return error.CorruptFrame;
+        if (match_offset == 0 or match_offset > written.* - frame_output_start) return error.InvalidMatch;
+        if (output.len - written.* < match_len) return error.OutputTooSmall;
+        sequence_match_copy.append(output, written, written.* - match_offset, match_len);
+    }
+    const last_literals = literals.len - literal_offset;
+    if (output.len - written.* < last_literals) return error.OutputTooSmall;
+    @memcpy(output[written.*..][0..last_literals], literals[literal_offset..]);
+    written.* += last_literals;
+    if (continuation.retainsState()) {
+        frame_state.previous_tables = spec.tables();
+        frame_state.repeated_offsets = state.repeated_offsets;
+    }
 }
 
 noinline fn decodeAllFseHuffmanSequences(
@@ -25032,21 +25121,76 @@ test "zstd native decoder preserves previous offsets for direct offsets" {
     try std.testing.expectEqualSlices(u8, payload.items, into_buffer[0..written]);
 }
 
-test "zstd native decoder streams many Huffman literal runs without replay" {
-    var payload: std.ArrayList(u8) = .empty;
-    defer payload.deinit(std.testing.allocator);
-    try payload.ensureTotalCapacity(std.testing.allocator, 80_000);
+test "zstd native decoder streams large raw-literal all-FSE sequence blocks" {
+    const encoded_hex_file = @embedFile("zstd/testdata/libzstd-all-fse-raw.frame.hex");
+    const encoded_hex = std.mem.trim(
+        u8,
+        encoded_hex_file,
+        " \r\n\t",
+    );
+    var encoded: [(encoded_hex_file.len - 1) / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&encoded, encoded_hex);
+    var payload: [80_000]u8 = undefined;
     const alphabet = "ACGTN";
-    for (0..80_000) |i| {
-        try payload.append(std.testing.allocator, alphabet[(i * 17 + i / 7 + i / 31) % alphabet.len]);
-    }
+    for (&payload, 0..) |*byte, i| byte.* = alphabet[(i * 17 + i / 7 + i / 31) % alphabet.len];
 
-    const encoded = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 1);
-    defer std.testing.allocator.free(encoded);
+    const first_block = try inspectNativeFrameFirstBlock(&encoded);
+    const modes = try inspectNativeFrameBlockSequenceModes(&encoded, first_block);
+    try std.testing.expectEqual(NativeLiteralsKind.raw, modes.literals_kind);
+    try std.testing.expect(modes.sequence_count >= 1024);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.compressed, modes.match_length_mode);
 
-    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, &encoded);
     defer std.testing.allocator.free(decoded);
-    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try decodeNativeFrameInto(&encoded, &output));
+    try std.testing.expectEqualSlices(u8, &payload, &output);
+
+    var reusable = NativeFrameDecoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    try std.testing.expectEqual(payload.len, try reusable.decodeIntoSlice(&encoded, &output));
+    try std.testing.expectEqualSlices(u8, &payload, &output);
+    @memset(&output, 0xa5);
+    try std.testing.expectEqual(payload.len, try reusable.decodeIntoSlice(&encoded, &output));
+    try std.testing.expectEqualSlices(u8, &payload, &output);
+    try std.testing.expect(reusable.reusableSequenceTableHitCount() != 0);
+    try std.testing.expectError(error.OutputTooSmall, reusable.decodeIntoSlice(&encoded, output[0 .. output.len - 1]));
+
+    const block = encoded[first_block.payload_offset..][0..first_block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    var mode_offset = section.sequence_payload_offset;
+    const parsed_spec = try parseSequenceModeSpec(block, &mode_offset, section.sequence_count);
+    const spec = try resolveSequenceModeSpec(parsed_spec, frame_state.previous_tables);
+    const bitstream_start = first_block.payload_offset + spec.bitstream_offset;
+    const mutated_indices = [_]usize{
+        bitstream_start,
+        bitstream_start + (encoded.len - bitstream_start) / 2,
+        encoded.len - 1,
+    };
+    var mutated = encoded;
+    const reference_output = try std.testing.allocator.alloc(u8, payload.len);
+    defer std.testing.allocator.free(reference_output);
+    for (mutated_indices) |byte_index| {
+        for (0..8) |bit_index| {
+            mutated[byte_index] ^= @as(u8, 1) << @as(u3, @intCast(bit_index));
+            if (decodeNativeFrameInto(&mutated, reference_output)) |reference_len| {
+                const actual_len = try reusable.decodeIntoSlice(&mutated, &output);
+                try std.testing.expectEqual(reference_len, actual_len);
+                try std.testing.expectEqualSlices(u8, reference_output[0..reference_len], output[0..actual_len]);
+            } else |err| {
+                try std.testing.expectError(err, reusable.decodeIntoSlice(&mutated, &output));
+            }
+            mutated[byte_index] ^= @as(u8, 1) << @as(u3, @intCast(bit_index));
+        }
+    }
+    @memset(&output, 0);
+    try std.testing.expectEqual(payload.len, try reusable.decodeIntoSlice(&encoded, &output));
+    try std.testing.expectEqualSlices(u8, &payload, &output);
 }
 
 test "zstd native decoder reads mixed FSE tables in serialized order" {

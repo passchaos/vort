@@ -14008,3 +14008,23 @@ reuse, so production keeps the simpler independently owned plans.
   mixed binary 0.477x. The host load was elevated, so these figures establish
   priority and order of magnitude rather than a fine-grained performance claim.
   Next work should profile the 5,161-sequence raw-literal all-FSE loop first.
+  Added that dedicated raw-literal all-FSE decode loop for dictionary-free
+  blocks with at least 1,024 sequences. It borrows the already parsed literal
+  slice, decodes LL/OF/ML directly from their resolved FSE tables, copies only
+  nonempty literal runs, and executes proven in-frame matches without reentering
+  the generic literal-kind and dictionary dispatch. All smaller, mixed-mode,
+  dictionary, Huffman, and RLE paths retain the generic decoder. A fixed
+  libzstd 1.5.7 frame locks the exact 80,000-byte/754-byte shape: raw literals,
+  5,161 sequences, and three compressed FSE tables. It covers allocating,
+  caller-owned, cold/warm reusable, OutputTooSmall, 24 bitstream mutations
+  against the stateless decoder, and recovery after errors. Against independent
+  ReleaseFast binaries, the final 15-pair warmed five-row matrix improves
+  `huffman80k` by 1.3558x with 15/15 wins; the control medians are 1.0113x
+  numbered JSON, 0.9980x zero-sequence Huffman, 0.9965x large JSON, and
+  1.0101x mixed binary. A separate 21-pair target run measured 1.3567x with
+  21/21 wins, while the 15-pair one-shot matrix measured 1.4272x on the target
+  with a 0.9977x floor. The same-process libzstd 1.5.7 comparison moves this
+  row from about 0.40x to 0.60x reference throughput, materially closing but
+  not eliminating the gap. All 404 Zstd tests, the compile gate, the 237-case
+  frame probe, 276-case compatibility matrix, and all 9,900 upstream corpus
+  frames across 64/64 sequence modes pass.
