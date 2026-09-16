@@ -131,6 +131,7 @@ var test_hash_token_lower_bound_hits: usize = 0;
 var test_disable_four_byte_optimal = false;
 var test_disable_split_huffman_decode = false;
 var test_split_huffman_decode_hits: usize = 0;
+var test_split_huffman_single_literal_hits: usize = 0;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
 const frame_magic_u32: u32 = 0xfd2fb528;
@@ -9612,7 +9613,12 @@ noinline fn tryDecodeAllFseSplitHuffmanSequences(
 
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
-        if (literal_len != 0) {
+        if (literal_len == 1) {
+            if (builtin.is_test) test_split_huffman_single_literal_hits += 1;
+            output[written.*] = literals[literal_offset];
+            written.* += 1;
+            literal_offset += 1;
+        } else if (literal_len != 0) {
             @memcpy(output[written.*..][0..literal_len], literals[literal_offset..][0..literal_len]);
             written.* += literal_len;
             literal_offset += literal_len;
@@ -25690,6 +25696,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     defer {
         test_disable_split_huffman_decode = false;
         test_split_huffman_decode_hits = 0;
+        test_split_huffman_single_literal_hits = 0;
     }
     const encoded_hex_file = @embedFile("zstd/testdata/libzstd-large-json-128k.frame.hex");
     var encoded: [2874]u8 = undefined;
@@ -25735,8 +25742,10 @@ test "zstd split Huffman all-FSE path matches generic decode" {
 
     test_disable_split_huffman_decode = false;
     test_split_huffman_decode_hits = 0;
+    test_split_huffman_single_literal_hits = 0;
     const fast_written = try decodeNativeFrameInto(&encoded, fast_output);
     try std.testing.expectEqual(@as(usize, 1), test_split_huffman_decode_hits);
+    try std.testing.expect(test_split_huffman_single_literal_hits > 1000);
     test_disable_split_huffman_decode = true;
     defer test_disable_split_huffman_decode = false;
     const generic_written = try decodeNativeFrameInto(&encoded, generic_output);

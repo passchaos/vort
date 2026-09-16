@@ -14116,3 +14116,13 @@ reuse, so production keeps the simpler independently owned plans.
   single-block fixture directly compares fast and generic output, checks a
   64-byte poison suffix and OutputTooSmall, and matches success bytes or errors
   for 64 evenly spaced Huffman-payload mutations plus 64 sequence-bit mutations.
+  The predecoded-literal executor now handles its dominant one-byte runs with
+  one exact byte load/store rather than entering the dynamic `memmove` path;
+  the fixed fixture requires more than 1,000 direct-copy hits. Against an
+  independent `867a46aa` binary, 21 serial one-shot target pairs improve
+  `large_json` by another 1.0977x with 21/21 wins. Fifteen-pair five-row
+  matrices measure 1.0919x one-shot and 1.1039x reusable on the target, with
+  control median floors of 0.9898x and 1.0010x; a separate 31-pair, 5,000-run
+  `binary_mixed` control recovers to 0.9950x. The final Homebrew libzstd 1.5.7
+  comparison reaches 4900.73 versus 6640.37 MiB/s (`0.7380x`) over 5,000
+  iterations, and the gate raises the `large_json` floor from 0.55x to 0.65x.

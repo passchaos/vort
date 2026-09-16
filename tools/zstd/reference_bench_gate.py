@@ -117,9 +117,10 @@ def main() -> int:
         # The isolated small LL-predefined/OF-FSE/ML-predefined frame decoder
         # raises the locked numbered-JSON row from ~0.44x to ~0.69x.
         # The bounded split-literal all-FSE/Huffman path raises the locked
-        # multi-block JSON row from ~0.61x to ~0.67x.
+        # multi-block JSON row from ~0.61x to ~0.74x after its one-byte literal
+        # copies were removed from the generic memmove path.
         "numbered_json": 0.60, "huffman80k": 0.44, "ascii64k": 0.88,
-        "large_text": 0.85, "large_json": 0.55, "binary_mixed": 0.36,
+        "large_text": 0.85, "large_json": 0.65, "binary_mixed": 0.36,
     }
     for name, floor in floors.items():
         if float(by_case[name]["vort_over_reference"]) < floor:

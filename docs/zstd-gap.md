@@ -414,6 +414,15 @@ Recommended next comparison steps:
   single-block reference frame pins byte-exact fast/generic equivalence, a
   64-byte untouched caller suffix, OutputTooSmall, and 64 mutations each in
   the Huffman payload and sequence bitstream.
+  The split-literal loop now handles its dominant one-byte literal run with one
+  exact load/store instead of a dynamic-size `memmove`; the fixed fixture
+  requires more than 1,000 such hits. Relative to independent `867a46aa`
+  binaries, 21-pair one-shot runs improve `large_json` by another 1.0977x with
+  21/21 wins. The 15-pair five-row one-shot/reusable matrices improve the
+  target by 1.0919x/1.1039x; their non-target median floors are 0.9898x and
+  1.0010x, and a 31-pair, 5,000-decode `binary_mixed` confirmation recovers to
+  0.9950x. A final 5,000-iteration libzstd 1.5.7 run measures 4900.73 versus
+  6640.37 MiB/s (`0.7380x`), so the reference floor rises from 0.55x to 0.65x.
 
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded
