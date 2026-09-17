@@ -14369,3 +14369,28 @@ reuse, so production keeps the simpler independently owned plans.
   next fast-mode work should avoid adding shared planner code or changing the
   surrounding hot-section layout; a dedicated direct sequence emitter with no
   fallback into the generic planner is the remaining high-leverage direction.
+  A lower-cost follow-up keeps exact arbitration while avoiding that rejected
+  scan: compile-time tables map each LL/OF/ML code to the minimum possible
+  predefined state cost for terminal and non-terminal positions. Once a
+  compressed-FSE plan already exists, one linear pass over its codes can prove
+  that the compressed table's full header-plus-bit cost is strictly below even
+  this optimistic predefined lower bound; only then is the predefined DP
+  skipped. Equal byte costs and inconclusive codes retain the historical
+  candidate and tie order. Randomized 12/31/127/256/512-sequence LL/ML cases
+  plus repcode-aware OF cases compare every proof hit against the exact
+  predefined planner, while the sparse-alternative oracle now requires the
+  optimized and full candidate sets to retain the same minimum byte cost. The
+  explicit fast prefix-tail path also reuses its existing single-sequence
+  scratch and appends a <=1/8 decisive candidate directly, avoiding an
+  allocation and redundant copy without changing its wire. Against frozen
+  independent binaries, a 15-pair default 20-row matrix preserves every input
+  hash, Vort/reference size, and checksum at 1.0161x row-median geometric
+  throughput with a 1.0021x floor. The explicit fast selection improves
+  JSON/binary/tradeoff/multiblock medians by
+  1.1171x/1.0529x/1.0377x/1.0019x over 15 pairs, with a 1.0019x five-row
+  floor. All compared wires and checksums remain exact. The final offset proof
+  deliberately indexes the predefined lower-bound LUT by the original match
+  distance rather than the compressed plan's repcode, and the OF oracle covers
+  that distinction. The finalized tree passes all 597 Zstd tests, the 100-row
+  stage gate, 364-case native probe, 276-case libzstd 1.5.7 compatibility
+  matrix, large-sequence/Repeat_Mode probe, and the full compile check.

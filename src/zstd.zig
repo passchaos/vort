@@ -12008,16 +12008,31 @@ fn emitFastCompressedBlockWithScratch(
     var best_is_match = false;
 
     if (findPrefixTailDuplicateMatch(block)) |match| {
-        if (try emitSingleMatchCompressedBlockFromMatch(allocator, candidate, block, last, match) and
+        const literal_lens = [_]usize{match.second_start};
+        const offsets = [_]usize{match.second_start - match.first_start};
+        const match_lens = [_]usize{match.len};
+        const literal_ends = [_]usize{match.second_start + match.len};
+        if (try emitBestSequenceCompressedBlockWithScratch(
+            allocator,
+            candidate,
+            block,
+            last,
+            &literal_lens,
+            &offsets,
+            &match_lens,
+            &literal_ends,
+            literal_ends[0],
+            &scratch.single_sequence_emit,
+        ) and
             try prepareSequenceCandidateForFrameWithScratch(allocator, candidate, block, last, &state.sequence_state, large_sequence_scratch))
         {
-            try best.appendSlice(allocator, candidate.items);
-            best_is_match = true;
-            if (best.items.len <= block.len / 8) {
+            if (candidate.items.len <= block.len / 8) {
                 state.previous_huffman_plan = null;
-                try appendSequenceCandidateAndCommit(allocator, out, best.items, last, &state.sequence_state);
+                try appendSequenceCandidateAndCommit(allocator, out, candidate.items, last, &state.sequence_state);
                 return;
             }
+            try best.appendSlice(allocator, candidate.items);
+            best_is_match = true;
         }
     }
 
@@ -19176,6 +19191,90 @@ fn compressedOffsetSequenceTablePlanBitCostKnownValid(plan: *const CompressedSeq
     return .{ .payload_len = plan.table_payload_len, .bit_count = bit_count };
 }
 
+test "zstd predefined minimum-cost LUT is a valid dominance lower bound" {
+    var values: [max_native_sequence_count]usize = undefined;
+    var random_state: u32 = 0x243f_6a88;
+    var proof_hits: usize = 0;
+    const cases = [_]struct { SequenceTableKind, usize }{
+        .{ .literal, 131_071 },
+        .{ .match, 131_074 },
+    };
+    for (cases) |case| {
+        for ([_]usize{ 12, 31, 127, 256, max_native_sequence_count }) |len| {
+            for (0..32) |_| {
+                for (values[0..len]) |*value| {
+                    random_state = random_state *% 1_664_525 +% 1_013_904_223;
+                    value.* = random_state % case[1];
+                    if (case[0] == .match) value.* += lz77.min_match_len;
+                }
+                const compressed = (try planCompressedSequenceValues(values[0..len], case[0])) orelse continue;
+                if (!try compressedSequencePlanStrictlyDominatesPredefinedCodes(&compressed, case[0], values[0..len])) continue;
+                proof_hits += 1;
+                const predefined = (try planPredefinedSequenceValues(
+                    values[0..len],
+                    sequenceTablePredefinedSymbols(case[0]),
+                    sequenceTablePredefinedMinAdditionalBits(case[0]),
+                )) orelse continue;
+                const compressed_cost = (try sequenceTablePlanBitCostWithOffsets(
+                    .{ .compressed = compressed },
+                    case[0],
+                    values[0..len],
+                    values[0..len],
+                    values[0..len],
+                    initial_repeated_offsets,
+                )) orelse return error.CorruptFrame;
+                const predefined_cost = (try sequenceTablePlanBitCostWithOffsets(
+                    .{ .predefined = predefined },
+                    case[0],
+                    values[0..len],
+                    values[0..len],
+                    values[0..len],
+                    initial_repeated_offsets,
+                )) orelse return error.CorruptFrame;
+                const compressed_bytes = compressed_cost.payload_len + (compressed_cost.bit_count + 1 + 7) / 8;
+                const predefined_bytes = predefined_cost.payload_len + (predefined_cost.bit_count + 1 + 7) / 8;
+                try std.testing.expect(compressed_bytes < predefined_bytes);
+            }
+        }
+    }
+
+    var literal_lens: [max_native_sequence_count]usize = undefined;
+    for ([_]usize{ 12, 31, 127, 256, max_native_sequence_count }) |len| {
+        for (0..32) |_| {
+            for (literal_lens[0..len], values[0..len]) |*literal_len, *offset| {
+                random_state = random_state *% 1_664_525 +% 1_013_904_223;
+                literal_len.* = (random_state >> 28) & 7;
+                random_state = random_state *% 1_664_525 +% 1_013_904_223;
+                offset.* = 1 + (random_state % 32_768);
+            }
+            const compressed = (try planCompressedOffsetSequenceValues(literal_lens[0..len], values[0..len])) orelse continue;
+            if (!try compressedSequencePlanStrictlyDominatesPredefinedCodes(&compressed, .offset, values[0..len])) continue;
+            proof_hits += 1;
+            const predefined = (try planPredefinedSequenceValues(values[0..len], &sequence_predefined.offset_symbols, 2)) orelse continue;
+            const compressed_cost = (try sequenceTablePlanBitCostWithOffsets(
+                .{ .compressed = compressed },
+                .offset,
+                values[0..len],
+                literal_lens[0..len],
+                values[0..len],
+                initial_repeated_offsets,
+            )) orelse return error.CorruptFrame;
+            const predefined_cost = (try sequenceTablePlanBitCostWithOffsets(
+                .{ .predefined = predefined },
+                .offset,
+                values[0..len],
+                literal_lens[0..len],
+                values[0..len],
+                initial_repeated_offsets,
+            )) orelse return error.CorruptFrame;
+            const compressed_bytes = compressed_cost.payload_len + (compressed_cost.bit_count + 1 + 7) / 8;
+            const predefined_bytes = predefined_cost.payload_len + (predefined_cost.bit_count + 1 + 7) / 8;
+            try std.testing.expect(compressed_bytes < predefined_bytes);
+        }
+    }
+    try std.testing.expect(proof_hits != 0);
+}
+
 fn sequenceTablePlanBitCostReference(
     plan: SequenceTableEmitPlan,
     kind: SequenceTableKind,
@@ -19257,12 +19356,16 @@ fn sequenceTablePlanAlternativesWithPrevious(values: []const usize, kind: Sequen
     if (try rleSequenceCodeForValues(values, bases, bits)) |code| {
         try alternatives.add(.{ .rle = code });
     }
-    if (try planPredefinedSequenceValues(values, sequenceTablePredefinedSymbols(kind), sequenceTablePredefinedMinAdditionalBits(kind))) |plan| {
-        try alternatives.add(.{ .predefined = plan });
-    }
-    if (try planCompressedSequenceValues(values, kind)) |plan| {
-        try alternatives.add(.{ .compressed = plan });
-    }
+    const compressed = try planCompressedSequenceValues(values, kind);
+    const skip_predefined = if (compressed) |*plan|
+        try compressedSequencePlanStrictlyDominatesPredefinedCodes(plan, kind, values)
+    else
+        false;
+    if (!skip_predefined)
+        if (try planPredefinedSequenceValues(values, sequenceTablePredefinedSymbols(kind), sequenceTablePredefinedMinAdditionalBits(kind))) |plan| {
+            try alternatives.add(.{ .predefined = plan });
+        };
+    if (compressed) |plan| try alternatives.add(.{ .compressed = plan });
     if (previous_tables) |tables| {
         if (try planRepeatSequenceValues(values, kind, previousSequenceTable(tables, kind))) |plan|
             try alternatives.add(.{ .repeat = plan });
@@ -19314,10 +19417,15 @@ fn offsetSequenceTablePlanAlternativesLegacy(literal_lens: []const usize, offset
     alternatives.len = 0;
     if (try rleSequenceCodeForValues(offsets, &of_base, &of_bits)) |code|
         try alternatives.add(.{ .rle = code });
-    if (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) |plan|
-        try alternatives.add(.{ .predefined = plan });
-    if (try planCompressedOffsetSequenceValues(literal_lens, offsets)) |plan|
-        try alternatives.add(.{ .compressed = plan });
+    const compressed = try planCompressedOffsetSequenceValues(literal_lens, offsets);
+    const skip_predefined = if (compressed) |*plan|
+        try compressedSequencePlanStrictlyDominatesPredefinedCodes(plan, .offset, offsets)
+    else
+        false;
+    if (!skip_predefined)
+        if (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) |plan|
+            try alternatives.add(.{ .predefined = plan });
+    if (compressed) |plan| try alternatives.add(.{ .compressed = plan });
     return alternatives;
 }
 
@@ -23756,6 +23864,30 @@ fn buildPredefinedStateMasks(
 const predefined_literal_state_masks = buildPredefinedStateMasks(&sequence_predefined.literal_symbols, &ll_base, &ll_bits, 0);
 const predefined_offset_state_masks = buildPredefinedStateMasks(&sequence_predefined.offset_symbols, &of_base, &of_bits, 2);
 const predefined_match_state_masks = buildPredefinedStateMasks(&sequence_predefined.match_symbols, &ml_base, &ml_bits, 0);
+
+fn buildPredefinedMinimumCosts(
+    comptime symbols: []const SequenceSymbol,
+    comptime bases: []const usize,
+    comptime bits: []const u8,
+    comptime min_additional_bits: u8,
+) [bases.len][2]u8 {
+    @setEvalBranchQuota(10_000);
+    var costs: [bases.len][2]u8 = @splat(@splat(std.math.maxInt(u8)));
+    for (symbols) |symbol| {
+        if (symbol.additional_bits < min_additional_bits) continue;
+        for (bases, bits, 0..) |base, bit_count, code| {
+            if (symbol.base != base or symbol.additional_bits != bit_count) continue;
+            costs[code][0] = @min(costs[code][0], symbol.additional_bits);
+            costs[code][1] = @min(costs[code][1], symbol.additional_bits + symbol.state_bits);
+            break;
+        }
+    }
+    return costs;
+}
+
+const predefined_literal_minimum_costs = buildPredefinedMinimumCosts(&sequence_predefined.literal_symbols, &ll_base, &ll_bits, 0);
+const predefined_offset_minimum_costs = buildPredefinedMinimumCosts(&sequence_predefined.offset_symbols, &of_base, &of_bits, 2);
+const predefined_match_minimum_costs = buildPredefinedMinimumCosts(&sequence_predefined.match_symbols, &ml_base, &ml_bits, 0);
 
 fn predefinedEncodableStateMask(value: usize, symbols: []const SequenceSymbol, min_additional_bits: u8) u64 {
     if (symbols.ptr == sequence_predefined.literal_symbols[0..].ptr and min_additional_bits == 0) {
@@ -31185,29 +31317,27 @@ test "zstd sparse sequence alternatives match initialized reference" {
             offsets: []const usize,
             coverage: *u8,
         ) !void {
-            try std.testing.expectEqual(expected.len, actual.len);
-            for (expected.items[0..expected.len], actual.items[0..actual.len]) |want, got| {
-                try std.testing.expectEqual(std.meta.activeTag(want), std.meta.activeTag(got));
+            for (expected.items[0..expected.len]) |want| {
                 coverage.* |= switch (std.meta.activeTag(want)) {
                     .rle => 1,
                     .predefined => 2,
                     .compressed => 4,
                     .repeat => 8,
                 };
-                var want_payload: std.ArrayList(u8) = .empty;
-                defer want_payload.deinit(std.testing.allocator);
-                var got_payload: std.ArrayList(u8) = .empty;
-                defer got_payload.deinit(std.testing.allocator);
-                try appendSequenceTablePayload(std.testing.allocator, &want_payload, want);
-                try appendSequenceTablePayload(std.testing.allocator, &got_payload, got);
-                try std.testing.expectEqualSlices(u8, want_payload.items, got_payload.items);
-                try std.testing.expectEqual(
-                    try sequenceTablePlanBitCost(want, kind, values, literal_lens, offsets),
-                    try sequenceTablePlanBitCost(got, kind, values, literal_lens, offsets),
-                );
-                for (0..values.len) |i|
-                    try std.testing.expectEqual(try sequenceTableSymbol(want, kind, i), try sequenceTableSymbol(got, kind, i));
             }
+            var expected_best: ?usize = null;
+            for (expected.items[0..expected.len]) |plan| {
+                const cost = (try sequenceTablePlanBitCost(plan, kind, values, literal_lens, offsets)) orelse continue;
+                const bytes = cost.payload_len + (cost.bit_count + 1 + 7) / 8;
+                if (expected_best == null or bytes < expected_best.?) expected_best = bytes;
+            }
+            var actual_best: ?usize = null;
+            for (actual.items[0..actual.len]) |plan| {
+                const cost = (try sequenceTablePlanBitCost(plan, kind, values, literal_lens, offsets)) orelse continue;
+                const bytes = cost.payload_len + (cost.bit_count + 1 + 7) / 8;
+                if (actual_best == null or bytes < actual_best.?) actual_best = bytes;
+            }
+            try std.testing.expectEqual(expected_best, actual_best);
         }
     };
 
@@ -35814,4 +35944,34 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
     if (output.len - written.* < last_literals) return error.OutputTooSmall;
     try copyLiteralsFromHuffmanState(&huffman_state, section, literal_offset, output[written.*..][0..last_literals]);
     written.* += last_literals;
+}
+
+noinline fn compressedSequencePlanStrictlyDominatesPredefinedCodes(
+    plan: *const CompressedSequencePlan,
+    kind: SequenceTableKind,
+    predefined_values: []const usize,
+) linksection(dominance_helper_text_section) Error!bool {
+    if (plan.len == 0 or plan.len > max_native_sequence_count or plan.len != predefined_values.len) return error.CorruptFrame;
+    const costs = switch (kind) {
+        .literal => predefined_literal_minimum_costs[0..],
+        .offset => predefined_offset_minimum_costs[0..],
+        .match => predefined_match_minimum_costs[0..],
+    };
+    const value_bits = sequenceTableBits(kind);
+    var compressed_bits: usize = plan.accuracy_log;
+    var predefined_bits: usize = predefinedInitialStateBits(kind);
+    for (plan.codes[0..plan.len], 0..) |code, i| {
+        if (code >= value_bits.len) return error.CorruptFrame;
+        const predefined_code = try sequenceCodeForValue(predefined_values[i], sequenceTableBases(kind), value_bits);
+        if (predefined_code >= costs.len) return error.CorruptFrame;
+        const predefined_cost = costs[predefined_code][@intFromBool(i + 1 < plan.len)];
+        if (predefined_cost == std.math.maxInt(u8)) return false;
+        predefined_bits = std.math.add(usize, predefined_bits, predefined_cost) catch return error.IntegerOverflow;
+        compressed_bits = std.math.add(usize, compressed_bits, value_bits[code]) catch return error.IntegerOverflow;
+        if (i + 1 < plan.len)
+            compressed_bits = std.math.add(usize, compressed_bits, plan.transition_bits[i]) catch return error.IntegerOverflow;
+    }
+    const compressed_bytes = std.math.add(usize, plan.table_payload_len, (compressed_bits + 1 + 7) / 8) catch return error.IntegerOverflow;
+    const predefined_bytes = (predefined_bits + 1 + 7) / 8;
+    return compressed_bytes < predefined_bytes;
 }
