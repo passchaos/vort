@@ -613,6 +613,18 @@ Recommended next comparison steps:
   improved JSON 1.0149x but reduced the complete matrix to 0.9992x with a
   0.9732x text floor; and a 32-bucket frequency precheck reduced JSON to
   0.9922x because its extra pass cost more than the avoided wide histogram.
+  A follow-up 1 kHz `samply` profile retained per-PC leaf addresses for the
+  stripped ReleaseFast binary and localized most remaining `single_beam.planReuse`
+  samples to literal target insertion plus indexed/rep0 short-match state
+  arbitration; allocator growth, backtracking, and the separate match extender
+  are secondary. Two semantics-preserving layout experiments were removed. A
+  likely-empty literal insertion branch used the measured 30,619/32,797 empty
+  JSON targets but reduced complete JSON level 1 to 0.9900x with 0/15 wins.
+  Deferring each literal candidate to the next position preserved all 17
+  single-state token/profile/tie/OOM tests, but extending the live state and
+  adding the merge reduced JSON level 1 to 0.9754x. Production keeps the
+  compiler-selected shared insertion layout; the next viable beam change needs
+  to reduce successful indexed/rep0 state work rather than only rearrange it.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers

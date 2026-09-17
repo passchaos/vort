@@ -14295,6 +14295,15 @@ reuse, so production keeps the simpler independently owned plans.
   at only 1.0023x JSON, inverse-FSE-derived decode entries at 0.9992x across the
   matrix with a 0.9732x text floor despite a 1.0149x JSON target, and a 32-bin
   frequency precheck that reduced JSON to 0.9922x.
+  A 1 kHz `samply` profile with per-PC leaf addresses localized remaining
+  `single_beam.planReuse` time to literal target insertion and indexed/rep0
+  short-match arbitration, not allocator growth or backtracking. A likely-empty
+  literal branch based on the measured 30,619/32,797 empty JSON targets reduced
+  complete JSON level 1 to 0.9900x with 0/15 wins. Deferring the literal state
+  until the following position kept all 17 single-state token/profile/tie/OOM
+  tests exact but reduced complete JSON level 1 to 0.9754x. Both layouts were
+  removed; future beam work should reduce successful match-state work rather
+  than extend live state or override LLVM's current literal insertion layout.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle
