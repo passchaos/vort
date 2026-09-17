@@ -472,6 +472,14 @@ Recommended next comparison steps:
   row medians with a 0.9874x text level-1 floor. All input hashes, frame and
   reference sizes, and checksums matched, but the implementation was removed
   because eliminating the stack array did not improve end-to-end throughput.
+  A capped-match continuation experiment was rejected for the same evidence
+  standard. Reusing the 257-byte prefix proved by the preceding 258-byte
+  single-state match improved the synthetic repetitive-text stage by 2.8275x
+  with 31/31 wins, but real README/source prefixes gained only 1.004x--1.019x
+  and had no additional capped reuse. The complete JSON level-1 encoder
+  regressed to 0.9913x (a narrower formulation reached 0.9883x), despite exact
+  token, frame, input-hash, and checksum parity, so no production change is
+  retained.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers

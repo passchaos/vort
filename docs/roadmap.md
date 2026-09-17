@@ -14171,6 +14171,17 @@ reuse, so production keeps the simpler independently owned plans.
   hash, size, and checksum but reached only 0.9997x across row medians and
   regressed text level 1 to 0.9874x, so the production field materialization
   remains.
+  Reusing capped 258-byte single-state beam matches at the following position
+  was also rejected. The previous match proves the first 257 bytes, so the
+  prototype compared only the newly exposed tail byte; a boundary oracle and
+  the existing 64-shape reference comparison kept tokens and wires exact. On
+  the synthetic repetitive-text stage this expanded shifted-match reuse from
+  253 to 37,299 hits and improved 2.8275x across 31/31 pairs. Real 32 KiB
+  README/source prefixes gained only 1.004x--1.019x at the isolated stage with
+  no additional capped reuse, while the complete JSON level-1 encoder fell to
+  0.9913x; a narrower caller-local form fell to 0.9883x. The optimization and
+  layout-padding variants were removed because the large synthetic win does
+  not represent production corpus coverage.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle
