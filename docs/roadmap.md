@@ -14247,6 +14247,16 @@ reuse, so production keeps the simpler independently owned plans.
   selector layout were likewise rejected at 0.9787x/0.9797x on tradeoff level 1
   and 0.9730x on JSON level 3. The retained scratch-marker layout avoids those
   non-target regressions.
+  A 10-second, 1 ms macOS sample of the retained `c2b18207` JSON level-1
+  encoder collected 7,978 stacks: 3,675 (about 46%) attribute to
+  `single_beam.planReuse`, about 1,816 (23%) to beam entropy work, 834 (10%)
+  to the direct single proof, about 837 (10%) to greedy parsing/emission, and
+  110 (1.4%) to the repeated-pattern proof. Prioritize single-beam planning and
+  entropy scoring over more repeated-pattern micro-optimization. A fused
+  single-beam `ByteSummary` was rejected after complete JSON level 1 measured
+  0.9895x with 3/31 wins. A vectorized alphabet-preservation proof was also
+  removed: although JSON level 1 improved 1.0794x with 31/31 wins, the long
+  tradeoff level-1 control regressed to 0.9833x with 0/31 wins.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle

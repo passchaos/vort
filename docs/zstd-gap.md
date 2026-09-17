@@ -551,6 +551,21 @@ Recommended next comparison steps:
   rejected after stable 0.9787x/0.9797x tradeoff-level-1 and 0.9730x JSON-level-3
   regressions; the final one-shot scratch marker keeps non-eligible selector
   control flow unchanged.
+  A 10-second, 1 ms macOS sample of the retained `c2b18207` JSON level-1
+  binary collected 7,978 stacks. Inclusive attribution puts 3,675 samples
+  (about 46%) in `single_beam.planReuse`, about 1,816 (23%) in the beam
+  entropy path, 834 (10%) in the direct single-candidate proof, about 837
+  (10%) in greedy parsing/emission, and only 110 (1.4%) in the retained
+  repeated-pattern proof. This makes single-beam planning and its entropy
+  scoring the next evidence-backed optimization targets; repeated discovery is
+  no longer a leading whole-encoder cost.
+  Two attempts to make the direct proof cheaper were measured and removed.
+  Collecting a `ByteSummary` inside single-beam DP avoided the later frequency
+  pass but reduced complete JSON level 1 to 0.9895x with only 3/31 wins. An
+  alphabet-preservation proof replaced the 256-bin frequency scan with a
+  vectorized non-RLE/low-symbol predicate and improved JSON level 1 by 1.0794x
+  with 31/31 wins, but its long tradeoff level-1 control fell to 0.9833x with
+  0/31 wins. Neither implementation is retained.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers
