@@ -503,6 +503,26 @@ Recommended next comparison steps:
   locked JSON candidate. Nevertheless, 31 independent level-1 pairs improved
   by only 1.0054x, below the retention threshold, so the exact Huffman lower
   bound remains the only production proof.
+  The same precomputed level-1 beam now also delays the roughly 384 KiB paired
+  duplicate index. A direct bounded scan first mirrors the existing indexed
+  `CannotBeat` proof: it rejects high-byte input, derives the shortest match
+  that could still beat both the beam and the historical 1/256 early-return
+  threshold, and compares only that prefix for paired eight-byte hashes. The
+  index is built unchanged whenever the proof is inconclusive. Passing
+  `max(beam_len, block_len / 256) + 1` preserves both equal-length tie order and
+  the old early single return. A 32-shape indexed/direct oracle covers six
+  limits per shape; the complete selector oracle covers proof hits, ordinary
+  and high-byte fallbacks, byte-exact old/new wire, and allocation-failure
+  rollback. Against independent `ca8c7785`/`7100fb34` ReleaseFast binaries, 31
+  interleaved 100-encode JSON level-1 pairs improve by 1.1001x median / 1.0999x
+  geometric mean with 31/31 wins and the same 643-byte frame. A 15-pair 20-row
+  matrix preserves every input hash, frame/reference size, and checksum,
+  reaches 1.0043x across row medians, and has a noisy 0.9877x short-row floor.
+  Longer controls recover tradeoff level 3 to 1.0019x and text level 9 to
+  1.0049x. An earlier exact-Huffman direct proof was rejected before this
+  version: although correct, it reduced the target to 0.9329x with 0/15 wins
+  because full match extension and tree construction cost more than the index
+  it replaced.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers

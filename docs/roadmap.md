@@ -14207,6 +14207,23 @@ reuse, so production keeps the simpler independently owned plans.
   length-limited Huffman payload cost, and it avoided the tree builder on the
   locked JSON path, but 31 independent level-1 pairs improved only 1.0054x.
   The simpler exact Huffman proof remains.
+  Precomputed level-1 beams now defer construction of the roughly 384 KiB
+  paired duplicate index until a direct capped-prefix scan fails to prove the
+  single-match candidate irrelevant. The proof mirrors the existing indexed
+  `CannotBeat` condition for direct-tree input and uses
+  `max(beam_len, block_len / 256) + 1`, preserving both equal-length tie order
+  and the historical decisive-single early return. High-byte and inconclusive
+  blocks build the unchanged index. A 32-shape indexed/direct oracle across six
+  limits plus complete old/new selector tests cover hits, ordinary/high-byte
+  fallback, exact wire output, and OOM rollback. Against independent
+  `ca8c7785`/`7100fb34` binaries, 31 interleaved 100-encode JSON level-1 pairs
+  improve 1.1001x median / 1.0999x geometric mean with 31/31 wins and the same
+  643-byte frame. The 15-pair 20-row matrix preserves every hash, size, and
+  checksum at 1.0043x across row medians; its 0.9877x short-row floor recovers
+  to 1.0019x on tradeoff level 3 and 1.0049x on text level 9 in longer runs.
+  An exact-Huffman direct proof was rejected first because its complete match
+  extension and tree construction reduced the target to 0.9329x with 0/15
+  wins.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle

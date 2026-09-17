@@ -140,6 +140,9 @@ var test_disable_hash_token_lower_bound = false;
 var test_hash_token_lower_bound_hits: usize = 0;
 var test_disable_precomputed_beam_greedy_prune = false;
 var test_precomputed_beam_greedy_prune_hits: usize = 0;
+var test_disable_precomputed_beam_single_index_prune = false;
+var test_precomputed_beam_single_index_prune_hits: usize = 0;
+var test_precomputed_beam_single_index_fallbacks: usize = 0;
 var test_disable_four_byte_optimal = false;
 var test_disable_split_huffman_decode = false;
 var test_split_huffman_decode_hits: usize = 0;
@@ -12574,13 +12577,22 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     const lazy_tokens = &match_scratch.lazy_tokens;
     const optimal_scratch = &match_scratch.optimal;
     var duplicate_index: DuplicateMatchIndex = undefined;
-    const duplicate_index_ptr: ?*DuplicateMatchIndex = if (block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len) blk: {
+    // Level 1 may already have a serialized beam before its single-duplicate
+    // candidate is needed. Delay the large paired index until a direct bounded
+    // scan has had a chance to prove that single candidate irrelevant.
+    const defer_level_one_index = has_precomputed_rep_beam and !prove_mixed_dominance and
+        match_search_budget < multi_duplicate_min_search_budget and
+        block.len > duplicate_exact_hash_input_max and
+        block.len <= duplicate_index_max_input_len and
+        (!builtin.is_test or !test_disable_precomputed_beam_single_index_prune);
+    var duplicate_index_ptr: ?*DuplicateMatchIndex = null;
+    if (!defer_level_one_index and block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len) {
         if (match_search_budget < multi_duplicate_min_search_budget)
             duplicate_index.buildBounded(block)
         else
             duplicate_index.build(block);
-        break :blk &duplicate_index;
-    } else null;
+        duplicate_index_ptr = &duplicate_index;
+    }
     // Level 1 skips multi-duplicate search, so its final single candidate has
     // no earlier query to reuse. Evaluate that candidate up front for large
     // blocks; an extreme 256x win can safely bypass the much slower optimal
@@ -12589,30 +12601,32 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     var early_single_tested = false;
     var early_single_match: ?DuplicateMatch = null;
     var skip_level_one_single = false;
-    if (match_search_budget < multi_duplicate_min_search_budget and block.len > duplicate_exact_hash_input_max) {
-        const decisive_total_len = block.len / 256;
-        if (duplicate_index_ptr != null) {
-            const index = duplicate_index_ptr.?;
-            // Derive the shortest match that could beat the decisive wire
-            // bound, then stop once no later position can still reach it.
-            // Only a competitive match needs the exact Huffman scoring pass.
-            skip_level_one_single = indexedSingleMatchCannotBeat(
-                block,
-                index,
-                decisive_total_len + 1,
-            );
-            if (!skip_level_one_single) {
-                early_single_match = try findBestDuplicateMatchIndexed(block, 0, index);
-                early_single_tested = true;
+    const evaluateEarlySingle = struct {
+        fn run(
+            block_bytes: []const u8,
+            index: ?*DuplicateMatchIndex,
+            match_out: *?DuplicateMatch,
+            tested: *bool,
+            skip: *bool,
+        ) Error!void {
+            const decisive_total_len = block_bytes.len / 256;
+            if (index) |built| {
+                skip.* = indexedSingleMatchCannotBeat(block_bytes, built, decisive_total_len + 1);
+                if (!skip.*) {
+                    match_out.* = try findBestDuplicateMatchIndexed(block_bytes, 0, built);
+                    tested.* = true;
+                }
+            } else {
+                tested.* = true;
+                match_out.* = try findBestDuplicateMatch(block_bytes);
             }
-        } else {
-            early_single_tested = true;
-            early_single_match = try findBestDuplicateMatch(block);
         }
+    }.run;
+    if (!defer_level_one_index and match_search_budget < multi_duplicate_min_search_budget and block.len > duplicate_exact_hash_input_max) {
+        try evaluateEarlySingle(block, duplicate_index_ptr, &early_single_match, &early_single_tested, &skip_level_one_single);
         if (early_single_match) |match| {
-            if (match.payload_len + 3 <= decisive_total_len) {
+            if (match.payload_len + 3 <= block.len / 256)
                 return try emitSingleMatchCompressedBlockFromMatch(allocator, out, block, last, match);
-            }
         }
     }
     const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget)
@@ -12644,6 +12658,34 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
         }
     }
 
+    if (defer_level_one_index) {
+        if (pre_emitted_beam_len) |beam_len| {
+            // The legacy path returns a <= 1/256 single candidate before the
+            // beam is considered. It later accepts only a candidate strictly
+            // shorter than the current winner. Prove strict loss against both
+            // boundaries before omitting the index and exact single scoring.
+            const strict_single_limit = try precomputedBeamSingleDominanceLimit(beam_len, block.len);
+            if (boundedSingleMatchCannotBeat(block, strict_single_limit)) {
+                skip_level_one_single = true;
+                early_single_tested = true;
+                if (comptime builtin.is_test) test_precomputed_beam_single_index_prune_hits += 1;
+            } else {
+                if (comptime builtin.is_test) test_precomputed_beam_single_index_fallbacks += 1;
+                duplicate_index.buildBounded(block);
+                duplicate_index_ptr = &duplicate_index;
+                try evaluateEarlySingle(block, duplicate_index_ptr, &early_single_match, &early_single_tested, &skip_level_one_single);
+            }
+        } else {
+            if (comptime builtin.is_test) test_precomputed_beam_single_index_fallbacks += 1;
+            duplicate_index.buildBounded(block);
+            duplicate_index_ptr = &duplicate_index;
+            try evaluateEarlySingle(block, duplicate_index_ptr, &early_single_match, &early_single_tested, &skip_level_one_single);
+        }
+        if (early_single_match) |match| {
+            if (match.payload_len + 3 <= block.len / 256)
+                return try emitSingleMatchCompressedBlockFromMatch(allocator, out, block, last, match);
+        }
+    }
     candidate.clearRetainingCapacity();
     var greedy_len: ?usize = null;
     const greedy_ok = if (comptime has_precomputed_rep_beam) blk: {
@@ -22178,6 +22220,60 @@ noinline fn indexedSingleMatchCannotBeat(
     return true;
 }
 
+noinline fn boundedSingleMatchCannotBeat(
+    block: []const u8,
+    total_len_limit: usize,
+) linksection(dominance_helper_text_section) bool {
+    if (comptime builtin.is_test) if (test_disable_indexed_single_lower_bound) return false;
+    if (total_len_limit == 0) return false;
+    if (block.len <= duplicate_exact_hash_input_max or block.len > duplicate_index_max_input_len or block.len < 24) return false;
+
+    // Mirror the cheap indexed proof without materializing its roughly 384 KiB
+    // candidate/match arrays. High-byte literals still require exact scoring.
+    // For direct-tree input, a competitive one-sequence block must remove at
+    // least `required_match_len` bytes; checking only that prefix avoids finding
+    // or scoring the complete match.
+    var byte_frequencies: [256]u16 = @splat(0);
+    var max_byte_frequency: usize = 0;
+    for (block) |byte| {
+        if (byte > native_max_direct_huffman_symbol) return false;
+        byte_frequencies[byte] += 1;
+        max_byte_frequency = @max(max_byte_frequency, byte_frequencies[byte]);
+    }
+    const huffman_literal_limit = if (total_len_limit <= 3)
+        0
+    else
+        std.math.mul(usize, total_len_limit - 4, 8) catch std.math.maxInt(usize);
+    const maximum_regenerated = @max(max_byte_frequency, huffman_literal_limit);
+    if (maximum_regenerated >= block.len) return false;
+    const required_match_len = block.len - maximum_regenerated;
+
+    const pending_word_bits = @bitSizeOf(usize);
+    comptime std.debug.assert(duplicate_hash_table_len % pending_word_bits == 0);
+    var pending: [duplicate_hash_table_len / pending_word_bits]usize = @splat(0);
+    var paired_predecessors: [duplicate_hash_table_len]u16 = undefined;
+    const last_candidate_position = block.len - required_match_len;
+    for (0..last_candidate_position + 1) |position| {
+        if (position + 8 > block.len) break;
+        const hash = duplicateHash8(block[position..][0..8]);
+        const pending_word = &pending[hash / pending_word_bits];
+        const pending_mask = @as(usize, 1) << @intCast(hash % pending_word_bits);
+        if (pending_word.* & pending_mask != 0) {
+            const first: usize = paired_predecessors[hash];
+            if (std.mem.eql(
+                u8,
+                block[first..][0..required_match_len],
+                block[position..][0..required_match_len],
+            )) return false;
+            pending_word.* &= ~pending_mask;
+        } else {
+            paired_predecessors[hash] = @intCast(position);
+            pending_word.* |= pending_mask;
+        }
+    }
+    return true;
+}
+
 noinline fn indexedSingleMatchDominatedBy(
     block: []const u8,
     index: *DuplicateMatchIndex,
@@ -22236,6 +22332,10 @@ noinline fn boundedSingleMatchDominatedBy(
     }
 
     return singleMatchDominatedByStatistics(&byte_frequencies, maximum_match_len, total_len_limit);
+}
+
+inline fn precomputedBeamSingleDominanceLimit(beam_len: usize, block_len: usize) Error!usize {
+    return std.math.add(usize, @max(beam_len, block_len / 256), 1) catch return error.IntegerOverflow;
 }
 
 inline fn singleMatchDominatedByStatistics(
@@ -22894,6 +22994,42 @@ test "zstd direct bounded single dominance matches indexed oracle across lengths
             index.buildBounded(payload);
             const indexed = indexedSingleMatchDominatedBy(payload, &index, limit);
             const direct = boundedSingleMatchDominatedBy(payload, limit);
+            try std.testing.expectEqual(indexed, direct);
+            pruned_cases += @intFromBool(direct);
+            retained_cases += @intFromBool(!direct);
+        }
+    }
+    try std.testing.expect(pruned_cases != 0);
+    try std.testing.expect(retained_cases != 0);
+}
+
+test "zstd direct bounded single cannot-beat proof matches indexed oracle" {
+    var pruned_cases: usize = 0;
+    var retained_cases: usize = 0;
+    for (0..32) |seed| {
+        const payload_len = duplicate_exact_hash_input_max + 1 + seed * 1_913;
+        const payload = try std.testing.allocator.alloc(u8, payload_len);
+        defer std.testing.allocator.free(payload);
+        var state: u32 = @truncate(0x3c6e_f372 +% seed *% 0x0100_0193);
+        for (payload, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @intCast('a' + (index + seed) % 23),
+                1 => if (index % 64 < 52) @intCast('A' + (index + seed) % 26) else @truncate(state >> 25),
+                2 => @intCast((index * 17 + seed * 13) & 127),
+                else => @truncate(state >> 24),
+            };
+        }
+        if (seed % 3 != 0) {
+            const copy_len = @min(payload.len / 4, 384 + seed * 47);
+            @memcpy(payload[payload.len - copy_len ..], payload[payload.len / 4 ..][0..copy_len]);
+        }
+
+        var index: DuplicateMatchIndex = undefined;
+        for ([_]usize{ 64, 128, 512, 2048, 8192, 16 * 1024 }) |limit| {
+            index.buildBounded(payload);
+            const indexed = indexedSingleMatchCannotBeat(payload, &index, limit);
+            const direct = boundedSingleMatchCannotBeat(payload, limit);
             try std.testing.expectEqual(indexed, direct);
             pruned_cases += @intFromBool(direct);
             retained_cases += @intFromBool(!direct);
@@ -26922,6 +27058,138 @@ test "zstd precomputed beam skips only provably dominated greedy wires" {
     try std.testing.expectEqualSlices(u8, reference.items, pruned.items);
     try std.testing.expectEqual(reference_allocator.allocations - 16, pruned_allocator.allocations);
     try std.testing.expectEqual(reference_allocator.allocated_bytes - 8_741, pruned_allocator.allocated_bytes);
+
+    const AllocationFailureTest = struct {
+        fn run(allocator: std.mem.Allocator, payload: []const u8) !void {
+            var output = try std.ArrayList(u8).initCapacity(allocator, "prefix".len);
+            defer output.deinit(allocator);
+            output.appendSliceAssumeCapacity("prefix");
+            const emitted = emitNativeMatchCompressedBlockSerialWithBeam(
+                allocator,
+                &output,
+                payload,
+                true,
+                fastest_wide_match_search_budget,
+                true,
+                null,
+                null,
+            ) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix", output.items);
+                return err;
+            };
+            try std.testing.expect(emitted);
+            try std.testing.expectEqualSlices(u8, "prefix", output.items[0.."prefix".len]);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        AllocationFailureTest.run,
+        .{measured_payload.items},
+    );
+}
+
+test "zstd precomputed beam single dominance limit preserves ties and early returns" {
+    try std.testing.expectEqual(@as(usize, 129), try precomputedBeamSingleDominanceLimit(64, 32 * 1024));
+    try std.testing.expectEqual(@as(usize, 201), try precomputedBeamSingleDominanceLimit(200, 32 * 1024));
+    try std.testing.expectError(error.IntegerOverflow, precomputedBeamSingleDominanceLimit(std.math.maxInt(usize), 0));
+
+    var frequencies: [256]u16 = @splat(0);
+    frequencies['a'] = 8;
+    frequencies['b'] = 8;
+    try std.testing.expect(singleMatchDominatedByStatistics(&frequencies, 0, 2));
+    try std.testing.expect(!singleMatchDominatedByStatistics(&frequencies, 0, 3));
+}
+
+test "zstd precomputed beam skips duplicate index only after strict single dominance proof" {
+    const Oracle = struct {
+        fn compare(payload: []const u8) !struct { pruned: bool, fell_back: bool } {
+            test_disable_precomputed_beam_single_index_prune = true;
+            var expected: std.ArrayList(u8) = .empty;
+            defer expected.deinit(std.testing.allocator);
+            const expected_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+                std.testing.allocator,
+                &expected,
+                payload,
+                true,
+                fastest_wide_match_search_budget,
+                true,
+                null,
+                null,
+            );
+
+            test_disable_precomputed_beam_single_index_prune = false;
+            const hits_before = test_precomputed_beam_single_index_prune_hits;
+            const fallbacks_before = test_precomputed_beam_single_index_fallbacks;
+            var actual: std.ArrayList(u8) = .empty;
+            defer actual.deinit(std.testing.allocator);
+            const actual_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+                std.testing.allocator,
+                &actual,
+                payload,
+                true,
+                fastest_wide_match_search_budget,
+                true,
+                null,
+                null,
+            );
+            try std.testing.expectEqual(expected_ok, actual_ok);
+            try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+            return .{
+                .pruned = test_precomputed_beam_single_index_prune_hits != hits_before,
+                .fell_back = test_precomputed_beam_single_index_fallbacks != fallbacks_before,
+            };
+        }
+    };
+
+    test_disable_precomputed_beam_single_index_prune = false;
+    test_precomputed_beam_single_index_prune_hits = 0;
+    test_precomputed_beam_single_index_fallbacks = 0;
+    defer {
+        test_disable_precomputed_beam_single_index_prune = false;
+        test_precomputed_beam_single_index_prune_hits = 0;
+        test_precomputed_beam_single_index_fallbacks = 0;
+    }
+
+    var pruned_cases: usize = 0;
+    for (0..24) |seed| {
+        var payload: std.ArrayList(u8) = .empty;
+        defer payload.deinit(std.testing.allocator);
+        const target_len = 24 * 1024 + seed * 347;
+        while (payload.items.len < target_len) {
+            var line: [160]u8 = undefined;
+            const formatted = try std.fmt.bufPrint(
+                &line,
+                "{{\"id\":{d},\"shard\":{d},\"service\":\"vort\",\"message\":\"single index proof\"}}\n",
+                .{ payload.items.len / 64, seed % 7 },
+            );
+            try payload.appendSlice(std.testing.allocator, formatted);
+        }
+        const result = try Oracle.compare(payload.items);
+        pruned_cases += @intFromBool(result.pruned);
+    }
+    try std.testing.expect(pruned_cases != 0);
+
+    const fallback_payload = "abcdefghijklmnop" ** (32 * 1024 / 16);
+    const fallback = try Oracle.compare(fallback_payload);
+    try std.testing.expect(fallback.fell_back);
+    var high_byte_fallback: [32 * 1024]u8 = undefined;
+    for (&high_byte_fallback, 0..) |*byte, index| byte.* = @intCast(128 + index % 127);
+    const high_byte = try Oracle.compare(&high_byte_fallback);
+    try std.testing.expect(high_byte.fell_back);
+
+    var measured_payload: std.ArrayList(u8) = .empty;
+    defer measured_payload.deinit(std.testing.allocator);
+    while (measured_payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const formatted = try std.fmt.bufPrint(
+            &line,
+            "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n",
+            .{measured_payload.items.len / 64},
+        );
+        try measured_payload.appendSlice(std.testing.allocator, formatted);
+    }
+    const measured = try Oracle.compare(measured_payload.items);
+    try std.testing.expect(measured.pruned);
 
     const AllocationFailureTest = struct {
         fn run(allocator: std.mem.Allocator, payload: []const u8) !void {
