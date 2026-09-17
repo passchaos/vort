@@ -143,6 +143,9 @@ var test_precomputed_beam_greedy_prune_hits: usize = 0;
 var test_disable_precomputed_beam_single_index_prune = false;
 var test_precomputed_beam_single_index_prune_hits: usize = 0;
 var test_precomputed_beam_single_index_fallbacks: usize = 0;
+var test_disable_precomputed_beam_repeated_prune = false;
+var test_precomputed_beam_repeated_prune_hits: usize = 0;
+var test_precomputed_beam_repeated_prune_fallbacks: usize = 0;
 var test_disable_four_byte_optimal = false;
 var test_disable_split_huffman_decode = false;
 var test_split_huffman_decode_hits: usize = 0;
@@ -11741,6 +11744,8 @@ const NativeBlockEncodeScratch = struct {
         self.match_best.clearRetainingCapacity();
         self.greedy_tokens.clearRetainingCapacity();
         self.lazy_tokens.clearRetainingCapacity();
+        self.single_sequence_emit.repeated_prune_best_len = 0;
+        self.single_sequence_emit.repeated_prune_max_byte_frequency = 0;
     }
 
     fn deinit(self: *NativeBlockEncodeScratch, allocator: std.mem.Allocator) void {
@@ -11766,6 +11771,8 @@ const SingleSequenceEmitScratch = struct {
     literals_prefix: std.ArrayList(u8) = .empty,
     payload: std.ArrayList(u8) = .empty,
     sequence_bits: std.ArrayList(u8) = .empty,
+    repeated_prune_best_len: usize = 0,
+    repeated_prune_max_byte_frequency: u16 = 0,
 
     fn clearRetainingCapacity(self: *SingleSequenceEmitScratch) void {
         self.literals_prefix.clearRetainingCapacity();
@@ -12601,6 +12608,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     var early_single_tested = false;
     var early_single_match: ?DuplicateMatch = null;
     var skip_level_one_single = false;
+    var single_max_byte_frequency: ?u16 = null;
     const evaluateEarlySingle = struct {
         fn run(
             block_bytes: []const u8,
@@ -12665,7 +12673,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
             // shorter than the current winner. Prove strict loss against both
             // boundaries before omitting the index and exact single scoring.
             const strict_single_limit = try precomputedBeamSingleDominanceLimit(beam_len, block.len);
-            if (boundedSingleMatchCannotBeat(block, strict_single_limit)) {
+            if (boundedSingleMatchCannotBeatWithSummary(block, strict_single_limit, &single_max_byte_frequency)) {
                 skip_level_one_single = true;
                 early_single_tested = true;
                 if (comptime builtin.is_test) test_precomputed_beam_single_index_prune_hits += 1;
@@ -12700,6 +12708,8 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
                         greedy_tokens,
                         sequence_scratch,
                         beam_len,
+                        if (!prove_mixed_dominance and skip_level_one_single) single_max_byte_frequency else null,
+                        &match_scratch.single_sequence_emit,
                     );
             }
         }
@@ -12792,6 +12802,18 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
                 optimal_candidates,
             );
         try retainShortestCandidate(allocator, optimal_ok, candidate.items, best);
+    }
+    if (!prove_mixed_dominance and match_scratch.single_sequence_emit.repeated_prune_best_len == 0 and
+        best.items.len != 0 and best.items.len * 32 <= block.len and
+        (!builtin.is_test or !test_disable_precomputed_beam_repeated_prune))
+    {
+        if (single_max_byte_frequency) |maximum| {
+            match_scratch.single_sequence_emit.repeated_prune_best_len = best.items.len;
+            match_scratch.single_sequence_emit.repeated_prune_max_byte_frequency = maximum;
+        } else if (duplicate_index_ptr) |index| {
+            match_scratch.single_sequence_emit.repeated_prune_best_len = best.items.len;
+            match_scratch.single_sequence_emit.repeated_prune_max_byte_frequency = index.max_byte_frequency;
+        }
     }
 
     candidate.clearRetainingCapacity();
@@ -13558,6 +13580,8 @@ noinline fn emitGreedyHashMatchCompressedBlockReuseUnlessDominated(
     tokens: *std.ArrayList(lz77.Token),
     sequence_scratch: *LargeSequenceScratch,
     best_len: usize,
+    single_max_byte_frequency: ?u16,
+    single_sequence_scratch: *SingleSequenceEmitScratch,
 ) linksection(fast_encode_helper_text_section) Error!bool {
     const parser_options = zstdHashParserOptions(block.len);
     if (block.len <= 32 * 1024) {
@@ -13565,6 +13589,12 @@ noinline fn emitGreedyHashMatchCompressedBlockReuseUnlessDominated(
         const stats = try lz77.hashGreedyPlanAutoTinyReuse(tokens, allocator, block, parser_options);
         if (try hashTokenSequenceCannotBeat(block, tokens.items, stats, best_len)) {
             if (comptime builtin.is_test) test_precomputed_beam_greedy_prune_hits += 1;
+            if (single_max_byte_frequency != null and
+                (!builtin.is_test or !test_disable_precomputed_beam_repeated_prune))
+            {
+                single_sequence_scratch.repeated_prune_best_len = best_len;
+                single_sequence_scratch.repeated_prune_max_byte_frequency = single_max_byte_frequency.?;
+            }
             return false;
         }
         return try emitHashTokenSequenceBlock(allocator, out, block, last, tokens.items, stats);
@@ -13574,6 +13604,12 @@ noinline fn emitGreedyHashMatchCompressedBlockReuseUnlessDominated(
     defer plan.deinit(allocator);
     if (try hashTokenSequenceCannotBeat(block, plan.tokens, plan.stats, best_len)) {
         if (comptime builtin.is_test) test_precomputed_beam_greedy_prune_hits += 1;
+        if (single_max_byte_frequency != null and
+            (!builtin.is_test or !test_disable_precomputed_beam_repeated_prune))
+        {
+            single_sequence_scratch.repeated_prune_best_len = best_len;
+            single_sequence_scratch.repeated_prune_max_byte_frequency = single_max_byte_frequency.?;
+        }
         return false;
     }
     return try emitHashTokenSequenceBlockReuse(allocator, out, block, last, plan.tokens, plan.stats, sequence_scratch);
@@ -22224,6 +22260,16 @@ noinline fn boundedSingleMatchCannotBeat(
     block: []const u8,
     total_len_limit: usize,
 ) linksection(dominance_helper_text_section) bool {
+    var max_byte_frequency: ?u16 = null;
+    return boundedSingleMatchCannotBeatWithSummary(block, total_len_limit, &max_byte_frequency);
+}
+
+noinline fn boundedSingleMatchCannotBeatWithSummary(
+    block: []const u8,
+    total_len_limit: usize,
+    max_byte_frequency_out: *?u16,
+) linksection(dominance_helper_text_section) bool {
+    max_byte_frequency_out.* = null;
     if (comptime builtin.is_test) if (test_disable_indexed_single_lower_bound) return false;
     if (total_len_limit == 0) return false;
     if (block.len <= duplicate_exact_hash_input_max or block.len > duplicate_index_max_input_len or block.len < 24) return false;
@@ -22240,6 +22286,7 @@ noinline fn boundedSingleMatchCannotBeat(
         byte_frequencies[byte] += 1;
         max_byte_frequency = @max(max_byte_frequency, byte_frequencies[byte]);
     }
+    max_byte_frequency_out.* = @intCast(max_byte_frequency);
     const huffman_literal_limit = if (total_len_limit <= 3)
         0
     else
@@ -23039,6 +23086,51 @@ test "zstd direct bounded single cannot-beat proof matches indexed oracle" {
     try std.testing.expect(retained_cases != 0);
 }
 
+test "zstd repeated pattern lower bound never exceeds exact candidate" {
+    var pruned_cases: usize = 0;
+    var retained_cases: usize = 0;
+    for (0..32) |seed| {
+        var payload: [32 * 1024]u8 = undefined;
+        var state: u32 = @truncate(0xa54f_f53a +% seed *% 0x0100_0193);
+        var frequencies: [256]u16 = @splat(0);
+        var max_byte_frequency: u16 = 0;
+        for (&payload, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed & 3) {
+                0 => @intCast('a' + (index + seed) % 23),
+                1 => if (index % 64 < 52) @intCast('A' + (index + seed) % 26) else @truncate(state >> 25),
+                2 => @intCast((index * 17 + seed * 13) & 127),
+                else => @truncate(state >> 25),
+            };
+            frequencies[byte.*] += 1;
+            max_byte_frequency = @max(max_byte_frequency, frequencies[byte.*]);
+        }
+        if (seed % 3 == 0) {
+            const repeated_len = 20 * 1024;
+            for (0..repeated_len) |index| payload[index] = @intCast('a' + index % (2 + seed % 31));
+            frequencies = @splat(0);
+            max_byte_frequency = 0;
+            for (payload) |byte| {
+                frequencies[byte] += 1;
+                max_byte_frequency = @max(max_byte_frequency, frequencies[byte]);
+            }
+        }
+
+        var exact: std.ArrayList(u8) = .empty;
+        defer exact.deinit(std.testing.allocator);
+        const exact_ok = try emitRepeatedPatternCompressedBlock(std.testing.allocator, &exact, &payload, true);
+        for ([_]usize{ 64, 128, 512, 2048, 8192, 16 * 1024 }) |limit| {
+            const dominated = repeatedPatternCandidateCannotBeat(&payload, limit, max_byte_frequency);
+            if (dominated) {
+                try std.testing.expect(!exact_ok or exact.items.len >= limit);
+                pruned_cases += 1;
+            } else retained_cases += 1;
+        }
+    }
+    try std.testing.expect(pruned_cases != 0);
+    try std.testing.expect(retained_cases != 0);
+}
+
 test "zstd hash-token block lower bound never exceeds exact wire" {
     var checked: usize = 0;
     var pruned: usize = 0;
@@ -23302,12 +23394,62 @@ fn repeatedPatternPayloadLenFrom(block: []const u8, segment: RepeatedPatternSegm
     return singleBestSequencePayloadLen(block, literal_len, segment.period, segment.match_len, tail_start) catch null;
 }
 
+noinline fn repeatedPatternCandidateCannotBeat(
+    block: []const u8,
+    best_len: usize,
+    max_byte_frequency: usize,
+) linksection(dominance_helper_text_section) bool {
+    if (best_len == 0 or block.len < 8) return false;
+    var first_pattern: ?RepeatedPatternSegment = null;
+    var multi_literal_len: usize = 0;
+    var multi_tail_start: usize = 0;
+    var count: usize = 0;
+    var search_start: usize = 0;
+    while (count < max_bootstrap_sequence_count and search_start < block.len) {
+        const segment = findRepeatedPatternSegmentIn(block, search_start, block.len) orelse break;
+        if (first_pattern == null) first_pattern = segment;
+        if (segment.start - search_start > 16) break;
+        const literal_len = std.math.add(usize, segment.start - search_start, segment.period) catch return false;
+        const segment_prefix = std.math.add(usize, segment.start, segment.period) catch return false;
+        const segment_end = std.math.add(usize, segment_prefix, segment.match_len) catch return false;
+        multi_literal_len = std.math.add(usize, multi_literal_len, literal_len) catch return false;
+        count += 1;
+        search_start = segment_end;
+        multi_tail_start = segment_end;
+        if (segment.tail_len == 0) break;
+    }
+    const first = first_pattern orelse return true;
+    const single_regenerated_len = block.len - first.match_len;
+    var minimum_regenerated_len = single_regenerated_len;
+    if (count >= 2) {
+        const multi_regenerated_len = std.math.add(usize, multi_literal_len, block.len - multi_tail_start) catch return false;
+        minimum_regenerated_len = @min(minimum_regenerated_len, multi_regenerated_len);
+    }
+    if (minimum_regenerated_len <= max_byte_frequency) return false;
+    const literal_payload_lower_bound = (minimum_regenerated_len + 7) / 8;
+    const block_lower_bound = std.math.add(usize, 3, literal_payload_lower_bound) catch return false;
+    return block_lower_bound >= best_len;
+}
+
 fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
     return try emitRepeatedPatternCompressedBlockWithScratch(allocator, out, block, last, null);
 }
 
 fn emitRepeatedPatternCompressedBlockWithScratch(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, single_scratch: ?*SingleSequenceEmitScratch) Error!bool {
     if (rleByte(block) != null) return false;
+    if (single_scratch) |scratch| {
+        const best_len = scratch.repeated_prune_best_len;
+        scratch.repeated_prune_best_len = 0;
+        if (best_len != 0 and repeatedPatternCandidateCannotBeat(
+            block,
+            best_len,
+            scratch.repeated_prune_max_byte_frequency,
+        )) {
+            if (comptime builtin.is_test) test_precomputed_beam_repeated_prune_hits += 1;
+            return false;
+        }
+        if (comptime builtin.is_test) test_precomputed_beam_repeated_prune_fallbacks += @intFromBool(best_len != 0);
+    }
     if (try emitMultiRepeatedPatternCompressedBlock(allocator, out, block, last)) return true;
     const pattern = findRepeatedPatternSegment(block) orelse return false;
     const literal_len = pattern.start + pattern.period;
@@ -26979,9 +27121,11 @@ test "zstd precomputed beam skips only provably dominated greedy wires" {
 
     test_disable_precomputed_beam_greedy_prune = false;
     test_precomputed_beam_greedy_prune_hits = 0;
+    test_disable_precomputed_beam_repeated_prune = true;
     defer {
         test_disable_precomputed_beam_greedy_prune = false;
         test_precomputed_beam_greedy_prune_hits = 0;
+        test_disable_precomputed_beam_repeated_prune = false;
     }
 
     var compared: usize = 0;
@@ -27144,10 +27288,12 @@ test "zstd precomputed beam skips duplicate index only after strict single domin
     test_disable_precomputed_beam_single_index_prune = false;
     test_precomputed_beam_single_index_prune_hits = 0;
     test_precomputed_beam_single_index_fallbacks = 0;
+    test_disable_precomputed_beam_repeated_prune = true;
     defer {
         test_disable_precomputed_beam_single_index_prune = false;
         test_precomputed_beam_single_index_prune_hits = 0;
         test_precomputed_beam_single_index_fallbacks = 0;
+        test_disable_precomputed_beam_repeated_prune = false;
     }
 
     var pruned_cases: usize = 0;
@@ -27190,6 +27336,156 @@ test "zstd precomputed beam skips duplicate index only after strict single domin
     }
     const measured = try Oracle.compare(measured_payload.items);
     try std.testing.expect(measured.pruned);
+
+    const AllocationFailureTest = struct {
+        fn run(allocator: std.mem.Allocator, payload: []const u8) !void {
+            var output = try std.ArrayList(u8).initCapacity(allocator, "prefix".len);
+            defer output.deinit(allocator);
+            output.appendSliceAssumeCapacity("prefix");
+            const emitted = emitNativeMatchCompressedBlockSerialWithBeam(
+                allocator,
+                &output,
+                payload,
+                true,
+                fastest_wide_match_search_budget,
+                true,
+                null,
+                null,
+            ) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix", output.items);
+                return err;
+            };
+            try std.testing.expect(emitted);
+            try std.testing.expectEqualSlices(u8, "prefix", output.items[0.."prefix".len]);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        AllocationFailureTest.run,
+        .{measured_payload.items},
+    );
+}
+
+test "zstd precomputed beam skips only dominated repeated-pattern candidates" {
+    const Oracle = struct {
+        fn compare(payload: []const u8) !bool {
+            test_disable_precomputed_beam_repeated_prune = true;
+            var expected: std.ArrayList(u8) = .empty;
+            defer expected.deinit(std.testing.allocator);
+            const expected_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+                std.testing.allocator,
+                &expected,
+                payload,
+                true,
+                fastest_wide_match_search_budget,
+                true,
+                null,
+                null,
+            );
+
+            test_disable_precomputed_beam_repeated_prune = false;
+            const hits_before = test_precomputed_beam_repeated_prune_hits;
+            var actual: std.ArrayList(u8) = .empty;
+            defer actual.deinit(std.testing.allocator);
+            const actual_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+                std.testing.allocator,
+                &actual,
+                payload,
+                true,
+                fastest_wide_match_search_budget,
+                true,
+                null,
+                null,
+            );
+            try std.testing.expectEqual(expected_ok, actual_ok);
+            try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+            return test_precomputed_beam_repeated_prune_hits != hits_before;
+        }
+    };
+
+    test_disable_precomputed_beam_repeated_prune = false;
+    test_precomputed_beam_repeated_prune_hits = 0;
+    test_precomputed_beam_repeated_prune_fallbacks = 0;
+    defer {
+        test_disable_precomputed_beam_repeated_prune = false;
+        test_precomputed_beam_repeated_prune_hits = 0;
+        test_precomputed_beam_repeated_prune_fallbacks = 0;
+    }
+
+    var measured_payload: std.ArrayList(u8) = .empty;
+    defer measured_payload.deinit(std.testing.allocator);
+    while (measured_payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const formatted = try std.fmt.bufPrint(
+            &line,
+            "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n",
+            .{measured_payload.items.len / 64},
+        );
+        try measured_payload.appendSlice(std.testing.allocator, formatted);
+    }
+    try std.testing.expect(try Oracle.compare(measured_payload.items));
+
+    var reference_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reference: std.ArrayList(u8) = .empty;
+    defer reference.deinit(reference_allocator.allocator());
+    test_disable_precomputed_beam_repeated_prune = true;
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+        reference_allocator.allocator(),
+        &reference,
+        measured_payload.items,
+        true,
+        fastest_wide_match_search_budget,
+        true,
+        null,
+        null,
+    ));
+    test_disable_precomputed_beam_repeated_prune = false;
+
+    var pruned_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var pruned: std.ArrayList(u8) = .empty;
+    defer pruned.deinit(pruned_allocator.allocator());
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+        pruned_allocator.allocator(),
+        &pruned,
+        measured_payload.items,
+        true,
+        fastest_wide_match_search_budget,
+        true,
+        null,
+        null,
+    ));
+    try std.testing.expectEqualSlices(u8, reference.items, pruned.items);
+    try std.testing.expectEqual(reference_allocator.allocations - 18, pruned_allocator.allocations);
+    try std.testing.expectEqual(reference_allocator.allocated_bytes - 235_092, pruned_allocator.allocated_bytes);
+
+    var greedy_tokens: std.ArrayList(lz77.Token) = .empty;
+    defer greedy_tokens.deinit(std.testing.allocator);
+    var sequence_scratch: LargeSequenceScratch = .{};
+    defer sequence_scratch.deinit(std.testing.allocator);
+    var single_sequence_scratch: SingleSequenceEmitScratch = .{};
+    defer single_sequence_scratch.deinit(std.testing.allocator);
+    var fallback_out: std.ArrayList(u8) = .empty;
+    defer fallback_out.deinit(std.testing.allocator);
+    const fallback_before = test_precomputed_beam_repeated_prune_fallbacks;
+    try std.testing.expect(!try emitGreedyHashMatchCompressedBlockReuseUnlessDominated(
+        std.testing.allocator,
+        &fallback_out,
+        measured_payload.items,
+        true,
+        &greedy_tokens,
+        &sequence_scratch,
+        643,
+        @intCast(measured_payload.items.len),
+        &single_sequence_scratch,
+    ));
+    _ = try emitRepeatedPatternCompressedBlockWithScratch(
+        std.testing.allocator,
+        &fallback_out,
+        measured_payload.items,
+        true,
+        &single_sequence_scratch,
+    );
+    try std.testing.expectEqual(fallback_before + 1, test_precomputed_beam_repeated_prune_fallbacks);
 
     const AllocationFailureTest = struct {
         fn run(allocator: std.mem.Allocator, payload: []const u8) !void {

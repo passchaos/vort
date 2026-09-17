@@ -523,6 +523,34 @@ Recommended next comparison steps:
   version: although correct, it reduced the target to 0.9329x with 0/15 wins
   because full match extension and tree construction cost more than the index
   it replaced.
+  Absolute-beam selection now also skips the later repeated-pattern entropy
+  candidate when a conservative literal lower bound cannot beat the selected
+  beam. The preceding direct single-match proof retains the whole-block maximum
+  byte frequency in reusable scratch. After greedy is independently proved
+  worse, repeated-pattern discovery computes the minimum regenerated-literal
+  count across its single- and multi-sequence forms. If that count exceeds the
+  maximum frequency, at least two symbols remain, so one bit per literal plus
+  the three-byte block header is a safe lower bound. Equality is pruned because
+  repeated-pattern candidates historically run after the current winner. The
+  proof never participates in the stronger mixed-family 24x cancellation
+  decision. Generated exact-candidate checks cover 32 shapes and six limits;
+  the complete selector oracle covers hits, conservative fallback, old/new wire
+  equality, and allocation-failure rollback. The locked JSON path drops from 44
+  allocations / 1,519,048 requested bytes to 26 / 1,283,956. Against independent
+  `7100fb34`/`c2b18207` ReleaseFast binaries, 31 interleaved 100-encode JSON
+  level-1 pairs improve by 1.1951x median / 1.2005x geometric mean with 31/31
+  wins and the same 643-byte frame. A 15-pair 20-row matrix preserves every
+  input hash, frame/reference size, and checksum, reaches 1.0134x across row
+  medians, and keeps a 0.9920x floor. Longer JSON level-3 and tradeoff level-1
+  controls measure 0.9933x and 0.9938x. Two narrower repeated-pattern changes
+  were rejected: reusing the first segment of a failed multi-pattern scan
+  improved that isolated stage by 1.0426x but reduced complete JSON level 1 to
+  0.9863x, while replacing scalar extension with 32/8-byte comparisons reduced
+  the isolated stage to 0.9877x because most probes fail just after the existing
+  three-byte anchor. Two earlier placements of the retained proof were also
+  rejected after stable 0.9787x/0.9797x tradeoff-level-1 and 0.9730x JSON-level-3
+  regressions; the final one-shot scratch marker keeps non-eligible selector
+  control flow unchanged.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers

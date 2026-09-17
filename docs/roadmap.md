@@ -14224,6 +14224,29 @@ reuse, so production keeps the simpler independently owned plans.
   An exact-Huffman direct proof was rejected first because its complete match
   extension and tree construction reduced the target to 0.9329x with 0/15
   wins.
+  Absolute-beam selection now also prunes the repeated-pattern entropy candidate
+  with a conservative literal lower bound. The preceding direct single-match
+  proof retains the exact whole-block maximum byte frequency in reusable
+  scratch; once greedy is independently proven worse, repeated-pattern
+  discovery finds the minimum regenerated-literal count across its single- and
+  multi-sequence forms. If that count exceeds the maximum frequency, at least
+  two symbols remain, so one bit per literal plus the block header cannot beat
+  the current winner. Equal sizes preserve the earlier winner, and mixed-family
+  24x cancellation still requires exact repeated scoring. Generated exact-wire
+  checks cover 32 shapes and six limits; selector hit/fallback, old/new wire,
+  and OOM oracles pass. The locked JSON path drops from 44 allocations /
+  1,519,048 requested bytes to 26 / 1,283,956. Independent
+  `7100fb34`/`c2b18207` binaries improve JSON level 1 by 1.1951x median /
+  1.2005x geometric mean over 31 pairs with 31/31 wins and the same 643-byte
+  frame. The 15-pair 20-row matrix preserves every hash, size, and checksum,
+  reaches 1.0134x across row medians, and keeps a 0.9920x floor; long JSON
+  level-3 and tradeoff level-1 controls measure 0.9933x and 0.9938x. Reusing a
+  failed multi-pattern scan's first segment improved its isolated stage 1.0426x
+  but reduced the full target to 0.9863x; a 32/8-byte periodic extender reduced
+  the isolated stage to 0.9877x. Two proof placements that changed shared
+  selector layout were likewise rejected at 0.9787x/0.9797x on tradeoff level 1
+  and 0.9730x on JSON level 3. The retained scratch-marker layout avoids those
+  non-target regressions.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle
