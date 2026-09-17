@@ -113,6 +113,49 @@ Current interpretation:
   strategy coverage, corpus
   throughput/ratio dashboards, and repeatable same-machine comparisons against
   zstd CLI/library modes.
+- The native encoder now exposes an explicit `fast_compressed` selection for
+  callers that need compressed output with less arbitration latency than the
+  numeric level-1 policy. It is available through one-shot/reusable/caller-
+  buffer, incremental, raw-content dictionary, dictionary-set, and CLI
+  surfaces (`fast_compressed` or `fast-compressed`). Each block tries RLE, a
+  decisive prefix-tail match, and the double-fast sequence parser; it commits a
+  valid match candidate without running the repeat-beam/full arbitration, and
+  only tries Huffman-only output when no match candidate is available before
+  falling back to raw. This is an opt-in policy: `.auto` and numeric levels
+  0/1/3 keep their established behavior and byte selection. Incremental output
+  is byte-identical to one-shot output at the same block size, including tiny
+  caller-output splits.
+
+  A same-process ReleaseFast run on Apple M1 against runtime libzstd 1.5.7
+  (`--native-selection fast_compressed --level 1 --iterations 1000 --rounds
+  7`, checksum disabled on both sides) measured:
+
+  | case | Vort bytes | libzstd bytes | Vort MiB/s | libzstd MiB/s | speed ratio |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | text | 80 | 80 | 4979.04 | 6866.33 | 0.7251x |
+  | JSON | 694 | 838 | 385.27 | 1877.73 | 0.2052x |
+  | binary | 8607 | 8609 | 217.37 | 1490.92 | 0.1458x |
+  | tradeoff | 2038 | 1967 | 105.30 | 2291.87 | 0.0459x |
+  | multiblock | 34228 | 25606 | 110.26 | 2119.27 | 0.0520x |
+
+  The mode fills a useful Vort-internal Pareto gap (roughly 1.1x/3.5x/1.4x/
+  1.0x/2.5x faster than the existing level-1 path on those five rows), but it
+  is still only 0.046x--0.725x of libzstd's encode throughput and loses ratio on
+  the tradeoff and multiblock rows. It therefore does **not** establish
+  libzstd performance parity. `zig build
+  run-zstd-fast-compressed-bench-gate -j1` retains and validates a shorter
+  five-row artifact at
+  `zig-out/vort-zstd-fast-compressed-bench.csv`; pass
+  `-- --libzstd PATH` when loader discovery is insufficient.
+
+  A frozen independent-binary control also compared the unchanged default
+  selection across 15 paired runs of the complete 20-row matrix, 50 iterations,
+  and three interleaved rounds per row. Every input SHA-256, Vort/reference size, and checksum
+  matched; the row-median geometric speed ratio was 1.0081x. Its weakest short
+  median was JSON level 1 at 0.9900x, while a 31-pair long control recovered to
+  1.0117x median / 1.0106x geometric mean with 31/31 wins. This supports the
+  claim that adding the opt-in route did not silently replace the default
+  level policy.
 - Large sequence-free four-stream Huffman sections now follow upstream zstd's
   independent-stream scheduling: all four streams advance together and decode
   five symbols per 64-bit reservoir load, with the existing checked decoder

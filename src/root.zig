@@ -4535,6 +4535,17 @@ test "root zstd public reusable aliases expose dictionary helpers" {
     const owned_result: ZstdFrameEncodeResult = encoded;
     try std.testing.expectEqual(ZstdFrameMode.literal_only, owned_result.mode);
 
+    const fast_options: ZstdAdvancedFrameOptions = .{
+        .selection = .fast_compressed,
+        .content_checksum = true,
+    };
+    const fast_encoded = try zstdEncodeFrameWithAdvancedOptionsAlloc(std.testing.allocator, payload, fast_options);
+    defer std.testing.allocator.free(fast_encoded.frame);
+    try std.testing.expectEqual(ZstdFrameMode.fast_compressed, fast_encoded.mode);
+    const fast_decoded = try zstdDecodeFrameAlloc(std.testing.allocator, fast_encoded.frame);
+    defer std.testing.allocator.free(fast_decoded);
+    try std.testing.expectEqualSlices(u8, payload, fast_decoded);
+
     var decoder = ZstdFrameDecoder.init(std.testing.allocator);
     defer decoder.deinit();
     const decoded = try decoder.decodeAllocWithDictionaryExactSize(encoded.frame, dict, payload.len);

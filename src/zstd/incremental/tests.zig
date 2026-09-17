@@ -395,6 +395,27 @@ test "Zstd incremental encoder continues mixed dictionary frames" {
     try std.testing.expectEqualSlices(u8, first ++ second, decoded);
 }
 
+test "Zstd incremental fast compressed mode matches one-shot bytes" {
+    const payload = "fast compressed incremental structured payload 0123456789\n" ** 256;
+    const options: zstd.NativeFrameOptions = .{
+        .include_content_size = true,
+        .content_checksum = true,
+        .selection = .fast_compressed,
+        .block_size_max = 1024,
+    };
+    const one_shot = try zstd.encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(one_shot.frame);
+
+    var encoder = try zstd.NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, options, payload.len);
+    defer encoder.deinit();
+    const incremental = try encodeSplit(&encoder, payload);
+    defer std.testing.allocator.free(incremental);
+    try std.testing.expectEqualSlices(u8, one_shot.frame, incremental);
+    const decoded = try zstd.decodeNativeFrameAlloc(std.testing.allocator, incremental);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
 test "Zstd incremental encoder emits skippable frames between data frames" {
     const first = "first Zstd data frame";
     const second = "second Zstd data frame";

@@ -21,6 +21,7 @@ const Options = struct {
     csv_path: ?[]const u8 = null,
     only_case: ?[]const u8 = null,
     only_level: ?c_int = null,
+    native_selection: ?vort.ZstdNativeFrameSelection = null,
     reference_library_path: ?[]const u8 = null,
     path_limit: usize = std.compress.zstd.block_size_max,
     paths: std.ArrayList([]const u8) = .empty,
@@ -117,12 +118,18 @@ pub fn main(init: std.process.Init) !void {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
         if (options.only_level) |wanted| if (wanted != level) continue;
         selected_rows += 1;
-        const vort_encoded = try vort.zstdEncodeFrameWithLevelAlloc(init.gpa, case.payload, level);
+        const vort_encoded = if (options.native_selection) |selection|
+            (try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, case.payload, .{
+                .selection = selection,
+                .content_checksum = false,
+            })).frame
+        else
+            try vort.zstdEncodeFrameWithLevelAlloc(init.gpa, case.payload, level);
         defer init.gpa.free(vort_encoded);
         const reference_encoded = try runtime.encodeAlloc(init.gpa, case.payload, level);
         defer init.gpa.free(reference_encoded);
         try verifyBothDecoders(init.gpa, runtime, case.payload, vort_encoded, reference_encoded);
-        const samples = try measureInterleaved(init.io, init.gpa, runtime, case.payload, level, options.iterations, options.rounds);
+        const samples = try measureInterleaved(init.io, init.gpa, runtime, case.payload, level, options.native_selection, options.iterations, options.rounds);
         const total_bytes = case.payload.len * options.iterations;
         const vort_rate = mibPerSecond(total_bytes, samples.vort.ns);
         const reference_rate = mibPerSecond(total_bytes, samples.reference.ns);
@@ -155,13 +162,13 @@ fn verifyBothDecoders(allocator: std.mem.Allocator, runtime: libzstd.Runtime, pa
     if (written != payload.len or !std.mem.eql(u8, payload, output)) return error.SizeMismatch;
 }
 
-fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, runtime: libzstd.Runtime, payload: []const u8, level: c_int, iterations: usize, rounds: usize) !struct { vort: Sample, reference: Sample } {
+fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, runtime: libzstd.Runtime, payload: []const u8, level: c_int, native_selection: ?vort.ZstdNativeFrameSelection, iterations: usize, rounds: usize) !struct { vort: Sample, reference: Sample } {
     var best_vort = Sample{ .ns = std.math.maxInt(u64), .mix = 0 };
     var best_reference = best_vort;
     for (0..rounds) |round| {
         const vort_first = round & 1 == 0;
-        const first = if (vort_first) try measureVort(io, allocator, payload, level, iterations) else try measureReference(io, allocator, runtime, payload, level, iterations);
-        const second = if (vort_first) try measureReference(io, allocator, runtime, payload, level, iterations) else try measureVort(io, allocator, payload, level, iterations);
+        const first = if (vort_first) try measureVort(io, allocator, payload, level, native_selection, iterations) else try measureReference(io, allocator, runtime, payload, level, iterations);
+        const second = if (vort_first) try measureReference(io, allocator, runtime, payload, level, iterations) else try measureVort(io, allocator, payload, level, native_selection, iterations);
         const vort_sample = if (vort_first) first else second;
         const reference_sample = if (vort_first) second else first;
         if (vort_sample.ns < best_vort.ns) best_vort = vort_sample;
@@ -170,11 +177,17 @@ fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, runtime: libzstd
     return .{ .vort = best_vort, .reference = best_reference };
 }
 
-fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, level: c_int, iterations: usize) !Sample {
+fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, level: c_int, native_selection: ?vort.ZstdNativeFrameSelection, iterations: usize) !Sample {
     var mix: usize = 0;
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
-        const encoded = try vort.zstdEncodeFrameWithLevelAlloc(allocator, payload, level);
+        const encoded = if (native_selection) |selection|
+            (try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, .{
+                .selection = selection,
+                .content_checksum = false,
+            })).frame
+        else
+            try vort.zstdEncodeFrameWithLevelAlloc(allocator, payload, level);
         mix +%= encoded.len;
         allocator.free(encoded);
     }
@@ -223,7 +236,13 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
             options.only_case = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--level"))
             options.only_level = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10)
-        else if (std.mem.eql(u8, arg, "--libzstd"))
+        else if (std.mem.eql(u8, arg, "--native-selection")) {
+            const selection = args.next() orelse return error.MissingLimit;
+            options.native_selection = if (std.mem.eql(u8, selection, "fast_compressed") or std.mem.eql(u8, selection, "fast-compressed"))
+                .fast_compressed
+            else
+                return error.UnknownArgument;
+        } else if (std.mem.eql(u8, arg, "--libzstd"))
             options.reference_library_path = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--csv"))
             options.csv_path = args.next() orelse return error.MissingCorpusPath

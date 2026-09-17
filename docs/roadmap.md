@@ -14324,3 +14324,31 @@ reuse, so production keeps the simpler independently owned plans.
   21-pair 20-row matrix preserves every input hash, frame/reference size, and
   checksum, reaches 1.0149x across row medians, and keeps a 0.9965x weakest
   median; binary level 1 and multi-block level 3 improve by 1.0299x and 1.0260x.
+  Added an explicit Zstd `.fast_compressed` native-frame selection between
+  raw/RLE-only operation and the full level-1 candidate arbitration. Its
+  bounded per-block policy selects RLE immediately, accepts a decisive
+  prefix-tail match, otherwise emits the double-fast match candidate directly,
+  and tries Huffman-only/raw only when no match candidate exists. The one-shot,
+  reusable scratch, append, caller-buffer, incremental, raw-content dictionary,
+  dictionary-set, root facade, and CLI surfaces all expose the same policy;
+  incremental encoding is pinned byte-for-byte to one-shot output with 1 KiB
+  blocks and tiny output slices. `.auto` and numeric levels 0/1/3 remain
+  unchanged. The generated native differential expands from 328 to 364 cases,
+  the 594-test Zstd root suite passes, the 276-case libzstd 1.5.7 compatibility
+  probe reports zero unsupported frames, and the large-sequence probe covers
+  2,044-sequence blocks plus 64-block Repeat_Mode and dictionary state.
+  A 1,000-iteration/seven-round Apple M1 comparison against libzstd 1.5.7 level
+  1 measured 80/694/8,607/2,038/34,228 Vort bytes for text/JSON/binary/tradeoff/
+  multiblock at 4,979.04/385.27/217.37/105.30/110.26 MiB/s. The matching
+  libzstd rows were 80/838/8,609/1,967/25,606 bytes at 6,866.33/1,877.73/
+  1,490.92/2,291.87/2,119.27 MiB/s. This is a useful Vort-internal low-latency
+  Pareto point, especially the roughly 3.5x level-1 JSON and 2.5x multiblock
+  speedups, but it is not a libzstd throughput-parity claim. The shared encode
+  benchmark accepts `--native-selection fast_compressed`, and
+  `run-zstd-fast-compressed-bench-gate` retains and validates a dedicated
+  five-row CSV artifact.
+  A frozen default-policy A/B across 15 paired runs of the complete 20-row
+  matrix preserved all hashes, sizes, and checksums at 1.0081x row-median
+  geometric throughput; its 0.9900x
+  short JSON level-1 floor recovered to 1.0117x median / 1.0106x geometric mean
+  over 31 longer pairs with 31/31 wins.

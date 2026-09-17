@@ -3202,6 +3202,32 @@ pub fn build(b: *std.Build) void {
     zstd_encode_bench_path_smoke.addArtifactArg(zstd_encode_bench_exe);
     const zstd_encode_bench_path_smoke_step = b.step("run-zstd-encode-bench-path-smoke", "Validate file-backed Zstd encode benchmark inputs");
     zstd_encode_bench_path_smoke_step.dependOn(&zstd_encode_bench_path_smoke.step);
+    const run_zstd_fast_compressed_bench = b.addRunArtifact(zstd_encode_bench_exe);
+    run_zstd_fast_compressed_bench.addArgs(&.{
+        "--native-selection", "fast_compressed",
+        "--level",            "1",
+        "--iterations",       "100",
+        "--rounds",           "5",
+        "--csv",              "zig-out/vort-zstd-fast-compressed-bench.csv",
+    });
+    if (b.args) |args| run_zstd_fast_compressed_bench.addArgs(args);
+    const zstd_fast_compressed_bench_step = b.step(
+        "run-zstd-fast-compressed-bench",
+        "Retain the explicit fast-compressed Zstd Pareto benchmark",
+    );
+    zstd_fast_compressed_bench_step.dependOn(&run_zstd_fast_compressed_bench.step);
+    const zstd_fast_compressed_bench_gate = b.addSystemCommand(&.{
+        "python3",      "tools/zstd/fast_compressed_bench_gate.py",
+        "--csv",        "zig-out/vort-zstd-fast-compressed-bench.csv",
+        "--executable",
+    });
+    zstd_fast_compressed_bench_gate.addArtifactArg(zstd_encode_bench_exe);
+    zstd_fast_compressed_bench_gate.step.dependOn(&run_zstd_fast_compressed_bench.step);
+    const zstd_fast_compressed_bench_gate_step = b.step(
+        "run-zstd-fast-compressed-bench-gate",
+        "Validate the explicit fast-compressed Zstd Pareto benchmark",
+    );
+    zstd_fast_compressed_bench_gate_step.dependOn(&zstd_fast_compressed_bench_gate.step);
 
     const zstd_level_schedule_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-level-schedule-bench",

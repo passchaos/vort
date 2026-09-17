@@ -454,7 +454,7 @@ def main() -> int:
         raise SystemExit(f"missing built CLI at {cli}; run `zig build` first")
 
     levels = (1, 3, 6, 9, 12, 19)
-    native_modes = ("auto", "raw_or_rle", "literal_only")
+    native_modes = ("auto", "raw_or_rle", "literal_only", "fast_compressed")
     checked = 0
     for name, frame, expected in handcrafted_frames():
         zstd_decoded = subprocess.run(

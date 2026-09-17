@@ -323,6 +323,7 @@ pub const NativeFrameSelection = enum {
     auto,
     raw_or_rle,
     literal_only,
+    fast_compressed,
 };
 
 pub const NativeFrameOptions = struct {
@@ -384,6 +385,13 @@ const IncrementalEncoderCodec = struct {
     }
     pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: usize, match_search_budget: usize) zstd.Error!void {
         try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(false, allocator, out, block, last, state, dictionary, frame_history, frame_offset, match_search_budget, false, null, null, null);
+    }
+    pub fn writeFastCompressed(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary) zstd.Error!void {
+        var block_scratch: NativeBlockEncodeScratch = .{};
+        defer block_scratch.deinit(allocator);
+        var large_sequence_scratch: LargeSequenceScratch = .{};
+        defer large_sequence_scratch.deinit(allocator);
+        try emitFastCompressedBlockWithScratch(allocator, out, block, last, state, dictionary, &large_sequence_scratch, &block_scratch);
     }
     pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash64) zstd.Error!void {
         if (!options.content_checksum) return;
@@ -1730,6 +1738,7 @@ pub fn dictionarySetFromMetadataAlloc(
 pub const NativeFrameMode = enum {
     raw_or_rle,
     literal_only,
+    fast_compressed,
 };
 
 pub const FrameMode = NativeFrameMode;
@@ -6856,6 +6865,23 @@ pub const NativeFrameEncoder = struct {
                 try encodeLiteralOnlyFrameAppendWithDictionaryInternal(self.allocator, out, input, frame_options, dictionary, &self.rep_beam_scratch, &self.large_sequence_scratch, &self.block_scratch);
                 return .literal_only;
             },
+            .fast_compressed => {
+                try emitFrameHeader(self.allocator, out, try checkedUsizeToU64(input.len), frame_options);
+                const block_size_max = try nativeBlockSizeMax(frame_options);
+                var state: LiteralOnlyEncoderState = .{};
+                if (input.len == 0) {
+                    try emitFastCompressedBlockWithScratch(self.allocator, out, "", true, &state, dictionary, &self.large_sequence_scratch, &self.block_scratch);
+                } else {
+                    var offset: usize = 0;
+                    while (offset < input.len) {
+                        const end = @min(input.len, offset + block_size_max);
+                        try emitFastCompressedBlockWithScratch(self.allocator, out, input[offset..end], end == input.len, &state, dictionary, &self.large_sequence_scratch, &self.block_scratch);
+                        offset = end;
+                    }
+                }
+                try emitContentChecksum(self.allocator, out, input, frame_options);
+                return .fast_compressed;
+            },
             .auto => {},
         }
 
@@ -11959,6 +11985,90 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(
     try payload.append(allocator, 0); // sequence_count=0: the compressed block is literals-only.
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
+}
+
+fn emitFastCompressedBlockWithScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    state: *LiteralOnlyEncoderState,
+    dictionary: ?NativeDictionary,
+    large_sequence_scratch: *LargeSequenceScratch,
+    scratch: *NativeBlockEncodeScratch,
+) Error!void {
+    try ensureEncoderSequenceState(state, dictionary);
+    if (rleByte(block)) |byte| {
+        try emitRleBlock(allocator, out, byte, block.len, last);
+        return;
+    }
+    scratch.clearRetainingCapacity();
+    const candidate = &scratch.candidate;
+    const best = &scratch.best;
+    var best_is_match = false;
+
+    if (findPrefixTailDuplicateMatch(block)) |match| {
+        if (try emitSingleMatchCompressedBlockFromMatch(allocator, candidate, block, last, match) and
+            try prepareSequenceCandidateForFrameWithScratch(allocator, candidate, block, last, &state.sequence_state, large_sequence_scratch))
+        {
+            try best.appendSlice(allocator, candidate.items);
+            best_is_match = true;
+            if (best.items.len <= block.len / 8) {
+                state.previous_huffman_plan = null;
+                try appendSequenceCandidateAndCommit(allocator, out, best.items, last, &state.sequence_state);
+                return;
+            }
+        }
+    }
+
+    candidate.clearRetainingCapacity();
+    const parser_options = zstdHashParserOptions(block.len);
+    const stats: lz77.PlanStats = double_fast_match.planReuse(&scratch.greedy_tokens, allocator, block, parser_options) catch |err| switch (err) {
+        error.InvalidBlockPlan => lz77.PlanStats{},
+        else => return err,
+    };
+    const match_ok = stats.matches != 0 and try emitHashTokenSequenceBlockReuse(
+        allocator,
+        candidate,
+        block,
+        last,
+        scratch.greedy_tokens.items,
+        stats,
+        large_sequence_scratch,
+    );
+    const match_ready = match_ok and try prepareSequenceCandidateForFrameWithScratch(
+        allocator,
+        candidate,
+        block,
+        last,
+        &state.sequence_state,
+        large_sequence_scratch,
+    );
+    if (match_ready and (best.items.len == 0 or candidate.items.len < best.items.len)) {
+        best.clearRetainingCapacity();
+        try best.appendSlice(allocator, candidate.items);
+        best_is_match = true;
+    }
+    if (best_is_match) {
+        state.previous_huffman_plan = null;
+        try appendSequenceCandidateAndCommit(allocator, out, best.items, last, &state.sequence_state);
+        return;
+    }
+
+    candidate.clearRetainingCapacity();
+    var next_huffman_plan = state.previous_huffman_plan;
+    const huffman_ok = try emitSmallHuffmanLiteralBlock(allocator, candidate, block, last, &next_huffman_plan);
+    if (huffman_ok and (best.items.len == 0 or candidate.items.len <= best.items.len)) {
+        try out.appendSlice(allocator, candidate.items);
+        state.previous_huffman_plan = next_huffman_plan;
+        return;
+    }
+    if (huffman_ok) {
+        try out.appendSlice(allocator, candidate.items);
+        state.previous_huffman_plan = next_huffman_plan;
+        return;
+    }
+    try emitBlock(allocator, out, block, last);
 }
 
 inline fn decisiveHistoryCandidate(block: []const u8, encoded_len: usize) bool {
@@ -33374,6 +33484,95 @@ test "zstd native frame writer chooses smallest fallback mode" {
     const reusable_raw_decoded = try decodeNativeFrameAlloc(std.testing.allocator, reusable_out.items);
     defer std.testing.allocator.free(reusable_raw_decoded);
     try std.testing.expectEqualSlices(u8, repeated, reusable_raw_decoded);
+}
+
+test "zstd fast compressed selection provides a bounded Pareto mode" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = payload.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{index});
+        try payload.appendSlice(std.testing.allocator, formatted);
+    }
+    const options: NativeFrameOptions = .{
+        .selection = .fast_compressed,
+        .content_checksum = true,
+    };
+    const encoded = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, options);
+    defer std.testing.allocator.free(encoded.frame);
+    try std.testing.expectEqual(NativeFrameMode.fast_compressed, encoded.mode);
+    try std.testing.expect(encoded.frame.len < payload.items.len / 32);
+    try std.testing.expectEqual(@as(usize, 698), encoded.frame.len);
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded.frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+
+    var encoder = NativeFrameEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const scratch = try encoder.encodeScratch(payload.items, options);
+    try std.testing.expectEqual(NativeFrameMode.fast_compressed, scratch.mode);
+    try std.testing.expectEqualSlices(u8, encoded.frame, scratch.frame);
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    const appended_mode = try encoder.encodeAppend(&appended, payload.items, options);
+    try std.testing.expectEqual(NativeFrameMode.fast_compressed, appended_mode);
+    try std.testing.expectEqualSlices(u8, encoded.frame, appended.items);
+    const bound = try encodedNativeFrameBoundWithOptions(payload.items.len, options);
+    const into = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(into);
+    const into_result = try encoder.encodeIntoSlice(payload.items, options, into);
+    try std.testing.expectEqual(NativeFrameMode.fast_compressed, into_result.mode);
+    try std.testing.expectEqualSlices(u8, encoded.frame, into[0..into_result.written]);
+
+    const raw = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, "short", options);
+    defer std.testing.allocator.free(raw.frame);
+    try std.testing.expectEqual(NativeFrameMode.fast_compressed, raw.mode);
+    const raw_decoded = try decodeNativeFrameAlloc(std.testing.allocator, raw.frame);
+    defer std.testing.allocator.free(raw_decoded);
+    try std.testing.expectEqualSlices(u8, "short", raw_decoded);
+
+    const repeated = "z" ** 1024;
+    const rle = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, repeated, options);
+    defer std.testing.allocator.free(rle.frame);
+    const rle_block = try inspectNativeFrameFirstBlock(rle.frame);
+    try std.testing.expectEqual(NativeBlockType.rle, rle_block.block_type);
+    const rle_decoded = try decodeNativeFrameAlloc(std.testing.allocator, rle.frame);
+    defer std.testing.allocator.free(rle_decoded);
+    try std.testing.expectEqualSlices(u8, repeated, rle_decoded);
+
+    const dictionary = NativeDictionary.initFromContent("fast-compressed-dictionary-prefix");
+    const dictionary_payload = "fast-compressed-dictionary-prefix payload fast-compressed-dictionary-prefix";
+    const dictionary_encoded = try encodeNativeFrameWithDictionaryAlloc(
+        std.testing.allocator,
+        dictionary_payload,
+        options,
+        dictionary,
+    );
+    defer std.testing.allocator.free(dictionary_encoded.frame);
+    try std.testing.expectEqual(NativeFrameMode.fast_compressed, dictionary_encoded.mode);
+    const dictionary_decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, dictionary_encoded.frame, dictionary);
+    defer std.testing.allocator.free(dictionary_decoded);
+    try std.testing.expectEqualSlices(u8, dictionary_payload, dictionary_decoded);
+    const dictionary_set = try NativeDictionarySet.initChecked(&.{dictionary});
+    const set_encoded = try encodeNativeFrameWithDictionarySetAlloc(
+        std.testing.allocator,
+        dictionary_payload,
+        options,
+        dictionary_set,
+        dictionary.id,
+    );
+    defer std.testing.allocator.free(set_encoded.frame);
+    try std.testing.expectEqualSlices(u8, dictionary_encoded.frame, set_encoded.frame);
+
+    const AllocationFailureTest = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, selected_options: NativeFrameOptions) !void {
+            const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, selected_options);
+            defer allocator.free(result.frame);
+            try std.testing.expectEqual(NativeFrameMode.fast_compressed, result.mode);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, AllocationFailureTest.run, .{ payload.items, options });
 }
 
 test "zstd native incremental decoder accepts split input and output" {

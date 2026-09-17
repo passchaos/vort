@@ -1643,13 +1643,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode dependency-free Brotli stored stream file
         \\  size-br-file <path> [max_output]
         \\                              Preflight dependency-free Brotli stored stream decoded size
-        \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only] [checksum] [content_size]
+        \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
         \\                              Encode text as dependency-free native-subset Zstandard hex
-        \\  encode-zstd-native-bytes-hex [hex] [auto|raw_or_rle|literal_only] [checksum] [content_size]
+        \\  encode-zstd-native-bytes-hex [hex] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
         \\                              Encode bytes as dependency-free native-subset Zstandard hex
-        \\  encode-zstd-native-file-hex [path] [auto|raw_or_rle|literal_only] [checksum] [content_size]
+        \\  encode-zstd-native-file-hex [path] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
         \\                              Encode file bytes as dependency-free native-subset Zstandard hex
-        \\  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only] [checksum] [content_size]
+        \\  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
         \\                              Encode file bytes as dependency-free native-subset Zstandard file
         \\  decode-zstd-native-hex [hex] [max_output]
         \\                              Decode dependency-free native-subset Zstandard hex
@@ -2654,6 +2654,7 @@ fn parseZstdNativeSelection(text: ?[]const u8) !vort.ZstdNativeFrameSelection {
     if (std.mem.eql(u8, value, "auto")) return .auto;
     if (std.mem.eql(u8, value, "raw_or_rle") or std.mem.eql(u8, value, "raw-rle")) return .raw_or_rle;
     if (std.mem.eql(u8, value, "literal_only") or std.mem.eql(u8, value, "literal-only")) return .literal_only;
+    if (std.mem.eql(u8, value, "fast_compressed") or std.mem.eql(u8, value, "fast-compressed")) return .fast_compressed;
     return error.InvalidZstdNativeSelection;
 }
 
