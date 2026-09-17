@@ -16420,12 +16420,13 @@ noinline fn emitBestMultiSequenceCompressedBlockWinnerOnly(
         test_multi_sequence_winner_hits[@intFromEnum(selected)] += 1;
     }
 
-    var candidate_block: std.ArrayList(u8) = .empty;
-    defer candidate_block.deinit(allocator);
+    const output_start = out.items.len;
+    errdefer out.items.len = output_start;
+    try out.ensureUnusedCapacity(allocator, best_payload_len + 3);
     const emitted = switch (selected) {
         .rle => try emitRleSequenceCompressedBlockWithLiterals(
             allocator,
-            &candidate_block,
+            out,
             block,
             last,
             literals_prefix,
@@ -16435,7 +16436,7 @@ noinline fn emitBestMultiSequenceCompressedBlockWinnerOnly(
         ),
         .predefined => try emitMultiSequencePredefinedCompressedBlockWithLiterals(
             allocator,
-            &candidate_block,
+            out,
             block,
             last,
             literals_prefix,
@@ -16446,7 +16447,7 @@ noinline fn emitBestMultiSequenceCompressedBlockWinnerOnly(
         .table_plan => if (literal_lens.len >= wide_borrowed_sequence_plan_min)
             try emitSequenceCompressedBlockWithTablePlansAndOffsetsBorrowed(
                 allocator,
-                &candidate_block,
+                out,
                 block,
                 last,
                 literal_lens,
@@ -16462,7 +16463,7 @@ noinline fn emitBestMultiSequenceCompressedBlockWinnerOnly(
         else
             try emitSequenceCompressedBlockWithTablePlans(
                 allocator,
-                &candidate_block,
+                out,
                 block,
                 last,
                 literal_lens,
@@ -16475,8 +16476,7 @@ noinline fn emitBestMultiSequenceCompressedBlockWinnerOnly(
                 null,
             ),
     };
-    if (!emitted or candidate_block.items.len != best_payload_len + 3) return error.CorruptFrame;
-    try out.appendSlice(allocator, candidate_block.items);
+    if (!emitted or out.items.len - output_start != best_payload_len + 3) return error.CorruptFrame;
     return true;
 }
 
@@ -16878,6 +16878,41 @@ test "zstd multi sequence winner-only emission preserves generic wire" {
     try std.testing.expect(test_multi_sequence_winner_hits[0] != 0);
     try std.testing.expect(test_multi_sequence_winner_hits[1] != 0);
     try std.testing.expect(test_multi_sequence_winner_hits[2] != 0);
+
+    var reference_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reference_output: std.ArrayList(u8) = .empty;
+    defer reference_output.deinit(reference_allocator.allocator());
+    test_disable_multi_sequence_winner_only = true;
+    try std.testing.expect(try emitBestSequenceCompressedBlock(
+        reference_allocator.allocator(),
+        &reference_output,
+        predefined_payload.items,
+        true,
+        &predefined_literal_lens,
+        &predefined_offsets,
+        &predefined_match_lens,
+        &predefined_literal_ends,
+        predefined_payload.items.len,
+    ));
+    test_disable_multi_sequence_winner_only = false;
+
+    var direct_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var direct_output: std.ArrayList(u8) = .empty;
+    defer direct_output.deinit(direct_allocator.allocator());
+    try std.testing.expect(try emitBestSequenceCompressedBlock(
+        direct_allocator.allocator(),
+        &direct_output,
+        predefined_payload.items,
+        true,
+        &predefined_literal_lens,
+        &predefined_offsets,
+        &predefined_match_lens,
+        &predefined_literal_ends,
+        predefined_payload.items.len,
+    ));
+    try std.testing.expectEqualSlices(u8, reference_output.items, direct_output.items);
+    try std.testing.expectEqual(reference_allocator.allocations - 2, direct_allocator.allocations);
+    try std.testing.expect(direct_allocator.allocated_bytes + reference_output.items.len * 2 <= reference_allocator.allocated_bytes);
 
     const AllocationFailureTest = struct {
         fn run(allocator: std.mem.Allocator) !void {

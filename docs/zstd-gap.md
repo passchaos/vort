@@ -440,6 +440,17 @@ Recommended next comparison steps:
   threshold. The 100-row candidate-stage gate now also models unavailable
   stages explicitly: a zero-duration sample is accepted only when no block was
   available, while every available stage must still report positive time.
+  The selected multi-sequence writer now appends transactionally into caller
+  output after reserving the exact encoded size, eliminating the final temporary
+  block allocation and copy. The predefined-winner allocation oracle drops from
+  6 calls / 882 requested bytes to 4 / 580 while preserving exact output and
+  rollback under every injected allocation failure. Against independent
+  `77f141e7` and direct-output binaries, a 21-pair 20-row matrix preserves every
+  input hash, frame/reference size, and checksum; row-median geometric throughput
+  is 1.0033x with a 0.9987x floor. The longer target/control checks measure
+  0.9994x for JSON level 1, 1.0019x for text level 1, and 1.0077x for binary
+  level 1, so the retained claim is lower allocation/copy traffic rather than a
+  broad latency win.
 
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded

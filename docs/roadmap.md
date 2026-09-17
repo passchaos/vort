@@ -14142,3 +14142,12 @@ reuse, so production keeps the simpler independently owned plans.
   mean. The 100-row stage gate also now accepts zero timer resolution only for
   unavailable stages and still requires positive timing for every available
   result.
+  The winner-only multi-sequence writer now reserves its exact final size and
+  writes transactionally into caller output instead of allocating and copying a
+  temporary block. The predefined-winner allocation oracle falls from 6 calls /
+  882 requested bytes to 4 / 580, preserves byte-identical output, and retains
+  rollback under every injected allocation failure. A 21-pair independent-binary
+  20-row matrix preserves every input hash, output/reference size, and checksum,
+  with 1.0033x row-median geometric throughput and a 0.9987x weakest median.
+  Longer level-1 controls measure 0.9994x JSON, 1.0019x text, and 1.0077x binary;
+  this is retained as an allocation/copy reduction rather than a latency claim.
