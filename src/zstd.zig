@@ -16564,16 +16564,20 @@ noinline fn emitBestMultiSequenceCompressedBlockWinnerOnly(
         error.CorruptFrame => {},
         else => return err,
     }
-    if (predefinedSequencePayloadLenWithLiteralsLen(literal_lens, offsets, match_lens, literals_prefix.len)) |payload_len| {
+    var predefined_payload_len: ?usize = null;
+    const table_plan = try bestTablePlanSequenceWithLiteralsLenAndPredefinedPayload(
+        literal_lens,
+        offsets,
+        match_lens,
+        literals_prefix.len,
+        &predefined_payload_len,
+    );
+    if (predefined_payload_len) |payload_len| {
         if (winner == null or payload_len < best_payload_len) {
             winner = .predefined;
             best_payload_len = payload_len;
         }
-    } else |err| switch (err) {
-        error.CorruptFrame => {},
-        else => return err,
     }
-    const table_plan = try bestTablePlanSequenceWithLiteralsLen(literal_lens, offsets, match_lens, literals_prefix.len);
     if (table_plan) |plan| {
         if (winner == null or plan.payload_len < best_payload_len) {
             winner = .table_plan;
@@ -18854,7 +18858,26 @@ fn bestTablePlanSequenceWithLiteralsLenAndPreviousTables(
     previous_tables: ?*const SequenceTables,
     initial_offsets: [3]usize,
 ) Error!?SequenceCombinedPlanCandidate {
-    return try bestTablePlanSequenceWithLiteralsLenInternal(literal_lens, offsets, match_lens, literals_section_len, true, previous_tables, initial_offsets);
+    return try bestTablePlanSequenceWithLiteralsLenInternal(literal_lens, offsets, match_lens, literals_section_len, true, previous_tables, initial_offsets, null);
+}
+
+fn bestTablePlanSequenceWithLiteralsLenAndPredefinedPayload(
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literals_section_len: usize,
+    predefined_payload_len: *?usize,
+) Error!?SequenceCombinedPlanCandidate {
+    return try bestTablePlanSequenceWithLiteralsLenInternal(
+        literal_lens,
+        offsets,
+        match_lens,
+        literals_section_len,
+        true,
+        null,
+        initial_repeated_offsets,
+        predefined_payload_len,
+    );
 }
 
 fn bestTablePayloadLenWithLiteralsLen(
@@ -18863,7 +18886,7 @@ fn bestTablePayloadLenWithLiteralsLen(
     match_lens: []const usize,
     literals_section_len: usize,
 ) Error!?usize {
-    const candidate = try bestTablePlanSequenceWithLiteralsLenInternal(literal_lens, offsets, match_lens, literals_section_len, false, null, initial_repeated_offsets) orelse return null;
+    const candidate = try bestTablePlanSequenceWithLiteralsLenInternal(literal_lens, offsets, match_lens, literals_section_len, false, null, initial_repeated_offsets, null) orelse return null;
     return candidate.payload_len;
 }
 
@@ -18875,7 +18898,9 @@ fn bestTablePlanSequenceWithLiteralsLenInternal(
     comptime retain_plan: bool,
     previous_tables: ?*const SequenceTables,
     initial_offsets: [3]usize,
+    predefined_payload_len_out: ?*?usize,
 ) Error!?SequenceCombinedPlanCandidate {
+    if (predefined_payload_len_out) |out| out.* = null;
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
     if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
 
@@ -18886,17 +18911,32 @@ fn bestTablePlanSequenceWithLiteralsLenInternal(
     var literal_costs: [4]?SequenceTableBitCost = @splat(null);
     var offset_costs: [4]?SequenceTableBitCost = @splat(null);
     var match_costs: [4]?SequenceTableBitCost = @splat(null);
+    var predefined_literal_cost: ?SequenceTableBitCost = null;
+    var predefined_offset_cost: ?SequenceTableBitCost = null;
+    var predefined_match_cost: ?SequenceTableBitCost = null;
     for (literal_alternatives.items[0..literal_alternatives.len], 0..) |plan, i| {
         literal_costs[i] = try sequenceTablePlanBitCostWithOffsets(plan, .literal, literal_lens, literal_lens, offsets, initial_offsets);
+        if (plan == .predefined) predefined_literal_cost = literal_costs[i];
     }
     for (offset_alternatives.items[0..offset_alternatives.len], 0..) |*plan, i| {
         offset_costs[i] = switch (plan.*) {
             .compressed => |*compressed| try compressedOffsetSequenceTablePlanBitCostKnownValid(compressed),
             else => try sequenceTablePlanBitCostWithOffsets(plan.*, .offset, offsets, literal_lens, offsets, initial_offsets),
         };
+        if (plan.* == .predefined) predefined_offset_cost = offset_costs[i];
     }
     for (match_alternatives.items[0..match_alternatives.len], 0..) |plan, i| {
         match_costs[i] = try sequenceTablePlanBitCostWithOffsets(plan, .match, match_lens, literal_lens, offsets, initial_offsets);
+        if (plan == .predefined) predefined_match_cost = match_costs[i];
+    }
+    if (predefined_payload_len_out) |out| {
+        if (predefined_literal_cost != null and predefined_offset_cost != null and predefined_match_cost != null) {
+            var payload_len = literals_section_len;
+            payload_len = std.math.add(usize, payload_len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
+            payload_len = std.math.add(usize, payload_len, 1) catch return error.IntegerOverflow;
+            const bit_count = std.math.add(usize, 1 + predefined_literal_cost.?.bit_count, predefined_offset_cost.?.bit_count + predefined_match_cost.?.bit_count) catch return error.IntegerOverflow;
+            out.* = std.math.add(usize, payload_len, (bit_count + 7) / 8) catch return error.IntegerOverflow;
+        }
     }
 
     var best_plan: SequenceCombinedEmitPlan = undefined;
@@ -30756,6 +30796,19 @@ test "zstd sequence payload scorers reuse exact literal section length" {
     const actual_table = (try bestTablePlanSequenceWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_section_len)) orelse return error.CorruptFrame;
     try std.testing.expectEqual(expected_table.payload_len, actual_table.payload_len);
     try std.testing.expectEqual(actual_table.payload_len, (try bestTablePayloadLenWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_section_len)).?);
+    var reused_predefined_len: ?usize = null;
+    const reused_table = (try bestTablePlanSequenceWithLiteralsLenAndPredefinedPayload(
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        literals_section_len,
+        &reused_predefined_len,
+    )) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(
+        try predefinedSequencePayloadLenWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_section_len),
+        reused_predefined_len.?,
+    );
+    try std.testing.expectEqual(actual_table.payload_len, reused_table.payload_len);
     var expected_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
     const expected_count = try sequenceReadFieldsWithTablePlans(&expected_fields, &literal_lens, &offsets, &match_lens, expected_table.plan);
     var actual_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;

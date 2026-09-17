@@ -579,6 +579,23 @@ Recommended next comparison steps:
   preserves every input hash, frame/reference size, and checksum and reaches
   1.0036x across row medians. Its noisy 0.9863x/0.9861x text level-1/9 rows
   recover to 0.9960x/0.9917x in separate 31-pair, 5,000-encode controls.
+  Multi-sequence winner selection now reuses the exact all-predefined payload
+  cost already computed while constructing the mixed RLE/predefined/FSE table
+  alternatives. Previously the winner path ran three independent predefined
+  DPs, then the mixed-table planner immediately rebuilt the same LL/OF/ML
+  plans. The mixed planner now returns the all-predefined cost without changing
+  its candidate set; winner comparison remains RLE first, predefined second,
+  mixed tables third, and a predefined winner still uses the established
+  emitter. The exact-length oracle compares the reused result with the old
+  scorer, while generated winner-only/reference checks retain every output
+  byte. Against independent `b71f0ad0`/`7405d1b6` binaries, 15 interleaved
+  500-encode JSON level-1 pairs improve by 1.0584x median / 1.0581x geometric
+  mean with 15/15 wins and the same 643-byte frame. A 15-pair 20-row matrix
+  preserves every input hash, frame/reference size, and checksum, reaches
+  1.0220x across row medians, and keeps a 0.9957x floor. The weakest multi-block
+  level-1 row recovers to 1.0011x over 31 longer pairs. A matching 10-second,
+  1 ms post-change sample reduces `planPredefinedSequenceValues` self samples
+  from 371 to 203, confirming that the measured gain tracks the removed DP work.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers

@@ -14269,6 +14269,19 @@ reuse, so production keeps the simpler independently owned plans.
   hash, size, and checksum at a 1.0036x row-median geometric mean; longer
   31-pair text level-1/9 controls recover the noisy short-sample floor to
   0.9960x/0.9917x.
+  Multi-sequence winner selection now obtains the all-predefined payload length
+  from the mixed-table planner's already-built LL/OF/ML predefined alternatives
+  instead of immediately running the same three DPs a second time. Candidate
+  availability and RLE/predefined/mixed tie order are unchanged, and predefined
+  winners still use the existing emitter. An exact-cost oracle matches the old
+  independent scorer, while the generated winner-only oracle preserves every
+  reference byte. Independent `b71f0ad0`/`7405d1b6` binaries improve JSON level
+  1 by 1.0584x median / 1.0581x geometric mean across 15 pairs with 15/15 wins
+  and the same 643-byte frame. A separate 15-pair 20-row matrix preserves every
+  hash, size, and checksum, reaches a 1.0220x row-median geometric mean, and
+  keeps a 0.9957x floor; the weakest multi-block level-1 row measures 1.0011x
+  over 31 longer pairs. A same-duration 10-second post-change sample reduces
+  `planPredefinedSequenceValues` self samples from 371 to 203.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle
