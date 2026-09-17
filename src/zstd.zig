@@ -23531,12 +23531,66 @@ fn appendBitField(out: []BitField, count: *usize, value: usize, bits: u8) Error!
 }
 
 fn emitReverseBitstreamFromReadOrder(allocator: std.mem.Allocator, out: *std.ArrayList(u8), read_fields: []const BitField) Error!void {
+    if (read_fields.len > max_native_sequence_count * 6) return error.OutputTooSmall;
+    var writer: ReverseBitstreamWriter = .{};
+    var i = read_fields.len;
+    while (i > 0) {
+        i -= 1;
+        const field = read_fields[i];
+        if (field.bits > @bitSizeOf(usize) or
+            (field.bits == 0 and field.value != 0) or
+            (field.bits != 0 and field.value >= (@as(usize, 1) << @intCast(field.bits)))) return error.CorruptFrame;
+        try writer.addBits(allocator, out, field.value, field.bits);
+    }
+    try writer.finish(allocator, out);
+}
+
+fn emitReverseBitstreamFromReadOrderReference(allocator: std.mem.Allocator, out: *std.ArrayList(u8), read_fields: []const BitField) Error!void {
     var reversed: [max_native_sequence_count * 6]BitField = undefined;
     if (read_fields.len > reversed.len) return error.OutputTooSmall;
-    for (read_fields, 0..) |field, i| {
-        reversed[read_fields.len - 1 - i] = field;
-    }
+    for (read_fields, 0..) |field, i| reversed[read_fields.len - 1 - i] = field;
     try emitReverseBitstream(allocator, out, reversed[0..read_fields.len]);
+}
+
+test "zstd reverse bitstream direct reverse traversal matches copied reference" {
+    var fields: [max_native_sequence_count * 6]BitField = undefined;
+    var random_state: u32 = 0x9e37_79b9;
+    const lengths = [_]usize{ 0, 1, 2, 7, 31, 127, 511, 1024, fields.len };
+    for (lengths) |len| {
+        for (fields[0..len]) |*field| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            const bits: u8 = @intCast((random_state >> 27) % 16);
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            field.* = .{
+                .value = if (bits == 0) 0 else @as(usize, random_state) & ((@as(usize, 1) << @intCast(bits)) - 1),
+                .bits = bits,
+            };
+        }
+        var expected: std.ArrayList(u8) = .empty;
+        defer expected.deinit(std.testing.allocator);
+        try emitReverseBitstreamFromReadOrderReference(std.testing.allocator, &expected, fields[0..len]);
+        var actual: std.ArrayList(u8) = .empty;
+        defer actual.deinit(std.testing.allocator);
+        try emitReverseBitstreamFromReadOrder(std.testing.allocator, &actual, fields[0..len]);
+        try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+    }
+
+    var invalid = [_]BitField{.{ .value = 1, .bits = 0 }};
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try std.testing.expectError(error.CorruptFrame, emitReverseBitstreamFromReadOrderReference(std.testing.allocator, &expected, &invalid));
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expectError(error.CorruptFrame, emitReverseBitstreamFromReadOrder(std.testing.allocator, &actual, &invalid));
+
+    var too_many: [max_native_sequence_count * 6 + 1]BitField = undefined;
+    @memset(&too_many, .{ .value = 0, .bits = 0 });
+    try std.testing.expectError(error.OutputTooSmall, emitReverseBitstreamFromReadOrderReference(std.testing.allocator, &expected, &too_many));
+    try std.testing.expectError(error.OutputTooSmall, emitReverseBitstreamFromReadOrder(std.testing.allocator, &actual, &too_many));
+
+    invalid[0] = .{ .value = 0, .bits = @bitSizeOf(usize) + 1 };
+    try std.testing.expectError(error.CorruptFrame, emitReverseBitstreamFromReadOrderReference(std.testing.allocator, &expected, &invalid));
+    try std.testing.expectError(error.CorruptFrame, emitReverseBitstreamFromReadOrder(std.testing.allocator, &actual, &invalid));
 }
 
 fn emitReverseBitstream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), fields: []const BitField) Error!void {

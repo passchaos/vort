@@ -14151,3 +14151,23 @@ reuse, so production keeps the simpler independently owned plans.
   with 1.0033x row-median geometric throughput and a 0.9987x weakest median.
   Longer level-1 controls measure 0.9994x JSON, 1.0019x text, and 1.0077x binary;
   this is retained as an allocation/copy reduction rather than a latency claim.
+  Reverse sequence-bitstream emission now iterates the existing read-order
+  fields backwards, removing a copy into a second array of up to 3,072
+  `BitField` records (roughly 48 KiB on 64-bit targets). The reference oracle
+  covers empty through maximum-length lists, mixed zero-to-15-bit widths,
+  invalid zero/oversized widths, and one-over-limit input. Against independent
+  `49cc7607` and candidate binaries, 31 JSON level-1 pairs improve by 1.0401x
+  median / 1.0405x geometric mean with 31/31 wins and the same 643-byte frame.
+  A separate 21-pair 20-row matrix preserves all hashes, sizes, and checksums,
+  reaches 1.0149x across row medians, and keeps a 0.9965x weakest median; binary
+  level 1 and multi-block level 3 improve by 1.0299x and 1.0260x.
+  Reverse sequence-bitstream emission now consumes the existing read-order
+  `BitField` slice backwards, removing the former copy into a second array of up
+  to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle
+  covers empty through maximum-length field lists, mixed zero-to-15-bit widths,
+  invalid values/widths, and one-over-limit input. Thirty-one interleaved
+  independent-binary JSON level-1 pairs improve by 1.0401x median / 1.0405x
+  geometric mean with 31/31 wins and the same 643-byte frame. A separate
+  21-pair 20-row matrix preserves every input hash, frame/reference size, and
+  checksum, reaches 1.0149x across row medians, and keeps a 0.9965x weakest
+  median; binary level 1 and multi-block level 3 improve by 1.0299x and 1.0260x.

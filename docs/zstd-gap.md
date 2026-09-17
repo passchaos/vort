@@ -451,6 +451,28 @@ Recommended next comparison steps:
   0.9994x for JSON level 1, 1.0019x for text level 1, and 1.0077x for binary
   level 1, so the retained claim is lower allocation/copy traffic rather than a
   broad latency win.
+  Reverse sequence-bitstream emission now walks the existing read-order fields
+  backwards directly instead of copying as many as 3,072 `BitField` records
+  into a second roughly 48 KiB stack array. A scalar reference oracle covers
+  empty through maximum-length field lists, mixed zero-to-15-bit widths,
+  invalid zero/oversized widths, and one-over-limit input. Against independent
+  `49cc7607` and candidate binaries, 31 interleaved JSON level-1 pairs improve
+  by 1.0401x median / 1.0405x geometric mean with 31/31 wins and the same
+  643-byte frame. A separate 21-pair 20-row matrix preserves every input hash,
+  frame/reference size, and checksum, improves by 1.0149x across row medians,
+  and keeps a 0.9965x weakest median; binary level 1 and multi-block level 3
+  improve by 1.0299x and 1.0260x.
+  Sequence bitstream emission now traverses the existing read-order fields in
+  reverse directly instead of copying as many as 3,072 `BitField` records into
+  a second roughly 48 KiB stack array first. A scalar reference oracle covers
+  empty through maximum-length field lists, mixed zero-to-15-bit widths, invalid
+  zero-width values, oversized widths, and one-over-limit input. Against frozen
+  `49cc7607` and candidate binaries, 31 interleaved JSON level-1 pairs improve
+  by 1.0401x median / 1.0405x geometric mean with 31/31 wins and the same
+  643-byte frame. A separate 21-pair 20-row matrix preserves all input hashes,
+  frame/reference sizes, and checksums, improves by 1.0149x across row medians,
+  and keeps a 0.9965x weakest median; binary level 1 and multi-block level 3
+  improve by 1.0299x and 1.0260x.
 
 - Native hash-parser blocks are no longer discarded at the historical 512-sequence
   implementation limit. Blocks above that small-stack threshold use bounded
