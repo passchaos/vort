@@ -21,6 +21,7 @@ const Options = struct {
     csv_path: ?[]const u8 = null,
     only_case: ?[]const u8 = null,
     only_level: ?c_int = null,
+    reference_library_path: ?[]const u8 = null,
     path_limit: usize = std.compress.zstd.block_size_max,
     paths: std.ArrayList([]const u8) = .empty,
 
@@ -39,7 +40,10 @@ pub fn main(init: std.process.Init) !void {
     defer options.deinit(init.gpa);
     const provenance = try benchmark_provenance.capture(init.io, init.gpa, init.minimal.args, "internal-auto");
     defer provenance.deinit(init.gpa);
-    var runtime = try libzstd.Runtime.open();
+    var runtime = if (options.reference_library_path) |path|
+        try libzstd.Runtime.openPath(path)
+    else
+        try libzstd.Runtime.open();
     defer runtime.deinit();
 
     var numbered_json: std.ArrayList(u8) = .empty;
@@ -219,6 +223,8 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
             options.only_case = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--level"))
             options.only_level = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10)
+        else if (std.mem.eql(u8, arg, "--libzstd"))
+            options.reference_library_path = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--csv"))
             options.csv_path = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--limit"))

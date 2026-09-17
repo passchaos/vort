@@ -41,6 +41,18 @@ def run(executable: Path, *args: str, check: bool = True) -> subprocess.Complete
     )
 
 
+def reference_library() -> Path | None:
+    candidates = (
+        Path("/opt/homebrew/opt/zstd/lib/libzstd.dylib"),
+        Path("/usr/local/opt/zstd/lib/libzstd.dylib"),
+        Path("/lib/x86_64-linux-gnu/libzstd.so.1"),
+        Path("/usr/lib/x86_64-linux-gnu/libzstd.so.1"),
+        Path("/lib/aarch64-linux-gnu/libzstd.so.1"),
+        Path("/usr/lib/aarch64-linux-gnu/libzstd.so.1"),
+    )
+    return next((path.resolve() for path in candidates if path.is_file()), None)
+
+
 def affinity_text(cpus: set[int]) -> str:
     ranges: list[str] = []
     ordered = sorted(cpus)
@@ -60,6 +72,8 @@ def main() -> int:
         raise SystemExit("usage: encode_bench_path_smoke.py <benchmark>")
     executable = Path(sys.argv[1]).resolve()
     executable_sha256 = hashlib.sha256(executable.read_bytes()).hexdigest()
+    explicit_library = reference_library()
+    reference_args = ("--libzstd", str(explicit_library)) if explicit_library else ()
     with tempfile.TemporaryDirectory(prefix="vort-zstd-encode-path-") as directory:
         root = Path(directory)
         first = root / "alpha.json"
@@ -83,6 +97,7 @@ def main() -> int:
             str(first),
             "--path",
             str(second),
+            *reference_args,
         )
         reader = csv.DictReader(io.StringIO(result.stdout))
         assert reader.fieldnames == COLUMNS, reader.fieldnames
@@ -107,6 +122,8 @@ def main() -> int:
             assert int(row["benchmark_threads"]) == 1, row
             assert row["codec_thread_policy"] == "internal-auto", row
             assert row["executable_sha256"] == executable_sha256, row
+            if explicit_library is not None:
+                assert f"--libzstd {explicit_library}" in row["command"], row
 
         filtered = run(
             executable,
@@ -122,6 +139,7 @@ def main() -> int:
             str(first),
             "--path",
             str(second),
+            *reference_args,
         )
         filtered_reader = csv.DictReader(io.StringIO(filtered.stdout))
         assert filtered_reader.fieldnames == COLUMNS, filtered_reader.fieldnames
@@ -133,12 +151,14 @@ def main() -> int:
         for invalid_args in (
             ("--limit", "0", "--path", str(first)),
             ("--path", str(empty)),
+            ("--libzstd",),
+            ("--libzstd", str(root / "missing-libzstd")),
             ("--unknown",),
         ):
             failed = run(executable, *invalid_args, check=False)
             assert failed.returncode != 0, (invalid_args, failed.stdout, failed.stderr)
 
-    print("zstd_encode_bench_path_smoke=ok rows=2 filtered=1 invalid=3")
+    print(f"zstd_encode_bench_path_smoke=ok rows=2 filtered=1 invalid=5 explicit_libzstd={explicit_library is not None}")
     return 0
 
 

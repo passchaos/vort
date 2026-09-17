@@ -397,6 +397,7 @@ zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate  # optional runti
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench -- --libzstd /path/to/libzstd  # explicit reference library
 zig build -Doptimize=ReleaseFast run-zstd-decode-profile -- --libzstd /path/to/libzstd  # pure-Vort decode shapes from explicit libzstd
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-gate  # libzstd encode comparison and level-policy gate
+zig build -Doptimize=ReleaseFast run-zstd-encode-bench -- --libzstd /path/to/libzstd  # explicit encode reference library
 zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench-gate  # match-family timings plus single-beam search histograms
 zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate  # parallel-vs-serial multi-block scheduling
 zig build run-zstd-large-sequence-probe  # >512-sequence single/cross-block encode plus Vort/libzstd decode
