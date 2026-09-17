@@ -481,6 +481,21 @@ Recommended next comparison steps:
   regressed to 0.9913x (a narrower formulation reached 0.9883x), despite exact
   token, frame, input-hash, and checksum parity, so no production change is
   retained.
+  Level-1 blocks with a precomputed absolute-decisive beam now serialize that
+  inevitable candidate first, then run the unchanged greedy parser and use the
+  existing conservative literal-Huffman plus LL/ML/OF extra-bit lower bound.
+  Only a bound strictly larger than the beam skips greedy entropy emission; an
+  equal bound still emits greedy and preserves its historical tie priority. A
+  32-shape old/new selector oracle covers both pruned and fallback paths
+  byte-exactly; exhaustive allocation-failure
+  injection preserves the caller prefix, and the locked 32 KiB JSON case drops
+  from 60 to 44 allocations and by 8,741 cumulatively requested bytes. Against
+  independent `46198919`/`ca8c7785` ReleaseFast binaries, 31 interleaved
+  100-encode JSON level-1 pairs improve by 1.1586x median / 1.1614x geometric
+  mean with 31/31 wins and the same 643-byte frame. A 21-pair 20-row matrix
+  preserves every input hash, frame/reference size, and checksum, reaches
+  1.0100x across row medians, and keeps a 0.9895x short-sample floor. Longer
+  controls recover JSON level 3 to 0.9912x and tradeoff level 9 to 1.0042x.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers

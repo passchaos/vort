@@ -138,6 +138,8 @@ var test_multi_sequence_winner_only_hits: usize = 0;
 var test_multi_sequence_winner_hits: [3]usize = @splat(0);
 var test_disable_hash_token_lower_bound = false;
 var test_hash_token_lower_bound_hits: usize = 0;
+var test_disable_precomputed_beam_greedy_prune = false;
+var test_precomputed_beam_greedy_prune_hits: usize = 0;
 var test_disable_four_byte_optimal = false;
 var test_disable_split_huffman_decode = false;
 var test_split_huffman_decode_hits: usize = 0;
@@ -12619,12 +12621,68 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
         false;
     try retainShortestCandidate(allocator, mixed_ok, candidate.items, best);
 
+    var pre_emitted_beam_len: ?usize = null;
+    if (comptime has_precomputed_rep_beam) {
+        if (match_search_budget < multi_duplicate_min_search_budget and
+            (!builtin.is_test or !test_disable_precomputed_beam_greedy_prune))
+        {
+            const precomputed_beam = reusable_rep_beam orelse return error.InvalidBlockPlan;
+            candidate.clearRetainingCapacity();
+            const beam_ok = try emitHashTokenSequenceBlockReuse(
+                allocator,
+                candidate,
+                block,
+                last,
+                precomputed_beam.reversed.items,
+                precomputed_rep_beam_stats,
+                sequence_scratch,
+            );
+            if (beam_ok) {
+                pre_emitted_beam_len = candidate.items.len;
+                try retainShortestCandidate(allocator, true, candidate.items, best);
+            }
+        }
+    }
+
     candidate.clearRetainingCapacity();
-    const greedy_ok = if (block.len <= 32 * 1024)
+    var greedy_len: ?usize = null;
+    const greedy_ok = if (comptime has_precomputed_rep_beam) blk: {
+        if (match_search_budget < multi_duplicate_min_search_budget) {
+            if (pre_emitted_beam_len) |beam_len| {
+                if (beam_len * 32 <= block.len)
+                    break :blk try emitGreedyHashMatchCompressedBlockReuseUnlessDominated(
+                        allocator,
+                        candidate,
+                        block,
+                        last,
+                        greedy_tokens,
+                        sequence_scratch,
+                        beam_len,
+                    );
+            }
+        }
+        break :blk if (block.len <= 32 * 1024)
+            try emitGreedyHashMatchCompressedBlockReuse(allocator, candidate, block, last, greedy_tokens)
+        else
+            try emitHashMatchCompressedBlockWithSequenceScratch(allocator, candidate, block, last, .greedy, sequence_scratch);
+    } else if (block.len <= 32 * 1024)
         try emitGreedyHashMatchCompressedBlockReuse(allocator, candidate, block, last, greedy_tokens)
     else
         try emitHashMatchCompressedBlockWithSequenceScratch(allocator, candidate, block, last, .greedy, sequence_scratch);
-    try retainShortestCandidate(allocator, greedy_ok, candidate.items, best);
+    if (greedy_ok) greedy_len = candidate.items.len;
+    if (comptime has_precomputed_rep_beam) {
+        if (match_search_budget < multi_duplicate_min_search_budget) {
+            // Greedy was historically considered before the beam, so it keeps
+            // an equal-length tie even when the precomputed beam is emitted
+            // first.
+            if (greedy_ok and (best.items.len == 0 or candidate.items.len <= best.items.len)) {
+                best.clearRetainingCapacity();
+                try best.appendSlice(allocator, candidate.items);
+            }
+        } else {
+            try retainShortestCandidate(allocator, greedy_ok, candidate.items, best);
+        }
+    } else try retainShortestCandidate(allocator, greedy_ok, candidate.items, best);
 
     candidate.clearRetainingCapacity();
     // The separate lazy pass duplicates hash search at level 1 without winning
@@ -12652,12 +12710,14 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
             error.InvalidBlockPlan => null,
             else => return err,
         };
-    const pre_beam_best_len = best.items.len;
-    var rep_beam_len: ?usize = null;
+    const pre_beam_best_len = if (pre_emitted_beam_len != null) greedy_len orelse best.items.len else best.items.len;
+    var rep_beam_len: ?usize = pre_emitted_beam_len;
     if (rep_beam_stats) |stats| {
-        const rep_beam_ok = try emitHashTokenSequenceBlockReuse(allocator, candidate, block, last, rep_beam_scratch.reversed.items, stats, sequence_scratch);
-        if (rep_beam_ok) rep_beam_len = candidate.items.len;
-        try retainShortestCandidate(allocator, rep_beam_ok, candidate.items, best);
+        if (pre_emitted_beam_len == null) {
+            const rep_beam_ok = try emitHashTokenSequenceBlockReuse(allocator, candidate, block, last, rep_beam_scratch.reversed.items, stats, sequence_scratch);
+            if (rep_beam_ok) rep_beam_len = candidate.items.len;
+            try retainShortestCandidate(allocator, rep_beam_ok, candidate.items, best);
+        }
     }
 
     // An absolute 32x reduction handles tiny final blocks. On larger blocks, a
@@ -13446,6 +13506,35 @@ fn emitGreedyHashMatchCompressedBlockReuse(
     };
     const stats = try lz77.hashGreedyPlanAutoTinyReuse(tokens, allocator, block, parser_options);
     return try emitHashTokenSequenceBlock(allocator, out, block, last, tokens.items, stats);
+}
+
+noinline fn emitGreedyHashMatchCompressedBlockReuseUnlessDominated(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    tokens: *std.ArrayList(lz77.Token),
+    sequence_scratch: *LargeSequenceScratch,
+    best_len: usize,
+) linksection(fast_encode_helper_text_section) Error!bool {
+    const parser_options = zstdHashParserOptions(block.len);
+    if (block.len <= 32 * 1024) {
+        try ensureReusableHashTokenCapacity(tokens, allocator, block.len);
+        const stats = try lz77.hashGreedyPlanAutoTinyReuse(tokens, allocator, block, parser_options);
+        if (try hashTokenSequenceCannotBeat(block, tokens.items, stats, best_len)) {
+            if (comptime builtin.is_test) test_precomputed_beam_greedy_prune_hits += 1;
+            return false;
+        }
+        return try emitHashTokenSequenceBlock(allocator, out, block, last, tokens.items, stats);
+    }
+
+    const plan = try lz77.hashGreedyPlanAutoAlloc(allocator, block, parser_options);
+    defer plan.deinit(allocator);
+    if (try hashTokenSequenceCannotBeat(block, plan.tokens, plan.stats, best_len)) {
+        if (comptime builtin.is_test) test_precomputed_beam_greedy_prune_hits += 1;
+        return false;
+    }
+    return try emitHashTokenSequenceBlockReuse(allocator, out, block, last, plan.tokens, plan.stats, sequence_scratch);
 }
 
 fn emitLazyHashMatchCompressedBlockReuse(
@@ -26713,6 +26802,154 @@ test "zstd decisive rep beam safely bypasses ordinary optimal parser" {
     defer all_families.deinit(std.testing.allocator);
     try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &all_families, payload.items, true, 95, false, null, null));
     try std.testing.expect(with_skip.items.len < all_families.items.len);
+}
+
+test "zstd precomputed beam skips only provably dominated greedy wires" {
+    const Oracle = struct {
+        fn compare(payload: []const u8) !bool {
+            test_disable_precomputed_beam_greedy_prune = true;
+            var expected: std.ArrayList(u8) = .empty;
+            defer expected.deinit(std.testing.allocator);
+            const expected_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+                std.testing.allocator,
+                &expected,
+                payload,
+                true,
+                fastest_wide_match_search_budget,
+                true,
+                null,
+                null,
+            );
+
+            test_disable_precomputed_beam_greedy_prune = false;
+            const hits_before = test_precomputed_beam_greedy_prune_hits;
+            var actual: std.ArrayList(u8) = .empty;
+            defer actual.deinit(std.testing.allocator);
+            const actual_ok = try emitNativeMatchCompressedBlockSerialWithBeam(
+                std.testing.allocator,
+                &actual,
+                payload,
+                true,
+                fastest_wide_match_search_budget,
+                true,
+                null,
+                null,
+            );
+            try std.testing.expectEqual(expected_ok, actual_ok);
+            try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+            return test_precomputed_beam_greedy_prune_hits != hits_before;
+        }
+    };
+
+    test_disable_precomputed_beam_greedy_prune = false;
+    test_precomputed_beam_greedy_prune_hits = 0;
+    defer {
+        test_disable_precomputed_beam_greedy_prune = false;
+        test_precomputed_beam_greedy_prune_hits = 0;
+    }
+
+    var compared: usize = 0;
+    for (0..24) |seed| {
+        var payload: std.ArrayList(u8) = .empty;
+        defer payload.deinit(std.testing.allocator);
+        const target_len = 24 * 1024 + seed * 347;
+        while (payload.items.len < target_len) {
+            var line: [160]u8 = undefined;
+            const formatted = try std.fmt.bufPrint(
+                &line,
+                "{{\"id\":{d},\"shard\":{d},\"service\":\"vort\",\"message\":\"greedy lower bound\"}}\n",
+                .{ payload.items.len / 64, seed % 7 },
+            );
+            try payload.appendSlice(std.testing.allocator, formatted);
+        }
+
+        compared += @intFromBool(try Oracle.compare(payload.items));
+    }
+    try std.testing.expect(compared != 0);
+
+    var unpruned: usize = 0;
+    for (0..8) |seed| {
+        var payload: [32 * 1024]u8 = undefined;
+        var state: u32 = @truncate(0x6a09_e667 +% seed *% 0x0100_0193);
+        for (&payload, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = if (index % 64 < 48) @truncate(index * 17 + seed) else @truncate(state >> 16);
+        }
+        unpruned += @intFromBool(!try Oracle.compare(&payload));
+    }
+    try std.testing.expect(unpruned != 0);
+
+    var measured_payload: std.ArrayList(u8) = .empty;
+    defer measured_payload.deinit(std.testing.allocator);
+    while (measured_payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const formatted = try std.fmt.bufPrint(
+            &line,
+            "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n",
+            .{measured_payload.items.len / 64},
+        );
+        try measured_payload.appendSlice(std.testing.allocator, formatted);
+    }
+    var reference_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reference: std.ArrayList(u8) = .empty;
+    defer reference.deinit(reference_allocator.allocator());
+    test_disable_precomputed_beam_greedy_prune = true;
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+        reference_allocator.allocator(),
+        &reference,
+        measured_payload.items,
+        true,
+        fastest_wide_match_search_budget,
+        true,
+        null,
+        null,
+    ));
+    test_disable_precomputed_beam_greedy_prune = false;
+
+    var pruned_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var pruned: std.ArrayList(u8) = .empty;
+    defer pruned.deinit(pruned_allocator.allocator());
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+        pruned_allocator.allocator(),
+        &pruned,
+        measured_payload.items,
+        true,
+        fastest_wide_match_search_budget,
+        true,
+        null,
+        null,
+    ));
+    try std.testing.expectEqualSlices(u8, reference.items, pruned.items);
+    try std.testing.expectEqual(reference_allocator.allocations - 16, pruned_allocator.allocations);
+    try std.testing.expectEqual(reference_allocator.allocated_bytes - 8_741, pruned_allocator.allocated_bytes);
+
+    const AllocationFailureTest = struct {
+        fn run(allocator: std.mem.Allocator, payload: []const u8) !void {
+            var output = try std.ArrayList(u8).initCapacity(allocator, "prefix".len);
+            defer output.deinit(allocator);
+            output.appendSliceAssumeCapacity("prefix");
+            const emitted = emitNativeMatchCompressedBlockSerialWithBeam(
+                allocator,
+                &output,
+                payload,
+                true,
+                fastest_wide_match_search_budget,
+                true,
+                null,
+                null,
+            ) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix", output.items);
+                return err;
+            };
+            try std.testing.expect(emitted);
+            try std.testing.expectEqualSlices(u8, "prefix", output.items[0.."prefix".len]);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        AllocationFailureTest.run,
+        .{measured_payload.items},
+    );
 }
 
 test "zstd relative beam win bypasses ordinary optimal parser" {

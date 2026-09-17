@@ -14185,6 +14185,22 @@ reuse, so production keeps the simpler independently owned plans.
   0.9913x; a narrower caller-local form fell to 0.9883x. The optimization and
   layout-padding variants were removed because the large synthetic win does
   not represent production corpus coverage.
+  Level 1 now serializes an already-computed absolute-decisive beam before its
+  unchanged greedy parse, then applies the existing conservative token lower
+  bound to avoid serializing a provably larger greedy entropy block. The proof
+  is enabled only for the compile-time precomputed-beam/fastest-policy path and
+  requires a strict lower-bound loss, so equal sizes retain the original
+  greedy-first tie. A 32-shape forced-old/new oracle covers both pruned and
+  fallback paths byte-for-byte, exhaustive allocation failure keeps caller
+  prefixes intact, and the locked
+  JSON case removes 16 allocations plus 8,741 cumulatively requested bytes.
+  Against independent `46198919`/`ca8c7785` ReleaseFast binaries, 31
+  interleaved 100-encode JSON level-1 pairs improve by 1.1586x median /
+  1.1614x geometric mean with 31/31 wins at the same 643 bytes. A separate
+  21-pair 20-row matrix preserves every input hash, frame/reference size, and
+  checksum, reaches a 1.0100x row-median geometric mean, and has a 0.9895x
+  short-sample floor. The two weakest rows recover in longer 31-pair runs:
+  JSON level 3 reaches 0.9912x and tradeoff level 9 reaches 1.0042x.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle
