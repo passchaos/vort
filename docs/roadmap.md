@@ -14489,3 +14489,9 @@ reuse, so production keeps the simpler independently owned plans.
   with a 1.00035x floor. The final path passes all 599 Zstd tests, the five-row
   fast gate, 100-row stage gate, 364-case native probe, 276-case libzstd 1.5.7
   matrix, 2,044-sequence/64-repeat-block probe, and compile check.
+  Folding the subsequent all-equal/RLE-code check into the shared conversion
+  loop was rejected despite preserving both alternatives oracles and all wire
+  identities. Relative to the retained shared-code binary, its five-row fast
+  screen measured 0.99501x geometrically with binary at 0.99080x and tradeoff
+  at 0.98993x. The separate compact `rleSequenceCode` scan remains because its
+  generated dependency structure is faster on this target.
