@@ -14467,3 +14467,25 @@ reuse, so production keeps the simpler independently owned plans.
   controls, both above the 0.99 retention floor. The final tree passes all 598
   Zstd tests, the fast gate, 100-row stage gate, 364-case native probe, 276-case
   libzstd 1.5.7 matrix, 2,044-sequence/64-repeat-block probe, and compile check.
+  A fresh 10-second/1 kHz profile of the retained direct-commit fast JSON
+  encoder attributes 19.69% of 9,258 leaf samples to `double_fast.planReuse`,
+  8.03% to compressed-FSE transition construction, 6.78% to sequence-code
+  conversion, 6.17% to predefined dominance, 5.20% to borrowed read-field
+  construction, and 5.09% to compressed-table planning. LL and ML table
+  alternatives now compute their canonical code stream once and reuse it for
+  RLE, predefined, compressed-FSE, and dominance planning instead of converting
+  the same value column repeatedly. Offset alternatives deliberately retain the
+  existing repcode-aware path: code 0/1 semantics depend on literal length and
+  recent-offset history, not only on absolute distance. Exact old/new
+  alternative oracles compare candidate tags, RLE codes, predefined states,
+  compressed table payloads, initial states, code/state vectors, and every used
+  transition; a separate canonical-value/code oracle covers LL/ML/OF through
+  512 values and explicit offset code-0/code-1 streams. Against frozen final
+  direct-commit and shared-code binaries, 15 independent explicit-fast pairs
+  preserve every input hash, Vort/reference size, and checksum while improving
+  binary/JSON/tradeoff/multiblock/text medians by
+  1.03488x/1.04184x/1.02103x/1.00018x/1.00548x, a 1.02055x row-median
+  geometric mean. The default 20-row matrix improves 1.00772x geometrically
+  with a 1.00035x floor. The final path passes all 599 Zstd tests, the five-row
+  fast gate, 100-row stage gate, 364-case native probe, 276-case libzstd 1.5.7
+  matrix, 2,044-sequence/64-repeat-block probe, and compile check.
