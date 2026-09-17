@@ -629,6 +629,15 @@ Recommended next comparison steps:
   also rejected at 0.9986x JSON level 1 with 6/15 wins. Four lanes remain the
   measured balance between independent hot-byte updates and the final 256-symbol
   fold.
+  A fresh 10-second sample after the striped proof measures 3,973 of roughly
+  7,900 stacks in `single_beam.planReuse`, 619 in the direct proof, 514 in
+  offset resolution, 284 in greedy parsing, and 263 in the separate match
+  extender. The finite-run `samply` PC map confirms literal target arbitration,
+  hash-head updates, and indexed/rep0 short-match insertion as the beam's core.
+  Moving the shifted-match lower-bound check into the finder preserved all 17
+  single-state token/profile/tie/OOM tests but reduced JSON level 1 to 0.9938x.
+  It was removed; carrying extra state across that finder boundary costs more
+  than the skipped insertion work.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers

@@ -14307,6 +14307,13 @@ reuse, so production keeps the simpler independently owned plans.
   An eight-lane variant of the retained exact dominance histogram was rejected
   too: JSON level 1 measured 0.9986x with 6/15 wins, so four lanes retain the
   better update-dependency versus final-fold balance.
+  A fresh 10-second post-change sample attributes 3,973 of roughly 7,900 stacks
+  to `single_beam.planReuse`, 619 to the direct proof, 514 to offset resolution,
+  284 to greedy parsing, and 263 to the separate match extender. The per-PC map
+  confirms literal arbitration, hash-head updates, and indexed/rep0 short-match
+  insertion as the beam core. Moving the shifted-match lower-bound check into
+  the finder retained all 17 token/profile/tie/OOM tests but reduced complete
+  JSON level 1 to 0.9938x, so the extra out-state and live values were removed.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle
