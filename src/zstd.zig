@@ -19355,6 +19355,35 @@ fn sequenceTablePlanAlternatives(values: []const usize, kind: SequenceTableKind)
 }
 
 fn sequenceTablePlanAlternativesWithPrevious(values: []const usize, kind: SequenceTableKind, previous_tables: ?*const SequenceTables) Error!SequenceTablePlanAlternatives {
+    if (previous_tables == null and kind != .offset) {
+        var alternatives: SequenceTablePlanAlternatives = undefined;
+        alternatives.len = 0;
+        if (values.len == 0 or values.len > max_native_sequence_count) return alternatives;
+
+        var codes: [max_native_sequence_count]u8 = undefined;
+        for (values, 0..) |value, i|
+            codes[i] = sequenceCodeForValue(value, sequenceTableBases(kind), sequenceTableBits(kind)) catch return alternatives;
+        const active_codes = codes[0..values.len];
+        if (rleSequenceCode(active_codes)) |code| try alternatives.add(.{ .rle = code });
+        const compressed = try planCompressedSequenceCodes(active_codes);
+        const skip_predefined = if (compressed) |*plan|
+            try compressedSequencePlanStrictlyDominatesPredefinedCodeSlice(plan, kind, active_codes)
+        else
+            false;
+        if (!skip_predefined)
+            if (try planPredefinedSequenceCodes(active_codes, sequenceTablePredefinedSymbols(kind), kind)) |plan|
+                try alternatives.add(.{ .predefined = plan });
+        if (compressed) |plan| try alternatives.add(.{ .compressed = plan });
+        return alternatives;
+    }
+    return try sequenceTablePlanAlternativesWithPreviousUnshared(values, kind, previous_tables);
+}
+
+fn sequenceTablePlanAlternativesWithPreviousUnshared(
+    values: []const usize,
+    kind: SequenceTableKind,
+    previous_tables: ?*const SequenceTables,
+) Error!SequenceTablePlanAlternatives {
     // `add` initializes every slot before `len` exposes it. Leave the inactive
     // multi-kilobyte union tail undefined instead of clearing it on every plan.
     var alternatives: SequenceTablePlanAlternatives = undefined;
@@ -19560,6 +19589,59 @@ fn rleSequenceCode(codes: []const u8) ?u8 {
 }
 
 fn planPredefinedSequenceCodes(
+    codes: []const u8,
+    symbols: []const SequenceSymbol,
+    kind: SequenceTableKind,
+) Error!?PredefinedSequencePlan {
+    if (codes.len == 0 or codes.len > max_native_sequence_count or symbols.len > max_predefined_sequence_states) return null;
+    var next_choice: [max_native_sequence_count][max_predefined_sequence_states]u8 = undefined;
+    var viable_next: u64 = 0;
+    var pos = codes.len;
+    while (pos > 0) {
+        pos -= 1;
+        var viable_current: u64 = 0;
+        var encodable_states: u64 = switch (kind) {
+            .literal => if (codes[pos] < predefined_literal_state_masks.len) predefined_literal_state_masks[codes[pos]] else 0,
+            .match => if (codes[pos] < predefined_match_state_masks.len) predefined_match_state_masks[codes[pos]] else 0,
+            .offset => blk: {
+                var mask: u64 = 0;
+                for (symbols, 0..) |symbol, state| {
+                    if (sequenceSymbolMatchesCode(symbol, kind, codes[pos])) {
+                        mask |= @as(u64, 1) << @intCast(state);
+                    }
+                }
+                break :blk mask;
+            },
+        };
+        while (encodable_states != 0) {
+            const state: usize = @ctz(encodable_states);
+            encodable_states &= encodable_states - 1;
+            const symbol = symbols[state];
+            if (pos == codes.len - 1) {
+                viable_current |= @as(u64, 1) << @intCast(state);
+                continue;
+            }
+            const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
+            const first_next: usize = symbol.next_state;
+            const end_next = @min(symbols.len, first_next + transition_count);
+            if (first_next >= end_next) continue;
+            const width = end_next - first_next;
+            const low_mask = if (width == 64) std.math.maxInt(u64) else (@as(u64, 1) << @intCast(width)) - 1;
+            const possible = viable_next & (low_mask << @intCast(first_next));
+            if (possible == 0) continue;
+            viable_current |= @as(u64, 1) << @intCast(state);
+            next_choice[pos][state] = @intCast(@ctz(possible));
+        }
+        viable_next = viable_current;
+    }
+    if (viable_next == 0) return null;
+    var plan: PredefinedSequencePlan = .{ .len = codes.len };
+    plan.states[0] = @intCast(@ctz(viable_next));
+    for (0..codes.len - 1) |i| plan.states[i + 1] = next_choice[i][plan.states[i]];
+    return plan;
+}
+
+fn planPredefinedSequenceCodesReference(
     codes: []const u8,
     symbols: []const SequenceSymbol,
     kind: SequenceTableKind,
@@ -24251,6 +24333,85 @@ test "zstd compact predefined planner matches usize reference" {
                     try std.testing.expectEqual(expected_state, actual_state);
                 }
             }
+        }
+    }
+}
+
+test "zstd code-based predefined planner matches canonical value planner" {
+    var values: [max_native_sequence_count]usize = undefined;
+    var codes: [max_native_sequence_count]u8 = undefined;
+    var state: u32 = 0x510e_527f;
+    const cases = [_]struct { SequenceTableKind, usize }{
+        .{ .literal, 131_071 },
+        .{ .offset, 32 * 1024 },
+        .{ .match, 131_074 },
+    };
+    for (cases) |case| {
+        for ([_]usize{ 1, 2, 12, 31, 127, 256, max_native_sequence_count }) |len| {
+            for (0..32) |_| {
+                for (values[0..len], codes[0..len]) |*value, *code| {
+                    state = state *% 1_664_525 +% 1_013_904_223;
+                    value.* = switch (case[0]) {
+                        .literal => (state >> 8) % (case[1] + 1),
+                        .offset => 1 + (state % case[1]),
+                        .match => lz77.min_match_len + (state % (case[1] - lz77.min_match_len + 1)),
+                    };
+                    code.* = try sequenceCodeForValue(value.*, sequenceTableBases(case[0]), sequenceTableBits(case[0]));
+                }
+                const expected = try planPredefinedSequenceValues(
+                    values[0..len],
+                    sequenceTablePredefinedSymbols(case[0]),
+                    sequenceTablePredefinedMinAdditionalBits(case[0]),
+                );
+                const actual = try planPredefinedSequenceCodes(
+                    codes[0..len],
+                    sequenceTablePredefinedSymbols(case[0]),
+                    case[0],
+                );
+                const code_reference = try planPredefinedSequenceCodesReference(
+                    codes[0..len],
+                    sequenceTablePredefinedSymbols(case[0]),
+                    case[0],
+                );
+                try std.testing.expectEqual(code_reference == null, actual == null);
+                if (code_reference) |want| {
+                    const got = actual.?;
+                    try std.testing.expectEqual(want.len, got.len);
+                    try std.testing.expectEqualSlices(u8, want.states[0..want.len], got.states[0..got.len]);
+                }
+                try std.testing.expectEqual(expected == null, actual == null);
+                if (expected) |want| {
+                    const got = actual.?;
+                    try std.testing.expectEqual(want.len, got.len);
+                    try std.testing.expectEqualSlices(u8, want.states[0..want.len], got.states[0..got.len]);
+                }
+            }
+        }
+    }
+
+    const repcode_cases = [_][]const u8{
+        &.{0},
+        &.{1},
+        &.{ 0, 1, 0, 1 },
+        &.{ 1, 0, 2, 1, 0, 3 },
+        &.{ 0, 1, 2, 3, 4, 5, 1, 0 },
+    };
+    for (repcode_cases) |offset_codes| {
+        const expected = try planPredefinedSequenceCodesReference(
+            offset_codes,
+            &sequence_predefined.offset_symbols,
+            .offset,
+        );
+        const actual = try planPredefinedSequenceCodes(
+            offset_codes,
+            &sequence_predefined.offset_symbols,
+            .offset,
+        );
+        try std.testing.expectEqual(expected == null, actual == null);
+        if (expected) |want| {
+            const got = actual.?;
+            try std.testing.expectEqual(want.len, got.len);
+            try std.testing.expectEqualSlices(u8, want.states[0..want.len], got.states[0..got.len]);
         }
     }
 }
@@ -31419,6 +31580,39 @@ test "zstd wide borrowed sequence fields match by-value reference" {
 
 test "zstd sparse sequence alternatives match initialized reference" {
     const Test = struct {
+        fn expectPlanEqual(expected: SequenceTableEmitPlan, actual: SequenceTableEmitPlan) !void {
+            try std.testing.expectEqual(std.meta.activeTag(expected), std.meta.activeTag(actual));
+            switch (expected) {
+                .rle => |code| try std.testing.expectEqual(code, actual.rle),
+                .predefined => |plan| {
+                    const other = actual.predefined;
+                    try std.testing.expectEqual(plan.len, other.len);
+                    try std.testing.expectEqualSlices(u8, plan.states[0..plan.len], other.states[0..other.len]);
+                },
+                .compressed => |plan| {
+                    const other = actual.compressed;
+                    try std.testing.expectEqual(plan.len, other.len);
+                    try std.testing.expectEqual(plan.accuracy_log, other.accuracy_log);
+                    try std.testing.expectEqual(plan.initial_state, other.initial_state);
+                    try std.testing.expectEqual(plan.table_payload_len, other.table_payload_len);
+                    try std.testing.expectEqualSlices(u8, plan.codes[0..plan.len], other.codes[0..other.len]);
+                    try std.testing.expectEqualSlices(u8, plan.next_states[0..plan.len], other.next_states[0..other.len]);
+                    try std.testing.expectEqualSlices(u8, plan.state_bits[0..plan.len], other.state_bits[0..other.len]);
+                    const transition_len = plan.len - 1;
+                    try std.testing.expectEqualSlices(u8, plan.transition_values[0..transition_len], other.transition_values[0..transition_len]);
+                    try std.testing.expectEqualSlices(u8, plan.transition_bits[0..transition_len], other.transition_bits[0..transition_len]);
+                    try std.testing.expectEqualSlices(u8, plan.table_payload[0..plan.table_payload_len], other.table_payload[0..other.table_payload_len]);
+                },
+                .repeat => unreachable,
+            }
+        }
+
+        fn expectAlternativesEqual(expected: SequenceTablePlanAlternatives, actual: SequenceTablePlanAlternatives) !void {
+            try std.testing.expectEqual(expected.len, actual.len);
+            for (expected.items[0..expected.len], actual.items[0..actual.len]) |want, got|
+                try expectPlanEqual(want, got);
+        }
+
         fn compare(
             expected: SequenceTablePlanAlternatives,
             actual: SequenceTablePlanAlternatives,
@@ -31469,9 +31663,12 @@ test "zstd sparse sequence alternatives match initialized reference" {
         }
         inline for (.{ SequenceTableKind.literal, .match }) |kind| {
             const values = if (kind == .literal) literal_lens[0..len] else match_lens[0..len];
+            const unshared = try sequenceTablePlanAlternativesWithPreviousUnshared(values, kind, null);
+            const shared = try sequenceTablePlanAlternatives(values, kind);
+            try Test.expectAlternativesEqual(unshared, shared);
             try Test.compare(
                 try sequenceTablePlanAlternativesInitializedReference(values, kind),
-                try sequenceTablePlanAlternatives(values, kind),
+                shared,
                 kind,
                 values,
                 literal_lens[0..len],
@@ -36101,6 +36298,34 @@ noinline fn compressedSequencePlanStrictlyDominatesPredefinedCodes(
         if (code >= value_bits.len) return error.CorruptFrame;
         const predefined_code = try sequenceCodeForValue(predefined_values[i], sequenceTableBases(kind), value_bits);
         if (predefined_code >= costs.len) return error.CorruptFrame;
+        const predefined_cost = costs[predefined_code][@intFromBool(i + 1 < plan.len)];
+        if (predefined_cost == std.math.maxInt(u8)) return false;
+        predefined_bits = std.math.add(usize, predefined_bits, predefined_cost) catch return error.IntegerOverflow;
+        compressed_bits = std.math.add(usize, compressed_bits, value_bits[code]) catch return error.IntegerOverflow;
+        if (i + 1 < plan.len)
+            compressed_bits = std.math.add(usize, compressed_bits, plan.transition_bits[i]) catch return error.IntegerOverflow;
+    }
+    const compressed_bytes = std.math.add(usize, plan.table_payload_len, (compressed_bits + 1 + 7) / 8) catch return error.IntegerOverflow;
+    const predefined_bytes = (predefined_bits + 1 + 7) / 8;
+    return compressed_bytes < predefined_bytes;
+}
+
+noinline fn compressedSequencePlanStrictlyDominatesPredefinedCodeSlice(
+    plan: *const CompressedSequencePlan,
+    kind: SequenceTableKind,
+    predefined_codes: []const u8,
+) linksection(dominance_helper_text_section) Error!bool {
+    if (plan.len == 0 or plan.len > max_native_sequence_count or plan.len != predefined_codes.len) return error.CorruptFrame;
+    const costs = switch (kind) {
+        .literal => predefined_literal_minimum_costs[0..],
+        .offset => predefined_offset_minimum_costs[0..],
+        .match => predefined_match_minimum_costs[0..],
+    };
+    const value_bits = sequenceTableBits(kind);
+    var compressed_bits: usize = plan.accuracy_log;
+    var predefined_bits: usize = predefinedInitialStateBits(kind);
+    for (plan.codes[0..plan.len], predefined_codes, 0..) |code, predefined_code, i| {
+        if (code >= value_bits.len or predefined_code >= costs.len) return error.CorruptFrame;
         const predefined_cost = costs[predefined_code][@intFromBool(i + 1 < plan.len)];
         if (predefined_cost == std.math.maxInt(u8)) return false;
         predefined_bits = std.math.add(usize, predefined_bits, predefined_cost) catch return error.IntegerOverflow;
