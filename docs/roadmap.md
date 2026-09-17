@@ -14425,3 +14425,13 @@ reuse, so production keeps the simpler independently owned plans.
   pairs with 10,000 iterations and three rounds. The finalized path passes all
   598 Zstd tests, the 100-row stage gate, 364-case native probe, 276-case
   libzstd 1.5.7 matrix, large-sequence/Repeat_Mode probe, and compile check.
+  A dedicated trusted compressed-FSE transition builder was then evaluated
+  and removed. Its oracle compared the initial state, every next state, state
+  width, transition value, and transition width against both the checked
+  inverse builder and the scan reference, with exact agreement. Relative to
+  the frozen repeated-offset binary, the 15-pair explicit-fast matrix retained
+  every input hash, frame/reference size, and checksum, but reached only a
+  1.00345x row-median geometric mean; the weakest multiblock row measured
+  0.998864x. That near-neutral result does not justify maintaining a second
+  transition implementation with stronger internal preconditions, so the
+  production path remains on the checked builder.
