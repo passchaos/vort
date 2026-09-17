@@ -14435,3 +14435,17 @@ reuse, so production keeps the simpler independently owned plans.
   0.998864x. That near-neutral result does not justify maintaining a second
   transition implementation with stronger internal preconditions, so the
   production path remains on the checked builder.
+  Three source-equivalent follow-ups were also rejected by complete fast-mode
+  measurements. Upstream-style 64-entry LL and 128-entry ML code tables matched
+  the existing full-range scan oracle, but their 15-pair five-row matrix reached
+  only 1.00086x geometrically, with binary at 0.99494x and multiblock at
+  0.99900x. The ML-only and LL-only forms failed their five-pair screens at
+  0.98961x and 0.99100x respectively on the tradeoff row. In double-fast,
+  skipping a redundant four-byte extension when a shared short/long hash
+  candidate had already passed eight bytes preserved every wire field and
+  improved JSON by 1.01280x, but the 15-pair matrix was 0.99966x overall with
+  binary at 0.99397x. A 31-pair text control recovered to 0.99757x but did not
+  rescue the cross-corpus result. Finally, checking rep0's encoding rank before
+  its full match scan was oracle-equivalent but reduced binary to 0.98090x in
+  the five-pair screen. All production variants were removed; the existing
+  arithmetic code mapping and double-fast control flow remain.
