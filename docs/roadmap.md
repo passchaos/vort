@@ -14495,3 +14495,21 @@ reuse, so production keeps the simpler independently owned plans.
   screen measured 0.99501x geometrically with binary at 0.99080x and tradeoff
   at 0.98993x. The separate compact `rleSequenceCode` scan remains because its
   generated dependency structure is faster on this target.
+  Small compressed sequence plans now omit their redundant per-sequence
+  `next_states` and `state_bits` arrays from production builds. Final emission
+  derives base/additional-bit metadata from the retained canonical codes and
+  writes state transitions from the separate value/width arrays; frame
+  continuation reconstructs the serialized FSE table, so the removed 1 KiB per
+  plan was not part of the wire or state contract. Test builds retain both arrays
+  and the existing scan/chain/inverse transition oracle still compares the full
+  internal state trace. The ReleaseFast encode benchmark shrinks from 1,623,352
+  to 1,606,936 bytes. Against frozen independent binaries, 15 explicit-fast
+  pairs preserve every input hash, size, and checksum while improving
+  binary/JSON/tradeoff/multiblock/text medians by
+  1.01155x/1.01390x/1.41495x/1.00597x/1.00512x, a 1.07970x row-median
+  geometric mean. The default 20-row matrix improves 1.06575x geometrically
+  with a 0.99396x floor; tradeoff levels 1/3/9/22 improve
+  1.36672x/1.36833x/1.15877x/1.16432x and multiblock levels improve
+  1.02371x--1.09264x. The final tree passes all 599 Zstd tests, the fast gate,
+  100-row stage gate, 364-case native probe, 276-case libzstd 1.5.7 matrix,
+  2,044-sequence/64-repeat-block probe, and compile check.
