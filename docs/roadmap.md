@@ -14410,3 +14410,18 @@ reuse, so production keeps the simpler independently owned plans.
   The finalized candidate passes all 598 Zstd tests, the 100-row stage gate,
   364-case native probe, 276-case libzstd 1.5.7 compatibility matrix, the
   large-sequence/Repeat_Mode probe, and the full compile check.
+  Post-change sampling reduced repeated-offset extra encoding from about 17.3%
+  to the next optimization target. Canonical OF code-0/code-1 emission now maps
+  rep0/rep1/rep2 and zero-literal rep0-minus-one directly instead of invoking
+  the decoder-side resolver for each possible extra bit. Direct offsets retain
+  the existing checked generic path. A loop-reference oracle covers positive
+  and zero literal lengths, duplicate and zero repcode histories, offsets
+  0...16, successful rotations, and exact error behavior. Relative to the
+  committed LUT baseline, 15 independent explicit-fast pairs preserve every
+  hash, size, and checksum while improving JSON/binary/tradeoff/multiblock by
+  1.1319x/1.0698x/1.0277x/1.0620x; the five-row median geomean is 1.0586x
+  with a 1.0058x floor. The default 20-row matrix reaches 1.0161x row-median
+  geomean; its noisy 0.9757x text level-3 row recovers to 0.9954x over 31
+  pairs with 10,000 iterations and three rounds. The finalized path passes all
+  598 Zstd tests, the 100-row stage gate, 364-case native probe, 276-case
+  libzstd 1.5.7 matrix, large-sequence/Repeat_Mode probe, and compile check.
