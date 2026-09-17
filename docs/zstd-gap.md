@@ -496,6 +496,13 @@ Recommended next comparison steps:
   preserves every input hash, frame/reference size, and checksum, reaches
   1.0100x across row medians, and keeps a 0.9895x short-sample floor. Longer
   controls recover JSON level 3 to 0.9912x and tradeoff level 9 to 1.0042x.
+  A cheaper precheck for that greedy lower bound was evaluated and removed. It
+  used the integer Shannon floor `sum(freq * floor(log2(total / freq)))`, which
+  an independent 2--256-symbol oracle proved never exceeded the selected
+  11-bit Huffman payload cost, and it was already strong enough to reject the
+  locked JSON candidate. Nevertheless, 31 independent level-1 pairs improved
+  by only 1.0054x, below the retention threshold, so the exact Huffman lower
+  bound remains the only production proof.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers

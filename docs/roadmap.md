@@ -14201,6 +14201,12 @@ reuse, so production keeps the simpler independently owned plans.
   checksum, reaches a 1.0100x row-median geometric mean, and has a 0.9895x
   short-sample floor. The two weakest rows recover in longer 31-pair runs:
   JSON level 3 reaches 0.9912x and tradeoff level 9 reaches 1.0042x.
+  A follow-up integer Shannon precheck for the greedy lower bound was rejected
+  as too small. The 2--256-symbol oracle proved its
+  `sum(freq * floor(log2(total / freq)))` result never exceeded the actual
+  length-limited Huffman payload cost, and it avoided the tree builder on the
+  locked JSON path, but 31 independent level-1 pairs improved only 1.0054x.
+  The simpler exact Huffman proof remains.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle
