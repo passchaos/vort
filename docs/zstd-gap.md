@@ -462,6 +462,16 @@ Recommended next comparison steps:
   frame/reference size, and checksum, improves by 1.0149x across row medians,
   and keeps a 0.9965x weakest median; binary level 1 and multi-block level 3
   improve by 1.0299x and 1.0260x.
+  A follow-up direct sequence-plan writer for the 450--512-sequence borrowed
+  path was rejected. It removed the remaining read-order `BitField` array and
+  emitted transitions, extras, and initial states directly in reverse order; a
+  byte-exact oracle covered 450/512 sequences with predefined, compressed,
+  mixed Repeat_Mode, malformed-length, and allocation-failure cases. Against
+  the frozen reverse-field binary, 31-pair JSON/binary level-1 runs measured
+  only 0.9989x/0.9929x, and the 21-pair 20-row matrix reached 0.9997x across
+  row medians with a 0.9874x text level-1 floor. All input hashes, frame and
+  reference sizes, and checksums matched, but the implementation was removed
+  because eliminating the stack array did not improve end-to-end throughput.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers

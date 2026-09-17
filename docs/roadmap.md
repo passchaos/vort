@@ -14161,6 +14161,16 @@ reuse, so production keeps the simpler independently owned plans.
   A separate 21-pair 20-row matrix preserves all hashes, sizes, and checksums,
   reaches 1.0149x across row medians, and keeps a 0.9965x weakest median; binary
   level 1 and multi-block level 3 improve by 1.0299x and 1.0260x.
+  Directly emitting the 450--512-sequence borrowed table plan without its
+  remaining read-order `BitField` array was then tested and rejected. The
+  direct writer matched the old path byte-for-byte for predefined, compressed,
+  mixed Repeat_Mode, and best-plan cases at both sequence-count boundaries; it
+  also rejected malformed lengths and preserved caller output on allocation
+  failure. Independent 31-pair level-1 runs measured 0.9989x on JSON and
+  0.9929x on binary. The 21-pair complete 20-row matrix preserved every input
+  hash, size, and checksum but reached only 0.9997x across row medians and
+  regressed text level 1 to 0.9874x, so the production field materialization
+  remains.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle
