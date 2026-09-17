@@ -18643,8 +18643,11 @@ const CompressedSequencePlan = struct {
     accuracy_log: u8 = 0,
     codes: [max_native_sequence_count]u8 = undefined,
     initial_state: u8 = 0,
-    next_states: [max_native_sequence_count]u8 = undefined,
-    state_bits: [max_native_sequence_count]u8 = undefined,
+    // These state details are valuable to the three-way transition oracle but
+    // redundant in production: emission consumes the canonical codes plus the
+    // independently stored transition values/widths below.
+    next_states: if (builtin.is_test) [max_native_sequence_count]u8 else void = if (builtin.is_test) undefined else {},
+    state_bits: if (builtin.is_test) [max_native_sequence_count]u8 else void = if (builtin.is_test) undefined else {},
     transition_values: [max_native_sequence_count]u8 = undefined,
     transition_bits: [max_native_sequence_count]u8 = undefined,
     table_payload: [64]u8 = undefined,
@@ -19166,8 +19169,8 @@ fn sequenceTablePlanBitCostWithOffsets(
                 const symbol: SequenceSymbol = .{
                     .base = @intCast(bases[code]),
                     .additional_bits = bits[code],
-                    .next_state = compressed.next_states[i],
-                    .state_bits = compressed.state_bits[i],
+                    .next_state = 0,
+                    .state_bits = 0,
                 };
                 if (!try sequenceSymbolAcceptsValue(symbol, kind, value, literal_lens[i], offsets[i], &repeated_offsets)) return null;
                 bit_count += symbol.additional_bits;
@@ -20043,8 +20046,10 @@ fn fillCompressedSequenceTransitions(plan: *CompressedSequencePlan, entries: []c
     const last_state = symbol_heads[plan.codes[plan.len - 1]];
     if (last_state == invalid_state) return error.CorruptFrame;
     var next_state = last_state;
-    plan.next_states[plan.len - 1] = @intCast(entries[last_state].baseline);
-    plan.state_bits[plan.len - 1] = entries[last_state].bits;
+    if (comptime builtin.is_test) {
+        plan.next_states[plan.len - 1] = @intCast(entries[last_state].baseline);
+        plan.state_bits[plan.len - 1] = entries[last_state].bits;
+    }
 
     var i = plan.len - 1;
     while (i > 0) {
@@ -20062,8 +20067,10 @@ fn fillCompressedSequenceTransitions(plan: *CompressedSequencePlan, entries: []c
         if (transition >= (@as(usize, 1) << @intCast(entry.bits))) return error.CorruptFrame;
         plan.transition_values[i] = @intCast(transition);
         plan.transition_bits[i] = entry.bits;
-        plan.next_states[i] = @intCast(entry.baseline);
-        plan.state_bits[i] = entry.bits;
+        if (comptime builtin.is_test) {
+            plan.next_states[i] = @intCast(entry.baseline);
+            plan.state_bits[i] = entry.bits;
+        }
         next_state = candidate_state;
     }
     plan.initial_state = @intCast(next_state);
@@ -20080,8 +20087,10 @@ noinline fn fillCompressedSequenceTransitionsFromCompressionTable(
     if (initial < table_size or initial - table_size >= entries.len) return error.CorruptFrame;
     var next_state = initial - table_size;
     const last_entry = entries[next_state];
-    plan.next_states[plan.len - 1] = @intCast(last_entry.baseline);
-    plan.state_bits[plan.len - 1] = last_entry.bits;
+    if (comptime builtin.is_test) {
+        plan.next_states[plan.len - 1] = @intCast(last_entry.baseline);
+        plan.state_bits[plan.len - 1] = last_entry.bits;
+    }
 
     var i = plan.len - 1;
     while (i > 0) {
@@ -20104,8 +20113,10 @@ noinline fn fillCompressedSequenceTransitionsFromCompressionTable(
         if (transition >= (@as(usize, 1) << @intCast(entry.bits))) return error.CorruptFrame;
         plan.transition_values[i] = @intCast(transition);
         plan.transition_bits[i] = entry.bits;
-        plan.next_states[i] = @intCast(entry.baseline);
-        plan.state_bits[i] = entry.bits;
+        if (comptime builtin.is_test) {
+            plan.next_states[i] = @intCast(entry.baseline);
+            plan.state_bits[i] = entry.bits;
+        }
         next_state = state;
     }
     plan.initial_state = @intCast(next_state);
@@ -20127,8 +20138,10 @@ fn fillCompressedSequenceTransitionsReference(plan: *CompressedSequencePlan, ent
     if (plan.len == 0) return error.CorruptFrame;
     const last_state = findCompressedSequenceState(entries, plan.codes[plan.len - 1], null) orelse return error.CorruptFrame;
     var next_state = last_state;
-    plan.next_states[plan.len - 1] = @intCast(entries[last_state].baseline);
-    plan.state_bits[plan.len - 1] = entries[last_state].bits;
+    if (comptime builtin.is_test) {
+        plan.next_states[plan.len - 1] = @intCast(entries[last_state].baseline);
+        plan.state_bits[plan.len - 1] = entries[last_state].bits;
+    }
     var i = plan.len - 1;
     while (i > 0) {
         i -= 1;
@@ -20139,8 +20152,10 @@ fn fillCompressedSequenceTransitionsReference(plan: *CompressedSequencePlan, ent
         if (transition >= (@as(usize, 1) << @intCast(entry.bits))) return error.CorruptFrame;
         plan.transition_values[i] = @intCast(transition);
         plan.transition_bits[i] = entry.bits;
-        plan.next_states[i] = @intCast(entry.baseline);
-        plan.state_bits[i] = entry.bits;
+        if (comptime builtin.is_test) {
+            plan.next_states[i] = @intCast(entry.baseline);
+            plan.state_bits[i] = entry.bits;
+        }
         next_state = state;
     }
     plan.initial_state = @intCast(next_state);
@@ -20550,10 +20565,7 @@ fn sequenceTableSymbol(plan: SequenceTableEmitPlan, kind: SequenceTableKind, ind
         },
         .compressed => |compressed| blk: {
             if (index >= compressed.len) return error.CorruptFrame;
-            var symbol = try sequenceRleSymbol(kind, compressed.codes[index]);
-            symbol.next_state = @intCast(compressed.next_states[index]);
-            symbol.state_bits = compressed.state_bits[index];
-            break :blk symbol;
+            break :blk try sequenceRleSymbol(kind, compressed.codes[index]);
         },
         .repeat => |repeat| blk: {
             if (index >= repeat.len) return error.CorruptFrame;
@@ -20579,10 +20591,7 @@ inline fn sequenceTableSymbolBorrowed(plan: *const SequenceTableEmitPlan, kind: 
         },
         .compressed => |*compressed| blk: {
             if (index >= compressed.len) return error.CorruptFrame;
-            var symbol = try sequenceRleSymbol(kind, compressed.codes[index]);
-            symbol.next_state = @intCast(compressed.next_states[index]);
-            symbol.state_bits = compressed.state_bits[index];
-            break :blk symbol;
+            break :blk try sequenceRleSymbol(kind, compressed.codes[index]);
         },
         .repeat => |*repeat| blk: {
             if (index >= repeat.len) return error.CorruptFrame;
