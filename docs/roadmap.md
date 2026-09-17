@@ -14352,3 +14352,20 @@ reuse, so production keeps the simpler independently owned plans.
   geometric throughput; its 0.9900x
   short JSON level-1 floor recovered to 1.0117x median / 1.0106x geometric mean
   over 31 longer pairs with 31/31 wins.
+  Follow-up profiling of the explicit fast selection attributes roughly 16.7%
+  of JSON samples to `double_fast.planReuse`, 17.5% to repeated-offset extra
+  encoding, and another roughly 43% to compressed/predefined sequence-table
+  planning and reverse-bitstream construction. Three plausible optimizations
+  were measured and rejected. A fast-only RLE/compressed-FSE policy kept all
+  five wires and improved JSON/binary/tradeoff/multiblock by about
+  1.245x/1.116x/1.112x/1.120x, but its added code layout reduced the untouched
+  default multiblock level-3 control to 0.98925x over 31 paired runs, below the
+  0.99 retention floor. A strict compressed-over-predefined lower-bound proof
+  preserved every wire but its extra scans reduced the complete default matrix
+  to 0.9508x geometrically, with a 0.8665x floor. Finally, reusing the current
+  position's already-computed short/long hashes in the double-fast table update
+  improved binary/multiblock only about 1.015x/1.012x while reducing the long
+  text control to 0.9800x. All three production experiments were removed. The
+  next fast-mode work should avoid adding shared planner code or changing the
+  surrounding hot-section layout; a dedicated direct sequence emitter with no
+  fallback into the generic planner is the remaining high-leverage direction.
