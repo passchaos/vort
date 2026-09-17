@@ -14257,6 +14257,18 @@ reuse, so production keeps the simpler independently owned plans.
   0.9895x with 3/31 wins. A vectorized alphabet-preservation proof was also
   removed: although JSON level 1 improved 1.0794x with 31/31 wins, the long
   tradeoff level-1 control regressed to 0.9833x with 0/31 wins.
+  The single-state beam now returns an exact shifted match before its generic
+  chain traversal when the newest hash entry is the preceding match source plus
+  one and the prior uncapped match proves the current `L-1` length. This keeps
+  the existing chain, cost, and tie semantics while avoiding repeated optional
+  and candidate handling on the common adjacent-match path. A 64-shape oracle
+  requires a real fast-path hit and matches every reference token and
+  `PlanStats` field. Independent `c2b18207`/`b71f0ad0` binaries improve JSON
+  level 1 by 1.0113x median / 1.0112x geometric mean over 31 pairs with 31/31
+  wins and the same 643-byte frame. The 15-pair 20-row matrix preserves every
+  hash, size, and checksum at a 1.0036x row-median geometric mean; longer
+  31-pair text level-1/9 controls recover the noisy short-sample floor to
+  0.9960x/0.9917x.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle

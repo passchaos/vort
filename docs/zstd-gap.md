@@ -566,6 +566,19 @@ Recommended next comparison steps:
   vectorized non-RLE/low-symbol predicate and improved JSON level 1 by 1.0794x
   with 31/31 wins, but its long tradeoff level-1 control fell to 0.9833x with
   0/31 wins. Neither implementation is retained.
+  The single-state beam now handles an exact adjacent indexed-match recurrence
+  before entering its generic 16-link chain loop. When the newest hash entry is
+  the prior match source shifted by one and that prior match ended below the
+  258-byte cap, the existing proof already fixes the current length to `L-1`;
+  the fast path returns the same match while preserving chain accounting and
+  all deterministic tie rules. The 64-shape shifted/reference oracle records a
+  real first-entry hit and keeps every token and `PlanStats` field exact. Against
+  independent `c2b18207`/`b71f0ad0` ReleaseFast binaries, 31 interleaved
+  500-encode JSON level-1 pairs improve by 1.0113x median / 1.0112x geometric
+  mean with 31/31 wins and the same 643-byte frame. A 15-pair 20-row matrix
+  preserves every input hash, frame/reference size, and checksum and reaches
+  1.0036x across row medians. Its noisy 0.9863x/0.9861x text level-1/9 rows
+  recover to 0.9960x/0.9917x in separate 31-pair, 5,000-encode controls.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers

@@ -15,6 +15,8 @@ const head_size = 4096;
 const empty = std.math.maxInt(u16);
 const max_chain = 16;
 
+var test_first_shifted_indexed_match_hits: usize = 0;
+
 pub const Profile = struct {
     pub const length_bucket_count = 6;
 
@@ -223,6 +225,31 @@ fn firstIndexedMatch(
     const maximum = @min(lz77.max_match_len, input.len - position);
     const window_len = @min(input.len, lz77.default_window_len);
     if (comptime collect_profile) profile.indexed_searches += @intFromBool(first_candidate != empty);
+    // Adjacent matches overwhelmingly remain at the newest hash-chain entry on
+    // structured input. Handle that exact recurrence before entering the
+    // generic chain loop so its optional/candidate checks stay off the common
+    // path. Capped matches still require normal extension.
+    if (comptime reuse_shifted_match) {
+        if (previous_match) |previous| {
+            if (previous.distance <= position and
+                first_candidate == position - previous.distance)
+            {
+                if (shiftedIndexedMatchLength(maximum, previous.length)) |length| {
+                    if (comptime collect_profile) {
+                        profile.indexed_chain_nodes += 1;
+                        profile.shifted_indexed_matches += 1;
+                        profile.indexed_matches += 1;
+                        profile.indexed_length_histogram[matchLengthBucket(length)] += 1;
+                    }
+                    if (comptime builtin.is_test) test_first_shifted_indexed_match_hits += 1;
+                    return .{
+                        .length = @intCast(length),
+                        .distance = previous.distance,
+                    };
+                }
+            }
+        }
+    }
     while (candidate_i != empty and checked < chain_limit) : (checked += 1) {
         if (comptime collect_profile) profile.indexed_chain_nodes += 1;
         const candidate: usize = candidate_i;
@@ -549,6 +576,7 @@ test "single-state fused index matches prebuilt predecessor chains" {
 }
 
 test "single-state shifted indexed matches preserve full-extension plans" {
+    test_first_shifted_indexed_match_hits = 0;
     var shifted: Scratch = .{};
     defer shifted.deinit(std.testing.allocator);
     var reference: Scratch = .{};
@@ -582,6 +610,7 @@ test "single-state shifted indexed matches preserve full-extension plans" {
         shifted_hits += profile.shifted_indexed_matches;
     }
     try std.testing.expect(shifted_hits != 0);
+    try std.testing.expect(test_first_shifted_indexed_match_hits != 0);
 }
 
 test "single-state prefixed match extension preserves every boundary" {
