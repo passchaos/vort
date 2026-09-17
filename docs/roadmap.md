@@ -14394,3 +14394,19 @@ reuse, so production keeps the simpler independently owned plans.
   that distinction. The finalized tree passes all 597 Zstd tests, the 100-row
   stage gate, 364-case native probe, 276-case libzstd 1.5.7 compatibility
   matrix, large-sequence/Repeat_Mode probe, and the full compile check.
+  The next profile still attributed about 17.3% of fast JSON samples to
+  encoding repeated-offset extras. The canonical OF code-0/code-1 cases now
+  map directly to rep0/rep1/rep2/rep0-minus-one updates instead of trying each
+  extra through the decoder-side resolver; direct-offset symbols retain the
+  checked generic path. A reference-loop oracle covers positive/zero literal
+  lengths, duplicate and zero repcode histories, offsets 0...16, and both
+  successful state rotations and exact errors. Relative to the committed LUT
+  baseline, a 15-pair explicit-fast matrix preserves every hash, size, and
+  checksum while improving JSON/binary/tradeoff/multiblock by
+  1.1319x/1.0698x/1.0277x/1.0620x; its row-median geometric mean is 1.0586x
+  with a 1.0058x floor. The complete default 20-row matrix reaches 1.0161x
+  row-median geometric throughput; its 0.9757x short text level-3 sample
+  recovers to 0.9954x over 31 pairs with 10,000 iterations and three rounds.
+  The finalized candidate passes all 598 Zstd tests, the 100-row stage gate,
+  364-case native probe, 276-case libzstd 1.5.7 compatibility matrix, the
+  large-sequence/Repeat_Mode probe, and the full compile check.

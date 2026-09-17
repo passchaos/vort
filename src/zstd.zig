@@ -20220,6 +20220,34 @@ fn sequenceOffsetExtraForEncodedOffset(
         updateRepeatedOffsets(repeated_offsets, offset);
         return extra;
     }
+    if (symbol.additional_bits == 0 and symbol.base == 0) {
+        const index: usize = @intFromBool(literal_len == 0);
+        if (offset == 0 or repeated_offsets[index] != offset) return error.CorruptFrame;
+        _ = try useRepeatedOffset(repeated_offsets, index);
+        return 0;
+    }
+    if (symbol.additional_bits == 1 and symbol.base == 1) {
+        if (literal_len == 0) {
+            if (offset != 0 and repeated_offsets[2] == offset) {
+                _ = try useRepeatedOffset(repeated_offsets, 2);
+                return 0;
+            }
+            if (repeated_offsets[0] > 1 and repeated_offsets[0] - 1 == offset) {
+                updateRepeatedOffsets(repeated_offsets, offset);
+                return 1;
+            }
+        } else {
+            if (offset != 0 and repeated_offsets[1] == offset) {
+                _ = try useRepeatedOffset(repeated_offsets, 1);
+                return 0;
+            }
+            if (offset != 0 and repeated_offsets[2] == offset) {
+                _ = try useRepeatedOffset(repeated_offsets, 2);
+                return 1;
+            }
+        }
+        return error.CorruptFrame;
+    }
 
     const alternatives: usize = @as(usize, 1) << @intCast(symbol.additional_bits);
     var extra: usize = 0;
@@ -20241,6 +20269,81 @@ fn sequenceOffsetExtraForEncodedOffset(
         }
     }
     return error.CorruptFrame;
+}
+
+fn sequenceOffsetExtraForEncodedOffsetReference(
+    symbol: SequenceSymbol,
+    literal_len: usize,
+    offset: usize,
+    repeated_offsets: *[3]usize,
+) Error!usize {
+    if (symbol.additional_bits > 1) {
+        if (offset < symbol.base) return error.CorruptFrame;
+        const extra = offset - symbol.base;
+        if (extra >= (@as(usize, 1) << @intCast(symbol.additional_bits))) return error.CorruptFrame;
+        updateRepeatedOffsets(repeated_offsets, offset);
+        return extra;
+    }
+    const alternatives: usize = @as(usize, 1) << @intCast(symbol.additional_bits);
+    var extra: usize = 0;
+    while (extra < alternatives) : (extra += 1) {
+        var trial_offsets = repeated_offsets.*;
+        const resolved = resolveSequenceOffset(
+            symbol.base,
+            symbol.additional_bits,
+            extra,
+            literal_len,
+            &trial_offsets,
+        ) catch |err| switch (err) {
+            error.InvalidMatch, error.UnsupportedZstdFeature => continue,
+            else => return err,
+        };
+        if (resolved == offset) {
+            repeated_offsets.* = trial_offsets;
+            return extra;
+        }
+    }
+    return error.CorruptFrame;
+}
+
+test "zstd direct repeated-offset extra mapping matches loop reference" {
+    const histories = [_][3]usize{
+        .{ 1, 4, 8 },
+        .{ 4, 1, 8 },
+        .{ 8, 4, 1 },
+        .{ 2, 2, 2 },
+        .{ 1, 1, 4 },
+        .{ 2, 4, 8 },
+        .{ 0, 4, 8 },
+        .{ 1, 0, 8 },
+        .{ 1, 4, 0 },
+    };
+    const symbols = [_]SequenceSymbol{
+        try sequenceRleSymbol(.offset, 0),
+        try sequenceRleSymbol(.offset, 1),
+        sequence_predefined.offset_symbols[0],
+        sequence_predefined.offset_symbols[23],
+        sequence_predefined.offset_symbols[14],
+    };
+    for (symbols) |symbol| {
+        for (histories) |history| {
+            for ([_]usize{ 0, 1, 7 }) |literal_len| {
+                for (0..17) |offset| {
+                    var expected_offsets = history;
+                    var actual_offsets = history;
+                    const expected = sequenceOffsetExtraForEncodedOffsetReference(symbol, literal_len, offset, &expected_offsets);
+                    const actual = sequenceOffsetExtraForEncodedOffset(symbol, literal_len, offset, &actual_offsets);
+                    if (expected) |expected_extra| {
+                        try std.testing.expectEqual(expected_extra, try actual);
+                        try std.testing.expectEqual(expected_offsets, actual_offsets);
+                    } else |expected_error| {
+                        try std.testing.expectError(expected_error, actual);
+                        try std.testing.expectEqual(expected_offsets, actual_offsets);
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn appendInitialSequenceStateField(out: []BitField, count: *usize, plan: SequenceTableEmitPlan, kind: SequenceTableKind) Error!void {
