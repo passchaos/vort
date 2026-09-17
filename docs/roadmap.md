@@ -14304,6 +14304,9 @@ reuse, so production keeps the simpler independently owned plans.
   tests exact but reduced complete JSON level 1 to 0.9754x. Both layouts were
   removed; future beam work should reduce successful match-state work rather
   than extend live state or override LLVM's current literal insertion layout.
+  An eight-lane variant of the retained exact dominance histogram was rejected
+  too: JSON level 1 measured 0.9986x with 6/15 wins, so four lanes retain the
+  better update-dependency versus final-fold balance.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle

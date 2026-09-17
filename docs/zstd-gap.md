@@ -625,6 +625,10 @@ Recommended next comparison steps:
   adding the merge reduced JSON level 1 to 0.9754x. Production keeps the
   compiler-selected shared insertion layout; the next viable beam change needs
   to reduce successful indexed/rep0 state work rather than only rearrange it.
+  Expanding the retained exact dominance histogram from four to eight lanes was
+  also rejected at 0.9986x JSON level 1 with 6/15 wins. Four lanes remain the
+  measured balance between independent hot-byte updates and the final 256-symbol
+  fold.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers
