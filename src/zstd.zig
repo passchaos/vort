@@ -22319,12 +22319,27 @@ noinline fn boundedSingleMatchCannotBeatWithSummary(
     // For direct-tree input, a competitive one-sequence block must remove at
     // least `required_match_len` bytes; checking only that prefix avoids finding
     // or scoring the complete match.
-    var byte_frequencies: [256]u16 = @splat(0);
+    var byte_frequencies: [4][256]u16 = @splat(@splat(0));
     var max_byte_frequency: usize = 0;
-    for (block) |byte| {
+    var i: usize = 0;
+    while (i + 4 <= block.len) : (i += 4) {
+        inline for (0..4) |lane| {
+            const byte = block[i + lane];
+            if (byte > native_max_direct_huffman_symbol) return false;
+            byte_frequencies[lane][byte] += 1;
+        }
+    }
+    while (i < block.len) : (i += 1) {
+        const byte = block[i];
         if (byte > native_max_direct_huffman_symbol) return false;
-        byte_frequencies[byte] += 1;
-        max_byte_frequency = @max(max_byte_frequency, byte_frequencies[byte]);
+        byte_frequencies[0][byte] += 1;
+    }
+    for (0..256) |symbol| {
+        const frequency = @as(usize, byte_frequencies[0][symbol]) +
+            byte_frequencies[1][symbol] +
+            byte_frequencies[2][symbol] +
+            byte_frequencies[3][symbol];
+        max_byte_frequency = @max(max_byte_frequency, frequency);
     }
     max_byte_frequency_out.* = @intCast(max_byte_frequency);
     const huffman_literal_limit = if (total_len_limit <= 3)

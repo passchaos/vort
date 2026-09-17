@@ -14282,6 +14282,19 @@ reuse, so production keeps the simpler independently owned plans.
   keeps a 0.9957x floor; the weakest multi-block level-1 row measures 1.0011x
   over 31 longer pairs. A same-duration 10-second post-change sample reduces
   `planPredefinedSequenceValues` self samples from 371 to 203.
+  The direct single-dominance proof now collects the same exact 256-symbol
+  histogram through four interleaved `u16` lanes and folds them afterward. The
+  existing 65,535-byte input ceiling bounds each lane below `u16` overflow, and
+  direct/indexed plus selector/repeated-prune oracles preserve every decision,
+  wire, and tie. Independent `7405d1b6`/`f8d4d069` binaries improve JSON level
+  1 by 1.0320x median / 1.0307x geometric mean over 15 pairs with 15/15 wins
+  and the same 643-byte frame. A 15-pair 20-row matrix preserves every hash,
+  size, and checksum, reaches a 1.0030x row-median geometric mean, and keeps a
+  0.9953x floor; the weakest tradeoff level-3 row recovers to 1.0100x over 31
+  longer pairs. Rejected follow-ups include a known-valid direct-offset scorer
+  at only 1.0023x JSON, inverse-FSE-derived decode entries at 0.9992x across the
+  matrix with a 0.9732x text floor despite a 1.0149x JSON target, and a 32-bin
+  frequency precheck that reduced JSON to 0.9922x.
   Reverse sequence-bitstream emission now consumes the existing read-order
   `BitField` slice backwards, removing the former copy into a second array of up
   to 3,072 fields (roughly 48 KiB on 64-bit targets). The reference oracle

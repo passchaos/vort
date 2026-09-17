@@ -596,6 +596,23 @@ Recommended next comparison steps:
   level-1 row recovers to 1.0011x over 31 longer pairs. A matching 10-second,
   1 ms post-change sample reduces `planPredefinedSequenceValues` self samples
   from 371 to 203, confirming that the measured gain tracks the removed DP work.
+  The direct single-dominance proof now builds its exact 256-symbol frequency
+  summary through four interleaved `u16` lanes. Every lane sees at most 16,384
+  bytes under the existing 65,535-byte block limit; a final 256-symbol fold
+  therefore reconstructs the original counts and maximum exactly while breaking
+  the dependency chain for repeated hot bytes. Existing direct/indexed, selector
+  wire, repeated-prune, and OOM oracles keep proof decisions and output exact.
+  Against independent `7405d1b6`/`f8d4d069` binaries, 15 interleaved 500-encode
+  JSON level-1 pairs improve by 1.0320x median / 1.0307x geometric mean with
+  15/15 wins and the same 643-byte frame. A 15-pair 20-row matrix preserves
+  every input hash, frame/reference size, and checksum, reaches 1.0030x across
+  row medians, and keeps a 0.9953x floor. The weakest tradeoff level-3 row
+  recovers to 1.0100x over 31 longer pairs. Three nearby experiments were
+  removed: a known-valid direct-offset scorer improved JSON only 1.0023x;
+  reconstructing small FSE decode entries from the inverse compression table
+  improved JSON 1.0149x but reduced the complete matrix to 0.9992x with a
+  0.9732x text floor; and a 32-bucket frequency precheck reduced JSON to
+  0.9922x because its extra pass cost more than the avoided wide histogram.
   Sequence bitstream emission now traverses the existing read-order fields in
   reverse directly instead of copying as many as 3,072 `BitField` records into
   a second roughly 48 KiB stack array first. A scalar reference oracle covers
