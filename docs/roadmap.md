@@ -14449,3 +14449,21 @@ reuse, so production keeps the simpler independently owned plans.
   its full match scan was oracle-equivalent but reduced binary to 0.98090x in
   the five-pair screen. All production variants were removed; the existing
   arithmetic code mapping and double-fast control flow remain.
+  The explicit fast encoder now commits a winning double-fast sequence block
+  directly from its candidate scratch. Once that candidate is ready and beats
+  the optional prefix-tail block, no later candidate is evaluated; the former
+  copy into `best` and subsequent copy into caller output were therefore dead
+  arbitration work. A test-only old-path comparison keeps the complete frame
+  byte-identical and verifies that the direct path removes one allocation and
+  at least one encoded-frame length of requested bytes; the existing exhaustive
+  allocation-failure test retains caller/state rollback coverage. Against the
+  frozen repeated-offset binary, 15 independent five-row fast pairs preserve
+  every input hash, Vort/reference size, and checksum while improving the
+  row-median geometric mean by 1.00775x with a 1.00181x floor. Binary, JSON,
+  tradeoff, multiblock, and text medians are respectively 1.01177x, 1.00181x,
+  1.00362x, 1.01212x, and 1.00947x. The untouched default 20-row short matrix
+  measured 0.99743x geometrically; its noisy binary level-22 and multiblock
+  level-3 rows recovered to 0.99705x and 0.99913x over separate 31-pair long
+  controls, both above the 0.99 retention floor. The final tree passes all 598
+  Zstd tests, the fast gate, 100-row stage gate, 364-case native probe, 276-case
+  libzstd 1.5.7 matrix, 2,044-sequence/64-repeat-block probe, and compile check.
