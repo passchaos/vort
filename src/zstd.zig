@@ -150,6 +150,8 @@ var test_disable_four_byte_optimal = false;
 var test_disable_split_huffman_decode = false;
 var test_split_huffman_decode_hits: usize = 0;
 var test_split_huffman_single_literal_hits: usize = 0;
+var test_disable_fast_direct_match_commit = false;
+var test_fast_direct_match_commit_hits: usize = 0;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
 const frame_magic_u32: u32 = 0xfd2fb528;
@@ -12060,6 +12062,12 @@ fn emitFastCompressedBlockWithScratch(
         large_sequence_scratch,
     );
     if (match_ready and (best.items.len == 0 or candidate.items.len < best.items.len)) {
+        if (!builtin.is_test or !test_disable_fast_direct_match_commit) {
+            if (comptime builtin.is_test) test_fast_direct_match_commit_hits += 1;
+            state.previous_huffman_plan = null;
+            try appendSequenceCandidateAndCommit(allocator, out, candidate.items, last, &state.sequence_state);
+            return;
+        }
         best.clearRetainingCapacity();
         try best.appendSlice(allocator, candidate.items);
         best_is_match = true;
@@ -33720,6 +33728,12 @@ test "zstd native frame writer chooses smallest fallback mode" {
 }
 
 test "zstd fast compressed selection provides a bounded Pareto mode" {
+    test_disable_fast_direct_match_commit = false;
+    test_fast_direct_match_commit_hits = 0;
+    defer {
+        test_disable_fast_direct_match_commit = false;
+        test_fast_direct_match_commit_hits = 0;
+    }
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(std.testing.allocator);
     while (payload.items.len < 32 * 1024) {
@@ -33734,12 +33748,32 @@ test "zstd fast compressed selection provides a bounded Pareto mode" {
     };
     const encoded = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, options);
     defer std.testing.allocator.free(encoded.frame);
+    try std.testing.expect(test_fast_direct_match_commit_hits != 0);
     try std.testing.expectEqual(NativeFrameMode.fast_compressed, encoded.mode);
     try std.testing.expect(encoded.frame.len < payload.items.len / 32);
     try std.testing.expectEqual(@as(usize, 698), encoded.frame.len);
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded.frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
+
+    test_disable_fast_direct_match_commit = true;
+    const copied = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, options);
+    defer std.testing.allocator.free(copied.frame);
+    test_disable_fast_direct_match_commit = false;
+    try std.testing.expectEqual(encoded.mode, copied.mode);
+    try std.testing.expectEqualSlices(u8, encoded.frame, copied.frame);
+
+    var direct_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    const measured_direct = try encodeNativeFrameWithOptionsAlloc(direct_allocator.allocator(), payload.items, options);
+    defer direct_allocator.allocator().free(measured_direct.frame);
+    test_disable_fast_direct_match_commit = true;
+    var copied_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    const measured_copied = try encodeNativeFrameWithOptionsAlloc(copied_allocator.allocator(), payload.items, options);
+    defer copied_allocator.allocator().free(measured_copied.frame);
+    test_disable_fast_direct_match_commit = false;
+    try std.testing.expectEqualSlices(u8, measured_copied.frame, measured_direct.frame);
+    try std.testing.expectEqual(copied_allocator.allocations - 1, direct_allocator.allocations);
+    try std.testing.expect(direct_allocator.allocated_bytes + measured_direct.frame.len <= copied_allocator.allocated_bytes);
 
     var encoder = NativeFrameEncoder.init(std.testing.allocator);
     defer encoder.deinit();
