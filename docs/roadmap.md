@@ -14754,7 +14754,7 @@ reuse, so production keeps the simpler independently owned plans.
   level-3/level-1 latency bound without weakening the threshold.
   The explicit fast encoder now uses a direct FSE compression-table transition
   kernel only when double-fast emits more than 512 sequences. The kernel lives
-  in `zstd/sequence/large_transition_object.zig`; a policy bit at the end of the
+  in `zstd/sequence/large/transition.zig`; a policy bit at the end of the
   existing reusable scratch selects it without cloning or moving the general
   large-sequence encoder. Default levels retain the inverse decode-table builder
   and extensible RLE/predefined/compressed/repeat arbitration. Direct/inverse
@@ -14776,3 +14776,12 @@ reuse, so production keeps the simpler independently owned plans.
   level 9 remain at `1.0091x`/`1.0052x`/`1.0015x`. The final nine-pair
   five-row fast matrix preserves every wire/hash/checksum and reaches `1.0225x`
   row-median geometric throughput with multiblock at `1.0794x`.
+  A subsequent cached-cost pass now lives in the isolated
+  `zstd/sequence/large/plan.zig` module. It totals value/transition
+  bits from the already-built code/state arrays and returns table-plan indexes;
+  the default large planner remains a separate comptime instance without a
+  runtime policy branch. A 4,096-case randomized cost/selection oracle and
+  four-way 128 KiB wire test preserve exact output. Eleven alternating
+  1,500-encode pairs improve fast multiblock by another `1.0756x` with 11/11
+  wins, while default tradeoff
+  levels 1/3 remain at `1.0068x`/`1.0054x` medians.

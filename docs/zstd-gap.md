@@ -163,7 +163,7 @@ Current interpretation:
   For blocks with more than 512 sequences, `fast_compressed` now builds FSE
   transitions directly from the compression table instead of building a decode
   table and recovering its inverse transitions through per-symbol chains. The
-  hot kernel is isolated in `src/zstd/sequence/large_transition_object.zig`;
+  hot kernel is isolated in `src/zstd/sequence/large/transition.zig`;
   default level encoding retains the existing general planner and full
   RLE/predefined/compressed/repeat arbitration. Direct/inverse oracles compare
   table bytes, initial state, and every transition field at 513, 1,024, and
@@ -185,6 +185,18 @@ Current interpretation:
   JSON level 9 remain at `1.0091x`/`1.0052x`/`1.0015x`. A nine-pair
   five-row fast matrix preserves every hash, frame size, and checksum, with
   multiblock at `1.0794x` and a `1.0225x` row-median geometric mean.
+
+  The fast-only large-sequence cost pass is now isolated in
+  `src/zstd/sequence/large/plan.zig`. It reuses the existing
+  canonical code arrays to total value and transition bits, then selects the
+  LL/OF/ML table tuple by index; the default planner remains a separate comptime
+  instance with no runtime policy branch. A 4,096-case randomized cost/selection
+  oracle plus a four-way 128 KiB frame comparison (direct/inverse transitions
+  and cached/scalar cost) and the normal OOM probes retain identical output.
+  Eleven alternating
+  1,500-encode pairs improve fast multiblock by another `1.0756x` median with
+  11/11 wins. The formerly sensitive default tradeoff levels 1/3 recover to
+  `1.0068x`/`1.0054x` medians over the same 11-pair control.
 
   A frozen independent-binary control also compared the unchanged default
   selection across 15 paired runs of the complete 20-row matrix, 50 iterations,

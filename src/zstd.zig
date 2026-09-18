@@ -27,7 +27,8 @@ const single_beam_match = @import("zstd/match/single_beam.zig");
 const optimal_four_match = @import("zstd/match/optimal_four.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
-const large_transition = @import("zstd/sequence/large_transition_object.zig");
+const large_transition = @import("zstd/sequence/large/transition.zig");
+const large_fast_plan = @import("zstd/sequence/large/plan.zig");
 
 const wide_sequence_emit_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_wide_sequence",
@@ -155,6 +156,8 @@ var test_disable_fast_direct_match_commit = false;
 var test_fast_direct_match_commit_hits: usize = 0;
 var test_disable_fast_large_direct_transitions = false;
 var test_fast_large_direct_transition_hits: usize = 0;
+var test_disable_fast_large_cached_planner = false;
+var test_fast_large_cached_planner_hits: usize = 0;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
 const frame_magic_u32: u32 = 0xfd2fb528;
@@ -423,6 +426,8 @@ test {
     _ = incremental_history_match;
     _ = dictionary_format;
     _ = seekable;
+    _ = large_transition;
+    _ = large_fast_plan;
 }
 
 pub const StandardDictionaryView = dictionary_format.View;
@@ -12196,9 +12201,8 @@ fn emitFastCompressedBlockWithScratch(
         error.InvalidBlockPlan => lz77.PlanStats{},
         else => return err,
     };
-    const use_direct_large_transitions = stats.matches > max_native_sequence_count and
-        (!builtin.is_test or !test_disable_fast_large_direct_transitions);
-    const match_ok = stats.matches != 0 and if (use_direct_large_transitions)
+    const use_fast_large_planner = stats.matches > max_native_sequence_count;
+    const match_ok = stats.matches != 0 and if (use_fast_large_planner)
         try emitLargeHashTokenSequenceBlockReuseFast(
             allocator,
             candidate,
@@ -12218,8 +12222,10 @@ fn emitFastCompressedBlockWithScratch(
             stats,
             large_sequence_scratch,
         );
-    if (comptime builtin.is_test)
-        test_fast_large_direct_transition_hits += @intFromBool(match_ok and use_direct_large_transitions);
+    if (comptime builtin.is_test) {
+        test_fast_large_direct_transition_hits += @intFromBool(match_ok and use_fast_large_planner and !test_disable_fast_large_direct_transitions);
+        test_fast_large_cached_planner_hits += @intFromBool(match_ok and use_fast_large_planner and !test_disable_fast_large_cached_planner);
+    }
     const match_ready = match_ok and try prepareSequenceCandidateForFrameWithScratch(
         allocator,
         candidate,
@@ -15353,6 +15359,21 @@ fn emitHashTokenSequenceBlockReuseWithState(
     previous_tables: ?*const SequenceTables,
     initial_offsets: [3]usize,
 ) Error!bool {
+    return try emitHashTokenSequenceBlockReuseWithStatePolicy(false, allocator, out, block, last, tokens, stats, scratch, previous_tables, initial_offsets);
+}
+
+fn emitHashTokenSequenceBlockReuseWithStatePolicy(
+    comptime use_fast_cached_planner: bool,
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    tokens: []const lz77.Token,
+    stats: lz77.PlanStats,
+    scratch: *LargeSequenceScratch,
+    previous_tables: ?*const SequenceTables,
+    initial_offsets: [3]usize,
+) Error!bool {
     if (stats.matches < 2 or
         stats.matches > max_large_native_sequence_count or
         stats.matches > block.len / lz77.min_match_len) return false;
@@ -15368,7 +15389,8 @@ fn emitHashTokenSequenceBlockReuseWithState(
         const offsets = scratch.values.items[stats.matches .. stats.matches * 2];
         const match_lens = scratch.values.items[stats.matches * 2 .. stats.matches * 3];
         const literal_ends = scratch.values.items[stats.matches * 3 .. stats.matches * 4];
-        return try emitLargeHashTokenSequenceBlockWithState(
+        return try emitLargeHashTokenSequenceBlockWithStatePolicy(
+            use_fast_cached_planner,
             allocator,
             out,
             block,
@@ -15421,10 +15443,34 @@ noinline fn emitLargeHashTokenSequenceBlockReuseFast(
     scratch: *LargeSequenceScratch,
 ) linksection(fast_encode_helper_text_section) Error!bool {
     std.debug.assert(stats.matches > max_native_sequence_count);
-    const previous = scratch.direct_transitions;
-    scratch.direct_transitions = true;
-    defer scratch.direct_transitions = previous;
-    return try emitHashTokenSequenceBlockReuse(allocator, out, block, last, tokens, stats, scratch);
+    const previous_direct = scratch.direct_transitions;
+    scratch.direct_transitions = !builtin.is_test or !test_disable_fast_large_direct_transitions;
+    defer scratch.direct_transitions = previous_direct;
+    if (comptime builtin.is_test) if (test_disable_fast_large_cached_planner)
+        return try emitHashTokenSequenceBlockReuseWithStatePolicy(
+            false,
+            allocator,
+            out,
+            block,
+            last,
+            tokens,
+            stats,
+            scratch,
+            null,
+            initial_repeated_offsets,
+        );
+    return try emitHashTokenSequenceBlockReuseWithStatePolicy(
+        true,
+        allocator,
+        out,
+        block,
+        last,
+        tokens,
+        stats,
+        scratch,
+        null,
+        initial_repeated_offsets,
+    );
 }
 
 fn hashTokenSequenceBlockLowerBound(
@@ -15596,6 +15642,24 @@ fn emitLargeHashTokenSequenceBlockWithState(
     previous_tables: ?*const SequenceTables,
     initial_offsets: [3]usize,
 ) Error!bool {
+    return try emitLargeHashTokenSequenceBlockWithStatePolicy(false, allocator, out, block, last, tokens, literal_lens, offsets, match_lens, literal_ends, scratch, previous_tables, initial_offsets);
+}
+
+fn emitLargeHashTokenSequenceBlockWithStatePolicy(
+    comptime use_fast_cached_planner: bool,
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    tokens: []const lz77.Token,
+    literal_lens: []usize,
+    offsets: []usize,
+    match_lens: []usize,
+    literal_ends: []usize,
+    scratch: *LargeSequenceScratch,
+    previous_tables: ?*const SequenceTables,
+    initial_offsets: [3]usize,
+) Error!bool {
     const output_start = out.items.len;
     errdefer out.items.len = output_start;
     const sequence_count = literal_lens.len;
@@ -15627,7 +15691,8 @@ fn emitLargeHashTokenSequenceBlockWithState(
     };
     if (position != block.len or count != sequence_count) return false;
 
-    return try emitLargeSequenceCompressedBlockWithState(
+    return try emitLargeSequenceCompressedBlockWithStatePolicy(
+        use_fast_cached_planner,
         allocator,
         out,
         block,
@@ -15672,6 +15737,24 @@ fn emitLargeSequenceCompressedBlock(
 }
 
 fn emitLargeSequenceCompressedBlockWithState(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    scratch: *LargeSequenceScratch,
+    previous_tables: ?*const SequenceTables,
+    initial_offsets: [3]usize,
+) Error!bool {
+    return try emitLargeSequenceCompressedBlockWithStatePolicy(false, allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, scratch, previous_tables, initial_offsets);
+}
+
+fn emitLargeSequenceCompressedBlockWithStatePolicy(
+    comptime use_fast_cached_planner: bool,
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     block: []const u8,
@@ -15786,16 +15869,30 @@ fn emitLargeSequenceCompressedBlockWithState(
         repeat_viable_masks,
         if (previous_tables) |tables| previousSequenceTable(tables, .match) else null,
     );
-    const plan = (try bestLargeSequenceTablePlan(
-        literal_lens,
-        offsets,
-        match_lens,
-        scratch.literals_prefix.items.len,
-        literal_alternatives,
-        offset_alternatives,
-        match_alternatives,
-        initial_offsets,
-    )) orelse return false;
+    const plan = (if (comptime use_fast_cached_planner)
+        try bestLargeSequenceTablePlanFast(
+            literal_lens,
+            offsets,
+            match_lens,
+            scratch.literals_prefix.items.len,
+            literal_alternatives,
+            offset_alternatives,
+            match_alternatives,
+            literal_compressed.codes,
+            offset_compressed.codes,
+            match_compressed.codes,
+        )
+    else
+        try bestLargeSequenceTablePlan(
+            literal_lens,
+            offsets,
+            match_lens,
+            scratch.literals_prefix.items.len,
+            literal_alternatives,
+            offset_alternatives,
+            match_alternatives,
+            initial_offsets,
+        )) orelse return false;
 
     scratch.payload.clearRetainingCapacity();
     try scratch.payload.appendSlice(allocator, scratch.literals_prefix.items);
@@ -19307,6 +19404,85 @@ fn bestLargeSequenceTablePlan(
         }
     }
     return best;
+}
+
+noinline fn bestLargeSequenceTablePlanFast(
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literals_section_len: usize,
+    literal_alternatives: LargeSequenceTablePlanAlternatives,
+    offset_alternatives: LargeSequenceTablePlanAlternatives,
+    match_alternatives: LargeSequenceTablePlanAlternatives,
+    literal_codes: []const u8,
+    offset_codes: []const u8,
+    match_codes: []const u8,
+) linksection(fast_encode_helper_text_section) Error!?LargeSequenceCombinedPlanCandidate {
+    const len = literal_lens.len;
+    if (len != offsets.len or len != match_lens.len or
+        len != literal_codes.len or len != offset_codes.len or len != match_codes.len or
+        len <= max_native_sequence_count or len > max_large_native_sequence_count) return error.CorruptFrame;
+    if (literal_alternatives.len == 0 or offset_alternatives.len == 0 or match_alternatives.len == 0) return null;
+
+    const literal_value_bits = try large_fast_plan.valueBits(literal_codes, &ll_bits);
+    const offset_value_bits = try large_fast_plan.valueBits(offset_codes, &of_bits);
+    const match_value_bits = try large_fast_plan.valueBits(match_codes, &ml_bits);
+    var literal_costs: [4]large_fast_plan.Cost = undefined;
+    var offset_costs: [4]large_fast_plan.Cost = undefined;
+    var match_costs: [4]large_fast_plan.Cost = undefined;
+    for (literal_alternatives.items[0..literal_alternatives.len], 0..) |*plan, i|
+        literal_costs[i] = try largeFastSequenceTableCost(plan, .literal, len, literal_value_bits);
+    for (offset_alternatives.items[0..offset_alternatives.len], 0..) |*plan, i|
+        offset_costs[i] = try largeFastSequenceTableCost(plan, .offset, len, offset_value_bits);
+    for (match_alternatives.items[0..match_alternatives.len], 0..) |*plan, i|
+        match_costs[i] = try largeFastSequenceTableCost(plan, .match, len, match_value_bits);
+
+    const selected = (try large_fast_plan.select(
+        try sequenceCountLen(len),
+        literals_section_len,
+        literal_costs[0..literal_alternatives.len],
+        offset_costs[0..offset_alternatives.len],
+        match_costs[0..match_alternatives.len],
+    )) orelse return null;
+    return .{
+        .plan = .{
+            .literal = literal_alternatives.items[selected.literal_index],
+            .offset = offset_alternatives.items[selected.offset_index],
+            .match = match_alternatives.items[selected.match_index],
+        },
+        .payload_len = selected.payload_len,
+    };
+}
+
+noinline fn largeFastSequenceTableCost(
+    plan: *const LargeSequenceTableEmitPlan,
+    kind: SequenceTableKind,
+    len: usize,
+    value_bits: usize,
+) linksection(fast_encode_helper_text_section) Error!large_fast_plan.Cost {
+    try validateLargeSequenceTablePlanLen(plan, len);
+    return switch (plan.*) {
+        .rle => large_fast_plan.rleCost(value_bits),
+        .predefined => |states| try large_fast_plan.predefinedCost(
+            states,
+            sequenceTablePredefinedSymbols(kind),
+            predefinedInitialStateBits(kind),
+            value_bits,
+        ),
+        .compressed => |compressed| try large_fast_plan.compressedCost(
+            compressed.transition_bits,
+            compressed.accuracy_log,
+            compressed.table_payload_len,
+            value_bits,
+        ),
+        .repeat => |repeat| try large_fast_plan.repeatCost(
+            repeat.states,
+            repeat.source.symbols,
+            repeat.source.mode == .rle,
+            repeatSequenceInitialStateBits(repeat.source),
+            value_bits,
+        ),
+    };
 }
 
 fn largeSequenceTablePlanBitCost(
@@ -34843,9 +35019,13 @@ test "zstd fast compressed selection provides a bounded Pareto mode" {
 test "zstd fast compressed large transition path preserves frame wire" {
     test_disable_fast_large_direct_transitions = false;
     test_fast_large_direct_transition_hits = 0;
+    test_disable_fast_large_cached_planner = false;
+    test_fast_large_cached_planner_hits = 0;
     defer {
         test_disable_fast_large_direct_transitions = false;
         test_fast_large_direct_transition_hits = 0;
+        test_disable_fast_large_cached_planner = false;
+        test_fast_large_cached_planner_hits = 0;
     }
     const payload = try std.testing.allocator.alloc(u8, std.compress.zstd.block_size_max);
     defer std.testing.allocator.free(payload);
@@ -34861,12 +35041,24 @@ test "zstd fast compressed large transition path preserves frame wire" {
     const direct = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
     defer std.testing.allocator.free(direct.frame);
     try std.testing.expectEqual(@as(usize, 1), test_fast_large_direct_transition_hits);
+    try std.testing.expectEqual(@as(usize, 1), test_fast_large_cached_planner_hits);
+
+    test_disable_fast_large_cached_planner = true;
+    const direct_scalar_plan = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(direct_scalar_plan.frame);
+    test_disable_fast_large_cached_planner = false;
+    try std.testing.expectEqualSlices(u8, direct.frame, direct_scalar_plan.frame);
 
     test_disable_fast_large_direct_transitions = true;
-    const inverse = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
-    defer std.testing.allocator.free(inverse.frame);
+    const inverse_cached_plan = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(inverse_cached_plan.frame);
+    test_disable_fast_large_cached_planner = true;
+    const inverse_scalar_plan = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(inverse_scalar_plan.frame);
     test_disable_fast_large_direct_transitions = false;
-    try std.testing.expectEqualSlices(u8, inverse.frame, direct.frame);
+    test_disable_fast_large_cached_planner = false;
+    try std.testing.expectEqualSlices(u8, direct.frame, inverse_cached_plan.frame);
+    try std.testing.expectEqualSlices(u8, direct.frame, inverse_scalar_plan.frame);
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, direct.frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
