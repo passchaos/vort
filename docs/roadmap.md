@@ -14534,3 +14534,28 @@ reuse, so production keeps the simpler independently owned plans.
   not complete: after more than 11 minutes the Zig build-server process was
   sleeping with no active compiler child and was interrupted, so this change
   does not claim a fresh full compile-check result.
+  A post-pack 10-second/1 kHz fast-JSON profile attributes 20.49% of 9,083
+  samples to `double_fast.planReuse`, 9.25% to compressed-FSE transition
+  construction, 5.58% to borrowed sequence-field construction, and 4.84% to
+  compressed-table planning. Wide borrowed emission now recognizes the
+  all-compressed LL/OF/ML case and loads each packed `u16` step once per table
+  and sequence, reusing its code and transition components while constructing
+  the read-order fields. Other mode combinations retain the generic path. The
+  existing borrowed/by-value oracle now explicitly exercises the specialized
+  all-compressed loop and compares every `BitField`. Against frozen independent
+  packed-plan and fused-borrowed binaries, 15 explicit-fast pairs preserve every
+  input hash, Vort/reference size, and checksum while improving JSON by
+  1.03105x with 15/15 wins. Binary/tradeoff/multiblock medians are
+  1.00530x/1.00527x/1.00061x; the five-row median geometric mean is 1.00767x
+  with a 0.99649x text floor. A separate 15-pair default 20-row matrix measures
+  1.00191x geometrically; its noisy 0.98284x short text level-22 floor recovers
+  across a 31-pair, 10,000-iteration all-level text control to 0.99653x, with
+  the four text medians spanning 0.99653x--1.00099x. An attempted direct packed
+  transition write was rejected before this change: despite exact wires, its
+  five-row screen measured 0.98717x geometrically with a 0.97509x floor. The
+  final source passes all 599 Zstd tests, the five-row fast gate, 100-row stage
+  gate, 276-case libzstd 1.5.7 compatibility matrix, and the
+  2,044-sequence/64-repeat-block probe. The Python-driven 364-case native probe
+  again encountered a Zig build-server sleep before its CLI child launched,
+  both with the repository cache and with fresh isolated local/global caches; no
+  result is claimed for that invocation.
