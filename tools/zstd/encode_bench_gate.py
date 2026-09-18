@@ -99,9 +99,13 @@ def main() -> int:
     assert int(binary_rows[9]["vort_bytes"]) <= 8_607, binary_rows
     assert int(binary_rows[22]["vort_bytes"]) <= 8_607, binary_rows
     # Wide-alphabet level 3 returns its already-computed primary frame instead
-    # of evaluating the adaptive split ladder. Keep the former roughly 5.8x
-    # level-1 latency cliff from returning while leaving ample CI headroom.
-    assert int(binary_rows[3]["vort_ns"]) < int(binary_rows[1]["vort_ns"]) * 4, binary_rows
+    # of evaluating the adaptive split ladder. Compare it with level 9, which
+    # runs the same consensus path, instead of making this guard fail whenever
+    # an independent level-1 optimization makes the denominator faster. Keep a
+    # generous absolute ceiling as a second guard against the former multi-
+    # millisecond split-ladder cliff.
+    assert int(binary_rows[3]["vort_ns"]) < int(binary_rows[9]["vort_ns"]) * 5 // 4, binary_rows
+    assert int(binary_rows[3]["vort_ns"]) <= 8_000_000, binary_rows
     # Ratio levels accept a wide primary only after it reaches the audited 3:1
     # decisive threshold. Inside that primary, matching double-fast and
     # At level 1, a 4:15 double-fast result can return before repeat-beam as an

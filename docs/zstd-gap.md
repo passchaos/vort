@@ -160,6 +160,21 @@ Current interpretation:
   `zig-out/vort-zstd-fast-compressed-bench.csv`; pass
   `-- --libzstd PATH` when loader discovery is insufficient.
 
+  For blocks with more than 512 sequences, `fast_compressed` now builds FSE
+  transitions directly from the compression table instead of building a decode
+  table and recovering its inverse transitions through per-symbol chains. The
+  hot kernel is isolated in `src/zstd/sequence/large_transition_object.zig`;
+  default level encoding retains the existing general planner and full
+  RLE/predefined/compressed/repeat arbitration. Direct/inverse oracles compare
+  table bytes, initial state, and every transition field at 513, 1,024, and
+  2,047 sequences, while whole-block and incremental/one-shot tests preserve
+  exact wire output. Five alternating independent-binary fast matrices raise
+  multiblock median throughput from 125.29 to 232.75 MiB/s (`1.8577x`) with all
+  five row medians at or above `1.0000x` and a `1.1551x` geometric mean. A
+  separate default 20-row matrix reaches `1.0183x` geometric mean; longer
+  controls retain binary level 1 at `0.9915x` and improve JSON level 3 by
+  `1.0100x`.
+
   A frozen independent-binary control also compared the unchanged default
   selection across 15 paired runs of the complete 20-row matrix, 50 iterations,
   and three interleaved rounds per row. Every input SHA-256, Vort/reference size, and checksum

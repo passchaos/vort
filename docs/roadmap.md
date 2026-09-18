@@ -14752,3 +14752,18 @@ reuse, so production keeps the simpler independently owned plans.
   throughput rises from 40.69 to 42.54 MiB/s (`1.0452x`, 5/5 wins). The 20-row
   encode gate passes on three consecutive runs, restoring its strict binary
   level-3/level-1 latency bound without weakening the threshold.
+  The explicit fast encoder now uses a direct FSE compression-table transition
+  kernel only when double-fast emits more than 512 sequences. The kernel lives
+  in `zstd/sequence/large_transition_object.zig`; a policy bit at the end of the
+  existing reusable scratch selects it without cloning or moving the general
+  large-sequence encoder. Default levels retain the inverse decode-table builder
+  and extensible RLE/predefined/compressed/repeat arbitration. Direct/inverse
+  oracles compare table payload, initial state, and every transition field at
+  513/1,024/2,047 sequences; a whole-block oracle, OOM rollback sweep,
+  incremental/one-shot equality test, and libzstd large-sequence probe preserve
+  wire behavior. Five alternating independent-binary fast matrices preserve
+  every hash, size, and checksum while improving multiblock from 125.29 to
+  232.75 MiB/s (`1.8577x`); all five row medians win, with `1.1551x` geometric
+  mean and `1.0000x` floor. A separate default 20-row matrix reaches `1.0183x`
+  geometric mean; eleven longer controls recover binary level 1 to `0.9915x`
+  and improve JSON level 3 by `1.0100x` with 11/11 wins.

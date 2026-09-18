@@ -27,6 +27,7 @@ const single_beam_match = @import("zstd/match/single_beam.zig");
 const optimal_four_match = @import("zstd/match/optimal_four.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
+const large_transition = @import("zstd/sequence/large_transition_object.zig");
 
 const wide_sequence_emit_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_wide_sequence",
@@ -152,6 +153,8 @@ var test_split_huffman_decode_hits: usize = 0;
 var test_split_huffman_single_literal_hits: usize = 0;
 var test_disable_fast_direct_match_commit = false;
 var test_fast_direct_match_commit_hits: usize = 0;
+var test_disable_fast_large_direct_transitions = false;
+var test_fast_large_direct_transition_hits: usize = 0;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
 const frame_magic_u32: u32 = 0xfd2fb528;
@@ -12193,15 +12196,30 @@ fn emitFastCompressedBlockWithScratch(
         error.InvalidBlockPlan => lz77.PlanStats{},
         else => return err,
     };
-    const match_ok = stats.matches != 0 and try emitHashTokenSequenceBlockReuse(
-        allocator,
-        candidate,
-        block,
-        last,
-        scratch.greedy_tokens.items,
-        stats,
-        large_sequence_scratch,
-    );
+    const use_direct_large_transitions = stats.matches > max_native_sequence_count and
+        (!builtin.is_test or !test_disable_fast_large_direct_transitions);
+    const match_ok = stats.matches != 0 and if (use_direct_large_transitions)
+        try emitLargeHashTokenSequenceBlockReuseFast(
+            allocator,
+            candidate,
+            block,
+            last,
+            scratch.greedy_tokens.items,
+            stats,
+            large_sequence_scratch,
+        )
+    else
+        try emitHashTokenSequenceBlockReuse(
+            allocator,
+            candidate,
+            block,
+            last,
+            scratch.greedy_tokens.items,
+            stats,
+            large_sequence_scratch,
+        );
+    if (comptime builtin.is_test)
+        test_fast_large_direct_transition_hits += @intFromBool(match_ok and use_direct_large_transitions);
     const match_ready = match_ok and try prepareSequenceCandidateForFrameWithScratch(
         allocator,
         candidate,
@@ -14094,6 +14112,35 @@ test "zstd hash emitter uses dynamic scratch beyond native stack capacity" {
     try std.testing.expectEqual(NativeSequenceTableMode.compressed, modes.literal_length_mode);
     try std.testing.expectEqual(NativeSequenceTableMode.compressed, modes.offset_mode);
     try std.testing.expectEqual(NativeSequenceTableMode.rle, modes.match_length_mode);
+
+    var inverse_scratch: LargeSequenceScratch = .{};
+    defer inverse_scratch.deinit(std.testing.allocator);
+    var inverse_block: std.ArrayList(u8) = .empty;
+    defer inverse_block.deinit(std.testing.allocator);
+    try std.testing.expect(try emitHashTokenSequenceBlockReuse(
+        std.testing.allocator,
+        &inverse_block,
+        &payload,
+        true,
+        tokens[0..token_len],
+        stats,
+        &inverse_scratch,
+    ));
+    var direct_scratch: LargeSequenceScratch = .{};
+    defer direct_scratch.deinit(std.testing.allocator);
+    var direct_block: std.ArrayList(u8) = .empty;
+    defer direct_block.deinit(std.testing.allocator);
+    try std.testing.expect(try emitLargeHashTokenSequenceBlockReuseFast(
+        std.testing.allocator,
+        &direct_block,
+        &payload,
+        true,
+        tokens[0..token_len],
+        stats,
+        &direct_scratch,
+    ));
+    try std.testing.expectEqualSlices(u8, inverse_block.items, direct_block.items);
+
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
@@ -14111,6 +14158,30 @@ test "zstd hash emitter uses dynamic scratch beyond native stack capacity" {
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ &payload, tokens[0..token_len], stats });
+
+    const FastTest = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, input_tokens: []const lz77.Token, input_stats: lz77.PlanStats) !void {
+            var local_scratch: LargeSequenceScratch = .{};
+            defer local_scratch.deinit(allocator);
+            var out: std.ArrayList(u8) = .empty;
+            defer out.deinit(allocator);
+            try out.appendSlice(allocator, "prefix");
+            _ = emitLargeHashTokenSequenceBlockReuseFast(
+                allocator,
+                &out,
+                input,
+                true,
+                input_tokens,
+                input_stats,
+                &local_scratch,
+            ) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix", out.items);
+                return err;
+            };
+            try std.testing.expectEqualSlices(u8, "prefix", out.items[0.."prefix".len]);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, FastTest.run, .{ &payload, tokens[0..token_len], stats });
 }
 
 test "zstd dynamic hash emitter reuses sequence tables across wide blocks" {
@@ -15132,6 +15203,9 @@ const LargeSequenceScratch = struct {
     literals_prefix: std.ArrayList(u8) = .empty,
     payload: std.ArrayList(u8) = .empty,
     sequence_bits: std.ArrayList(u8) = .empty,
+    // Keep this policy bit after the established scratch arrays so adding the
+    // fast-only path does not perturb their offsets in the ordinary encoder.
+    direct_transitions: bool = false,
 
     fn deinit(self: *LargeSequenceScratch, allocator: std.mem.Allocator) void {
         self.sequence_bits.deinit(allocator);
@@ -15262,6 +15336,22 @@ fn emitHashTokenSequenceBlockReuseWithState(
         return try emitBestSequenceCompressedBlockSmall(allocator, out, block, last, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], literal_start);
     }
     return try emitBestSequenceCompressedBlock(allocator, out, block, last, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], literal_start);
+}
+
+noinline fn emitLargeHashTokenSequenceBlockReuseFast(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    tokens: []const lz77.Token,
+    stats: lz77.PlanStats,
+    scratch: *LargeSequenceScratch,
+) linksection(fast_encode_helper_text_section) Error!bool {
+    std.debug.assert(stats.matches > max_native_sequence_count);
+    const previous = scratch.direct_transitions;
+    scratch.direct_transitions = true;
+    defer scratch.direct_transitions = previous;
+    return try emitHashTokenSequenceBlockReuse(allocator, out, block, last, tokens, stats, scratch);
 }
 
 fn hashTokenSequenceBlockLowerBound(
@@ -15569,6 +15659,7 @@ fn emitLargeSequenceCompressedBlockWithState(
     const offset_repeat_states = if (previous_tables != null) repeat_states[sequence_count .. sequence_count * 2] else repeat_states;
     const match_repeat_states = if (previous_tables != null) repeat_states[sequence_count * 2 .. sequence_count * 3] else repeat_states;
     const literal_compressed = LargeCompressedSequenceBuffers{
+        .direct_transitions = scratch.direct_transitions,
         .codes = scratch.codes.items[0..sequence_count],
         .next_states = scratch.next_states.items[0..sequence_count],
         .state_bits = scratch.state_bits.items[0..sequence_count],
@@ -15576,6 +15667,7 @@ fn emitLargeSequenceCompressedBlockWithState(
         .transition_bits = scratch.transition_bits.items[0..sequence_count],
     };
     const offset_compressed = LargeCompressedSequenceBuffers{
+        .direct_transitions = scratch.direct_transitions,
         .codes = scratch.codes.items[sequence_count .. sequence_count * 2],
         .next_states = scratch.next_states.items[sequence_count .. sequence_count * 2],
         .state_bits = scratch.state_bits.items[sequence_count .. sequence_count * 2],
@@ -15583,6 +15675,7 @@ fn emitLargeSequenceCompressedBlockWithState(
         .transition_bits = scratch.transition_bits.items[sequence_count .. sequence_count * 2],
     };
     const match_compressed = LargeCompressedSequenceBuffers{
+        .direct_transitions = scratch.direct_transitions,
         .codes = scratch.codes.items[sequence_count * 2 .. sequence_count * 3],
         .next_states = scratch.next_states.items[sequence_count * 2 .. sequence_count * 3],
         .state_bits = scratch.state_bits.items[sequence_count * 2 .. sequence_count * 3],
@@ -18903,6 +18996,7 @@ const RepeatSequencePlan = struct {
 };
 
 const LargeCompressedSequenceBuffers = struct {
+    direct_transitions: bool = false,
     codes: []u8,
     next_states: []u8,
     state_bits: []u8,
@@ -20202,13 +20296,24 @@ fn planLargeCompressedSequenceCodes(
     };
     if (table_payload_len >= len) return null;
 
-    var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
-    const table_len = try buildFseDecodeTableFromNormalized(
-        normalized[0 .. @as(usize, max_code) + 1],
-        accuracy_log,
-        &entries,
-    );
-    const initial_state = try fillLargeCompressedSequenceTransitions(buffers, entries[0..table_len]);
+    const initial_state = if (buffers.direct_transitions) blk: {
+        var compression_table: FseCompressionTable = undefined;
+        try buildFseCompressionTable(
+            &compression_table,
+            normalized[0 .. @as(usize, max_code) + 1],
+            max_code,
+            accuracy_log,
+        );
+        break :blk try fillLargeCompressedSequenceTransitionsDirect(buffers, &compression_table);
+    } else blk: {
+        var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
+        const table_len = try buildFseDecodeTableFromNormalized(
+            normalized[0 .. @as(usize, max_code) + 1],
+            accuracy_log,
+            &entries,
+        );
+        break :blk try fillLargeCompressedSequenceTransitions(buffers, entries[0..table_len]);
+    };
     return .{
         .accuracy_log = accuracy_log,
         .codes = buffers.codes,
@@ -20263,6 +20368,22 @@ fn fillLargeCompressedSequenceTransitions(
         next_state = candidate_state;
     }
     return @intCast(next_state);
+}
+
+noinline fn fillLargeCompressedSequenceTransitionsDirect(
+    buffers: LargeCompressedSequenceBuffers,
+    table: *const FseCompressionTable,
+) Error!u8 {
+    return large_transition.fill(
+        buffers.codes,
+        table.state_table[0..table.table_len],
+        &table.transforms,
+        table.max_symbol,
+        buffers.next_states,
+        buffers.state_bits,
+        buffers.transition_values,
+        buffers.transition_bits,
+    ) orelse error.CorruptFrame;
 }
 
 fn buildFseDecodeTableFromNormalized(
@@ -21845,10 +21966,7 @@ const max_fse_compression_table_log = 9;
 const max_fse_compression_table_size = 1 << max_fse_compression_table_log;
 const max_fse_compression_symbol = 63;
 
-const FseCompressionTransform = struct {
-    delta_find_state: i32 = 0,
-    delta_nb_bits: i32 = 0,
-};
+const FseCompressionTransform = large_transition.Transform;
 
 const FseCompressionTable = struct {
     state_table: [max_fse_compression_table_size]u16 = undefined,
@@ -33486,6 +33604,57 @@ test "zstd compressed transition builders match scan reference" {
     try std.testing.expect(cases > 250);
 }
 
+test "zstd large direct compressed transitions match inverse builder" {
+    const max_len = 2047;
+    var codes: [max_len]u8 = undefined;
+    var inverse_next_states: [max_len]u8 = undefined;
+    var inverse_state_bits: [max_len]u8 = undefined;
+    var inverse_values: [max_len]u8 = undefined;
+    var inverse_bits: [max_len]u8 = undefined;
+    var direct_next_states: [max_len]u8 = undefined;
+    var direct_state_bits: [max_len]u8 = undefined;
+    var direct_values: [max_len]u8 = undefined;
+    var direct_bits: [max_len]u8 = undefined;
+    var random_state: u32 = 0x243f_6a88;
+
+    for ([_]usize{ 513, 1024, max_len }) |len| {
+        const symbol_count: usize = switch (len) {
+            513 => 7,
+            1024 => 19,
+            else => 32,
+        };
+        for (codes[0..len]) |*code| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            code.* = @intCast((random_state >> 16) % symbol_count);
+        }
+        const inverse_buffers = LargeCompressedSequenceBuffers{
+            .codes = codes[0..len],
+            .next_states = inverse_next_states[0..len],
+            .state_bits = inverse_state_bits[0..len],
+            .transition_values = inverse_values[0..len],
+            .transition_bits = inverse_bits[0..len],
+        };
+        var direct_buffers = LargeCompressedSequenceBuffers{
+            .codes = codes[0..len],
+            .next_states = direct_next_states[0..len],
+            .state_bits = direct_state_bits[0..len],
+            .transition_values = direct_values[0..len],
+            .transition_bits = direct_bits[0..len],
+        };
+        const inverse = (try planLargeCompressedSequenceCodes(len, inverse_buffers)) orelse return error.CorruptFrame;
+        direct_buffers.direct_transitions = true;
+        const direct = (try planLargeCompressedSequenceCodes(len, direct_buffers)) orelse return error.CorruptFrame;
+        try std.testing.expectEqual(inverse.accuracy_log, direct.accuracy_log);
+        try std.testing.expectEqual(inverse.initial_state, direct.initial_state);
+        try std.testing.expectEqual(inverse.table_payload_len, direct.table_payload_len);
+        try std.testing.expectEqualSlices(u8, inverse.table_payload[0..inverse.table_payload_len], direct.table_payload[0..direct.table_payload_len]);
+        try std.testing.expectEqualSlices(u8, inverse.transition_values[0 .. len - 1], direct.transition_values[0 .. len - 1]);
+        try std.testing.expectEqualSlices(u8, inverse.transition_bits[0 .. len - 1], direct.transition_bits[0 .. len - 1]);
+        try std.testing.expectEqualSlices(u8, inverse.next_states[0 .. len - 1], direct.next_states[0 .. len - 1]);
+        try std.testing.expectEqualSlices(u8, inverse.state_bits[0 .. len - 1], direct.state_bits[0 .. len - 1]);
+    }
+}
+
 test "zstd sequence emitter supports compressed FSE match-length table" {
     const literal_lens = [_]usize{ 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     const offsets = [_]usize{ 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
@@ -34572,6 +34741,38 @@ test "zstd fast compressed selection provides a bounded Pareto mode" {
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, AllocationFailureTest.run, .{ payload.items, options });
+}
+
+test "zstd fast compressed large transition path preserves frame wire" {
+    test_disable_fast_large_direct_transitions = false;
+    test_fast_large_direct_transition_hits = 0;
+    defer {
+        test_disable_fast_large_direct_transitions = false;
+        test_fast_large_direct_transition_hits = 0;
+    }
+    const payload = try std.testing.allocator.alloc(u8, std.compress.zstd.block_size_max);
+    defer std.testing.allocator.free(payload);
+    var random_state: u32 = 0xfeed_beef;
+    for (payload, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(random_state >> 16);
+    }
+    const options = NativeFrameOptions{
+        .selection = .fast_compressed,
+        .content_checksum = true,
+    };
+    const direct = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(direct.frame);
+    try std.testing.expectEqual(@as(usize, 1), test_fast_large_direct_transition_hits);
+
+    test_disable_fast_large_direct_transitions = true;
+    const inverse = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(inverse.frame);
+    test_disable_fast_large_direct_transitions = false;
+    try std.testing.expectEqualSlices(u8, inverse.frame, direct.frame);
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, direct.frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "zstd native incremental decoder accepts split input and output" {

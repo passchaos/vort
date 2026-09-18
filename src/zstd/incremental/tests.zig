@@ -416,6 +416,35 @@ test "Zstd incremental fast compressed mode matches one-shot bytes" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "Zstd incremental fast compressed large sequence block matches one-shot bytes" {
+    const payload = try std.testing.allocator.alloc(u8, std.compress.zstd.block_size_max);
+    defer std.testing.allocator.free(payload);
+    var random_state: u32 = 0xfeed_beef;
+    for (payload, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(random_state >> 16);
+    }
+    const options: zstd.NativeFrameOptions = .{
+        .include_content_size = true,
+        .content_checksum = true,
+        .selection = .fast_compressed,
+    };
+    const one_shot = try zstd.encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(one_shot.frame);
+    const block = try zstd.inspectNativeFrameFirstBlock(one_shot.frame);
+    const modes = try zstd.inspectNativeFrameBlockSequenceModes(one_shot.frame, block);
+    try std.testing.expect(modes.sequence_count > 512);
+
+    var encoder = try zstd.NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, options, payload.len);
+    defer encoder.deinit();
+    const incremental = try encodeSplit(&encoder, payload);
+    defer std.testing.allocator.free(incremental);
+    try std.testing.expectEqualSlices(u8, one_shot.frame, incremental);
+    const decoded = try zstd.decodeNativeFrameAlloc(std.testing.allocator, incremental);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
 test "Zstd incremental encoder emits skippable frames between data frames" {
     const first = "first Zstd data frame";
     const second = "second Zstd data frame";
