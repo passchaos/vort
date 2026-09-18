@@ -14740,3 +14740,15 @@ reuse, so production keeps the simpler independently owned plans.
   `0x490` bytes. The independent five-pair fast matrix still measured only
   0.99810x geometrically: text fell to 0.98281x, tradeoff lost all five pairs at
   0.99442x, and the executable grew 128 bytes. The unified helper remains.
+  Zstd's specialized two-state repeat-beam matcher now rejects 12-bit hash
+  collisions with one full 32-bit prefix comparison and starts match extension
+  after those four proven bytes. The same skip applies to recent-offset probes.
+  An old scalar compact-index oracle compares every position across eight
+  generated 8 KiB inputs, while the generic/specialized beam and recent-offset
+  oracles preserve exact plans. On the locked 32 KiB binary level-3 workload,
+  the focused stage median fell from 633.07 to 611.50 microseconds per block.
+  Five alternating independent-binary comparisons against the previous commit
+  preserve the input hash, 8,607-byte frame, and checksum in every run; median
+  throughput rises from 40.69 to 42.54 MiB/s (`1.0452x`, 5/5 wins). The 20-row
+  encode gate passes on three consecutive runs, restoring its strict binary
+  level-3/level-1 latency bound without weakening the threshold.

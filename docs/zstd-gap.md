@@ -210,6 +210,16 @@ Current interpretation:
   generated wide blocks meeting the 3:1 threshold, 89 parser agreements all
   matched complete level-3 arbitration. The locked binary row remains 8,607
   bytes while improving by about `2.14x` (12/12 fixed-CPU pairs).
+- The specialized two-state repeat-beam matcher now rejects compact-index hash
+  collisions with a full four-byte prefix comparison and resumes extension
+  after that proven prefix; recent-offset probes use the same exact skip. A
+  scalar compact-index oracle checks every position across eight generated
+  inputs. On the locked 32 KiB binary level-3 row, the focused repeat-beam
+  median falls from 633.07 to 611.50 microseconds per block. Five alternating
+  independent-binary runs preserve the 8,607-byte frame and checksum while
+  raising median throughput from 40.69 to 42.54 MiB/s (`1.0452x`, 5/5 wins);
+  the 20-row encode gate then passes on three consecutive runs without changing
+  its strict level-3/level-1 latency threshold.
 - The consensus trigger also covers level 1's 16-state and level 2's 32-state
   budgets. Both 1,008-case audits found 89 agreements and 89/89 matches with
   their complete arbitration. The locked binary level-1 row gains `1.71x`

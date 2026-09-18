@@ -276,16 +276,18 @@ const RepBeamIndex = struct {
         var count: usize = 0;
         const maximum = @min(max_match_len, input.len - position);
         const window_len = @min(input.len, default_window_len);
+        const anchor = std.mem.readInt(u32, input[position..][0..4], .little);
         while (candidate_i != rep_beam_index_empty and checked < 128 and count < out.len) : (checked += 1) {
             const candidate: usize = candidate_i;
             const distance = position - candidate;
             if (distance == 0 or distance > window_len) break;
-            if (input[candidate + 3] == input[position + 3]) {
-                const length = matchLength(input, candidate, position, maximum);
-                if (length >= 4) {
-                    out[count] = .{ .length = @intCast(length), .distance = @intCast(distance) };
-                    count += 1;
-                }
+            // The index collides on twelve hash bits. Reject the remaining
+            // prefix collisions in one load, then continue after the four
+            // bytes already proven equal.
+            if (std.mem.readInt(u32, input[candidate..][0..4], .little) == anchor) {
+                const length = 4 + matchLength(input, candidate + 4, position + 4, maximum - 4);
+                out[count] = .{ .length = @intCast(length), .distance = @intCast(distance) };
+                count += 1;
             }
             candidate_i = self.prev.items[candidate];
         }
@@ -1136,9 +1138,12 @@ inline fn extendRepBeamMatchZstd(states: []RepBeamState, lengths: []u8, position
 }
 
 inline fn repBeamMatchLength(input: []const u8, candidate: usize, position: usize, maximum: usize, minimum: usize) usize {
-    if (minimum >= 4 and std.mem.readInt(u32, input[candidate..][0..4], .little) !=
-        std.mem.readInt(u32, input[position..][0..4], .little)) return 0;
-    const length = matchLength(input, candidate, position, maximum);
+    const length = if (minimum >= 4) blk: {
+        if (std.mem.readInt(u32, input[candidate..][0..4], .little) !=
+            std.mem.readInt(u32, input[position..][0..4], .little)) return 0;
+        // Avoid comparing the accepted prefix again in the vector extender.
+        break :blk 4 + matchLength(input, candidate + 4, position + 4, maximum - 4);
+    } else matchLength(input, candidate, position, maximum);
     return if (length >= minimum) length else 0;
 }
 
@@ -1837,6 +1842,62 @@ test "rep beam compact index matches reference beyond u16 positions" {
         const actual_len = try compact.matchesAt(&input, position, options, &actual);
         try std.testing.expectEqual(expected_len, actual_len);
         try std.testing.expectEqualSlices(Token.Match, expected[0..expected_len], actual[0..actual_len]);
+    }
+}
+
+test "Zstd rep beam prefix filter preserves scalar compact-index matches" {
+    const Reference = struct {
+        fn matchesAt(
+            index: *const RepBeamIndex,
+            input: []const u8,
+            position: usize,
+            out: []Token.Match,
+        ) usize {
+            if (position + 4 > input.len or out.len == 0) return 0;
+            var candidate_i = index.prev.items[position];
+            var checked: usize = 0;
+            var count: usize = 0;
+            const maximum = @min(max_match_len, input.len - position);
+            const window_len = @min(input.len, default_window_len);
+            while (candidate_i != rep_beam_index_empty and checked < 128 and count < out.len) : (checked += 1) {
+                const candidate: usize = candidate_i;
+                const distance = position - candidate;
+                if (distance == 0 or distance > window_len) break;
+                const length = matchLength(input, candidate, position, maximum);
+                if (length >= 4) {
+                    out[count] = .{ .length = @intCast(length), .distance = @intCast(distance) };
+                    count += 1;
+                }
+                candidate_i = index.prev.items[candidate];
+            }
+            return count;
+        }
+    };
+
+    var input: [8192]u8 = undefined;
+    for (0..8) |seed| {
+        var random_state: u32 = @truncate(0x9e37_79b9 +% seed *% 0x0100_0193);
+        for (&input, 0..) |*byte, position| {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            byte.* = if (position % 64 < 48)
+                @truncate(position * 17 + seed * 13)
+            else
+                @truncate(random_state >> 16);
+        }
+        if (seed & 1 == 0)
+            @memcpy(input[input.len / 2 ..], input[0 .. input.len / 2]);
+
+        var index: RepBeamIndex = .{};
+        defer index.deinit(std.testing.allocator);
+        try index.build(std.testing.allocator, &input);
+        for (0..input.len - 3) |position| {
+            var expected: [rep_beam_match_candidates]Token.Match = undefined;
+            var actual: [rep_beam_match_candidates]Token.Match = undefined;
+            const expected_len = Reference.matchesAt(&index, &input, position, &expected);
+            const actual_len = index.matchesAtZstd(&input, position, &actual);
+            try std.testing.expectEqual(expected_len, actual_len);
+            try std.testing.expectEqualSlices(Token.Match, expected[0..expected_len], actual[0..actual_len]);
+        }
     }
 }
 
