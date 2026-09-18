@@ -14513,3 +14513,24 @@ reuse, so production keeps the simpler independently owned plans.
   1.02371x--1.09264x. The final tree passes all 599 Zstd tests, the fast gate,
   100-row stage gate, 364-case native probe, 276-case libzstd 1.5.7 matrix,
   2,044-sequence/64-repeat-block probe, and compile check.
+  The remaining small-plan canonical-code and transition value/width arrays are
+  now one packed production `u16` per sequence. The exact 6-bit code, 7-bit
+  transition value, and 3-bit transition width layout reduces each production
+  plan by another 512 bytes (1,536 bytes across the three LL/OF/ML plans), while
+  test builds retain all five expanded arrays and the complete three-way state
+  transition oracle. Against frozen independent compact-plan and packed-step
+  binaries, 15 explicit-fast pairs preserve every input hash, Vort/reference
+  size, and checksum while improving binary/JSON/tradeoff/multiblock/text
+  medians by 1.00606x/1.01126x/1.25475x/1.00443x/1.00194x, a 1.05138x
+  row-median geometric mean. The short default 20-row matrix improves 1.04367x
+  geometrically with a 0.99928x floor; tradeoff levels 1/3/9/22 improve
+  1.21528x/1.21154x/1.09727x/1.10288x, and multiblock levels improve
+  1.01849x--1.05809x. A 31-pair, 10,000-iteration text control measures
+  1.00629x. A clean final rebuild has identical executable code, constants, and
+  data sections to the frozen candidate; only Mach-O UUID/link metadata differ.
+  The final source passes all 599 Zstd tests, the five-row fast gate, 100-row
+  stage gate, 364-case native probe, 276-case libzstd 1.5.7 matrix, and the
+  2,044-sequence/64-repeat-block probe. A subsequent `zig build check -j1` did
+  not complete: after more than 11 minutes the Zig build-server process was
+  sleeping with no active compiler child and was interrupted, so this change
+  does not claim a fresh full compile-check result.
