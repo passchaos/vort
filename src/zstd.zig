@@ -18669,11 +18669,32 @@ comptime {
     std.debug.assert(max_fse_compression_symbol <= compressed_sequence_code_mask);
 }
 
+inline fn compressedSequencePackedStep(plan: *const CompressedSequencePlan, index: usize) u16 {
+    if (comptime !builtin.is_test) return plan.packed_steps[index];
+    const transition_value = if (index + 1 < plan.len) plan.transition_values[index] else 0;
+    const transition_bits = if (index + 1 < plan.len) plan.transition_bits[index] else 0;
+    return @as(u16, plan.codes[index]) |
+        (@as(u16, transition_value) << compressed_sequence_code_bits) |
+        (@as(u16, transition_bits) << (compressed_sequence_code_bits + compressed_sequence_transition_value_bits));
+}
+
+inline fn compressedSequencePackedCode(step: u16) u8 {
+    return @intCast(step & compressed_sequence_code_mask);
+}
+
+inline fn compressedSequencePackedTransitionValue(step: u16) u8 {
+    return @intCast((step >> compressed_sequence_code_bits) & compressed_sequence_transition_value_mask);
+}
+
+inline fn compressedSequencePackedTransitionBits(step: u16) u8 {
+    return @intCast(step >> (compressed_sequence_code_bits + compressed_sequence_transition_value_bits));
+}
+
 inline fn compressedSequenceCode(plan: *const CompressedSequencePlan, index: usize) u8 {
     return if (comptime builtin.is_test)
         plan.codes[index]
     else
-        @intCast(plan.packed_steps[index] & compressed_sequence_code_mask);
+        compressedSequencePackedCode(plan.packed_steps[index]);
 }
 
 inline fn setCompressedSequenceCode(plan: *CompressedSequencePlan, index: usize, code: u8) void {
@@ -18688,14 +18709,14 @@ inline fn compressedSequenceTransitionValue(plan: *const CompressedSequencePlan,
     return if (comptime builtin.is_test)
         plan.transition_values[index]
     else
-        @intCast((plan.packed_steps[index] >> compressed_sequence_code_bits) & compressed_sequence_transition_value_mask);
+        compressedSequencePackedTransitionValue(plan.packed_steps[index]);
 }
 
 inline fn compressedSequenceTransitionBits(plan: *const CompressedSequencePlan, index: usize) u8 {
     return if (comptime builtin.is_test)
         plan.transition_bits[index]
     else
-        @intCast(plan.packed_steps[index] >> (compressed_sequence_code_bits + compressed_sequence_transition_value_bits));
+        compressedSequencePackedTransitionBits(plan.packed_steps[index]);
 }
 
 inline fn setCompressedSequenceTransition(plan: *CompressedSequencePlan, index: usize, value: u8, bits: u8) void {
@@ -20351,6 +20372,30 @@ noinline fn sequenceReadFieldsWithTablePlansAndOffsetsBorrowed(
     try appendInitialSequenceStateFieldBorrowed(out, &count, &plan.offset, .offset);
     try appendInitialSequenceStateFieldBorrowed(out, &count, &plan.match, .match);
 
+    const compressed_plans = switch (plan.literal) {
+        .compressed => |*literal| switch (plan.offset) {
+            .compressed => |*offset| switch (plan.match) {
+                .compressed => |*match| .{ literal, offset, match },
+                else => null,
+            },
+            else => null,
+        },
+        else => null,
+    };
+    if (compressed_plans) |compressed| {
+        return try appendCompressedSequenceReadFields(
+            out,
+            count,
+            literal_lens,
+            offsets,
+            match_lens,
+            compressed[0],
+            compressed[1],
+            compressed[2],
+            initial_offsets,
+        );
+    }
+
     var repeated_offsets = initial_offsets;
     for (0..literal_lens.len) |i| {
         const literal_symbol = try sequenceTableSymbolBorrowed(&plan.literal, .literal, i);
@@ -20366,6 +20411,48 @@ noinline fn sequenceReadFieldsWithTablePlansAndOffsetsBorrowed(
             try appendSequenceTransitionFieldBorrowed(out, &count, &plan.literal, .literal, i);
             try appendSequenceTransitionFieldBorrowed(out, &count, &plan.match, .match, i);
             try appendSequenceTransitionFieldBorrowed(out, &count, &plan.offset, .offset, i);
+        }
+    }
+    return count;
+}
+
+noinline fn appendCompressedSequenceReadFields(
+    out: []BitField,
+    initial_count: usize,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_plan: *const CompressedSequencePlan,
+    offset_plan: *const CompressedSequencePlan,
+    match_plan: *const CompressedSequencePlan,
+    initial_offsets: [3]usize,
+) linksection(wide_sequence_emit_text_section) Error!usize {
+    var count = initial_count;
+    var repeated_offsets = initial_offsets;
+    for (0..literal_lens.len) |i| {
+        const literal_step = compressedSequencePackedStep(literal_plan, i);
+        const offset_step = compressedSequencePackedStep(offset_plan, i);
+        const match_step = compressedSequencePackedStep(match_plan, i);
+        const literal_code = compressedSequencePackedCode(literal_step);
+        const offset_code = compressedSequencePackedCode(offset_step);
+        const match_code = compressedSequencePackedCode(match_step);
+        if (literal_code >= ll_base.len or offset_code >= of_base.len or match_code >= ml_base.len) return error.CorruptFrame;
+
+        const offset_symbol: SequenceSymbol = .{
+            .base = @intCast(of_base[offset_code]),
+            .additional_bits = of_bits[offset_code],
+            .next_state = 0,
+            .state_bits = 0,
+        };
+        const offset_extra = try sequenceOffsetExtraForEncodedOffset(offset_symbol, literal_lens[i], offsets[i], &repeated_offsets);
+        try appendBitField(out, &count, offset_extra, offset_symbol.additional_bits);
+        try appendBitField(out, &count, match_lens[i] - ml_base[match_code], ml_bits[match_code]);
+        try appendBitField(out, &count, literal_lens[i] - ll_base[literal_code], ll_bits[literal_code]);
+
+        if (i + 1 < literal_lens.len) {
+            try appendBitField(out, &count, compressedSequencePackedTransitionValue(literal_step), compressedSequencePackedTransitionBits(literal_step));
+            try appendBitField(out, &count, compressedSequencePackedTransitionValue(match_step), compressedSequencePackedTransitionBits(match_step));
+            try appendBitField(out, &count, compressedSequencePackedTransitionValue(offset_step), compressedSequencePackedTransitionBits(offset_step));
         }
     }
     return count;
@@ -31547,6 +31634,7 @@ test "zstd wide borrowed sequence fields match by-value reference" {
         ),
     );
 
+    var all_compressed_cases: usize = 0;
     for ([_]usize{ wide_borrowed_sequence_plan_min, max_native_sequence_count }) |len| {
         const plan = (try bestTablePlanSequenceWithLiteralsLen(
             literal_lens[0..len],
@@ -31573,7 +31661,37 @@ test "zstd wide borrowed sequence fields match by-value reference" {
             initial_repeated_offsets,
         );
         try std.testing.expectEqualSlices(BitField, expected[0..expected_count], actual[0..actual_count]);
+        switch (plan.plan.literal) {
+            .compressed => |*literal| switch (plan.plan.offset) {
+                .compressed => |*offset| switch (plan.plan.match) {
+                    .compressed => |*match| {
+                        var specialized: [max_native_sequence_count * 6]BitField = undefined;
+                        var initial_count: usize = 0;
+                        try appendInitialSequenceStateFieldBorrowed(&specialized, &initial_count, &plan.plan.literal, .literal);
+                        try appendInitialSequenceStateFieldBorrowed(&specialized, &initial_count, &plan.plan.offset, .offset);
+                        try appendInitialSequenceStateFieldBorrowed(&specialized, &initial_count, &plan.plan.match, .match);
+                        const specialized_count = try appendCompressedSequenceReadFields(
+                            &specialized,
+                            initial_count,
+                            literal_lens[0..len],
+                            offsets[0..len],
+                            match_lens[0..len],
+                            literal,
+                            offset,
+                            match,
+                            initial_repeated_offsets,
+                        );
+                        try std.testing.expectEqualSlices(BitField, expected[0..expected_count], specialized[0..specialized_count]);
+                        all_compressed_cases += 1;
+                    },
+                    else => {},
+                },
+                else => {},
+            },
+            else => {},
+        }
     }
+    try std.testing.expect(all_compressed_cases != 0);
 
     const sequence_count = wide_borrowed_sequence_plan_min;
     var payload: [sequence_count * 5]u8 = undefined;
