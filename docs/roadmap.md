@@ -14623,25 +14623,3 @@ reuse, so production keeps the simpler independently owned plans.
   0.99180x geometrically: JSON/tradeoff fell to 0.98494x/0.98643x and tradeoff
   lost all five pairs. The shared 512-byte local retains the better generated
   layout; test builds continue to exercise tableLog 5--9.
-  Compressed sequence plans now cache their exact canonical-value and FSE
-  transition bit totals while those values are already available. Two `u16`
-  fields fit the existing production-plan padding; compile-time bounds cover the
-  512-sequence maximum, 31 offset extra bits, and seven transition bits. LL/ML
-  combination scoring, known-valid offset scoring, and both compressed-vs-
-  predefined dominance checks consume the cached total instead of rescanning up
-  to 512 packed steps. The original stateful scorer remains an independent
-  oracle for generated LL/ML/OF inputs, and the alternatives oracle compares the
-  cached fields as well. Against frozen independent direct-transition and
-  cached-cost binaries, 15 explicit-fast pairs preserve every input hash,
-  Vort/reference size, and checksum while improving binary/JSON/tradeoff/
-  multiblock/text medians by 1.01869x/1.04960x/1.00257x/0.99917x/1.00575x, a
-  1.01499x row-median geometric mean. The default 20-row matrix measures
-  1.00447x geometrically; its noisy 0.98771x short text level-1 control recovers
-  across a 31-pair, 10,000-iteration all-level text run whose medians span
-  1.00125x--1.00492x. The executable remains 1,606,920 bytes and the final
-  rebuild has identical code, constant, and data sections to the measured
-  candidate. Profiling reduces the two dominance helpers from a combined 5.09%
-  to 3.03% of sampled leaf time. The final source passes all 599 Zstd tests, the
-  five-row fast gate, 100-row stage gate, 364-case native probe, 276-case
-  libzstd 1.5.7 compatibility matrix, and the 2,044-sequence/64-repeat-block
-  probe.
