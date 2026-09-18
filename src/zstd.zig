@@ -19457,8 +19457,13 @@ fn sequenceTablePlanAlternativesWithPrevious(values: []const usize, kind: Sequen
         if (values.len == 0 or values.len > max_native_sequence_count) return alternatives;
 
         var codes: [max_native_sequence_count]u8 = undefined;
-        for (values, 0..) |value, i|
-            codes[i] = sequenceCodeForValue(value, sequenceTableBases(kind), sequenceTableBits(kind)) catch return alternatives;
+        if (kind == .match) {
+            for (values, 0..) |value, i|
+                codes[i] = matchLengthCode(value) catch return alternatives;
+        } else {
+            for (values, 0..) |value, i|
+                codes[i] = sequenceCodeForValue(value, &ll_base, &ll_bits) catch return alternatives;
+        }
         const active_codes = codes[0..values.len];
         if (rleSequenceCode(active_codes)) |code| try alternatives.add(.{ .rle = code });
         const compressed = try planCompressedSequenceCodes(active_codes, kind);
