@@ -14733,3 +14733,10 @@ reuse, so production keeps the simpler independently owned plans.
   0.98885x geometrically, with text at 0.95378x and binary at 0.99179x. The
   existing temporary bitstream and copy remain because their generated layout
   is substantially faster on this target.
+  Splitting `sequenceOffsetExtraForEncodedOffset`'s noncanonical exhaustive
+  resolver into a cold noinline fallback was rejected. A synthetic noncanonical
+  symbol extended the existing reference-loop oracle, all 599 Zstd tests and the
+  fast gate passed, and the canonical helper shrank from roughly `0x838` to
+  `0x490` bytes. The independent five-pair fast matrix still measured only
+  0.99810x geometrically: text fell to 0.98281x, tradeoff lost all five pairs at
+  0.99442x, and the executable grew 128 bytes. The unified helper remains.
