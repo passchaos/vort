@@ -14705,3 +14705,11 @@ reuse, so production keeps the simpler independently owned plans.
   matrix measured only 0.99594x geometrically: text fell to 0.98242x, binary
   was 0.99839x, and JSON improved only 1.00292x. The compact checked appends
   remain because they produce the better complete-encoder layout.
+  Delaying packed canonical-code writes until a compressed sequence plan passed
+  its distribution, normalized-header, and amortization gates was rejected. It
+  removed up to 512 unused writes from failed candidates and changed successful
+  candidates into a separate contiguous u8-to-u16 loop; alternatives and
+  transition oracles plus all 599 Zstd tests remained exact. The five-pair fast
+  matrix nevertheless measured 0.99342x geometrically: text was 0.98517x and
+  binary/JSON/tradeoff were 0.99279x/0.99474x/0.99297x, each with only 1/5
+  wins. Fusing the packed store with histogram collection remains faster.
