@@ -14805,3 +14805,37 @@ reuse, so production keeps the simpler independently owned plans.
   to all inputs reduced the nine-pair JSON median to roughly `0.983x`; raising
   the wide-only reserve from 64 to 128 tokens was only `1.0017x` median with
   6/11 wins, so the smaller bounded policy remains.
+  A post-reservation profile kept double-fast as the largest leaf and moved the
+  next large hotspot to predefined sequence-state planning. Large predefined
+  planning now lives in `zstd/sequence/large/predefined.zig`: compile-time LL,
+  OF, and ML successor masks replace repeated runtime construction of each
+  state's bounded transition range during both reverse viability and forward
+  reconstruction. The existing scalar DP remains the independent oracle and
+  compares every state and viability mask at 513, 1,024, and 2,047 sequences
+  for all three alphabets; the module also tests malformed lengths and invalid
+  codes directly. Both large-alternative helpers live in the existing wide-
+  sequence text section, and removing the old planner shrinks `src/zstd.zig` by
+  28 net lines while the cohesive new module remains 118 lines. Against the
+  frozen `c1535ec1` executable, fifteen alternating 1,500-encode fast
+  multiblock pairs improve by `1.0632x` median with 15/15 wins and identical
+  hashes, 34,228-byte frames, and checksums. A matching five-row fast matrix
+  reaches `1.0107x` across row medians; its noisy JSON median of `0.9889x`
+  recovers to `1.0013x` with 18/31 wins in a 10,000-encode control. The full
+  default 20-row matrix reaches `1.0028x` across row medians with a `0.9911x`
+  floor and preserves every Vort/reference size and checksum. A first shared-
+  text implementation was rejected despite the same target gain because code
+  movement reduced binary/multiblock level 22 below the 0.99 floor.
+  An eight-second 1 kHz post-change sample moves the old predefined planner's
+  612 leaf samples to 295 in the isolated module, while `double_fast.planReuse`
+  remains the next dominant encoder hotspot.
+  Nearby double-fast experiments were also removed. Replacing the impossible
+  forward-candidate guard with a debug invariant reduced the focused wide stage
+  to `0.9866x` median; pointer-based match extension reached `0.9960x`; checking
+  the short candidate before the long candidate reached `0.9857x`; a likely
+  no-match branch hint lost all 15 pairs at roughly `0.978x`; and removing three
+  provably redundant complementary-insertion guards reduced the stage to about
+  `0.984x`. Caching literal length improved the focused stage by `1.0085x` but
+  reduced the complete five-row median aggregate to `0.9975x`. Narrowing
+  `storeMatch` parameters reduced its AArch64 stack frame from 128 to 112 bytes
+  and improved the focused stage by `1.0046x`, but binary/multiblock complete
+  medians fell to `0.9938x`/`0.9945x`. None are retained.

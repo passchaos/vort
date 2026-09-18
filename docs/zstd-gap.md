@@ -211,6 +211,23 @@ Current interpretation:
   dummy-candidate loads did not meet the cross-corpus or repeatability bar and
   are not retained.
 
+  Large predefined sequence planning is now isolated in
+  `src/zstd/sequence/large/predefined.zig`. Compile-time successor masks for
+  every predefined LL/OF/ML state replace repeated runtime range-mask creation
+  in reverse viability and forward state reconstruction. A scalar oracle
+  compares complete state and mask output at 513, 1,024, and 2,047 sequences
+  for all three alphabets, with direct malformed-shape and invalid-code tests.
+  The two callers are placed in the existing wide-sequence text section; the
+  old in-file planner is removed, shrinking `src/zstd.zig` by 28 net lines.
+  Fifteen alternating 1,500-encode comparisons against frozen `c1535ec1`
+  improve explicit fast multiblock by `1.0632x` median with 15/15 wins and the
+  same 34,228-byte frame. A five-row fast matrix reaches `1.0107x` across row
+  medians, and its noisy JSON control recovers to `1.0013x` median over 31
+  longer 10,000-encode pairs. The default 20-row matrix reaches `1.0028x`
+  across row medians with a `0.9911x` floor; every input hash, Vort/reference
+  size, and checksum remains identical. An eight-second 1 kHz profile reduces
+  the corresponding predefined-planner leaf samples from 612 to 295.
+
   A frozen independent-binary control also compared the unchanged default
   selection across 15 paired runs of the complete 20-row matrix, 50 iterations,
   and three interleaved rounds per row. Every input SHA-256, Vort/reference size, and checksum
