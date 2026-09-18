@@ -14713,3 +14713,14 @@ reuse, so production keeps the simpler independently owned plans.
   matrix nevertheless measured 0.99342x geometrically: text was 0.98517x and
   binary/JSON/tradeoff were 0.99279x/0.99474x/0.99297x, each with only 1/5
   wins. Fusing the packed store with histogram collection remains faster.
+  Reusing winner-only's exact payload length to append the reverse sequence
+  bitstream directly into the payload was rejected. Unlike the earlier reserve
+  experiment, this path added no field-count scan: it derived bitstream bytes
+  from the already selected payload length, allocated the exact destination
+  slice once, validated each field while writing, and rolled back on any error.
+  Wire/length/error oracles and all 599 Zstd tests passed, and the allocation
+  audit removed four calls plus 2,116 requested bytes from the measured
+  unpruned path. The five-pair complete fast matrix nevertheless fell to
+  0.98885x geometrically, with text at 0.95378x and binary at 0.99179x. The
+  existing temporary bitstream and copy remain because their generated layout
+  is substantially faster on this target.
