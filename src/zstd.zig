@@ -19933,12 +19933,6 @@ noinline fn planCompressedSequenceCodes(codes: []const u8) linksection(fse_encod
     // cost in those cases.
     if (plan.table_payload_len >= codes.len) return null;
 
-    var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
-    const table_len = try buildFseDecodeTableFromNormalized(
-        normalized[0 .. @as(usize, max_code) + 1],
-        plan.accuracy_log,
-        &entries,
-    );
     var compression_table: FseCompressionTable = undefined;
     try buildFseCompressionTable(
         &compression_table,
@@ -19946,7 +19940,17 @@ noinline fn planCompressedSequenceCodes(codes: []const u8) linksection(fse_encod
         max_code,
         plan.accuracy_log,
     );
-    try fillCompressedSequenceTransitionsFromCompressionTable(&plan, entries[0..table_len], &compression_table);
+    if (comptime builtin.is_test) {
+        var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
+        const table_len = try buildFseDecodeTableFromNormalized(
+            normalized[0 .. @as(usize, max_code) + 1],
+            plan.accuracy_log,
+            &entries,
+        );
+        try fillCompressedSequenceTransitionsFromCompressionTable(&plan, entries[0..table_len], &compression_table);
+    } else {
+        try fillCompressedSequenceTransitionsDirect(&plan, &compression_table);
+    }
     return plan;
 }
 
@@ -20201,6 +20205,34 @@ noinline fn fillCompressedSequenceTransitionsFromCompressionTable(
         next_state = state;
     }
     plan.initial_state = @intCast(next_state);
+}
+
+noinline fn fillCompressedSequenceTransitionsDirect(
+    plan: *CompressedSequencePlan,
+    table: *const FseCompressionTable,
+) linksection(fse_encode_helper_text_section) Error!void {
+    if (plan.len == 0 or table.table_len == 0) return error.CorruptFrame;
+    const table_size = table.table_len;
+    var encoder_state = try fseInitialState(table, compressedSequenceCode(plan, plan.len - 1));
+    if (encoder_state < table_size or encoder_state - table_size >= table_size) return error.CorruptFrame;
+
+    var i = plan.len - 1;
+    while (i > 0) {
+        i -= 1;
+        const code = compressedSequenceCode(plan, i);
+        if (code > table.max_symbol) return error.CorruptFrame;
+        const transform = table.transforms[code];
+        const bits: u8 = @intCast((@as(i32, @intCast(encoder_state)) + transform.delta_nb_bits) >> 16);
+        const state_index_signed = @as(i32, @intCast(encoder_state >> @intCast(bits))) + transform.delta_find_state;
+        if (state_index_signed < 0) return error.CorruptFrame;
+        const state_index: usize = @intCast(state_index_signed);
+        if (state_index >= table_size) return error.CorruptFrame;
+        const transition_mask = (@as(usize, 1) << @intCast(bits)) - 1;
+        setCompressedSequenceTransition(plan, i, @intCast(encoder_state & transition_mask), bits);
+        encoder_state = table.state_table[state_index];
+        if (encoder_state < table_size or encoder_state - table_size >= table_size) return error.CorruptFrame;
+    }
+    plan.initial_state = @intCast(encoder_state - table_size);
 }
 
 fn findCompressedSequenceState(entries: []const FseTableEntry, code: u8, maybe_next_state: ?usize) ?usize {
@@ -33114,9 +33146,11 @@ test "zstd compressed transition builders match scan reference" {
             var expected: CompressedSequencePlan = .{ .len = len, .accuracy_log = accuracy_log };
             var actual: CompressedSequencePlan = .{ .len = len, .accuracy_log = accuracy_log };
             var inverse: CompressedSequencePlan = .{ .len = len, .accuracy_log = accuracy_log };
+            var direct: CompressedSequencePlan = .{ .len = len, .accuracy_log = accuracy_log };
             @memcpy(expected.codes[0..len], codes[0..len]);
             @memcpy(actual.codes[0..len], codes[0..len]);
             @memcpy(inverse.codes[0..len], codes[0..len]);
+            @memcpy(direct.codes[0..len], codes[0..len]);
             try fillCompressedSequenceTransitionsReference(&expected, entries[0..table_len]);
             try fillCompressedSequenceTransitions(&actual, entries[0..table_len]);
             var compression_table: FseCompressionTable = undefined;
@@ -33132,6 +33166,10 @@ test "zstd compressed transition builders match scan reference" {
             try std.testing.expectEqualSlices(u8, expected.state_bits[0..len], inverse.state_bits[0..len]);
             try std.testing.expectEqualSlices(u8, expected.transition_values[0 .. len - 1], inverse.transition_values[0 .. len - 1]);
             try std.testing.expectEqualSlices(u8, expected.transition_bits[0 .. len - 1], inverse.transition_bits[0 .. len - 1]);
+            try fillCompressedSequenceTransitionsDirect(&direct, &compression_table);
+            try std.testing.expectEqual(expected.initial_state, direct.initial_state);
+            try std.testing.expectEqualSlices(u8, expected.transition_values[0 .. len - 1], direct.transition_values[0 .. len - 1]);
+            try std.testing.expectEqualSlices(u8, expected.transition_bits[0 .. len - 1], direct.transition_bits[0 .. len - 1]);
             cases += 1;
         }
     }
