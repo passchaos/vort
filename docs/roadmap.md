@@ -14785,3 +14785,23 @@ reuse, so production keeps the simpler independently owned plans.
   1,500-encode pairs improve fast multiblock by another `1.0756x` with 11/11
   wins, while default tradeoff
   levels 1/3 remain at `1.0068x`/`1.0054x` medians.
+  Double-fast now gives only blocks above 64 KiB a bounded 64-token cold-start
+  capacity before parsing. This targets the measured wide-block `storeMatch`
+  growth path without applying the previously rejected input-proportional
+  reservation to ordinary blocks; retained caller capacity remains reusable. An
+  allocation-failure test covers the new initial reservation and verifies that
+  the caller-visible token length is cleared while owned storage remains
+  balanced. Against the frozen `732039c2` executable, fifteen alternating
+  1,500-encode five-row fast matrices preserve every input hash, frame size, and
+  checksum. The 132,096-byte multiblock row improves by `1.0057x` median with
+  13/15 wins; the row-median geometric mean is `1.0022x`. Twenty-one longer
+  default-policy multiblock controls retain level 1/3 at `1.0021x`/`1.0006x`
+  median, with identical 27,363/27,517-byte frames. Three nearby experiments
+  were removed. Folding the all-ones sentinel check into the position check won
+  only 3/11 target pairs at roughly `0.995x` median. Upstream-style dummy-prefix
+  loads passed an adversarial invalid-candidate oracle but lost all 11 target
+  pairs at roughly `0.983x`, because address selection and post-hit validation
+  outweighed Vort's predictable range branches. Applying the 64-token reserve
+  to all inputs reduced the nine-pair JSON median to roughly `0.983x`; raising
+  the wide-only reserve from 64 to 128 tokens was only `1.0017x` median with
+  6/11 wins, so the smaller bounded policy remains.

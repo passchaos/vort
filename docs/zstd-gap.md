@@ -198,6 +198,19 @@ Current interpretation:
   11/11 wins. The formerly sensitive default tradeoff levels 1/3 recover to
   `1.0068x`/`1.0054x` medians over the same 11-pair control.
 
+  The double-fast parser now reserves a bounded 64-token cold-start capacity
+  only for inputs above 64 KiB, reducing early token-list growth on wide blocks
+  without adding input-proportional memory or changing ordinary-block behavior.
+  An initial-allocation failure test preserves cleared caller state and balanced
+  ownership. Fifteen alternating 1,500-encode comparisons against the frozen
+  `732039c2` executable preserve every hash, size, and checksum; the 132,096-byte
+  fast multiblock row improves by `1.0057x` median with 13/15 wins, and the five
+  row-median geometric mean is `1.0022x`. Default multiblock levels 1/3 remain at
+  `1.0021x`/`1.0006x` median over 21 longer pairs. Broader all-input reservation,
+  a 128-token wide reserve, a folded sentinel/range guard, and upstream-style
+  dummy-candidate loads did not meet the cross-corpus or repeatability bar and
+  are not retained.
+
   A frozen independent-binary control also compared the unchanged default
   selection across 15 paired runs of the complete 20-row matrix, 50 iterations,
   and three interleaved rounds per row. Every input SHA-256, Vort/reference size, and checksum

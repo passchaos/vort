@@ -9,6 +9,8 @@ const long_hash_bits = 11;
 const short_hash_size = 1 << short_hash_bits;
 const long_hash_size = 1 << long_hash_bits;
 const invalid_position = std.math.maxInt(u32);
+const wide_input_threshold = 64 * 1024;
+const initial_token_capacity = 64;
 pub const max_input_len = 128 * 1024;
 // Long recent offsets are still available through the hash tables. Restrict
 // eager rep0 probing to the range where it measured as a reliable win: farther
@@ -43,6 +45,8 @@ pub fn planReuse(
         return error.InvalidBlockPlan;
 
     tokens.clearRetainingCapacity();
+    if (input.len > wide_input_threshold)
+        try tokens.ensureTotalCapacityPrecise(allocator, initial_token_capacity);
     var short_table: [short_hash_size]u32 = @splat(invalid_position);
     var long_table: [long_hash_size]u32 = @splat(invalid_position);
     var reps = [3]usize{ 1, 4, 8 };
@@ -261,6 +265,33 @@ test "double-fast equal matches prefer repcodes then shorter distance" {
     try std.testing.expect(!preferEqualLengthDistance(4, 8, reps, 1));
     try std.testing.expect(preferEqualLengthDistance(32, 64, reps, 1));
     try std.testing.expect(!preferEqualLengthDistance(64, 32, reps, 1));
+}
+
+test "double-fast wide token reservation reports initial allocation failure" {
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    const allocator = failing.allocator();
+    {
+        var tokens: std.ArrayList(lz77.Token) = .empty;
+        defer tokens.deinit(allocator);
+        try tokens.append(allocator, .{ .literal = 0xa5 });
+        const successful_allocations = failing.allocations;
+        failing.fail_index = failing.alloc_index;
+        failing.resize_fail_index = failing.resize_index;
+
+        try std.testing.expectError(
+            error.OutOfMemory,
+            planReuse(
+                &tokens,
+                allocator,
+                "x" ** (wide_input_threshold + 1),
+                .{ .window_len = 32 * 1024, .min_match = 4, .max_match = 258 },
+            ),
+        );
+        try std.testing.expectEqual(@as(usize, 0), tokens.items.len);
+        try std.testing.expect(failing.has_induced_failure);
+        try std.testing.expectEqual(successful_allocations, failing.allocations);
+    }
+    try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
 }
 
 fn preferMatch(candidate: Match, current: Match, reps: [3]usize, literal_len: usize) bool {
