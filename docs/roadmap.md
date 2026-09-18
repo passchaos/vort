@@ -14643,6 +14643,14 @@ reuse, so production keeps the simpler independently owned plans.
   geometrically: JSON fell to 0.97364x with 0/5 wins, tradeoff to 0.98771x, and
   multiblock to 0.99173x. The extra validation/count pass costs more than the
   removed per-byte capacity checks, so the single-pass checked writer remains.
+  Sharing `min(max_match, input.len - position)` between double-fast's same-
+  position long/short hash candidates was rejected. A focused mismatch oracle
+  covered both prefix widths plus invalid, same-position, window, and short-
+  maximum boundaries, and the fast gate preserved every wire. Passing the
+  precomputed maximum and window as separate live arguments nevertheless
+  reduced the five-row explicit-fast screen to 0.98518x geometrically: JSON,
+  binary, and tradeoff fell to 0.97630x/0.98572x/0.98318x with 0/5 wins. The
+  compact options-based helper remains.
   Hoisting canonical LL/ML kind dispatch out of the shared no-previous-table
   conversion loop was rejected after a wider control. The existing complete
   alternatives oracle and all 599 Zstd tests stayed exact, and 15 explicit-fast
