@@ -14623,3 +14623,14 @@ reuse, so production keeps the simpler independently owned plans.
   0.99180x geometrically: JSON/tradeoff fell to 0.98494x/0.98643x and tradeoff
   lost all five pairs. The shared 512-byte local retains the better generated
   layout; test builds continue to exercise tableLog 5--9.
+  Removing the checked bounds and signed-state branches from the production
+  compressed-sequence transition loop was rejected after comparison with
+  upstream `FSE_encodeSymbol`. A fourth oracle matched the scan, inverse-table,
+  and checked-direct builders across more than 250 generated table shapes, and
+  all 599 Zstd tests plus the fast gate passed. Frozen independent binaries
+  preserved every input hash, encoded/reference size, and checksum, but the
+  15-pair explicit-fast matrix improved only 1.00204x geometrically with a
+  0.99097x tradeoff median. A 31-pair, 10,000-iteration tradeoff control
+  confirmed a 0.99342x median, 0.99213x geometric mean, and only 5/31 wins.
+  Production therefore retains the checked direct builder; removing apparently
+  redundant branches perturbs this hot loop enough to cause a stable regression.
