@@ -3253,6 +3253,44 @@ pub fn build(b: *std.Build) void {
     const zstd_level_schedule_bench_gate_step = b.step("run-zstd-level-schedule-bench-gate", "Validate Zstd level scheduling benchmark");
     zstd_level_schedule_bench_gate_step.dependOn(&zstd_level_schedule_bench_gate.step);
 
+    const zstd_seekable_parallel_bench_exe = b.addExecutable(.{
+        .name = "vort-zstd-seekable-parallel-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/seekable_parallel_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_zstd_seekable_parallel_bench = b.addRunArtifact(zstd_seekable_parallel_bench_exe);
+    if (b.args) |args| run_zstd_seekable_parallel_bench.addArgs(args);
+    const zstd_seekable_parallel_bench_step = b.step(
+        "run-zstd-seekable-parallel-bench",
+        "Benchmark deterministic parallel native Zstd seekable encoding",
+    );
+    zstd_seekable_parallel_bench_step.dependOn(&run_zstd_seekable_parallel_bench.step);
+    const run_zstd_seekable_parallel_bench_csv = b.addRunArtifact(zstd_seekable_parallel_bench_exe);
+    run_zstd_seekable_parallel_bench_csv.addArgs(&.{
+        "--iterations", "2",
+        "--rounds",     "5",
+        "--csv",        "zig-out/vort-zstd-seekable-parallel-bench.csv",
+    });
+    const zstd_seekable_parallel_bench_gate = b.addSystemCommand(&.{
+        "python3",      "tools/zstd/seekable_parallel_bench_gate.py",
+        "--csv",        "zig-out/vort-zstd-seekable-parallel-bench.csv",
+        "--executable",
+    });
+    zstd_seekable_parallel_bench_gate.addArtifactArg(zstd_seekable_parallel_bench_exe);
+    zstd_seekable_parallel_bench_gate.step.dependOn(&run_zstd_seekable_parallel_bench_csv.step);
+    const zstd_seekable_parallel_bench_gate_step = b.step(
+        "run-zstd-seekable-parallel-bench-gate",
+        "Validate parallel native Zstd seekable benchmark evidence",
+    );
+    zstd_seekable_parallel_bench_gate_step.dependOn(&zstd_seekable_parallel_bench_gate.step);
+
     const zstd_native_encode_stage_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-native-encode-stage-bench",
         .root_module = b.createModule(.{
@@ -4264,6 +4302,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&benchmark_provenance_tests.step);
     check_step.dependOn(&zstd_decode_profile_exe.step);
     check_step.dependOn(&zstd_encode_bench_exe.step);
+    check_step.dependOn(&zstd_seekable_parallel_bench_exe.step);
     check_step.dependOn(&zstd_level_schedule_bench_exe.step);
     check_step.dependOn(&zstd_native_encode_stage_bench_exe.step);
     check_step.dependOn(&zstd_large_sequence_probe_exe.step);
@@ -4348,6 +4387,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(native_summary_error_negative_smoke_step);
     ci_smoke_step.dependOn(zstd_native_summary_dashboard_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
+    ci_smoke_step.dependOn(zstd_seekable_parallel_bench_gate_step);
     ci_smoke_step.dependOn(zstd_encode_bench_path_smoke_step);
     ci_smoke_step.dependOn(zstd_native_encode_stage_bench_path_smoke_step);
     ci_smoke_step.dependOn(benchmark_provenance_test_step);

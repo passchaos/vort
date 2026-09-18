@@ -105,6 +105,18 @@ Current interpretation:
   process/stdout overhead and the result remains a smoke signal. It still does
   **not** measure library-level decompression speed, memory use, full binary
   corpora, or zstd's higher compression levels.
+- Native seekable encoding now has a deterministic parallel API for plain,
+  explicit-dictionary, and dictionary-set streams. Frames are independently
+  encoded through a bounded caller-selected work queue and serialized in the
+  same order as the existing serial encoder; worker-spawn failure reduces
+  concurrency instead of changing output. On an Apple M1 Pro ReleaseFast run over
+  an 8 MiB generated payload split into 32 256 KiB frames, the retained
+  `run-zstd-seekable-parallel-bench-gate` artifact measured 83.49, 164.88,
+  320.18, and 537.49 MiB/s for 1/2/4/8 requested workers, or 1.96x/3.81x/6.42x
+  at 2/4/8 workers. All rows produced the same 2,229,301-byte stream and pass a
+  range-decode check. This is strong same-machine evidence for frame-level
+  scaling, but it is one generated corpus and does not replace comparison with
+  libzstd's streaming/multithreaded encoder on standard corpora.
 - The compatibility decoder now covers single-stream and four-stream
   Huffman-literals sections, can reuse that tree for treeless repeat-literals
   blocks, and decodes FSE-compressed sequence tables for the currently supported

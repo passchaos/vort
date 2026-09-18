@@ -11039,6 +11039,49 @@ pub fn encodeNativeSeekableStreamWithDictionarySetAlloc(allocator: std.mem.Alloc
     return encodeNativeSeekableStreamWithDictionaryAlloc(allocator, input, options, dictionary);
 }
 
+/// Maximum caller-requested concurrency for the native seekable encoder.
+/// Actual concurrency is additionally capped by the number of independent
+/// frames, and the calling thread participates in the work queue.
+pub const native_seekable_parallel_workers_max: usize = 256;
+
+/// Encode independent native Zstandard frames concurrently and append the
+/// standardized seek table in deterministic frame order. A worker count of one
+/// uses the existing serial encoder directly. Failure to create an optional
+/// worker reduces concurrency; it never changes the wire or abandons queued
+/// work.
+pub fn encodeNativeSeekableStreamParallelAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeSeekableOptions,
+    worker_count: usize,
+) Error![]u8 {
+    try validateNativeSeekableOptions(options);
+    return encodeNativeSeekableStreamParallelInternal(allocator, input, options, null, worker_count);
+}
+
+pub fn encodeNativeSeekableStreamParallelWithDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeSeekableOptions,
+    dictionary: NativeDictionary,
+    worker_count: usize,
+) Error![]u8 {
+    try validateNativeSeekableOptions(options);
+    return encodeNativeSeekableStreamParallelInternal(allocator, input, options, dictionary, worker_count);
+}
+
+pub fn encodeNativeSeekableStreamParallelWithDictionarySetAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeSeekableOptions,
+    dictionary_set: NativeDictionarySet,
+    dictionary_id: u32,
+    worker_count: usize,
+) Error![]u8 {
+    const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+    return encodeNativeSeekableStreamParallelWithDictionaryAlloc(allocator, input, options, dictionary, worker_count);
+}
+
 pub fn encodeNativeSeekableStreamAppendWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!void {
     const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
     return encodeNativeSeekableStreamAppendWithDictionary(allocator, out, input, options, dictionary);
@@ -11058,6 +11101,112 @@ fn nativeSeekableFrameCount(input_len: usize, frame_size: usize) Error!usize {
     const frame_count = std.math.divCeil(usize, input_len, frame_size) catch return error.IntegerOverflow;
     if (frame_count > seekable.max_frames) return error.InvalidBlockPlan;
     return frame_count;
+}
+
+const ParallelNativeSeekableFrameResult = struct {
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+    dictionary: ?NativeDictionary,
+    seek_checksums: bool,
+    entry: *NativeSeekTableFrameSize,
+    frame: ?[]u8 = null,
+    err: ?Error = null,
+
+    fn run(self: *ParallelNativeSeekableFrameResult) void {
+        var encoder = NativeFrameEncoder.init(self.allocator);
+        defer encoder.deinit();
+        const encoded = if (self.dictionary) |dictionary|
+            encoder.encodeWithDictionaryAlloc(self.input, self.options, dictionary)
+        else
+            encoder.encodeWithOptionsAlloc(self.input, self.options);
+        const result = encoded catch |err| {
+            self.err = err;
+            return;
+        };
+        self.frame = result.frame;
+        self.entry.* = nativeSeekableFrameSize(result.frame.len, self.input, self.seek_checksums) catch |err| {
+            self.err = err;
+            return;
+        };
+    }
+};
+
+const ParallelNativeSeekableQueue = struct {
+    next: std.atomic.Value(usize) = std.atomic.Value(usize).init(0),
+    results: []ParallelNativeSeekableFrameResult,
+
+    fn run(self: *ParallelNativeSeekableQueue) void {
+        while (true) {
+            const index = self.next.fetchAdd(1, .monotonic);
+            if (index >= self.results.len) return;
+            self.results[index].run();
+        }
+    }
+};
+
+fn encodeNativeSeekableStreamParallelInternal(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeSeekableOptions,
+    dictionary: ?NativeDictionary,
+    worker_count: usize,
+) Error![]u8 {
+    if (worker_count == 0 or worker_count > native_seekable_parallel_workers_max) return error.InvalidBlockPlan;
+    const frame_count = try nativeSeekableFrameCount(input.len, options.frame_size);
+    if (worker_count == 1 or frame_count == 1 or comptime builtin.single_threaded) {
+        return if (dictionary) |dict|
+            encodeNativeSeekableStreamWithDictionaryAlloc(allocator, input, options, dict)
+        else
+            encodeNativeSeekableStreamAlloc(allocator, input, options);
+    }
+
+    var locked_allocator = LockedAllocator{ .child = allocator };
+    const parallel_allocator = locked_allocator.allocator();
+    const entries = try allocator.alloc(NativeSeekTableFrameSize, frame_count);
+    defer allocator.free(entries);
+    const results = try allocator.alloc(ParallelNativeSeekableFrameResult, frame_count);
+    defer allocator.free(results);
+    for (results, 0..) |*result, frame_index| {
+        const start = frame_index * options.frame_size;
+        const end = @min(input.len, start + options.frame_size);
+        result.* = .{
+            .allocator = parallel_allocator,
+            .input = input[start..end],
+            .options = options.frame_options,
+            .dictionary = dictionary,
+            .seek_checksums = options.seek_checksums,
+            .entry = &entries[frame_index],
+        };
+    }
+    defer for (results) |result| if (result.frame) |frame| parallel_allocator.free(frame);
+
+    const actual_workers = @min(worker_count, frame_count);
+    const threads = try allocator.alloc(std.Thread, actual_workers - 1);
+    defer allocator.free(threads);
+    var queue: ParallelNativeSeekableQueue = .{ .results = results };
+    var spawned: usize = 0;
+    while (spawned < threads.len) : (spawned += 1) {
+        threads[spawned] = std.Thread.spawn(.{}, ParallelNativeSeekableQueue.run, .{&queue}) catch break;
+    }
+    queue.run();
+    for (threads[0..spawned]) |thread| thread.join();
+
+    for (results) |result| if (result.err) |err| return err;
+    var total_len = try encodedNativeSeekTableBound(frame_count, options.seek_checksums);
+    for (results) |result|
+        total_len = std.math.add(usize, total_len, result.frame.?.len) catch return error.IntegerOverflow;
+    const stream = try allocator.alloc(u8, total_len);
+    errdefer allocator.free(stream);
+    var written: usize = 0;
+    for (results) |result| {
+        const frame = result.frame.?;
+        @memcpy(stream[written..][0..frame.len], frame);
+        written += frame.len;
+    }
+    written += try encodeNativeSeekTableInto(entries, options.seek_checksums, stream[written..]);
+    if (written != stream.len) return error.CorruptFrame;
+    return stream;
 }
 
 /// Reusable native seekable-stream encoder. It retains both per-frame codec
@@ -25650,6 +25799,133 @@ test "zstd native seekable stream encoder round trips indexed frames" {
     try std.testing.expectError(error.InvalidBlockPlan, encodeNativeSeekableStreamAlloc(std.testing.allocator, payload, .{ .frame_size = seekable.max_frame_decompressed_size + 1 }));
     try std.testing.expectError(error.InvalidBlockPlan, encodeNativeSeekableStreamAlloc(std.testing.allocator, payload, .{ .frame_options = .{ .dictionary_id = 1 } }));
     try std.testing.expectError(error.InvalidBlockPlan, encodeNativeSeekableStreamAppend(std.testing.allocator, &appended, payload, .{ .frame_size = 0 }));
+}
+
+test "zstd parallel seekable encoder is deterministic across worker counts" {
+    const payload = ("parallel-seekable-zstd-{\"id\":42,\"status\":\"ready\"}\n" ** 768);
+    const options = NativeSeekableOptions{
+        .frame_size = 4096,
+        .frame_options = .{ .selection = .fast_compressed, .content_checksum = true },
+        .seek_checksums = true,
+    };
+    const serial = try encodeNativeSeekableStreamAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(serial);
+    for ([_]usize{ 1, 2, 4, 64 }) |worker_count| {
+        const parallel = try encodeNativeSeekableStreamParallelAlloc(std.testing.allocator, payload, options, worker_count);
+        defer std.testing.allocator.free(parallel);
+        try std.testing.expectEqualSlices(u8, serial, parallel);
+        const table = try inspectNativeSeekTable(parallel);
+        try std.testing.expectEqual(try nativeSeekableFrameCount(payload.len, options.frame_size), table.entry_count);
+        const range_start: u64 = options.frame_size - 31;
+        var output: [options.frame_size + 79]u8 = undefined;
+        var scratch: [options.frame_size]u8 = undefined;
+        try std.testing.expectEqual(output.len, try decodeNativeSeekableRangeInto(parallel, range_start, &output, &scratch));
+        try std.testing.expectEqualSlices(u8, payload[@intCast(range_start)..][0..output.len], &output);
+    }
+
+    const empty_serial = try encodeNativeSeekableStreamAlloc(std.testing.allocator, "", options);
+    defer std.testing.allocator.free(empty_serial);
+    const empty_parallel = try encodeNativeSeekableStreamParallelAlloc(std.testing.allocator, "", options, 8);
+    defer std.testing.allocator.free(empty_parallel);
+    try std.testing.expectEqualSlices(u8, empty_serial, empty_parallel);
+    try std.testing.expectError(error.InvalidBlockPlan, encodeNativeSeekableStreamParallelAlloc(std.testing.allocator, payload, options, 0));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeNativeSeekableStreamParallelAlloc(std.testing.allocator, payload, options, native_seekable_parallel_workers_max + 1));
+}
+
+test "zstd parallel seekable encoder preserves dictionary routing" {
+    const dictionary = NativeDictionary.init(0x7654, "parallel dictionary prefix alpha beta gamma delta");
+    const dictionary_set = NativeDictionarySet.init(&.{dictionary});
+    const payload = ("parallel dictionary prefix alpha beta gamma delta payload\n" ** 384);
+    const options = NativeSeekableOptions{
+        .frame_size = 2048,
+        .frame_options = .{ .selection = .literal_only, .content_checksum = false },
+        .seek_checksums = true,
+    };
+    const serial = try encodeNativeSeekableStreamWithDictionaryAlloc(std.testing.allocator, payload, options, dictionary);
+    defer std.testing.allocator.free(serial);
+    const parallel = try encodeNativeSeekableStreamParallelWithDictionaryAlloc(std.testing.allocator, payload, options, dictionary, 4);
+    defer std.testing.allocator.free(parallel);
+    try std.testing.expectEqualSlices(u8, serial, parallel);
+    const selected = try encodeNativeSeekableStreamParallelWithDictionarySetAlloc(std.testing.allocator, payload, options, dictionary_set, dictionary.id, 3);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, serial, selected);
+
+    const table = try inspectNativeSeekTable(parallel);
+    var output: [4096]u8 = undefined;
+    var scratch: [options.frame_size]u8 = undefined;
+    try std.testing.expectEqual(output.len, try decodeNativeSeekableRangeIntoWithDictionary(parallel, options.frame_size - 17, &output, &scratch, dictionary));
+    try std.testing.expectEqualSlices(u8, payload[options.frame_size - 17 ..][0..output.len], &output);
+    try std.testing.expect(table.entry_count > 2);
+    try std.testing.expectError(error.NeedDictionary, encodeNativeSeekableStreamParallelWithDictionarySetAlloc(std.testing.allocator, payload, options, dictionary_set, 0x9999, 2));
+}
+
+test "zstd parallel seekable encoder releases allocation failures" {
+    const payload = ("parallel seekable allocation failure\n" ** 256);
+    const options = NativeSeekableOptions{
+        .frame_size = 1024,
+        .frame_options = .{ .selection = .literal_only, .content_checksum = false },
+        .seek_checksums = false,
+    };
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, opts: NativeSeekableOptions) !void {
+            const encoded = try encodeNativeSeekableStreamParallelAlloc(allocator, input, opts, 1);
+            defer allocator.free(encoded);
+            const decoded = try decodeNativeSeekableRangeAlloc(allocator, encoded, 0, input.len);
+            defer allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, input, decoded);
+        }
+    };
+    // Worker count one covers every allocation/rollback point without creating
+    // threads from the intentionally non-thread-safe failing allocator.
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ payload, options });
+}
+
+test "zstd parallel seekable encoder handles metadata allocation failure before spawning" {
+    const payload = ("parallel seekable metadata allocation failure\n" ** 128);
+    const options = NativeSeekableOptions{
+        .frame_size = 512,
+        .frame_options = .{ .selection = .literal_only, .content_checksum = false },
+        .seek_checksums = false,
+    };
+
+    // The first three allocations are the entry array, per-frame result array,
+    // and thread-handle array. All must exist before any worker can start.
+    for (0..3) |fail_index| {
+        var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{
+            .fail_index = fail_index,
+        });
+        try std.testing.expectError(
+            error.OutOfMemory,
+            encodeNativeSeekableStreamParallelAlloc(failing.allocator(), payload, options, 4),
+        );
+        try std.testing.expect(failing.has_induced_failure);
+        try std.testing.expectEqual(fail_index, failing.allocations);
+        try std.testing.expectEqual(fail_index, failing.deallocations);
+        try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
+    }
+}
+
+test "zstd parallel seekable encoder joins workers after encoder allocation failure" {
+    const payload = ("parallel worker allocation failure\n" ** 128);
+    const options = NativeSeekableOptions{
+        .frame_size = 512,
+        .frame_options = .{ .selection = .literal_only, .content_checksum = false },
+        .seek_checksums = false,
+    };
+
+    // Three metadata allocations complete before worker threads start. The
+    // next allocation is made by a frame encoder through LockedAllocator.
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{
+        .fail_index = 3,
+    });
+    try std.testing.expectError(
+        error.OutOfMemory,
+        encodeNativeSeekableStreamParallelAlloc(failing.allocator(), payload, options, 4),
+    );
+    try std.testing.expect(failing.has_induced_failure);
+    try std.testing.expectEqual(@as(usize, 3), failing.allocations);
+    try std.testing.expectEqual(failing.allocations, failing.deallocations);
+    try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
 }
 
 test "zstd seekable range decoder resolves per-frame dictionaries" {
