@@ -14643,3 +14643,13 @@ reuse, so production keeps the simpler independently owned plans.
   geometrically: JSON fell to 0.97364x with 0/5 wins, tradeoff to 0.98771x, and
   multiblock to 0.99173x. The extra validation/count pass costs more than the
   removed per-byte capacity checks, so the single-pass checked writer remains.
+  Hoisting canonical LL/ML kind dispatch out of the shared no-previous-table
+  conversion loop was rejected after a wider control. The existing complete
+  alternatives oracle and all 599 Zstd tests stayed exact, and 15 explicit-fast
+  pairs improved 1.00801x geometrically, led by JSON at 1.02694x with 15/15
+  wins and binary at 1.01539x. A 31-pair text control remained above the floor
+  at 0.99393x. The default 20-row matrix exposed a multiblock level-22 median
+  of 0.98811x, however, and its 31-pair, 200-iteration control confirmed
+  0.98583x with only 5/31 wins. The combined LL/ML specialization was removed;
+  follow-up work must isolate the two kinds rather than accepting a fast-policy
+  win that regresses a default high level.
