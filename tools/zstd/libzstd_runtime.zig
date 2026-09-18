@@ -59,7 +59,11 @@ pub const Runtime = struct {
             "libzstd.so.1",
             "/lib/x86_64-linux-gnu/libzstd.so.1",
             "/usr/lib/x86_64-linux-gnu/libzstd.so.1",
+            "/lib/aarch64-linux-gnu/libzstd.so.1",
+            "/usr/lib/aarch64-linux-gnu/libzstd.so.1",
             "libzstd.dylib",
+            "/opt/homebrew/opt/zstd/lib/libzstd.dylib",
+            "/usr/local/opt/zstd/lib/libzstd.dylib",
         };
         for (names) |name| {
             if (openPath(name)) |runtime| return runtime else |_| {}
