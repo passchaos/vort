@@ -14651,6 +14651,14 @@ reuse, so production keeps the simpler independently owned plans.
   reduced the five-row explicit-fast screen to 0.98518x geometrically: JSON,
   binary, and tradeoff fell to 0.97630x/0.98572x/0.98318x with 0/5 wins. The
   compact options-based helper remains.
+  Encoding double-fast hash positions as `position + 1` so zero can replace the
+  all-ones sentinel was rejected too. It changed the two per-block 1 KiB/8 KiB
+  `memset(0xff)` calls into `bzero`, retained exact sentinel/current-position
+  boundaries, passed all focused parser tests and the fast gate, and kept the
+  executable at 1,606,920 bytes. The five-pair complete fast matrix was only
+  1.00054x geometrically, however: binary fell to 0.98639x with 0/5 wins and
+  multiblock to 0.99376x with 0/5 wins. Decoding every live table position
+  costs more than the cheaper initialization, so the all-ones sentinel remains.
   Hoisting canonical LL/ML kind dispatch out of the shared no-previous-table
   conversion loop was rejected after a wider control. The existing complete
   alternatives oracle and all 599 Zstd tests stayed exact, and 15 explicit-fast
