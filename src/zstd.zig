@@ -18641,18 +18641,79 @@ const SequenceTableEmitPlan = union(enum) {
 const CompressedSequencePlan = struct {
     len: usize = 0,
     accuracy_log: u8 = 0,
-    codes: [max_native_sequence_count]u8 = undefined,
+    codes: if (builtin.is_test) [max_native_sequence_count]u8 else void = if (builtin.is_test) undefined else {},
     initial_state: u8 = 0,
     // These state details are valuable to the three-way transition oracle but
     // redundant in production: emission consumes the canonical codes plus the
     // independently stored transition values/widths below.
     next_states: if (builtin.is_test) [max_native_sequence_count]u8 else void = if (builtin.is_test) undefined else {},
     state_bits: if (builtin.is_test) [max_native_sequence_count]u8 else void = if (builtin.is_test) undefined else {},
-    transition_values: [max_native_sequence_count]u8 = undefined,
-    transition_bits: [max_native_sequence_count]u8 = undefined,
+    transition_values: if (builtin.is_test) [max_native_sequence_count]u8 else void = if (builtin.is_test) undefined else {},
+    transition_bits: if (builtin.is_test) [max_native_sequence_count]u8 else void = if (builtin.is_test) undefined else {},
+    // Production needs only the canonical code plus the transition value and
+    // width: 6 + 7 + 3 bits fit exactly in one u16. Tests retain the expanded
+    // fields above so the independent transition builders remain inspectable.
+    packed_steps: if (builtin.is_test) void else [max_native_sequence_count]u16 = if (builtin.is_test) {} else undefined,
     table_payload: [64]u8 = undefined,
     table_payload_len: usize = 0,
 };
+
+const compressed_sequence_code_bits = 6;
+const compressed_sequence_transition_value_bits = 7;
+const compressed_sequence_transition_width_bits = 3;
+const compressed_sequence_code_mask: u16 = (1 << compressed_sequence_code_bits) - 1;
+const compressed_sequence_transition_value_mask: u16 = (1 << compressed_sequence_transition_value_bits) - 1;
+const compressed_sequence_transition_width_mask: u16 = (1 << compressed_sequence_transition_width_bits) - 1;
+
+comptime {
+    std.debug.assert(max_fse_compression_symbol <= compressed_sequence_code_mask);
+}
+
+inline fn compressedSequenceCode(plan: *const CompressedSequencePlan, index: usize) u8 {
+    return if (comptime builtin.is_test)
+        plan.codes[index]
+    else
+        @intCast(plan.packed_steps[index] & compressed_sequence_code_mask);
+}
+
+inline fn setCompressedSequenceCode(plan: *CompressedSequencePlan, index: usize, code: u8) void {
+    std.debug.assert(code <= max_fse_compression_symbol);
+    if (comptime builtin.is_test)
+        plan.codes[index] = code
+    else
+        plan.packed_steps[index] = code;
+}
+
+inline fn compressedSequenceTransitionValue(plan: *const CompressedSequencePlan, index: usize) u8 {
+    return if (comptime builtin.is_test)
+        plan.transition_values[index]
+    else
+        @intCast((plan.packed_steps[index] >> compressed_sequence_code_bits) & compressed_sequence_transition_value_mask);
+}
+
+inline fn compressedSequenceTransitionBits(plan: *const CompressedSequencePlan, index: usize) u8 {
+    return if (comptime builtin.is_test)
+        plan.transition_bits[index]
+    else
+        @intCast(plan.packed_steps[index] >> (compressed_sequence_code_bits + compressed_sequence_transition_value_bits));
+}
+
+inline fn setCompressedSequenceTransition(plan: *CompressedSequencePlan, index: usize, value: u8, bits: u8) void {
+    std.debug.assert(
+        plan.accuracy_log <= compressed_sequence_transition_width_mask and
+            bits <= plan.accuracy_log and
+            value <= compressed_sequence_transition_value_mask,
+    );
+    if (comptime builtin.is_test) {
+        plan.transition_values[index] = value;
+        plan.transition_bits[index] = bits;
+    } else {
+        const code = plan.packed_steps[index] & compressed_sequence_code_mask;
+        plan.packed_steps[index] = code |
+            (@as(u16, value) << compressed_sequence_code_bits) |
+            (@as(u16, bits) << (compressed_sequence_code_bits + compressed_sequence_transition_value_bits));
+    }
+}
 
 const RepeatSequenceSource = struct {
     mode: SymbolMode,
@@ -19164,7 +19225,7 @@ fn sequenceTablePlanBitCostWithOffsets(
             const bases = sequenceTableBases(kind);
             const bits = sequenceTableBits(kind);
             for (values, 0..) |value, i| {
-                const code = compressed.codes[i];
+                const code = compressedSequenceCode(&compressed, i);
                 if (code >= bases.len or code >= bits.len) return error.CorruptFrame;
                 const symbol: SequenceSymbol = .{
                     .base = @intCast(bases[code]),
@@ -19174,7 +19235,7 @@ fn sequenceTablePlanBitCostWithOffsets(
                 };
                 if (!try sequenceSymbolAcceptsValue(symbol, kind, value, literal_lens[i], offsets[i], &repeated_offsets)) return null;
                 bit_count += symbol.additional_bits;
-                if (i + 1 < values.len) bit_count += compressed.transition_bits[i];
+                if (i + 1 < values.len) bit_count += compressedSequenceTransitionBits(&compressed, i);
             }
         },
         .repeat => |repeat| {
@@ -19193,11 +19254,12 @@ fn sequenceTablePlanBitCostWithOffsets(
 fn compressedOffsetSequenceTablePlanBitCostKnownValid(plan: *const CompressedSequencePlan) Error!SequenceTableBitCost {
     if (plan.len == 0 or plan.len > max_native_sequence_count) return error.CorruptFrame;
     var bit_count: usize = plan.accuracy_log;
-    for (plan.codes[0..plan.len], 0..) |code, i| {
+    for (0..plan.len) |i| {
+        const code = compressedSequenceCode(plan, i);
         if (code >= of_bits.len) return error.CorruptFrame;
         bit_count = std.math.add(usize, bit_count, of_bits[code]) catch return error.IntegerOverflow;
         if (i + 1 < plan.len)
-            bit_count = std.math.add(usize, bit_count, plan.transition_bits[i]) catch return error.IntegerOverflow;
+            bit_count = std.math.add(usize, bit_count, compressedSequenceTransitionBits(plan, i)) catch return error.IntegerOverflow;
     }
     return .{ .payload_len = plan.table_payload_len, .bit_count = bit_count };
 }
@@ -19808,7 +19870,7 @@ noinline fn planCompressedSequenceCodes(codes: []const u8) linksection(fse_encod
     var max_code: u8 = 0;
     for (codes, 0..) |code, i| {
         if (code > max_fse_compression_symbol) return null;
-        plan.codes[i] = code;
+        setCompressedSequenceCode(&plan, i, code);
         counts[code] += 1;
         max_code = @max(max_code, code);
     }
@@ -20043,7 +20105,7 @@ fn fillCompressedSequenceTransitions(plan: *CompressedSequencePlan, entries: []c
         symbol_heads[symbol] = @intCast(state);
     }
 
-    const last_state = symbol_heads[plan.codes[plan.len - 1]];
+    const last_state = symbol_heads[compressedSequenceCode(plan, plan.len - 1)];
     if (last_state == invalid_state) return error.CorruptFrame;
     var next_state = last_state;
     if (comptime builtin.is_test) {
@@ -20054,7 +20116,7 @@ fn fillCompressedSequenceTransitions(plan: *CompressedSequencePlan, entries: []c
     var i = plan.len - 1;
     while (i > 0) {
         i -= 1;
-        var candidate_state = symbol_heads[plan.codes[i]];
+        var candidate_state = symbol_heads[compressedSequenceCode(plan, i)];
         while (candidate_state != invalid_state) : (candidate_state = symbol_next[candidate_state]) {
             const candidate = entries[candidate_state];
             if (next_state >= candidate.baseline and
@@ -20065,8 +20127,7 @@ fn fillCompressedSequenceTransitions(plan: *CompressedSequencePlan, entries: []c
         if (next_state < entry.baseline) return error.CorruptFrame;
         const transition = next_state - entry.baseline;
         if (transition >= (@as(usize, 1) << @intCast(entry.bits))) return error.CorruptFrame;
-        plan.transition_values[i] = @intCast(transition);
-        plan.transition_bits[i] = entry.bits;
+        setCompressedSequenceTransition(plan, i, @intCast(transition), entry.bits);
         if (comptime builtin.is_test) {
             plan.next_states[i] = @intCast(entry.baseline);
             plan.state_bits[i] = entry.bits;
@@ -20083,7 +20144,7 @@ noinline fn fillCompressedSequenceTransitionsFromCompressionTable(
 ) linksection(fse_encode_helper_text_section) Error!void {
     if (plan.len == 0 or entries.len != table.table_len) return error.CorruptFrame;
     const table_size = table.table_len;
-    const initial = try fseInitialState(table, plan.codes[plan.len - 1]);
+    const initial = try fseInitialState(table, compressedSequenceCode(plan, plan.len - 1));
     if (initial < table_size or initial - table_size >= entries.len) return error.CorruptFrame;
     var next_state = initial - table_size;
     const last_entry = entries[next_state];
@@ -20095,7 +20156,7 @@ noinline fn fillCompressedSequenceTransitionsFromCompressionTable(
     var i = plan.len - 1;
     while (i > 0) {
         i -= 1;
-        const code = plan.codes[i];
+        const code = compressedSequenceCode(plan, i);
         if (code > table.max_symbol) return error.CorruptFrame;
         const transform = table.transforms[code];
         const encoder_state = table_size + next_state;
@@ -20111,8 +20172,7 @@ noinline fn fillCompressedSequenceTransitionsFromCompressionTable(
         if (entry.symbol != code or next_state < entry.baseline) return error.CorruptFrame;
         const transition = next_state - entry.baseline;
         if (transition >= (@as(usize, 1) << @intCast(entry.bits))) return error.CorruptFrame;
-        plan.transition_values[i] = @intCast(transition);
-        plan.transition_bits[i] = entry.bits;
+        setCompressedSequenceTransition(plan, i, @intCast(transition), entry.bits);
         if (comptime builtin.is_test) {
             plan.next_states[i] = @intCast(entry.baseline);
             plan.state_bits[i] = entry.bits;
@@ -20136,7 +20196,7 @@ fn findCompressedSequenceState(entries: []const FseTableEntry, code: u8, maybe_n
 
 fn fillCompressedSequenceTransitionsReference(plan: *CompressedSequencePlan, entries: []const FseTableEntry) Error!void {
     if (plan.len == 0) return error.CorruptFrame;
-    const last_state = findCompressedSequenceState(entries, plan.codes[plan.len - 1], null) orelse return error.CorruptFrame;
+    const last_state = findCompressedSequenceState(entries, compressedSequenceCode(plan, plan.len - 1), null) orelse return error.CorruptFrame;
     var next_state = last_state;
     if (comptime builtin.is_test) {
         plan.next_states[plan.len - 1] = @intCast(entries[last_state].baseline);
@@ -20145,13 +20205,12 @@ fn fillCompressedSequenceTransitionsReference(plan: *CompressedSequencePlan, ent
     var i = plan.len - 1;
     while (i > 0) {
         i -= 1;
-        const state = findCompressedSequenceState(entries, plan.codes[i], next_state) orelse return error.CorruptFrame;
+        const state = findCompressedSequenceState(entries, compressedSequenceCode(plan, i), next_state) orelse return error.CorruptFrame;
         const entry = entries[state];
         if (next_state < entry.baseline) return error.CorruptFrame;
         const transition = next_state - entry.baseline;
         if (transition >= (@as(usize, 1) << @intCast(entry.bits))) return error.CorruptFrame;
-        plan.transition_values[i] = @intCast(transition);
-        plan.transition_bits[i] = entry.bits;
+        setCompressedSequenceTransition(plan, i, @intCast(transition), entry.bits);
         if (comptime builtin.is_test) {
             plan.next_states[i] = @intCast(entry.baseline);
             plan.state_bits[i] = entry.bits;
@@ -20500,7 +20559,7 @@ fn appendSequenceTransitionField(out: []BitField, count: *usize, plan: SequenceT
         },
         .compressed => |compressed| {
             if (index + 1 >= compressed.len) return error.CorruptFrame;
-            try appendBitField(out, count, compressed.transition_values[index], compressed.transition_bits[index]);
+            try appendBitField(out, count, compressedSequenceTransitionValue(&compressed, index), compressedSequenceTransitionBits(&compressed, index));
         },
         .repeat => |repeat| {
             if (index + 1 >= repeat.len) return error.CorruptFrame;
@@ -20523,7 +20582,7 @@ inline fn appendSequenceTransitionFieldBorrowed(out: []BitField, count: *usize, 
         },
         .compressed => |*compressed| {
             if (index + 1 >= compressed.len) return error.CorruptFrame;
-            try appendBitField(out, count, compressed.transition_values[index], compressed.transition_bits[index]);
+            try appendBitField(out, count, compressedSequenceTransitionValue(compressed, index), compressedSequenceTransitionBits(compressed, index));
         },
         .repeat => |*repeat| {
             if (index + 1 >= repeat.len) return error.CorruptFrame;
@@ -20565,7 +20624,7 @@ fn sequenceTableSymbol(plan: SequenceTableEmitPlan, kind: SequenceTableKind, ind
         },
         .compressed => |compressed| blk: {
             if (index >= compressed.len) return error.CorruptFrame;
-            break :blk try sequenceRleSymbol(kind, compressed.codes[index]);
+            break :blk try sequenceRleSymbol(kind, compressedSequenceCode(&compressed, index));
         },
         .repeat => |repeat| blk: {
             if (index >= repeat.len) return error.CorruptFrame;
@@ -20591,7 +20650,7 @@ inline fn sequenceTableSymbolBorrowed(plan: *const SequenceTableEmitPlan, kind: 
         },
         .compressed => |*compressed| blk: {
             if (index >= compressed.len) return error.CorruptFrame;
-            break :blk try sequenceRleSymbol(kind, compressed.codes[index]);
+            break :blk try sequenceRleSymbol(kind, compressedSequenceCode(compressed, index));
         },
         .repeat => |*repeat| blk: {
             if (index >= repeat.len) return error.CorruptFrame;
@@ -32762,6 +32821,7 @@ test "zstd sequence candidate commit is atomic on allocation failure" {
 test "zstd compressed sequence state scratch fits one byte" {
     const values = [_]usize{ 8, 1, 2, 3, 2, 4, 3, 1, 2, 3, 2, 4, 3, 1, 2, 3 };
     const plan = (try planCompressedSequenceValues(&values, .literal)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(@as(usize, 0), @sizeOf(@FieldType(CompressedSequencePlan, "packed_steps")));
     try std.testing.expect(plan.initial_state < max_predefined_sequence_states);
     for (plan.next_states[0..plan.len]) |state| try std.testing.expect(state < max_predefined_sequence_states);
     for (plan.transition_values[0 .. plan.len - 1], plan.transition_bits[0 .. plan.len - 1]) |value, bits| {
@@ -36303,7 +36363,8 @@ noinline fn compressedSequencePlanStrictlyDominatesPredefinedCodes(
     const value_bits = sequenceTableBits(kind);
     var compressed_bits: usize = plan.accuracy_log;
     var predefined_bits: usize = predefinedInitialStateBits(kind);
-    for (plan.codes[0..plan.len], 0..) |code, i| {
+    for (0..plan.len) |i| {
+        const code = compressedSequenceCode(plan, i);
         if (code >= value_bits.len) return error.CorruptFrame;
         const predefined_code = try sequenceCodeForValue(predefined_values[i], sequenceTableBases(kind), value_bits);
         if (predefined_code >= costs.len) return error.CorruptFrame;
@@ -36312,7 +36373,7 @@ noinline fn compressedSequencePlanStrictlyDominatesPredefinedCodes(
         predefined_bits = std.math.add(usize, predefined_bits, predefined_cost) catch return error.IntegerOverflow;
         compressed_bits = std.math.add(usize, compressed_bits, value_bits[code]) catch return error.IntegerOverflow;
         if (i + 1 < plan.len)
-            compressed_bits = std.math.add(usize, compressed_bits, plan.transition_bits[i]) catch return error.IntegerOverflow;
+            compressed_bits = std.math.add(usize, compressed_bits, compressedSequenceTransitionBits(plan, i)) catch return error.IntegerOverflow;
     }
     const compressed_bytes = std.math.add(usize, plan.table_payload_len, (compressed_bits + 1 + 7) / 8) catch return error.IntegerOverflow;
     const predefined_bytes = (predefined_bits + 1 + 7) / 8;
@@ -36333,14 +36394,15 @@ noinline fn compressedSequencePlanStrictlyDominatesPredefinedCodeSlice(
     const value_bits = sequenceTableBits(kind);
     var compressed_bits: usize = plan.accuracy_log;
     var predefined_bits: usize = predefinedInitialStateBits(kind);
-    for (plan.codes[0..plan.len], predefined_codes, 0..) |code, predefined_code, i| {
+    for (predefined_codes, 0..) |predefined_code, i| {
+        const code = compressedSequenceCode(plan, i);
         if (code >= value_bits.len or predefined_code >= costs.len) return error.CorruptFrame;
         const predefined_cost = costs[predefined_code][@intFromBool(i + 1 < plan.len)];
         if (predefined_cost == std.math.maxInt(u8)) return false;
         predefined_bits = std.math.add(usize, predefined_bits, predefined_cost) catch return error.IntegerOverflow;
         compressed_bits = std.math.add(usize, compressed_bits, value_bits[code]) catch return error.IntegerOverflow;
         if (i + 1 < plan.len)
-            compressed_bits = std.math.add(usize, compressed_bits, plan.transition_bits[i]) catch return error.IntegerOverflow;
+            compressed_bits = std.math.add(usize, compressed_bits, compressedSequenceTransitionBits(plan, i)) catch return error.IntegerOverflow;
     }
     const compressed_bytes = std.math.add(usize, plan.table_payload_len, (compressed_bits + 1 + 7) / 8) catch return error.IntegerOverflow;
     const predefined_bytes = (predefined_bits + 1 + 7) / 8;
