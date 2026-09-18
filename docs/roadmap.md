@@ -14578,6 +14578,29 @@ reuse, so production keeps the simpler independently owned plans.
   source passes all 599 Zstd tests, the five-row fast gate, 100-row stage gate,
   364-case native probe, 276-case libzstd 1.5.7 compatibility matrix, and the
   2,044-sequence/64-repeat-block probe.
+  Compressed sequence plans now cache their exact canonical-value and FSE
+  transition bit totals in two `u16` fields that fit existing production
+  padding. Static bounds cover 512 maximum sequences, 31 offset extra bits,
+  and seven transition bits. The canonical histogram fold and each of the three
+  transition builders populate the totals while already visiting those values;
+  LL/ML candidate scoring, known-valid offset scoring, and compressed-vs-
+  predefined dominance then avoid rescanning up to 512 packed steps. The
+  original stateful scorer remains an independent oracle and agrees exactly on
+  randomized LL/ML/OF cases, while alternatives comparisons include both cached
+  fields. Against frozen independent direct-transition and cached-cost binaries,
+  15 explicit-fast pairs preserve every input hash, Vort/reference size, and
+  checksum while improving binary/JSON/tradeoff/multiblock/text medians by
+  1.01869x/1.04960x/1.00257x/0.99917x/1.00575x, a 1.01499x row-median
+  geometric mean. The default 20-row matrix measures 1.00447x geometrically;
+  its noisy 0.98771x short text level-1 row recovers in a 31-pair,
+  10,000-iteration all-level text control whose medians span
+  1.00125x--1.00492x. The executable remains 1,606,920 bytes, and a final
+  rebuild has identical code, constant, and data sections to the measured
+  candidate. Post-change profiling reduces the two dominance helpers from a
+  combined 5.09% to 3.03% of sampled leaf time. The final source passes all 599
+  Zstd tests, the five-row fast gate, 100-row stage gate, 364-case native probe,
+  276-case libzstd 1.5.7 compatibility matrix, and the
+  2,044-sequence/64-repeat-block probe.
   Two follow-up compressed-plan layout experiments were rejected. Specializing
   the generic 512-state FSE compression table to the small sequence planner's
   actual 128-state maximum reduced `planCompressedSequenceCodes`' stack frame
