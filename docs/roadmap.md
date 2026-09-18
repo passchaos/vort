@@ -14671,3 +14671,12 @@ reuse, so production keeps the simpler independently owned plans.
   five-row fast gate, 100-row stage gate, 364-case native probe, 276-case
   libzstd 1.5.7 compatibility matrix, and the 2,044-sequence/64-repeat-block
   probe.
+  A canonical-offset helper limited to the packed all-compressed field emitter
+  was rejected. It consumed the already validated OF code directly, retained
+  the existing code-0/code-1 repcode transitions, and used `of_base`/`of_bits`
+  directly for codes 2--31. A new full-code oracle covered every boundary,
+  duplicate and zero histories, successor states, and exact errors against the
+  generic resolver; all 600 Zstd tests and the fast gate passed. The five-pair
+  screen looked positive outside noisy text, but the 15-pair independent-binary
+  matrix measured only 0.99697x geometrically: text fell to 0.98386x and JSON
+  to 0.99694x. The generic symbol-based emitter remains.
