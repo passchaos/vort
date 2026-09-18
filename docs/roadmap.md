@@ -14554,8 +14554,27 @@ reuse, so production keeps the simpler independently owned plans.
   transition write was rejected before this change: despite exact wires, its
   five-row screen measured 0.98717x geometrically with a 0.97509x floor. The
   final source passes all 599 Zstd tests, the five-row fast gate, 100-row stage
-  gate, 276-case libzstd 1.5.7 compatibility matrix, and the
-  2,044-sequence/64-repeat-block probe. The Python-driven 364-case native probe
-  again encountered a Zig build-server sleep before its CLI child launched,
-  both with the repository cache and with fresh isolated local/global caches; no
-  result is claimed for that invocation.
+  gate, 276-case libzstd 1.5.7 compatibility matrix, the
+  2,044-sequence/64-repeat-block probe, and the Python-driven 364-case native
+  probe. The latter's ReleaseFast CLI build remained silent for several minutes
+  but continued consuming CPU and eventually completed, distinguishing a long
+  compile from the earlier sleeping build-server failure.
+  Production small compressed-FSE plans now derive transition bits directly
+  from the upstream `FSE_encodeSymbol` state: the low `nbBitsOut` bits of the
+  current encoder state are serialized before advancing through the compression
+  table. This removes the production decode-table build and its entry lookup;
+  test builds retain that table and compare the direct path's initial state and
+  every used transition value/width against both the inverse checked builder and
+  the independent scan reference over more than 250 generated table shapes. The
+  ReleaseFast benchmark binary shrinks from 1,607,048 to 1,606,920 bytes. After
+  terminating two orphaned same-repository Zig jobs and confirming an idle host,
+  15 interleaved explicit-fast pairs preserve every input hash, frame/reference
+  size, and checksum while improving binary/JSON/tradeoff/multiblock/text medians
+  by 1.02011x/1.07119x/1.02553x/0.99990x/1.01127x, a 1.02532x row-median
+  geometric mean. The matching clean-host default 20-row matrix improves
+  1.00735x geometrically with a 0.99377x floor. A post-change 100,000-encode
+  profile reduces transition construction from 9.19% to 5.75% of sampled leaf
+  time and removes `buildFseTable` from the visible top-level hotspots. The final
+  source passes all 599 Zstd tests, the five-row fast gate, 100-row stage gate,
+  364-case native probe, 276-case libzstd 1.5.7 compatibility matrix, and the
+  2,044-sequence/64-repeat-block probe.
