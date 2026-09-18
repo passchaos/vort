@@ -14653,3 +14653,21 @@ reuse, so production keeps the simpler independently owned plans.
   0.98583x with only 5/31 wins. The combined LL/ML specialization was removed;
   follow-up work must isolate the two kinds rather than accepting a fast-policy
   win that regresses a default high level.
+  The split follow-up retains only match-length specialization in the shared
+  no-previous-table alternatives path. It dispatches once per ML column and
+  calls the existing arithmetic `matchLengthCode` mapping directly; LL keeps
+  the generic canonical-table dispatch, and offset planning remains repcode-
+  aware. The complete alternatives oracle preserves every candidate tag, RLE
+  code, predefined state, compressed-table payload, initial state, and used
+  transition. Against frozen independent cached-cost and match-only binaries,
+  15 explicit-fast pairs preserve every input hash, Vort/reference size, and
+  checksum while improving binary/JSON/tradeoff/multiblock/text medians by
+  1.00511x/1.02570x/1.00411x/0.99742x/1.01231x, a 1.00889x row-median
+  geometric mean. A 15-pair default 20-row matrix measures 1.00139x
+  geometrically. Its short tradeoff level-1/3 medians recover across separate
+  31-pair, 1,000-iteration controls to 1.00863x/1.00774x, while a 15-pair,
+  200-iteration multiblock level-22 control measures 1.00899x. The executable
+  remains 1,606,920 bytes. The retained source passes all 599 Zstd tests, the
+  five-row fast gate, 100-row stage gate, 364-case native probe, 276-case
+  libzstd 1.5.7 compatibility matrix, and the 2,044-sequence/64-repeat-block
+  probe.
