@@ -14468,6 +14468,79 @@ test "zstd large predefined planner matches small planner" {
     }
 }
 
+test "zstd large predefined code planner matches scalar reference" {
+    const max_len = 2047;
+    var codes: [max_len]u8 = undefined;
+    var expected_states: [max_len]u8 = undefined;
+    var actual_states: [max_len]u8 = undefined;
+    var expected_masks: [max_len]u64 = undefined;
+    var actual_masks: [max_len]u64 = undefined;
+
+    const Test = struct {
+        fn plan(
+            input_codes: []const u8,
+            symbols: []const SequenceSymbol,
+            kind: SequenceTableKind,
+            states: []u8,
+            viable_masks: []u64,
+        ) bool {
+            if (input_codes.len == 0 or states.len != input_codes.len or viable_masks.len != input_codes.len) return false;
+            var viable_next: u64 = 0;
+            var pos = input_codes.len;
+            while (pos > 0) {
+                pos -= 1;
+                var viable_current: u64 = 0;
+                for (symbols, 0..) |symbol, state| {
+                    if (!sequenceSymbolMatchesCode(symbol, kind, input_codes[pos])) continue;
+                    if (pos == input_codes.len - 1) {
+                        viable_current |= @as(u64, 1) << @intCast(state);
+                        continue;
+                    }
+                    const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
+                    const first_next: usize = symbol.next_state;
+                    const end_next = @min(symbols.len, first_next + transition_count);
+                    const width = end_next - first_next;
+                    const low_mask = if (width == 64) std.math.maxInt(u64) else (@as(u64, 1) << @intCast(width)) - 1;
+                    if (viable_next & (low_mask << @intCast(first_next)) != 0)
+                        viable_current |= @as(u64, 1) << @intCast(state);
+                }
+                viable_next = viable_current;
+                viable_masks[pos] = viable_current;
+            }
+            if (viable_next == 0) return false;
+            states[0] = @intCast(@ctz(viable_next));
+            for (0..input_codes.len - 1) |i| {
+                const symbol = symbols[states[i]];
+                const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
+                const first_next: usize = symbol.next_state;
+                const end_next = @min(symbols.len, first_next + transition_count);
+                const width = end_next - first_next;
+                const low_mask = if (width == 64) std.math.maxInt(u64) else (@as(u64, 1) << @intCast(width)) - 1;
+                const possible = viable_masks[i + 1] & (low_mask << @intCast(first_next));
+                if (possible == 0) return false;
+                states[i + 1] = @intCast(@ctz(possible));
+            }
+            return true;
+        }
+    };
+
+    var random_state: u32 = 0x1319_8a2e;
+    inline for (std.meta.tags(SequenceTableKind)) |kind| {
+        const symbols = sequenceTablePredefinedSymbols(kind);
+        for ([_]usize{ 513, 1024, max_len }) |len| {
+            for (codes[0..len]) |*code| {
+                random_state = random_state *% 1_664_525 +% 1_013_904_223;
+                const symbol = symbols[(random_state >> 16) % symbols.len];
+                code.* = try sequenceCodeForValue(symbol.base, sequenceTableBases(kind), sequenceTableBits(kind));
+            }
+            const expected = Test.plan(codes[0..len], symbols, kind, expected_states[0..len], expected_masks[0..len]);
+            const actual = planLargePredefinedSequenceCodes(codes[0..len], symbols, kind, actual_states[0..len], actual_masks[0..len]);
+            try std.testing.expectEqual(expected, actual);
+            if (expected) try std.testing.expectEqualSlices(u8, expected_states[0..len], actual_states[0..len]);
+        }
+    }
+}
+
 test "zstd native match stage benchmark mirrors production emitters" {
     const payload = ("{\"service\":\"vort\",\"message\":\"native stage benchmark\"}\n" ** 96) ++ ("abcdefghijklmnop" ** 32);
     var scratch: NativeMatchStageScratch = .{};
@@ -19062,16 +19135,32 @@ fn largeSequenceTablePlanAlternatives(
     previous: ?RepeatSequenceSource,
 ) Error!LargeSequenceTablePlanAlternatives {
     var alternatives: LargeSequenceTablePlanAlternatives = .{};
-    if (try rleSequenceCodeForValues(values, sequenceTableBases(kind), sequenceTableBits(kind))) |code|
+    if (values.len == 0 or values.len > max_large_native_sequence_count or
+        compressed_buffers.codes.len != values.len) return alternatives;
+
+    // RLE, predefined, compressed, and repeat alternatives all consume the
+    // same canonical code stream. Materialize it once instead of remapping
+    // every LL/ML value independently for each candidate family.
+    const bases = sequenceTableBases(kind);
+    const bits = sequenceTableBits(kind);
+    for (values, 0..) |value, i| {
+        const code = sequenceCodeForValue(value, bases, bits) catch |err| switch (err) {
+            error.CorruptFrame => return alternatives,
+            else => return err,
+        };
+        if (code > max_fse_compression_symbol) return alternatives;
+        compressed_buffers.codes[i] = code;
+    }
+    if (rleSequenceCode(compressed_buffers.codes)) |code|
         try alternatives.add(.{ .rle = code });
-    if (planLargePredefinedSequenceValues(
-        values,
+    if (planLargePredefinedSequenceCodes(
+        compressed_buffers.codes,
         sequenceTablePredefinedSymbols(kind),
-        sequenceTablePredefinedMinAdditionalBits(kind),
+        kind,
         predefined_states,
         viable_masks,
     )) try alternatives.add(.{ .predefined = predefined_states });
-    if (try planLargeCompressedSequenceValues(values, kind, compressed_buffers)) |plan|
+    if (try planLargeCompressedSequenceCodes(values.len, compressed_buffers)) |plan|
         try alternatives.add(.{ .compressed = plan });
     if (previous) |source| if (try planLargeRepeatSequenceCodes(compressed_buffers.codes, kind, source, repeat_states, repeat_viable_masks)) |plan|
         try alternatives.add(.{ .repeat = plan });
@@ -24542,6 +24631,7 @@ fn buildPredefinedStateMasks(
 
 const predefined_literal_state_masks = buildPredefinedStateMasks(&sequence_predefined.literal_symbols, &ll_base, &ll_bits, 0);
 const predefined_offset_state_masks = buildPredefinedStateMasks(&sequence_predefined.offset_symbols, &of_base, &of_bits, 2);
+const predefined_offset_code_state_masks = buildPredefinedStateMasks(&sequence_predefined.offset_symbols, &of_base, &of_bits, 0);
 const predefined_match_state_masks = buildPredefinedStateMasks(&sequence_predefined.match_symbols, &ml_base, &ml_bits, 0);
 
 fn buildPredefinedMinimumCosts(
@@ -24720,8 +24810,15 @@ fn planLargePredefinedSequenceCodes(
     while (pos > 0) {
         pos -= 1;
         var viable_current: u64 = 0;
-        for (symbols, 0..) |symbol, state| {
-            if (!sequenceSymbolMatchesCode(symbol, kind, codes[pos])) continue;
+        var encodable_states: u64 = switch (kind) {
+            .literal => if (codes[pos] < predefined_literal_state_masks.len) predefined_literal_state_masks[codes[pos]] else 0,
+            .offset => if (codes[pos] < predefined_offset_code_state_masks.len) predefined_offset_code_state_masks[codes[pos]] else 0,
+            .match => if (codes[pos] < predefined_match_state_masks.len) predefined_match_state_masks[codes[pos]] else 0,
+        };
+        while (encodable_states != 0) {
+            const state: usize = @ctz(encodable_states);
+            encodable_states &= encodable_states - 1;
+            const symbol = symbols[state];
             if (pos == codes.len - 1) {
                 viable_current |= @as(u64, 1) << @intCast(state);
                 continue;

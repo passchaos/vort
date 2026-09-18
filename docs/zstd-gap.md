@@ -175,6 +175,17 @@ Current interpretation:
   controls retain binary level 1 at `0.9915x` and improve JSON level 3 by
   `1.0100x`.
 
+  Large LL/ML planning now materializes each canonical code stream once and
+  shares it across RLE, predefined, compressed, and repeat candidates. The
+  predefined planner intersects precomputed per-code state masks instead of
+  rescanning every state for each sequence. A scalar oracle compares selected
+  states at 513, 1,024, and 2,047 codes for LL/OF/ML. Eleven alternating
+  1,000-encode controls against the previous commit improve explicit fast
+  multiblock by `1.0792x` median with 11/11 wins; default text levels 3/9 and
+  JSON level 9 remain at `1.0091x`/`1.0052x`/`1.0015x`. A nine-pair
+  five-row fast matrix preserves every hash, frame size, and checksum, with
+  multiblock at `1.0794x` and a `1.0225x` row-median geometric mean.
+
   A frozen independent-binary control also compared the unchanged default
   selection across 15 paired runs of the complete 20-row matrix, 50 iterations,
   and three interleaved rounds per row. Every input SHA-256, Vort/reference size, and checksum

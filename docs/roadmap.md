@@ -14767,3 +14767,12 @@ reuse, so production keeps the simpler independently owned plans.
   mean and `1.0000x` floor. A separate default 20-row matrix reaches `1.0183x`
   geometric mean; eleven longer controls recover binary level 1 to `0.9915x`
   and improve JSON level 3 by `1.0100x` with 11/11 wins.
+  Large LL/ML planning now generates canonical codes once and reuses them for
+  RLE, predefined, compressed, and repeat candidates; predefined reachability
+  intersects compile-time per-code state masks rather than scanning the full
+  table at each position. A scalar oracle covers 513/1,024/2,047-code LL/OF/ML
+  paths. Eleven alternating 1,000-encode pairs improve explicit fast multiblock
+  by `1.0792x` median with 11/11 wins, while default text levels 3/9 and JSON
+  level 9 remain at `1.0091x`/`1.0052x`/`1.0015x`. The final nine-pair
+  five-row fast matrix preserves every wire/hash/checksum and reaches `1.0225x`
+  row-median geometric throughput with multiblock at `1.0794x`.
