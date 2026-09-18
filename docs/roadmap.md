@@ -14696,3 +14696,12 @@ reuse, so production keeps the simpler independently owned plans.
   screen looked positive outside noisy text, but the 15-pair independent-binary
   matrix measured only 0.99697x geometrically: text fell to 0.98386x and JSON
   to 0.99694x. The generic symbol-based emitter remains.
+  Replacing all-compressed sequence field emission's per-field capacity checks
+  with one exact upfront bound was rejected. Its dedicated borrowed/by-value
+  oracle covered both 450- and 512-sequence plans, exact fields, one-short
+  `OutputTooSmall`, and no partial mutation; all 599 Zstd tests and the fast
+  gate passed. Disassembly confirmed that roughly 2,700--3,069 loop-local bound
+  branches collapsed to one entry check, but the independent 15-pair fast
+  matrix measured only 0.99594x geometrically: text fell to 0.98242x, binary
+  was 0.99839x, and JSON improved only 1.00292x. The compact checked appends
+  remain because they produce the better complete-encoder layout.
