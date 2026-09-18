@@ -14713,6 +14713,15 @@ reuse, so production keeps the simpler independently owned plans.
   matrix nevertheless measured 0.99342x geometrically: text was 0.98517x and
   binary/JSON/tradeoff were 0.99279x/0.99474x/0.99297x, each with only 1/5
   wins. Fusing the packed store with histogram collection remains faster.
+  Fusing each packed canonical-code store into the existing reverse FSE
+  transition pass was rejected as a separate attempt to avoid a second code
+  scan. Production histogram collection stopped writing the plan, the direct
+  builder read caller codes and wrote each complete code/value/width `u16` once,
+  and its test plan was pre-poisoned to prove every code was overwritten. The
+  scan/inverse/direct transition oracles and all 599 Zstd tests stayed exact,
+  but the five-pair fast matrix was 0.99558x geometrically; binary/JSON/tradeoff
+  medians were 0.99589x/0.99354x/0.99218x. The original fused histogram store
+  plus transition update remains.
   Reusing winner-only's exact payload length to append the reverse sequence
   bitstream directly into the payload was rejected. Unlike the earlier reserve
   experiment, this path added no field-count scan: it derived bitstream bytes
