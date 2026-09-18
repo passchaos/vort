@@ -14578,3 +14578,22 @@ reuse, so production keeps the simpler independently owned plans.
   source passes all 599 Zstd tests, the five-row fast gate, 100-row stage gate,
   364-case native probe, 276-case libzstd 1.5.7 compatibility matrix, and the
   2,044-sequence/64-repeat-block probe.
+  Small compressed-FSE planning now follows upstream `FSE_encodeSymbol`
+  directly in production: it serializes the low `nbBitsOut` bits of the current
+  encoder state and advances through the compression table without first
+  building and then indexing an equivalent decode table. Test builds retain the
+  old checked inverse path plus the independent scan builder; more than 250
+  generated table shapes compare the new direct initial state and every used
+  transition value/width against both oracles. The ReleaseFast benchmark binary
+  shrinks from 1,607,048 to 1,606,920 bytes. After terminating two orphaned
+  same-repository Zig builds and verifying the host was idle, 15 interleaved
+  explicit-fast pairs preserve every input hash, Vort/reference size, and
+  checksum while improving binary/JSON/tradeoff/multiblock/text medians by
+  1.02011x/1.07119x/1.02553x/0.99990x/1.01127x, a 1.02532x row-median
+  geometric mean. A separate clean-host 15-pair default 20-row matrix improves
+  1.00735x geometrically with a 0.99377x floor. A post-change 100,000-encode
+  profile reduces transition construction from 9.19% to 5.75% of sampled leaf
+  time and removes `buildFseTable` from the visible top-level hotspots. The
+  final source passes all 599 Zstd tests, the five-row fast gate, 100-row stage
+  gate, 364-case native probe, 276-case libzstd 1.5.7 compatibility matrix, and
+  the 2,044-sequence/64-repeat-block probe.
