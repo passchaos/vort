@@ -14593,3 +14593,10 @@ reuse, so production keeps the simpler independently owned plans.
   0.98843x with 0/15 wins, and the executable grew 112 bytes. The return-value
   planner remains until a broader ownership redesign can avoid perturbing the
   surrounding entropy-planner layout.
+  Shrinking only `buildFseCompressionTable`'s production symbol-spread scratch
+  from 512 bytes to the current writers' 128-state maximum was rejected too.
+  The existing table and transition oracles remained exact and the executable
+  size was unchanged, but a clean-host five-pair explicit-fast screen measured
+  0.99180x geometrically: JSON/tradeoff fell to 0.98494x/0.98643x and tradeoff
+  lost all five pairs. The shared 512-byte local retains the better generated
+  layout; test builds continue to exercise tableLog 5--9.
