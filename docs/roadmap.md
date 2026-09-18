@@ -14578,3 +14578,18 @@ reuse, so production keeps the simpler independently owned plans.
   source passes all 599 Zstd tests, the five-row fast gate, 100-row stage gate,
   364-case native probe, 276-case libzstd 1.5.7 compatibility matrix, and the
   2,044-sequence/64-repeat-block probe.
+  Two follow-up compressed-plan layout experiments were rejected. Specializing
+  the generic 512-state FSE compression table to the small sequence planner's
+  actual 128-state maximum reduced `planCompressedSequenceCodes`' stack frame
+  from `0xbf0` to `0x8f0`, but added a second generic builder instance and 144
+  bytes to the ReleaseFast executable. After exact FSE-table and transition
+  oracles passed, a clean-host 15-pair explicit-fast matrix measured only
+  1.00160x geometrically; JSON/tradeoff medians were 0.99934x/0.99914x, so the
+  unified 512-state private table remains. Building no-previous-table LL/ML
+  compressed plans directly into their alternatives slot removed the visible
+  1,112-byte return copy, and the alternatives/transition oracles plus every
+  benchmark wire field remained exact. Its promising five-pair screen did not
+  survive the clean-host 15-pair run: the matrix fell to 0.99572x, tradeoff was
+  0.98843x with 0/15 wins, and the executable grew 112 bytes. The return-value
+  planner remains until a broader ownership redesign can avoid perturbing the
+  surrounding entropy-planner layout.
