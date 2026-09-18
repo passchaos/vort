@@ -14634,3 +14634,12 @@ reuse, so production keeps the simpler independently owned plans.
   confirmed a 0.99342x median, 0.99213x geometric mean, and only 5/31 wins.
   Production therefore retains the checked direct builder; removing apparently
   redundant branches perturbs this hot loop enough to cause a stable regression.
+  Reserving the complete reverse sequence bitstream before emission was rejected
+  as well. The candidate first validated and counted every read-order field, then
+  used capacity-assuming byte appends; its copied-field oracle stayed exact, all
+  599 Zstd tests and the fast gate passed, and the measured greedy fallback
+  removed three allocations plus 997 requested bytes. Against frozen independent
+  binaries, however, the five-pair explicit-fast screen measured only 0.99220x
+  geometrically: JSON fell to 0.97364x with 0/5 wins, tradeoff to 0.98771x, and
+  multiblock to 0.99173x. The extra validation/count pass costs more than the
+  removed per-byte capacity checks, so the single-pass checked writer remains.
