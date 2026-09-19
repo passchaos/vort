@@ -1,4 +1,12 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
+const mapped_build_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_zz_fse_mapped",
+    .macho => "__TEXT,__vort_zstd_zz",
+    .coff => ".text$zz_vort_zstd_fse_mapped",
+    else => ".text",
+};
 
 pub const Error = error{CorruptFrame};
 
@@ -81,6 +89,77 @@ pub noinline fn build(values: []const u16, entries: []Entry) Error!void {
     }
 }
 
+/// Build the final sequence-symbol table directly. Only one byte per spread
+/// state is retained until the ascending state pass assigns transitions; this
+/// avoids materializing an intermediate Entry table and converting it later.
+pub noinline fn buildMapped(
+    values: []const u16,
+    entries: anytype,
+    bases: []const usize,
+    additional_bits: []const u8,
+) linksection(mapped_build_text_section) Error!void {
+    if (entries.len == 0 or !std.math.isPowerOfTwo(entries.len)) return error.CorruptFrame;
+    if (entries.len > 512 or values.len > 256 or values.len > bases.len or values.len > additional_bits.len)
+        return error.CorruptFrame;
+
+    var normalized_total: usize = 0;
+    var low_probability_count: usize = 0;
+    var symbol_next: [256]u16 = undefined;
+    @memset(symbol_next[0..values.len], 0);
+    for (values, 0..) |value, symbol| {
+        if (value == 0) {
+            normalized_total += 1;
+            low_probability_count += 1;
+        } else if (value > 1) {
+            normalized_total += value - 1;
+            symbol_next[symbol] = value - 1;
+        }
+    }
+    if (normalized_total != entries.len) return error.CorruptFrame;
+
+    const table_size: u16 = @intCast(entries.len);
+    const accuracy_log = std.math.log2_int(u16, table_size);
+    const spread_step = (entries.len >> 1) + (entries.len >> 3) + 3;
+    const normal_end = entries.len - low_probability_count;
+    var symbols: [512]u8 = undefined;
+
+    var low_index: usize = 0;
+    for (values, 0..) |value, symbol| {
+        if (value != 0) continue;
+        entries[entries.len - 1 - low_index] = .{
+            .base = @intCast(bases[symbol]),
+            .additional_bits = additional_bits[symbol],
+            .next_state = 0,
+            .state_bits = accuracy_log,
+        };
+        low_index += 1;
+    }
+
+    var position: usize = 0;
+    for (values, 0..) |value, symbol| {
+        if (value <= 1) continue;
+        for (0..value - 1) |_| {
+            symbols[position] = @intCast(symbol);
+            position = (position + spread_step) & (entries.len - 1);
+            while (position >= normal_end) position = (position + spread_step) & (entries.len - 1);
+        }
+    }
+    if (position != 0) return error.CorruptFrame;
+
+    for (entries[0..normal_end], symbols[0..normal_end]) |*entry, symbol| {
+        const next_state = symbol_next[symbol];
+        if (next_state == 0) return error.CorruptFrame;
+        symbol_next[symbol] += 1;
+        const state_bits = accuracy_log - std.math.log2_int(u16, next_state);
+        entry.* = .{
+            .base = @intCast(bases[symbol]),
+            .additional_bits = additional_bits[symbol],
+            .next_state = @intCast((@as(u32, next_state) << @intCast(state_bits)) - table_size),
+            .state_bits = state_bits,
+        };
+    }
+}
+
 fn buildSortedReference(values: []const u16, entries: []Entry) Error!void {
     const total_probability: u16 = @intCast(entries.len);
     const accuracy_log = std.math.log2_int(u16, total_probability);
@@ -152,4 +231,37 @@ test "Zstd linear FSE builder rejects invalid normalized totals" {
     var entries: [32]Entry = undefined;
     try std.testing.expectError(error.CorruptFrame, build(&.{ 17, 9 }, &entries));
     try std.testing.expectError(error.CorruptFrame, build(&.{2}, entries[0..31]));
+}
+
+fn expectMappedMatches(comptime table_size: usize, values: []const u16) !void {
+    const Mapped = struct {
+        base: u32,
+        additional_bits: u8,
+        next_state: u16,
+        state_bits: u8,
+    };
+    var raw: [table_size]Entry = undefined;
+    var mapped: [table_size]Mapped = undefined;
+    var bases: [256]usize = undefined;
+    var bits: [256]u8 = undefined;
+    for (&bases, &bits, 0..) |*base, *bit_count, symbol| {
+        base.* = symbol * 37;
+        bit_count.* = @intCast(symbol % 9);
+    }
+    try build(values, &raw);
+    try buildMapped(values, &mapped, bases[0..values.len], bits[0..values.len]);
+    for (raw, mapped) |entry, actual| {
+        try std.testing.expectEqual(@as(u32, @intCast(bases[entry.symbol])), actual.base);
+        try std.testing.expectEqual(bits[entry.symbol], actual.additional_bits);
+        try std.testing.expectEqual(entry.baseline, actual.next_state);
+        try std.testing.expectEqual(entry.bits, actual.state_bits);
+    }
+}
+
+test "Zstd mapped FSE builder matches entry conversion" {
+    try expectMappedMatches(32, &.{ 17, 9, 5, 3, 2, 0 });
+    try expectMappedMatches(32, &.{ 14, 8, 6, 5, 3, 0 });
+    try expectMappedMatches(32, &.{ 21, 8, 4, 0, 0, 1 });
+    try expectMappedMatches(256, &.{ 129, 65, 33, 17, 9, 5, 0, 0, 0, 0 });
+    try expectMappedMatches(512, &.{ 256, 129, 65, 33, 17, 9, 5, 3, 2, 0, 0 });
 }

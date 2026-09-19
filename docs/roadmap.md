@@ -15052,3 +15052,22 @@ reuse, so production keeps the simpler independently owned plans.
   its tiny-frame short outliers recover over 61 one-million-decode pairs to
   `1.0031x` caller-owned and `0.9956x` allocating medians. Input hashes, encoded
   sizes, output checksums, and hot large-decoder symbol addresses remain exact.
+  One-shot compressed sequence-table construction now decodes normalized counts
+  once and builds final `SequenceSymbol` entries directly in
+  `zstd/sequence/fse_builder.zig`, replacing the former 512-entry intermediate
+  FSE table and subsequent conversion pass. The existing generic builder remains
+  the independent oracle; mapped-builder tests cover 32-, 256-, and 512-state
+  tables. The established large four-stream Huffman kernels are explicitly
+  cache-line aligned because adding an out-of-line builder otherwise perturbed
+  their unchanged AArch64 code layout. Against frozen `63d38a7d`/`aa65ebc3`
+  ReleaseFast binaries, 15 alternating 20,000-decode `large_json` pairs improve
+  by `1.0271x` median / `1.0238x` geometric throughput with 14/15 wins; a second
+  long control with the final `0dc465f5` aligned candidate measures `1.0363x`
+  with 15/15 wins. The final 15-pair
+  five-row one-shot matrix improves `1.0147x` across row medians, with
+  `large_json` at `1.0312x`; long reusable controls remain near-neutral or
+  positive at `0.9969x`--`1.0158x`. A 15-run same-process comparison measures
+  `large_json` at 4,762.21 MiB/s versus 6,379.79 MiB/s for libzstd 1.5.7
+  (`0.7457x` median), so the remaining gap is explicit. All 237 native-frame
+  cases, 276 libzstd compatibility cases, 26 CLI differential cases, 9,900
+  upstream decodecorpus frames, 1,617 tests, and 94 `check` steps pass.

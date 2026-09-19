@@ -1053,12 +1053,29 @@ Recommended next comparison steps:
   the tiny control recovers to `1.0031x`/`0.9956x` over 61 long pairs. The
   remaining small-frame cost is now primarily Huffman tree and lookup
   construction rather than the eliminated by-value tree handoff.
+  Compressed sequence-table parsing now sends normalized counts directly to a
+  mapped FSE builder in `zstd/sequence/fse_builder.zig`. It writes final
+  base/extra-bit/next-state/state-bit entries in one build instead of first
+  materializing a 512-entry generic table and then converting every active
+  entry. The generic builder remains as the oracle, with exact comparisons at
+  32, 256, and 512 states. Explicit 64-byte alignment stabilizes the otherwise
+  unchanged large four-stream Huffman kernels against unrelated code-layout
+  movement. Frozen `63d38a7d`/`aa65ebc3` binaries improve one-shot
+  `large_json` by `1.0271x` median over 15 alternating 20,000-decode pairs
+  (14/15 wins); an independent long control with final `0dc465f5` reaches
+  `1.0363x` with 15/15 wins. The final five-row one-shot row-median geomean is `1.0147x`, while
+  long reusable controls range from `0.9969x` to `1.0158x`. Current same-process
+  absolute throughput remains 4,762.21 MiB/s versus 6,379.79 MiB/s for libzstd
+  1.5.7, or `0.7457x`; this is a table-build improvement, not decoder parity.
+  The 237-case native probe, 276-case compatibility matrix, 26-case CLI
+  differential, all 9,900 upstream decodecorpus frames, 1,617 tests, and all 94
+  build-check steps pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
    mixed-FSE `numbered_json` row is about `0.766x` libzstd and the multi-block
-   all-FSE/Huffman `large_json` row is about `0.71x`; prioritize tree/lookup
-   setup and sequence execution without perturbing already-leading raw/RLE and
-   single-sequence paths.
+   all-FSE/Huffman `large_json` row is about `0.746x` one-shot (`0.831x` in a
+   warmed reusable sample); prioritize tree/lookup setup and sequence execution
+   without perturbing already-leading raw/RLE and single-sequence paths.
 2. Add library-level range-latency rows for the public seekability tiers
    (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because even the
    ReleaseFast tier sweep still measures through the CLI bench surface.

@@ -7744,7 +7744,7 @@ fn copyHuffmanLiteralsFromSection(
 noinline fn decodeLargeFourStreamHuffman(
     section: LiteralOnlySection,
     dest: []u8,
-) linksection(huffman_only_decode_text_section) Error!bool {
+) align(64) linksection(huffman_only_decode_text_section) Error!bool {
     const huffman_tree = section.huffman_tree orelse return false;
     var lookup: HuffmanLiteralLookup = undefined;
     if (!lookup.buildComplete(&huffman_tree)) return false;
@@ -7824,7 +7824,7 @@ noinline fn decodeFourStreamHuffmanReservoir(
     width: u4,
     lookup: *const HuffmanLiteralLookup,
     dest: []u8,
-) linksection(huffman_only_decode_text_section) void {
+) align(64) linksection(huffman_only_decode_text_section) void {
     var output_positions = positions.*;
     var reservoirs = [4]huffman_reservoir.Reservoir{
         huffman_reservoir.Reservoir.init(readers[0]) orelse unreachable,
@@ -8883,29 +8883,24 @@ fn readFseSequenceTableInto(
     expected_symbol_count: usize,
     max_accuracy_log: u4,
 ) Error!void {
-    // Parse directly into the owning mode spec. Returning this 4 KiB table
-    // from each LL/OF/ML branch makes the generated parser copy it once before
-    // assembling the final spec, even though every reachable entry is freshly
-    // written below.
+    // Parse normalized counts once, then build final SequenceSymbol entries
+    // directly. This avoids the former 512-entry intermediate table plus a
+    // second full conversion pass for every compressed LL/OF/ML table.
     if (offset.* >= block.len) return error.TruncatedFrame;
     var reader: ForwardBitReader = .{ .bytes = block[offset.*..] };
-    var raw_entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
-    const table_len = try decodeFseTable(&reader, expected_symbol_count, max_accuracy_log, &raw_entries);
+    var values: [256]u16 = undefined;
+    const decoded = try decodeFseNormalizedCounts(&reader, expected_symbol_count, max_accuracy_log, &values);
     offset.* = std.math.add(usize, offset.*, reader.byteIndex()) catch return error.IntegerOverflow;
     if (offset.* > block.len) return error.TruncatedFrame;
 
-    table.len = table_len;
-    table.accuracy_log = @intCast(std.math.log2_int(usize, table_len));
-    for (raw_entries[0..table_len], 0..) |entry, i| {
-        const code = entry.symbol;
-        if (code >= bases.len or code >= bits.len) return error.CorruptFrame;
-        table.entries[i] = .{
-            .base = @intCast(bases[code]),
-            .additional_bits = bits[code],
-            .next_state = @intCast(entry.baseline),
-            .state_bits = entry.bits,
-        };
-    }
+    table.len = decoded.table_len;
+    table.accuracy_log = @intCast(std.math.log2_int(usize, decoded.table_len));
+    try sequence_fse_builder.buildMapped(
+        values[0..decoded.value_count],
+        table.entries[0..decoded.table_len],
+        bases,
+        bits,
+    );
 }
 
 const FseTableEntry = sequence_fse_builder.Entry;
@@ -8916,11 +8911,27 @@ fn decodeFseTable(
     max_accuracy_log: u4,
     entries: *[max_sequence_fse_table_size]FseTableEntry,
 ) Error!usize {
+    var values: [256]u16 = undefined;
+    const decoded = try decodeFseNormalizedCounts(reader, expected_symbol_count, max_accuracy_log, &values);
+    try buildFseTable(values[0..decoded.value_count], entries[0..decoded.table_len]);
+    return decoded.table_len;
+}
+
+const DecodedFseNormalizedCounts = struct {
+    value_count: usize,
+    table_len: usize,
+};
+
+fn decodeFseNormalizedCounts(
+    reader: *ForwardBitReader,
+    expected_symbol_count: usize,
+    max_accuracy_log: u4,
+    values: *[256]u16,
+) Error!DecodedFseNormalizedCounts {
     const accuracy_log_biased = try reader.readBits(u4, 4);
     if (accuracy_log_biased > max_accuracy_log -| 5) return error.CorruptFrame;
     const accuracy_log = accuracy_log_biased + 5;
 
-    var values: [256]u16 = undefined;
     var value_count: usize = 0;
 
     const total_probability = @as(u16, 1) << accuracy_log;
@@ -8962,8 +8973,7 @@ fn decodeFseTable(
     if (accumulated_probability != total_probability) return error.CorruptFrame;
     if (value_count > expected_symbol_count) return error.CorruptFrame;
     const table_len: usize = @as(usize, 1) << @intCast(accuracy_log);
-    try buildFseTable(values[0..value_count], entries[0..table_len]);
-    return table_len;
+    return .{ .value_count = value_count, .table_len = table_len };
 }
 
 fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {
