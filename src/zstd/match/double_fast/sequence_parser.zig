@@ -1,6 +1,14 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const lz77 = @import("../../../lz77.zig");
 const sequence_plan = @import("sequence_plan.zig");
+
+const text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_fast_records",
+    .macho => "__TEXT,__vort_zstd_rec",
+    .coff => ".text$vort_zstd_fast_records",
+    else => ".text",
+};
 
 const short_hash_bits = 8;
 const long_hash_bits = 11;
@@ -136,7 +144,7 @@ pub fn planReuse(
     return stats;
 }
 
-fn consumeImmediateReps(
+noinline fn consumeImmediateReps(
     records: *std.ArrayList(sequence_plan.Record),
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -147,7 +155,7 @@ fn consumeImmediateReps(
     reps: *[3]usize,
     anchor: *usize,
     position: *usize,
-) !void {
+) linksection(text_section) !void {
     while (position.* + 4 <= input.len) {
         const immediate = matchAtDistance(input, position.*, reps[1], options);
         if (immediate.length == 0) return;
@@ -158,17 +166,17 @@ fn consumeImmediateReps(
     }
 }
 
-fn storeMatch(
+noinline fn storeMatch(
     records: *std.ArrayList(sequence_plan.Record),
     allocator: std.mem.Allocator,
     stats: *lz77.PlanStats,
     reps: *[3]usize,
     anchor: usize,
     match: Match,
-) !void {
+) linksection(text_section) !void {
     std.debug.assert(match.position >= anchor);
     const literal_len = match.position - anchor;
-    try sequence_plan.append(
+    try sequence_plan.appendTrusted(
         records,
         allocator,
         literal_len,

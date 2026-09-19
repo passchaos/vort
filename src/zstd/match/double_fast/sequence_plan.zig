@@ -39,6 +39,24 @@ pub fn append(
     if (literal_len > literal_len_mask or distance == 0 or distance > distance_mask or
         match_len < 4 or match_len > match_len_mask or match_end == 0 or
         match_end - 1 > match_end_mask) return error.InvalidBlockPlan;
+    try appendTrusted(records, allocator, literal_len, distance, match_len, match_end);
+}
+
+/// Append fields already bounded by the double-fast parser's block, window,
+/// and match-length invariants. Debug builds retain the proof obligations; the
+/// ReleaseFast parser avoids rechecking them for every match.
+pub fn appendTrusted(
+    records: *std.ArrayList(Record),
+    allocator: std.mem.Allocator,
+    literal_len: usize,
+    distance: usize,
+    match_len: usize,
+    match_end: usize,
+) !void {
+    std.debug.assert(literal_len <= literal_len_mask);
+    std.debug.assert(distance != 0 and distance <= distance_mask);
+    std.debug.assert(match_len >= 4 and match_len <= match_len_mask);
+    std.debug.assert(match_end != 0 and match_end - 1 <= match_end_mask);
     const record = @as(Record, @intCast(literal_len)) |
         (@as(Record, @intCast(distance)) << distance_shift) |
         (@as(Record, @intCast(match_len)) << match_len_shift) |
@@ -143,4 +161,21 @@ test "compact sequence records preserve fields and reject malformed plans" {
     malformed ^= @as(Record, 1) << match_end_shift;
     try std.testing.expectEqual(@as(?Summary, null), expand(&.{ records.items[0], malformed }, 281, &literal_lens, &offsets, &match_lens, &literal_ends));
     try std.testing.expect(!try materializeTokens(&tokens, std.testing.allocator, input, &.{ records.items[0], malformed }));
+}
+
+test "trusted compact sequence append matches checked packing boundaries" {
+    const cases = [_]Fields{
+        .{ .literal_len = 0, .distance = 1, .match_len = 4, .match_end = 4 },
+        .{ .literal_len = literal_len_mask, .distance = distance_mask, .match_len = match_len_mask, .match_end = match_end_mask + 1 },
+        .{ .literal_len = 65_535, .distance = 32_768, .match_len = 258, .match_end = 131_072 },
+    };
+    var checked: std.ArrayList(Record) = .empty;
+    defer checked.deinit(std.testing.allocator);
+    var trusted: std.ArrayList(Record) = .empty;
+    defer trusted.deinit(std.testing.allocator);
+    for (cases) |fields| {
+        try append(&checked, std.testing.allocator, fields.literal_len, fields.distance, fields.match_len, fields.match_end);
+        try appendTrusted(&trusted, std.testing.allocator, fields.literal_len, fields.distance, fields.match_len, fields.match_end);
+    }
+    try std.testing.expectEqualSlices(Record, checked.items, trusted.items);
 }

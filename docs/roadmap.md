@@ -14921,3 +14921,20 @@ reuse, so production keeps the simpler independently owned plans.
   retained source passes the fast gate, 2,044-sequence probe, 237-case frame
   probe, 26-case CLI differential, 276-case libzstd matrix, all 1,613 tests, and
   all 94 `check` steps.
+  Compact record packing now keeps its checked public-internal entry for
+  malformed callers while the wide parser uses a trusted entry whose field
+  bounds follow from the 128 KiB block limit, 32 KiB window, and 4--258-byte
+  match contract. ReleaseSafe retains assertions for every bound; ReleaseFast
+  removes the four repeated range branches from each match. A boundary oracle
+  compares checked and trusted packing at minimum, maximum, and production
+  values. Assembly shrinks `sequence_parser.storeMatch`'s AArch64 frame from 96
+  to 80 bytes. The parser's out-of-line store/immediate-rep helpers share the
+  record-only text section so their size change cannot displace ordinary
+  small-block helpers. Against frozen `2de6cc85` and final `0213d1ea` binaries,
+  21 alternating 5,000-encode multiblock pairs measure `1.0022x` median /
+  `1.0046x` geometric throughput with 14/21 wins and exact wire. The 15-pair
+  fast matrix is essentially neutral at `0.9997x` across row medians; its noisy
+  JSON row recovers to `1.0002x` over 31 alternating 10,000-encode pairs. The
+  default 20-row matrix is `1.0044x`; long controls recover its three sub-0.99
+  rows to `0.9963x`--`1.0033x`. All 276 compatibility cases, 1,614 tests, and
+  94 `check` steps pass.

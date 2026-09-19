@@ -981,6 +981,13 @@ Recommended next comparison steps:
   JSON/text level 1 at `0.9923x`/`1.0009x`. Token/record plans, compressed
   sizes, checksums, all 276 libzstd compatibility cases, 1,613 tests, and 94
   build-check steps remain exact.
+  Record packing now separates checked and parser-trusted entry points. The
+  latter retains ReleaseSafe assertions but removes redundant ReleaseFast field
+  checks already implied by the wide parser contract; boundary tests prove
+  byte-identical packing. Record-only helpers stay in the dedicated text section.
+  The target control improves `1.0022x` median / `1.0046x` geometrically over
+  21 long pairs, while the fast matrix remains neutral overall and all 1,614
+  tests pass.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-
