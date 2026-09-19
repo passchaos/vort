@@ -19427,6 +19427,7 @@ const LargeSequenceCombinedPlanCandidate = struct {
 const LargeSequenceTablePlanAlternatives = struct {
     items: [4]LargeSequenceTableEmitPlan = undefined,
     len: usize = 0,
+    value_bit_count: usize = 0,
 
     fn add(self: *LargeSequenceTablePlanAlternatives, plan: LargeSequenceTableEmitPlan) Error!void {
         if (self.len >= self.items.len) return error.CorruptFrame;
@@ -19461,6 +19462,7 @@ fn largeSequenceTablePlanAlternatives(
         };
         if (code > max_fse_compression_symbol) return alternatives;
         compressed_buffers.codes[i] = code;
+        alternatives.value_bit_count += bits[code];
     }
     if (rleSequenceCode(compressed_buffers.codes)) |code|
         try alternatives.add(.{ .rle = code });
@@ -19484,6 +19486,8 @@ fn largeSequenceTablePlanAlternatives(
         try alternatives.add(.{ .compressed = plan });
     if (previous) |source| if (try planLargeRepeatSequenceCodes(compressed_buffers.codes, kind, source, repeat_states, repeat_viable_masks)) |plan|
         try alternatives.add(.{ .repeat = plan });
+    if (comptime builtin.is_test)
+        std.debug.assert(alternatives.value_bit_count == (large_fast_plan.valueBits(compressed_buffers.codes, bits) catch unreachable));
     return alternatives;
 }
 
@@ -19564,8 +19568,11 @@ fn largeOffsetSequenceTablePlanAlternatives(
     if (literal_lens.len != offsets.len) return error.CorruptFrame;
     var alternatives: LargeSequenceTablePlanAlternatives = .{};
     var repeated_offsets = initial_offsets;
-    for (offsets, 0..) |offset, i|
-        compressed_buffers.codes[i] = try chooseOffsetSequenceCode(literal_lens[i], offset, &repeated_offsets);
+    for (offsets, 0..) |offset, i| {
+        const code = try chooseOffsetSequenceCode(literal_lens[i], offset, &repeated_offsets);
+        compressed_buffers.codes[i] = code;
+        alternatives.value_bit_count += of_bits[code];
+    }
     if (rleSequenceCode(compressed_buffers.codes)) |code|
         try alternatives.add(.{ .rle = code });
     const offset_viable_bytes = std.mem.sliceAsBytes(viable_masks);
@@ -19581,6 +19588,8 @@ fn largeOffsetSequenceTablePlanAlternatives(
         try alternatives.add(.{ .compressed = plan });
     if (previous) |source| if (try planLargeRepeatSequenceCodes(compressed_buffers.codes, .offset, source, repeat_states, repeat_viable_masks)) |plan|
         try alternatives.add(.{ .repeat = plan });
+    if (comptime builtin.is_test)
+        std.debug.assert(alternatives.value_bit_count == (large_fast_plan.valueBits(compressed_buffers.codes, &of_bits) catch unreachable));
     return alternatives;
 }
 
@@ -19649,9 +19658,9 @@ noinline fn bestLargeSequenceTablePlanFast(
         len <= max_native_sequence_count or len > max_large_native_sequence_count) return error.CorruptFrame;
     if (literal_alternatives.len == 0 or offset_alternatives.len == 0 or match_alternatives.len == 0) return null;
 
-    const literal_value_bits = try large_fast_plan.valueBits(literal_codes, &ll_bits);
-    const offset_value_bits = try large_fast_plan.valueBits(offset_codes, &of_bits);
-    const match_value_bits = try large_fast_plan.valueBits(match_codes, &ml_bits);
+    const literal_value_bits = literal_alternatives.value_bit_count;
+    const offset_value_bits = offset_alternatives.value_bit_count;
+    const match_value_bits = match_alternatives.value_bit_count;
     var literal_costs: [4]large_fast_plan.Cost = undefined;
     var offset_costs: [4]large_fast_plan.Cost = undefined;
     var match_costs: [4]large_fast_plan.Cost = undefined;

@@ -1004,6 +1004,13 @@ Recommended next comparison steps:
   `1.0183x` median with 18/21 wins; the fast matrix is `1.0011x` overall with a
   `0.9961x` floor. Four noisy default rows recover to at least `0.9944x` in
   31-pair long controls, with exact wire and compatibility results.
+  Canonical code construction now also accumulates LL/OF/ML value-bit totals,
+  allowing the fast large-plan selector to skip three complete code-array
+  scans. Test builds independently recompute the totals with the old helper.
+  The target improves `1.0369x` median over 21 long pairs, the five-row fast
+  matrix improves `1.0072x`, and the default matrix improves `1.0102x`; the
+  only short outlier recovers to `0.9987x` in a 31-pair control. Wire and all
+  compatibility gates remain unchanged.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

@@ -14970,3 +14970,19 @@ reuse, so production keeps the simpler independently owned plans.
   20-row matrix is `0.9979x`; 31-pair, 1,000-iteration controls recover its four
   sub-0.99 rows to `0.9944x`--`1.0018x`. All hashes, Vort/reference sizes, and
   checksums remain exact, and the full 1,615-test and 94-step build gates pass.
+  Large LL/OF/ML alternative construction now accumulates canonical value-bit
+  totals while it creates the already-required code arrays. The fast selector
+  consumes those totals directly, removing three later full scans of as many as
+  43,690 codes without changing the scalar selector. Test builds independently
+  recompute each total through `large_fast_plan.valueBits` before returning an
+  alternative set, so fused accounting remains checked across the existing
+  513/1,024/2,047-sequence LL/OF/ML planner cases. The ReleaseFast benchmark no
+  longer contains the standalone `valueBits` symbol. Against frozen `7273f5f3`
+  and final `2637d70d` binaries, 21 alternating 5,000-encode multiblock pairs
+  improve by `1.0369x` median / `1.0320x` geometric throughput with 18/21 wins.
+  The 15-pair fast matrix reaches `1.0072x` across row medians with a `0.9964x`
+  floor and multiblock at `1.0292x`; the default 20-row matrix improves
+  `1.0102x`. Its lone sub-0.99 row, multiblock level 3, recovers to `0.9987x`
+  median / `1.0008x` geometric throughput over 31 longer pairs. All wire sizes,
+  hashes, checksums, 276 compatibility cases, 1,615 tests, and 94 `check` steps
+  remain exact.
