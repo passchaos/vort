@@ -1024,10 +1024,26 @@ Recommended next comparison steps:
   recover to `0.9998x`--`1.0219x` median in 31-pair controls. All
   276 libzstd cases, 1,616 tests, and 94 build-check steps pass with identical
   wire.
-
-1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
-   caller-owned decode rows against runtime libzstd. Optimize the locked raw-
-   literal/single-predefined-sequence shape before broadening levels/corpora.
+  The small mixed-FSE decoder now routes its Huffman literal runs through the
+  established full-width lookup loop. This remains limited to the existing
+  single-block LL=Predefined/OF=Compressed/ML=Predefined specialization, so the
+  generic decoder and large FSE/Huffman loops keep their prior shape. The fixed
+  frame oracle covers exact output, partial output, untouched suffix bytes, and
+  every bit mutation in the OF table and sequence payload; a test-only hit count
+  proves that the optimized helper consumes all 102 regenerated literals.
+  Twenty-one alternating 100,000-decode pairs improve the 1,290-byte
+  `numbered_json` row by `1.0287x` median with 18/21 wins. A separate
+  same-process libzstd 1.5.7 comparison improves Vort by `1.0357x` median and
+  moves the absolute ratio from `0.6902x` to `0.7146x`. Fifteen-pair one-shot
+  and warmed-reusable five-row matrices have `1.0116x`/`1.0071x` row-median
+  geometric means and `0.9975x`/`1.0013x` floors. The remaining target gap is
+  dominated by rebuilding the Huffman tree and 2,048-entry lookup for every
+  one-shot decode; this is progress, not libzstd parity.
+1. Keep closing the two remaining measured general decode gaps: the small
+   mixed-FSE `numbered_json` row is about `0.715x` libzstd and the multi-block
+   all-FSE/Huffman `large_json` row is about `0.71x`; prioritize tree/lookup
+   setup and sequence execution without perturbing already-leading raw/RLE and
+   single-sequence paths.
 2. Add library-level range-latency rows for the public seekability tiers
    (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because even the
    ReleaseFast tier sweep still measures through the CLI bench surface.

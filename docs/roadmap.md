@@ -15007,3 +15007,29 @@ reuse, so production keeps the simpler independently owned plans.
   recover its five sub-0.99 rows to `0.9998x`--`1.0219x` median. All hashes,
   sizes, checksums, 276 compatibility
   cases, 1,616 tests, and 94 `check` steps remain exact.
+  The small LL=Predefined/OF=Compressed/ML=Predefined decoder now uses the
+  existing full-width Huffman lookup loop for each sequence literal run and the
+  terminal literals. The change remains inside the established small mixed-FSE
+  specialization; generic, raw-literal, all-FSE, and sequence-free paths retain
+  their prior implementation. The fixed libzstd-frame oracle compares the
+  specialized and generic decoders across exact output, partial
+  `OutputTooSmall` progress, untouched suffix bytes, and every single-bit
+  mutation of the OF table and sequence payload. A test-only counter also proves
+  that all 102 regenerated literals take the intended helper. Against frozen
+  independent `c7ad7ce1`/`1a29c73f` pure-Vort binaries, 21 alternating
+  100,000-decode pairs improve the 1,290-byte `numbered_json` target by
+  `1.0287x` median with 18/21 wins. Fifteen-pair one-shot/reusable five-row
+  matrices reach `1.0116x`/`1.0071x` across row medians with
+  `0.9975x`/`1.0013x` floors. A separate same-process comparison with frozen
+  `2b423be3`/`76553dd5` binaries and libzstd 1.5.7 improves the target by
+  `1.0357x` median with 18/21 wins, moving Vort from `0.6902x` to `0.7146x`
+  median reference throughput. The 15-pair 13-row reference matrix is
+  `1.0074x` across row medians; its `0.9766x` short `large_text` outlier recovers
+  to `1.0183x` over 31 longer 10,000-decode pairs. All input hashes, encoded
+  sizes, and decoded checksums remain exact. This closes only part of the small
+  mixed-FSE gap: sampled Huffman tree/lookup construction remains the dominant
+  cost and the target is still slower than libzstd. Two adjacent encoder ideas
+  were measured and removed before this decode work: merging six wide byte-plane
+  allocations caused a stable `0.9699x` default JSON level-1 regression, while
+  a trusted 128-state FSE transition kernel measured only `0.9984x` on its target
+  over 21 long pairs.
