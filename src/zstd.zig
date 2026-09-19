@@ -25,6 +25,7 @@ const incremental_history_index = @import("zstd/incremental/encoder/history_inde
 const double_fast_match = @import("zstd/match/double_fast.zig");
 const double_fast_sequence_plan = @import("zstd/match/double_fast/sequence_plan.zig");
 const large_sequence_record_values = @import("zstd/sequence/large/record_values.zig");
+const large_state_handoff_test = if (builtin.is_test) @import("zstd/sequence/large/state_handoff_test.zig") else struct {};
 const single_beam_match = @import("zstd/match/single_beam.zig");
 const optimal_four_match = @import("zstd/match/optimal_four.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
@@ -170,6 +171,8 @@ var test_disable_fast_large_cached_planner = false;
 var test_fast_large_cached_planner_hits: usize = 0;
 var test_disable_fast_sequence_records = false;
 var test_fast_sequence_record_hits: usize = 0;
+var test_disable_fast_large_known_offsets_commit = false;
+var test_fast_large_known_offsets_commit_hits: usize = 0;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
 const frame_magic_u32: u32 = 0xfd2fb528;
@@ -12230,7 +12233,24 @@ fn emitFastCompressedBlockWithScratch(
         if (!builtin.is_test or !test_disable_fast_direct_match_commit) {
             if (comptime builtin.is_test) test_fast_direct_match_commit_hits += 1;
             state.previous_huffman_plan = null;
-            try appendSequenceCandidateAndCommit(allocator, out, candidate.items, last, &state.sequence_state);
+            const can_commit_known_offsets = !last and
+                match_ok and use_fast_large_planner and
+                dictionary == null and
+                state.sequence_state.previous_tables == null and
+                std.meta.eql(state.sequence_state.repeated_offsets, initial_repeated_offsets) and
+                (!builtin.is_test or !test_disable_fast_large_known_offsets_commit);
+            if (can_commit_known_offsets) {
+                if (comptime builtin.is_test) test_fast_large_known_offsets_commit_hits += 1;
+                try appendSequenceCandidateAndCommitKnownOffsets(
+                    allocator,
+                    out,
+                    candidate.items,
+                    &state.sequence_state,
+                    large_sequence_scratch.offset_extras.items[0..3].*,
+                );
+            } else {
+                try appendSequenceCandidateAndCommit(allocator, out, candidate.items, last, &state.sequence_state);
+            }
             return;
         }
         best.clearRetainingCapacity();
@@ -15307,8 +15327,6 @@ const LargeSequenceScratch = struct {
     literals_prefix: std.ArrayList(u8) = .empty,
     payload: std.ArrayList(u8) = .empty,
     sequence_bits: std.ArrayList(u8) = .empty,
-    // Keep this policy bit after the established scratch arrays so adding the
-    // fast-only path does not perturb their offsets in the ordinary encoder.
     direct_transitions: bool = false,
 
     fn deinit(self: *LargeSequenceScratch, allocator: std.mem.Allocator) void {
@@ -16158,6 +16176,10 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
     if (scratch.payload.items.len + 3 >= raw_block_len) return false;
     try emitBlockHeader(allocator, out, 2, scratch.payload.items.len, last);
     try out.appendSlice(allocator, scratch.payload.items);
+    // The encoded candidate no longer needs its per-sequence offset extras.
+    // Retain the final repcode ring in their first three slots for the
+    // fast-frame commit path without enlarging the shared scratch object.
+    scratch.offset_extras.items[0..3].* = repeated_offsets;
     return true;
 }
 
@@ -18433,6 +18455,39 @@ fn appendSequenceCandidateAndCommit(
         next.previous_tables = spec.tables();
         next.repeated_offsets = decode_state.repeated_offsets;
     }
+    try out.appendSlice(allocator, candidate);
+    state.* = next;
+}
+
+noinline fn appendSequenceCandidateAndCommitKnownOffsets(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    candidate: []const u8,
+    state: *SequenceEncoderState,
+    repeated_offsets: [3]usize,
+) linksection(fast_sequence_record_text_section) Error!void {
+    if (state.previous_tables != null or
+        !std.meta.eql(state.repeated_offsets, initial_repeated_offsets)) return error.CorruptFrame;
+    if (candidate.len < 3) return error.CorruptFrame;
+    const header = std.mem.readInt(u24, candidate[0..3], .little);
+    if (((header >> 1) & 0x3) != 2) return error.CorruptFrame;
+    const payload_len: usize = @intCast(header >> 3);
+    if (candidate.len != payload_len + 3) return error.CorruptFrame;
+
+    const payload = candidate[3..];
+    var next = state.*;
+    var parse_state: SequenceFrameState = .{ .previous_tables = next.previous_tables };
+    const section = try parseLiteralsSection(payload, &parse_state);
+    if (section.sequence_count == 0) return error.CorruptFrame;
+    var sequence_offset = section.sequence_payload_offset;
+    const spec = try resolveSequenceModeSpec(
+        try parseSequenceModeSpec(payload, &sequence_offset, section.sequence_count),
+        next.previous_tables,
+    );
+    _ = try ReverseBitReader.init(payload[spec.bitstream_offset..]);
+    next.previous_tables = spec.tables();
+    next.repeated_offsets = repeated_offsets;
+
     try out.appendSlice(allocator, candidate);
     state.* = next;
 }
@@ -35250,6 +35305,76 @@ test "zstd fast compressed large transition path preserves frame wire" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, direct.frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "zstd fast large known offsets commit matches decoded state" {
+    test_disable_fast_large_known_offsets_commit = false;
+    test_fast_large_known_offsets_commit_hits = 0;
+    defer {
+        test_disable_fast_large_known_offsets_commit = false;
+        test_fast_large_known_offsets_commit_hits = 0;
+    }
+
+    const payload = try std.testing.allocator.alloc(u8, 129 * 1024);
+    defer std.testing.allocator.free(payload);
+    large_state_handoff_test.fillMultiblockPayload(payload);
+    const first_block = payload[0..std.compress.zstd.block_size_max];
+
+    var large_scratch: LargeSequenceScratch = .{};
+    defer large_scratch.deinit(std.testing.allocator);
+    var block_scratch: NativeBlockEncodeScratch = .{};
+    defer block_scratch.deinit(std.testing.allocator);
+    const candidate = &block_scratch.candidate;
+    const result = try emitFastMatchCandidate(
+        std.testing.allocator,
+        candidate,
+        first_block,
+        false,
+        &large_scratch,
+        &block_scratch,
+    );
+    try std.testing.expect(result.match_ok);
+    try std.testing.expect(result.use_fast_large_planner);
+    var initial_state: SequenceEncoderState = .{};
+    try std.testing.expect(try prepareSequenceCandidateForFrameWithScratch(
+        std.testing.allocator,
+        candidate,
+        first_block,
+        false,
+        &initial_state,
+        &large_scratch,
+    ));
+
+    try large_state_handoff_test.expectCommitPathsEqual(
+        std.testing.allocator,
+        candidate.items,
+        initial_state,
+        large_scratch.offset_extras.items[0..3].*,
+        appendSequenceCandidateAndCommit,
+        appendSequenceCandidateAndCommitKnownOffsets,
+    );
+    try large_state_handoff_test.expectKnownCommitRejectsEstablishedState(
+        std.testing.allocator,
+        candidate.items,
+        initial_state,
+        large_scratch.offset_extras.items[0..3].*,
+        appendSequenceCandidateAndCommit,
+        appendSequenceCandidateAndCommitKnownOffsets,
+    );
+
+    const options: NativeFrameOptions = .{
+        .selection = .fast_compressed,
+        .content_checksum = true,
+    };
+    try large_state_handoff_test.expectFrameSwitchEqual(
+        std.testing.allocator,
+        payload,
+        options,
+        &test_disable_fast_large_known_offsets_commit,
+        &test_fast_large_known_offsets_commit_hits,
+        encodeNativeFrameWithOptionsAlloc,
+        decodeNativeFrameAlloc,
+    );
 }
 
 test "zstd native incremental decoder accepts split input and output" {

@@ -1011,6 +1011,19 @@ Recommended next comparison steps:
   matrix improves `1.0072x`, and the default matrix improves `1.0102x`; the
   only short outlier recovers to `0.9987x` in a 31-pair control. Wire and all
   compatibility gates remain unchanged.
+  Wide explicit-fast state commit now consumes the final repcode ring already
+  produced by the forward offset pass. On a winning non-terminal, dictionary-
+  free initial candidate it still parses and validates literals/mode/table
+  headers, but avoids replaying all 2,044 sequences solely to rediscover those
+  offsets. The handoff reuses expired large-sequence scratch and keeps append-
+  then-state transactional ordering. A focused byte/table/offset/OOM oracle is
+  isolated under `zstd/sequence/large/state_handoff_test.zig`. The target
+  multiblock workload improves `1.0674x` median / `1.0646x` geometrically with
+  21/21 wins; the five-row fast matrix improves `1.0323x` with a `1.0056x`
+  floor. The final default matrix is neutral at `1.0002x`; five short low points
+  recover to `0.9998x`--`1.0219x` median in 31-pair controls. All
+  276 libzstd cases, 1,616 tests, and 94 build-check steps pass with identical
+  wire.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

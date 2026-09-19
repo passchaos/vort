@@ -14986,3 +14986,24 @@ reuse, so production keeps the simpler independently owned plans.
   median / `1.0008x` geometric throughput over 31 longer pairs. All wire sizes,
   hashes, checksums, 276 compatibility cases, 1,615 tests, and 94 `check` steps
   remain exact.
+  Non-terminal explicit-fast wide blocks now retain the final three-entry
+  repcode ring computed by the encoder's required forward offset pass. When
+  the dictionary-free initial candidate wins without frame-state rewriting,
+  commit still validates the block, literals section, sequence count, mode
+  headers, FSE tables, and reverse bitstream marker, but installs those known
+  offsets directly instead of decoding all 2,044 sequences a second time. The
+  handoff reuses the expired first three offset-extra slots, so it does not
+  enlarge shared scratch, and the commit remains transactional: append failure
+  leaves both output and state unchanged. Focused oracles compare candidate
+  bytes, every active LL/OF/ML table entry, final repcodes, whole-frame output,
+  invalid established-state rejection, and injected OOM behavior; their support
+  code lives in `zstd/sequence/large/state_handoff_test.zig` instead of further
+  expanding the main implementation file. Against frozen `2637d70d` and final
+  `474f3e94` ReleaseFast executables, 21 alternating 5,000-encode multiblock
+  pairs improve by `1.0674x` median / `1.0646x` geometric throughput with
+  21/21 wins. A 15-pair five-row fast matrix reaches `1.0323x` across row
+  medians with a `1.0056x` floor and multiblock at `1.0513x`. The final default
+  20-row short matrix is neutral at `1.0002x`; 31-pair, 1,000-encode controls
+  recover its five sub-0.99 rows to `0.9998x`--`1.0219x` median. All hashes,
+  sizes, checksums, 276 compatibility
+  cases, 1,616 tests, and 94 `check` steps remain exact.
