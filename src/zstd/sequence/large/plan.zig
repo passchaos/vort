@@ -24,6 +24,23 @@ pub const Selection = struct {
     payload_len: usize,
 };
 
+pub const ValueField = struct {
+    base: usize,
+    additional_bits: u8,
+};
+
+pub inline fn valueField(
+    codes: []const u8,
+    bases: []const usize,
+    bit_widths: []const u8,
+    index: usize,
+) Error!ValueField {
+    if (index >= codes.len) return error.CorruptFrame;
+    const code = codes[index];
+    if (code >= bases.len or code >= bit_widths.len) return error.CorruptFrame;
+    return .{ .base = bases[code], .additional_bits = bit_widths[code] };
+}
+
 pub noinline fn valueBits(
     codes: []const u8,
     bit_widths: []const u8,
@@ -123,6 +140,17 @@ test "fast large plan cost and selection reject malformed shapes" {
     try std.testing.expectError(error.CorruptFrame, predefinedCost(&.{}, &.{}, 0, 0));
     try std.testing.expectError(error.CorruptFrame, compressedCost(&.{}, 5, 1, 0));
     try std.testing.expectEqual(@as(?Selection, null), try select(1, 0, &.{}, &.{.{ .payload_len = 0, .bit_count = 0 }}, &.{.{ .payload_len = 0, .bit_count = 0 }}));
+}
+
+test "fast large value fields validate indexes and canonical codes" {
+    const bases = [_]usize{ 3, 7, 15 };
+    const widths = [_]u8{ 0, 2, 4 };
+    const codes = [_]u8{ 2, 0, 1 };
+    try std.testing.expectEqual(ValueField{ .base = 15, .additional_bits = 4 }, try valueField(&codes, &bases, &widths, 0));
+    try std.testing.expectEqual(ValueField{ .base = 3, .additional_bits = 0 }, try valueField(&codes, &bases, &widths, 1));
+    try std.testing.expectError(error.CorruptFrame, valueField(&codes, &bases, &widths, codes.len));
+    try std.testing.expectError(error.CorruptFrame, valueField(&.{3}, &bases, &widths, 0));
+    try std.testing.expectError(error.CorruptFrame, valueField(&.{2}, &bases, widths[0..2], 0));
 }
 
 test "fast large selection matches scalar cartesian search" {

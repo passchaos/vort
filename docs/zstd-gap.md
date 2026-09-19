@@ -988,6 +988,15 @@ Recommended next comparison steps:
   The target control improves `1.0022x` median / `1.0046x` geometrically over
   21 long pairs, while the fast matrix remains neutral overall and all 1,614
   tests pass.
+  The fast large emitter also reuses planner-produced canonical LL/ML codes for
+  value-field base/width lookup, avoiding a per-sequence selected-plan union
+  dispatch. Offset values retain the existing repcode-aware symbol path. A
+  checked helper in `zstd/sequence/large/plan.zig` covers malformed indexes and
+  codes, while the fast/scalar frame oracle pins wire identity. The target
+  multiblock workload improves `1.0188x` median with 21/21 wins; the five-row
+  fast and default 20-row matrices improve `1.0025x` and `1.0060x` across row
+  medians with `0.9941x`/`0.9935x` floors. Compatibility remains exact across
+  all 276 libzstd cases and 1,615 repository tests.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

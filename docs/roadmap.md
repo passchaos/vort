@@ -14938,3 +14938,21 @@ reuse, so production keeps the simpler independently owned plans.
   default 20-row matrix is `1.0044x`; long controls recover its three sub-0.99
   rows to `0.9963x`--`1.0033x`. All 276 compatibility cases, 1,614 tests, and
   94 `check` steps pass.
+  Fast large-sequence emission now reads LL/ML value bases and extra-bit widths
+  directly from the canonical code arrays already built for table planning,
+  rather than reopening the selected RLE/predefined/compressed/repeat union for
+  every value field. The checked code-to-field helper and malformed-index tests
+  live in `zstd/sequence/large/plan.zig`; the scalar large emitter retains its
+  original plan-derived symbols. Offset fields deliberately remain on the
+  repcode-aware plan-symbol path because code 0/1 history semantics are more
+  sensitive than LL/ML canonical values. The existing fast-vs-scalar whole-frame
+  oracle keeps direct/inverse planner and transition policies byte-identical.
+  Against frozen `0213d1ea` and candidate `117fc6ae` binaries, 21 alternating
+  5,000-encode multiblock pairs improve by `1.0188x` median / `1.0218x` geometric
+  throughput with 21/21 wins. The 15-pair fast matrix reaches `1.0025x` across
+  row medians with a `0.9941x` floor and multiblock at `1.0171x`; the default
+  20-row matrix improves `1.0060x` with a `0.9935x` floor. Every hash, Vort and
+  reference size, and checksum remains exact. The retained source passes the
+  five-row fast gate, 2,044-sequence probe, 237-case frame probe, 26-case CLI
+  differential, 276-case libzstd matrix, all 1,615 tests, and all 94 `check`
+  steps.

@@ -16112,17 +16112,27 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
     var i = sequence_count;
     while (i > 0) {
         i -= 1;
-        const literal_symbol = try largeSequenceTableSymbol(&plan.plan.literal, .literal, i);
+        const literal_value = if (comptime use_fast_cached_planner)
+            try large_fast_plan.valueField(literal_compressed.codes, &ll_base, &ll_bits, i)
+        else value: {
+            const symbol = try largeSequenceTableSymbol(&plan.plan.literal, .literal, i);
+            break :value large_fast_plan.ValueField{ .base = symbol.base, .additional_bits = symbol.additional_bits };
+        };
         const offset_symbol = try largeSequenceTableSymbol(&plan.plan.offset, .offset, i);
-        const match_symbol = try largeSequenceTableSymbol(&plan.plan.match, .match, i);
+        const match_value = if (comptime use_fast_cached_planner)
+            try large_fast_plan.valueField(match_compressed.codes, &ml_base, &ml_bits, i)
+        else value: {
+            const symbol = try largeSequenceTableSymbol(&plan.plan.match, .match, i);
+            break :value large_fast_plan.ValueField{ .base = symbol.base, .additional_bits = symbol.additional_bits };
+        };
 
         if (i + 1 < sequence_count) {
             try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.offset, .offset, i);
             try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.match, .match, i);
             try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.literal, .literal, i);
         }
-        try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, literal_lens[i] - literal_symbol.base, literal_symbol.additional_bits);
-        try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, match_lens[i] - match_symbol.base, match_symbol.additional_bits);
+        try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, literal_lens[i] - literal_value.base, literal_value.additional_bits);
+        try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, match_lens[i] - match_value.base, match_value.additional_bits);
         try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, offset_extras[i], offset_symbol.additional_bits);
     }
     try appendLargeInitialSequenceStateBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.match, .match);
