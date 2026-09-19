@@ -8109,6 +8109,10 @@ fn readHuffmanLiteralSymbolFromCursorWithLookup(
     return try cursor.readSymbol(huffman_tree, lookup);
 }
 
+inline fn expectHuffmanLiteralCursorEnd(cursor: *HuffmanLiteralCursor) Error!void {
+    return cursor.expectEnd();
+}
+
 fn compressedLiteralOnlyBlockDecodedSize(
     block: []const u8,
     block_size_max: usize,
@@ -37586,8 +37590,12 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
     var of_state = try reader.readSmall(@intCast(offset_fse.accuracy_log));
     var ml_state = try reader.readSmall(6);
     var repcodes = repeated_offsets;
-    var huffman_state = (try initHuffmanLiteralDecodeState(block, section.*)) orelse
-        return error.CorruptFrame;
+    const huffman_tree = if (section.huffman_tree) |*tree| tree else return error.CorruptFrame;
+    var huffman_lookup_table: HuffmanLiteralLookup = undefined;
+    if (!huffman_lookup_table.buildComplete(huffman_tree))
+        huffman_lookup_table = HuffmanLiteralLookup.build(huffman_tree);
+    var huffman_cursor = try initHuffmanLiteralCursor(block, section.*);
+    var huffman_decoded: usize = 0;
     var literal_offset: usize = 0;
     var remaining = section.sequence_count;
 
@@ -37610,7 +37618,18 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
         } else try reader.expectEnd();
 
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
-        try copyLiteralsFromHuffmanStateFast(&huffman_state, section, literal_offset, output[written.*..][0..literal_len]);
+        try huffman_lookup.copyBorrowed(
+            Error,
+            &huffman_cursor,
+            huffman_tree,
+            &huffman_lookup_table,
+            &huffman_decoded,
+            section.regenerated_size,
+            literal_offset,
+            output[written.*..][0..literal_len],
+            readHuffmanLiteralSymbolFromCursorCold,
+            expectHuffmanLiteralCursorEnd,
+        );
         if (comptime builtin.is_test) test_small_mixed_fse_fast_literal_hits += literal_len;
         written.* += literal_len;
         literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
@@ -37619,7 +37638,18 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     const last_literals = section.regenerated_size - literal_offset;
     if (output.len - written.* < last_literals) return error.OutputTooSmall;
-    try copyLiteralsFromHuffmanStateFast(&huffman_state, section, literal_offset, output[written.*..][0..last_literals]);
+    try huffman_lookup.copyBorrowed(
+        Error,
+        &huffman_cursor,
+        huffman_tree,
+        &huffman_lookup_table,
+        &huffman_decoded,
+        section.regenerated_size,
+        literal_offset,
+        output[written.*..][0..last_literals],
+        readHuffmanLiteralSymbolFromCursorCold,
+        expectHuffmanLiteralCursorEnd,
+    );
     if (comptime builtin.is_test) test_small_mixed_fse_fast_literal_hits += last_literals;
     written.* += last_literals;
 }

@@ -15033,3 +15033,22 @@ reuse, so production keeps the simpler independently owned plans.
   allocations caused a stable `0.9699x` default JSON level-1 regression, while
   a trusted 128-state FSE transition kernel measured only `0.9984x` on its target
   over 21 long pairs.
+  The same small mixed-FSE decoder now borrows the already parsed Huffman tree
+  from `LiteralOnlySection` while retaining a local lookup table, cursor, and
+  decoded counter. The generic `HuffmanLiteralDecodeState` remains unchanged;
+  the borrowed literal loop lives in `zstd/literals/huffman_lookup.zig`, so this
+  removes the roughly 1 KiB tree copy without adding a cache or changing the
+  large all-FSE decoder state layout. The existing exhaustive frame-mutation
+  oracle covers the new path. Against frozen independent `d149d70a`/`63d38a7d`
+  pure-Vort binaries, 21 alternating 100,000-decode `numbered_json` pairs
+  improve by `1.0819x` median with 21/21 wins. Fifteen one-shot and warmed-
+  reusable five-row matrices reach `1.0183x`/`1.0013x` across row medians, with
+  `0.9985x`/`0.9956x` floors; as expected, the warmed target is near-neutral
+  because table caching already amortizes its setup. Against frozen
+  `76553dd5`/`85eaa98e` reference-benchmark binaries, 21 same-process pairs
+  improve Vort by `1.0733x` with 21/21 wins and move the median from `0.7156x`
+  to `0.7662x` libzstd 1.5.7 throughput. The 15-pair 13-row matrix improves
+  caller-owned and allocating decode by `1.0117x`/`1.0047x` across row medians;
+  its tiny-frame short outliers recover over 61 one-million-decode pairs to
+  `1.0031x` caller-owned and `0.9956x` allocating medians. Input hashes, encoded
+  sizes, output checksums, and hot large-decoder symbol addresses remain exact.

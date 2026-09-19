@@ -1039,8 +1039,23 @@ Recommended next comparison steps:
   geometric means and `0.9975x`/`1.0013x` floors. The remaining target gap is
   dominated by rebuilding the Huffman tree and 2,048-entry lookup for every
   one-shot decode; this is progress, not libzstd parity.
+  The next small mixed-FSE improvement removes a second copy of the parsed
+  Huffman tree inside its dedicated decoder. It borrows the tree from
+  `LiteralOnlySection`, but retains local lookup/cursor state and all existing
+  validation; the generic and large all-FSE decoder layouts do not change. The
+  shared borrowed literal loop is kept in `zstd/literals/huffman_lookup.zig`.
+  Relative to the preceding fast-literal commit, 21 alternating 100,000-decode
+  pairs improve `numbered_json` by `1.0819x` median with 21/21 wins, and the
+  one-shot five-row matrix improves `1.0183x` across row medians with a
+  `0.9985x` floor. In the same-process libzstd comparison the target improves
+  `1.0733x`, moving from `0.7156x` to `0.7662x` median reference throughput.
+  The full 13-row caller-owned/allocating matrix improves `1.0117x`/`1.0047x`;
+  the tiny control recovers to `1.0031x`/`0.9956x` over 61 long pairs. The
+  remaining small-frame cost is now primarily Huffman tree and lookup
+  construction rather than the eliminated by-value tree handoff.
+
 1. Keep closing the two remaining measured general decode gaps: the small
-   mixed-FSE `numbered_json` row is about `0.715x` libzstd and the multi-block
+   mixed-FSE `numbered_json` row is about `0.766x` libzstd and the multi-block
    all-FSE/Huffman `large_json` row is about `0.71x`; prioritize tree/lookup
    setup and sequence execution without perturbing already-leading raw/RLE and
    single-sequence paths.

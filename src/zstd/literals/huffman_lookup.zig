@@ -111,6 +111,41 @@ pub fn Table(comptime max_bits: u4) type {
     };
 }
 
+/// Decode a contiguous literal run while borrowing the already parsed tree.
+/// The caller owns stream transitions and cold canonical fallback through the
+/// supplied callbacks; this helper only keeps the complete-table hot path
+/// compact and avoids embedding another tree copy in a decoder state object.
+pub inline fn copyBorrowed(
+    comptime ErrorSet: type,
+    cursor: anytype,
+    tree: anytype,
+    lookup: anytype,
+    decoded: *usize,
+    regenerated_size: usize,
+    literal_offset: usize,
+    dest: []u8,
+    comptime read_cold: anytype,
+    comptime expect_end: anytype,
+) ErrorSet!void {
+    if (literal_offset != decoded.* or literal_offset > regenerated_size or
+        regenerated_size - literal_offset < dest.len) return error.CorruptFrame;
+    for (dest) |*out| {
+        if (tree.max_bit_count != 0 and cursor.reader.available() >= tree.max_bit_count) {
+            const width = tree.max_bit_count;
+            const prefix = cursor.reader.peekBulkHuffman(width);
+            if (lookup.lookup(prefix << @intCast(11 - width))) |entry| {
+                cursor.reader.skipBulkHuffman(entry.bit_count);
+                out.* = entry.symbol;
+                decoded.* += 1;
+                continue;
+            }
+        }
+        out.* = try read_cold(cursor, tree);
+        decoded.* += 1;
+    }
+    if (decoded.* == regenerated_size) try expect_end(cursor);
+}
+
 test "Huffman lookup expands short prefixes" {
     const Node = struct { symbol: u8, prefix: u16, weight: u4 };
     const Tree = struct {
