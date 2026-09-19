@@ -21,10 +21,34 @@ pub noinline fn plan(
     states: []u8,
     viable_masks: []u64,
 ) linksection(text_section) bool {
+    return planWithMask(u64, codes, code_state_masks, kind, states, viable_masks);
+}
+
+pub noinline fn planOffset(
+    codes: []const u8,
+    code_state_masks: []const u64,
+    states: []u8,
+    viable_masks: []u32,
+) linksection(text_section) bool {
+    return planWithMask(u32, codes, code_state_masks, .offset, states, viable_masks);
+}
+
+fn planWithMask(
+    comptime Mask: type,
+    codes: []const u8,
+    code_state_masks: []const u64,
+    kind: Kind,
+    states: []u8,
+    viable_masks: []Mask,
+) bool {
     if (codes.len == 0 or codes.len > max_sequence_count or
         states.len != codes.len or viable_masks.len != codes.len) return false;
     const successor_masks = successorMasks(kind);
-    var viable_next: u64 = 0;
+    const valid_state_mask: u64 = if (@bitSizeOf(Mask) == 64)
+        std.math.maxInt(u64)
+    else
+        (@as(u64, 1) << @bitSizeOf(Mask)) - 1;
+    var viable_next: Mask = 0;
     var pos = codes.len;
     while (pos > 0) {
         pos -= 1;
@@ -34,15 +58,17 @@ pub noinline fn plan(
             viable_next = 0;
             continue;
         }
-        var viable_current: u64 = 0;
-        var encodable_states = code_state_masks[code];
-        if (successor_masks.len < 64)
-            std.debug.assert(encodable_states >> @intCast(successor_masks.len) == 0);
+        var viable_current: Mask = 0;
+        if (@bitSizeOf(Mask) < 64)
+            std.debug.assert(code_state_masks[code] & ~valid_state_mask == 0);
+        var encodable_states: Mask = @intCast(code_state_masks[code] & valid_state_mask);
+        std.debug.assert(successor_masks.len <= @bitSizeOf(Mask));
         while (encodable_states != 0) {
             const state: usize = @ctz(encodable_states);
             encodable_states &= encodable_states - 1;
-            if (pos == codes.len - 1 or viable_next & successor_masks[state] != 0)
-                viable_current |= @as(u64, 1) << @intCast(state);
+            const successor_mask: Mask = @intCast(successor_masks[state] & valid_state_mask);
+            if (pos == codes.len - 1 or viable_next & successor_mask != 0)
+                viable_current |= @as(Mask, 1) << @intCast(state);
         }
         viable_next = viable_current;
         viable_masks[pos] = viable_current;
@@ -50,7 +76,8 @@ pub noinline fn plan(
     if (viable_next == 0) return false;
     states[0] = @intCast(@ctz(viable_next));
     for (0..codes.len - 1) |i| {
-        const possible = viable_masks[i + 1] & successor_masks[states[i]];
+        const successor_mask: Mask = @intCast(successor_masks[states[i]] & valid_state_mask);
+        const possible = viable_masks[i + 1] & successor_mask;
         if (possible == 0) return false;
         states[i + 1] = @intCast(@ctz(possible));
     }
@@ -104,6 +131,7 @@ test "large predefined successor masks match scalar ranges" {
 test "large predefined planner rejects malformed shapes and invalid codes" {
     var state: [2]u8 = undefined;
     var masks: [2]u64 = undefined;
+    var compact_masks: [2]u32 = undefined;
     try std.testing.expect(!plan(&.{}, &.{1}, .literal, state[0..0], masks[0..0]));
     try std.testing.expect(!plan(&.{ 0, 0 }, &.{1}, .literal, state[0..1], &masks));
     try std.testing.expect(!plan(&.{1}, &.{1}, .literal, state[0..1], masks[0..1]));
@@ -115,4 +143,10 @@ test "large predefined planner rejects malformed shapes and invalid codes" {
     try std.testing.expect(plan(&.{ 0, 0 }, &.{1}, .literal, &state, &masks));
     try std.testing.expectEqualSlices(u8, &.{ 0, 0 }, &state);
     try std.testing.expectEqualSlices(u64, &.{ 1, 1 }, &masks);
+
+    try std.testing.expect(!planOffset(&.{}, &.{1}, state[0..0], compact_masks[0..0]));
+    try std.testing.expect(!planOffset(&.{1}, &.{1}, state[0..1], compact_masks[0..1]));
+    try std.testing.expect(planOffset(&.{ 0, 0 }, &.{1}, &state, &compact_masks));
+    try std.testing.expectEqualSlices(u8, &.{ 0, 0 }, &state);
+    try std.testing.expectEqualSlices(u32, &.{ 1, 1 }, &compact_masks);
 }

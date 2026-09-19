@@ -14839,3 +14839,21 @@ reuse, so production keeps the simpler independently owned plans.
   `storeMatch` parameters reduced its AArch64 stack frame from 128 to 112 bytes
   and improved the focused stage by `1.0046x`, but binary/multiblock complete
   medians fell to `0.9938x`/`0.9945x`. None are retained.
+  The 32-state predefined offset planner now specializes the same isolated DP
+  over `u32` viability masks. It reuses the low half of the existing aligned
+  caller-owned `u64` scratch, so no allocation, capacity, or scratch-structure
+  change is required; LL and ML retain their 64-state `u64` path. The scalar
+  oracle compares every compact mask with the low 32 bits of its reference mask
+  and preserves the complete state path at 513, 1,024, and 2,047 offsets.
+  Against frozen `ff7869e3` and final `a3cdaeb4` ReleaseFast binaries, fifteen
+  1,500-encode fast matrices preserve every hash, frame/reference size, and
+  checksum. Multiblock improves by `1.0174x` median with 14/15 wins; the five
+  row-median geometric mean is `1.0042x` with a `0.9953x` floor. A matching
+  default 20-row matrix reaches `1.0023x` across row medians. Its noisy text
+  level-1 median of `0.9823x` recovers to `1.0042x` with 19/31 wins in a
+  10,000-encode control. A final 31-pair, 5,000-encode multiblock control narrows
+  the target claim to `1.0026x` median / `1.0007x` geometric mean with 20/31
+  wins. Two follow-ups were removed: peeling the terminal row
+  from the reverse DP was only `1.0007x` median with 8/15 target wins, and
+  replacing the forward non-empty check with a debug invariant was `0.9996x`
+  with 7/15 wins.

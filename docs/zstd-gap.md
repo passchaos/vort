@@ -228,6 +228,19 @@ Current interpretation:
   size, and checksum remains identical. An eight-second 1 kHz profile reduces
   the corresponding predefined-planner leaf samples from 612 to 295.
 
+  The predefined OF path now specializes the same DP over `u32` masks because
+  the standard offset table has exactly 32 states. It reuses the low half of
+  the existing aligned `u64` viability scratch, adding no allocation or scratch
+  field; LL/ML continue to use `u64`. The scalar oracle compares compact masks
+  and complete state paths at 513, 1,024, and 2,047 offsets. Fifteen interleaved
+  1,500-encode comparisons against frozen `ff7869e3` preserve every hash, size,
+  and checksum: fast multiblock improves by `1.0174x` median with 14/15 wins,
+  and the five row-median geometric mean is `1.0042x` with a `0.9953x` floor.
+  The default 20-row matrix reaches `1.0023x`; its noisy text level-1 row
+  recovers to `1.0042x` median over 31 longer 10,000-encode pairs. A final
+  31-pair, 5,000-encode multiblock control narrows the target claim to
+  `1.0026x` median / `1.0007x` geometric mean with 20/31 wins.
+
   A frozen independent-binary control also compared the unchanged default
   selection across 15 paired runs of the complete 20-row matrix, 50 iterations,
   and three interleaved rounds per row. Every input SHA-256, Vort/reference size, and checksum

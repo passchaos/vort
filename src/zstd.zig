@@ -14481,8 +14481,10 @@ test "zstd large predefined code planner matches scalar reference" {
     var codes: [max_len]u8 = undefined;
     var expected_states: [max_len]u8 = undefined;
     var actual_states: [max_len]u8 = undefined;
+    var compact_states: [max_len]u8 = undefined;
     var expected_masks: [max_len]u64 = undefined;
     var actual_masks: [max_len]u64 = undefined;
+    var compact_masks: [max_len]u32 = undefined;
 
     const Test = struct {
         fn plan(
@@ -14561,6 +14563,20 @@ test "zstd large predefined code planner matches scalar reference" {
             if (expected) {
                 try std.testing.expectEqualSlices(u8, expected_states[0..len], actual_states[0..len]);
                 try std.testing.expectEqualSlices(u64, expected_masks[0..len], actual_masks[0..len]);
+            }
+            if (kind == .offset) {
+                const compact = large_predefined.planOffset(
+                    codes[0..len],
+                    &predefined_offset_code_state_masks,
+                    compact_states[0..len],
+                    compact_masks[0..len],
+                );
+                try std.testing.expectEqual(expected, compact);
+                if (expected) {
+                    try std.testing.expectEqualSlices(u8, expected_states[0..len], compact_states[0..len]);
+                    for (expected_masks[0..len], compact_masks[0..len]) |expected_mask, compact_mask|
+                        try std.testing.expectEqual(@as(u32, @intCast(expected_mask)), compact_mask);
+                }
             }
         }
     }
@@ -19373,12 +19389,13 @@ fn largeOffsetSequenceTablePlanAlternatives(
         compressed_buffers.codes[i] = try chooseOffsetSequenceCode(literal_lens[i], offset, &repeated_offsets);
     if (rleSequenceCode(compressed_buffers.codes)) |code|
         try alternatives.add(.{ .rle = code });
-    const predefined_ok = large_predefined.plan(
+    const offset_viable_bytes = std.mem.sliceAsBytes(viable_masks);
+    const offset_viable_masks = std.mem.bytesAsSlice(u32, offset_viable_bytes[0 .. offsets.len * @sizeOf(u32)]);
+    const predefined_ok = large_predefined.planOffset(
         compressed_buffers.codes,
         &predefined_offset_code_state_masks,
-        .offset,
         predefined_states,
-        viable_masks,
+        offset_viable_masks,
     );
     if (predefined_ok) try alternatives.add(.{ .predefined = predefined_states });
     if (try planLargeCompressedSequenceCodes(offsets.len, compressed_buffers)) |plan|
