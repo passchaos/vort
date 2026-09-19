@@ -15771,6 +15771,10 @@ test "zstd direct sequence codes lower-bound predefined extra bits" {
     }
     for (1..lz77.default_window_len + 1) |value| {
         const code = try sequenceCodeForValue(value, &of_base, &of_bits);
+        const cached = try large_fast_plan.valueField(&.{code}, &of_base, &of_bits, 0);
+        const symbol = try sequenceRleSymbol(.offset, code);
+        try std.testing.expectEqual(@as(usize, symbol.base), cached.base);
+        try std.testing.expectEqual(symbol.additional_bits, cached.additional_bits);
         try std.testing.expect(of_bits[code] <= minimumPredefinedSequenceExtraBits(
             value,
             &sequence_predefined.offset_symbols,
@@ -16118,7 +16122,15 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
             const symbol = try largeSequenceTableSymbol(&plan.plan.literal, .literal, i);
             break :value large_fast_plan.ValueField{ .base = symbol.base, .additional_bits = symbol.additional_bits };
         };
-        const offset_symbol = try largeSequenceTableSymbol(&plan.plan.offset, .offset, i);
+        const offset_symbol = if (comptime use_fast_cached_planner) symbol: {
+            const value = try large_fast_plan.valueField(offset_compressed.codes, &of_base, &of_bits, i);
+            break :symbol SequenceSymbol{
+                .base = @intCast(value.base),
+                .additional_bits = value.additional_bits,
+                .next_state = 0,
+                .state_bits = 0,
+            };
+        } else try largeSequenceTableSymbol(&plan.plan.offset, .offset, i);
         const match_value = if (comptime use_fast_cached_planner)
             try large_fast_plan.valueField(match_compressed.codes, &ml_base, &ml_bits, i)
         else value: {

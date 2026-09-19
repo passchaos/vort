@@ -14956,3 +14956,17 @@ reuse, so production keeps the simpler independently owned plans.
   five-row fast gate, 2,044-sequence probe, 237-case frame probe, 26-case CLI
   differential, 276-case libzstd matrix, all 1,615 tests, and all 94 `check`
   steps.
+  The same fast-only cached value-field path now covers offsets without replacing
+  the repcode resolver: the retained canonical OF code supplies only base and
+  extra-bit width, while `sequenceOffsetExtraForEncodedOffset` still validates
+  code 0/1 semantics and performs every recent-offset history transition. The
+  existing exhaustive resolver oracle remains authoritative; its canonical-code
+  loop now also compares cached fields against all 32 OF table entries, and the
+  fast/scalar whole-frame oracle pins the selected table modes and output bytes.
+  Against frozen `117fc6ae` and final `ee56e596` binaries, 21 alternating
+  5,000-encode multiblock pairs improve by `1.0183x` median / `1.0196x` geometric
+  throughput with 18/21 wins. The 15-pair fast matrix reaches `1.0011x` across
+  row medians with a `0.9961x` floor and multiblock at `1.0113x`. The default
+  20-row matrix is `0.9979x`; 31-pair, 1,000-iteration controls recover its four
+  sub-0.99 rows to `0.9944x`--`1.0018x`. All hashes, Vort/reference sizes, and
+  checksums remain exact, and the full 1,615-test and 94-step build gates pass.

@@ -997,6 +997,13 @@ Recommended next comparison steps:
   fast and default 20-row matrices improve `1.0025x` and `1.0060x` across row
   medians with `0.9941x`/`0.9935x` floors. Compatibility remains exact across
   all 276 libzstd cases and 1,615 repository tests.
+  Cached value fields now cover OF as well as LL/ML, but only base and bit width
+  bypass the selected-plan union; the original repcode resolver still validates
+  code 0/1 and mutates history. All 32 canonical OF entries and the complete
+  resolver history matrix remain covered. The target multiblock control improves
+  `1.0183x` median with 18/21 wins; the fast matrix is `1.0011x` overall with a
+  `0.9961x` floor. Four noisy default rows recover to at least `0.9944x` in
+  31-pair long controls, with exact wire and compatibility results.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-
