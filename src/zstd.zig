@@ -8730,6 +8730,17 @@ const ResolvedSymbolTable = struct {
 };
 
 fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usize) Error!SequenceModeSpec {
+    var spec: SequenceModeSpec = undefined;
+    try parseSequenceModeSpecInto(&spec, block, offset, sequence_count);
+    return spec;
+}
+
+fn parseSequenceModeSpecInto(
+    spec: *SequenceModeSpec,
+    block: []const u8,
+    offset: *usize,
+    sequence_count: usize,
+) Error!void {
     if (sequence_count == 0) return error.CorruptFrame;
     if (block.len - offset.* < 1) return error.TruncatedFrame;
     const mode = block[offset.*];
@@ -8745,7 +8756,7 @@ fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usiz
         const bitstream_offset = offset.*;
         if (bitstream_offset >= block.len) return error.TruncatedFrame;
         offset.* = block.len;
-        return .{
+        spec.* = .{
             .ll_mode = .predefined,
             .of_mode = .predefined,
             .ml_mode = .predefined,
@@ -8754,59 +8765,49 @@ fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usiz
             .match_rle = null,
             .bitstream_offset = bitstream_offset,
         };
+        return;
     }
 
-    var literal_rle: ?SequenceSymbol = null;
-    var offset_rle: ?SequenceSymbol = null;
-    var match_rle: ?SequenceSymbol = null;
+    spec.ll_mode = ll_mode;
+    spec.of_mode = of_mode;
+    spec.ml_mode = ml_mode;
+    spec.literal_rle = null;
+    spec.offset_rle = null;
+    spec.match_rle = null;
     // Only `len` and `accuracy_log` are observed for non-compressed modes. Do
     // not zero three 4 KiB entry arrays before immediately overwriting the
     // compressed ones; the active mode guards every entry access.
-    var literal_fse: SequenceFseTable = undefined;
-    literal_fse.len = 0;
-    literal_fse.accuracy_log = 0;
-    var offset_fse: SequenceFseTable = undefined;
-    offset_fse.len = 0;
-    offset_fse.accuracy_log = 0;
-    var match_fse: SequenceFseTable = undefined;
-    match_fse.len = 0;
-    match_fse.accuracy_log = 0;
+    spec.literal_fse.len = 0;
+    spec.literal_fse.accuracy_log = 0;
+    spec.offset_fse.len = 0;
+    spec.offset_fse.accuracy_log = 0;
+    spec.match_fse.len = 0;
+    spec.match_fse.accuracy_log = 0;
 
     // Sequence table payloads are serialized in LL, OF, ML order. Each table's
     // mode decides whether the next bytes are a one-byte RLE symbol or a full
     // FSE table. Reading all RLE bytes before all FSE tables corrupts mixed
     // mode blocks such as LL=FSE, OF=FSE, ML=RLE.
     switch (ll_mode) {
-        .rle => literal_rle = try readRleSymbolCode(block, offset, &ll_base, &ll_bits),
-        .compressed => try readFseSequenceTableInto(&literal_fse, block, offset, &ll_base, &ll_bits, sequence_table_symbol_count_max.literal, sequence_table_accuracy_log_max.literal),
+        .rle => spec.literal_rle = try readRleSymbolCode(block, offset, &ll_base, &ll_bits),
+        .compressed => try readFseSequenceTableInto(&spec.literal_fse, block, offset, &ll_base, &ll_bits, sequence_table_symbol_count_max.literal, sequence_table_accuracy_log_max.literal),
         .predefined, .repeat => {},
     }
     switch (of_mode) {
-        .rle => offset_rle = try readRleSymbolCode(block, offset, &of_base, &of_bits),
-        .compressed => try readFseSequenceTableInto(&offset_fse, block, offset, &of_base, &of_bits, sequence_table_symbol_count_max.offset, sequence_table_accuracy_log_max.offset),
+        .rle => spec.offset_rle = try readRleSymbolCode(block, offset, &of_base, &of_bits),
+        .compressed => try readFseSequenceTableInto(&spec.offset_fse, block, offset, &of_base, &of_bits, sequence_table_symbol_count_max.offset, sequence_table_accuracy_log_max.offset),
         .predefined, .repeat => {},
     }
     switch (ml_mode) {
-        .rle => match_rle = try readRleSymbolCode(block, offset, &ml_base, &ml_bits),
-        .compressed => try readFseSequenceTableInto(&match_fse, block, offset, &ml_base, &ml_bits, sequence_table_symbol_count_max.match, sequence_table_accuracy_log_max.match),
+        .rle => spec.match_rle = try readRleSymbolCode(block, offset, &ml_base, &ml_bits),
+        .compressed => try readFseSequenceTableInto(&spec.match_fse, block, offset, &ml_base, &ml_bits, sequence_table_symbol_count_max.match, sequence_table_accuracy_log_max.match),
         .predefined, .repeat => {},
     }
 
     const bitstream_offset = offset.*;
     if (bitstream_offset >= block.len) return error.TruncatedFrame;
     offset.* = block.len;
-    return .{
-        .ll_mode = ll_mode,
-        .of_mode = of_mode,
-        .ml_mode = ml_mode,
-        .literal_rle = literal_rle,
-        .offset_rle = offset_rle,
-        .match_rle = match_rle,
-        .literal_fse = literal_fse,
-        .offset_fse = offset_fse,
-        .match_fse = match_fse,
-        .bitstream_offset = bitstream_offset,
-    };
+    spec.bitstream_offset = bitstream_offset;
 }
 
 fn resolveSymbolTable(
@@ -8851,6 +8852,25 @@ fn resolveSequenceModeSpec(spec: SequenceModeSpec, previous: ?SequenceTables) Er
         .match_fse = ml.fse,
         .bitstream_offset = spec.bitstream_offset,
     };
+}
+
+fn expectSequenceModeSpecsEqual(expected: *const SequenceModeSpec, actual: *const SequenceModeSpec) !void {
+    try std.testing.expectEqual(expected.ll_mode, actual.ll_mode);
+    try std.testing.expectEqual(expected.of_mode, actual.of_mode);
+    try std.testing.expectEqual(expected.ml_mode, actual.ml_mode);
+    try std.testing.expectEqual(expected.literal_rle, actual.literal_rle);
+    try std.testing.expectEqual(expected.offset_rle, actual.offset_rle);
+    try std.testing.expectEqual(expected.match_rle, actual.match_rle);
+    try std.testing.expectEqual(expected.bitstream_offset, actual.bitstream_offset);
+    inline for (.{
+        .{ &expected.literal_fse, &actual.literal_fse },
+        .{ &expected.offset_fse, &actual.offset_fse },
+        .{ &expected.match_fse, &actual.match_fse },
+    }) |tables| {
+        try std.testing.expectEqual(tables[0].len, tables[1].len);
+        try std.testing.expectEqual(tables[0].accuracy_log, tables[1].accuracy_log);
+        try std.testing.expectEqualSlices(SequenceSymbol, tables[0].entries[0..tables[0].len], tables[1].entries[0..tables[1].len]);
+    }
 }
 
 fn readRleSymbolCode(block: []const u8, offset: *usize, bases: []const usize, bits: []const u8) Error!SequenceSymbol {
@@ -9191,8 +9211,10 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             continuation,
         );
     }
-    const parsed_spec = try parseSequenceModeSpec(block, &offset, section.sequence_count);
-    const spec = try resolveSequenceModeSpec(parsed_spec, frame_state.previous_tables);
+    var spec: SequenceModeSpec = undefined;
+    try parseSequenceModeSpecInto(&spec, block, &offset, section.sequence_count);
+    if (spec.ll_mode == .repeat or spec.of_mode == .repeat or spec.ml_mode == .repeat)
+        spec = try resolveSequenceModeSpec(spec, frame_state.previous_tables);
     try expectConsumedBlock(offset, block.len);
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
@@ -9360,9 +9382,10 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         copyCachedSequenceModeSpec(&spec, cached.spec, description_start + cached.description_len);
         offset = block.len;
     } else {
-        const parsed = try parseSequenceModeSpec(block, &offset, section.sequence_count);
-        spec = try resolveSequenceModeSpec(parsed, frame_state.previous_tables);
-        if (parsed.ll_mode != .repeat and parsed.of_mode != .repeat and parsed.ml_mode != .repeat)
+        try parseSequenceModeSpecInto(&spec, block, &offset, section.sequence_count);
+        const has_repeat = spec.ll_mode == .repeat or spec.of_mode == .repeat or spec.ml_mode == .repeat;
+        if (has_repeat) spec = try resolveSequenceModeSpec(spec, frame_state.previous_tables);
+        if (!has_repeat)
             workspace.store(block, description_start, section.sequence_count, spec);
     }
     try expectConsumedBlock(offset, block.len);
@@ -10761,6 +10784,20 @@ test "zstd dictionary-aware sequence inspector seeds trained repeat tables" {
     const block = try inspectNativeFrameFirstBlock(frame);
     try std.testing.expectEqual(NativeBlockType.compressed, block.block_type);
     try std.testing.expectError(error.CorruptFrame, inspectNativeFrameBlockSequenceModes(frame, block));
+    const block_bytes = frame[block.payload_offset..][0..block.payload_len];
+    var parse_state = try initialSequenceFrameState(standard.dictionary);
+    const section = try parseLiteralsSection(block_bytes, &parse_state);
+    var returned_offset = section.sequence_payload_offset;
+    const returned_parsed = try parseSequenceModeSpec(block_bytes, &returned_offset, section.sequence_count);
+    var direct_parsed: SequenceModeSpec = undefined;
+    @memset(std.mem.asBytes(&direct_parsed), 0xa5);
+    var direct_offset = section.sequence_payload_offset;
+    try parseSequenceModeSpecInto(&direct_parsed, block_bytes, &direct_offset, section.sequence_count);
+    try std.testing.expectEqual(returned_offset, direct_offset);
+    try expectSequenceModeSpecsEqual(&returned_parsed, &direct_parsed);
+    const returned_resolved = try resolveSequenceModeSpec(returned_parsed, parse_state.previous_tables);
+    const direct_resolved = try resolveSequenceModeSpec(direct_parsed, parse_state.previous_tables);
+    try expectSequenceModeSpecsEqual(&returned_resolved, &direct_resolved);
 
     const modes = try inspectNativeFrameBlockSequenceModesWithDictionary(frame, block, standard.dictionary);
     try std.testing.expectEqual(@as(usize, 57), modes.sequence_count);
@@ -28016,6 +28053,25 @@ test "zstd native decoder accepts FSE compressed sequence tables" {
     _ = try std.fmt.hexToBytes(&all_fse_frame, all_fse_hex);
 
     for ([_][]const u8{ &offset_fse_frame, &all_fse_frame }) |frame| {
+        const parsed_block = try inspectNativeFrameFirstBlock(frame);
+        const block_bytes = frame[parsed_block.payload_offset..][0..parsed_block.payload_len];
+        var direct_frame_state: SequenceFrameState = .{};
+        const direct_section = try parseLiteralsSection(block_bytes, &direct_frame_state);
+        var returned_offset = direct_section.sequence_payload_offset;
+        const returned_spec = try resolveSequenceModeSpec(
+            try parseSequenceModeSpec(block_bytes, &returned_offset, direct_section.sequence_count),
+            null,
+        );
+        var direct_spec: SequenceModeSpec = undefined;
+        @memset(std.mem.asBytes(&direct_spec), 0xa5);
+        var direct_offset = direct_section.sequence_payload_offset;
+        try parseSequenceModeSpecInto(&direct_spec, block_bytes, &direct_offset, direct_section.sequence_count);
+        try std.testing.expect(direct_spec.ll_mode != .repeat);
+        try std.testing.expect(direct_spec.of_mode != .repeat);
+        try std.testing.expect(direct_spec.ml_mode != .repeat);
+        try std.testing.expectEqual(returned_offset, direct_offset);
+        try expectSequenceModeSpecsEqual(&returned_spec, &direct_spec);
+
         const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame);
         defer std.testing.allocator.free(std_decoded);
         try std.testing.expectEqualSlices(u8, payload.items, std_decoded);

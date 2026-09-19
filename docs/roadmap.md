@@ -15071,3 +15071,25 @@ reuse, so production keeps the simpler independently owned plans.
   (`0.7457x` median), so the remaining gap is explicit. All 237 native-frame
   cases, 276 libzstd compatibility cases, 26 CLI differential cases, 9,900
   upstream decodecorpus frames, 1,617 tests, and 94 `check` steps pass.
+  Sequence-mode parsing now also has a direct-write entry used by the one-shot
+  and reusable buffer decoders. It constructs LL/OF/ML tables in the caller's
+  final `SequenceModeSpec`, avoiding the returned 12 KiB aggregate and its three
+  generated 4 KiB table copies. Blocks without Repeat_Mode keep that completed
+  spec directly; Repeat_Mode still goes through the original resolver and
+  previous-table validation. The returning parser remains available to all
+  other call sites. Fixed mixed-FSE, all-FSE, and dictionary-seeded Repeat_Mode
+  fixtures compare both parser entries field-for-field, including every active
+  FSE state and final bitstream offset. Against frozen `a268b6dd`/`a7d47fee`
+  ReleaseFast binaries, 21 alternating 5,000-decode `large_json` pairs improve
+  by `1.0637x` median / `1.0763x` geometric throughput with 21/21 wins; 15
+  alternating 20,000-decode pairs confirm `1.0563x` / `1.0550x` with 15/15
+  wins and a `1.0208x` minimum. The five-row one-shot/reusable matrices improve
+  `1.0416x`/`1.0052x` across row medians; a 31-pair, 100,000-decode warmed
+  `ascii64k` control recovers its short-run low result to `0.9971x` median.
+  Same-process `large_json` measurements now reach 5,087.35 MiB/s one-shot and
+  5,632.86 MiB/s warmed versus 6,315.42/6,368.70 MiB/s for libzstd 1.5.7, or
+  `0.8063x`/`0.8845x`. The ReleaseFast benchmark executable is about 32 KiB
+  smaller. All input hashes, encoded sizes, and checksums remain exact; the
+  237-case native probe, 276-case compatibility matrix, 26-case CLI
+  differential, 9,900-frame upstream corpus, 1,617 tests, and 94 `check` steps
+  pass.

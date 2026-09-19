@@ -1070,11 +1070,28 @@ Recommended next comparison steps:
   The 237-case native probe, 276-case compatibility matrix, 26-case CLI
   differential, all 9,900 upstream decodecorpus frames, 1,617 tests, and all 94
   build-check steps pass.
+  The one-shot and reusable buffer decoders now parse non-predefined sequence
+  modes directly into their final `SequenceModeSpec`. This removes the returned
+  12 KiB aggregate and three generated table copies; no-Repeat blocks use the
+  result directly, while Repeat_Mode retains the established previous-table
+  resolver. The original returning parser remains for other consumers. Fixed
+  mixed/all-FSE and dictionary-seeded Repeat fixtures compare both parser forms
+  field-for-field, including active table entries and bitstream offsets. Frozen
+  `a268b6dd`/`a7d47fee` binaries improve `large_json` by `1.0637x` median over
+  21 alternating 5,000-decode pairs with 21/21 wins; 15 longer 20,000-decode
+  pairs confirm `1.0563x` median / `1.0550x` geometric throughput with 15/15
+  wins. Five-row one-shot/reusable row-median geomeans are `1.0416x`/`1.0052x`;
+  a 31-pair warmed `ascii64k` control is `0.9971x`. Absolute `large_json`
+  throughput is now 5,087.35 MiB/s one-shot and 5,632.86 MiB/s warmed against
+  libzstd 1.5.7 at 6,315.42/6,368.70 MiB/s (`0.8063x`/`0.8845x`). The remaining
+  gap is now predominantly sequence execution and match-copy work rather than
+  table handoff. All 237 native, 276 compatibility, 26 CLI differential, 9,900
+  upstream corpus, 1,617 test, and 94 build-check cases pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
    mixed-FSE `numbered_json` row is about `0.766x` libzstd and the multi-block
-   all-FSE/Huffman `large_json` row is about `0.746x` one-shot (`0.831x` in a
-   warmed reusable sample); prioritize tree/lookup setup and sequence execution
+   all-FSE/Huffman `large_json` row is about `0.806x` one-shot (`0.885x`
+   warmed); prioritize tree/lookup setup and sequence execution
    without perturbing already-leading raw/RLE and single-sequence paths.
 2. Add library-level range-latency rows for the public seekability tiers
    (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because even the
