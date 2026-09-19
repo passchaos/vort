@@ -965,6 +965,13 @@ Recommended next comparison steps:
   1,000-encode controls and all retained at least `0.9916x`. The full Zstd
   compatibility and build gates pass, including 276 libzstd cases and all
   1,613 repository tests.
+  The compact record buffer now reserves `input_len / 64` entries before a
+  wide parse. The 128 KiB oracle records exactly one allocation, zero resizes,
+  and 2,048 retained records; this replaces a 64-record seed that reached 2,096
+  records through geometric growth. The target multiblock improves another
+  `1.0050x` median over 21 alternating 5,000-encode pairs without changing wire
+  output. A 1,024-record alternative was slower and required three allocations,
+  so the exact 16 KiB reusable reservation remains.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

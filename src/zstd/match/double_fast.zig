@@ -426,16 +426,25 @@ test "double-fast compact sequence plan matches token plan" {
     defer expected.deinit(std.testing.allocator);
     const expected_stats = try planReuse(&expected, std.testing.allocator, &input, options);
 
-    var records: std.ArrayList(SequenceRecord) = .empty;
-    defer records.deinit(std.testing.allocator);
-    const actual_stats = try planSequencesReuse(&records, std.testing.allocator, &input, options);
-    try std.testing.expectEqual(expected_stats, actual_stats);
-    try std.testing.expectEqual(expected_stats.matches, records.items.len);
+    var counting = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    {
+        const allocator = counting.allocator();
+        var records: std.ArrayList(SequenceRecord) = .empty;
+        defer records.deinit(allocator);
+        const actual_stats = try planSequencesReuse(&records, allocator, &input, options);
+        try std.testing.expectEqual(expected_stats, actual_stats);
+        try std.testing.expectEqual(expected_stats.matches, records.items.len);
+        try std.testing.expect(records.items.len <= input.len / 64);
+        try std.testing.expectEqual(input.len / 64, records.capacity);
+        try std.testing.expectEqual(@as(usize, 1), counting.allocations);
+        try std.testing.expectEqual(@as(usize, 0), counting.resize_index);
 
-    var actual: std.ArrayList(lz77.Token) = .empty;
-    defer actual.deinit(std.testing.allocator);
-    try std.testing.expect(try sequence_plan.materializeTokens(&actual, std.testing.allocator, &input, records.items));
-    try std.testing.expectEqualSlices(lz77.Token, expected.items, actual.items);
+        var actual: std.ArrayList(lz77.Token) = .empty;
+        defer actual.deinit(std.testing.allocator);
+        try std.testing.expect(try sequence_plan.materializeTokens(&actual, std.testing.allocator, &input, records.items));
+        try std.testing.expectEqualSlices(lz77.Token, expected.items, actual.items);
+    }
+    try std.testing.expectEqual(counting.allocated_bytes, counting.freed_bytes);
 }
 
 test "double-fast compact sequence plan materializes sparse wide input" {

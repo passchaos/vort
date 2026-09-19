@@ -14882,3 +14882,20 @@ reuse, so production keeps the simpler independently owned plans.
   2,044-sequence large probe, 276-case libzstd compatibility matrix, 237-case
   frame probe, 25-case dictionary probe, 26-case CLI differential probe, all
   1,613 tests, and all 94 `check` build steps.
+  A follow-up profile found compact-record growth under `storeMatch` as the
+  remaining parser-local allocation hotspot. The wide parser now reserves one
+  8-byte record per 64 input bytes, so the representative 128 KiB parse starts
+  with exactly 2,048 records of caller-owned reusable capacity. Its oracle pins
+  one allocation, zero resize operations, exact token-plan equivalence, and
+  balanced release; the former 64-record seed would geometrically grow through
+  eight capacities to 2,096 records. A smaller 1,024-record seed was rejected:
+  it required three allocations and was `0.9984x` as fast as the retained
+  2,048-record policy over 21 alternating 5,000-encode pairs. Against frozen
+  `08a8dce0` and candidate `b9d62561` binaries, the retained policy improves
+  multiblock by `1.0050x` median / `1.0048x` geometric mean with 16/21 wins.
+  The 15-pair fast matrix is neutral overall at `0.99996x`, with a `0.9945x`
+  floor; the default 20-row matrix is `1.00007x`. Its lone short-test outlier,
+  text level 1, recovers to `1.0044x` over 31 alternating 10,000-encode pairs.
+  Post-change sampling removes realloc/memmove descendants from compact
+  `storeMatch`, and all hashes, sizes, checksums, 1,613 tests, and 94 `check`
+  steps remain exact.

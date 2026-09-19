@@ -7,7 +7,7 @@ const long_hash_bits = 11;
 const short_hash_size = 1 << short_hash_bits;
 const long_hash_size = 1 << long_hash_bits;
 const invalid_position = std.math.maxInt(u32);
-const initial_record_capacity = 64;
+const record_capacity_divisor = 64;
 const max_long_rep_probe_distance = 512;
 
 pub const input_len_min = 64 * 1024 + 1;
@@ -33,7 +33,12 @@ pub fn planReuse(
         return error.InvalidBlockPlan;
 
     records.clearRetainingCapacity();
-    try records.ensureTotalCapacityPrecise(allocator, initial_record_capacity);
+    // A 128 KiB fast block in the measured mixed workload emits almost exactly
+    // one sequence per 64 input bytes. Reserve that compact 8-byte record
+    // density once instead of repeatedly moving a growing record buffer. This
+    // remains far below zstd's block_len / min_match worst-case allocation and
+    // caller-owned capacity is retained for subsequent blocks.
+    try records.ensureTotalCapacityPrecise(allocator, input.len / record_capacity_divisor);
     var short_table: [short_hash_size]u32 = @splat(invalid_position);
     var long_table: [long_hash_size]u32 = @splat(invalid_position);
     var reps = [3]usize{ 1, 4, 8 };
