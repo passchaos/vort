@@ -14899,3 +14899,25 @@ reuse, so production keeps the simpler independently owned plans.
   Post-change sampling removes realloc/memmove descendants from compact
   `storeMatch`, and all hashes, sizes, checksums, 1,613 tests, and 94 `check`
   steps remain exact.
+  The wide-only compact parser now computes each current short/long hash once,
+  reads the previous candidate, and updates the corresponding table slot
+  directly. This is deliberately not applied to the established token parser:
+  an earlier shared implementation improved wide blocks but reduced a long text
+  control to `0.9800x`. Two record-only encoder helpers now live in a separate
+  `fast_sequence_record` text section, keeping the shared dispatcher and
+  ordinary small-block hot functions at their baseline addresses. Without that
+  isolation, the new parser loop improved multiblock by `1.0104x` but default
+  JSON level 1 measured only `0.9891x` over 31 long pairs. The isolated final
+  `2de6cc85` executable preserves every hash, size, and checksum while improving
+  multiblock by `1.0056x` median / `1.0049x` geometric mean with 14/21 wins.
+  Its 15-pair five-row fast matrix reaches `1.0041x` across row medians with a
+  `0.9983x` floor and multiblock at `1.0074x`; the default 20-row matrix is
+  `1.0008x`. Default JSON/text level-1 short outliers recover to `0.9923x` and
+  `1.0009x` over 31 alternating 10,000-encode pairs. Three adjacent attempts
+  were removed: making the compact parser noinline measured `0.9938x` with only
+  4/21 target wins; an explicit `appendAssumeCapacity` fast branch was only
+  `1.00004x` across the fast matrix; and borrowing later large-sequence scratch
+  for literal Huffman temporaries fell to `0.9937x` with 2/21 target wins. The
+  retained source passes the fast gate, 2,044-sequence probe, 237-case frame
+  probe, 26-case CLI differential, 276-case libzstd matrix, all 1,613 tests, and
+  all 94 `check` steps.

@@ -47,6 +47,13 @@ const fast_encode_helper_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const fast_sequence_record_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_fast_records",
+    .macho => "__TEXT,__vort_zstd_rec",
+    .coff => ".text$vort_zstd_fast_records",
+    else => ".text",
+};
+
 const fse_encode_helper_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_fse_encode",
     .macho => "__TEXT,__vort_zstd_fse",
@@ -15559,7 +15566,7 @@ noinline fn emitFastSequenceRecordCandidate(
     large_sequence_scratch: *LargeSequenceScratch,
     scratch: *NativeBlockEncodeScratch,
     parser_options: lz77.GreedyOptions,
-) linksection(fast_encode_helper_text_section) Error!FastMatchCandidateResult {
+) linksection(fast_sequence_record_text_section) Error!FastMatchCandidateResult {
     const stats: lz77.PlanStats = double_fast_match.planSequencesReuse(
         &large_sequence_scratch.viable_masks,
         allocator,
@@ -15612,7 +15619,7 @@ noinline fn emitLargeDoubleFastSequenceBlockReuseFast(
     records: []const double_fast_sequence_plan.Record,
     stats: lz77.PlanStats,
     scratch: *LargeSequenceScratch,
-) linksection(fast_encode_helper_text_section) Error!bool {
+) linksection(fast_sequence_record_text_section) Error!bool {
     const prepared = try large_sequence_record_values.prepare(
         &scratch.values,
         allocator,

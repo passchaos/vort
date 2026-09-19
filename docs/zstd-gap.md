@@ -972,6 +972,15 @@ Recommended next comparison steps:
   `1.0050x` median over 21 alternating 5,000-encode pairs without changing wire
   output. A 1,024-record alternative was slower and required three allocations,
   so the exact 16 KiB reusable reservation remains.
+  The isolated compact parser also reuses each current-position short/long hash
+  for lookup and table update. Record-only encoder helpers use a dedicated text
+  section so their layout does not displace shared small-block hot functions.
+  The final target control improves by `1.0056x` median over 21 alternating
+  5,000-encode pairs; the five-row fast matrix is `1.0041x` with a `0.9983x`
+  floor, while the default matrix is `1.0008x`. Long controls retain default
+  JSON/text level 1 at `0.9923x`/`1.0009x`. Token/record plans, compressed
+  sizes, checksums, all 276 libzstd compatibility cases, 1,613 tests, and 94
+  build-check steps remain exact.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

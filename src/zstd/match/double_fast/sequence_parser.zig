@@ -63,9 +63,15 @@ pub fn planReuse(
             }
         }
 
-        const short_candidate = short_table[shortHash(input, position)];
-        const long_candidate = if (position + 8 <= input.len) long_table[longHash(input, position)] else invalid_position;
-        insertPosition(input, position, &short_table, &long_table);
+        const short_hash = shortHash(input, position);
+        const short_candidate = short_table[short_hash];
+        short_table[short_hash] = @intCast(position);
+        const long_candidate = if (position + 8 <= input.len) candidate: {
+            const long_hash = longHash(input, position);
+            const previous = long_table[long_hash];
+            long_table[long_hash] = @intCast(position);
+            break :candidate previous;
+        } else invalid_position;
 
         var best = candidateMatch(input, position, long_candidate, options, 8);
         const short_match = candidateMatch(input, position, short_candidate, options, 4);
