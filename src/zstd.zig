@@ -23,6 +23,8 @@ const incremental_history_match = @import("zstd/incremental/encoder/history_matc
 const incremental_history = @import("zstd/incremental/encoder/history.zig");
 const incremental_history_index = @import("zstd/incremental/encoder/history_index.zig");
 const double_fast_match = @import("zstd/match/double_fast.zig");
+const double_fast_sequence_plan = @import("zstd/match/double_fast/sequence_plan.zig");
+const large_sequence_record_values = @import("zstd/sequence/large/record_values.zig");
 const single_beam_match = @import("zstd/match/single_beam.zig");
 const optimal_four_match = @import("zstd/match/optimal_four.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
@@ -159,6 +161,8 @@ var test_disable_fast_large_direct_transitions = false;
 var test_fast_large_direct_transition_hits: usize = 0;
 var test_disable_fast_large_cached_planner = false;
 var test_fast_large_cached_planner_hits: usize = 0;
+var test_disable_fast_sequence_records = false;
+var test_fast_sequence_record_hits: usize = 0;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
 const frame_magic_u32: u32 = 0xfd2fb528;
@@ -420,6 +424,7 @@ pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(Incrementa
 
 test {
     _ = double_fast_match;
+    _ = double_fast_sequence_plan;
     _ = optimal_four_match;
     _ = incremental_tests;
     _ = incremental_history;
@@ -12198,35 +12203,13 @@ fn emitFastCompressedBlockWithScratch(
     }
 
     candidate.clearRetainingCapacity();
-    const parser_options = zstdHashParserOptions(block.len);
-    const stats: lz77.PlanStats = double_fast_match.planReuse(&scratch.greedy_tokens, allocator, block, parser_options) catch |err| switch (err) {
-        error.InvalidBlockPlan => lz77.PlanStats{},
-        else => return err,
-    };
-    const use_fast_large_planner = stats.matches > max_native_sequence_count;
-    const match_ok = stats.matches != 0 and if (use_fast_large_planner)
-        try emitLargeHashTokenSequenceBlockReuseFast(
-            allocator,
-            candidate,
-            block,
-            last,
-            scratch.greedy_tokens.items,
-            stats,
-            large_sequence_scratch,
-        )
-    else
-        try emitHashTokenSequenceBlockReuse(
-            allocator,
-            candidate,
-            block,
-            last,
-            scratch.greedy_tokens.items,
-            stats,
-            large_sequence_scratch,
-        );
+    const match_result = try emitFastMatchCandidate(allocator, candidate, block, last, large_sequence_scratch, scratch);
+    const match_ok = match_result.match_ok;
+    const use_fast_large_planner = match_result.use_fast_large_planner;
     if (comptime builtin.is_test) {
         test_fast_large_direct_transition_hits += @intFromBool(match_ok and use_fast_large_planner and !test_disable_fast_large_direct_transitions);
         test_fast_large_cached_planner_hits += @intFromBool(match_ok and use_fast_large_planner and !test_disable_fast_large_cached_planner);
+        test_fast_sequence_record_hits += @intFromBool(match_ok and match_result.used_sequence_records and use_fast_large_planner);
     }
     const match_ready = match_ok and try prepareSequenceCandidateForFrameWithScratch(
         allocator,
@@ -15502,6 +15485,173 @@ noinline fn emitLargeHashTokenSequenceBlockReuseFast(
         last,
         tokens,
         stats,
+        scratch,
+        null,
+        initial_repeated_offsets,
+    );
+}
+
+const FastMatchCandidateResult = struct {
+    match_ok: bool,
+    use_fast_large_planner: bool,
+    used_sequence_records: bool,
+};
+
+noinline fn emitFastMatchCandidate(
+    allocator: std.mem.Allocator,
+    candidate: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    large_sequence_scratch: *LargeSequenceScratch,
+    scratch: *NativeBlockEncodeScratch,
+) linksection(fast_encode_helper_text_section) Error!FastMatchCandidateResult {
+    const parser_options = zstdHashParserOptions(block.len);
+    if (block.len >= double_fast_match.sequence_plan_input_min and
+        (!builtin.is_test or !test_disable_fast_sequence_records))
+    {
+        return try emitFastSequenceRecordCandidate(
+            allocator,
+            candidate,
+            block,
+            last,
+            large_sequence_scratch,
+            scratch,
+            parser_options,
+        );
+    }
+    const stats: lz77.PlanStats = double_fast_match.planReuse(&scratch.greedy_tokens, allocator, block, parser_options) catch |err| switch (err) {
+        error.InvalidBlockPlan => lz77.PlanStats{},
+        else => return err,
+    };
+    const use_fast_large_planner = stats.matches > max_native_sequence_count;
+    const match_ok = stats.matches != 0 and if (use_fast_large_planner)
+        try emitLargeHashTokenSequenceBlockReuseFast(
+            allocator,
+            candidate,
+            block,
+            last,
+            scratch.greedy_tokens.items,
+            stats,
+            large_sequence_scratch,
+        )
+    else
+        try emitHashTokenSequenceBlockReuse(
+            allocator,
+            candidate,
+            block,
+            last,
+            scratch.greedy_tokens.items,
+            stats,
+            large_sequence_scratch,
+        );
+    return .{
+        .match_ok = match_ok,
+        .use_fast_large_planner = use_fast_large_planner,
+        .used_sequence_records = false,
+    };
+}
+
+noinline fn emitFastSequenceRecordCandidate(
+    allocator: std.mem.Allocator,
+    candidate: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    large_sequence_scratch: *LargeSequenceScratch,
+    scratch: *NativeBlockEncodeScratch,
+    parser_options: lz77.GreedyOptions,
+) linksection(fast_encode_helper_text_section) Error!FastMatchCandidateResult {
+    const stats: lz77.PlanStats = double_fast_match.planSequencesReuse(
+        &large_sequence_scratch.viable_masks,
+        allocator,
+        block,
+        parser_options,
+    ) catch |err| switch (err) {
+        error.InvalidBlockPlan => lz77.PlanStats{},
+        else => return err,
+    };
+    const use_fast_large_planner = stats.matches > max_native_sequence_count;
+    if (!use_fast_large_planner and stats.matches != 0)
+        if (!try double_fast_sequence_plan.materializeTokens(
+            &scratch.greedy_tokens,
+            allocator,
+            block,
+            large_sequence_scratch.viable_masks.items,
+        )) return error.CorruptFrame;
+    const match_ok = stats.matches != 0 and if (use_fast_large_planner)
+        try emitLargeDoubleFastSequenceBlockReuseFast(
+            allocator,
+            candidate,
+            block,
+            last,
+            large_sequence_scratch.viable_masks.items,
+            stats,
+            large_sequence_scratch,
+        )
+    else
+        try emitHashTokenSequenceBlockReuse(
+            allocator,
+            candidate,
+            block,
+            last,
+            scratch.greedy_tokens.items,
+            stats,
+            large_sequence_scratch,
+        );
+    return .{
+        .match_ok = match_ok,
+        .use_fast_large_planner = use_fast_large_planner,
+        .used_sequence_records = true,
+    };
+}
+
+noinline fn emitLargeDoubleFastSequenceBlockReuseFast(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    records: []const double_fast_sequence_plan.Record,
+    stats: lz77.PlanStats,
+    scratch: *LargeSequenceScratch,
+) linksection(fast_encode_helper_text_section) Error!bool {
+    const prepared = try large_sequence_record_values.prepare(
+        &scratch.values,
+        allocator,
+        records,
+        block.len,
+        stats,
+        max_native_sequence_count,
+    ) orelse return false;
+
+    const previous_direct = scratch.direct_transitions;
+    scratch.direct_transitions = !builtin.is_test or !test_disable_fast_large_direct_transitions;
+    defer scratch.direct_transitions = previous_direct;
+    if (comptime builtin.is_test) if (test_disable_fast_large_cached_planner)
+        return try emitLargeSequenceCompressedBlockWithStatePolicy(
+            false,
+            allocator,
+            out,
+            block,
+            last,
+            prepared.literal_lens,
+            prepared.offsets,
+            prepared.match_lens,
+            prepared.literal_ends,
+            prepared.tail_start,
+            scratch,
+            null,
+            initial_repeated_offsets,
+        );
+    return try emitLargeSequenceCompressedBlockWithStatePolicy(
+        true,
+        allocator,
+        out,
+        block,
+        last,
+        prepared.literal_lens,
+        prepared.offsets,
+        prepared.match_lens,
+        prepared.literal_ends,
+        prepared.tail_start,
         scratch,
         null,
         initial_repeated_offsets,
@@ -35010,11 +35160,15 @@ test "zstd fast compressed large transition path preserves frame wire" {
     test_fast_large_direct_transition_hits = 0;
     test_disable_fast_large_cached_planner = false;
     test_fast_large_cached_planner_hits = 0;
+    test_disable_fast_sequence_records = false;
+    test_fast_sequence_record_hits = 0;
     defer {
         test_disable_fast_large_direct_transitions = false;
         test_fast_large_direct_transition_hits = 0;
         test_disable_fast_large_cached_planner = false;
         test_fast_large_cached_planner_hits = 0;
+        test_disable_fast_sequence_records = false;
+        test_fast_sequence_record_hits = 0;
     }
     const payload = try std.testing.allocator.alloc(u8, std.compress.zstd.block_size_max);
     defer std.testing.allocator.free(payload);
@@ -35031,6 +35185,13 @@ test "zstd fast compressed large transition path preserves frame wire" {
     defer std.testing.allocator.free(direct.frame);
     try std.testing.expectEqual(@as(usize, 1), test_fast_large_direct_transition_hits);
     try std.testing.expectEqual(@as(usize, 1), test_fast_large_cached_planner_hits);
+    try std.testing.expectEqual(@as(usize, 1), test_fast_sequence_record_hits);
+
+    test_disable_fast_sequence_records = true;
+    const token_scanned = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(token_scanned.frame);
+    test_disable_fast_sequence_records = false;
+    try std.testing.expectEqualSlices(u8, direct.frame, token_scanned.frame);
 
     test_disable_fast_large_cached_planner = true;
     const direct_scalar_plan = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);

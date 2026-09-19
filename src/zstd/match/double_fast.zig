@@ -1,5 +1,7 @@
 const std = @import("std");
 const lz77 = @import("../../lz77.zig");
+const sequence_plan = @import("double_fast/sequence_plan.zig");
+const sequence_parser = @import("double_fast/sequence_parser.zig");
 
 // Upstream dfast gives both tables enough index bits to avoid letting common
 // four-byte JSON/source prefixes continuously evict useful candidates. These
@@ -12,6 +14,7 @@ const invalid_position = std.math.maxInt(u32);
 const wide_input_threshold = 64 * 1024;
 const initial_token_capacity = 64;
 pub const max_input_len = 128 * 1024;
+pub const sequence_plan_input_min = sequence_parser.input_len_min;
 // Long recent offsets are still available through the hash tables. Restrict
 // eager rep0 probing to the range where it measured as a reliable win: farther
 // rep0 matches displaced cheaper local structure on JSON and binary blocks.
@@ -156,6 +159,17 @@ pub fn planReuse(
 
     try appendLiterals(tokens, allocator, input[anchor..], &stats);
     return stats;
+}
+
+pub const SequenceRecord = sequence_plan.Record;
+
+pub fn planSequencesReuse(
+    records: *std.ArrayList(SequenceRecord),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: lz77.GreedyOptions,
+) !lz77.PlanStats {
+    return sequence_parser.planReuse(records, allocator, input, options);
 }
 
 fn consumeImmediateReps(
@@ -398,4 +412,66 @@ test "double-fast verified prefixes preserve complete match lengths" {
         try std.testing.expectEqual(if (expected_length >= 4) expected else Match{}, short_match);
         try std.testing.expectEqual(if (expected_length >= 8) expected else Match{}, long_match);
     }
+}
+
+test "double-fast compact sequence plan matches token plan" {
+    var input: [max_input_len]u8 = undefined;
+    var random_state: u32 = 0x3c6e_f372;
+    for (&input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(random_state >> 16);
+    }
+    const options: lz77.GreedyOptions = .{ .window_len = 32 * 1024, .min_match = 4, .max_match = 258 };
+    var expected: std.ArrayList(lz77.Token) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    const expected_stats = try planReuse(&expected, std.testing.allocator, &input, options);
+
+    var records: std.ArrayList(SequenceRecord) = .empty;
+    defer records.deinit(std.testing.allocator);
+    const actual_stats = try planSequencesReuse(&records, std.testing.allocator, &input, options);
+    try std.testing.expectEqual(expected_stats, actual_stats);
+    try std.testing.expectEqual(expected_stats.matches, records.items.len);
+
+    var actual: std.ArrayList(lz77.Token) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expect(try sequence_plan.materializeTokens(&actual, std.testing.allocator, &input, records.items));
+    try std.testing.expectEqualSlices(lz77.Token, expected.items, actual.items);
+}
+
+test "double-fast compact sequence plan materializes sparse wide input" {
+    const input = "abcdefghijklmnopqrstuvwxyz012345" ** 2049;
+    const options: lz77.GreedyOptions = .{ .window_len = 32 * 1024, .min_match = 4, .max_match = 258 };
+    var expected: std.ArrayList(lz77.Token) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    const expected_stats = try planReuse(&expected, std.testing.allocator, input, options);
+    try std.testing.expect(expected_stats.matches <= 512);
+
+    var records: std.ArrayList(SequenceRecord) = .empty;
+    defer records.deinit(std.testing.allocator);
+    const actual_stats = try planSequencesReuse(&records, std.testing.allocator, input, options);
+    try std.testing.expectEqual(expected_stats, actual_stats);
+    var actual: std.ArrayList(lz77.Token) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expect(try sequence_plan.materializeTokens(&actual, std.testing.allocator, input, records.items));
+    try std.testing.expectEqualSlices(lz77.Token, expected.items, actual.items);
+}
+
+test "double-fast compact sequence plan releases allocation failures" {
+    var input: [sequence_plan_input_min]u8 = undefined;
+    var random_state: u32 = 0xa54f_f53a;
+    for (&input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(random_state >> 16);
+    }
+    const options: lz77.GreedyOptions = .{ .window_len = 32 * 1024, .min_match = 4, .max_match = 258 };
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, bytes: []const u8, parser_options: lz77.GreedyOptions) !void {
+            var records: std.ArrayList(SequenceRecord) = .empty;
+            defer records.deinit(allocator);
+            const stats = try planSequencesReuse(&records, allocator, bytes, parser_options);
+            try std.testing.expectEqual(stats.matches, records.items.len);
+            try std.testing.expectEqual(bytes.len, stats.literals + stats.matched_bytes);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ &input, options });
 }

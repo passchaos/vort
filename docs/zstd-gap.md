@@ -949,6 +949,22 @@ Recommended next comparison steps:
   and a limit below eight bytes still reports `OutputLimitExceeded`. A 4 KiB
   metadata fixture under a 16-byte cap also verifies bounded scratch, partial
   capture, and continuation into the following data frame.
+  Wide explicit-fast encoding now bypasses the intermediate per-byte token
+  stream. The double-fast parser stores one checked compact `u64` record per
+  match, then expands those records directly into the existing reusable large-
+  sequence SoA scratch. The implementation is split between
+  `zstd/match/double_fast/sequence_parser.zig`, `sequence_plan.zig`, and
+  `zstd/sequence/large/record_values.zig`; ordinary blocks retain the original
+  token parser and sparse wide results still materialize tokens for the legacy
+  bounded fallback. Differential plan tests and a byte-for-byte frame switch
+  pin compatibility. Against the frozen pre-change executable, the final
+  15-pair fast matrix improves the 132,096-byte multiblock workload by
+  `1.0746x` with 15/15 wins and reaches `1.0167x` across row medians with a
+  `0.9938x` floor. All hashes, compressed sizes, reference sizes, and checksums
+  remain identical. Short default-row anomalies were rerun as 31-pair,
+  1,000-encode controls and all retained at least `0.9916x`. The full Zstd
+  compatibility and build gates pass, including 276 libzstd cases and all
+  1,613 repository tests.
 
 1. The new opt-in `run-zstd-reference-bench-gate` now provides same-process
    caller-owned decode rows against runtime libzstd. Optimize the locked raw-

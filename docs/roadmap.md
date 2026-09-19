@@ -14857,3 +14857,28 @@ reuse, so production keeps the simpler independently owned plans.
   from the reverse DP was only `1.0007x` median with 8/15 target wins, and
   replacing the forward non-empty check with a debug invariant was `0.9996x`
   with 7/15 wins.
+  Wide double-fast blocks now emit one compact `u64` record per match instead
+  of first materializing every literal as an LZ77 token and then rescanning the
+  token stream into four large-sequence arrays. Record packing and validation
+  live in `zstd/match/double_fast/sequence_plan.zig`, the wide-only parser lives
+  in `zstd/match/double_fast/sequence_parser.zig`, and the SoA adapter lives in
+  `zstd/sequence/large/record_values.zig`; the established token parser remains
+  source-identical and blocks at or below 64 KiB retain that path. Wide parses
+  with at most 512 matches materialize the old token representation before
+  entering its bounded encoder, while denser parses feed the reusable large
+  encoder directly. Compact/token differential tests, malformed-record and OOM
+  checks, plus a whole-frame switch compare both routes byte-for-byte. A shared
+  generic sink was rejected because it reduced the level-3 tradeoff row to
+  `0.9826x`; forcing that shared parser inline was worse at `0.9214x`. Keeping
+  the state machines in separate modules and isolating candidate emission in a
+  noinline helper preserves the ordinary hot path. Against frozen `a3cdaeb4`
+  and final `08a8dce0` ReleaseFast executables, fifteen alternating
+  1,500-encode fast matrices preserve every hash, Vort/reference size, and
+  checksum. The 132,096-byte multiblock row improves by `1.0746x` median with
+  15/15 wins; the five row-median geometric mean is `1.0167x` with a
+  `0.9938x` floor. The default 20-row nine-pair matrix is `0.9964x` overall;
+  31-pair, 1,000-encode controls recover every sub-0.99 short row to
+  `0.9916x`--`1.0016x`. The retained source passes the five-row fast gate,
+  2,044-sequence large probe, 276-case libzstd compatibility matrix, 237-case
+  frame probe, 25-case dictionary probe, 26-case CLI differential probe, all
+  1,613 tests, and all 94 `check` build steps.
