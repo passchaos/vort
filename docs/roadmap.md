@@ -15137,6 +15137,28 @@ reuse, so production keeps the simpler independently owned plans.
   237-case native probe, 276-case compatibility matrix, 26-case CLI
   differential, 9,900-frame upstream corpus, all 1,619 tests, and all 94
   `check` steps pass.
+  Huffman-weight normalized-count parsing now uses a dedicated forward
+  reservoir in `zstd/literals/weight_fse.zig`, following libzstd's key
+  `FSE_readNCount_body` property of loading neighboring bytes once and consuming
+  successive fields by shift. The narrow parser accepts only the format's
+  tableLog-5/6 range and reports its exact byte consumption; the general
+  sequence parser remains out of line so its call and code-layout boundary is
+  stable. A per-bit module oracle and a generic-parser differential exercise
+  98,304 randomized inputs and compare successful values plus malformed/truncated
+  errors exactly. Frozen `00054ef9`/`a475a3e6` ReleaseFast binaries improve
+  one-shot `numbered_json` by `1.0170x` median / `1.0189x` geometric throughput
+  over 15 alternating 200,000-decode pairs, with 15/15 wins and a `1.0038x`
+  minimum. Reusable `numbered_json` improves `1.0173x` median. The five-row
+  one-shot/reusable row-median geomeans are `1.0050x`/`1.0041x`, and their
+  floors are `0.9961x`/`0.9940x`. Twenty-one same-process libzstd 1.5.7 runs
+  measure 608.63 versus 649.35 MiB/s (`0.9366x`) one-shot and 416.20 versus
+  638.92 MiB/s (`0.6521x`) reusable. The decode-profile and 13-row
+  reference gates pass, as do the 237-case native probe, 276-case compatibility
+  matrix, 26-case CLI differential, 9,900-frame upstream corpus with 64/64 mode
+  combinations and 76,578 streamed sequence blocks, all 1,623 tests, and all 94
+  `check` steps. A fixed tableLog-5 builder was separately rejected: eleven
+  target pairs had only one win and a `0.9931x` median, confirming that the
+  existing 32-state bitset builder is already the better implementation.
   The small mixed-FSE decoder now sizes its complete Huffman lookup to the
   accepted tree width. Its fixed `numbered_json` tree is seven bits wide, so a
   real `Table(7)` initializes and retains 128 entries instead of a partially

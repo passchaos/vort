@@ -1192,9 +1192,28 @@ Recommended next comparison steps:
   throughput reaches 585.95 MiB/s against libzstd 1.5.7 at 640.28 MiB/s
   (`0.9152x`). All 237 native, 276 compatibility, 26 CLI differential, 9,900
   upstream corpus, 1,621 test, and 94 build-check cases pass.
+  FSE-compressed Huffman weights now parse their tableLog-5/6 normalized-count
+  header from one reusable 64-bit forward reservoir. The implementation lives
+  in `zstd/literals/weight_fse.zig`; it is inlined only into the Huffman-weight
+  path, while the general sequence normalized-count parser remains an explicit
+  out-of-line boundary. An independent per-bit oracle and a second differential
+  against the established generic parser compare acceptance, exact errors,
+  consumed bytes, table length, value count, and every normalized count over
+  98,304 randomized short inputs. Against frozen independent `00054ef9`/
+  `a475a3e6` ReleaseFast binaries, 15 alternating 200,000-decode pairs improve
+  one-shot `numbered_json` by `1.0170x` median / `1.0189x` geometrically with
+  15/15 wins and a `1.0038x` minimum. The matching five-row one-shot/reusable
+  row-median geomeans are `1.0050x`/`1.0041x`, with `0.9961x`/`0.9940x`
+  floors; reusable `numbered_json` improves `1.0173x` median. A 21-run
+  same-process comparison now measures 608.63 versus 649.35 MiB/s for libzstd
+  1.5.7 (`0.9366x`) one-shot and 416.20 versus 638.92 MiB/s (`0.6521x`)
+  reusable. All 237 native, 276 compatibility, 26 CLI differential, 9,900
+  upstream corpus, 1,623 test, and 94 build-check cases pass. A separate fixed
+  32-state builder was rejected after only 1/11 target wins and a `0.9931x`
+  median, so the established compact table builder remains in place.
 
 1. Keep closing the two remaining measured general decode gaps: the small
-   mixed-FSE `numbered_json` row is about `0.915x` libzstd and the multi-block
+   mixed-FSE `numbered_json` row is about `0.937x` libzstd and the multi-block
    all-FSE/Huffman `large_json` row is about `0.827x` one-shot (`0.903x`
    warmed); prioritize tree/lookup setup and sequence execution
    without perturbing already-leading raw/RLE and single-sequence paths.

@@ -15,6 +15,7 @@ const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
 const huffman_reservoir = @import("zstd/literals/huffman_reservoir.zig");
+const huffman_weight_fse = @import("zstd/literals/weight_fse.zig");
 const seekable = @import("zstd/seekable.zig");
 const dictionary_format = @import("zstd/dictionary_format.zig");
 const incremental_encoder = @import("zstd/incremental/encoder/frame.zig");
@@ -8419,11 +8420,13 @@ noinline fn decodeLinearZstdHuffmanTree(
 }
 
 inline fn decodeHuffmanWeightsFse(compressed: []const u8, weights: *[256]u4) Error!usize {
-    var forward: ForwardBitReader = .{ .bytes = compressed };
     var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
-    const table_len = try decodeFseTable(&forward, 256, 6, &entries);
-    if (forward.byteIndex() >= compressed.len) return error.TruncatedFrame;
-    var reverse = try ReverseBitReader.init(compressed[forward.byteIndex()..]);
+    var values: [256]u16 = undefined;
+    const decoded = try huffman_weight_fse.parseNormalizedCounts(compressed, &values);
+    try buildFseTable(values[0..decoded.value_count], entries[0..decoded.table_len]);
+    if (decoded.bytes_consumed >= compressed.len) return error.TruncatedFrame;
+    var reverse = try ReverseBitReader.init(compressed[decoded.bytes_consumed..]);
+    const table_len = decoded.table_len;
     const accuracy_log: u8 = @intCast(std.math.log2_int(usize, table_len));
     var even_state = try reverse.readSmall(@intCast(accuracy_log));
     var odd_state = try reverse.readSmall(@intCast(accuracy_log));
@@ -8951,7 +8954,7 @@ const DecodedFseNormalizedCounts = struct {
     table_len: usize,
 };
 
-fn decodeFseNormalizedCounts(
+noinline fn decodeFseNormalizedCounts(
     reader: *ForwardBitReader,
     expected_symbol_count: usize,
     max_accuracy_log: u4,
@@ -9003,6 +9006,21 @@ fn decodeFseNormalizedCounts(
     if (value_count > expected_symbol_count) return error.CorruptFrame;
     const table_len: usize = @as(usize, 1) << @intCast(accuracy_log);
     return .{ .value_count = value_count, .table_len = table_len };
+}
+
+test "zstd Huffman weight normalized-count parser matches generic decoder" {
+    const Adapter = struct {
+        fn parse(bytes: []const u8, values: *[256]u16) Error!huffman_weight_fse.ParseResult {
+            var reader: ForwardBitReader = .{ .bytes = bytes };
+            const decoded = try decodeFseNormalizedCounts(&reader, 256, 6, values);
+            return .{
+                .value_count = decoded.value_count,
+                .table_len = decoded.table_len,
+                .bytes_consumed = reader.byteIndex(),
+            };
+        }
+    };
+    try huffman_weight_fse.expectMatchesGeneric(Adapter.parse);
 }
 
 fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {
