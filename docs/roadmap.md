@@ -15217,6 +15217,26 @@ reuse, so production keeps the simpler independently owned plans.
   probe, 276-case compatibility matrix, 26-case CLI differential, 9,900-frame
   corpus with all 64 mode tuples and 76,578 streamed sequence blocks, all 1,625
   tests, and all 94 `check` steps.
+  The large split-Huffman/all-FSE executor now handles its dominant
+  positive-literal OF-code-zero case without entering the full repeat/direct
+  offset resolver. A temporary untimed profile established that 6,020 of
+  `large_json`'s 7,299 sequences select rep0 without rotating the ring. The
+  narrow implementation lives in `zstd/sequence/large/offset.zig`; it rejects a
+  zero rep0 and proves that successful selection leaves all three offsets
+  unchanged, while the fixed 128 KiB frame asserts more than 1,000 production
+  hits before its existing output, suffix, error, and mutation comparisons.
+  Against frozen `1d4224c4`/`8c1b716b` ReleaseFast binaries, 15-pair five-row
+  matrices improve `large_json` by `1.0297x` one-shot and `1.0386x` reusable.
+  Row-median geomeans are `1.0137x`/`1.0089x`, with `1.0042x`/`0.9986x`
+  floors. Twenty-one same-process libzstd 1.5.7 runs measure 5,269.49 versus
+  6,152.54 MiB/s (`0.8546x`) one-shot and 6,037.48 versus 6,167.30 MiB/s
+  (`0.9894x`) reusable. The decode-profile and 13-row reference gates pass, as
+  do the 237-case native probe, 276-case compatibility matrix, 26-case CLI
+  differential, 9,900-frame corpus with all 64 mode tuples and 76,578 streamed
+  sequence blocks, all 1,626 tests, and all 94 `check` steps. A nearby attempt
+  to remove checked addition from the three FSE state transitions was rejected:
+  despite a dedicated reader oracle it reduced `large_json` to `0.9386x` with
+  0/15 wins, so the shared checked transition remains.
   The small mixed-FSE decoder now sizes its complete Huffman lookup to the
   accepted tree width. Its fixed `numbered_json` tree is seven bits wide, so a
   real `Table(7)` initializes and retains 128 entries instead of a partially

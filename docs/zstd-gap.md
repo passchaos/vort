@@ -1265,11 +1265,27 @@ Recommended next comparison steps:
   versus 631.77 MiB/s (`1.0464x`). All 237 native, 276 compatibility, 26 CLI
   differential, 9,900 upstream corpus, 1,625 test, and 94 build-check cases
   pass.
+  The split-Huffman/all-FSE executor now recognizes its dominant positive-
+  literal OF-code-zero case directly. In `large_json`, 6,020 of 7,299
+  sequences select rep0 without rotating the recent-offset ring; these no
+  longer enter the complete repeat/direct-offset resolver. The tiny semantic
+  helper lives in `zstd/sequence/large/offset.zig`, where its zero-offset error
+  and unchanged-ring contract are tested, while the fixed 128 KiB frame asserts
+  more than 1,000 production hits before comparing fast/generic output and
+  mutations. Frozen `1d4224c4`/`8c1b716b` ReleaseFast binaries improve
+  `large_json` by `1.0297x` one-shot and `1.0386x` reusable at the 15-pair row
+  medians; the five-row row-median geomeans are `1.0137x`/`1.0089x`, with
+  `1.0042x`/`0.9986x` floors. Current 21-run same-process throughput is
+  5,269.49 versus 6,152.54 MiB/s (`0.8546x`) one-shot and 6,037.48 versus
+  6,167.30 MiB/s (`0.9894x`) reusable. All 237 native, 276 compatibility, 26
+  CLI differential, 9,900 upstream corpus, 1,626 test, and 94 build-check cases
+  pass. A separate specialized unchecked FSE-state transition helper was
+  rejected after reducing `large_json` to `0.9386x` with 0/15 wins.
 
 1. Keep closing the two remaining measured general decode gaps: the small
    mixed-FSE `numbered_json` row now leads libzstd by about `1.046x` one-shot
    and `1.012x` reusable; the multi-block all-FSE/Huffman
-   `large_json` row is about `0.827x` one-shot (`0.903x` warmed). Prioritize
+   `large_json` row is about `0.855x` one-shot (`0.989x` warmed). Prioritize
    large-frame sequence execution and broader corpus coverage without
    perturbing already-leading raw/RLE, single-sequence, or one-shot paths.
 2. Add library-level range-latency rows for the public seekability tiers

@@ -33,6 +33,7 @@ const optimal_four_match = @import("zstd/match/optimal_four.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
 const large_transition = @import("zstd/sequence/large/transition.zig");
+const large_offset = @import("zstd/sequence/large/offset.zig");
 const large_fast_plan = @import("zstd/sequence/large/plan.zig");
 const large_predefined = @import("zstd/sequence/large/predefined.zig");
 
@@ -166,6 +167,7 @@ var test_disable_split_huffman_decode = false;
 var test_split_huffman_decode_hits: usize = 0;
 var test_split_huffman_single_literal_hits: usize = 0;
 var test_split_huffman_match_68_70_hits: usize = 0;
+var test_split_huffman_positive_rep0_hits: usize = 0;
 var test_small_mixed_fse_fast_literal_hits: usize = 0;
 var test_small_mixed_fse_match_56_hits: usize = 0;
 var test_small_mixed_fse_match_6_7_hits: usize = 0;
@@ -9832,7 +9834,10 @@ noinline fn tryDecodeAllFseSplitHuffmanSequences(
         const offset_extra = try state.reader.readSequenceField(of_symbol.additional_bits);
         const match_len = @as(usize, ml_symbol.base) + try state.reader.readSequenceField(ml_symbol.additional_bits);
         const literal_len = @as(usize, ll_symbol.base) + try state.reader.readSequenceField(ll_symbol.additional_bits);
-        const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
+        const match_offset = if (of_symbol.additional_bits == 0 and literal_len != 0) blk: {
+            if (builtin.is_test) test_split_huffman_positive_rep0_hits += 1;
+            break :blk try large_offset.positiveLiteralRep0(&state.repeated_offsets);
+        } else try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
         state.remaining -= 1;
         if (state.remaining != 0) {
             state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
@@ -28432,6 +28437,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         test_split_huffman_decode_hits = 0;
         test_split_huffman_single_literal_hits = 0;
         test_split_huffman_match_68_70_hits = 0;
+        test_split_huffman_positive_rep0_hits = 0;
     }
     const encoded_hex_file = @embedFile("zstd/testdata/libzstd-large-json-128k.frame.hex");
     var encoded: [2874]u8 = undefined;
@@ -28479,10 +28485,12 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     test_split_huffman_decode_hits = 0;
     test_split_huffman_single_literal_hits = 0;
     test_split_huffman_match_68_70_hits = 0;
+    test_split_huffman_positive_rep0_hits = 0;
     const fast_written = try decodeNativeFrameInto(&encoded, fast_output);
     try std.testing.expectEqual(@as(usize, 1), test_split_huffman_decode_hits);
     try std.testing.expect(test_split_huffman_single_literal_hits > 1000);
     try std.testing.expect(test_split_huffman_match_68_70_hits > 100);
+    try std.testing.expect(test_split_huffman_positive_rep0_hits > 1000);
     test_disable_split_huffman_decode = true;
     defer test_disable_split_huffman_decode = false;
     const generic_written = try decodeNativeFrameInto(&encoded, generic_output);
