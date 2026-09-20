@@ -15137,3 +15137,21 @@ reuse, so production keeps the simpler independently owned plans.
   237-case native probe, 276-case compatibility matrix, 26-case CLI
   differential, 9,900-frame upstream corpus, all 1,619 tests, and all 94
   `check` steps pass.
+  Canonical Huffman tree construction now accumulates rank counts during the
+  already-required power-sum pass, then installs the implied final weight
+  directly into the same counts. This removes a second complete scan of up to
+  256 decoded weights while retaining the narrow invalid-weight count check.
+  The existing 512 randomized malformed-input comparison against Zig std plus
+  generated direct/FSE tree comparisons remain the oracle for tree bytes,
+  reader progress, and error classification. Against frozen independent
+  `96f9ed66`/`91eda15f` ReleaseFast binaries, 21 alternating 200,000-decode
+  `numbered_json` pairs improve by `1.0318x` median / `1.0267x` geometric
+  throughput with 20/21 wins. The warmed target improves `1.0260x`; a 21-pair
+  `large_json` control is neutral at `1.0019x`. Seven-pair five-row one-shot
+  and reusable matrices improve `1.0140x`/`1.0068x` across row medians, with
+  no row-median regression below `0.9973x`. A 21-run same-process comparison
+  measures `numbered_json` at 516.09 MiB/s one-shot and 426.72 MiB/s reusable
+  versus 641.13/654.94 MiB/s for libzstd 1.5.7, or `0.7963x`/`0.6521x`. The
+  237-case native probe, 276-case compatibility matrix, 26-case CLI
+  differential, 9,900-frame upstream corpus, all 1,619 tests, and all 94
+  `check` steps pass.

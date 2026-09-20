@@ -8464,21 +8464,22 @@ fn readHuffmanWeightFseBits(reader: *ReverseBitReader, bit_count: u8) Error!Huff
 inline fn buildHuffmanTreeFromWeights(weights: *[256]u4, symbol_count: usize) Error!StdZstdHuffmanTree {
     if (symbol_count < 2 or symbol_count > weights.len) return error.CorruptFrame;
     var weight_power_sum: u32 = 0;
+    var counts: [16]u16 = @splat(0);
     for (weights[0 .. symbol_count - 1]) |weight| {
         if (weight > 11) return error.CorruptFrame;
         weight_power_sum += (@as(u16, 1) << weight) >> 1;
+        counts[weight] += 1;
     }
     if (weight_power_sum >= 1 << 11) return error.CorruptFrame;
     const max_bit_count: u4 = @intCast(if (weight_power_sum == 0) 1 else std.math.log2_int(u32, weight_power_sum) + 1);
     const remaining_power = (@as(u32, 1) << max_bit_count) - weight_power_sum;
     if (remaining_power == 0) return error.CorruptFrame;
-    weights[symbol_count - 1] = @intCast(std.math.log2_int(u32, remaining_power) + 1);
-
-    var counts: [16]u16 = @splat(0);
-    for (weights[0..symbol_count]) |weight| {
-        if (weight > max_bit_count + 1) return error.CorruptFrame;
-        counts[weight] += 1;
-    }
+    const implied_weight: u4 = @intCast(std.math.log2_int(u32, remaining_power) + 1);
+    weights[symbol_count - 1] = implied_weight;
+    counts[implied_weight] += 1;
+    const first_invalid_weight: usize = @as(usize, max_bit_count) + 2;
+    for (counts[first_invalid_weight..]) |count|
+        if (count != 0) return error.CorruptFrame;
     var starts: [16]u16 = @splat(0);
     var active_count: usize = 0;
     for (1..counts.len) |weight| {

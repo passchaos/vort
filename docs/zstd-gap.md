@@ -1119,9 +1119,24 @@ Recommended next comparison steps:
   yet use the small mixed-FSE decoder. All 237 native, 276 compatibility, 26
   CLI differential, 9,900 upstream corpus, 1,619 test, and 94 build-check cases
   pass.
+  Canonical Huffman tree construction now folds rank-count accumulation into
+  its required weight power-sum pass and adds the implied final weight directly,
+  removing one full scan of up to 256 weights. The remaining narrow count-range
+  validation preserves malformed-stream behavior, while the existing 512-case
+  randomized parser comparison against Zig std and generated-tree oracle cover
+  exact results. Frozen `96f9ed66`/`91eda15f` binaries improve one-shot
+  `numbered_json` by `1.0318x` median / `1.0267x` geometrically over 21
+  alternating 200,000-decode pairs with 20/21 wins; reusable improves
+  `1.0260x`, and `large_json` remains neutral at `1.0019x`. Five-row
+  one-shot/reusable row-median geomeans are `1.0140x`/`1.0068x`, with every
+  row median at least `0.9973x`. Current same-process `numbered_json` throughput
+  is 516.09 MiB/s one-shot and 426.72 MiB/s reusable versus 641.13/654.94 MiB/s
+  for libzstd 1.5.7 (`0.7963x`/`0.6521x`). All 237 native, 276 compatibility,
+  26 CLI differential, 9,900 upstream corpus, 1,619 test, and 94 build-check
+  cases pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
-   mixed-FSE `numbered_json` row is about `0.776x` libzstd and the multi-block
+   mixed-FSE `numbered_json` row is about `0.796x` libzstd and the multi-block
    all-FSE/Huffman `large_json` row is about `0.827x` one-shot (`0.903x`
    warmed); prioritize tree/lookup setup and sequence execution
    without perturbing already-leading raw/RLE and single-sequence paths.
