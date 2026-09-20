@@ -8457,11 +8457,8 @@ inline fn decodeHuffmanWeightsFse(compressed: []const u8, weights: *[256]u4) Err
 const HuffmanWeightFseBits = struct { value: usize, count: u8 };
 
 fn readHuffmanWeightFseBits(reader: *ReverseBitReader, bit_count: u8) Error!HuffmanWeightFseBits {
-    const count: u8 = @intCast(@min(@as(usize, bit_count), reader.available()));
-    return .{
-        .value = if (count == 0) 0 else try reader.read(count),
-        .count = count,
-    };
+    const result = try reader.readSmallAvailable(@intCast(bit_count));
+    return .{ .value = result.value, .count = result.count };
 }
 
 inline fn buildHuffmanTreeFromWeights(weights: *[256]u4, symbol_count: usize) Error!StdZstdHuffmanTree {

@@ -190,6 +190,17 @@ pub const Reader = struct {
         return value;
     }
 
+    /// Read up to the currently available prefix for FSE streams whose state
+    /// width is bounded to the small-reader range. The returned count lets the
+    /// caller distinguish a clean final partial transition from truncation.
+    pub inline fn readSmallAvailable(self: *Reader, bit_count: u4) Error!struct { value: usize, count: u4 } {
+        const count: u4 = @intCast(@min(@as(usize, bit_count), self.remaining_bits));
+        return .{
+            .value = if (count == 0) 0 else try self.readSmall(count),
+            .count = count,
+        };
+    }
+
     pub fn skip(self: *Reader, bit_count: u8) Error!void {
         if (bit_count > self.remaining_bits) return error.TruncatedFrame;
         self.remaining_bits -= bit_count;
@@ -317,6 +328,24 @@ test "Zstd reverse reader small read matches generic read" {
         var width: u4 = 1;
         while (width <= 11 and width <= fast.available()) : (width += 1) {
             try std.testing.expectEqual(try generic.read(width), try fast.readSmall(width));
+        }
+    }
+}
+
+test "Zstd reverse reader available small read matches bounded generic read" {
+    const bytes = [_]u8{ 0x35, 0xa6, 0x59, 0xc3, 0xd0 };
+    for (0..32) |consumed| {
+        var fast = try Reader.init(&bytes);
+        if (consumed != 0) try fast.skip(@intCast(consumed));
+        var generic = fast;
+        var width: u4 = 0;
+        while (width <= 6) : (width += 1) {
+            const expected_count: u4 = @intCast(@min(@as(usize, width), generic.available()));
+            const expected_value = if (expected_count == 0) 0 else try generic.read(expected_count);
+            const actual = try fast.readSmallAvailable(width);
+            try std.testing.expectEqual(expected_count, actual.count);
+            try std.testing.expectEqual(expected_value, actual.value);
+            try std.testing.expectEqual(generic.available(), fast.available());
         }
     }
 }

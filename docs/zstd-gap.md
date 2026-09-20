@@ -1103,9 +1103,25 @@ Recommended next comparison steps:
   against libzstd 1.5.7 at 6,440.12/6,402.00 MiB/s, closing the ratios to
   `0.8273x`/`0.9025x`. All 237 native, 276 compatibility, 26 CLI differential,
   9,900 upstream corpus, 1,618 test, and 94 build-check cases pass.
+  Huffman-weight FSE decoding now routes its at-most-six-bit state transitions
+  through the bounded small reader rather than the generic reverse reader's
+  wide reservoir path. The helper returns both value and the actual consumed
+  width so the legal final partial transition retains its previous behavior; a
+  new alignment/width oracle compares every width zero through six against the
+  generic reader, while the existing randomized tree parser remains the
+  end-to-end oracle. Frozen `7813877e`/`96f9ed66` binaries improve one-shot
+  `numbered_json` by `1.0127x` median / `1.0159x` geometrically over 21
+  alternating 200,000-decode pairs with 17/21 wins. Longer controls retain
+  `large_json` one-shot at `0.9911x`, reusable `ascii64k` at `0.9983x`, and
+  reusable `large_json` at `0.9955x`. Current same-process throughput is
+  506.06 MiB/s versus 650.65 MiB/s for libzstd 1.5.7 (`0.7756x`) one-shot;
+  reusable is still 415.97 versus 650.16 MiB/s (`0.6393x`) because it does not
+  yet use the small mixed-FSE decoder. All 237 native, 276 compatibility, 26
+  CLI differential, 9,900 upstream corpus, 1,619 test, and 94 build-check cases
+  pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
-   mixed-FSE `numbered_json` row is about `0.766x` libzstd and the multi-block
+   mixed-FSE `numbered_json` row is about `0.776x` libzstd and the multi-block
    all-FSE/Huffman `large_json` row is about `0.827x` one-shot (`0.903x`
    warmed); prioritize tree/lookup setup and sequence execution
    without perturbing already-leading raw/RLE and single-sequence paths.

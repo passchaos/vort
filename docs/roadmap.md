@@ -15116,3 +15116,24 @@ reuse, so production keeps the simpler independently owned plans.
   `0.8273x`/`0.9025x`. The 237-case native probe, 276-case compatibility
   matrix, 26-case CLI differential, 9,900-frame upstream corpus, all 1,618
   tests, and all 94 `check` steps pass.
+  Huffman-weight FSE transitions now use the existing bounded small-bit reader
+  instead of the generic reverse reader. Weight tables have a maximum accuracy
+  log of six, so every transition is limited to six bits; the specialized
+  helper avoids carrying the generic 3--9-byte reservoir and memcpy fallback
+  through this table-build loop while still returning the actual number of
+  bits available for the legal final partial transition. A new exhaustive
+  alignment/width oracle compares it against bounded generic reads, and the
+  existing 512 malformed-parser comparisons continue to match Zig std's
+  acceptance and exact trees. Against frozen independent `7813877e`/`96f9ed66`
+  ReleaseFast binaries, 21 alternating 200,000-decode `numbered_json` pairs
+  improve by `1.0127x` median / `1.0159x` geometric throughput with 17/21 wins.
+  The warmed target is neutral at `1.0012x`; a 31-pair, 50,000-decode
+  `large_json` one-shot control recovers the short low result to `0.9911x`,
+  while 31-pair reusable controls measure `0.9983x` for `ascii64k` and
+  `0.9955x` for `large_json`. A 21-run same-process comparison measures
+  `numbered_json` at 506.06 MiB/s versus 650.65 MiB/s for libzstd 1.5.7, or
+  `0.7756x`; reusable remains 415.97 versus 650.16 MiB/s (`0.6393x`) because
+  that public path still bypasses the small mixed-FSE specialization. The
+  237-case native probe, 276-case compatibility matrix, 26-case CLI
+  differential, 9,900-frame upstream corpus, all 1,619 tests, and all 94
+  `check` steps pass.
