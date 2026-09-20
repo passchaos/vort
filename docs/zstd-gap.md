@@ -1281,12 +1281,30 @@ Recommended next comparison steps:
   CLI differential, 9,900 upstream corpus, 1,626 test, and 94 build-check cases
   pass. A separate specialized unchecked FSE-state transition helper was
   rejected after reducing `large_json` to `0.9386x` with 0/15 wins.
+  The same split-Huffman executor now fuses its dominant one-literal,
+  71-byte-match positive-rep0 sequence. It emits the literal, performs the
+  existing frame-history and exact-output checks, then calls the established
+  exact 71-byte non-overlapping copy kernel without returning through the
+  generic literal and match dispatch. The fixed 128 KiB frame records 607
+  fused sequences (and asserts more than 500) before its byte-for-byte generic
+  comparison, short-output suffix check, and 128 bitstream/literal mutations.
+  Against frozen `8c1b716b`/`477051df` ReleaseFast binaries, 15 alternating
+  20,000-decode confirmation pairs improve `large_json` by `1.0477x` at the
+  one-shot median (13/15 wins) and `1.0460x` reusable (11/15 wins). A separate
+  31-pair, 20,000-decode reusable `binary_mixed` control recovers the noisy
+  short matrix to `0.9991x` median / `1.0034x` geometric throughput. Twenty-one
+  same-process libzstd 1.5.7 runs now measure `large_json` at 4,996.01 versus
+  5,625.87 MiB/s (`0.8922x` median ratio) one-shot and 6,316.21 versus 6,156.34
+  MiB/s (`1.0270x`) reusable. The decode-profile and 13-row reference gates
+  pass, as do the 237-case native probe, 276-case compatibility matrix,
+  26-case CLI differential, 9,900-frame corpus with all 64 mode tuples and
+  76,578 streamed sequence blocks, all 1,626 tests, and all 94 `check` steps.
 
-1. Keep closing the two remaining measured general decode gaps: the small
-   mixed-FSE `numbered_json` row now leads libzstd by about `1.046x` one-shot
-   and `1.012x` reusable; the multi-block all-FSE/Huffman
-   `large_json` row is about `0.855x` one-shot (`0.989x` warmed). Prioritize
-   large-frame sequence execution and broader corpus coverage without
+1. Keep closing the remaining measured one-shot general decode gap: the small
+   mixed-FSE `numbered_json` row leads libzstd in both modes, and the
+   multi-block all-FSE/Huffman `large_json` row now leads by about `1.027x`
+   warmed but remains about `0.892x` one-shot. Prioritize one-shot large-frame
+   setup and sequence execution plus broader corpus coverage without
    perturbing already-leading raw/RLE, single-sequence, or one-shot paths.
 2. Add library-level range-latency rows for the public seekability tiers
    (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because even the

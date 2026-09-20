@@ -15237,6 +15237,26 @@ reuse, so production keeps the simpler independently owned plans.
   to remove checked addition from the three FSE state transitions was rejected:
   despite a dedicated reader oracle it reduced `large_json` to `0.9386x` with
   0/15 wins, so the shared checked transition remains.
+  The split-Huffman/all-FSE executor now fuses its common one-literal,
+  71-byte-match positive-rep0 sequence after decoding the three symbols and
+  updating FSE state. The branch preserves the established literal/history/
+  output validation order and reuses the exact non-overlapping 71-byte copy
+  kernel; other lengths, overlapping matches, dictionary-backed frames, and
+  the generic decoder remain unchanged. The fixed 128 KiB libzstd frame hits
+  the production branch 607 times and keeps its full output, untouched suffix,
+  short-output, and 128-mutation differential oracle. Frozen independent
+  `8c1b716b`/`477051df` ReleaseFast binaries improve `large_json` by `1.0477x`
+  at the one-shot median over 15 alternating 20,000-decode pairs (13/15 wins)
+  and by `1.0460x` reusable (11/15 wins). The initially noisy reusable
+  `binary_mixed` control recovers to `0.9991x` median / `1.0034x` geometric
+  throughput over 31 longer pairs. Twenty-one same-process libzstd 1.5.7 runs
+  measure 4,996.01 versus 5,625.87 MiB/s (`0.8922x` median ratio) one-shot and
+  6,316.21 versus 6,156.34 MiB/s (`1.0270x`) reusable, putting the warmed
+  large-JSON path ahead while leaving one-shot as the next priority. The
+  decode-profile and 13-row reference gates pass, as do the 237-case native
+  probe, 276-case compatibility matrix, 26-case CLI differential, 9,900-frame
+  corpus with all 64 mode tuples and 76,578 streamed sequence blocks, all
+  1,626 tests, and all 94 `check` steps.
   The small mixed-FSE decoder now sizes its complete Huffman lookup to the
   accepted tree width. Its fixed `numbered_json` tree is seven bits wide, so a
   real `Table(7)` initializes and retains 128 entries instead of a partially
