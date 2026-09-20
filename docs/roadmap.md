@@ -15093,3 +15093,26 @@ reuse, so production keeps the simpler independently owned plans.
   237-case native probe, 276-case compatibility matrix, 26-case CLI
   differential, 9,900-frame upstream corpus, 1,617 tests, and 94 `check` steps
   pass.
+  The large split-Huffman/all-FSE sequence executor now keeps the adjacent
+  68--70-byte non-overlapping match cluster out of the dynamic-length memmove
+  path. The exact-size helper lives in `zstd/sequence/match_copy.zig`: two
+  32-byte vector copies plus bounded 4/5/6-byte tails never touch the caller's
+  output suffix. Its oracle compares the complete output buffer against the
+  generic LZ replay for all three lengths, while the fixed 128 KiB libzstd-frame
+  test proves the specialized branch is exercised before retaining the existing
+  fast/generic output, `OutputTooSmall`, suffix, and mutation comparisons. The
+  512 KiB `large_json` workload contains 287/161/780 matches of lengths
+  68/69/70, so this removes 1,228 dynamic copies per decode without changing
+  the 6,059 already-specialized 71-byte matches. Against frozen independent
+  `a7d47fee`/`7813877e` ReleaseFast binaries, 21 alternating 20,000-decode
+  pairs improve `large_json` by `1.0302x` median / `1.0367x` geometric
+  throughput with 21/21 wins and a `1.0092x` minimum. Five-row one-shot and
+  reusable matrices reach `1.0015x`/`1.0117x` across row medians. Longer
+  controls recover short-run low rows to `1.0001x` for one-shot `ascii64k`,
+  `0.9984x` for reusable `ascii64k`, `0.9958x` for one-shot `binary_mixed`,
+  and `1.0062x` for reusable `binary_mixed`. A 15-run same-process comparison
+  now measures `large_json` at 5,329.42 MiB/s one-shot and 5,751.14 MiB/s
+  warmed versus 6,440.12/6,402.00 MiB/s for libzstd 1.5.7, or
+  `0.8273x`/`0.9025x`. The 237-case native probe, 276-case compatibility
+  matrix, 26-case CLI differential, 9,900-frame upstream corpus, all 1,618
+  tests, and all 94 `check` steps pass.

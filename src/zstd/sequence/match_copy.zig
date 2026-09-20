@@ -51,6 +51,37 @@ pub inline fn appendNonOverlapping71(
     written.* += 71;
 }
 
+/// Copy the other dense Zstd match-length cluster beside the 71-byte fast
+/// path. Fixed-size array moves keep these 68--70 byte non-overlapping matches
+/// out of the dynamic-length memmove path while preserving exact output bounds.
+pub inline fn appendNonOverlapping68To70(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+    match_len: usize,
+) void {
+    const destination_start = written.*;
+    std.debug.assert(match_len >= 68 and match_len <= 70);
+    std.debug.assert(destination_start - repeat_start >= match_len);
+    const first: @Vector(32, u8) = output[repeat_start..][0..32].*;
+    const second: @Vector(32, u8) = output[repeat_start + 32 ..][0..32].*;
+    output[destination_start..][0..32].* = first;
+    output[destination_start + 32 ..][0..32].* = second;
+    switch (match_len) {
+        68 => output[destination_start + 64 ..][0..4].* = output[repeat_start + 64 ..][0..4].*,
+        69 => {
+            output[destination_start + 64 ..][0..4].* = output[repeat_start + 64 ..][0..4].*;
+            output[destination_start + 68] = output[repeat_start + 68];
+        },
+        70 => {
+            output[destination_start + 64 ..][0..4].* = output[repeat_start + 64 ..][0..4].*;
+            output[destination_start + 68 ..][0..2].* = output[repeat_start + 68 ..][0..2].*;
+        },
+        else => unreachable,
+    }
+    written.* += match_len;
+}
+
 /// Expand the common eight-byte, distance-seven match with two exact four-byte
 /// copies. The second load observes the first byte just written, matching LZ
 /// overlap semantics without entering the generic seed-and-double loop.
@@ -124,6 +155,20 @@ test "Zstd fixed 71-byte match copy preserves output tail" {
     appendNonOverlapping71(&actual, &actual_written, 17);
     try std.testing.expectEqual(expected_written, actual_written);
     try std.testing.expectEqualSlices(u8, &expected, &actual);
+}
+
+test "Zstd fixed 68 through 70 byte match copies preserve output tail" {
+    for (68..71) |match_len| {
+        var expected: [256]u8 = undefined;
+        for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + index / 11);
+        var actual = expected;
+        var expected_written: usize = 96;
+        var actual_written = expected_written;
+        append(&expected, &expected_written, 17, match_len);
+        appendNonOverlapping68To70(&actual, &actual_written, 17, match_len);
+        try std.testing.expectEqual(expected_written, actual_written);
+        try std.testing.expectEqualSlices(u8, &expected, &actual);
+    }
 }
 
 test "Zstd fixed distance-seven match preserves overlap and output tail" {

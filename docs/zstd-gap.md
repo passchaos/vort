@@ -1087,10 +1087,26 @@ Recommended next comparison steps:
   gap is now predominantly sequence execution and match-copy work rather than
   table handoff. All 237 native, 276 compatibility, 26 CLI differential, 9,900
   upstream corpus, 1,617 test, and 94 build-check cases pass.
+  Large split-Huffman/all-FSE blocks now specialize their other dense match
+  cluster as well as length 71. Non-overlapping lengths 68, 69, and 70 use an
+  exact two-vector-plus-tail helper in `zstd/sequence/match_copy.zig`, avoiding
+  1,228 dynamic-length memmoves in the 512 KiB `large_json` workload without
+  writing beyond the logical output. The helper has a full-buffer oracle for
+  all three lengths, and the fixed libzstd-frame fast/generic mutation test has
+  an explicit hit assertion for the production branch. Frozen
+  `a7d47fee`/`7813877e` binaries improve `large_json` by `1.0302x` median /
+  `1.0367x` geometrically over 21 alternating 20,000-decode pairs, with 21/21
+  wins and a `1.0092x` floor. Five-row one-shot/reusable row-median geomeans are
+  `1.0015x`/`1.0117x`; long controls keep unrelated `ascii64k` and
+  `binary_mixed` paths at `0.9984x`--`1.0062x` median. Current same-process
+  `large_json` throughput is 5,329.42 MiB/s one-shot and 5,751.14 MiB/s warmed
+  against libzstd 1.5.7 at 6,440.12/6,402.00 MiB/s, closing the ratios to
+  `0.8273x`/`0.9025x`. All 237 native, 276 compatibility, 26 CLI differential,
+  9,900 upstream corpus, 1,618 test, and 94 build-check cases pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
    mixed-FSE `numbered_json` row is about `0.766x` libzstd and the multi-block
-   all-FSE/Huffman `large_json` row is about `0.806x` one-shot (`0.885x`
+   all-FSE/Huffman `large_json` row is about `0.827x` one-shot (`0.903x`
    warmed); prioritize tree/lookup setup and sequence execution
    without perturbing already-leading raw/RLE and single-sequence paths.
 2. Add library-level range-latency rows for the public seekability tiers

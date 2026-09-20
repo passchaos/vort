@@ -163,6 +163,7 @@ var test_disable_four_byte_optimal = false;
 var test_disable_split_huffman_decode = false;
 var test_split_huffman_decode_hits: usize = 0;
 var test_split_huffman_single_literal_hits: usize = 0;
+var test_split_huffman_match_68_70_hits: usize = 0;
 var test_small_mixed_fse_fast_literal_hits: usize = 0;
 var test_disable_fast_direct_match_commit = false;
 var test_fast_direct_match_commit_hits: usize = 0;
@@ -9735,6 +9736,10 @@ noinline fn tryDecodeAllFseSplitHuffmanSequences(
         if (match_len == 71 and match_offset >= 71 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
             sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
+        } else if (match_len >= 68 and match_len <= 70 and match_offset >= match_len and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
+            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
+            sequence_match_copy.appendNonOverlapping68To70(output, written, written.* - match_offset, match_len);
         } else {
             try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
         }
@@ -28262,6 +28267,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         test_disable_split_huffman_decode = false;
         test_split_huffman_decode_hits = 0;
         test_split_huffman_single_literal_hits = 0;
+        test_split_huffman_match_68_70_hits = 0;
     }
     const encoded_hex_file = @embedFile("zstd/testdata/libzstd-large-json-128k.frame.hex");
     var encoded: [2874]u8 = undefined;
@@ -28308,9 +28314,11 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     test_disable_split_huffman_decode = false;
     test_split_huffman_decode_hits = 0;
     test_split_huffman_single_literal_hits = 0;
+    test_split_huffman_match_68_70_hits = 0;
     const fast_written = try decodeNativeFrameInto(&encoded, fast_output);
     try std.testing.expectEqual(@as(usize, 1), test_split_huffman_decode_hits);
     try std.testing.expect(test_split_huffman_single_literal_hits > 1000);
+    try std.testing.expect(test_split_huffman_match_68_70_hits > 100);
     test_disable_split_huffman_decode = true;
     defer test_disable_split_huffman_decode = false;
     const generic_written = try decodeNativeFrameInto(&encoded, generic_output);
