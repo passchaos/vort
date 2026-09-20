@@ -165,6 +165,7 @@ var test_split_huffman_decode_hits: usize = 0;
 var test_split_huffman_single_literal_hits: usize = 0;
 var test_split_huffman_match_68_70_hits: usize = 0;
 var test_small_mixed_fse_fast_literal_hits: usize = 0;
+var test_small_mixed_fse_match_56_hits: usize = 0;
 var test_disable_fast_direct_match_commit = false;
 var test_fast_direct_match_commit_hits: usize = 0;
 var test_disable_fast_large_direct_transitions = false;
@@ -28103,7 +28104,11 @@ test "zstd native decoder accepts FSE compressed sequence tables" {
 
 test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     test_small_mixed_fse_fast_literal_hits = 0;
-    defer test_small_mixed_fse_fast_literal_hits = 0;
+    test_small_mixed_fse_match_56_hits = 0;
+    defer {
+        test_small_mixed_fse_fast_literal_hits = 0;
+        test_small_mixed_fse_match_56_hits = 0;
+    }
     const encoded_hex_file = @embedFile("zstd/testdata/libzstd-numbered-json.frame.hex");
     const encoded_hex = std.mem.trim(u8, encoded_hex_file, " \r\n\t");
     var encoded: [(encoded_hex_file.len - 1) / 2]u8 = undefined;
@@ -28167,6 +28172,7 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
         specialized_state.repeated_offsets,
     );
     try std.testing.expectEqual(generic_section.regenerated_size, test_small_mixed_fse_fast_literal_hits);
+    try std.testing.expectEqual(@as(usize, 17), test_small_mixed_fse_match_56_hits);
 
     try std.testing.expectEqual(payload.items.len, generic_written);
     try std.testing.expectEqual(generic_written, specialized_written);
@@ -37731,7 +37737,13 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
         if (comptime builtin.is_test) test_small_mixed_fse_fast_literal_hits += literal_len;
         written.* += literal_len;
         literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
-        try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+        if (match_len == 56 and match_offset >= 56 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
+            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (builtin.is_test) test_small_mixed_fse_match_56_hits += 1;
+            sequence_match_copy.appendNonOverlapping56(output, written, written.* - match_offset);
+        } else {
+            try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+        }
     }
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     const last_literals = section.regenerated_size - literal_offset;

@@ -1150,9 +1150,24 @@ Recommended next comparison steps:
   one-shot; reusable remains 423.23 versus 655.88 MiB/s (`0.6470x`). All 237
   native, 276 compatibility, 26 CLI differential, 9,900 upstream corpus, 1,619
   test, and 94 build-check cases pass.
+  The 39-sequence `numbered_json` frame contains 17 non-overlapping matches of
+  exactly 56 bytes. They now use an exact 32+16+8-byte kernel in
+  `zstd/sequence/match_copy.zig` instead of the dynamic memmove path. A
+  full-buffer oracle protects untouched suffix bytes, and the fixed frame test
+  proves all 17 matches take the specialization while preserving its existing
+  fast/generic mutation and `OutputTooSmall` comparisons. Frozen
+  `52dc25b3`/`d46c82d0` binaries improve one-shot `numbered_json` by `1.0270x`
+  median / `1.0306x` geometrically over 21 alternating 200,000-decode pairs
+  with 20/21 wins. Five-row one-shot/reusable row-median geomeans are
+  `1.0067x`/`1.0008x`, with row floors of `0.9942x`/`0.9944x`; long
+  `large_json` and `binary_mixed` controls remain at `1.0004x` and `0.9962x`.
+  Current same-process `numbered_json` throughput reaches 557.05 MiB/s against
+  libzstd 1.5.7 at 638.48 MiB/s (`0.8709x`) one-shot. All 237 native, 276
+  compatibility, 26 CLI differential, 9,900 upstream corpus, 1,620 test, and
+  94 build-check cases pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
-   mixed-FSE `numbered_json` row is about `0.849x` libzstd and the multi-block
+   mixed-FSE `numbered_json` row is about `0.871x` libzstd and the multi-block
    all-FSE/Huffman `large_json` row is about `0.827x` one-shot (`0.903x`
    warmed); prioritize tree/lookup setup and sequence execution
    without perturbing already-leading raw/RLE and single-sequence paths.

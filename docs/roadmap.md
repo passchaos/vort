@@ -15137,6 +15137,24 @@ reuse, so production keeps the simpler independently owned plans.
   237-case native probe, 276-case compatibility matrix, 26-case CLI
   differential, 9,900-frame upstream corpus, all 1,619 tests, and all 94
   `check` steps pass.
+  The small mixed-FSE decoder now gives its dominant 56-byte non-overlapping
+  match a strict fixed-size copy. The helper lives beside the existing 23-,
+  48-, 68--71-byte kernels in `zstd/sequence/match_copy.zig` and performs exact
+  32+16+8-byte moves, so it neither overreads nor overwrites the caller's output
+  suffix. A full-buffer oracle compares it with generic LZ replay, and the fixed
+  `numbered_json` frame asserts exactly 17 production hits among its 39
+  sequences before running the existing fast/generic output, short-output, and
+  mutation comparisons. Against frozen independent `52dc25b3`/`d46c82d0`
+  ReleaseFast binaries, 21 alternating 200,000-decode pairs improve
+  `numbered_json` by `1.0270x` median / `1.0306x` geometric throughput with
+  20/21 wins. The five-row one-shot/reusable matrices improve `1.0067x`/
+  `1.0008x` across row medians, with `0.9942x`/`0.9944x` floors; longer
+  controls keep one-shot `large_json` at `1.0004x` and `binary_mixed` at
+  `0.9962x`. A 21-run same-process comparison measures `numbered_json` at
+  557.05 MiB/s versus 638.48 MiB/s for libzstd 1.5.7 (`0.8709x`) one-shot;
+  reusable remains 410.99 versus 634.35 MiB/s (`0.6484x`). All 237 native,
+  276 compatibility, 26 CLI differential, 9,900 upstream corpus, 1,620 test,
+  and 94 build-check cases pass.
   The small single-block mixed-FSE decoder now calls a literals parser whose
   state dependency is explicitly only `previous_huffman_tree`, instead of
   materializing and zero-initializing a complete `SequenceFrameState` that also

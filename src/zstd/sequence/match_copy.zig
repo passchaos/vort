@@ -126,6 +126,22 @@ pub inline fn appendNonOverlapping48(
     written.* += 48;
 }
 
+pub inline fn appendNonOverlapping56(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+) void {
+    const destination_start = written.*;
+    std.debug.assert(destination_start - repeat_start >= 56);
+    const first: @Vector(32, u8) = output[repeat_start..][0..32].*;
+    const second: @Vector(16, u8) = output[repeat_start + 32 ..][0..16].*;
+    const tail = output[repeat_start + 48 ..][0..8].*;
+    output[destination_start..][0..32].* = first;
+    output[destination_start + 32 ..][0..16].* = second;
+    output[destination_start + 48 ..][0..8].* = tail;
+    written.* += 56;
+}
+
 test "Zstd match copy preserves overlapping periods" {
     var output: [80]u8 = undefined;
     @memcpy(output[0..5], "abcde");
@@ -203,6 +219,18 @@ test "Zstd fixed 48-byte match preserves output tail" {
     var actual_written = expected_written;
     append(&expected, &expected_written, 17, 48);
     appendNonOverlapping48(&actual, &actual_written, 17);
+    try std.testing.expectEqual(expected_written, actual_written);
+    try std.testing.expectEqualSlices(u8, &expected, &actual);
+}
+
+test "Zstd fixed 56-byte match copy preserves output tail" {
+    var expected: [160]u8 = undefined;
+    for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+    var actual = expected;
+    var expected_written: usize = 80;
+    var actual_written = expected_written;
+    append(&expected, &expected_written, 17, 56);
+    appendNonOverlapping56(&actual, &actual_written, 17);
     try std.testing.expectEqual(expected_written, actual_written);
     try std.testing.expectEqualSlices(u8, &expected, &actual);
 }
