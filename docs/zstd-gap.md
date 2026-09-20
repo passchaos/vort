@@ -1134,9 +1134,25 @@ Recommended next comparison steps:
   for libzstd 1.5.7 (`0.7963x`/`0.6521x`). All 237 native, 276 compatibility,
   26 CLI differential, 9,900 upstream corpus, 1,619 test, and 94 build-check
   cases pass.
+  The small-frame fast path no longer zero-initializes an entire
+  `SequenceFrameState` merely to parse its literal section. A narrow parser
+  takes only the prior Huffman-tree slot; the normal wrapper preserves all
+  multi-block/treeless behavior, while the independent no-dictionary fast path
+  supplies a null tree and canonical initial offsets. The fixed frame test
+  compares every parsed scalar, four compressed stream slices, and the complete
+  Huffman trees between both parser entries. Frozen `91eda15f`/`52dc25b3`
+  binaries improve one-shot `numbered_json` by `1.0674x` median / `1.0662x`
+  geometrically over 15 alternating 200,000-decode pairs with 15/15 wins.
+  Controls retain `large_json` at `1.0056x`, `binary_mixed` at `0.9982x`, and
+  reusable `numbered_json` at `0.9943x`; the five-row one-shot row-median
+  geomean is `1.0167x` with a `0.9979x` floor. Current same-process throughput
+  reaches 555.44 MiB/s versus 654.80 MiB/s for libzstd 1.5.7 (`0.8488x`)
+  one-shot; reusable remains 423.23 versus 655.88 MiB/s (`0.6470x`). All 237
+  native, 276 compatibility, 26 CLI differential, 9,900 upstream corpus, 1,619
+  test, and 94 build-check cases pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
-   mixed-FSE `numbered_json` row is about `0.796x` libzstd and the multi-block
+   mixed-FSE `numbered_json` row is about `0.849x` libzstd and the multi-block
    all-FSE/Huffman `large_json` row is about `0.827x` one-shot (`0.903x`
    warmed); prioritize tree/lookup setup and sequence execution
    without perturbing already-leading raw/RLE and single-sequence paths.

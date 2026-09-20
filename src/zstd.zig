@@ -8180,6 +8180,13 @@ const HuffmanLiteralStreams = union(enum) {
 };
 
 fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Error!LiteralOnlySection {
+    return parseLiteralsSectionWithPreviousTree(block, &frame_state.previous_huffman_tree);
+}
+
+inline fn parseLiteralsSectionWithPreviousTree(
+    block: []const u8,
+    previous_huffman_tree: *?StdZstdHuffmanTree,
+) Error!LiteralOnlySection {
     var offset: usize = 0;
     const literal_header = try parseLiteralsHeader(block, &offset);
     const literal_payload_offset = offset;
@@ -8190,7 +8197,7 @@ fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Err
     };
     if (block.len - offset < literal_payload_len) return error.TruncatedFrame;
     offset += literal_payload_len;
-    if (literal_header.kind == .treeless and frame_state.previous_huffman_tree == null) {
+    if (literal_header.kind == .treeless and previous_huffman_tree.* == null) {
         return error.CorruptFrame;
     }
     var huffman_tree: ?StdZstdHuffmanTree = null;
@@ -8208,11 +8215,11 @@ fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Err
                 else => return error.CorruptFrame,
             };
             huffman_stream_offset += reader.seek;
-            frame_state.previous_huffman_tree = huffman_tree;
+            previous_huffman_tree.* = huffman_tree;
             huffman_streams = try parseHuffmanLiteralStreams(block, literal_header.size_format, literal_payload_offset, huffman_stream_offset, literal_header.compressed_size);
         },
         .treeless => {
-            huffman_tree = frame_state.previous_huffman_tree.?;
+            huffman_tree = previous_huffman_tree.*.?;
             huffman_streams = try parseHuffmanLiteralStreams(block, literal_header.size_format, literal_payload_offset, huffman_stream_offset, literal_header.compressed_size);
         },
         .raw, .rle => {},
@@ -28114,6 +28121,25 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     try std.testing.expectEqual(LiteralsKind.compressed, generic_section.kind);
     try std.testing.expectEqual(@as(u8, 0x20), block[generic_section.sequence_payload_offset]);
 
+    var direct_previous_tree: ?StdZstdHuffmanTree = null;
+    const direct_section = try parseLiteralsSectionWithPreviousTree(block, &direct_previous_tree);
+    try std.testing.expectEqual(generic_section.kind, direct_section.kind);
+    try std.testing.expectEqual(generic_section.size_format, direct_section.size_format);
+    try std.testing.expectEqual(generic_section.regenerated_size, direct_section.regenerated_size);
+    try std.testing.expectEqual(generic_section.literal_payload_offset, direct_section.literal_payload_offset);
+    try std.testing.expectEqual(generic_section.huffman_stream_offset, direct_section.huffman_stream_offset);
+    try std.testing.expectEqual(generic_section.compressed_size, direct_section.compressed_size);
+    try std.testing.expectEqual(generic_section.sequence_count, direct_section.sequence_count);
+    try std.testing.expectEqual(generic_section.sequence_payload_offset, direct_section.sequence_payload_offset);
+    try std.testing.expectEqual(std.meta.activeTag(generic_section.huffman_streams), std.meta.activeTag(direct_section.huffman_streams));
+    switch (generic_section.huffman_streams) {
+        .none, .one => {},
+        .four => |expected_streams| for (expected_streams, direct_section.huffman_streams.four) |expected_stream, actual_stream|
+            try std.testing.expectEqualSlices(u8, expected_stream, actual_stream),
+    }
+    try expectHuffmanTreesEqual(generic_section.huffman_tree.?, direct_section.huffman_tree.?);
+    try expectHuffmanTreesEqual(generic_state.previous_huffman_tree.?, direct_previous_tree.?);
+
     var generic_output: [1290 + 64]u8 = @splat(0xa5);
     var generic_written: usize = 0;
     try decodeRleSequencesCompressedBlockIntoBuffer(
@@ -37610,8 +37636,8 @@ noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
     if (block_len > header.block_size_max) return null;
     const block = frame[offset..][0..block_len];
 
-    var frame_state: SequenceFrameState = .{};
-    const section = parseLiteralsSection(block, &frame_state) catch return null;
+    var previous_huffman_tree: ?StdZstdHuffmanTree = null;
+    const section = parseLiteralsSectionWithPreviousTree(block, &previous_huffman_tree) catch return null;
     if (section.regenerated_size > header.block_size_max or
         section.sequence_count < 2 or section.sequence_count > 256 or
         (section.kind != .compressed and section.kind != .treeless) or
@@ -37626,7 +37652,7 @@ noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
         output,
         &written,
         0,
-        frame_state.repeated_offsets,
+        initial_repeated_offsets,
     );
     if (written != output_len) return error.SizeMismatch;
     return written;

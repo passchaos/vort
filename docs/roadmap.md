@@ -15137,6 +15137,26 @@ reuse, so production keeps the simpler independently owned plans.
   237-case native probe, 276-case compatibility matrix, 26-case CLI
   differential, 9,900-frame upstream corpus, all 1,619 tests, and all 94
   `check` steps pass.
+  The small single-block mixed-FSE decoder now calls a literals parser whose
+  state dependency is explicitly only `previous_huffman_tree`, instead of
+  materializing and zero-initializing a complete `SequenceFrameState` that also
+  contains three 512-entry FSE tables. All ordinary and treeless multi-block
+  paths retain the wrapper that passes their real frame state; the specialized
+  no-dictionary frame starts with a local null tree and uses the canonical
+  initial repeated offsets directly. Its fixed libzstd-frame oracle compares
+  every literals-section field, each four-stream slice, and both full Huffman
+  trees between the wrapper and narrow entry before the existing output/error/
+  mutation comparisons run. Against frozen independent `91eda15f`/`52dc25b3`
+  ReleaseFast binaries, 15 alternating 200,000-decode `numbered_json` pairs
+  improve by `1.0674x` median / `1.0662x` geometric throughput with 15/15 wins
+  and a `1.0343x` minimum. Twenty-one-pair controls measure `1.0056x` for
+  one-shot `large_json`, `0.9982x` for one-shot `binary_mixed`, and `0.9943x`
+  for reusable `numbered_json`. The seven-pair five-row one-shot matrix improves
+  `1.0167x` across row medians with a `0.9979x` floor. A 21-run same-process
+  comparison now measures `numbered_json` at 555.44 MiB/s versus 654.80 MiB/s
+  for libzstd 1.5.7 (`0.8488x`); reusable remains 423.23 versus 655.88 MiB/s
+  (`0.6470x`). All 237 native, 276 compatibility, 26 CLI differential, 9,900
+  upstream corpus, 1,619 test, and 94 build-check cases pass.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to
