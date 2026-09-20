@@ -8400,26 +8400,51 @@ noinline fn decodeLinearZstdHuffmanTree(
     remaining.* = remaining.subtract(1) orelse return error.TruncatedFrame;
     const header = reader.takeByte() catch return error.TruncatedFrame;
     var weights: [256]u4 = undefined;
-    const symbol_count = if (header < 128) blk: {
+    if (header < 128) {
         const compressed_size: usize = header;
         remaining.* = remaining.subtract(compressed_size) orelse return error.TruncatedFrame;
         const compressed = reader.take(compressed_size) catch return error.TruncatedFrame;
-        break :blk try decodeHuffmanWeightsFse(compressed, &weights);
-    } else blk: {
-        const encoded_symbol_count: usize = header - 127;
-        const byte_count = (encoded_symbol_count + 1) / 2;
-        remaining.* = remaining.subtract(byte_count) orelse return error.TruncatedFrame;
-        const encoded = reader.take(byte_count) catch return error.TruncatedFrame;
-        for (encoded, 0..) |byte, index| {
-            weights[index * 2] = @intCast(byte >> 4);
-            weights[index * 2 + 1] = @intCast(byte & 0x0f);
-        }
-        break :blk encoded_symbol_count + 1;
-    };
-    return buildHuffmanTreeFromWeights(&weights, symbol_count);
+        var decoded = try decodeHuffmanWeightsFse(compressed, &weights);
+        return buildHuffmanTreeFromWeightStats(
+            &weights,
+            decoded.symbol_count,
+            decoded.power_sum,
+            &decoded.counts,
+        );
+    }
+
+    const encoded_symbol_count: usize = header - 127;
+    const byte_count = (encoded_symbol_count + 1) / 2;
+    remaining.* = remaining.subtract(byte_count) orelse return error.TruncatedFrame;
+    const encoded = reader.take(byte_count) catch return error.TruncatedFrame;
+    for (encoded, 0..) |byte, index| {
+        weights[index * 2] = @intCast(byte >> 4);
+        weights[index * 2 + 1] = @intCast(byte & 0x0f);
+    }
+    return buildHuffmanTreeFromWeights(&weights, encoded_symbol_count + 1);
 }
 
-inline fn decodeHuffmanWeightsFse(compressed: []const u8, weights: *[256]u4) Error!usize {
+const DecodedHuffmanWeights = struct {
+    symbol_count: usize,
+    power_sum: u32,
+    counts: [16]u16,
+};
+
+inline fn recordDecodedHuffmanWeight(
+    weights: *[256]u4,
+    index: usize,
+    symbol: u8,
+    power_sum: *u32,
+    counts: *[16]u16,
+) Error!void {
+    if (symbol > 11) return error.CorruptFrame;
+    const weight: u4 = @intCast(symbol);
+    weights[index] = weight;
+    power_sum.* += (@as(u16, 1) << weight) >> 1;
+    counts[weight] += 1;
+}
+
+inline fn decodeHuffmanWeightsFse(compressed: []const u8, weights: *[256]u4) Error!DecodedHuffmanWeights {
     var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
     var values: [256]u16 = undefined;
     const decoded = try huffman_weight_fse.parseNormalizedCounts(compressed, &values);
@@ -8431,16 +8456,16 @@ inline fn decodeHuffmanWeightsFse(compressed: []const u8, weights: *[256]u4) Err
     var even_state = try reverse.readSmall(@intCast(accuracy_log));
     var odd_state = try reverse.readSmall(@intCast(accuracy_log));
     var index: usize = 0;
+    var power_sum: u32 = 0;
+    var counts: [16]u16 = @splat(0);
     while (index < 254) {
         const even = entries[even_state];
-        if (even.symbol > std.math.maxInt(u4)) return error.CorruptFrame;
-        weights[index] = @intCast(even.symbol);
+        try recordDecodedHuffmanWeight(weights, index, even.symbol, &power_sum, &counts);
         index += 1;
         const even_bits = try readHuffmanWeightFseBits(&reverse, even.bits);
         if (even_bits.count < even.bits) {
             const odd = entries[odd_state];
-            if (odd.symbol > std.math.maxInt(u4)) return error.CorruptFrame;
-            weights[index] = @intCast(odd.symbol);
+            try recordDecodedHuffmanWeight(weights, index, odd.symbol, &power_sum, &counts);
             index += 1;
             break;
         }
@@ -8448,15 +8473,13 @@ inline fn decodeHuffmanWeightsFse(compressed: []const u8, weights: *[256]u4) Err
         if (even_state >= table_len) return error.CorruptFrame;
 
         const odd = entries[odd_state];
-        if (odd.symbol > std.math.maxInt(u4)) return error.CorruptFrame;
-        weights[index] = @intCast(odd.symbol);
+        try recordDecodedHuffmanWeight(weights, index, odd.symbol, &power_sum, &counts);
         index += 1;
         const odd_bits = try readHuffmanWeightFseBits(&reverse, odd.bits);
         if (odd_bits.count < odd.bits) {
             if (index == 255) return error.CorruptFrame;
             const final_even = entries[even_state];
-            if (final_even.symbol > std.math.maxInt(u4)) return error.CorruptFrame;
-            weights[index] = @intCast(final_even.symbol);
+            try recordDecodedHuffmanWeight(weights, index, final_even.symbol, &power_sum, &counts);
             index += 1;
             break;
         }
@@ -8464,7 +8487,7 @@ inline fn decodeHuffmanWeightsFse(compressed: []const u8, weights: *[256]u4) Err
         if (odd_state >= table_len) return error.CorruptFrame;
     } else return error.CorruptFrame;
     if (reverse.available() != 0) return error.CorruptFrame;
-    return index + 1;
+    return .{ .symbol_count = index + 1, .power_sum = power_sum, .counts = counts };
 }
 
 const HuffmanWeightFseBits = struct { value: usize, count: u8 };
@@ -8483,6 +8506,16 @@ inline fn buildHuffmanTreeFromWeights(weights: *[256]u4, symbol_count: usize) Er
         weight_power_sum += (@as(u16, 1) << weight) >> 1;
         counts[weight] += 1;
     }
+    return buildHuffmanTreeFromWeightStats(weights, symbol_count, weight_power_sum, &counts);
+}
+
+inline fn buildHuffmanTreeFromWeightStats(
+    weights: *[256]u4,
+    symbol_count: usize,
+    weight_power_sum: u32,
+    counts: *[16]u16,
+) Error!StdZstdHuffmanTree {
+    if (symbol_count < 2 or symbol_count > weights.len) return error.CorruptFrame;
     if (weight_power_sum >= 1 << 11) return error.CorruptFrame;
     const max_bit_count: u4 = @intCast(if (weight_power_sum == 0) 1 else std.math.log2_int(u32, weight_power_sum) + 1);
     const remaining_power = (@as(u32, 1) << max_bit_count) - weight_power_sum;
@@ -8562,6 +8595,18 @@ test "zstd linear Huffman tree builder matches standard direct and FSE trees" {
     var fse: [fse_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&fse, fse_hex);
     try expectLinearHuffmanTreeMatchesStd(&fse);
+
+    var weights: [256]u4 = undefined;
+    const compressed_size: usize = fse[0];
+    const decoded = try decodeHuffmanWeightsFse(fse[1..][0..compressed_size], &weights);
+    var expected_power_sum: u32 = 0;
+    var expected_counts: [16]u16 = @splat(0);
+    for (weights[0 .. decoded.symbol_count - 1]) |weight| {
+        expected_power_sum += (@as(u16, 1) << weight) >> 1;
+        expected_counts[weight] += 1;
+    }
+    try std.testing.expectEqual(expected_power_sum, decoded.power_sum);
+    try std.testing.expectEqualSlices(u16, &expected_counts, &decoded.counts);
 }
 
 test "zstd linear Huffman tree parser matches standard acceptance" {

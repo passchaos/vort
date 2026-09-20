@@ -15159,6 +15159,25 @@ reuse, so production keeps the simpler independently owned plans.
   `check` steps. A fixed tableLog-5 builder was separately rejected: eleven
   target pairs had only one win and a `0.9931x` median, confirming that the
   existing 32-state bitset builder is already the better implementation.
+  The FSE Huffman-weight loop now folds power-sum and rank-count accumulation
+  into weight emission, so its canonical tree builder no longer rescans the
+  125 decoded weights. Direct-weight headers keep the existing checked scan; a
+  fixed FSE-tree oracle independently recomputes the fused statistics before
+  the full tree is compared with Zig std. Against frozen independent
+  `a475a3e6`/`908169fe` ReleaseFast binaries, 15 alternating 200,000-decode
+  `numbered_json` pairs improve `1.1209x` median / `1.1207x` geometrically,
+  with 15/15 wins and a `1.1116x` minimum. One-shot `large_json` also improves
+  `1.0132x`; the five-row one-shot row-median geomean is `1.0258x` with a
+  `0.9943x` floor. Reusable `numbered_json` improves `1.0812x`; the apparently
+  low reusable `binary_mixed` short row recovers over 31 alternating 5,000-
+  decode pairs to `1.0020x` median / `1.0074x` geometric. Twenty-one
+  same-process libzstd 1.5.7 runs make this the first retained general mixed-FSE
+  one-shot row to lead the reference: 659.70 versus 636.81 MiB/s (`1.0426x`).
+  Reusable reaches 450.84 versus 631.14 MiB/s (`0.7139x`) and remains a priority.
+  The decode-profile and 13-row reference gates pass, as do the 237-case native
+  probe, 276-case compatibility matrix, 26-case CLI differential, 9,900-frame
+  corpus with all 64 sequence-mode tuples and 76,578 streamed sequence blocks,
+  all 1,623 tests, and all 94 `check` steps.
   The small mixed-FSE decoder now sizes its complete Huffman lookup to the
   accepted tree width. Its fixed `numbered_json` tree is seven bits wide, so a
   real `Table(7)` initializes and retains 128 entries instead of a partially

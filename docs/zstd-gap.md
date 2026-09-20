@@ -1211,12 +1211,31 @@ Recommended next comparison steps:
   upstream corpus, 1,623 test, and 94 build-check cases pass. A separate fixed
   32-state builder was rejected after only 1/11 target wins and a `0.9931x`
   median, so the established compact table builder remains in place.
+  FSE weight decoding now accumulates its Huffman power sum and 16 rank counts
+  while it emits each decoded weight. The FSE tree path passes those statistics
+  into the canonical tree builder, eliminating the former second scan over 125
+  weights; direct-weight trees retain their established validation and scan. A
+  fixed FSE-tree oracle recomputes both statistics independently and compares
+  every field before the existing Zig-std tree differential runs. Frozen
+  `a475a3e6`/`908169fe` ReleaseFast binaries improve one-shot `numbered_json`
+  by `1.1209x` median / `1.1207x` geometrically over 15 alternating
+  200,000-decode pairs with 15/15 wins and a `1.1116x` minimum. The same matrix
+  improves `large_json` by `1.0132x`; its five-row one-shot row-median geomean
+  is `1.0258x` with a `0.9943x` floor. Reusable `numbered_json` improves
+  `1.0812x`; a separate 31-pair, 5,000-decode reusable `binary_mixed` control
+  recovers the noisy short result to `1.0020x` median / `1.0074x` geometric. A
+  21-run same-process comparison now puts Vort ahead of libzstd 1.5.7 on this
+  one-shot row at 659.70 versus 636.81 MiB/s (`1.0426x`); reusable reaches
+  450.84 versus 631.14 MiB/s (`0.7139x`). All 237 native, 276 compatibility,
+  26 CLI differential, 9,900 upstream corpus, 1,623 test, and 94 build-check
+  cases pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
-   mixed-FSE `numbered_json` row is about `0.937x` libzstd and the multi-block
-   all-FSE/Huffman `large_json` row is about `0.827x` one-shot (`0.903x`
-   warmed); prioritize tree/lookup setup and sequence execution
-   without perturbing already-leading raw/RLE and single-sequence paths.
+   mixed-FSE `numbered_json` row now leads libzstd by about `1.043x` one-shot
+   but remains about `0.714x` reusable; the multi-block all-FSE/Huffman
+   `large_json` row is about `0.827x` one-shot (`0.903x` warmed). Prioritize
+   reusable small-frame routing and large-frame sequence execution without
+   perturbing already-leading raw/RLE, single-sequence, or one-shot paths.
 2. Add library-level range-latency rows for the public seekability tiers
    (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because even the
    ReleaseFast tier sweep still measures through the CLI bench surface.
