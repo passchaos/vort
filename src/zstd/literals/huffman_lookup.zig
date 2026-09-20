@@ -13,6 +13,7 @@ comptime {
 
 pub fn Table(comptime max_bits: u4) type {
     return struct {
+        pub const bit_width = max_bits;
         pub const len = @as(usize, 1) << max_bits;
         entries: [len]Entry = @splat(.{
             .symbol = 0,
@@ -133,7 +134,7 @@ pub inline fn copyBorrowed(
         if (tree.max_bit_count != 0 and cursor.reader.available() >= tree.max_bit_count) {
             const width = tree.max_bit_count;
             const prefix = cursor.reader.peekBulkHuffman(width);
-            if (lookup.lookup(prefix << @intCast(11 - width))) |entry| {
+            if (lookup.lookup(prefix << @intCast(@TypeOf(lookup.*).bit_width - width))) |entry| {
                 cursor.reader.skipBulkHuffman(entry.bit_count);
                 out.* = entry.symbol;
                 decoded.* += 1;
@@ -333,5 +334,11 @@ test "complete Huffman lookup matches reference fill for randomized canonical tr
             std.mem.asBytes(&reference.entries),
             std.mem.asBytes(&actual.entries),
         );
+        if (max_depth <= Table(7).bit_width) {
+            var narrow: Table(7) = undefined;
+            try std.testing.expect(narrow.buildComplete(&tree));
+            for (narrow.entries, 0..) |entry, prefix|
+                try std.testing.expectEqual(entry, actual.entries[prefix << 4]);
+        }
     }
 }

@@ -1178,9 +1178,23 @@ Recommended next comparison steps:
   582.46 MiB/s against libzstd 1.5.7 at 653.31 MiB/s (`0.8901x`). All 237
   native, 276 compatibility, 26 CLI differential, 9,900 upstream corpus, 1,621
   test, and 94 build-check cases pass.
+  The fixed small mixed-FSE frame's Huffman tree has a seven-bit maximum code.
+  Its specialized decoder now builds a real 128-entry `Table(7)` rather than a
+  2,048-entry `Table(11)`; trees wider than seven bits leave the specialization
+  before any output and use the generic decoder. The shared borrowed-copy loop
+  takes its shift from the table type, and randomized canonical trees compare
+  every `Table(7)` entry with the equivalent `Table(11)` prefix. Frozen
+  `be0d31b1`/`00054ef9` binaries improve one-shot `numbered_json` by `1.0255x`
+  median / `1.0291x` geometrically over 15 alternating 200,000-decode pairs
+  with 15/15 wins. Five-row one-shot/reusable row-median geomeans are
+  `1.0051x`/`0.9937x`; 31-pair reusable controls recover `large_json` and
+  `binary_mixed` to `0.9940x`/`0.9998x`. Current same-process one-shot
+  throughput reaches 585.95 MiB/s against libzstd 1.5.7 at 640.28 MiB/s
+  (`0.9152x`). All 237 native, 276 compatibility, 26 CLI differential, 9,900
+  upstream corpus, 1,621 test, and 94 build-check cases pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
-   mixed-FSE `numbered_json` row is about `0.890x` libzstd and the multi-block
+   mixed-FSE `numbered_json` row is about `0.915x` libzstd and the multi-block
    all-FSE/Huffman `large_json` row is about `0.827x` one-shot (`0.903x`
    warmed); prioritize tree/lookup setup and sequence execution
    without perturbing already-leading raw/RLE and single-sequence paths.

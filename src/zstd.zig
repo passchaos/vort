@@ -340,6 +340,7 @@ const of_bits = [_]u8{
 const StdZstdLiteralsSection = std.compress.zstd.Decompress.LiteralsSection;
 const StdZstdHuffmanTree = StdZstdLiteralsSection.HuffmanTree;
 const HuffmanLiteralLookup = huffman_lookup.Table(11);
+const NarrowHuffmanLiteralLookup = huffman_lookup.Table(7);
 
 pub const FrameOptions = struct {
     include_content_size: bool = true,
@@ -28127,6 +28128,7 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     const generic_section = try parseLiteralsSection(block, &generic_state);
     try std.testing.expectEqual(@as(usize, 39), generic_section.sequence_count);
     try std.testing.expectEqual(LiteralsKind.compressed, generic_section.kind);
+    try std.testing.expectEqual(NarrowHuffmanLiteralLookup.bit_width, generic_section.huffman_tree.?.max_bit_count);
     try std.testing.expectEqual(@as(u8, 0x20), block[generic_section.sequence_payload_offset]);
 
     var direct_previous_tree: ?StdZstdHuffmanTree = null;
@@ -37651,6 +37653,7 @@ noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
     if (section.regenerated_size > header.block_size_max or
         section.sequence_count < 2 or section.sequence_count > 256 or
         (section.kind != .compressed and section.kind != .treeless) or
+        section.huffman_tree.?.max_bit_count > NarrowHuffmanLiteralLookup.bit_width or
         section.sequence_payload_offset >= block.len or
         block[section.sequence_payload_offset] != 0x20) return null;
 
@@ -37699,9 +37702,8 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
     var ml_state = try reader.readSmall(6);
     var repcodes = repeated_offsets;
     const huffman_tree = if (section.huffman_tree) |*tree| tree else return error.CorruptFrame;
-    var huffman_lookup_table: HuffmanLiteralLookup = undefined;
-    if (!huffman_lookup_table.buildComplete(huffman_tree))
-        huffman_lookup_table = HuffmanLiteralLookup.build(huffman_tree);
+    var huffman_lookup_table: NarrowHuffmanLiteralLookup = undefined;
+    if (!huffman_lookup_table.buildComplete(huffman_tree)) return error.CorruptFrame;
     var huffman_cursor = try initHuffmanLiteralCursor(block, section.*);
     var huffman_decoded: usize = 0;
     var literal_offset: usize = 0;

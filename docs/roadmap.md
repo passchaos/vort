@@ -15137,6 +15137,24 @@ reuse, so production keeps the simpler independently owned plans.
   237-case native probe, 276-case compatibility matrix, 26-case CLI
   differential, 9,900-frame upstream corpus, all 1,619 tests, and all 94
   `check` steps pass.
+  The small mixed-FSE decoder now sizes its complete Huffman lookup to the
+  accepted tree width. Its fixed `numbered_json` tree is seven bits wide, so a
+  real `Table(7)` initializes and retains 128 entries instead of a partially
+  initialized 2,048-entry `Table(11)`. Trees wider than seven bits are rejected
+  by the specialization before output and fall back to the generic decoder. The
+  shared borrowed-copy helper derives its prefix shift from the table type, and
+  the randomized canonical-tree oracle compares every narrow entry with the
+  equivalent prefix in `Table(11)`. Against frozen independent
+  `be0d31b1`/`00054ef9` ReleaseFast binaries, 15 alternating 200,000-decode
+  `numbered_json` pairs improve by `1.0255x` median / `1.0291x` geometric
+  throughput with 15/15 wins and a `1.0151x` minimum. The seven-pair five-row
+  one-shot/reusable matrices improve `1.0051x`/`0.9937x` across row medians;
+  31-pair reusable controls recover `large_json` and `binary_mixed` to
+  `0.9940x`/`0.9998x`. A 21-run same-process comparison measures
+  `numbered_json` at 585.95 MiB/s versus 640.28 MiB/s for libzstd 1.5.7, or
+  `0.9152x` one-shot; reusable remains 415.70 versus 642.16 MiB/s (`0.6480x`).
+  All 237 native, 276 compatibility, 26 CLI differential, 9,900 upstream
+  corpus, 1,621 test, and 94 build-check cases pass.
   The small mixed-FSE decoder now gives its dominant 56-byte non-overlapping
   match a strict fixed-size copy. The helper lives beside the existing 23-,
   48-, 68--71-byte kernels in `zstd/sequence/match_copy.zig` and performs exact
