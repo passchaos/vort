@@ -15155,6 +15155,23 @@ reuse, so production keeps the simpler independently owned plans.
   reusable remains 410.99 versus 634.35 MiB/s (`0.6484x`). All 237 native,
   276 compatibility, 26 CLI differential, 9,900 upstream corpus, 1,620 test,
   and 94 build-check cases pass.
+  The same small mixed-FSE executor now handles its second dense match cluster:
+  the fixed `numbered_json` frame has ten six-byte and eight seven-byte
+  non-overlapping matches. A shared exact 4+2(+1)-byte helper keeps all 18 out
+  of dynamic memmove without touching an eighth byte, and a full-buffer oracle
+  covers both lengths. The frame test asserts all 18 production hits before its
+  existing fast/generic output and mutation comparisons. Against frozen
+  independent `52dc25b3`/`be0d31b1` ReleaseFast binaries, 21 alternating
+  200,000-decode pairs improve `numbered_json` by `1.0618x` median / `1.0760x`
+  geometric throughput with 20/21 wins. The five-row one-shot/reusable matrices
+  improve `1.0119x`/`0.9980x` across row medians; unrelated one-shot
+  `large_json` and `binary_mixed` controls remain at `1.0000x` and `0.9984x`,
+  while a 21-pair reusable target control is neutral at `1.0005x`. A 21-run
+  same-process comparison now measures `numbered_json` at 582.46 MiB/s versus
+  653.31 MiB/s for libzstd 1.5.7 (`0.8901x`) one-shot; reusable remains
+  424.65 versus 654.02 MiB/s (`0.6487x`). All 237 native, 276 compatibility,
+  26 CLI differential, 9,900 upstream corpus, 1,621 test, and 94 build-check
+  cases pass.
   The small single-block mixed-FSE decoder now calls a literals parser whose
   state dependency is explicitly only `previous_huffman_tree`, instead of
   materializing and zero-initializing a complete `SequenceFrameState` that also

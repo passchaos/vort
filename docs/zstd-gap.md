@@ -1165,9 +1165,22 @@ Recommended next comparison steps:
   libzstd 1.5.7 at 638.48 MiB/s (`0.8709x`) one-shot. All 237 native, 276
   compatibility, 26 CLI differential, 9,900 upstream corpus, 1,620 test, and
   94 build-check cases pass.
+  The remaining short-match cluster in `numbered_json` is now specialized too:
+  ten six-byte and eight seven-byte non-overlapping matches use an exact
+  4+2(+1)-byte helper, with no speculative eighth-byte store. A full-buffer
+  oracle covers both lengths, and the fixed frame asserts all 18 fast-path hits.
+  Frozen `52dc25b3`/`be0d31b1` binaries improve one-shot `numbered_json` by
+  `1.0618x` median / `1.0760x` geometrically over 21 alternating
+  200,000-decode pairs with 20/21 wins. Five-row one-shot/reusable row-median
+  geomeans are `1.0119x`/`0.9980x`; long unrelated `large_json` and
+  `binary_mixed` controls remain at `1.0000x`/`0.9984x`, and reusable
+  `numbered_json` is `1.0005x`. Current same-process one-shot throughput reaches
+  582.46 MiB/s against libzstd 1.5.7 at 653.31 MiB/s (`0.8901x`). All 237
+  native, 276 compatibility, 26 CLI differential, 9,900 upstream corpus, 1,621
+  test, and 94 build-check cases pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
-   mixed-FSE `numbered_json` row is about `0.871x` libzstd and the multi-block
+   mixed-FSE `numbered_json` row is about `0.890x` libzstd and the multi-block
    all-FSE/Huffman `large_json` row is about `0.827x` one-shot (`0.903x`
    warmed); prioritize tree/lookup setup and sequence execution
    without perturbing already-leading raw/RLE and single-sequence paths.
