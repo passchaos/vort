@@ -15178,6 +15178,24 @@ reuse, so production keeps the simpler independently owned plans.
   probe, 276-case compatibility matrix, 26-case CLI differential, 9,900-frame
   corpus with all 64 sequence-mode tuples and 76,578 streamed sequence blocks,
   all 1,623 tests, and all 94 `check` steps.
+  The reusable generic sequence executor now selects the already-oracled exact
+  56-byte and 6/7-byte non-overlapping match-copy kernels when the source lies
+  wholly inside the current frame. Dictionary, overlap, other-length, and
+  one-shot paths are unchanged. The fixed libzstd `numbered_json` frame checks
+  byte-for-byte output and asserts exactly 17 medium and 18 short reusable
+  specialization hits. Frozen `908169fe`/`9694001a` ReleaseFast binaries improve
+  reusable `numbered_json` by `1.0613x` median / `1.0615x` geometrically over
+  15 alternating 200,000-decode pairs, with 15/15 wins and a `1.0567x`
+  minimum. The reusable five-row row-median geomean is `1.0124x` with a
+  `0.9989x` floor. One-shot is neutral after longer controls: 31 alternating
+  5,000-decode pairs measure `1.0020x` for `binary_mixed` and `0.9947x` for
+  `large_json`. Twenty-one same-process libzstd 1.5.7 runs measure reusable at
+  480.44 versus 632.63 MiB/s (`0.7595x`), up from `0.7139x`; one-shot remains
+  ahead at 658.84 versus 630.76 MiB/s (`1.0462x`). The decode-profile and
+  13-row reference gates pass, as do the 237-case native probe, 276-case
+  compatibility matrix, 26-case CLI differential, 9,900-frame corpus with all
+  64 mode tuples and 76,578 streamed sequence blocks, all 1,623 tests, and all
+  94 `check` steps.
   The small mixed-FSE decoder now sizes its complete Huffman lookup to the
   accepted tree width. Its fixed `numbered_json` tree is seven bits wide, so a
   real `Table(7)` initializes and retains 128 entries instead of a partially

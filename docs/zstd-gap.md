@@ -1229,10 +1229,27 @@ Recommended next comparison steps:
   450.84 versus 631.14 MiB/s (`0.7139x`). All 237 native, 276 compatibility,
   26 CLI differential, 9,900 upstream corpus, 1,623 test, and 94 build-check
   cases pass.
+  The reusable generic sequence executor now reuses the existing exact
+  non-overlapping match kernels for its 56-byte and 6/7-byte clusters. The
+  route remains local to the reusable executor: dictionary-backed, overlapping,
+  other-length, one-shot, and all error paths retain their prior behavior. The
+  fixed `numbered_json` frame verifies that a warmed decode takes exactly 17
+  56-byte and 18 short-match hits and remains byte-identical, including its
+  untouched output suffix. Frozen `908169fe`/`9694001a` ReleaseFast binaries
+  improve reusable `numbered_json` by `1.0613x` median / `1.0615x`
+  geometrically over 15 alternating 200,000-decode pairs with 15/15 wins and a
+  `1.0567x` minimum. Its reusable five-row row-median geomean is `1.0124x`
+  with a `0.9989x` floor; one-shot remains neutral, and longer 31-pair
+  one-shot controls measure `1.0020x` for `binary_mixed` and `0.9947x` for
+  `large_json`. A 21-run same-process comparison measures 480.44 versus 632.63
+  MiB/s for libzstd 1.5.7 (`0.7595x`) reusable, while one-shot remains ahead at
+  658.84 versus 630.76 MiB/s (`1.0462x`). All 237 native, 276 compatibility,
+  26 CLI differential, 9,900 upstream corpus, 1,623 test, and 94 build-check
+  cases pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
    mixed-FSE `numbered_json` row now leads libzstd by about `1.043x` one-shot
-   but remains about `0.714x` reusable; the multi-block all-FSE/Huffman
+   but remains about `0.760x` reusable; the multi-block all-FSE/Huffman
    `large_json` row is about `0.827x` one-shot (`0.903x` warmed). Prioritize
    reusable small-frame routing and large-frame sequence execution without
    perturbing already-leading raw/RLE, single-sequence, or one-shot paths.
