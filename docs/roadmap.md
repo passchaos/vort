@@ -15196,6 +15196,27 @@ reuse, so production keeps the simpler independently owned plans.
   compatibility matrix, 26-case CLI differential, 9,900-frame corpus with all
   64 mode tuples and 76,578 streamed sequence blocks, all 1,623 tests, and all
   94 `check` steps.
+  The reusable decoder now carries a four-slot exact-byte cache for successfully
+  parsed explicit Huffman trees. The implementation is isolated in the 94-line
+  `zstd/literals/tree_cache.zig` module and keys on the complete self-delimiting
+  tree description (at most 128 bytes). It never caches failed parses, changed
+  or truncated descriptions miss, and treeless blocks retain the current
+  frame's `previous_huffman_tree` semantics rather than consulting cross-frame
+  cache state. The fixed libzstd frame asserts a cold miss followed by one warm
+  hit while retaining byte-identical output and exact reusable match-copy hits.
+  Frozen `9694001a`/`1d4224c4` ReleaseFast binaries improve reusable
+  `numbered_json` by `1.3486x` median / `1.3485x` geometrically over 15
+  alternating 200,000-decode pairs, with 15/15 wins and a `1.3387x` minimum.
+  All four reusable controls are positive, giving a five-row row-median
+  geomean of `1.0741x` and a `1.0016x` floor. One-shot stays neutral at
+  `1.0005x` geometrically across row medians with a `0.9976x` floor; 31 longer
+  `binary_mixed` pairs confirm `0.9985x`. Twenty-one same-process libzstd 1.5.7
+  runs put reusable Vort ahead at 639.65 versus 631.79 MiB/s (`1.0120x`), while
+  one-shot remains ahead at 661.51 versus 631.77 MiB/s (`1.0464x`). The
+  decode-profile and 13-row reference gates pass, as do the 237-case native
+  probe, 276-case compatibility matrix, 26-case CLI differential, 9,900-frame
+  corpus with all 64 mode tuples and 76,578 streamed sequence blocks, all 1,625
+  tests, and all 94 `check` steps.
   The small mixed-FSE decoder now sizes its complete Huffman lookup to the
   accepted tree width. Its fixed `numbered_json` tree is seven bits wide, so a
   real `Table(7)` initializes and retains 128 entries instead of a partially

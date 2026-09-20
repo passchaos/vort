@@ -16,6 +16,7 @@ const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
 const huffman_reservoir = @import("zstd/literals/huffman_reservoir.zig");
 const huffman_weight_fse = @import("zstd/literals/weight_fse.zig");
+const huffman_tree_cache = @import("zstd/literals/tree_cache.zig");
 const seekable = @import("zstd/seekable.zig");
 const dictionary_format = @import("zstd/dictionary_format.zig");
 const incremental_encoder = @import("zstd/incremental/encoder/frame.zig");
@@ -5030,7 +5031,13 @@ pub const NativeFrameDecoder = struct {
     /// A hit does not imply the remainder of the frame decoded successfully.
     /// Dictionary and allocating APIs currently bypass this cache.
     pub fn reusableSequenceTableHitCount(self: *const NativeFrameDecoder) usize {
-        return if (self.sequence_workspace) |workspace| workspace.hit_count else 0;
+        return if (self.sequence_workspace) |workspace| workspace.sequence.hit_count else 0;
+    }
+
+    /// Exact explicit Huffman-tree description matches over this decoder's
+    /// lifetime. Treeless blocks still use only their current frame state.
+    pub fn reusableHuffmanTreeHitCount(self: *const NativeFrameDecoder) usize {
+        return if (self.sequence_workspace) |workspace| workspace.huffman.hit_count else 0;
     }
 
     pub fn decodeChunksAlloc(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
@@ -7647,7 +7654,11 @@ fn decodeLiteralOnlyCompressedBlockIntoBufferWithSequenceWorkspace(
     continuation: sequence_continuation.Context,
     workspace: *SequenceDecodeWorkspace,
 ) Error!void {
-    const section = try parseLiteralsSection(block, frame_state);
+    const section = try parseLiteralsSectionWithPreviousTreeAndCache(
+        block,
+        &frame_state.previous_huffman_tree,
+        &workspace.huffman,
+    );
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
     try validateSupportedLiteralSection(section);
     if (section.sequence_count != 0) return try decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
@@ -8186,12 +8197,20 @@ const HuffmanLiteralStreams = union(enum) {
 };
 
 fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Error!LiteralOnlySection {
-    return parseLiteralsSectionWithPreviousTree(block, &frame_state.previous_huffman_tree);
+    return parseLiteralsSectionWithPreviousTreeAndCache(block, &frame_state.previous_huffman_tree, null);
 }
 
 inline fn parseLiteralsSectionWithPreviousTree(
     block: []const u8,
     previous_huffman_tree: *?StdZstdHuffmanTree,
+) Error!LiteralOnlySection {
+    return parseLiteralsSectionWithPreviousTreeAndCache(block, previous_huffman_tree, null);
+}
+
+inline fn parseLiteralsSectionWithPreviousTreeAndCache(
+    block: []const u8,
+    previous_huffman_tree: *?StdZstdHuffmanTree,
+    cache: ?*huffman_tree_cache.Cache(StdZstdHuffmanTree),
 ) Error!LiteralOnlySection {
     var offset: usize = 0;
     const literal_header = try parseLiteralsHeader(block, &offset);
@@ -8212,15 +8231,21 @@ inline fn parseLiteralsSectionWithPreviousTree(
     switch (literal_header.kind) {
         .compressed => {
             const payload = block[literal_payload_offset..][0..literal_payload_len];
-            var reader: std.Io.Reader = .fixed(payload);
-            var remaining: std.Io.Limit = .limited(payload.len);
-            // FSE-compressed weights use the local linear canonical builder;
-            // direct weights retain Zig std's parser and tree representation.
-            huffman_tree = decodeFrameHuffmanTree(payload, &reader, &remaining) catch |err| switch (err) {
-                error.EndOfStream => return error.TruncatedFrame,
-                else => return error.CorruptFrame,
-            };
-            huffman_stream_offset += reader.seek;
+            if (if (cache) |tree_cache| tree_cache.find(payload) else null) |hit| {
+                huffman_tree = hit.tree.*;
+                huffman_stream_offset += hit.description_len;
+            } else {
+                var reader: std.Io.Reader = .fixed(payload);
+                var remaining: std.Io.Limit = .limited(payload.len);
+                // FSE-compressed weights use the local linear canonical builder;
+                // direct weights retain Zig std's parser and tree representation.
+                huffman_tree = decodeFrameHuffmanTree(payload, &reader, &remaining) catch |err| switch (err) {
+                    error.EndOfStream => return error.TruncatedFrame,
+                    else => return error.CorruptFrame,
+                };
+                huffman_stream_offset += reader.seek;
+                if (cache) |tree_cache| tree_cache.store(payload, reader.seek, huffman_tree.?);
+            }
             previous_huffman_tree.* = huffman_tree;
             huffman_streams = try parseHuffmanLiteralStreams(block, literal_header.size_format, literal_payload_offset, huffman_stream_offset, literal_header.compressed_size);
         },
@@ -8775,7 +8800,10 @@ const SequenceFrameState = struct {
 // Four entries retain every compressed block in the common 512 KiB frame. The
 // public decoder owns this workspace out of line so its stack-facing handle
 // stays compact and raw/RLE-only workloads never pay for it.
-const SequenceDecodeWorkspace = sequence_decode_cache.Cache(SequenceModeSpec);
+const SequenceDecodeWorkspace = struct {
+    sequence: sequence_decode_cache.Cache(SequenceModeSpec) = .{},
+    huffman: huffman_tree_cache.Cache(StdZstdHuffmanTree) = .{},
+};
 
 comptime {
     std.debug.assert(@sizeOf(NativeFrameDecoder) <= 64);
@@ -9452,7 +9480,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
 
     var offset = description_start;
     var spec: SequenceModeSpec = undefined;
-    if (workspace.find(block, description_start, section.sequence_count)) |cached| {
+    if (workspace.sequence.find(block, description_start, section.sequence_count)) |cached| {
         copyCachedSequenceModeSpec(&spec, cached.spec, description_start + cached.description_len);
         offset = block.len;
     } else {
@@ -9460,7 +9488,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         const has_repeat = spec.ll_mode == .repeat or spec.of_mode == .repeat or spec.ml_mode == .repeat;
         if (has_repeat) spec = try resolveSequenceModeSpec(spec, frame_state.previous_tables);
         if (!has_repeat)
-            workspace.store(block, description_start, section.sequence_count, spec);
+            workspace.sequence.store(block, description_start, section.sequence_count, spec);
     }
     try expectConsumedBlock(offset, block.len);
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
@@ -28280,6 +28308,7 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     defer reusable_decoder.deinit();
     var reusable_output: [1290 + 64]u8 = @splat(0xa5);
     _ = try reusable_decoder.decodeIntoSlice(&encoded, &reusable_output);
+    try std.testing.expectEqual(@as(usize, 0), reusable_decoder.reusableHuffmanTreeHitCount());
     test_reusable_match_56_hits = 0;
     test_reusable_match_6_7_hits = 0;
     defer {
@@ -28288,6 +28317,7 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     }
     try std.testing.expectEqual(payload.items.len, try reusable_decoder.decodeIntoSlice(&encoded, &reusable_output));
     try std.testing.expectEqualSlices(u8, &specialized_output, &reusable_output);
+    try std.testing.expectEqual(@as(usize, 1), reusable_decoder.reusableHuffmanTreeHitCount());
     try std.testing.expectEqual(@as(usize, 17), test_reusable_match_56_hits);
     try std.testing.expectEqual(@as(usize, 18), test_reusable_match_6_7_hits);
 
@@ -33440,7 +33470,7 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     var changed_block = try std.testing.allocator.dupe(u8, cached_block);
     defer std.testing.allocator.free(changed_block);
     changed_block[section.sequence_payload_offset] ^= 0x40;
-    try std.testing.expect(cache.find(changed_block, section.sequence_payload_offset, section.sequence_count) == null);
+    try std.testing.expect(cache.sequence.find(changed_block, section.sequence_payload_offset, section.sequence_count) == null);
 
     // Errors after a cache hit must match the stateless decoder and leave the
     // reusable context valid for the next complete frame.
@@ -33457,7 +33487,7 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     defer std.testing.allocator.free(mutated_frame);
     const reference_output = try std.testing.allocator.alloc(u8, payload.items.len);
     defer std.testing.allocator.free(reference_output);
-    const hit = cache.find(cached_block, section.sequence_payload_offset, section.sequence_count) orelse return error.TestUnexpectedResult;
+    const hit = cache.sequence.find(cached_block, section.sequence_payload_offset, section.sequence_count) orelse return error.TestUnexpectedResult;
     const bitstream_start = first_block.payload_offset + section.sequence_payload_offset + hit.description_len;
     const hits_before_mutation = reusable_decoder.reusableSequenceTableHitCount();
     for (bitstream_start..frame.items.len) |byte_index| {

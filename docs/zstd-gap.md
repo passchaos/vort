@@ -1246,12 +1246,31 @@ Recommended next comparison steps:
   658.84 versus 630.76 MiB/s (`1.0462x`). All 237 native, 276 compatibility,
   26 CLI differential, 9,900 upstream corpus, 1,623 test, and 94 build-check
   cases pass.
+  Reusable decoding now caches four successfully parsed explicit Huffman trees
+  by their complete self-delimiting wire descriptions. The 94-line cache lives
+  in `zstd/literals/tree_cache.zig`; truncated or changed descriptions miss,
+  malformed inputs still run the authoritative parser, and treeless blocks
+  continue to use only the current frame's previous tree. The public fixed-frame
+  oracle proves the first decode misses and the second hits while preserving the
+  complete output and existing exact match-copy counts. Frozen `9694001a`/
+  `1d4224c4` ReleaseFast binaries improve reusable `numbered_json` by `1.3486x`
+  median / `1.3485x` geometrically over 15 alternating 200,000-decode pairs,
+  with 15/15 wins and a `1.3387x` minimum. Every reusable control row is
+  positive: `huffman80k` `1.0016x`, `ascii64k` `1.0110x`, `large_json`
+  `1.0189x`, and `binary_mixed` `1.0277x`; the row-median geomean is `1.0741x`.
+  The one-shot row-median geomean is neutral at `1.0005x` with a `0.9976x`
+  floor, confirmed by a 31-pair `binary_mixed` control at `0.9985x`. A 21-run
+  same-process comparison now puts reusable Vort ahead of libzstd 1.5.7 at
+  639.65 versus 631.79 MiB/s (`1.0120x`); one-shot remains ahead at 661.51
+  versus 631.77 MiB/s (`1.0464x`). All 237 native, 276 compatibility, 26 CLI
+  differential, 9,900 upstream corpus, 1,625 test, and 94 build-check cases
+  pass.
 
 1. Keep closing the two remaining measured general decode gaps: the small
-   mixed-FSE `numbered_json` row now leads libzstd by about `1.043x` one-shot
-   but remains about `0.760x` reusable; the multi-block all-FSE/Huffman
+   mixed-FSE `numbered_json` row now leads libzstd by about `1.046x` one-shot
+   and `1.012x` reusable; the multi-block all-FSE/Huffman
    `large_json` row is about `0.827x` one-shot (`0.903x` warmed). Prioritize
-   reusable small-frame routing and large-frame sequence execution without
+   large-frame sequence execution and broader corpus coverage without
    perturbing already-leading raw/RLE, single-sequence, or one-shot paths.
 2. Add library-level range-latency rows for the public seekability tiers
    (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because even the
