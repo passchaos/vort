@@ -15367,6 +15367,18 @@ reuse, so production keeps the simpler independently owned plans.
   MiB/s (`0.9711x` median), leaving roughly 2.9% on this cold large-frame row.
   The full 9,900-frame decodecorpus remains green across all 64 sequence-mode
   tuples after the complement optimization.
+  The split-Huffman/all-FSE helper now borrows the `SequenceModeSpec` already
+  stored inside its `SequenceDecodeState`, removing a duplicate roughly 12 KiB
+  by-value argument copy while leaving the hot loop's local table layout intact.
+  Sampling had attributed a visible `_platform_memmove` share to that entry
+  copy. Frozen independent `fb86d06d` baseline and candidate ReleaseFast
+  binaries improve one-shot `large_json` by `1.0209x` median / `1.0187x`
+  geometrically over 15 alternating 20,000-decode pairs, with 13/15 wins;
+  warmed pairs improve `1.0247x` / `1.0273x`, also 13/15. The seven-pair 13-row
+  one-shot matrix keeps the target at `1.0164x`; its noisy raw `binary_mixed`
+  row recovers over 31 longer pairs to `0.9996x` median. Same-process one-shot
+  throughput reaches 6,304.52 MiB/s versus libzstd 1.5.7 at 6,452.46 MiB/s
+  (`0.9718x` median), so the final few percent remain an explicit target.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to

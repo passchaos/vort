@@ -9346,7 +9346,6 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     {
         if (try tryDecodeAllFseSplitHuffmanSequences(
             section,
-            spec,
             output,
             written,
             frame_output_start,
@@ -9519,7 +9518,6 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
     {
         if (try tryDecodeAllFseSplitHuffmanSequences(
             section,
-            spec,
             output,
             written,
             frame_output_start,
@@ -9824,7 +9822,6 @@ noinline fn decodeAllFseHuffmanSequences(
 
 noinline fn tryDecodeAllFseSplitHuffmanSequences(
     section: LiteralOnlySection,
-    spec: SequenceModeSpec,
     output: []u8,
     written: *usize,
     frame_output_start: usize,
@@ -9834,6 +9831,7 @@ noinline fn tryDecodeAllFseSplitHuffmanSequences(
 ) linksection(split_literal_decode_text_section) Error!bool {
     std.debug.assert(section.regenerated_size <= 4096);
     if (section.huffman_streams != .four) return false;
+    const spec = &state.spec;
 
     var literals: [4096]u8 = undefined;
     if (!try decodeLargeFourStreamHuffman(section, literals[0..section.regenerated_size])) return false;

@@ -1339,6 +1339,18 @@ Recommended next comparison steps:
   MiB/s (`0.9711x` median), narrowing this cold large-frame gap to about 2.9%.
   The full 9,900-frame decodecorpus remains green across all 64 sequence-mode
   tuples after the complement optimization.
+  The split-Huffman/all-FSE helper now consumes the `SequenceModeSpec` already
+  embedded in its `SequenceDecodeState` instead of receiving the same roughly
+  12 KiB spec as a second by-value argument. The hot loop retains local-table
+  locality, but its entry no longer emits the duplicate whole-spec memmove
+  observed in sampling. Against frozen independent `fb86d06d` baseline and
+  candidate ReleaseFast binaries, 15 alternating 20,000-decode `large_json`
+  pairs improve `1.0209x` median / `1.0187x` geometrically with 13/15 wins;
+  warmed pairs improve `1.0247x` / `1.0273x`, also 13/15. A seven-pair 13-row
+  one-shot matrix keeps the target at `1.0164x`; its noisy raw `binary_mixed`
+  control recovers over 31 longer pairs to `0.9996x` median. Same-process
+  one-shot throughput reaches 6,304.52 MiB/s versus libzstd 1.5.7 at 6,452.46
+  MiB/s (`0.9718x` median) in this run, leaving a small but explicit gap.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
