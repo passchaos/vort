@@ -15351,6 +15351,22 @@ reuse, so production keeps the simpler independently owned plans.
   native probe, 276-case compatibility matrix, 26-case CLI differential, and
   9,900-frame upstream corpus with all 64 mode tuples and 76,578 streamed
   sequence blocks pass, along with all 1,627 tests.
+  For probabilities of at least 128, that specialized builder now constructs
+  the complement of the spread set: all four 64-bit state words start full and
+  only unoccupied positions are cleared before the unchanged ascending
+  transition pass. The fixed `large_json` LL/OF/ML distributions have dominant
+  probabilities 226/208/255, so their first pass now visits only 30/48/1 holes
+  instead of setting every occupied state. Those exact distributions are pinned
+  in the generic-table oracle. Frozen independent `f03767ec` baseline and
+  candidate ReleaseFast binaries improve one-shot `large_json` by `1.0340x`
+  median / `1.0343x` geometrically over 15 alternating 20,000-decode pairs,
+  with 15/15 wins. A seven-pair 13-row one-shot matrix reaches a `1.0080x`
+  row-median geometric mean and a `0.9922x` floor; 21 longer warmed target pairs
+  remain positive at `1.0084x` median / `1.0055x` geometric throughput. The
+  same one-shot runs put Vort at 6,414.04 MiB/s versus libzstd 1.5.7 at 6,610.80
+  MiB/s (`0.9711x` median), leaving roughly 2.9% on this cold large-frame row.
+  The full 9,900-frame decodecorpus remains green across all 64 sequence-mode
+  tuples after the complement optimization.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to

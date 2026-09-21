@@ -1323,6 +1323,22 @@ Recommended next comparison steps:
   matrix, 26-case CLI differential, and 9,900-frame upstream corpus with all 64
   sequence-mode tuples and 76,578 streamed sequence blocks pass, along with all
   1,627 tests.
+  That builder now also handles probabilities of at least 128 through the
+  complement of their spread set: it initializes the four 64-bit state words
+  as full and clears only the unoccupied positions before the same ascending
+  transition pass. This reduces the three fixed `large_json` tables' dominant
+  226/208/255-probability setup from setting every occupied state to clearing
+  only 30/48/1 holes. The randomized oracle now includes those three exact
+  libzstd table distributions. Against frozen independent `f03767ec` baseline
+  and candidate ReleaseFast binaries, 15 alternating 20,000-decode pairs
+  improve one-shot `large_json` by `1.0340x` median / `1.0343x` geometrically
+  with 15/15 wins. Seven-pair 13-row one-shot controls reach a `1.0080x`
+  row-median geometric mean and a `0.9922x` floor; 21 longer warmed target pairs
+  remain positive at `1.0084x` median / `1.0055x` geometric throughput. The
+  same one-shot runs measure 6,414.04 MiB/s against libzstd 1.5.7 at 6,610.80
+  MiB/s (`0.9711x` median), narrowing this cold large-frame gap to about 2.9%.
+  The full 9,900-frame decodecorpus remains green across all 64 sequence-mode
+  tuples after the complement optimization.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

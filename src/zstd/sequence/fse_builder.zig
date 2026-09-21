@@ -298,6 +298,15 @@ test "Zstd 256-state no-low mapped builder matches generic table" {
         try large_fse_table.buildNoLowProbability(values[0..symbol_count], &actual, bases[0..symbol_count], bits[0..symbol_count]);
         try std.testing.expectEqualSlices(Mapped, &expected, &actual);
     }
+    inline for (.{
+        &[_]u16{ 4, 227, 25, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2 },
+        &[_]u16{ 209, 1, 1, 1, 1, 1, 2, 1, 1, 4, 2, 1, 19, 13, 2, 13 },
+        &[_]u16{ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 256 },
+    }) |fixture| {
+        try buildMapped(fixture, &expected, bases[0..fixture.len], bits[0..fixture.len]);
+        try large_fse_table.buildNoLowProbability(fixture, &actual, bases[0..fixture.len], bits[0..fixture.len]);
+        try std.testing.expectEqualSlices(Mapped, &expected, &actual);
+    }
 
     var invalid = [_]u16{ 128, 64, 32, 16, 8, 4, 3 };
     try std.testing.expectError(error.CorruptFrame, large_fse_table.buildNoLowProbability(&invalid, &actual, &bases, &bits));

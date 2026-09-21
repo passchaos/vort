@@ -30,10 +30,21 @@ pub noinline fn buildNoLowProbability(
         if (value == 0) return error.CorruptFrame;
         if (value == 1) continue;
         const probability: usize = value - 1;
-        var states: [4]u64 = @splat(0);
-        for (0..probability) |_| {
-            states[position >> 6] |= @as(u64, 1) << @intCast(position & 63);
-            position = (position + spread_step) & (table_size - 1);
+        var states: [4]u64 = if (probability >= table_size / 2) @splat(std.math.maxInt(u64)) else @splat(0);
+        if (probability >= table_size / 2) {
+            const symbol_end = (position + probability * spread_step) & (table_size - 1);
+            var gap_position = symbol_end;
+            for (0..table_size - probability) |_| {
+                states[gap_position >> 6] &= ~(@as(u64, 1) << @intCast(gap_position & 63));
+                gap_position = (gap_position + spread_step) & (table_size - 1);
+            }
+            std.debug.assert(gap_position == position);
+            position = symbol_end;
+        } else {
+            for (0..probability) |_| {
+                states[position >> 6] |= @as(u64, 1) << @intCast(position & 63);
+                position = (position + spread_step) & (table_size - 1);
+            }
         }
 
         var ordinal: usize = 0;
