@@ -1463,6 +1463,20 @@ Recommended next comparison steps:
   median / `1.0004x` geometric throughput, and `large_json` remains within
   layout noise at `0.9962x`. Current paired source-like ratios are `0.6694x`,
   `0.5693x`, `0.4668x`, and `0.6067x` of libzstd 1.5.7.
+  Mirroring libzstd's short-literal common path without adopting its output
+  overwrite allowance, dense/wide helpers now copy 2--15 literal bytes with
+  exact overlapping first/last 2-, 4-, or 8-byte moves. The helper never
+  touches the caller's logical suffix and has a full-buffer oracle for every
+  supported length; zero and one-byte runs retain their existing paths. The
+  production condition explicitly requires at least two bytes after the first
+  prototype's end-to-end oracle caught a ReleaseFast zero-length underflow.
+  Against frozen `0b9dde2c` binaries, 15 alternating pairs improve README,
+  `build.zig`, roadmap, and `src/zstd.zig` by median `1.1300x`, `1.0128x`,
+  `1.0681x`, and `1.0294x`, with 15/15, 14/15, 15/15, and 15/15 wins.
+  `large_json`, whose up-to-4-KiB helper is unchanged, remains neutral at
+  `1.0008x`. Current paired source-like ratios rise to `0.7244x`, `0.5700x`,
+  `0.5000x`, and `0.6246x` of libzstd 1.5.7; strict caller-owned output bounds
+  remain intact.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

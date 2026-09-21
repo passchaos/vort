@@ -17,6 +17,7 @@ const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
 const huffman_reservoir = @import("zstd/literals/huffman_reservoir.zig");
 const huffman_weight_fse = @import("zstd/literals/weight_fse.zig");
 const huffman_tree_cache = @import("zstd/literals/tree_cache.zig");
+const literal_copy = @import("zstd/literals/copy.zig");
 const seekable = @import("zstd/seekable.zig");
 const dictionary_format = @import("zstd/dictionary_format.zig");
 const incremental_encoder = @import("zstd/incremental/encoder/frame.zig");
@@ -189,6 +190,7 @@ var test_split_huffman_match_68_70_hits: usize = 0;
 var test_split_huffman_match_6_63_hits: usize = 0;
 var test_split_huffman_positive_rep0_hits: usize = 0;
 var test_split_huffman_direct_offset_hits: usize = 0;
+var test_split_huffman_short_literal_hits: usize = 0;
 var test_split_huffman_common_sequence_hits: usize = 0;
 var test_large_fse_no_low_builder_hits: usize = 0;
 var test_small_mixed_fse_fast_literal_hits: usize = 0;
@@ -7135,8 +7137,8 @@ pub const NativeSequenceModeSummary = struct {
 pub const NativeSequenceCopyProfile = struct {
     pub const length_bucket_count = 8;
     pub const offset_bucket_count = 9;
-    pub const medium_length_min = 32;
-    pub const medium_length_max = 127;
+    pub const medium_length_min = 3;
+    pub const medium_length_max = 31;
 
     sequence_count: usize = 0,
     literal_bytes: usize = 0,
@@ -10057,6 +10059,9 @@ inline fn decodeAllFseSplitHuffmanSequences(
             output[written.*] = literals[literal_offset];
             written.* += 1;
             literal_offset += 1;
+        } else if (use_wide_state_reads and literal_len >= 2 and literal_len <= 15) {
+            if (builtin.is_test) test_split_huffman_short_literal_hits += 1;
+            literal_copy.append2To15(output, written, &literals, &literal_offset, literal_len);
         } else if (literal_len != 0) {
             @memcpy(output[written.*..][0..literal_len], literals[literal_offset..][0..literal_len]);
             written.* += literal_len;
@@ -28735,6 +28740,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         test_split_huffman_match_6_63_hits = 0;
         test_split_huffman_positive_rep0_hits = 0;
         test_split_huffman_direct_offset_hits = 0;
+        test_split_huffman_short_literal_hits = 0;
         test_split_huffman_common_sequence_hits = 0;
         test_large_fse_no_low_builder_hits = 0;
     }
@@ -28787,6 +28793,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     test_split_huffman_match_6_63_hits = 0;
     test_split_huffman_positive_rep0_hits = 0;
     test_split_huffman_direct_offset_hits = 0;
+    test_split_huffman_short_literal_hits = 0;
     test_split_huffman_common_sequence_hits = 0;
     test_large_fse_no_low_builder_hits = 0;
     const fast_written = try decodeNativeFrameInto(&encoded, fast_output);
@@ -28813,6 +28820,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         dense_frame_state.repeated_offsets,
     );
     test_split_huffman_direct_offset_hits = 0;
+    test_split_huffman_short_literal_hits = 0;
     try std.testing.expect(try decodeAllFseSplitHuffmanSequences(
         split_huffman_literal_capacity,
         true,
@@ -28832,6 +28840,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expectEqualSlices(u8, fast_output, generic_output);
     try std.testing.expectEqualSlices(u8, fast_output, dense_output);
     try std.testing.expect(test_split_huffman_direct_offset_hits > 0);
+    try std.testing.expect(test_split_huffman_short_literal_hits > 0);
 
     const wide_output = try std.testing.allocator.alloc(u8, output_len);
     defer std.testing.allocator.free(wide_output);
