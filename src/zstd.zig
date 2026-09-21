@@ -7863,8 +7863,12 @@ noinline fn decodeFourStreamHuffmanReservoir(
     {
         inline for (0..5) |symbol_index| {
             inline for (0..4) |stream_index| {
-                const prefix = reservoirs[stream_index].peek(width);
-                const entry = lookup.lookupAssumeComplete(prefix << @intCast(11 - width));
+                // The complete 11-bit table already replicates every shorter
+                // canonical prefix. Index it directly from the reservoir's
+                // high bits, matching libzstd's fast X1 loop and avoiding an
+                // extra width-dependent shift for every decoded symbol.
+                const prefix = reservoirs[stream_index].peek(HuffmanLiteralLookup.bit_width);
+                const entry = lookup.lookupAssumeComplete(prefix);
                 dest[output_positions[stream_index] + symbol_index] = entry.symbol;
                 reservoirs[stream_index].consume(entry.bit_count);
             }

@@ -334,6 +334,14 @@ test "complete Huffman lookup matches reference fill for randomized canonical tr
             std.mem.asBytes(&reference.entries),
             std.mem.asBytes(&actual.entries),
         );
+        const suffix_bits: u4 = Table(11).bit_width - max_depth;
+        for (actual.entries, 0..) |entry, prefix| {
+            const tree_width_index = (prefix >> suffix_bits) << suffix_bits;
+            try std.testing.expectEqual(
+                actual.entries[tree_width_index],
+                entry,
+            );
+        }
         if (max_depth <= Table(7).bit_width) {
             var narrow: Table(7) = undefined;
             try std.testing.expect(narrow.buildComplete(&tree));

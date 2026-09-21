@@ -1365,6 +1365,19 @@ Recommended next comparison steps:
   (`19.97x`). Thirty-one-pair non-target controls retain `raw256k` and `text`
   at `1.0020x` and `0.9962x` medians. This is a small-message latency result,
   not evidence for general corpus superiority.
+  The large four-stream Huffman reservoir now indexes the already-complete
+  11-bit X1 table directly from each reservoir's high 11 bits. Shorter
+  canonical codes are replicated across that table, so this is equivalent to
+  the previous tree-width prefix plus left shift while removing the latter
+  variable shift from every symbol; it also matches libzstd's fast X1 loop.
+  Against a frozen `7e1e9987` ReleaseFast binary, 21 alternating 10,000-decode
+  `ascii64k` pairs improve by `1.1222x` median / `1.1163x` geometrically with
+  21/21 wins and a `1.0778x` floor. Longer direct comparisons against libzstd
+  1.5.7 put Vort at a `1.0553x` median over 15 runs, with a `1.0481x` floor.
+  Twenty-one-pair controls are neutral for `huffman80k` (`1.0007x` median) and
+  `binary_mixed` (`1.0038x`) and positive for `large_json` (`1.0132x`). All
+  633 focused tests, 276 compatibility cases, and the 9,900-frame upstream
+  decodecorpus with every sequence-mode combination pass.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

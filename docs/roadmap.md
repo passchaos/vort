@@ -15393,6 +15393,18 @@ reuse, so production keeps the simpler independently owned plans.
   pair non-target controls retain `raw256k` and `text` at `1.0020x` and
   `0.9962x` medians. This is a tiny-message fixed-overhead win rather than a
   broad corpus claim.
+  The four-stream Huffman reservoir now indexes its complete 11-bit X1 table
+  directly with the top 11 reservoir bits. Because complete-table construction
+  replicates every shorter canonical prefix, this preserves the old tree-width
+  lookup exactly while removing its per-symbol variable left shift and follows
+  libzstd's fast X1-loop invariant. Against a frozen `7e1e9987` ReleaseFast
+  binary, 21 alternating 10,000-decode `ascii64k` pairs improve by `1.1222x`
+  median / `1.1163x` geometrically, with 21/21 wins and a `1.0778x` floor.
+  Fifteen longer direct comparisons measure Vort at `1.0553x` median versus
+  libzstd 1.5.7, with all 15 runs ahead and a `1.0481x` floor. Twenty-one-pair
+  `huffman80k`, `binary_mixed`, and `large_json` controls have medians of
+  `1.0007x`, `1.0038x`, and `1.0132x`. All 633 focused tests, 276 compatibility
+  cases, and the full 9,900-frame upstream decodecorpus remain green.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to
