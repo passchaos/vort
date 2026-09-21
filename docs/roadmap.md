@@ -15478,6 +15478,17 @@ reuse, so production keeps the simpler independently owned plans.
   are `0.6214x`, `0.5618x`, `0.4631x`, and `0.5983x` of libzstd 1.5.7.
   All 639 focused tests, 276 compatibility cases, 9,900 upstream corpus frames
   with all 64 sequence-mode combinations, and 94 build-check steps pass.
+  The dense/wide helpers now keep only the reverse reader's byte slice and bit
+  cursor in a compact local value, committing it back after the sequence loop.
+  The 12 KiB `SequenceDecodeState`, FSE states, and repcodes remain shared,
+  avoiding the register-pressure regression previously measured when all state
+  was localized together; the up-to-4-KiB helper retains its original code
+  path. Against frozen `a7c31952` binaries, 15 alternating pairs improve README,
+  roadmap, and `src/zstd.zig` by median `1.0532x`, `1.0072x`, and `1.0122x`
+  (13/15, 15/15, and 15/15 wins). `build.zig` is neutral at `1.0038x` median /
+  `1.0004x` geometric throughput, and `large_json` remains within layout noise
+  at `0.9962x`. Current paired source-like ratios are `0.6694x`, `0.5693x`,
+  `0.4668x`, and `0.6067x` of libzstd 1.5.7.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to

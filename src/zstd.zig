@@ -9969,6 +9969,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
     if (!try decodeLargeFourStreamHuffman(section, literals[0..section.regenerated_size])) return false;
     if (builtin.is_test) test_split_huffman_decode_hits += 1;
     var literal_offset: usize = 0;
+    var wide_reader: ReverseBitReader = if (use_wide_state_reads) state.reader else undefined;
     while (state.remaining != 0) {
         const ll_symbol = spec.literal_fse.symbolUnchecked(state.ll_state);
         const of_symbol = spec.offset_fse.symbolUnchecked(state.of_state);
@@ -9980,17 +9981,26 @@ inline fn decodeAllFseSplitHuffmanSequences(
         const total_bits: u8 = of_symbol.additional_bits + ml_symbol.additional_bits +
             ll_symbol.additional_bits + transition_bits;
         const fields_are_wide = use_wide_state_reads and
-            state.reader.canReadSequenceFieldsWide(total_bits);
-        const offset_extra = if (fields_are_wide)
-            state.reader.readSequenceFieldWide(of_symbol.additional_bits)
+            wide_reader.canReadSequenceFieldsWide(total_bits);
+        const offset_extra = if (use_wide_state_reads)
+            if (fields_are_wide)
+                wide_reader.readSequenceFieldWide(of_symbol.additional_bits)
+            else
+                try wide_reader.readSequenceField(of_symbol.additional_bits)
         else
             try state.reader.readSequenceField(of_symbol.additional_bits);
-        const match_len = @as(usize, ml_symbol.base) + if (fields_are_wide)
-            state.reader.readSequenceFieldWide(ml_symbol.additional_bits)
+        const match_len = @as(usize, ml_symbol.base) + if (use_wide_state_reads)
+            if (fields_are_wide)
+                wide_reader.readSequenceFieldWide(ml_symbol.additional_bits)
+            else
+                try wide_reader.readSequenceField(ml_symbol.additional_bits)
         else
             try state.reader.readSequenceField(ml_symbol.additional_bits);
-        const literal_len = @as(usize, ll_symbol.base) + if (fields_are_wide)
-            state.reader.readSequenceFieldWide(ll_symbol.additional_bits)
+        const literal_len = @as(usize, ll_symbol.base) + if (use_wide_state_reads)
+            if (fields_are_wide)
+                wide_reader.readSequenceFieldWide(ll_symbol.additional_bits)
+            else
+                try wide_reader.readSequenceField(ll_symbol.additional_bits)
         else
             try state.reader.readSequenceField(ll_symbol.additional_bits);
         const match_offset = if (use_wide_state_reads and of_symbol.additional_bits > 1) blk: {
@@ -10008,20 +10018,23 @@ inline fn decodeAllFseSplitHuffmanSequences(
         if (state.remaining != 0) {
             if (use_wide_state_reads) {
                 if (fields_are_wide) {
-                    state.ll_state = nextSequenceStateProvenWide(&state.reader, ll_symbol);
-                    state.ml_state = nextSequenceStateProvenWide(&state.reader, ml_symbol);
-                    state.of_state = nextSequenceStateProvenWide(&state.reader, of_symbol);
+                    state.ll_state = nextSequenceStateProvenWide(&wide_reader, ll_symbol);
+                    state.ml_state = nextSequenceStateProvenWide(&wide_reader, ml_symbol);
+                    state.of_state = nextSequenceStateProvenWide(&wide_reader, of_symbol);
                 } else {
-                    state.ll_state = try nextSequenceStateWide(&state.reader, ll_symbol);
-                    state.ml_state = try nextSequenceStateWide(&state.reader, ml_symbol);
-                    state.of_state = try nextSequenceStateWide(&state.reader, of_symbol);
+                    state.ll_state = try nextSequenceStateWide(&wide_reader, ll_symbol);
+                    state.ml_state = try nextSequenceStateWide(&wide_reader, ml_symbol);
+                    state.of_state = try nextSequenceStateWide(&wide_reader, of_symbol);
                 }
             } else {
                 state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
                 state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
                 state.of_state = try nextSequenceState(&state.reader, of_symbol);
             }
-        } else try state.reader.expectEnd();
+        } else if (use_wide_state_reads)
+            try wide_reader.expectEnd()
+        else
+            try state.reader.expectEnd();
 
         if (!use_wide_state_reads and literal_len == 1 and match_len == 71 and of_symbol.additional_bits == 0 and match_offset >= 71) {
             if (literal_offset >= section.regenerated_size) return error.CorruptFrame;
@@ -10123,6 +10136,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
         literals[literal_offset..][0..last_literals],
     );
     written.* += last_literals;
+    if (use_wide_state_reads) state.reader = wide_reader;
     if (continuation.retainsState()) {
         frame_state.previous_tables = spec.tables();
         frame_state.repeated_offsets = state.repeated_offsets;

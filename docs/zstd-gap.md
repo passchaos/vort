@@ -1452,6 +1452,17 @@ Recommended next comparison steps:
   libzstd 1.5.7. All 639 focused tests, 276 compatibility cases, 9,900 upstream
   corpus frames with all 64 sequence-mode combinations, and 94 build-check
   steps pass.
+  The dense/wide helpers now keep only the reverse reader's byte slice and bit
+  cursor in a compact local value, committing it back after the sequence loop.
+  The 12 KiB `SequenceDecodeState`, FSE states, and repcodes remain shared,
+  avoiding the register-pressure regression previously measured when all state
+  was localized together; the up-to-4-KiB helper keeps its original code path.
+  Against frozen `a7c31952` binaries, 15 alternating pairs improve README,
+  roadmap, and `src/zstd.zig` by `1.0532x`, `1.0072x`, and `1.0122x` at the
+  medians (13/15, 15/15, and 15/15 wins). `build.zig` is neutral at `1.0038x`
+  median / `1.0004x` geometric throughput, and `large_json` remains within
+  layout noise at `0.9962x`. Current paired source-like ratios are `0.6694x`,
+  `0.5693x`, `0.4668x`, and `0.6067x` of libzstd 1.5.7.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
