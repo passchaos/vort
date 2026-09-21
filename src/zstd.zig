@@ -188,6 +188,7 @@ var test_split_huffman_single_literal_hits: usize = 0;
 var test_split_huffman_match_68_70_hits: usize = 0;
 var test_split_huffman_match_6_63_hits: usize = 0;
 var test_split_huffman_positive_rep0_hits: usize = 0;
+var test_split_huffman_direct_offset_hits: usize = 0;
 var test_split_huffman_common_sequence_hits: usize = 0;
 var test_large_fse_no_low_builder_hits: usize = 0;
 var test_small_mixed_fse_fast_literal_hits: usize = 0;
@@ -9992,7 +9993,14 @@ inline fn decodeAllFseSplitHuffmanSequences(
             state.reader.readSequenceFieldWide(ll_symbol.additional_bits)
         else
             try state.reader.readSequenceField(ll_symbol.additional_bits);
-        const match_offset = if (of_symbol.additional_bits == 0 and literal_len != 0) blk: {
+        const match_offset = if (use_wide_state_reads and of_symbol.additional_bits > 1) blk: {
+            const offset = @as(usize, of_symbol.base) + offset_extra;
+            const previous_0 = state.repeated_offsets[0];
+            const previous_1 = state.repeated_offsets[1];
+            state.repeated_offsets = .{ offset, previous_0, previous_1 };
+            if (builtin.is_test) test_split_huffman_direct_offset_hits += 1;
+            break :blk offset;
+        } else if (of_symbol.additional_bits == 0 and literal_len != 0) blk: {
             if (builtin.is_test) test_split_huffman_positive_rep0_hits += 1;
             break :blk try large_offset.positiveLiteralRep0(&state.repeated_offsets);
         } else try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
@@ -28712,6 +28720,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         test_split_huffman_match_68_70_hits = 0;
         test_split_huffman_match_6_63_hits = 0;
         test_split_huffman_positive_rep0_hits = 0;
+        test_split_huffman_direct_offset_hits = 0;
         test_split_huffman_common_sequence_hits = 0;
         test_large_fse_no_low_builder_hits = 0;
     }
@@ -28763,6 +28772,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     test_split_huffman_match_68_70_hits = 0;
     test_split_huffman_match_6_63_hits = 0;
     test_split_huffman_positive_rep0_hits = 0;
+    test_split_huffman_direct_offset_hits = 0;
     test_split_huffman_common_sequence_hits = 0;
     test_large_fse_no_low_builder_hits = 0;
     const fast_written = try decodeNativeFrameInto(&encoded, fast_output);
@@ -28777,10 +28787,37 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     defer test_disable_split_huffman_decode = false;
     const generic_written = try decodeNativeFrameInto(&encoded, generic_output);
 
+    const dense_output = try std.testing.allocator.alloc(u8, output_len);
+    defer std.testing.allocator.free(dense_output);
+    @memset(dense_output, 0xa5);
+    var dense_written: usize = 0;
+    var dense_frame_state: SequenceFrameState = .{};
+    var dense_state = try initSequenceDecodeState(
+        spec,
+        section.sequence_count,
+        try ReverseBitReader.init(block[spec.bitstream_offset..]),
+        dense_frame_state.repeated_offsets,
+    );
+    test_split_huffman_direct_offset_hits = 0;
+    try std.testing.expect(try decodeAllFseSplitHuffmanSequences(
+        split_huffman_literal_capacity,
+        true,
+        section,
+        dense_output,
+        &dense_written,
+        0,
+        &dense_frame_state,
+        .terminal,
+        &dense_state,
+    ));
+
     try std.testing.expectEqual(expected.len, fast_written);
     try std.testing.expectEqual(fast_written, generic_written);
+    try std.testing.expectEqual(fast_written, dense_written);
     try std.testing.expectEqualSlices(u8, expected, fast_output[0..fast_written]);
     try std.testing.expectEqualSlices(u8, fast_output, generic_output);
+    try std.testing.expectEqualSlices(u8, fast_output, dense_output);
+    try std.testing.expect(test_split_huffman_direct_offset_hits > 0);
 
     const wide_output = try std.testing.allocator.alloc(u8, output_len);
     defer std.testing.allocator.free(wide_output);

@@ -15453,6 +15453,17 @@ reuse, so production keeps the simpler independently owned plans.
   1,380.16, 2,223.17, 1,271.66, and 1,836.95 MiB/s, with paired median ratios
   of `0.5805x`, `0.5481x`, `0.4506x`, and `0.5850x`; broad source-like parity
   remains open.
+  A direct comparison with libzstd's AArch64 sequence decoder then isolated the
+  common `ofBits > 1` case in the dense/wide helpers. Its `u32` base plus at
+  most 28 extra bits is lossless in `usize`; the hot path computes the direct
+  offset and rotates the three repcodes in place instead of entering the
+  general repeat-offset resolver. The up-to-4-KiB helper keeps its established
+  code layout. Against frozen `2f94dfdc` binaries, alternating pairs improve
+  README, `build.zig`, roadmap, and `src/zstd.zig` by median `1.0078x` (14/21),
+  `1.0069x` (14/15), `1.0229x` (15/15), and `1.0145x` (15/15). Synthetic
+  `large_json` remains neutral-positive at `1.0061x`. The same runs measure
+  source-like throughput at `0.6177x`, `0.5627x`, `0.4614x`, and `0.5932x` of
+  libzstd 1.5.7, so sequence execution remains the primary unresolved gap.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to
