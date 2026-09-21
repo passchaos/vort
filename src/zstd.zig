@@ -129,6 +129,16 @@ const split_literal_decode_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const split_wide_literal_decode_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_split_wide_literal_decode",
+    .macho => "__TEXT,__vort_zstd_slw",
+    .coff => ".text$vort_zstd_split_wide_literal_decode",
+    else => ".text",
+};
+
+const split_huffman_literal_capacity = 16 * 1024;
+const split_wide_huffman_literal_capacity = 32 * 1024;
+
 const multi_sequence_winner_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_multi_sequence_winner",
     .macho => "__TEXT,__vort_zstd_msw",
@@ -168,6 +178,7 @@ var test_disable_split_huffman_decode = false;
 var test_split_huffman_decode_hits: usize = 0;
 var test_split_huffman_single_literal_hits: usize = 0;
 var test_split_huffman_match_68_70_hits: usize = 0;
+var test_split_huffman_match_6_63_hits: usize = 0;
 var test_split_huffman_positive_rep0_hits: usize = 0;
 var test_split_huffman_common_sequence_hits: usize = 0;
 var test_large_fse_no_low_builder_hits: usize = 0;
@@ -9346,9 +9357,19 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         (section.kind == .compressed or section.kind == .treeless) and
         section.sequence_count >= 1024 and
         dictionary_history.len == 0 and
-        section.regenerated_size <= 4096)
+        section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
-        if (try tryDecodeAllFseSplitHuffmanSequences(
+        if (section.regenerated_size <= split_huffman_literal_capacity) {
+            if (try tryDecodeAllFseSplitHuffmanSequences(
+                section,
+                output,
+                written,
+                frame_output_start,
+                frame_state,
+                continuation,
+                &state,
+            )) return;
+        } else if (try tryDecodeAllFseSplitWideHuffmanSequences(
             section,
             output,
             written,
@@ -9518,9 +9539,19 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         (section.kind == .compressed or section.kind == .treeless) and
         section.sequence_count >= 1024 and
         dictionary_history.len == 0 and
-        section.regenerated_size <= 4096)
+        section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
-        if (try tryDecodeAllFseSplitHuffmanSequences(
+        if (section.regenerated_size <= split_huffman_literal_capacity) {
+            if (try tryDecodeAllFseSplitHuffmanSequences(
+                section,
+                output,
+                written,
+                frame_output_start,
+                frame_state,
+                continuation,
+                &state,
+            )) return;
+        } else if (try tryDecodeAllFseSplitWideHuffmanSequences(
             section,
             output,
             written,
@@ -9833,11 +9864,54 @@ noinline fn tryDecodeAllFseSplitHuffmanSequences(
     continuation: sequence_continuation.Context,
     state: *SequenceDecodeState,
 ) linksection(split_literal_decode_text_section) Error!bool {
-    std.debug.assert(section.regenerated_size <= 4096);
+    return try decodeAllFseSplitHuffmanSequences(
+        split_huffman_literal_capacity,
+        section,
+        output,
+        written,
+        frame_output_start,
+        frame_state,
+        continuation,
+        state,
+    );
+}
+
+noinline fn tryDecodeAllFseSplitWideHuffmanSequences(
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+) linksection(split_wide_literal_decode_text_section) Error!bool {
+    return try decodeAllFseSplitHuffmanSequences(
+        split_wide_huffman_literal_capacity,
+        section,
+        output,
+        written,
+        frame_output_start,
+        frame_state,
+        continuation,
+        state,
+    );
+}
+
+inline fn decodeAllFseSplitHuffmanSequences(
+    comptime literal_capacity: usize,
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+) Error!bool {
+    std.debug.assert(section.regenerated_size <= literal_capacity);
     if (section.huffman_streams != .four) return false;
     const spec = &state.spec;
 
-    var literals: [4096]u8 = undefined;
+    var literals: [literal_capacity]u8 = undefined;
     if (!try decodeLargeFourStreamHuffman(section, literals[0..section.regenerated_size])) return false;
     if (builtin.is_test) test_split_huffman_decode_hits += 1;
     var literal_offset: usize = 0;
@@ -9888,6 +9962,61 @@ noinline fn tryDecodeAllFseSplitHuffmanSequences(
         if (match_len == 71 and match_offset >= 71 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
             sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
+        } else if ((match_len == 6 or match_len == 7) and
+            match_offset >= match_len and
+            frame_output_start <= written.* and
+            match_offset <= written.* - frame_output_start)
+        {
+            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (builtin.is_test) test_split_huffman_match_6_63_hits += 1;
+            sequence_match_copy.appendNonOverlapping6Or7(
+                output,
+                written,
+                written.* - match_offset,
+                match_len,
+            );
+        } else if (match_len >= 8 and
+            match_len <= 15 and
+            match_offset >= match_len and
+            frame_output_start <= written.* and
+            match_offset <= written.* - frame_output_start)
+        {
+            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (builtin.is_test) test_split_huffman_match_6_63_hits += 1;
+            sequence_match_copy.appendNonOverlapping8To15(
+                output,
+                written,
+                written.* - match_offset,
+                match_len,
+            );
+        } else if (match_len >= 16 and
+            match_len <= 31 and
+            match_offset >= match_len and
+            frame_output_start <= written.* and
+            match_offset <= written.* - frame_output_start)
+        {
+            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (builtin.is_test) test_split_huffman_match_6_63_hits += 1;
+            sequence_match_copy.appendNonOverlapping16To31(
+                output,
+                written,
+                written.* - match_offset,
+                match_len,
+            );
+        } else if (match_len >= 32 and
+            match_len <= 63 and
+            match_offset >= match_len and
+            frame_output_start <= written.* and
+            match_offset <= written.* - frame_output_start)
+        {
+            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (builtin.is_test) test_split_huffman_match_6_63_hits += 1;
+            sequence_match_copy.appendNonOverlapping32To63(
+                output,
+                written,
+                written.* - match_offset,
+                match_len,
+            );
         } else if (match_len >= 68 and match_len <= 70 and match_offset >= match_len and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
             if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
@@ -28465,6 +28594,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         test_split_huffman_decode_hits = 0;
         test_split_huffman_single_literal_hits = 0;
         test_split_huffman_match_68_70_hits = 0;
+        test_split_huffman_match_6_63_hits = 0;
         test_split_huffman_positive_rep0_hits = 0;
         test_split_huffman_common_sequence_hits = 0;
         test_large_fse_no_low_builder_hits = 0;
@@ -28515,6 +28645,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     test_split_huffman_decode_hits = 0;
     test_split_huffman_single_literal_hits = 0;
     test_split_huffman_match_68_70_hits = 0;
+    test_split_huffman_match_6_63_hits = 0;
     test_split_huffman_positive_rep0_hits = 0;
     test_split_huffman_common_sequence_hits = 0;
     test_large_fse_no_low_builder_hits = 0;
@@ -28523,6 +28654,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expectEqual(@as(usize, 1), test_split_huffman_decode_hits);
     try std.testing.expect(test_split_huffman_single_literal_hits > 1000);
     try std.testing.expect(test_split_huffman_match_68_70_hits > 100);
+    try std.testing.expect(test_split_huffman_match_6_63_hits > 0);
     try std.testing.expect(test_split_huffman_positive_rep0_hits > 1000);
     try std.testing.expect(test_split_huffman_common_sequence_hits > 500);
     test_disable_split_huffman_decode = true;
@@ -28533,6 +28665,29 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expectEqual(fast_written, generic_written);
     try std.testing.expectEqualSlices(u8, expected, fast_output[0..fast_written]);
     try std.testing.expectEqualSlices(u8, fast_output, generic_output);
+
+    const wide_output = try std.testing.allocator.alloc(u8, output_len);
+    defer std.testing.allocator.free(wide_output);
+    @memset(wide_output, 0xa5);
+    var wide_frame_state: SequenceFrameState = .{};
+    var wide_state = try initSequenceDecodeState(
+        spec,
+        section.sequence_count,
+        try ReverseBitReader.init(block[spec.bitstream_offset..]),
+        wide_frame_state.repeated_offsets,
+    );
+    var wide_written: usize = 0;
+    try std.testing.expect(try tryDecodeAllFseSplitWideHuffmanSequences(
+        section,
+        wide_output,
+        &wide_written,
+        0,
+        &wide_frame_state,
+        .terminal,
+        &wide_state,
+    ));
+    try std.testing.expectEqual(fast_written, wide_written);
+    try std.testing.expectEqualSlices(u8, fast_output, wide_output);
 
     @memset(fast_output, 0x3c);
     @memset(generic_output, 0x3c);

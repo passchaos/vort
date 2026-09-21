@@ -15405,6 +15405,24 @@ reuse, so production keeps the simpler independently owned plans.
   `huffman80k`, `binary_mixed`, and `large_json` controls have medians of
   `1.0007x`, `1.0038x`, and `1.0132x`. All 633 focused tests, 276 compatibility
   cases, and the full 9,900-frame upstream decodecorpus remain green.
+  File-backed profiling exposed a wider real-source all-FSE/Huffman shape that
+  the prior 4 KiB split-literal gate missed. The existing executor now has a
+  16 KiB instance plus a separately sectioned 16--32 KiB instance, preserving
+  small-path layout while covering README and roadmap-style frames. Within
+  those paths, exact non-overlapping 6--63-byte match kernels replace dynamic
+  `memmove`; each width class uses bounded first/last 4/8/16/32-byte moves and
+  never touches caller output past the logical match. Against frozen
+  `cdf9eb15` ReleaseFast code, 15 alternating same-frame pairs improve README,
+  `build.zig`, `docs/roadmap.md`, and `src/zstd.zig` by `1.7758x`, `1.3452x`,
+  `1.6246x`, and `1.4831x` at the medians, all 15/15 wins. The final 32--63
+  increment is independently positive at `1.0279x`, `1.0735x`, `1.0124x`, and
+  `1.0509x`; roadmap's weakest result is confirmed over 31 longer pairs with
+  30/31 wins. Despite this large Vort-over-Vort gain, absolute same-frame
+  caller-owned decode is still only `0.3634x`--`0.4866x` of libzstd 1.5.7
+  across those four source files, keeping the general FSE sequence loop as the
+  primary unresolved performance target. All 636 focused tests, 276
+  compatibility cases, 9,900 upstream corpus frames with all 64 sequence-mode
+  combinations, and 94 build-check steps pass.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to

@@ -157,6 +157,54 @@ pub inline fn appendNonOverlapping6Or7(
     written.* += match_len;
 }
 
+pub inline fn appendNonOverlapping8To15(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+    match_len: usize,
+) void {
+    const destination_start = written.*;
+    std.debug.assert(match_len >= 8 and match_len <= 15);
+    std.debug.assert(destination_start - repeat_start >= match_len);
+    const first = output[repeat_start..][0..8].*;
+    const last = output[repeat_start + match_len - 8 ..][0..8].*;
+    output[destination_start..][0..8].* = first;
+    output[destination_start + match_len - 8 ..][0..8].* = last;
+    written.* += match_len;
+}
+
+pub inline fn appendNonOverlapping16To31(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+    match_len: usize,
+) void {
+    const destination_start = written.*;
+    std.debug.assert(match_len >= 16 and match_len <= 31);
+    std.debug.assert(destination_start - repeat_start >= match_len);
+    const first: @Vector(16, u8) = output[repeat_start..][0..16].*;
+    const last: @Vector(16, u8) = output[repeat_start + match_len - 16 ..][0..16].*;
+    output[destination_start..][0..16].* = first;
+    output[destination_start + match_len - 16 ..][0..16].* = last;
+    written.* += match_len;
+}
+
+pub inline fn appendNonOverlapping32To63(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+    match_len: usize,
+) void {
+    const destination_start = written.*;
+    std.debug.assert(match_len >= 32 and match_len <= 63);
+    std.debug.assert(destination_start - repeat_start >= match_len);
+    const first: @Vector(32, u8) = output[repeat_start..][0..32].*;
+    const last: @Vector(32, u8) = output[repeat_start + match_len - 32 ..][0..32].*;
+    output[destination_start..][0..32].* = first;
+    output[destination_start + match_len - 32 ..][0..32].* = last;
+    written.* += match_len;
+}
+
 test "Zstd match copy preserves overlapping periods" {
     var output: [80]u8 = undefined;
     @memcpy(output[0..5], "abcde");
@@ -212,6 +260,48 @@ test "Zstd fixed distance-seven match preserves overlap and output tail" {
     appendOverlapping8Offset7(&actual, &actual_written);
     try std.testing.expectEqual(expected_written, actual_written);
     try std.testing.expectEqualSlices(u8, &expected, &actual);
+}
+
+test "Zstd fixed eight through fifteen byte matches preserve output tail" {
+    for (8..16) |match_len| {
+        var expected: [64]u8 = undefined;
+        for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+        var actual = expected;
+        var expected_written: usize = 23;
+        var actual_written = expected_written;
+        append(&expected, &expected_written, 7, match_len);
+        appendNonOverlapping8To15(&actual, &actual_written, 7, match_len);
+        try std.testing.expectEqual(expected_written, actual_written);
+        try std.testing.expectEqualSlices(u8, &expected, &actual);
+    }
+}
+
+test "Zstd fixed sixteen through thirty-one byte matches preserve output tail" {
+    for (16..32) |match_len| {
+        var expected: [96]u8 = undefined;
+        for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+        var actual = expected;
+        var expected_written: usize = 48;
+        var actual_written = expected_written;
+        append(&expected, &expected_written, 7, match_len);
+        appendNonOverlapping16To31(&actual, &actual_written, 7, match_len);
+        try std.testing.expectEqual(expected_written, actual_written);
+        try std.testing.expectEqualSlices(u8, &expected, &actual);
+    }
+}
+
+test "Zstd fixed thirty-two through sixty-three byte matches preserve output tail" {
+    for (32..64) |match_len| {
+        var expected: [160]u8 = undefined;
+        for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+        var actual = expected;
+        var expected_written: usize = 80;
+        var actual_written = expected_written;
+        append(&expected, &expected_written, 7, match_len);
+        appendNonOverlapping32To63(&actual, &actual_written, 7, match_len);
+        try std.testing.expectEqual(expected_written, actual_written);
+        try std.testing.expectEqualSlices(u8, &expected, &actual);
+    }
 }
 
 test "Zstd fixed 23-byte match preserves output tail" {

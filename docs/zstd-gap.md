@@ -1378,6 +1378,24 @@ Recommended next comparison steps:
   `binary_mixed` (`1.0038x`) and positive for `large_json` (`1.0132x`). All
   633 focused tests, 276 compatibility cases, and the 9,900-frame upstream
   decodecorpus with every sequence-mode combination pass.
+  Real-source profiling now routes four-stream/all-FSE blocks with up to 16 KiB
+  of regenerated literals through the existing split-literal executor, plus an
+  independently sectioned 16--32 KiB instance so the wider stack frame does not
+  perturb smaller hot blocks. That executor also keeps exact non-overlapping
+  6--63-byte matches out of dynamic `memmove`: 6--7-byte copies use bounded
+  4/2/1-byte moves, while 8--15, 16--31, and 32--63 use overlapping first/last
+  8-, 16-, and 32-byte moves without touching the caller's output suffix.
+  Against a frozen pre-change `cdf9eb15` ReleaseFast binary, 15 alternating
+  same-frame pairs improve README, `build.zig`, `docs/roadmap.md`, and
+  `src/zstd.zig` by `1.7758x`, `1.3452x`, `1.6246x`, and `1.4831x` at their
+  medians, all 15/15 wins. The 32--63-byte increment separately improves those
+  rows by `1.0279x`, `1.0735x`, `1.0124x`, and `1.0509x`; the weakest roadmap
+  control is confirmed over 31 longer pairs with 30/31 wins. Current absolute
+  caller-owned throughput remains only `0.4195x`--`0.4866x` of libzstd 1.5.7
+  on README/`build.zig` and `0.3634x`--`0.4572x` on roadmap/`src/zstd.zig`, so
+  the main real-source sequence-loop gap remains open. All 636 focused tests,
+  276 compatibility cases, 9,900 upstream corpus frames with all 64 sequence-
+  mode combinations, and 94 build-check steps pass.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
