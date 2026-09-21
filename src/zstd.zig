@@ -10070,7 +10070,23 @@ inline fn decodeAllFseSplitHuffmanSequences(
         if (!use_wide_state_reads and match_len == 71 and match_offset >= 71 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
             sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
-        } else if ((match_len == 6 or match_len == 7) and
+        } else if (use_wide_state_reads and
+            match_len >= 4 and
+            match_len <= 7 and
+            match_offset >= match_len and
+            frame_output_start <= written.* and
+            match_offset <= written.* - frame_output_start)
+        {
+            if (output.len - written.* < match_len) return error.OutputTooSmall;
+            if (builtin.is_test) test_split_huffman_match_6_63_hits += 1;
+            sequence_match_copy.appendNonOverlapping4To7(
+                output,
+                written,
+                written.* - match_offset,
+                match_len,
+            );
+        } else if (!use_wide_state_reads and
+            (match_len == 6 or match_len == 7) and
             match_offset >= match_len and
             frame_output_start <= written.* and
             match_offset <= written.* - frame_output_start)

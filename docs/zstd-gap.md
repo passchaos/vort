@@ -1477,6 +1477,13 @@ Recommended next comparison steps:
   `1.0008x`. Current paired source-like ratios rise to `0.7244x`, `0.5700x`,
   `0.5000x`, and `0.6246x` of libzstd 1.5.7; strict caller-owned output bounds
   remain intact.
+  The existing dense/wide 6--7-byte non-overlapping match branch now covers
+  lengths 4--7 with exact first/last four-byte moves. This adds no dispatch
+  tier, keeps the caller suffix untouched, and has a full-buffer oracle for
+  every added length. Against frozen `4f0bf81e` binaries, 15 alternating pairs
+  improve README, `build.zig`, roadmap, and `src/zstd.zig` by median `1.0200x`,
+  `1.0061x`, `1.0045x`, and `1.0047x`; `large_json` remains neutral at
+  `1.0011x`.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

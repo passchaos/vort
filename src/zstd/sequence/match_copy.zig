@@ -157,6 +157,25 @@ pub inline fn appendNonOverlapping6Or7(
     written.* += match_len;
 }
 
+/// Copy a non-overlapping 4--7-byte match with exact first/last four-byte
+/// stores. Both loads happen before either store, and no caller suffix is
+/// touched.
+pub inline fn appendNonOverlapping4To7(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+    match_len: usize,
+) void {
+    const destination_start = written.*;
+    std.debug.assert(match_len >= 4 and match_len <= 7);
+    std.debug.assert(destination_start - repeat_start >= match_len);
+    const first = output[repeat_start..][0..4].*;
+    const last = output[repeat_start + match_len - 4 ..][0..4].*;
+    output[destination_start..][0..4].* = first;
+    output[destination_start + match_len - 4 ..][0..4].* = last;
+    written.* += match_len;
+}
+
 pub inline fn appendNonOverlapping8To15(
     output: []u8,
     written: *usize,
@@ -349,6 +368,20 @@ test "Zstd fixed six and seven byte match copies preserve output tail" {
         var actual_written = expected_written;
         append(&expected, &expected_written, 8, match_len);
         appendNonOverlapping6Or7(&actual, &actual_written, 8, match_len);
+        try std.testing.expectEqual(expected_written, actual_written);
+        try std.testing.expectEqualSlices(u8, &expected, &actual);
+    }
+}
+
+test "Zstd fixed four through seven byte match copies preserve output tail" {
+    for (4..8) |match_len| {
+        var expected: [64]u8 = undefined;
+        for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+        var actual = expected;
+        var expected_written: usize = 23;
+        var actual_written = expected_written;
+        append(&expected, &expected_written, 7, match_len);
+        appendNonOverlapping4To7(&actual, &actual_written, 7, match_len);
         try std.testing.expectEqual(expected_written, actual_written);
         try std.testing.expectEqualSlices(u8, &expected, &actual);
     }
