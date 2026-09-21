@@ -8,6 +8,9 @@ const Options = struct {
     iterations: usize = 1000,
     only_case: ?[]const u8 = null,
     csv_path: ?[]const u8 = null,
+    input_path: ?[]const u8 = null,
+    input_name: ?[]const u8 = null,
+    input_level: c_int = 1,
     reusable: bool = false,
     reference_library_path: ?[]const u8 = null,
 };
@@ -24,6 +27,30 @@ pub fn main(init: std.process.Init) !void {
     else
         try libzstd.Runtime.open();
     defer runtime.deinit();
+
+    if (options.input_path) |path| {
+        if (options.only_case != null) return error.InvalidCaseSelection;
+        const payload = try std.Io.Dir.cwd().readFileAlloc(
+            init.io,
+            path,
+            init.gpa,
+            .limited(128 * 1024 * 1024),
+        );
+        defer init.gpa.free(payload);
+        if (payload.len == 0) return error.InputTooSmall;
+        const name = options.input_name orelse std.fs.path.basename(path);
+        if (name.len == 0 or std.mem.indexOfAny(u8, name, ",\r\n") != null)
+            return error.InvalidCaseName;
+        return try runCases(
+            init,
+            runtime,
+            &.{.{ .name = name, .payload = payload, .level = options.input_level }},
+            options,
+            provenance,
+        );
+    }
+    if (options.input_name != null or options.input_level != 1)
+        return error.MissingCorpusPath;
 
     var numbered_json: std.ArrayList(u8) = .empty;
     defer numbered_json.deinit(init.gpa);
@@ -66,6 +93,16 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "binary_mixed", .payload = binary_mixed },
     };
 
+    try runCases(init, runtime, &cases, options, provenance);
+}
+
+fn runCases(
+    init: std.process.Init,
+    runtime: libzstd.Runtime,
+    cases: []const Case,
+    options: Options,
+    provenance: benchmark_provenance.Info,
+) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     try csv.writer.print("case,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum,block_count,compressed_blocks,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,total_sequences,literal_bytes,match_bytes,zero_literal_sequences,overlapping_matches,overlapping_match_bytes,non_overlapping_matches,non_overlapping_match_bytes,vector32_eligible_matches,vector32_eligible_bytes,match_length_histogram,offset_histogram,medium_length_histogram,{s}\n", .{benchmark_provenance.csv_columns});
@@ -157,6 +194,12 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.only_case = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--csv"))
             options.csv_path = args.next() orelse return error.MissingCorpusPath
+        else if (std.mem.eql(u8, arg, "--input"))
+            options.input_path = args.next() orelse return error.MissingCorpusPath
+        else if (std.mem.eql(u8, arg, "--name"))
+            options.input_name = args.next() orelse return error.MissingCorpusPath
+        else if (std.mem.eql(u8, arg, "--level"))
+            options.input_level = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10)
         else if (std.mem.eql(u8, arg, "--reusable"))
             options.reusable = true
         else if (std.mem.eql(u8, arg, "--libzstd"))

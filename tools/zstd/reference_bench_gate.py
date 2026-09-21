@@ -14,7 +14,9 @@ EXPECTED_COLUMNS = [
     "iterations", "vort_ns", "reference_ns", "vort_mib_s",
     "reference_mib_s", "vort_over_reference", "checksum",
     "block_count", "raw_blocks", "rle_blocks", "compressed_blocks",
-    "first_block_type", "literals_kind", "sequence_count",
+    "first_block_type", "literals_kind", "regenerated_literals_size",
+    "sequence_count", "total_sequence_count",
+    "total_literal_bytes", "total_match_bytes",
     "ll_mode", "of_mode", "ml_mode", "header_inspect_ns",
     "block_inspect_ns", "sequence_inspect_ns",
     "alloc_ns", "alloc_mib_s", "into_over_alloc",
@@ -64,15 +66,25 @@ def main() -> int:
         for key in (
             "input_bytes", "encoded_bytes", "iterations", "vort_ns",
             "reference_ns", "checksum", "block_count",
+            "regenerated_literals_size",
             "header_inspect_ns", "block_inspect_ns", "sequence_inspect_ns",
             "alloc_ns",
         ):
             if int(row[key]) <= 0:
                 raise AssertionError(f"non-positive {key}: {row}")
+        for key in (
+            "total_sequence_count", "total_literal_bytes",
+            "total_match_bytes",
+        ):
+            if int(row[key]) < 0:
+                raise AssertionError(f"negative {key}: {row}")
         if int(row["raw_blocks"]) + int(row["rle_blocks"]) + int(
             row["compressed_blocks"]
         ) != int(row["block_count"]):
             raise AssertionError(f"block count mismatch: {row}")
+        if (int(row["raw_blocks"]) == 0 and int(row["rle_blocks"]) == 0 and
+                int(row["total_literal_bytes"]) + int(row["total_match_bytes"]) != int(row["input_bytes"])):
+            raise AssertionError(f"decoded byte accounting mismatch: {row}")
         for key in (
             "vort_mib_s", "reference_mib_s", "vort_over_reference",
             "alloc_mib_s", "into_over_alloc",

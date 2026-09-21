@@ -28,7 +28,11 @@ const Row = struct {
     compressed_blocks: usize,
     first_block_type: []const u8,
     literals_kind: []const u8,
+    regenerated_literals_size: usize,
     sequence_count: usize,
+    total_sequence_count: usize,
+    total_literal_bytes: usize,
+    total_match_bytes: usize,
     ll_mode: []const u8,
     of_mode: []const u8,
     ml_mode: []const u8,
@@ -44,6 +48,9 @@ const Options = struct {
     iterations: usize = 5000,
     csv_path: ?[]const u8 = null,
     only_case: ?[]const u8 = null,
+    input_path: ?[]const u8 = null,
+    input_name: ?[]const u8 = null,
+    input_level: c_int = 1,
     reusable: bool = false,
     reference_library_path: ?[]const u8 = null,
 };
@@ -67,6 +74,30 @@ pub fn main(init: std.process.Init) !void {
     else
         try libzstd.Runtime.open();
     defer runtime.deinit();
+
+    if (options.input_path) |path| {
+        if (options.only_case != null) return error.InvalidCaseSelection;
+        const payload = try std.Io.Dir.cwd().readFileAlloc(
+            init.io,
+            path,
+            init.gpa,
+            .limited(128 * 1024 * 1024),
+        );
+        defer init.gpa.free(payload);
+        if (payload.len == 0) return error.InputTooSmall;
+        const name = options.input_name orelse std.fs.path.basename(path);
+        if (name.len == 0 or std.mem.indexOfAny(u8, name, ",\r\n") != null)
+            return error.InvalidCaseName;
+        const row = try measureCase(init, runtime, .{
+            .name = name,
+            .payload = payload,
+            .level = options.input_level,
+        }, options.iterations, options.reusable);
+        return try writeOutput(init, options.csv_path, &.{row}, provenance);
+    }
+    if (options.input_name != null or options.input_level != 1)
+        return error.MissingCorpusPath;
+
     const raw_large_payload = try init.gpa.alloc(u8, 256 * 1024);
     defer init.gpa.free(raw_large_payload);
     fillIncompressible(raw_large_payload, 0x9e37_79b9);
@@ -151,10 +182,19 @@ pub fn main(init: std.process.Init) !void {
         );
     }
 
+    try writeOutput(init, options.csv_path, rows.items, provenance);
+}
+
+fn writeOutput(
+    init: std.process.Init,
+    csv_path: ?[]const u8,
+    rows: []const Row,
+    provenance: benchmark_provenance.Info,
+) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try writeCsv(&csv.writer, rows.items, provenance);
-    if (options.csv_path) |path| {
+    try writeCsv(&csv.writer, rows, provenance);
+    if (csv_path) |path| {
         try std.Io.Dir.cwd().writeFile(
             init.io,
             .{ .sub_path = path, .data = csv.written() },
@@ -180,6 +220,16 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.csv_path = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--case")) {
             options.only_case = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--input")) {
+            options.input_path = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--name")) {
+            options.input_name = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--level")) {
+            options.input_level = try std.fmt.parseInt(
+                c_int,
+                args.next() orelse return error.MissingLimit,
+                10,
+            );
         } else if (std.mem.eql(u8, arg, "--reusable")) {
             options.reusable = true;
         } else if (std.mem.eql(u8, arg, "--libzstd")) {
@@ -206,6 +256,7 @@ fn measureCase(
             encoded,
             first_block,
         );
+    const copy_profile = try vort.zstd.benchmarkNativeSequenceCopyProfile(encoded);
     const vort_output = try init.gpa.alloc(u8, case.payload.len);
     defer init.gpa.free(vort_output);
     const reference_output = try init.gpa.alloc(u8, case.payload.len);
@@ -303,7 +354,11 @@ fn measureCase(
         .compressed_blocks = summary.compressed_block_count,
         .first_block_type = @tagName(first_block.block_type),
         .literals_kind = @tagName(sequence_summary.literals_kind),
+        .regenerated_literals_size = sequence_summary.regenerated_literals_size,
         .sequence_count = sequence_summary.sequence_count,
+        .total_sequence_count = copy_profile.sequence_count,
+        .total_literal_bytes = copy_profile.literal_bytes,
+        .total_match_bytes = copy_profile.match_bytes,
         .ll_mode = @tagName(sequence_summary.literal_length_mode),
         .of_mode = @tagName(sequence_summary.offset_mode),
         .ml_mode = @tagName(sequence_summary.match_length_mode),
@@ -450,12 +505,12 @@ fn mibPerSecond(bytes: usize, ns: u64) f64 {
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row, provenance: benchmark_provenance.Info) !void {
     try writer.print(
-        "case,reference_version,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,block_count,raw_blocks,rle_blocks,compressed_blocks,first_block_type,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,header_inspect_ns,block_inspect_ns,sequence_inspect_ns,alloc_ns,alloc_mib_s,into_over_alloc,{s}\n",
+        "case,reference_version,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,block_count,raw_blocks,rle_blocks,compressed_blocks,first_block_type,literals_kind,regenerated_literals_size,sequence_count,total_sequence_count,total_literal_bytes,total_match_bytes,ll_mode,of_mode,ml_mode,header_inspect_ns,block_inspect_ns,sequence_inspect_ns,alloc_ns,alloc_mib_s,into_over_alloc,{s}\n",
         .{benchmark_provenance.csv_columns},
     );
     for (rows) |row| {
         try writer.print(
-            "{s},{s},{d},{s},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{s},{s},{d},{s},{s},{s},{d},{d},{d},{d},{d:.2},{d:.4}",
+            "{s},{s},{d},{s},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{s},{s},{d},{d},{d},{d},{d},{s},{s},{s},{d},{d},{d},{d},{d:.2},{d:.4}",
             .{
                 row.case_name,
                 row.reference_version,
@@ -475,7 +530,11 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row, provenance: benchmark_pro
                 row.compressed_blocks,
                 row.first_block_type,
                 row.literals_kind,
+                row.regenerated_literals_size,
                 row.sequence_count,
+                row.total_sequence_count,
+                row.total_literal_bytes,
+                row.total_match_bytes,
                 row.ll_mode,
                 row.of_mode,
                 row.ml_mode,

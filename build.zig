@@ -3134,6 +3134,17 @@ pub fn build(b: *std.Build) void {
     zstd_reference_bench_gate_step.dependOn(
         &zstd_reference_bench_gate.step,
     );
+    const zstd_reference_bench_path_smoke = b.addSystemCommand(&.{
+        "python3", "tools/zstd/reference_bench_path_smoke.py",
+    });
+    zstd_reference_bench_path_smoke.addArtifactArg(zstd_reference_bench_exe);
+    const zstd_reference_bench_path_smoke_step = b.step(
+        "run-zstd-reference-bench-path-smoke",
+        "Validate file-backed Zstd decode benchmark inputs",
+    );
+    zstd_reference_bench_path_smoke_step.dependOn(
+        &zstd_reference_bench_path_smoke.step,
+    );
 
     const zstd_decode_profile_exe = b.addExecutable(.{
         .name = "vort-zstd-decode-profile",
@@ -3173,6 +3184,17 @@ pub fn build(b: *std.Build) void {
         "Validate pure-Vort Zstd decode profile coverage",
     );
     zstd_decode_profile_gate_step.dependOn(&zstd_decode_profile_gate.step);
+    const zstd_decode_profile_path_smoke = b.addSystemCommand(&.{
+        "python3", "tools/zstd/decode_profile_path_smoke.py",
+    });
+    zstd_decode_profile_path_smoke.addArtifactArg(zstd_decode_profile_exe);
+    const zstd_decode_profile_path_smoke_step = b.step(
+        "run-zstd-decode-profile-path-smoke",
+        "Validate file-backed Zstd decode profile inputs",
+    );
+    zstd_decode_profile_path_smoke_step.dependOn(
+        &zstd_decode_profile_path_smoke.step,
+    );
 
     const zstd_encode_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-encode-bench",
@@ -4389,6 +4411,8 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zstd_native_probe_step);
     ci_smoke_step.dependOn(zstd_seekable_parallel_bench_gate_step);
     ci_smoke_step.dependOn(zstd_encode_bench_path_smoke_step);
+    ci_smoke_step.dependOn(zstd_reference_bench_path_smoke_step);
+    ci_smoke_step.dependOn(zstd_decode_profile_path_smoke_step);
     ci_smoke_step.dependOn(zstd_native_encode_stage_bench_path_smoke_step);
     ci_smoke_step.dependOn(benchmark_provenance_test_step);
     ci_smoke_step.dependOn(benchmark_provenance_gate_smoke_step);
