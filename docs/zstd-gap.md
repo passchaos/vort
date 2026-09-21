@@ -1351,6 +1351,20 @@ Recommended next comparison steps:
   control recovers over 31 longer pairs to `0.9996x` median. Same-process
   one-shot throughput reaches 6,304.52 MiB/s versus libzstd 1.5.7 at 6,452.46
   MiB/s (`0.9718x` median) in this run, leaving a small but explicit gap.
+  Caller-owned tiny raw frames now have a one-pass recognizer in an isolated
+  `zstd/frame/raw.zig` text section. It accepts only an exact one-block, final,
+  checksum-free, dictionary-free raw frame with either the standard no-content-
+  size descriptor or a one-byte single-segment size; frame length, block length,
+  and declared size are validated before output mutation. The fixed 19-byte
+  libzstd frame for `hello zstd`, short output, trailing input, and an existing
+  unsupported two-block tiny frame pin success and fallback semantics. Against
+  frozen independent `c331e79e` baseline and candidate ReleaseFast binaries,
+  21 alternating one-million-decode pairs improve the 10-byte `tiny` row by
+  `29.70x` median / `29.79x` geometrically with 21/21 wins. Same-process median
+  throughput reaches 1,425.42 MiB/s versus libzstd 1.5.7 at 71.41 MiB/s
+  (`19.97x`). Thirty-one-pair non-target controls retain `raw256k` and `text`
+  at `1.0020x` and `0.9962x` medians. This is a small-message latency result,
+  not evidence for general corpus superiority.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

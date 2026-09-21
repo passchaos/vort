@@ -15379,6 +15379,20 @@ reuse, so production keeps the simpler independently owned plans.
   row recovers over 31 longer pairs to `0.9996x` median. Same-process one-shot
   throughput reaches 6,304.52 MiB/s versus libzstd 1.5.7 at 6,452.46 MiB/s
   (`0.9718x` median), so the final few percent remain an explicit target.
+  Tiny caller-owned raw frames now use a one-pass recognizer isolated in
+  `zstd/frame/raw.zig`'s own text section. It accepts only an exact single final
+  raw block with no checksum or dictionary, either under the standard no-size
+  descriptor or a one-byte single-segment size, and validates complete frame,
+  block, and declared lengths before copying. Tests pin the 19-byte libzstd
+  `hello zstd` frame, short output without mutation, trailing input fallback,
+  and the existing unsupported two-block tiny frame. Frozen independent
+  `c331e79e` baseline and candidate ReleaseFast binaries improve the 10-byte
+  `tiny` row by `29.70x` median / `29.79x` geometrically over 21 alternating
+  one-million-decode pairs, with 21/21 wins. Same-process median throughput is
+  1,425.42 MiB/s versus libzstd 1.5.7 at 71.41 MiB/s (`19.97x`). Thirty-one-
+  pair non-target controls retain `raw256k` and `text` at `1.0020x` and
+  `0.9962x` medians. This is a tiny-message fixed-overhead win rather than a
+  broad corpus claim.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to

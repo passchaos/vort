@@ -1,4 +1,12 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
+const tiny_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_tiny_raw",
+    .macho => "__TEXT,__vort_zstd_traw",
+    .coff => ".text$vort_zstd_tiny_raw",
+    else => ".text",
+};
 
 pub const Error = error{
     CorruptFrame,
@@ -25,7 +33,7 @@ pub fn tryDecode(frame: []const u8, output: []u8) Error!?usize {
     // The general decoder's fixed setup cost is already appropriate for tiny
     // payloads; this two-pass scanner exists to amortize frame parsing across
     // medium/large raw blocks.
-    if (output.len < 256) return null;
+    if (output.len < 256) return try decodeTinySingleRaw(frame, output);
     const plan = (try scan(frame)) orelse return null;
     if (output.len < plan.content_size) return error.OutputTooSmall;
 
@@ -60,6 +68,28 @@ pub fn tryDecode(frame: []const u8, output: []u8) Error!?usize {
     std.debug.assert(input_offset == frame.len);
     std.debug.assert(output_offset == plan.content_size);
     return output_offset;
+}
+
+/// Decode a complete one-byte-content-size, one-block raw frame in one pass.
+/// Every structural field and the exact frame length are validated before the
+/// output copy, preserving the no-mutation-on-miss contract.
+noinline fn decodeTinySingleRaw(frame: []const u8, output: []u8) linksection(tiny_text_section) Error!?usize {
+    if (frame.len < 9 or std.mem.readInt(u32, frame[0..4], .little) != frame_magic) return null;
+    const descriptor = frame[4];
+    const payload_offset: usize = 9;
+    const content_size: ?usize = if (descriptor == 0)
+        null
+    else if ((descriptor & 0xe0) == 0x20 and (descriptor & 0x0f) == 0)
+        frame[5]
+    else
+        return null;
+    const header = std.mem.readInt(u24, frame[6..payload_offset], .little);
+    if ((header & 0x07) != 0x01) return null;
+    const block_len: usize = @intCast(header >> 3);
+    if ((content_size != null and block_len != content_size.?) or frame.len != payload_offset + block_len) return null;
+    if (output.len < block_len) return error.OutputTooSmall;
+    @memcpy(output[0..block_len], frame[payload_offset..]);
+    return block_len;
 }
 
 fn scan(frame: []const u8) Error!?Plan {
@@ -140,10 +170,24 @@ test "Zstd raw frame fast path decodes eligible frame without mutation on miss" 
         'd',  0x09, 0x00, 0x00, 'e',
     };
     var tiny_output: [5]u8 = undefined;
-    try std.testing.expectEqual(
-        @as(?usize, null),
-        try tryDecode(&tiny_frame, &tiny_output),
-    );
+    try std.testing.expectEqual(@as(?usize, null), try tryDecode(&tiny_frame, &tiny_output));
+
+    const tiny_libzstd = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd, 0x00, 0x48,
+        0x51, 0x00, 0x00, 'h',  'e',  'l',
+        'l',  'o',  ' ',  'z',  's',  't',
+        'd',
+    };
+    var tiny_libzstd_output: [10]u8 = undefined;
+    try std.testing.expectEqual(@as(?usize, 10), try tryDecode(&tiny_libzstd, &tiny_libzstd_output));
+    try std.testing.expectEqualSlices(u8, "hello zstd", &tiny_libzstd_output);
+    var tiny_short: [9]u8 = @splat(0xa5);
+    try std.testing.expectError(error.OutputTooSmall, tryDecode(&tiny_libzstd, &tiny_short));
+    try std.testing.expectEqualSlices(u8, &([_]u8{0xa5} ** tiny_short.len), &tiny_short);
+    var tiny_trailing = tiny_libzstd ++ [_]u8{0};
+    var tiny_untouched: [10]u8 = @splat(0x5a);
+    try std.testing.expectEqual(@as(?usize, null), try tryDecode(&tiny_trailing, &tiny_untouched));
+    try std.testing.expectEqualSlices(u8, &([_]u8{0x5a} ** tiny_untouched.len), &tiny_untouched);
 
     var frame: [10 + 256]u8 = undefined;
     frame[0..7].* = .{ 0x28, 0xb5, 0x2f, 0xfd, 0x60, 0, 0 };
