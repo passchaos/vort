@@ -83,11 +83,14 @@ pub const Reader = struct {
     }
 
     /// Prove that a sequence's remaining fields can each use the 64-bit load
-    /// path. Every individual read starts at or after this combined start.
+    /// path. The first non-empty field starts nearest the physical stream end,
+    /// so requiring eight bytes after the current highest payload bit also
+    /// proves every later field load.
     pub inline fn canReadSequenceFieldsWide(self: Reader, total_bits: u8) bool {
         if (total_bits > self.remaining_bits) return false;
-        const first_byte = (self.remaining_bits - total_bits) >> 3;
-        return self.bytes.len - first_byte >= @sizeOf(u64);
+        if (total_bits == 0) return true;
+        const last_byte = (self.remaining_bits - 1) >> 3;
+        return self.bytes.len - last_byte >= @sizeOf(u64);
     }
 
     /// Read one already-bounded sequence field through a 64-bit load. The
@@ -427,6 +430,10 @@ test "Zstd reverse wide sequence field group matches checked reads" {
 
         var wide = checked;
         for (widths) |width| {
+            if (width != 0) {
+                const first_byte = (wide.remaining_bits - width) >> 3;
+                try std.testing.expect(wide.bytes.len - first_byte >= @sizeOf(u64));
+            }
             try std.testing.expectEqual(
                 try checked.readSequenceField(width),
                 wide.readSequenceFieldWide(width),
@@ -434,4 +441,16 @@ test "Zstd reverse wide sequence field group matches checked reads" {
             try std.testing.expectEqual(checked.available(), wide.available());
         }
     }
+}
+
+test "Zstd reverse wide sequence group rejects an unsafe leading load" {
+    var bytes: [16]u8 = @splat(0x5a);
+    bytes[bytes.len - 1] = 0x80;
+
+    var reader = try Reader.init(&bytes);
+    try std.testing.expect(!reader.canReadSequenceFieldsWide(64));
+
+    try reader.skip(56);
+    try std.testing.expect(reader.canReadSequenceFieldsWide(64));
+    try std.testing.expect(reader.canReadSequenceFieldsWide(0));
 }

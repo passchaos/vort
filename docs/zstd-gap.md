@@ -1409,16 +1409,23 @@ Recommended next comparison steps:
   537.27, and 1,005.13 MiB/s versus libzstd 1.5.7 at 1,362.99, 2,197.46,
   1,271.58, and 1,817.36 MiB/s (`0.4225x`--`0.5531x`), so a persistent or
   batched sequence bit container remains the next structural target.
-  Those helpers now preflight all six current-sequence fields once. When the
-  earliest field still permits a bounded 64-bit load, OF/ML/LL extras and
-  LL/ML/OF transitions use a proven-wide primitive without repeating length or
-  physical-tail checks; the final short group retains checked reads. A 4,096-
-  case randomized oracle covers combined widths, field values, and remaining-
-  bit state. Relative to `13ddaff6`, 15 alternating same-frame pairs improve
-  README, `build.zig`, roadmap, and `src/zstd.zig` by `1.1109x`, `1.0405x`,
-  `1.0628x`, and `1.0595x` at the medians, all 15/15 wins. Absolute throughput
-  reaches 768.22/1,262.00/576.98/1,071.02 MiB/s versus libzstd 1.5.7 at
-  1,434.13/2,198.27/1,258.54/1,846.61 MiB/s, or `0.4584x`--`0.5800x`.
+  Those helpers now preflight all six current-sequence fields once. A group is
+  proven wide only when the first non-empty field, which begins nearest the
+  physical stream tail, has a complete eight-byte load available; this also
+  proves every later field load. OF/ML/LL extras and LL/ML/OF transitions then
+  use a proven-wide primitive without repeating length or physical-tail checks;
+  the leading unsafe and final short groups retain checked reads. A 4,096-case
+  randomized oracle checks every accepted field address and value, and a
+  targeted boundary case rejects the unsafe leading load that a combined-start
+  check would incorrectly accept. Relative to `13ddaff6`, 15 alternating
+  same-frame pairs improve README, `build.zig`, roadmap, and `src/zstd.zig` by
+  `1.1121x`, `1.0372x`, `1.0601x`, and `1.0632x` at the medians, all 15/15
+  wins. The corrected bound is `0.9959x`/`0.9925x`/`0.9940x`/`0.9981x`
+  relative to the unsafe combined-start build, while synthetic `large_json` is
+  neutral versus `13ddaff6` at `0.9987x`. Current absolute throughput is
+  802.28/1,218.99/579.20/1,076.23 MiB/s versus libzstd 1.5.7 at
+  1,380.16/2,223.17/1,271.66/1,836.95 MiB/s, with paired median ratios of
+  `0.5805x`/`0.5481x`/`0.4506x`/`0.5850x`.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

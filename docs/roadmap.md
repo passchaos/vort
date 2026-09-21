@@ -15436,16 +15436,23 @@ reuse, so production keeps the simpler independently owned plans.
   and 1,817.36 MiB/s, leaving the persistent sequence bit-container design as
   the main path to closing the remaining `0.4225x`--`0.5531x` gap.
   Each dense/wide iteration now preflights all six current-sequence fields once.
-  When the earliest field still permits a bounded 64-bit load, OF/ML/LL extras
-  and LL/ML/OF state updates use a proven-wide primitive without repeating
-  length or physical-tail checks; the final short group stays fully checked. A
-  4,096-case randomized oracle covers combined widths, field values, and final
-  remaining-bit positions. Relative to `13ddaff6`, 15 alternating same-frame
-  pairs improve README, `build.zig`, roadmap, and `src/zstd.zig` by median
-  `1.1109x`, `1.0405x`, `1.0628x`, and `1.0595x`, all 15/15 wins. Absolute
-  throughput reaches 768.22, 1,262.00, 576.98, and 1,071.02 MiB/s versus
-  libzstd 1.5.7 at 1,434.13, 2,198.27, 1,258.54, and 1,846.61 MiB/s, or
-  `0.4584x`--`0.5800x`; broad source-like parity remains open.
+  A group is proven wide only when the first non-empty field, which begins
+  nearest the physical stream tail, has a complete eight-byte load available;
+  this also proves every later field load. OF/ML/LL extras and LL/ML/OF state
+  updates then use a proven-wide primitive without repeating length or physical-
+  tail checks, while the leading unsafe and final short groups stay fully
+  checked. A 4,096-case randomized oracle validates every accepted load address
+  and value, and a targeted boundary case rejects the unsafe leading load that
+  a combined-start check would incorrectly accept. Relative to `13ddaff6`, 15
+  alternating same-frame pairs improve README, `build.zig`, roadmap, and
+  `src/zstd.zig` by median `1.1121x`, `1.0372x`, `1.0601x`, and `1.0632x`, all
+  15/15 wins. The corrected bound measures `0.9959x`/`0.9925x`/`0.9940x`/
+  `0.9981x` versus the unsafe combined-start build; synthetic `large_json` is
+  neutral versus `13ddaff6` at `0.9987x`. Current absolute throughput is
+  802.28, 1,218.99, 579.20, and 1,076.23 MiB/s versus libzstd 1.5.7 at
+  1,380.16, 2,223.17, 1,271.66, and 1,836.95 MiB/s, with paired median ratios
+  of `0.5805x`, `0.5481x`, `0.4506x`, and `0.5850x`; broad source-like parity
+  remains open.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to
