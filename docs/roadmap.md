@@ -15423,18 +15423,6 @@ reuse, so production keeps the simpler independently owned plans.
   primary unresolved performance target. All 636 focused tests, 276
   compatibility cases, 9,900 upstream corpus frames with all 64 sequence-mode
   combinations, and 94 build-check steps pass.
-  Split-Huffman blocks above 4 KiB of regenerated literals now update their FSE
-  states through the existing 64-bit sequence-field reader. The established
-  small-literal helper retains the bounded 1/2/3-byte reader, isolating the
-  code-generation tradeoff that otherwise reduces synthetic `large_json`; 15
-  longer pairs keep that control neutral at `1.0007x`. An exhaustive direct
-  oracle compares state values and remaining-bit positions for widths 0...9
-  across 96 alignments. Fifteen alternating real-source pairs improve README,
-  `build.zig`, roadmap, and `src/zstd.zig` by `1.2163x`, `1.2592x`, `1.1751x`,
-  and `1.2646x`, all 15/15 wins. Current absolute throughput is 712.07,
-  1,170.75, 537.27, and 1,005.13 MiB/s versus libzstd 1.5.7 at 1,362.99,
-  2,197.46, 1,271.58, and 1,817.36 MiB/s (`0.5224x`--`0.5531x`, with roadmap
-  at `0.4225x`), so broad source-like parity remains open.
   The dense/wide source-like split helpers now use the existing 64-bit
   sequence-field reader for their 4--9-bit FSE state transitions. The original
   up-to-4-KiB helper stays separately instantiated with its bounded reader,
@@ -15447,6 +15435,17 @@ reuse, so production keeps the simpler independently owned plans.
   and 1,005.13 MiB/s versus libzstd 1.5.7 at 1,362.99, 2,197.46, 1,271.58,
   and 1,817.36 MiB/s, leaving the persistent sequence bit-container design as
   the main path to closing the remaining `0.4225x`--`0.5531x` gap.
+  Each dense/wide iteration now preflights all six current-sequence fields once.
+  When the earliest field still permits a bounded 64-bit load, OF/ML/LL extras
+  and LL/ML/OF state updates use a proven-wide primitive without repeating
+  length or physical-tail checks; the final short group stays fully checked. A
+  4,096-case randomized oracle covers combined widths, field values, and final
+  remaining-bit positions. Relative to `13ddaff6`, 15 alternating same-frame
+  pairs improve README, `build.zig`, roadmap, and `src/zstd.zig` by median
+  `1.1109x`, `1.0405x`, `1.0628x`, and `1.0595x`, all 15/15 wins. Absolute
+  throughput reaches 768.22, 1,262.00, 576.98, and 1,071.02 MiB/s versus
+  libzstd 1.5.7 at 1,434.13, 2,198.27, 1,258.54, and 1,846.61 MiB/s, or
+  `0.4584x`--`0.5800x`; broad source-like parity remains open.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to

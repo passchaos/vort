@@ -9972,9 +9972,26 @@ inline fn decodeAllFseSplitHuffmanSequences(
         const ll_symbol = spec.literal_fse.symbolUnchecked(state.ll_state);
         const of_symbol = spec.offset_fse.symbolUnchecked(state.of_state);
         const ml_symbol = spec.match_fse.symbolUnchecked(state.ml_state);
-        const offset_extra = try state.reader.readSequenceField(of_symbol.additional_bits);
-        const match_len = @as(usize, ml_symbol.base) + try state.reader.readSequenceField(ml_symbol.additional_bits);
-        const literal_len = @as(usize, ll_symbol.base) + try state.reader.readSequenceField(ll_symbol.additional_bits);
+        const transition_bits: u8 = if (state.remaining == 1)
+            0
+        else
+            ll_symbol.state_bits + ml_symbol.state_bits + of_symbol.state_bits;
+        const total_bits: u8 = of_symbol.additional_bits + ml_symbol.additional_bits +
+            ll_symbol.additional_bits + transition_bits;
+        const fields_are_wide = use_wide_state_reads and
+            state.reader.canReadSequenceFieldsWide(total_bits);
+        const offset_extra = if (fields_are_wide)
+            state.reader.readSequenceFieldWide(of_symbol.additional_bits)
+        else
+            try state.reader.readSequenceField(of_symbol.additional_bits);
+        const match_len = @as(usize, ml_symbol.base) + if (fields_are_wide)
+            state.reader.readSequenceFieldWide(ml_symbol.additional_bits)
+        else
+            try state.reader.readSequenceField(ml_symbol.additional_bits);
+        const literal_len = @as(usize, ll_symbol.base) + if (fields_are_wide)
+            state.reader.readSequenceFieldWide(ll_symbol.additional_bits)
+        else
+            try state.reader.readSequenceField(ll_symbol.additional_bits);
         const match_offset = if (of_symbol.additional_bits == 0 and literal_len != 0) blk: {
             if (builtin.is_test) test_split_huffman_positive_rep0_hits += 1;
             break :blk try large_offset.positiveLiteralRep0(&state.repeated_offsets);
@@ -9982,9 +9999,15 @@ inline fn decodeAllFseSplitHuffmanSequences(
         state.remaining -= 1;
         if (state.remaining != 0) {
             if (use_wide_state_reads) {
-                state.ll_state = try nextSequenceStateWide(&state.reader, ll_symbol);
-                state.ml_state = try nextSequenceStateWide(&state.reader, ml_symbol);
-                state.of_state = try nextSequenceStateWide(&state.reader, of_symbol);
+                if (fields_are_wide) {
+                    state.ll_state = nextSequenceStateProvenWide(&state.reader, ll_symbol);
+                    state.ml_state = nextSequenceStateProvenWide(&state.reader, ml_symbol);
+                    state.of_state = nextSequenceStateProvenWide(&state.reader, of_symbol);
+                } else {
+                    state.ll_state = try nextSequenceStateWide(&state.reader, ll_symbol);
+                    state.ml_state = try nextSequenceStateWide(&state.reader, ml_symbol);
+                    state.of_state = try nextSequenceStateWide(&state.reader, of_symbol);
+                }
             } else {
                 state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
                 state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
@@ -10626,6 +10649,10 @@ fn nextSequenceState(reader: *ReverseBitReader, symbol: SequenceSymbol) Error!us
 
 inline fn nextSequenceStateWide(reader: *ReverseBitReader, symbol: SequenceSymbol) Error!usize {
     return std.math.add(usize, symbol.next_state, try reader.readSequenceField(symbol.state_bits)) catch return error.IntegerOverflow;
+}
+
+inline fn nextSequenceStateProvenWide(reader: *ReverseBitReader, symbol: SequenceSymbol) usize {
+    return @as(usize, symbol.next_state) + reader.readSequenceFieldWide(symbol.state_bits);
 }
 
 test "wide sequence transition matches bounded reader" {

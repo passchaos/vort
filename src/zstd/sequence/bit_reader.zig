@@ -82,6 +82,33 @@ pub const Reader = struct {
         return @intCast((reservoir >> @intCast(start & 7)) & mask);
     }
 
+    /// Prove that a sequence's remaining fields can each use the 64-bit load
+    /// path. Every individual read starts at or after this combined start.
+    pub inline fn canReadSequenceFieldsWide(self: Reader, total_bits: u8) bool {
+        if (total_bits > self.remaining_bits) return false;
+        const first_byte = (self.remaining_bits - total_bits) >> 3;
+        return self.bytes.len - first_byte >= @sizeOf(u64);
+    }
+
+    /// Read one already-bounded sequence field through a 64-bit load. The
+    /// caller must first prove the complete field group with
+    /// `canReadSequenceFieldsWide`.
+    pub inline fn readSequenceFieldWide(self: *Reader, bit_count: u8) usize {
+        std.debug.assert(bit_count <= 32 and bit_count <= self.remaining_bits);
+        if (bit_count == 0) return 0;
+        const start = self.remaining_bits - bit_count;
+        const first_byte = start >> 3;
+        std.debug.assert(self.bytes.len - first_byte >= @sizeOf(u64));
+        const reservoir = std.mem.readInt(
+            u64,
+            self.bytes[first_byte..][0..@sizeOf(u64)],
+            .little,
+        );
+        const mask = (@as(u64, 1) << @intCast(bit_count)) - 1;
+        self.remaining_bits = start;
+        return @intCast((reservoir >> @intCast(start & 7)) & mask);
+    }
+
     /// Return the next bits without advancing. The value uses the same stream
     /// order as `read`, so table decoders can index fixed-width prefixes and
     /// then consume the actual code length.
@@ -373,4 +400,38 @@ test "Zstd reverse sequence-field read matches generic read" {
     }
     var reader = try Reader.init(&bytes);
     try std.testing.expectError(error.CorruptFrame, reader.readSequenceField(33));
+}
+
+test "Zstd reverse wide sequence field group matches checked reads" {
+    var bytes: [32]u8 = undefined;
+    for (&bytes, 0..) |*byte, index| byte.* = @truncate(index * 109 + 37);
+    bytes[bytes.len - 1] |= 0x80;
+    var prng = std.Random.DefaultPrng.init(0x5a53_5444_4653_4531);
+    const random = prng.random();
+
+    for (0..4096) |_| {
+        var checked = try Reader.init(&bytes);
+        const consumed = random.uintLessThan(usize, 128);
+        if (consumed != 0) try checked.skip(@intCast(consumed));
+        const widths = [6]u8{
+            random.intRangeAtMost(u8, 0, 32),
+            random.intRangeAtMost(u8, 0, 16),
+            random.intRangeAtMost(u8, 0, 16),
+            random.intRangeAtMost(u8, 0, 9),
+            random.intRangeAtMost(u8, 0, 9),
+            random.intRangeAtMost(u8, 0, 8),
+        };
+        var total_bits: u8 = 0;
+        for (widths) |width| total_bits += width;
+        if (!checked.canReadSequenceFieldsWide(total_bits)) continue;
+
+        var wide = checked;
+        for (widths) |width| {
+            try std.testing.expectEqual(
+                try checked.readSequenceField(width),
+                wide.readSequenceFieldWide(width),
+            );
+            try std.testing.expectEqual(checked.available(), wide.available());
+        }
+    }
 }

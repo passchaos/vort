@@ -1396,19 +1396,6 @@ Recommended next comparison steps:
   the main real-source sequence-loop gap remains open. All 636 focused tests,
   276 compatibility cases, 9,900 upstream corpus frames with all 64 sequence-
   mode combinations, and 94 build-check steps pass.
-  Dense real-source split-Huffman blocks now use the existing 64-bit sequence-
-  field reader for their 4--9-bit FSE state transitions, instead of the bounded
-  1/2/3-byte reader. The route is isolated to blocks above 4 KiB of regenerated
-  literals; the smaller synthetic `large_json` shape keeps its established
-  helper and measures `1.0007x` against the prior binary over 15 longer pairs.
-  A direct oracle compares both transition readers across widths 0...9 and 96
-  bit alignments. Fifteen alternating same-frame pairs improve README,
-  `build.zig`, roadmap, and `src/zstd.zig` by `1.2163x`, `1.2592x`, `1.1751x`,
-  and `1.2646x`, all 15/15 wins. Absolute caller-owned throughput reaches
-  712.07/1,170.75/537.27/1,005.13 MiB/s versus libzstd 1.5.7 at
-  1,362.99/2,197.46/1,271.58/1,817.36 MiB/s, or `0.5224x`/`0.5328x`/
-  `0.4225x`/`0.5531x`; the remaining real-source gap still requires a more
-  fundamental sequence bit-container improvement.
   The dense/wide source-like helpers now read their 4--9-bit FSE state updates
   through the existing 64-bit sequence-field path instead of rebuilding a
   bounded 1/2/3-byte value for every transition. The original up-to-4-KiB
@@ -1422,6 +1409,16 @@ Recommended next comparison steps:
   537.27, and 1,005.13 MiB/s versus libzstd 1.5.7 at 1,362.99, 2,197.46,
   1,271.58, and 1,817.36 MiB/s (`0.4225x`--`0.5531x`), so a persistent or
   batched sequence bit container remains the next structural target.
+  Those helpers now preflight all six current-sequence fields once. When the
+  earliest field still permits a bounded 64-bit load, OF/ML/LL extras and
+  LL/ML/OF transitions use a proven-wide primitive without repeating length or
+  physical-tail checks; the final short group retains checked reads. A 4,096-
+  case randomized oracle covers combined widths, field values, and remaining-
+  bit state. Relative to `13ddaff6`, 15 alternating same-frame pairs improve
+  README, `build.zig`, roadmap, and `src/zstd.zig` by `1.1109x`, `1.0405x`,
+  `1.0628x`, and `1.0595x` at the medians, all 15/15 wins. Absolute throughput
+  reaches 768.22/1,262.00/576.98/1,071.02 MiB/s versus libzstd 1.5.7 at
+  1,434.13/2,198.27/1,258.54/1,846.61 MiB/s, or `0.4584x`--`0.5800x`.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
