@@ -15464,6 +15464,20 @@ reuse, so production keeps the simpler independently owned plans.
   `large_json` remains neutral-positive at `1.0061x`. The same runs measure
   source-like throughput at `0.6177x`, `0.5627x`, `0.4614x`, and `0.5932x` of
   libzstd 1.5.7, so sequence execution remains the primary unresolved gap.
+  The dense/wide executors now keep the synthetic 68--71-byte copy cluster out
+  of their real-source hot loop. The original up-to-4-KiB helper retains those
+  exact-output kernels; larger helpers route the rare lengths through the
+  already-validated generic copy path. This mirrors libzstd's compact common/
+  slow-path split without allowing writes past the caller's logical output. The
+  dense and wide functions shrink from 5,032 to 4,408 bytes each. Against frozen
+  `9bd097c8` binaries, 15 alternating pairs improve README, `build.zig`, roadmap,
+  and `src/zstd.zig` by median `1.0286x`, `1.0091x`, `1.0036x`, and `1.0087x`,
+  each with 14/15 wins. A longer 31-pair `large_json` control, whose small helper
+  machine code is unchanged, measures `0.9970x` median / `0.9966x` geometric
+  throughput and is treated as layout noise. Current paired source-like ratios
+  are `0.6214x`, `0.5618x`, `0.4631x`, and `0.5983x` of libzstd 1.5.7.
+  All 639 focused tests, 276 compatibility cases, 9,900 upstream corpus frames
+  with all 64 sequence-mode combinations, and 94 build-check steps pass.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to

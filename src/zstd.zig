@@ -10023,7 +10023,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             }
         } else try state.reader.expectEnd();
 
-        if (literal_len == 1 and match_len == 71 and of_symbol.additional_bits == 0 and match_offset >= 71) {
+        if (!use_wide_state_reads and literal_len == 1 and match_len == 71 and of_symbol.additional_bits == 0 and match_offset >= 71) {
             if (literal_offset >= section.regenerated_size) return error.CorruptFrame;
             if (output.len - written.* < 1) return error.OutputTooSmall;
             output[written.*] = literals[literal_offset];
@@ -10049,7 +10049,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             written.* += literal_len;
             literal_offset += literal_len;
         }
-        if (match_len == 71 and match_offset >= 71 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
+        if (!use_wide_state_reads and match_len == 71 and match_offset >= 71 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
             sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
         } else if ((match_len == 6 or match_len == 7) and
@@ -10107,7 +10107,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 written.* - match_offset,
                 match_len,
             );
-        } else if (match_len >= 68 and match_len <= 70 and match_offset >= match_len and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
+        } else if (!use_wide_state_reads and match_len >= 68 and match_len <= 70 and match_offset >= match_len and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
             if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
             sequence_match_copy.appendNonOverlapping68To70(output, written, written.* - match_offset, match_len);
