@@ -15330,6 +15330,27 @@ reuse, so production keeps the simpler independently owned plans.
   for libzstd 1.5.7 (`0.8488x`); reusable remains 423.23 versus 655.88 MiB/s
   (`0.6470x`). All 237 native, 276 compatibility, 26 CLI differential, 9,900
   upstream corpus, 1,619 test, and 94 build-check cases pass.
+  The common 256-state sequence FSE tables without low-probability (`-1`)
+  symbols now use a dedicated builder in `zstd/sequence/large/fse_table.zig`.
+  Per-symbol state bitsets construct final mapped entries directly, removing
+  the generic 512-byte spread scratch and the following symbol-indexed
+  transition pass. Other widths and low-probability tables keep the generic
+  builder. A deterministic 256-case randomized oracle compares every output
+  entry, while the fixed 128 KiB libzstd frame asserts that all three production
+  tables take the specialization before its existing generic-decode, short-
+  output, suffix, and 128-mutation comparisons. Frozen independent `024ba27b`
+  baseline and candidate ReleaseFast binaries improve one-shot `large_json` by
+  `1.0257x` median / `1.0279x` geometrically over 15 alternating 20,000-decode
+  pairs, with 15/15 wins. A seven-pair 13-row one-shot matrix reaches a
+  `1.0048x` row-median geometric mean; its noisy `large_text` row recovers over
+  31 longer pairs to `1.0038x` median / `1.0060x` geometric throughput. Warmed
+  `large_json`, which already hits the sequence-table cache, remains neutral at
+  `1.0010x` median over 15 pairs. The same one-shot runs measure 6,048.93 MiB/s
+  for the candidate versus 6,470.28 MiB/s for libzstd 1.5.7 (`0.9341x` median),
+  leaving cold large-frame setup as an explicit remaining gap. The 364-case
+  native probe, 276-case compatibility matrix, 26-case CLI differential, and
+  9,900-frame upstream corpus with all 64 mode tuples and 76,578 streamed
+  sequence blocks pass, along with all 1,627 tests.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to

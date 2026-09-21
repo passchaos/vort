@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const large_fse_table = if (builtin.is_test) @import("large/fse_table.zig") else struct {};
 
 const mapped_build_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_zz_fse_mapped",
@@ -264,4 +265,44 @@ test "Zstd mapped FSE builder matches entry conversion" {
     try expectMappedMatches(32, &.{ 21, 8, 4, 0, 0, 1 });
     try expectMappedMatches(256, &.{ 129, 65, 33, 17, 9, 5, 0, 0, 0, 0 });
     try expectMappedMatches(512, &.{ 256, 129, 65, 33, 17, 9, 5, 3, 2, 0, 0 });
+}
+
+test "Zstd 256-state no-low mapped builder matches generic table" {
+    const Mapped = struct {
+        base: u32,
+        additional_bits: u8,
+        next_state: u16,
+        state_bits: u8,
+    };
+    var bases: [256]usize = undefined;
+    var bits: [256]u8 = undefined;
+    for (&bases, &bits, 0..) |*base, *bit_count, symbol| {
+        base.* = symbol * 37;
+        bit_count.* = @intCast(symbol % 9);
+    }
+    var expected: [256]Mapped = undefined;
+    var actual: [256]Mapped = undefined;
+    var values: [256]u16 = undefined;
+    var prng = std.Random.DefaultPrng.init(0x4653_4532_3536);
+    const random = prng.random();
+    for (0..256) |_| {
+        const symbol_count = random.intRangeAtMost(usize, 2, 64);
+        @memset(values[0..symbol_count], 1);
+        var remaining: usize = 256;
+        while (remaining != 0) {
+            const symbol = random.uintLessThan(usize, symbol_count);
+            values[symbol] += 1;
+            remaining -= 1;
+        }
+        try buildMapped(values[0..symbol_count], &expected, bases[0..symbol_count], bits[0..symbol_count]);
+        try large_fse_table.buildNoLowProbability(values[0..symbol_count], &actual, bases[0..symbol_count], bits[0..symbol_count]);
+        try std.testing.expectEqualSlices(Mapped, &expected, &actual);
+    }
+
+    var invalid = [_]u16{ 128, 64, 32, 16, 8, 4, 3 };
+    try std.testing.expectError(error.CorruptFrame, large_fse_table.buildNoLowProbability(&invalid, &actual, &bases, &bits));
+    invalid[6] = 4;
+    try std.testing.expectError(error.CorruptFrame, large_fse_table.buildNoLowProbability(&invalid, actual[0..128], &bases, &bits));
+    invalid[6] = 0;
+    try std.testing.expectError(error.CorruptFrame, large_fse_table.buildNoLowProbability(&invalid, &actual, &bases, &bits));
 }

@@ -1300,6 +1300,30 @@ Recommended next comparison steps:
   26-case CLI differential, 9,900-frame corpus with all 64 mode tuples and
   76,578 streamed sequence blocks, all 1,626 tests, and all 94 `check` steps.
 
+  One-shot 256-state sequence-table construction now detects the common case
+  without low-probability (`-1`) symbols and builds final `SequenceSymbol`
+  entries with per-symbol state bitsets. The specialized builder in
+  `zstd/sequence/large/fse_table.zig` avoids the generic 512-byte spread
+  scratch and its second symbol-indexed transition pass; all other table widths
+  and low-probability tables retain the established mapped builder. A
+  deterministic 256-case randomized oracle compares every resulting entry, and
+  the fixed 128 KiB libzstd frame proves that all three production sequence
+  tables take the route while preserving the existing generic-decode, short-
+  output, suffix, and 128-mutation comparisons. Against frozen independent
+  `024ba27b` baseline and candidate ReleaseFast binaries, 15 alternating
+  20,000-decode `large_json` pairs improve by `1.0257x` median / `1.0279x`
+  geometric throughput with 15/15 wins. A seven-pair 13-row one-shot matrix
+  improves `1.0048x` across row medians; its noisy `large_text` low row recovers
+  over 31 longer 10,000-decode pairs to `1.0038x` median / `1.0060x`
+  geometric throughput. Warmed `large_json`, which already caches parsed
+  sequence tables, remains neutral at `1.0010x` median over 15 pairs. The same
+  one-shot runs measure the candidate at 6,048.93 MiB/s versus libzstd 1.5.7 at
+  6,470.28 MiB/s (`0.9341x` median), so the general cold large-frame gap is
+  smaller but remains open. The 364-case native probe, 276-case compatibility
+  matrix, 26-case CLI differential, and 9,900-frame upstream corpus with all 64
+  sequence-mode tuples and 76,578 streamed sequence blocks pass, along with all
+  1,627 tests.
+
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
    multi-block all-FSE/Huffman `large_json` row now leads by about `1.027x`

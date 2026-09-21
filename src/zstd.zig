@@ -33,6 +33,7 @@ const optimal_four_match = @import("zstd/match/optimal_four.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
 const large_transition = @import("zstd/sequence/large/transition.zig");
+const large_fse_table = @import("zstd/sequence/large/fse_table.zig");
 const large_offset = @import("zstd/sequence/large/offset.zig");
 const large_fast_plan = @import("zstd/sequence/large/plan.zig");
 const large_predefined = @import("zstd/sequence/large/predefined.zig");
@@ -169,6 +170,7 @@ var test_split_huffman_single_literal_hits: usize = 0;
 var test_split_huffman_match_68_70_hits: usize = 0;
 var test_split_huffman_positive_rep0_hits: usize = 0;
 var test_split_huffman_common_sequence_hits: usize = 0;
+var test_large_fse_no_low_builder_hits: usize = 0;
 var test_small_mixed_fse_fast_literal_hits: usize = 0;
 var test_small_mixed_fse_match_56_hits: usize = 0;
 var test_small_mixed_fse_match_6_7_hits: usize = 0;
@@ -9005,12 +9007,21 @@ fn readFseSequenceTableInto(
 
     table.len = decoded.table_len;
     table.accuracy_log = @intCast(std.math.log2_int(usize, decoded.table_len));
-    try sequence_fse_builder.buildMapped(
-        values[0..decoded.value_count],
-        table.entries[0..decoded.table_len],
-        bases,
-        bits,
-    );
+    const normalized = values[0..decoded.value_count];
+    if (decoded.table_len == 256) {
+        var no_low_probability = true;
+        for (normalized) |value| no_low_probability = no_low_probability and value != 0;
+        if (no_low_probability) {
+            if (builtin.is_test) test_large_fse_no_low_builder_hits += 1;
+            return large_fse_table.buildNoLowProbability(
+                normalized,
+                table.entries[0..decoded.table_len],
+                bases,
+                bits,
+            );
+        }
+    }
+    try sequence_fse_builder.buildMapped(normalized, table.entries[0..decoded.table_len], bases, bits);
 }
 
 const FseTableEntry = sequence_fse_builder.Entry;
@@ -28454,6 +28465,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         test_split_huffman_match_68_70_hits = 0;
         test_split_huffman_positive_rep0_hits = 0;
         test_split_huffman_common_sequence_hits = 0;
+        test_large_fse_no_low_builder_hits = 0;
     }
     const encoded_hex_file = @embedFile("zstd/testdata/libzstd-large-json-128k.frame.hex");
     var encoded: [2874]u8 = undefined;
@@ -28503,7 +28515,9 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     test_split_huffman_match_68_70_hits = 0;
     test_split_huffman_positive_rep0_hits = 0;
     test_split_huffman_common_sequence_hits = 0;
+    test_large_fse_no_low_builder_hits = 0;
     const fast_written = try decodeNativeFrameInto(&encoded, fast_output);
+    try std.testing.expectEqual(@as(usize, 3), test_large_fse_no_low_builder_hits);
     try std.testing.expectEqual(@as(usize, 1), test_split_huffman_decode_hits);
     try std.testing.expect(test_split_huffman_single_literal_hits > 1000);
     try std.testing.expect(test_split_huffman_match_68_70_hits > 100);
