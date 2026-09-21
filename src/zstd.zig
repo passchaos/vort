@@ -136,6 +136,14 @@ const split_wide_literal_decode_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const split_dense_literal_decode_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_split_dense_literal_decode",
+    .macho => "__TEXT,__vort_zstd_sldn",
+    .coff => ".text$vort_zstd_split_dense_literal_decode",
+    else => ".text",
+};
+
+const split_small_huffman_literal_limit = 4 * 1024;
 const split_huffman_literal_capacity = 16 * 1024;
 const split_wide_huffman_literal_capacity = 32 * 1024;
 
@@ -9359,8 +9367,18 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         dictionary_history.len == 0 and
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
-        if (section.regenerated_size <= split_huffman_literal_capacity) {
+        if (section.regenerated_size <= split_small_huffman_literal_limit) {
             if (try tryDecodeAllFseSplitHuffmanSequences(
+                section,
+                output,
+                written,
+                frame_output_start,
+                frame_state,
+                continuation,
+                &state,
+            )) return;
+        } else if (section.regenerated_size <= split_huffman_literal_capacity) {
+            if (try tryDecodeAllFseSplitDenseHuffmanSequences(
                 section,
                 output,
                 written,
@@ -9541,8 +9559,18 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         dictionary_history.len == 0 and
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
-        if (section.regenerated_size <= split_huffman_literal_capacity) {
+        if (section.regenerated_size <= split_small_huffman_literal_limit) {
             if (try tryDecodeAllFseSplitHuffmanSequences(
+                section,
+                output,
+                written,
+                frame_output_start,
+                frame_state,
+                continuation,
+                &state,
+            )) return;
+        } else if (section.regenerated_size <= split_huffman_literal_capacity) {
+            if (try tryDecodeAllFseSplitDenseHuffmanSequences(
                 section,
                 output,
                 written,
@@ -9866,6 +9894,29 @@ noinline fn tryDecodeAllFseSplitHuffmanSequences(
 ) linksection(split_literal_decode_text_section) Error!bool {
     return try decodeAllFseSplitHuffmanSequences(
         split_huffman_literal_capacity,
+        false,
+        section,
+        output,
+        written,
+        frame_output_start,
+        frame_state,
+        continuation,
+        state,
+    );
+}
+
+noinline fn tryDecodeAllFseSplitDenseHuffmanSequences(
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+) linksection(split_dense_literal_decode_text_section) Error!bool {
+    return try decodeAllFseSplitHuffmanSequences(
+        split_huffman_literal_capacity,
+        true,
         section,
         output,
         written,
@@ -9887,6 +9938,7 @@ noinline fn tryDecodeAllFseSplitWideHuffmanSequences(
 ) linksection(split_wide_literal_decode_text_section) Error!bool {
     return try decodeAllFseSplitHuffmanSequences(
         split_wide_huffman_literal_capacity,
+        true,
         section,
         output,
         written,
@@ -9899,6 +9951,7 @@ noinline fn tryDecodeAllFseSplitWideHuffmanSequences(
 
 inline fn decodeAllFseSplitHuffmanSequences(
     comptime literal_capacity: usize,
+    comptime use_wide_state_reads: bool,
     section: LiteralOnlySection,
     output: []u8,
     written: *usize,
@@ -9928,9 +9981,15 @@ inline fn decodeAllFseSplitHuffmanSequences(
         } else try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
         state.remaining -= 1;
         if (state.remaining != 0) {
-            state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
-            state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
-            state.of_state = try nextSequenceState(&state.reader, of_symbol);
+            if (use_wide_state_reads) {
+                state.ll_state = try nextSequenceStateWide(&state.reader, ll_symbol);
+                state.ml_state = try nextSequenceStateWide(&state.reader, ml_symbol);
+                state.of_state = try nextSequenceStateWide(&state.reader, of_symbol);
+            } else {
+                state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
+                state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
+                state.of_state = try nextSequenceState(&state.reader, of_symbol);
+            }
         } else try state.reader.expectEnd();
 
         if (literal_len == 1 and match_len == 71 and of_symbol.additional_bits == 0 and match_offset >= 71) {
@@ -10563,6 +10622,36 @@ const DecodedSequence = struct {
 
 fn nextSequenceState(reader: *ReverseBitReader, symbol: SequenceSymbol) Error!usize {
     return std.math.add(usize, symbol.next_state, try reader.readSmall(@intCast(symbol.state_bits))) catch return error.IntegerOverflow;
+}
+
+inline fn nextSequenceStateWide(reader: *ReverseBitReader, symbol: SequenceSymbol) Error!usize {
+    return std.math.add(usize, symbol.next_state, try reader.readSequenceField(symbol.state_bits)) catch return error.IntegerOverflow;
+}
+
+test "wide sequence transition matches bounded reader" {
+    var bytes: [24]u8 = undefined;
+    for (&bytes, 0..) |*byte, index| byte.* = @truncate(index * 73 + 19);
+    bytes[bytes.len - 1] |= 0x80;
+    for (0..96) |consumed| {
+        var positioned = try ReverseBitReader.init(&bytes);
+        if (consumed != 0) try positioned.skip(@intCast(consumed));
+        const max_width = @min(@as(usize, 9), positioned.available());
+        for (0..max_width + 1) |width| {
+            var bounded = positioned;
+            var wide = positioned;
+            const symbol: SequenceSymbol = .{
+                .base = 0,
+                .additional_bits = 0,
+                .next_state = 511,
+                .state_bits = @intCast(width),
+            };
+            try std.testing.expectEqual(
+                try nextSequenceState(&bounded, symbol),
+                try nextSequenceStateWide(&wide, symbol),
+            );
+            try std.testing.expectEqual(bounded.available(), wide.available());
+        }
+    }
 }
 
 /// Resolve repeat/direct offsets inside the per-sequence decode loop. This is
