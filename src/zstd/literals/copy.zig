@@ -33,6 +33,29 @@ pub inline fn append2To15(
     literal_offset.* += literal_len;
 }
 
+/// Copy a 0--15-byte literal run with one 16-byte move. The caller provides
+/// initialized source padding and writable output through byte sixteen. Bytes
+/// beyond the logical literal run are intentionally temporary: the following
+/// match or later sequence overwrites them before the frame is returned.
+pub inline fn appendUpTo15Wildcopy16(
+    output: []u8,
+    written: *usize,
+    literals: []const u8,
+    literal_offset: *usize,
+    literal_len: usize,
+) void {
+    const destination_start = written.*;
+    const source_start = literal_offset.*;
+    std.debug.assert(literal_len <= 15);
+    std.debug.assert(output.len - destination_start >= 16);
+    std.debug.assert(literals.len - source_start >= 16);
+
+    const chunk: @Vector(16, u8) = literals[source_start..][0..16].*;
+    output[destination_start..][0..16].* = chunk;
+    written.* += literal_len;
+    literal_offset.* += literal_len;
+}
+
 test "Zstd exact short literal copy preserves output suffix" {
     const literals = "abcdefghijklmnopqrstuvwxyz";
     for (2..16) |literal_len| {
@@ -45,5 +68,22 @@ test "Zstd exact short literal copy preserves output suffix" {
         try std.testing.expectEqual(@as(usize, 7) + literal_len, written);
         try std.testing.expectEqual(@as(usize, 3) + literal_len, literal_offset);
         try std.testing.expectEqualSlices(u8, &expected, &actual);
+    }
+}
+
+test "Zstd bounded literal wildcopy preserves logical bytes and caller suffix" {
+    var literals: [48]u8 = undefined;
+    for (&literals, 0..) |*byte, index| byte.* = @truncate(index * 31 + 5);
+    for (0..16) |literal_len| {
+        var expected: [64]u8 = @splat(0xa5);
+        var actual = expected;
+        @memcpy(expected[7..][0..literal_len], literals[3..][0..literal_len]);
+        var written: usize = 7;
+        var literal_offset: usize = 3;
+        appendUpTo15Wildcopy16(actual[0..23], &written, &literals, &literal_offset, literal_len);
+        try std.testing.expectEqual(@as(usize, 7) + literal_len, written);
+        try std.testing.expectEqual(@as(usize, 3) + literal_len, literal_offset);
+        try std.testing.expectEqualSlices(u8, expected[0..written], actual[0..written]);
+        try std.testing.expectEqualSlices(u8, expected[23..], actual[23..]);
     }
 }

@@ -208,6 +208,32 @@ pub inline fn appendNonOverlapping8To15(
     written.* += match_len;
 }
 
+/// Copy a match in 16-byte forward chunks. `distance >= 16` is sufficient:
+/// each source vector is fully initialized before the corresponding store,
+/// even when the logical match overlaps. The caller must provide writable
+/// space through `roundUp(match_len, 16)`; bytes after the logical match are
+/// intentional wildcopy padding and must remain inside the current frame.
+pub inline fn appendForwardWildcopy16(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+    match_len: usize,
+) void {
+    const destination_start = written.*;
+    const distance = destination_start - repeat_start;
+    const rounded_len = (match_len + 15) & ~@as(usize, 15);
+    std.debug.assert(match_len != 0);
+    std.debug.assert(distance >= 16);
+    std.debug.assert(output.len - destination_start >= rounded_len);
+
+    var copied: usize = 0;
+    while (copied < rounded_len) : (copied += 16) {
+        const chunk: @Vector(16, u8) = output[repeat_start + copied ..][0..16].*;
+        output[destination_start + copied ..][0..16].* = chunk;
+    }
+    written.* += match_len;
+}
+
 pub inline fn appendNonOverlapping16To31(
     output: []u8,
     written: *usize,
@@ -429,6 +455,24 @@ test "Zstd bounded short wildcopies preserve the caller suffix" {
         var actual_written: usize = destination_start;
         append(&expected, &expected_written, 8, match_len);
         appendNonOverlapping8To15(actual[0..logical_end], &actual_written, 8, match_len, true);
+        try std.testing.expectEqual(expected_written, actual_written);
+        try std.testing.expectEqualSlices(u8, expected[0..expected_written], actual[0..actual_written]);
+        try std.testing.expectEqualSlices(u8, expected[logical_end..], actual[logical_end..]);
+    }
+}
+
+test "Zstd bounded forward wildcopy handles overlapping long matches" {
+    inline for (.{ @as(usize, 4), 15, 16, 17, 31, 32, 47, 64, 71 }) |match_len| {
+        var expected: [160]u8 = undefined;
+        for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 29 + 13);
+        var actual = expected;
+        const destination_start = 64;
+        const rounded_len = (match_len + 15) & ~@as(usize, 15);
+        const logical_end = destination_start + rounded_len;
+        var expected_written: usize = destination_start;
+        var actual_written: usize = destination_start;
+        append(&expected, &expected_written, destination_start - 16, match_len);
+        appendForwardWildcopy16(actual[0..logical_end], &actual_written, destination_start - 16, match_len);
         try std.testing.expectEqual(expected_written, actual_written);
         try std.testing.expectEqualSlices(u8, expected[0..expected_written], actual[0..actual_written]);
         try std.testing.expectEqualSlices(u8, expected[logical_end..], actual[logical_end..]);

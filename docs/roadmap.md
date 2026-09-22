@@ -15570,3 +15570,21 @@ reuse, so production keeps the simpler independently owned plans.
   237-case native probe, 276-case compatibility matrix, 26-case CLI
   differential, 9,900-frame upstream corpus, all 1,619 tests, and all 94
   `check` steps pass.
+  The source-like all-FSE/Huffman executor now follows libzstd's AArch64 hot
+  path more closely without adopting its public overwrite allowance. It loads
+  each FSE symbol as one 64-bit word, performs a single sequence-level bounds
+  preflight, copies short literals with one 16-byte move from explicitly padded
+  staging, and replays matches with offset at least 16 through a forward
+  16-byte wildcopy loop. The output view is still clipped to the declared frame
+  end, and all other paths retain exact checked copies. Against frozen
+  `0d928678`, paired medians improve by `1.2634x` on README (15/15 wins),
+  `1.0561x` on `build.zig`, `1.2363x` on this roadmap, and `1.1344x` on
+  `src/zstd.zig` (all 11/11). The current same-process README result is
+  1,262.07 MiB/s versus 1,411.03 MiB/s for libzstd 1.5.7 (`0.8962x`), leaving
+  about a 10.4% gap. The `ascii64k` small-helper control remains neutral at
+  `1.0001x` over 21 pairs; `large_json` is `0.9893x` median / `0.9974x`
+  geometric and remains layout-sensitive. All 645 focused tests, 276
+  compatibility cases, and 9,900 decodecorpus frames with all 64 sequence-mode
+  combinations pass. Rejected follow-ups include state localization/reordering,
+  a borrowed-table cursor, explicit repcode swaps, and unconditional match
+  prefetch; each caused a measurable README regression and was removed.

@@ -1533,6 +1533,32 @@ Recommended next comparison steps:
   on `src/zstd.zig`; README remains positive at `1.0061x` median but noisy. The
   current same-process README comparison is 831.74 versus 1,174.06 MiB/s
   (`0.7102x`) against libzstd 1.5.7, so the broad gap remains explicit.
+  A source-and-machine-code follow-up now adopts the complete common execution
+  shape from libzstd's AArch64 `ZSTD_decodeSequence()` /
+  `ZSTD_execSequence()`, while retaining Vort's stricter caller boundary. The
+  dense/wide known-size path loads each 8-byte FSE symbol once and extracts its
+  fields, copies 0--15 literals with one padded 16-byte move, and handles every
+  in-frame offset of at least 16 with a single forward 16-byte wildcopy loop. A
+  combined sequence preflight proves literal input, match history, and rounded
+  output bounds before either copy; near-frame-end and short-offset cases stay
+  on the existing exact checked path. Literal staging owns and initializes 16
+  padding bytes, and the frame-bounded output view prevents writes into the
+  caller's suffix. New full-buffer oracles cover every 0--15-byte literal and
+  overlapping 16-byte-distance matches through 71 bytes. Against the frozen
+  `0d928678` ReleaseFast binary, final alternating same-frame pairs improve
+  README by `1.2634x` median / `1.2600x` geometric throughput (15/15 wins),
+  `build.zig` by `1.0561x` (11/11), roadmap by `1.2363x` (11/11), and
+  `src/zstd.zig` by `1.1344x` (11/11). A same-process 11-run README comparison
+  measures Vort at 1,262.07 MiB/s and libzstd 1.5.7 at 1,411.03 MiB/s, or
+  `0.8962x`; the remaining gap is about 10.4%, not a parity claim. The unchanged
+  small-helper `ascii64k` control is neutral over 21 pairs (`1.0001x` median),
+  while `large_json` is `0.9893x` median / `0.9974x` geometric and remains a
+  code-layout-sensitive control rather than evidence for widening this route.
+  Narrow follow-ups that localized FSE state, reordered the 12-KiB state,
+  borrowed table pointers, manually expanded repcode swaps, or prefetched every
+  match all regressed README and were removed. The retained combination passes
+  645 focused ReleaseFast tests, all 276 libzstd compatibility cases, and the
+  complete 9,900-frame decodecorpus with all 64 sequence-mode combinations.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

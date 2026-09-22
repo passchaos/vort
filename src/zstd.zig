@@ -9499,7 +9499,6 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     try expectConsumedBlock(offset, block.len);
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
-    var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
     if ((!builtin.is_test or !test_disable_split_huffman_decode) and
         spec.ll_mode == .compressed and
         spec.of_mode == .compressed and
@@ -9509,6 +9508,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         dictionary_history.len == 0 and
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
+        var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
         if (section.regenerated_size <= split_small_huffman_literal_limit) {
             if (try tryDecodeAllFseSplitHuffmanSequences(
                 section,
@@ -9542,6 +9542,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             allow_wildcopy,
         )) return;
     }
+    var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
     if (spec.ll_mode == .compressed and
@@ -9695,7 +9696,6 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
     try expectConsumedBlock(offset, block.len);
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
-    var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
     if ((!builtin.is_test or !test_disable_split_huffman_decode) and
         spec.ll_mode == .compressed and
         spec.of_mode == .compressed and
@@ -9705,6 +9705,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         dictionary_history.len == 0 and
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
+        var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
         if (section.regenerated_size <= split_small_huffman_literal_limit) {
             if (try tryDecodeAllFseSplitHuffmanSequences(
                 section,
@@ -9738,6 +9739,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
             allow_wildcopy,
         )) return;
     }
+    var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
     if (spec.ll_mode == .compressed and
@@ -10119,67 +10121,82 @@ inline fn decodeAllFseSplitHuffmanSequences(
     std.debug.assert(section.regenerated_size <= literal_capacity);
     if (section.huffman_streams != .four) return false;
     const spec = &state.spec;
-
-    var literals: [literal_capacity]u8 = undefined;
+    var literals: [literal_capacity + 16]u8 = undefined;
     if (!try decodeLargeFourStreamHuffman(section, literals[0..section.regenerated_size])) return false;
+    @memset(literals[section.regenerated_size..][0..16], 0);
     if (builtin.is_test) test_split_huffman_decode_hits += 1;
     var literal_offset: usize = 0;
     var wide_reader: ReverseBitReader = if (use_wide_state_reads) state.reader else undefined;
     while (state.remaining != 0) {
-        const ll_symbol = spec.literal_fse.symbolUnchecked(state.ll_state);
-        const of_symbol = spec.offset_fse.symbolUnchecked(state.of_state);
-        const ml_symbol = spec.match_fse.symbolUnchecked(state.ml_state);
+        const ll_symbol: SequenceSymbol = if (use_wide_state_reads) undefined else spec.literal_fse.symbolUnchecked(state.ll_state);
+        const of_symbol: SequenceSymbol = if (use_wide_state_reads) undefined else spec.offset_fse.symbolUnchecked(state.of_state);
+        const ml_symbol: SequenceSymbol = if (use_wide_state_reads) undefined else spec.match_fse.symbolUnchecked(state.ml_state);
+        const ll_word: u64 = if (use_wide_state_reads) spec.literal_fse.symbolWordUnchecked(state.ll_state) else undefined;
+        const of_word: u64 = if (use_wide_state_reads) spec.offset_fse.symbolWordUnchecked(state.of_state) else undefined;
+        const ml_word: u64 = if (use_wide_state_reads) spec.match_fse.symbolWordUnchecked(state.ml_state) else undefined;
+        const literal_base_value = if (use_wide_state_reads) sequenceSymbolBase(ll_word) else @as(usize, ll_symbol.base);
+        const offset_base_value = if (use_wide_state_reads) sequenceSymbolBase(of_word) else @as(usize, of_symbol.base);
+        const match_base_value = if (use_wide_state_reads) sequenceSymbolBase(ml_word) else @as(usize, ml_symbol.base);
+        const ll_additional_bits = if (use_wide_state_reads) sequenceSymbolAdditionalBits(ll_word) else ll_symbol.additional_bits;
+        const of_additional_bits = if (use_wide_state_reads) sequenceSymbolAdditionalBits(of_word) else of_symbol.additional_bits;
+        const ml_additional_bits = if (use_wide_state_reads) sequenceSymbolAdditionalBits(ml_word) else ml_symbol.additional_bits;
+        const ll_state_bits = if (use_wide_state_reads) sequenceSymbolStateBits(ll_word) else ll_symbol.state_bits;
+        const of_state_bits = if (use_wide_state_reads) sequenceSymbolStateBits(of_word) else of_symbol.state_bits;
+        const ml_state_bits = if (use_wide_state_reads) sequenceSymbolStateBits(ml_word) else ml_symbol.state_bits;
+        const ll_next_state = if (use_wide_state_reads) sequenceSymbolNextState(ll_word) else @as(usize, ll_symbol.next_state);
+        const of_next_state = if (use_wide_state_reads) sequenceSymbolNextState(of_word) else @as(usize, of_symbol.next_state);
+        const ml_next_state = if (use_wide_state_reads) sequenceSymbolNextState(ml_word) else @as(usize, ml_symbol.next_state);
         const transition_bits: u8 = if (state.remaining == 1)
             0
         else
-            ll_symbol.state_bits + ml_symbol.state_bits + of_symbol.state_bits;
-        const total_bits: u8 = of_symbol.additional_bits + ml_symbol.additional_bits +
-            ll_symbol.additional_bits + transition_bits;
+            ll_state_bits + ml_state_bits + of_state_bits;
+        const total_bits: u8 = of_additional_bits + ml_additional_bits +
+            ll_additional_bits + transition_bits;
         const fields_are_wide = use_wide_state_reads and
             wide_reader.canReadSequenceFieldsWide(total_bits);
         const offset_extra = if (use_wide_state_reads)
             if (fields_are_wide)
-                wide_reader.readSequenceFieldWide(of_symbol.additional_bits)
+                wide_reader.readSequenceFieldWide(of_additional_bits)
             else
-                try wide_reader.readSequenceField(of_symbol.additional_bits)
+                try wide_reader.readSequenceField(of_additional_bits)
         else
-            try state.reader.readSequenceField(of_symbol.additional_bits);
-        const match_len = @as(usize, ml_symbol.base) + if (use_wide_state_reads)
+            try state.reader.readSequenceField(of_additional_bits);
+        const match_len = match_base_value + if (use_wide_state_reads)
             if (fields_are_wide)
-                wide_reader.readSequenceFieldWide(ml_symbol.additional_bits)
+                wide_reader.readSequenceFieldWide(ml_additional_bits)
             else
-                try wide_reader.readSequenceField(ml_symbol.additional_bits)
+                try wide_reader.readSequenceField(ml_additional_bits)
         else
-            try state.reader.readSequenceField(ml_symbol.additional_bits);
-        const literal_len = @as(usize, ll_symbol.base) + if (use_wide_state_reads)
+            try state.reader.readSequenceField(ml_additional_bits);
+        const literal_len = literal_base_value + if (use_wide_state_reads)
             if (fields_are_wide)
-                wide_reader.readSequenceFieldWide(ll_symbol.additional_bits)
+                wide_reader.readSequenceFieldWide(ll_additional_bits)
             else
-                try wide_reader.readSequenceField(ll_symbol.additional_bits)
+                try wide_reader.readSequenceField(ll_additional_bits)
         else
-            try state.reader.readSequenceField(ll_symbol.additional_bits);
-        const match_offset = if (use_wide_state_reads and of_symbol.additional_bits > 1) blk: {
-            const offset = @as(usize, of_symbol.base) + offset_extra;
+            try state.reader.readSequenceField(ll_additional_bits);
+        const match_offset = if (use_wide_state_reads and of_additional_bits > 1) blk: {
+            const offset = offset_base_value + offset_extra;
             const previous_0 = state.repeated_offsets[0];
             const previous_1 = state.repeated_offsets[1];
             state.repeated_offsets = .{ offset, previous_0, previous_1 };
             if (builtin.is_test) test_split_huffman_direct_offset_hits += 1;
             break :blk offset;
-        } else if (of_symbol.additional_bits == 0 and literal_len != 0) blk: {
+        } else if (of_additional_bits == 0 and literal_len != 0) blk: {
             if (builtin.is_test) test_split_huffman_positive_rep0_hits += 1;
             break :blk try large_offset.positiveLiteralRep0(&state.repeated_offsets);
-        } else try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
+        } else try resolveSequenceOffset(offset_base_value, of_additional_bits, offset_extra, literal_len, &state.repeated_offsets);
         state.remaining -= 1;
         if (state.remaining != 0) {
             if (use_wide_state_reads) {
                 if (fields_are_wide) {
-                    state.ll_state = nextSequenceStateProvenWide(&wide_reader, ll_symbol);
-                    state.ml_state = nextSequenceStateProvenWide(&wide_reader, ml_symbol);
-                    state.of_state = nextSequenceStateProvenWide(&wide_reader, of_symbol);
+                    state.ll_state = ll_next_state + wide_reader.readSequenceFieldWide(ll_state_bits);
+                    state.ml_state = ml_next_state + wide_reader.readSequenceFieldWide(ml_state_bits);
+                    state.of_state = of_next_state + wide_reader.readSequenceFieldWide(of_state_bits);
                 } else {
-                    state.ll_state = try nextSequenceStateWide(&wide_reader, ll_symbol);
-                    state.ml_state = try nextSequenceStateWide(&wide_reader, ml_symbol);
-                    state.of_state = try nextSequenceStateWide(&wide_reader, of_symbol);
+                    state.ll_state = ll_next_state + try wide_reader.readSequenceField(ll_state_bits);
+                    state.ml_state = ml_next_state + try wide_reader.readSequenceField(ml_state_bits);
+                    state.of_state = of_next_state + try wide_reader.readSequenceField(of_state_bits);
                 }
             } else {
                 state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
@@ -10191,7 +10208,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
         else
             try state.reader.expectEnd();
 
-        if (!use_wide_state_reads and literal_len == 1 and match_len == 71 and of_symbol.additional_bits == 0 and match_offset >= 71) {
+        if (!use_wide_state_reads and literal_len == 1 and match_len == 71 and of_additional_bits == 0 and match_offset >= 71) {
             if (literal_offset >= section.regenerated_size) return error.CorruptFrame;
             if (output.len - written.* < 1) return error.OutputTooSmall;
             output[written.*] = literals[literal_offset];
@@ -10205,9 +10222,48 @@ inline fn decodeAllFseSplitHuffmanSequences(
             continue;
         }
 
+        const rounded_match_len = (match_len + 15) & ~@as(usize, 15);
+        if (use_wide_state_reads and
+            allow_wildcopy and
+            literal_len <= 15 and
+            literal_offset <= section.regenerated_size and
+            section.regenerated_size - literal_offset >= literal_len and
+            frame_output_start <= written.* and
+            match_offset >= 16 and
+            match_offset <= written.* - frame_output_start + literal_len and
+            output.len - written.* >= literal_len + rounded_match_len)
+        {
+            literal_copy.appendUpTo15Wildcopy16(
+                output,
+                written,
+                &literals,
+                &literal_offset,
+                literal_len,
+            );
+            sequence_match_copy.appendForwardWildcopy16(
+                output,
+                written,
+                written.* - match_offset,
+                match_len,
+            );
+            continue;
+        }
+
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
-        if (literal_len == 1) {
+        if (use_wide_state_reads and
+            allow_wildcopy and
+            literal_len <= 15 and
+            output.len - written.* >= 16)
+        {
+            literal_copy.appendUpTo15Wildcopy16(
+                output,
+                written,
+                &literals,
+                &literal_offset,
+                literal_len,
+            );
+        } else if (literal_len == 1) {
             if (builtin.is_test) test_split_huffman_single_literal_hits += 1;
             output[written.*] = literals[literal_offset];
             written.* += 1;
@@ -10220,7 +10276,22 @@ inline fn decodeAllFseSplitHuffmanSequences(
             written.* += literal_len;
             literal_offset += literal_len;
         }
-        if (!use_wide_state_reads and match_len == 71 and match_offset >= 71 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
+        if (use_wide_state_reads and
+            allow_wildcopy and
+            match_offset >= 16 and
+            frame_output_start <= written.* and
+            match_offset <= written.* - frame_output_start and
+            output.len - written.* >= rounded_match_len)
+        {
+            sequence_match_copy.appendForwardWildcopy16(
+                output,
+                written,
+                written.* - match_offset,
+                match_len,
+            );
+        } else if (use_wide_state_reads and allow_wildcopy) {
+            try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+        } else if (!use_wide_state_reads and match_len == 71 and match_offset >= 71 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
             sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
         } else if (use_wide_state_reads and
