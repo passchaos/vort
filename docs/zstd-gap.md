@@ -1503,7 +1503,16 @@ Recommended next comparison steps:
   safety preflight with one persistent wide-reader state was rejected: the
   large rows regressed to `9.207` and `10.284` ns/sequence, confirming that the
   current per-sequence proof is cheaper than the resulting code-generation and
-  state costs.
+  state costs. Loading each eight-byte FSE entry as one `u64`, matching
+  libzstd's AArch64 `ZSTD_seqSymbol` strategy, does improve this isolated stage:
+  two runs put roadmap at `8.791`/`8.777` and `src/zstd.zig` at `9.867`/
+  `9.859` ns/sequence, about 2.4--2.5% below the original large-row baselines.
+  The same representation was not promoted to the production copy loop: 11
+  alternating README decode pairs against frozen `19ff5365` lost all 11 with a
+  `0.9441x` median when fields were unpacked eagerly, while a direct-extraction
+  retry recovered only to `0.9712x` with 3/11 wins. Keep the single-word load as
+  stage evidence until decode and copy can be separated without raising register
+  pressure.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

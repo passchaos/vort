@@ -15525,7 +15525,13 @@ reuse, so production keeps the simpler independently owned plans.
   decoder source differ by only 0.06%/0.16% between runs and contain zero
   generic stage blocks. A libzstd-inspired persistent-wide-reader experiment
   was immediately rejected by this gate after moving those rows backward to
-  `9.207`/`10.284` ns/sequence.
+  `9.207`/`10.284` ns/sequence. A single-`u64` FSE-entry load, mirroring
+  libzstd's AArch64 `ZSTD_seqSymbol` access, improves the isolated roadmap and
+  decoder-source rows to `8.791`/`8.777` and `9.867`/`9.859` ns/sequence. It
+  remains benchmark-only because production README decode regressed to
+  `0.9441x` across 11/11 losses with eager field extraction; extracting fields
+  directly at use sites still reached only `0.9712x` with 3/11 wins versus the
+  frozen `19ff5365` binary.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to

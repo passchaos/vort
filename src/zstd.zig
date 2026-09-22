@@ -8833,7 +8833,33 @@ const SequenceFseTable = struct {
         std.debug.assert(state < self.len);
         return self.entries[state];
     }
+
+    inline fn symbolWordUnchecked(self: *const SequenceFseTable, state: usize) u64 {
+        std.debug.assert(state < self.len);
+        const bytes: *const [8]u8 = @ptrCast(&self.entries[state]);
+        return std.mem.readInt(u64, bytes, .little);
+    }
 };
+
+comptime {
+    std.debug.assert(@sizeOf(SequenceSymbol) == @sizeOf(u64));
+}
+
+inline fn sequenceSymbolBase(word: u64) usize {
+    return @intCast(@as(u32, @truncate(word)));
+}
+
+inline fn sequenceSymbolNextState(word: u64) usize {
+    return @intCast(@as(u16, @truncate(word >> 32)));
+}
+
+inline fn sequenceSymbolAdditionalBits(word: u64) u8 {
+    return @truncate(word >> 48);
+}
+
+inline fn sequenceSymbolStateBits(word: u64) u8 {
+    return @truncate(word >> 56);
+}
 
 const sequence_table_accuracy_log_max = struct {
     const literal: u4 = 9;
@@ -10840,52 +10866,58 @@ noinline fn decodePreparedNativeSequenceBlockAllFse(
     var cursor = try initNativeSequenceDecodeStageCursor(block);
     var result: NativeSequenceDecodeStageBlockResult = .{ .repeated_offsets = undefined };
     while (cursor.remaining != 0) {
-        const ll_symbol = block.spec.literal_fse.symbolUnchecked(cursor.ll_state);
-        const of_symbol = block.spec.offset_fse.symbolUnchecked(cursor.of_state);
-        const ml_symbol = block.spec.match_fse.symbolUnchecked(cursor.ml_state);
+        const ll_word = block.spec.literal_fse.symbolWordUnchecked(cursor.ll_state);
+        const of_word = block.spec.offset_fse.symbolWordUnchecked(cursor.of_state);
+        const ml_word = block.spec.match_fse.symbolWordUnchecked(cursor.ml_state);
+        const ll_additional_bits = sequenceSymbolAdditionalBits(ll_word);
+        const of_additional_bits = sequenceSymbolAdditionalBits(of_word);
+        const ml_additional_bits = sequenceSymbolAdditionalBits(ml_word);
+        const ll_state_bits = sequenceSymbolStateBits(ll_word);
+        const of_state_bits = sequenceSymbolStateBits(of_word);
+        const ml_state_bits = sequenceSymbolStateBits(ml_word);
         const transition_bits: u8 = if (cursor.remaining == 1)
             0
         else
-            ll_symbol.state_bits + ml_symbol.state_bits + of_symbol.state_bits;
-        const total_bits: u8 = of_symbol.additional_bits + ml_symbol.additional_bits +
-            ll_symbol.additional_bits + transition_bits;
+            ll_state_bits + ml_state_bits + of_state_bits;
+        const total_bits: u8 = of_additional_bits + ml_additional_bits +
+            ll_additional_bits + transition_bits;
         const fields_are_wide = wide and cursor.reader.canReadSequenceFieldsWide(total_bits);
         const offset_extra = if (fields_are_wide)
-            cursor.reader.readSequenceFieldWide(of_symbol.additional_bits)
+            cursor.reader.readSequenceFieldWide(of_additional_bits)
         else
-            try cursor.reader.readSequenceField(of_symbol.additional_bits);
-        const match_len = @as(usize, ml_symbol.base) + if (fields_are_wide)
-            cursor.reader.readSequenceFieldWide(ml_symbol.additional_bits)
+            try cursor.reader.readSequenceField(of_additional_bits);
+        const match_len = sequenceSymbolBase(ml_word) + if (fields_are_wide)
+            cursor.reader.readSequenceFieldWide(ml_additional_bits)
         else
-            try cursor.reader.readSequenceField(ml_symbol.additional_bits);
-        const literal_len = @as(usize, ll_symbol.base) + if (fields_are_wide)
-            cursor.reader.readSequenceFieldWide(ll_symbol.additional_bits)
+            try cursor.reader.readSequenceField(ml_additional_bits);
+        const literal_len = sequenceSymbolBase(ll_word) + if (fields_are_wide)
+            cursor.reader.readSequenceFieldWide(ll_additional_bits)
         else
-            try cursor.reader.readSequenceField(ll_symbol.additional_bits);
-        const match_offset = if (wide and of_symbol.additional_bits > 1) blk: {
-            const offset = @as(usize, of_symbol.base) + offset_extra;
+            try cursor.reader.readSequenceField(ll_additional_bits);
+        const match_offset = if (wide and of_additional_bits > 1) blk: {
+            const offset = sequenceSymbolBase(of_word) + offset_extra;
             cursor.repeated_offsets = .{ offset, cursor.repeated_offsets[0], cursor.repeated_offsets[1] };
             break :blk offset;
-        } else if (of_symbol.additional_bits == 0 and literal_len != 0)
+        } else if (of_additional_bits == 0 and literal_len != 0)
             try large_offset.positiveLiteralRep0(&cursor.repeated_offsets)
         else
-            try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &cursor.repeated_offsets);
+            try resolveSequenceOffset(sequenceSymbolBase(of_word), of_additional_bits, offset_extra, literal_len, &cursor.repeated_offsets);
         accumulateNativeSequenceDecodeStage(&result, literal_len, match_len, match_offset);
 
         cursor.remaining -= 1;
         if (cursor.remaining != 0) {
             if (fields_are_wide) {
-                cursor.ll_state = nextSequenceStateProvenWide(&cursor.reader, ll_symbol);
-                cursor.ml_state = nextSequenceStateProvenWide(&cursor.reader, ml_symbol);
-                cursor.of_state = nextSequenceStateProvenWide(&cursor.reader, of_symbol);
+                cursor.ll_state = sequenceSymbolNextState(ll_word) + cursor.reader.readSequenceFieldWide(ll_state_bits);
+                cursor.ml_state = sequenceSymbolNextState(ml_word) + cursor.reader.readSequenceFieldWide(ml_state_bits);
+                cursor.of_state = sequenceSymbolNextState(of_word) + cursor.reader.readSequenceFieldWide(of_state_bits);
             } else if (wide) {
-                cursor.ll_state = try nextSequenceStateWide(&cursor.reader, ll_symbol);
-                cursor.ml_state = try nextSequenceStateWide(&cursor.reader, ml_symbol);
-                cursor.of_state = try nextSequenceStateWide(&cursor.reader, of_symbol);
+                cursor.ll_state = sequenceSymbolNextState(ll_word) + try cursor.reader.readSequenceField(ll_state_bits);
+                cursor.ml_state = sequenceSymbolNextState(ml_word) + try cursor.reader.readSequenceField(ml_state_bits);
+                cursor.of_state = sequenceSymbolNextState(of_word) + try cursor.reader.readSequenceField(of_state_bits);
             } else {
-                cursor.ll_state = try nextSequenceState(&cursor.reader, ll_symbol);
-                cursor.ml_state = try nextSequenceState(&cursor.reader, ml_symbol);
-                cursor.of_state = try nextSequenceState(&cursor.reader, of_symbol);
+                cursor.ll_state = sequenceSymbolNextState(ll_word) + try cursor.reader.readSmall(@intCast(ll_state_bits));
+                cursor.ml_state = sequenceSymbolNextState(ml_word) + try cursor.reader.readSmall(@intCast(ml_state_bits));
+                cursor.of_state = sequenceSymbolNextState(of_word) + try cursor.reader.readSmall(@intCast(of_state_bits));
             }
         } else try cursor.reader.expectEnd();
     }
