@@ -1517,6 +1517,22 @@ Recommended next comparison steps:
   showing that the extra packed fields increase pressure once literal/match copy
   state is live. Earlier absolute packed-stage and eight-sequence queue numbers
   were collected before the oracle fix and are discarded.
+  The retained follow-up adopts libzstd's short-match wildcopy idea without
+  exposing its overwrite margin to callers. For frames with a declared content
+  size, caller-owned and reusable decoders first clip their internal output view
+  to the exact frame end; only the dense/wide all-FSE helpers may then copy 4--7
+  byte matches with one 8-byte move and 8--15 byte matches with one 16-byte
+  vector move. Small, no-size, append, incremental, and direct helper paths keep
+  exact first/last copies. A full-buffer oracle verifies both wildcopy families
+  against generic LZ replay and requires the physical caller suffix after the
+  clipped view to remain unchanged. Twenty-one reverse-order, 5,000-decode README
+  pairs against the frozen pre-change binary improve by `1.0122x` median /
+  `1.0118x` geometric throughput with 15/21 wins; one-shot and reusable medians
+  improve by `1.0207x` and `1.0156x` in separate controls. A four-file 11-pair
+  screen measures `1.0128x` on `build.zig`, `1.0046x` on roadmap, and `1.0030x`
+  on `src/zstd.zig`; README remains positive at `1.0061x` median but noisy. The
+  current same-process README comparison is 831.74 versus 1,174.06 MiB/s
+  (`0.7102x`) against libzstd 1.5.7, so the broad gap remains explicit.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

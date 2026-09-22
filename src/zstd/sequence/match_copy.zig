@@ -157,18 +157,25 @@ pub inline fn appendNonOverlapping6Or7(
     written.* += match_len;
 }
 
-/// Copy a non-overlapping 4--7-byte match with exact first/last four-byte
-/// stores. Both loads happen before either store, and no caller suffix is
-/// touched.
+/// Copy a non-overlapping 4--7-byte match. The exact form uses first/last
+/// four-byte stores. `allow_wildcopy` may write through byte eight only when
+/// the caller has clipped `output` to the declared frame end, so bytes beyond
+/// the caller's logical frame slice remain untouched.
 pub inline fn appendNonOverlapping4To7(
     output: []u8,
     written: *usize,
     repeat_start: usize,
     match_len: usize,
+    comptime allow_wildcopy: bool,
 ) void {
     const destination_start = written.*;
     std.debug.assert(match_len >= 4 and match_len <= 7);
     std.debug.assert(destination_start - repeat_start >= match_len);
+    if (allow_wildcopy and destination_start - repeat_start >= 8 and output.len - destination_start >= 8) {
+        output[destination_start..][0..8].* = output[repeat_start..][0..8].*;
+        written.* += match_len;
+        return;
+    }
     const first = output[repeat_start..][0..4].*;
     const last = output[repeat_start + match_len - 4 ..][0..4].*;
     output[destination_start..][0..4].* = first;
@@ -176,15 +183,24 @@ pub inline fn appendNonOverlapping4To7(
     written.* += match_len;
 }
 
+/// Copy an 8--15-byte non-overlapping match. The optional 16-byte wildcopy has
+/// the same clipped-frame-end contract as `appendNonOverlapping4To7`.
 pub inline fn appendNonOverlapping8To15(
     output: []u8,
     written: *usize,
     repeat_start: usize,
     match_len: usize,
+    comptime allow_wildcopy: bool,
 ) void {
     const destination_start = written.*;
     std.debug.assert(match_len >= 8 and match_len <= 15);
     std.debug.assert(destination_start - repeat_start >= match_len);
+    if (allow_wildcopy and destination_start - repeat_start >= 16 and output.len - destination_start >= 16) {
+        const chunk: @Vector(16, u8) = output[repeat_start..][0..16].*;
+        output[destination_start..][0..16].* = chunk;
+        written.* += match_len;
+        return;
+    }
     const first = output[repeat_start..][0..8].*;
     const last = output[repeat_start + match_len - 8 ..][0..8].*;
     output[destination_start..][0..8].* = first;
@@ -289,7 +305,7 @@ test "Zstd fixed eight through fifteen byte matches preserve output tail" {
         var expected_written: usize = 23;
         var actual_written = expected_written;
         append(&expected, &expected_written, 7, match_len);
-        appendNonOverlapping8To15(&actual, &actual_written, 7, match_len);
+        appendNonOverlapping8To15(&actual, &actual_written, 7, match_len, false);
         try std.testing.expectEqual(expected_written, actual_written);
         try std.testing.expectEqualSlices(u8, &expected, &actual);
     }
@@ -381,8 +397,40 @@ test "Zstd fixed four through seven byte match copies preserve output tail" {
         var expected_written: usize = 23;
         var actual_written = expected_written;
         append(&expected, &expected_written, 7, match_len);
-        appendNonOverlapping4To7(&actual, &actual_written, 7, match_len);
+        appendNonOverlapping4To7(&actual, &actual_written, 7, match_len, false);
         try std.testing.expectEqual(expected_written, actual_written);
         try std.testing.expectEqualSlices(u8, &expected, &actual);
+    }
+}
+
+test "Zstd bounded short wildcopies preserve the caller suffix" {
+    inline for (.{ @as(usize, 4), 5, 6, 7 }) |match_len| {
+        var expected: [64]u8 = undefined;
+        for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+        var actual = expected;
+        const destination_start = 24;
+        const logical_end = destination_start + 8;
+        var expected_written: usize = destination_start;
+        var actual_written: usize = destination_start;
+        append(&expected, &expected_written, 8, match_len);
+        appendNonOverlapping4To7(actual[0..logical_end], &actual_written, 8, match_len, true);
+        try std.testing.expectEqual(expected_written, actual_written);
+        try std.testing.expectEqualSlices(u8, expected[0..expected_written], actual[0..actual_written]);
+        try std.testing.expectEqualSlices(u8, expected[logical_end..], actual[logical_end..]);
+    }
+
+    inline for (.{ @as(usize, 8), 9, 12, 15 }) |match_len| {
+        var expected: [80]u8 = undefined;
+        for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 41 + 7);
+        var actual = expected;
+        const destination_start = 32;
+        const logical_end = destination_start + 16;
+        var expected_written: usize = destination_start;
+        var actual_written: usize = destination_start;
+        append(&expected, &expected_written, 8, match_len);
+        appendNonOverlapping8To15(actual[0..logical_end], &actual_written, 8, match_len, true);
+        try std.testing.expectEqual(expected_written, actual_written);
+        try std.testing.expectEqualSlices(u8, expected[0..expected_written], actual[0..actual_written]);
+        try std.testing.expectEqualSlices(u8, expected[logical_end..], actual[logical_end..]);
     }
 }

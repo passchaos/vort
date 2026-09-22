@@ -15538,6 +15538,20 @@ reuse, so production keeps the simpler independently owned plans.
   3/15 wins against frozen `19ff5365`: packed loads help the isolated entropy
   loop but raise pressure when copy state is also live. Earlier absolute packed
   and eight-sequence queue results predate the oracle fix and are discarded.
+  Known-size caller-owned and reusable decoding now use a bounded short-match
+  wildcopy modeled on libzstd. The frame parser clips the internal output slice
+  to the declared content-size boundary before selecting a separate dense/wide
+  all-FSE instantiation; 4--7 byte matches can issue one 8-byte move and 8--15
+  byte matches one 16-byte move without making any byte beyond the logical frame
+  writable. No-size, append, incremental, small, and direct helper paths retain
+  exact copies. A full-buffer oracle checks generic output and the untouched
+  physical suffix. Twenty-one reverse-order 5,000-decode README pairs improve
+  `1.0122x` median / `1.0118x` geometrically with 15/21 wins; separate one-shot
+  and reusable controls reach `1.0207x` and `1.0156x`. An 11-pair four-source
+  screen measures `1.0128x` on `build.zig`, `1.0046x` on roadmap, and `1.0030x`
+  on `src/zstd.zig`; README is positive at `1.0061x` median but noisy. Current
+  same-process README throughput is 831.74 versus 1,174.06 MiB/s (`0.7102x`)
+  against libzstd 1.5.7, leaving the larger entropy/copy-loop gap open.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to
