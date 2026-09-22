@@ -10127,7 +10127,8 @@ inline fn decodeAllFseSplitHuffmanSequences(
     if (builtin.is_test) test_split_huffman_decode_hits += 1;
     var literal_offset: usize = 0;
     var wide_reader: ReverseBitReader = if (use_wide_state_reads) state.reader else undefined;
-    while (state.remaining != 0) {
+    var remaining = state.remaining;
+    while (remaining != 0) {
         const ll_symbol: SequenceSymbol = if (use_wide_state_reads) undefined else spec.literal_fse.symbolUnchecked(state.ll_state);
         const of_symbol: SequenceSymbol = if (use_wide_state_reads) undefined else spec.offset_fse.symbolUnchecked(state.of_state);
         const ml_symbol: SequenceSymbol = if (use_wide_state_reads) undefined else spec.match_fse.symbolUnchecked(state.ml_state);
@@ -10146,7 +10147,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
         const ll_next_state = if (use_wide_state_reads) sequenceSymbolNextState(ll_word) else @as(usize, ll_symbol.next_state);
         const of_next_state = if (use_wide_state_reads) sequenceSymbolNextState(of_word) else @as(usize, of_symbol.next_state);
         const ml_next_state = if (use_wide_state_reads) sequenceSymbolNextState(ml_word) else @as(usize, ml_symbol.next_state);
-        const transition_bits: u8 = if (state.remaining == 1)
+        const transition_bits: u8 = if (remaining == 1)
             0
         else
             ll_state_bits + ml_state_bits + of_state_bits;
@@ -10186,8 +10187,8 @@ inline fn decodeAllFseSplitHuffmanSequences(
             if (builtin.is_test) test_split_huffman_positive_rep0_hits += 1;
             break :blk try large_offset.positiveLiteralRep0(&state.repeated_offsets);
         } else try resolveSequenceOffset(offset_base_value, of_additional_bits, offset_extra, literal_len, &state.repeated_offsets);
-        state.remaining -= 1;
-        if (state.remaining != 0) {
+        remaining -= 1;
+        if (remaining != 0) {
             if (use_wide_state_reads) {
                 if (fields_are_wide) {
                     state.ll_state = ll_next_state + wide_reader.readSequenceFieldWide(ll_state_bits);
@@ -10383,6 +10384,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
         literals[literal_offset..][0..last_literals],
     );
     written.* += last_literals;
+    state.remaining = remaining;
     if (use_wide_state_reads) state.reader = wide_reader;
     if (continuation.retainsState()) {
         frame_state.previous_tables = spec.tables();

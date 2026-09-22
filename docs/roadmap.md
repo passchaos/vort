@@ -15588,3 +15588,10 @@ reuse, so production keeps the simpler independently owned plans.
   combinations pass. Rejected follow-ups include state localization/reordering,
   a borrowed-table cursor, explicit repcode swaps, and unconditional match
   prefetch; each caused a measurable README regression and was removed.
+  A follow-up localizes only the sequence counter, avoiding one hot large-offset
+  state load/store without localizing the other live state. Against the frozen
+  `933fd71e` binary this improves README by `1.0098x` median / `1.0123x`
+  geometric throughput (13/15 wins), roadmap by `1.0122x`, and `src/zstd.zig`
+  by `1.0217x`; `build.zig` is effectively neutral (`1.0065x` median,
+  `0.9988x` geometric). The next major decoder target is a bounded X2 Huffman
+  table comparable to libzstd's production four-stream decoder.

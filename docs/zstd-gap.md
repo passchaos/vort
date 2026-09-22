@@ -1559,6 +1559,15 @@ Recommended next comparison steps:
   match all regressed README and were removed. The retained combination passes
   645 focused ReleaseFast tests, all 276 libzstd compatibility cases, and the
   complete 9,900-frame decodecorpus with all 64 sequence-mode combinations.
+  A narrower state follow-up keeps only the sequence counter local while leaving
+  the three FSE states and repcodes in their established layout. This removes a
+  hot large-offset load/store pair without recreating the register-pressure
+  regression of full state localization. Against the frozen `933fd71e` binary,
+  15 alternating README pairs improve by `1.0098x` median / `1.0123x` geometric
+  throughput with 13/15 wins; roadmap and `src/zstd.zig` improve by `1.0122x`
+  and `1.0217x`, while `build.zig` is mixed at `1.0065x` median / `0.9988x`
+  geometric. This is retained as a narrow source-heavy optimization; the next
+  structural target is libzstd's two-symbol Huffman table.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
