@@ -10249,22 +10249,25 @@ inline fn decodeAllFseSplitHuffmanSequences(
             );
             continue;
         }
+        if (use_wide_state_reads and allow_wildcopy) {
+            @branchHint(.unlikely);
+            try executeSplitHuffmanSequenceCold(
+                &literals,
+                section.regenerated_size,
+                output,
+                written,
+                frame_output_start,
+                &literal_offset,
+                literal_len,
+                match_offset,
+                match_len,
+            );
+            continue;
+        }
 
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
-        if (use_wide_state_reads and
-            allow_wildcopy and
-            literal_len <= 15 and
-            output.len - written.* >= 16)
-        {
-            literal_copy.appendUpTo15Wildcopy16(
-                output,
-                written,
-                &literals,
-                &literal_offset,
-                literal_len,
-            );
-        } else if (literal_len == 1) {
+        if (literal_len == 1) {
             if (builtin.is_test) test_split_huffman_single_literal_hits += 1;
             output[written.*] = literals[literal_offset];
             written.* += 1;
@@ -10277,22 +10280,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             written.* += literal_len;
             literal_offset += literal_len;
         }
-        if (use_wide_state_reads and
-            allow_wildcopy and
-            match_offset >= 16 and
-            frame_output_start <= written.* and
-            match_offset <= written.* - frame_output_start and
-            output.len - written.* >= rounded_match_len)
-        {
-            sequence_match_copy.appendForwardWildcopy16(
-                output,
-                written,
-                written.* - match_offset,
-                match_len,
-            );
-        } else if (use_wide_state_reads and allow_wildcopy) {
-            try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
-        } else if (!use_wide_state_reads and match_len == 71 and match_offset >= 71 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
+        if (!use_wide_state_reads and match_len == 71 and match_offset >= 71 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
             sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
         } else if (use_wide_state_reads and
@@ -10391,6 +10379,29 @@ inline fn decodeAllFseSplitHuffmanSequences(
         frame_state.repeated_offsets = state.repeated_offsets;
     }
     return true;
+}
+
+noinline fn executeSplitHuffmanSequenceCold(
+    literals: []const u8,
+    regenerated_size: usize,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    literal_offset: *usize,
+    literal_len: usize,
+    match_offset: usize,
+    match_len: usize,
+) Error!void {
+    if (literal_offset.* > regenerated_size or regenerated_size - literal_offset.* < literal_len) return error.CorruptFrame;
+    if (output.len - written.* < literal_len) return error.OutputTooSmall;
+    if (literal_len <= 15 and output.len - written.* >= 16) {
+        literal_copy.appendUpTo15Wildcopy16(output, written, literals, literal_offset, literal_len);
+    } else if (literal_len != 0) {
+        @memcpy(output[written.*..][0..literal_len], literals[literal_offset.*..][0..literal_len]);
+        written.* += literal_len;
+        literal_offset.* += literal_len;
+    }
+    try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
 }
 
 noinline fn decodeFseFseRleSequences(

@@ -15595,3 +15595,11 @@ reuse, so production keeps the simpler independently owned plans.
   by `1.0217x`; `build.zig` is effectively neutral (`1.0065x` median,
   `0.9988x` geometric). The next major decoder target is a bounded X2 Huffman
   table comparable to libzstd's production four-stream decoder.
+  The common dense/wide sequence now shares one bounds preflight across its
+  short-literal and offset-at-least-16 match wildcopies; failed preconditions
+  enter an out-of-line checked executor. Against frozen `e23e8269`, README
+  improves by `1.0377x` median (14/15 wins), with `1.0118x`, `1.0153x`, and
+  `1.0172x` medians on `build.zig`, roadmap, and `src/zstd.zig`. The resulting
+  same-process README ratio is 1,262.07 versus 1,411.03 MiB/s (`0.8962x`)
+  against libzstd 1.5.7. All 645 focused tests, 276 compatibility cases, and
+  9,900 decodecorpus frames pass.

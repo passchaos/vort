@@ -1568,6 +1568,17 @@ Recommended next comparison steps:
   and `1.0217x`, while `build.zig` is mixed at `1.0065x` median / `0.9988x`
   geometric. This is retained as a narrow source-heavy optimization; the next
   structural target is libzstd's two-symbol Huffman table.
+  The known-size dense/wide executor now also performs one combined preflight
+  for the common short-literal, offset-at-least-16 match and sends every failed
+  precondition to an out-of-line checked executor. This mirrors libzstd's
+  `ZSTD_execSequence()` hot/slow split while preserving exact writes on every
+  unrestricted output path. Relative to frozen `e23e8269`, alternating pairs
+  improve README by `1.0377x` median / `1.0326x` geometric (14/15 wins),
+  `build.zig` by `1.0118x` (10/11), roadmap by `1.0153x` (11/11), and
+  `src/zstd.zig` by `1.0172x` (11/11). An 11-run same-process README comparison
+  now measures 1,262.07 MiB/s versus 1,411.03 MiB/s for libzstd 1.5.7
+  (`0.8962x`), leaving about 10.4%. The combined path passes 645 focused
+  ReleaseFast tests, 276 compatibility cases, and all 9,900 decodecorpus frames.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
