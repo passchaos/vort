@@ -8843,6 +8843,10 @@ const SequenceFseTable = struct {
 
 comptime {
     std.debug.assert(@sizeOf(SequenceSymbol) == @sizeOf(u64));
+    std.debug.assert(@offsetOf(SequenceSymbol, "base") == 0);
+    std.debug.assert(@offsetOf(SequenceSymbol, "next_state") == 4);
+    std.debug.assert(@offsetOf(SequenceSymbol, "additional_bits") == 6);
+    std.debug.assert(@offsetOf(SequenceSymbol, "state_bits") == 7);
 }
 
 inline fn sequenceSymbolBase(word: u64) usize {
@@ -10781,6 +10785,7 @@ const NativeSequenceDecodeStageBlockResult = struct {
     literal_bytes: usize = 0,
     match_bytes: usize = 0,
     offset_sum: usize = 0,
+    ordered_checksum: u64 = 0x6a09_e667_f3bc_c909,
     repeated_offsets: [3]usize,
 };
 
@@ -10810,6 +10815,10 @@ inline fn accumulateNativeSequenceDecodeStage(
     result.literal_bytes +%= literal_len;
     result.match_bytes +%= match_len;
     result.offset_sum +%= match_offset;
+    const fields = @as(u64, @intCast(literal_len)) *% 0x9e37_79b1_85eb_ca87 +%
+        @as(u64, @intCast(match_len)) *% 0xc2b2_ae3d_27d4_eb4f +%
+        @as(u64, @intCast(match_offset)) *% 0x1656_67b1_9e37_79f9;
+    result.ordered_checksum = std.math.rotl(u64, result.ordered_checksum ^ fields, 17) *% 0x94d0_49bb_1331_11eb;
 }
 
 noinline fn decodePreparedNativeSequenceBlockGeneric(
@@ -10896,7 +10905,9 @@ noinline fn decodePreparedNativeSequenceBlockAllFse(
             try cursor.reader.readSequenceField(ll_additional_bits);
         const match_offset = if (wide and of_additional_bits > 1) blk: {
             const offset = sequenceSymbolBase(of_word) + offset_extra;
-            cursor.repeated_offsets = .{ offset, cursor.repeated_offsets[0], cursor.repeated_offsets[1] };
+            const previous_0 = cursor.repeated_offsets[0];
+            const previous_1 = cursor.repeated_offsets[1];
+            cursor.repeated_offsets = .{ offset, previous_0, previous_1 };
             break :blk offset;
         } else if (of_additional_bits == 0 and literal_len != 0)
             try large_offset.positiveLiteralRep0(&cursor.repeated_offsets)
@@ -10947,6 +10958,7 @@ noinline fn decodePreparedNativeSequenceBlocks(
         checksum +%= @as(u64, @intCast(decoded.match_bytes)) *% 0xc2b2_ae3d_27d4_eb4f;
         checksum +%= @as(u64, @intCast(decoded.offset_sum)) *% 0x1656_67b1_9e37_79f9;
         checksum +%= @as(u64, @intCast(decoded.repeated_offsets[0])) *% 0x85eb_ca77_c2b2_ae63;
+        checksum = std.math.rotl(u64, checksum ^ decoded.ordered_checksum, 23);
     }
     return .{ .sequence_count = sequence_count, .checksum = checksum };
 }
@@ -11536,6 +11548,15 @@ pub fn prepareNativeSequenceDecodeStage(
                         .path = path,
                     };
                     const decoded = try decodePreparedNativeSequenceBlock(&prepared);
+                    var generic_prepared = prepared;
+                    generic_prepared.path = .generic;
+                    const generic_decoded = try decodePreparedNativeSequenceBlock(&generic_prepared);
+                    if (decoded.literal_bytes != generic_decoded.literal_bytes or
+                        decoded.match_bytes != generic_decoded.match_bytes or
+                        decoded.offset_sum != generic_decoded.offset_sum or
+                        decoded.ordered_checksum != generic_decoded.ordered_checksum or
+                        !std.mem.eql(usize, &decoded.repeated_offsets, &generic_decoded.repeated_offsets))
+                        return error.CorruptFrame;
                     if (decoded.literal_bytes > section.regenerated_size) return error.CorruptFrame;
                     produced = try checkedAdd(produced, decoded.literal_bytes);
                     produced = try checkedAdd(produced, decoded.match_bytes);

@@ -107,6 +107,7 @@ fn measureCase(
     defer stage.deinit();
     const shape = stage.shape();
     const warmed = try stage.decode();
+
     if (warmed.sequence_count != shape.sequence_count or
         shape.sequence_count != sequence_profile.sequence_count) return error.SizeMismatch;
     const sample = try measureStage(init.io, &stage, options.iterations, options.rounds);

@@ -15525,13 +15525,19 @@ reuse, so production keeps the simpler independently owned plans.
   decoder source differ by only 0.06%/0.16% between runs and contain zero
   generic stage blocks. A libzstd-inspired persistent-wide-reader experiment
   was immediately rejected by this gate after moving those rows backward to
-  `9.207`/`10.284` ns/sequence. A single-`u64` FSE-entry load, mirroring
-  libzstd's AArch64 `ZSTD_seqSymbol` access, improves the isolated roadmap and
-  decoder-source rows to `8.791`/`8.777` and `9.867`/`9.859` ns/sequence. It
-  remains benchmark-only because production README decode regressed to
-  `0.9441x` across 11/11 losses with eager field extraction; extracting fields
-  directly at use sites still reached only `0.9712x` with 3/11 wins versus the
-  frozen `19ff5365` binary.
+  `9.207`/`10.284` ns/sequence. The stage oracle now hashes every sequence in
+  order and compares each prepared fast block with the generic decoder. This
+  exposes a benchmark-only Zig aggregate-assignment alias bug that collapsed
+  repcodes under ReleaseFast and invalidates the apparent packed-symbol win
+  recorded in `e692ffa1`.
+  With explicit old-offset temporaries and the same strengthened oracle on both
+  binaries, nine alternating pairs put the single-`u64` FSE-entry stage ahead by
+  `1.0419x` on README, `1.0013x` on `build.zig`, `1.0309x` on roadmap, and
+  `1.0359x` on `src/zstd.zig`, with 8/9, 5/9, 9/9, and 9/9 wins. The corrected
+  production copy-loop form is rejected at `0.9813x` median on README with only
+  3/15 wins against frozen `19ff5365`: packed loads help the isolated entropy
+  loop but raise pressure when copy state is also live. Earlier absolute packed
+  and eight-sequence queue results predate the oracle fix and are discarded.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to

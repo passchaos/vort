@@ -1503,16 +1503,20 @@ Recommended next comparison steps:
   safety preflight with one persistent wide-reader state was rejected: the
   large rows regressed to `9.207` and `10.284` ns/sequence, confirming that the
   current per-sequence proof is cheaper than the resulting code-generation and
-  state costs. Loading each eight-byte FSE entry as one `u64`, matching
-  libzstd's AArch64 `ZSTD_seqSymbol` strategy, does improve this isolated stage:
-  two runs put roadmap at `8.791`/`8.777` and `src/zstd.zig` at `9.867`/
-  `9.859` ns/sequence, about 2.4--2.5% below the original large-row baselines.
-  The same representation was not promoted to the production copy loop: 11
-  alternating README decode pairs against frozen `19ff5365` lost all 11 with a
-  `0.9441x` median when fields were unpacked eagerly, while a direct-extraction
-  retry recovered only to `0.9712x` with 3/11 wins. Keep the single-word load as
-  stage evidence until decode and copy can be separated without raising register
-  pressure.
+  state costs. Follow-up work strengthens the stage checksum to preserve
+  sequence order and compares every prepared fast block against the independent
+  generic decoder. That oracle caught a Zig aggregate-assignment alias bug in a
+  benchmark-only packed-symbol experiment: rotating repcodes with one expression
+  collapsed `{new, old0, old1}` to `{new, new, new}` under ReleaseFast. Explicit
+  temporaries restore exact sequence order. With the strengthened oracle held
+  identical, nine alternating pairs show the single-`u64` FSE-entry stage ahead
+  by `1.0419x` on README (8/9 wins), `1.0013x` on `build.zig` (5/9), `1.0309x`
+  on roadmap (9/9), and `1.0359x` on `src/zstd.zig` (9/9). The optimization is
+  nevertheless not promoted: the corrected production copy-loop form reaches
+  only `0.9813x` median on README with 3/15 wins against frozen `19ff5365`,
+  showing that the extra packed fields increase pressure once literal/match copy
+  state is live. Earlier absolute packed-stage and eight-sequence queue numbers
+  were collected before the oracle fix and are discarded.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
