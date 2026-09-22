@@ -15510,6 +15510,22 @@ reuse, so production keeps the simpler independently owned plans.
   improve README, `build.zig`, roadmap, and `src/zstd.zig` by median `1.0200x`,
   `1.0061x`, `1.0045x`, and `1.0047x`; `large_json` remains neutral at
   `1.0011x`.
+  Added `run-zstd-sequence-decode-stage-bench` as a separate ReleaseFast
+  executable for the unresolved source-frame bottleneck. Its prepared API
+  parses frame/literal sections, builds and resolves sequence tables, validates
+  all sequences, and records per-block repcode state outside timing. Timed
+  iterations then execute only reverse-bit/FSE sequence decode and checksum the
+  decoded lengths, offsets, and final repcode state; no literal or match bytes
+  are copied. Routing mirrors the production bounded/wide all-FSE split. Every
+  benchmark row first verifies full decoded bytes and compares its prepared
+  sequence count with the independent sequence profile; every timed iteration
+  also checks the prepared checksum. Two idle-host 1,000-iteration, seven-round measurements give
+  README `7.816`/`8.112`, `build.zig` `10.580`/`10.512`, roadmap `9.002`/
+  `9.007`, and `src/zstd.zig` `10.092`/`10.108` ns/sequence. Roadmap and the
+  decoder source differ by only 0.06%/0.16% between runs and contain zero
+  generic stage blocks. A libzstd-inspired persistent-wide-reader experiment
+  was immediately rejected by this gate after moving those rows backward to
+  `9.207`/`10.284` ns/sequence.
   Canonical Huffman tree construction now accumulates rank counts during the
   already-required power-sum pass, then installs the implied final weight
   directly into the same counts. This removes a second complete scan of up to

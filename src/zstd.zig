@@ -7155,6 +7155,48 @@ pub const NativeSequenceCopyProfile = struct {
     medium_length_histogram: [medium_length_max - medium_length_min + 1]usize = @splat(0),
 };
 
+pub const NativeSequenceDecodeStageShape = struct {
+    sequence_count: usize = 0,
+    sequence_block_count: usize = 0,
+    generic_block_count: usize = 0,
+    bounded_all_fse_block_count: usize = 0,
+    wide_all_fse_block_count: usize = 0,
+};
+
+pub const NativeSequenceDecodeStageResult = struct {
+    sequence_count: usize,
+    checksum: u64,
+};
+
+/// Prepared benchmark state for isolating sequence bitstream and FSE decode.
+/// Frame/literal parsing and FSE table construction happen in
+/// `prepareNativeSequenceDecodeStage`; `decode` only initializes each reverse
+/// reader and its three FSE states, then consumes the sequences without
+/// materializing literals or copying matches. The source frame is borrowed and
+/// must remain alive and unchanged until `deinit`.
+pub const NativeSequenceDecodeStage = struct {
+    allocator: std.mem.Allocator,
+    blocks: []PreparedNativeSequenceDecodeBlock,
+    prepared_shape: NativeSequenceDecodeStageShape,
+    expected_checksum: u64,
+
+    pub fn deinit(self: *NativeSequenceDecodeStage) void {
+        self.allocator.free(self.blocks);
+        self.* = undefined;
+    }
+
+    pub fn shape(self: *const NativeSequenceDecodeStage) NativeSequenceDecodeStageShape {
+        return self.prepared_shape;
+    }
+
+    pub noinline fn decode(self: *const NativeSequenceDecodeStage) Error!NativeSequenceDecodeStageResult {
+        const result = try decodePreparedNativeSequenceBlocks(self.blocks);
+        if (result.sequence_count != self.prepared_shape.sequence_count or
+            result.checksum != self.expected_checksum) return error.CorruptFrame;
+        return result;
+    }
+};
+
 pub const NativeSequenceTableMode = enum {
     predefined,
     rle,
@@ -10686,6 +10728,197 @@ const DecodedSequence = struct {
     match_offset: usize,
 };
 
+const NativeSequenceDecodeStagePath = enum {
+    generic,
+    bounded_all_fse,
+    wide_all_fse,
+};
+
+const PreparedNativeSequenceDecodeBlock = struct {
+    spec: SequenceModeSpec,
+    bitstream: []const u8,
+    sequence_count: usize,
+    repeated_offsets: [3]usize,
+    path: NativeSequenceDecodeStagePath,
+};
+
+const NativeSequenceDecodeStageCursor = struct {
+    reader: ReverseBitReader,
+    ll_state: usize,
+    of_state: usize,
+    ml_state: usize,
+    repeated_offsets: [3]usize,
+    remaining: usize,
+};
+
+const NativeSequenceDecodeStageBlockResult = struct {
+    literal_bytes: usize = 0,
+    match_bytes: usize = 0,
+    offset_sum: usize = 0,
+    repeated_offsets: [3]usize,
+};
+
+fn initNativeSequenceDecodeStageCursor(
+    block: *const PreparedNativeSequenceDecodeBlock,
+) Error!NativeSequenceDecodeStageCursor {
+    var reader = try ReverseBitReader.init(block.bitstream);
+    const ll_state = try readInitialSequenceState(&reader, block.spec.ll_mode, block.spec.literal_fse.accuracy_log, 6);
+    const of_state = try readInitialSequenceState(&reader, block.spec.of_mode, block.spec.offset_fse.accuracy_log, 5);
+    const ml_state = try readInitialSequenceState(&reader, block.spec.ml_mode, block.spec.match_fse.accuracy_log, 6);
+    return .{
+        .reader = reader,
+        .ll_state = ll_state,
+        .of_state = of_state,
+        .ml_state = ml_state,
+        .repeated_offsets = block.repeated_offsets,
+        .remaining = block.sequence_count,
+    };
+}
+
+inline fn accumulateNativeSequenceDecodeStage(
+    result: *NativeSequenceDecodeStageBlockResult,
+    literal_len: usize,
+    match_len: usize,
+    match_offset: usize,
+) void {
+    result.literal_bytes +%= literal_len;
+    result.match_bytes +%= match_len;
+    result.offset_sum +%= match_offset;
+}
+
+noinline fn decodePreparedNativeSequenceBlockGeneric(
+    block: *const PreparedNativeSequenceDecodeBlock,
+) Error!NativeSequenceDecodeStageBlockResult {
+    var cursor = try initNativeSequenceDecodeStageCursor(block);
+    var result: NativeSequenceDecodeStageBlockResult = .{ .repeated_offsets = undefined };
+    while (cursor.remaining != 0) {
+        const ll_symbol = switch (block.spec.ll_mode) {
+            .predefined => try defaultLiteralLengthSymbol(cursor.ll_state),
+            .rle => block.spec.literal_rle orelse return error.CorruptFrame,
+            .compressed => try block.spec.literal_fse.symbol(cursor.ll_state),
+            .repeat => unreachable,
+        };
+        const of_symbol = switch (block.spec.of_mode) {
+            .predefined => try defaultOffsetSymbol(cursor.of_state),
+            .rle => block.spec.offset_rle orelse return error.CorruptFrame,
+            .compressed => try block.spec.offset_fse.symbol(cursor.of_state),
+            .repeat => unreachable,
+        };
+        const ml_symbol = switch (block.spec.ml_mode) {
+            .predefined => try defaultMatchLengthSymbol(cursor.ml_state),
+            .rle => block.spec.match_rle orelse return error.CorruptFrame,
+            .compressed => try block.spec.match_fse.symbol(cursor.ml_state),
+            .repeat => unreachable,
+        };
+        const offset_extra = try cursor.reader.read(of_symbol.additional_bits);
+        const match_len = std.math.add(usize, ml_symbol.base, try cursor.reader.read(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const literal_len = std.math.add(usize, ll_symbol.base, try cursor.reader.read(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &cursor.repeated_offsets);
+        accumulateNativeSequenceDecodeStage(&result, literal_len, match_len, match_offset);
+
+        cursor.remaining -= 1;
+        if (cursor.remaining != 0) {
+            if (block.spec.ll_mode == .predefined or block.spec.ll_mode == .compressed)
+                cursor.ll_state = try nextSequenceState(&cursor.reader, ll_symbol);
+            if (block.spec.ml_mode == .predefined or block.spec.ml_mode == .compressed)
+                cursor.ml_state = try nextSequenceState(&cursor.reader, ml_symbol);
+            if (block.spec.of_mode == .predefined or block.spec.of_mode == .compressed)
+                cursor.of_state = try nextSequenceState(&cursor.reader, of_symbol);
+        } else try cursor.reader.expectEnd();
+    }
+    result.repeated_offsets = cursor.repeated_offsets;
+    return result;
+}
+
+noinline fn decodePreparedNativeSequenceBlockAllFse(
+    block: *const PreparedNativeSequenceDecodeBlock,
+    comptime wide: bool,
+) Error!NativeSequenceDecodeStageBlockResult {
+    std.debug.assert(block.spec.ll_mode == .compressed);
+    std.debug.assert(block.spec.of_mode == .compressed);
+    std.debug.assert(block.spec.ml_mode == .compressed);
+    var cursor = try initNativeSequenceDecodeStageCursor(block);
+    var result: NativeSequenceDecodeStageBlockResult = .{ .repeated_offsets = undefined };
+    while (cursor.remaining != 0) {
+        const ll_symbol = block.spec.literal_fse.symbolUnchecked(cursor.ll_state);
+        const of_symbol = block.spec.offset_fse.symbolUnchecked(cursor.of_state);
+        const ml_symbol = block.spec.match_fse.symbolUnchecked(cursor.ml_state);
+        const transition_bits: u8 = if (cursor.remaining == 1)
+            0
+        else
+            ll_symbol.state_bits + ml_symbol.state_bits + of_symbol.state_bits;
+        const total_bits: u8 = of_symbol.additional_bits + ml_symbol.additional_bits +
+            ll_symbol.additional_bits + transition_bits;
+        const fields_are_wide = wide and cursor.reader.canReadSequenceFieldsWide(total_bits);
+        const offset_extra = if (fields_are_wide)
+            cursor.reader.readSequenceFieldWide(of_symbol.additional_bits)
+        else
+            try cursor.reader.readSequenceField(of_symbol.additional_bits);
+        const match_len = @as(usize, ml_symbol.base) + if (fields_are_wide)
+            cursor.reader.readSequenceFieldWide(ml_symbol.additional_bits)
+        else
+            try cursor.reader.readSequenceField(ml_symbol.additional_bits);
+        const literal_len = @as(usize, ll_symbol.base) + if (fields_are_wide)
+            cursor.reader.readSequenceFieldWide(ll_symbol.additional_bits)
+        else
+            try cursor.reader.readSequenceField(ll_symbol.additional_bits);
+        const match_offset = if (wide and of_symbol.additional_bits > 1) blk: {
+            const offset = @as(usize, of_symbol.base) + offset_extra;
+            cursor.repeated_offsets = .{ offset, cursor.repeated_offsets[0], cursor.repeated_offsets[1] };
+            break :blk offset;
+        } else if (of_symbol.additional_bits == 0 and literal_len != 0)
+            try large_offset.positiveLiteralRep0(&cursor.repeated_offsets)
+        else
+            try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &cursor.repeated_offsets);
+        accumulateNativeSequenceDecodeStage(&result, literal_len, match_len, match_offset);
+
+        cursor.remaining -= 1;
+        if (cursor.remaining != 0) {
+            if (fields_are_wide) {
+                cursor.ll_state = nextSequenceStateProvenWide(&cursor.reader, ll_symbol);
+                cursor.ml_state = nextSequenceStateProvenWide(&cursor.reader, ml_symbol);
+                cursor.of_state = nextSequenceStateProvenWide(&cursor.reader, of_symbol);
+            } else if (wide) {
+                cursor.ll_state = try nextSequenceStateWide(&cursor.reader, ll_symbol);
+                cursor.ml_state = try nextSequenceStateWide(&cursor.reader, ml_symbol);
+                cursor.of_state = try nextSequenceStateWide(&cursor.reader, of_symbol);
+            } else {
+                cursor.ll_state = try nextSequenceState(&cursor.reader, ll_symbol);
+                cursor.ml_state = try nextSequenceState(&cursor.reader, ml_symbol);
+                cursor.of_state = try nextSequenceState(&cursor.reader, of_symbol);
+            }
+        } else try cursor.reader.expectEnd();
+    }
+    result.repeated_offsets = cursor.repeated_offsets;
+    return result;
+}
+
+fn decodePreparedNativeSequenceBlock(
+    block: *const PreparedNativeSequenceDecodeBlock,
+) Error!NativeSequenceDecodeStageBlockResult {
+    return switch (block.path) {
+        .generic => decodePreparedNativeSequenceBlockGeneric(block),
+        .bounded_all_fse => decodePreparedNativeSequenceBlockAllFse(block, false),
+        .wide_all_fse => decodePreparedNativeSequenceBlockAllFse(block, true),
+    };
+}
+
+noinline fn decodePreparedNativeSequenceBlocks(
+    blocks: []const PreparedNativeSequenceDecodeBlock,
+) Error!NativeSequenceDecodeStageResult {
+    var sequence_count: usize = 0;
+    var checksum: u64 = 0;
+    for (blocks) |*block| {
+        const decoded = try decodePreparedNativeSequenceBlock(block);
+        sequence_count +%= block.sequence_count;
+        checksum +%= @as(u64, @intCast(decoded.literal_bytes)) *% 0x9e37_79b1_85eb_ca87;
+        checksum +%= @as(u64, @intCast(decoded.match_bytes)) *% 0xc2b2_ae3d_27d4_eb4f;
+        checksum +%= @as(u64, @intCast(decoded.offset_sum)) *% 0x1656_67b1_9e37_79f9;
+        checksum +%= @as(u64, @intCast(decoded.repeated_offsets[0])) *% 0x85eb_ca77_c2b2_ae63;
+    }
+    return .{ .sequence_count = sequence_count, .checksum = checksum };
+}
+
 fn nextSequenceState(reader: *ReverseBitReader, symbol: SequenceSymbol) Error!usize {
     return std.math.add(usize, symbol.next_state, try reader.readSmall(@intCast(symbol.state_bits))) catch return error.IntegerOverflow;
 }
@@ -11191,6 +11424,125 @@ pub fn benchmarkNativeSequenceCopyProfile(frame: []const u8) Error!NativeSequenc
     }
     if (offset != frame.len) return error.TrailingData;
     return profile;
+}
+
+/// Parse a complete dictionary-free Zstandard frame into a caller-owned list
+/// of prepared sequence blocks. This deliberately validates every sequence
+/// once before returning so benchmark timings cannot turn malformed data into
+/// unchecked FSE table access.
+pub fn prepareNativeSequenceDecodeStage(
+    allocator: std.mem.Allocator,
+    frame: []const u8,
+) Error!NativeSequenceDecodeStage {
+    // Establish a checked decode oracle before the timed stage is allowed to
+    // use the same unchecked table lookups as the production all-FSE loops.
+    const validated_profile = try benchmarkNativeSequenceCopyProfile(frame);
+    if (frame.len < 4 or std.mem.readInt(u32, frame[0..4], .little) != frame_magic_u32) return error.InvalidMagic;
+    var offset: usize = 4;
+    const header = try parseRawOrRleFrameHeader(frame, &offset);
+    var frame_state: SequenceFrameState = .{};
+    var blocks: std.ArrayList(PreparedNativeSequenceDecodeBlock) = .empty;
+    defer blocks.deinit(allocator);
+    var shape: NativeSequenceDecodeStageShape = .{};
+    var produced: usize = 0;
+
+    while (true) {
+        if (frame.len - offset < 3) return error.TruncatedFrame;
+        const block_header = std.mem.readInt(u24, frame[offset..][0..3], .little);
+        offset += 3;
+        const last = block_header & 1 != 0;
+        const block_type = (block_header >> 1) & 3;
+        const block_len: usize = @intCast(block_header >> 3);
+        try validateBlockSize(header, block_type, block_len);
+        switch (block_type) {
+            0 => {
+                if (frame.len - offset < block_len) return error.TruncatedFrame;
+                offset += block_len;
+                produced = try checkedAdd(produced, block_len);
+            },
+            1 => {
+                if (frame.len - offset < 1) return error.TruncatedFrame;
+                offset += 1;
+                produced = try checkedAdd(produced, block_len);
+            },
+            2 => {
+                if (frame.len - offset < block_len) return error.TruncatedFrame;
+                const block = frame[offset..][0..block_len];
+                const section = try parseLiteralsSection(block, &frame_state);
+                if (section.regenerated_size > header.block_size_max) return error.CorruptFrame;
+                try validateSupportedLiteralSection(section);
+                if (section.sequence_count == 0) {
+                    try expectConsumedBlock(section.sequence_payload_offset, block.len);
+                    try validateHuffmanLiteralsConsumed(block, section);
+                    produced = try checkedAdd(produced, section.regenerated_size);
+                } else {
+                    var sequence_offset = section.sequence_payload_offset;
+                    const parsed = try parseSequenceModeSpec(block, &sequence_offset, section.sequence_count);
+                    var spec = try resolveSequenceModeSpec(parsed, frame_state.previous_tables);
+                    try expectConsumedBlock(sequence_offset, block.len);
+                    const path: NativeSequenceDecodeStagePath = if (spec.ll_mode == .compressed and
+                        spec.of_mode == .compressed and
+                        spec.ml_mode == .compressed and
+                        (section.kind == .compressed or section.kind == .treeless) and
+                        section.sequence_count >= 1024 and
+                        section.huffman_streams == .four and
+                        section.regenerated_size <= split_wide_huffman_literal_capacity) if (section.regenerated_size <= split_small_huffman_literal_limit)
+                        .bounded_all_fse
+                    else
+                        .wide_all_fse else if (spec.ll_mode == .compressed and
+                        spec.of_mode == .compressed and
+                        spec.ml_mode == .compressed and
+                        section.sequence_count >= 1024)
+                        .bounded_all_fse
+                    else
+                        .generic;
+                    const prepared = PreparedNativeSequenceDecodeBlock{
+                        .spec = spec,
+                        .bitstream = block[spec.bitstream_offset..],
+                        .sequence_count = section.sequence_count,
+                        .repeated_offsets = frame_state.repeated_offsets,
+                        .path = path,
+                    };
+                    const decoded = try decodePreparedNativeSequenceBlock(&prepared);
+                    if (decoded.literal_bytes > section.regenerated_size) return error.CorruptFrame;
+                    produced = try checkedAdd(produced, decoded.literal_bytes);
+                    produced = try checkedAdd(produced, decoded.match_bytes);
+                    produced = try checkedAdd(produced, section.regenerated_size - decoded.literal_bytes);
+                    try validateHuffmanLiteralsConsumed(block, section);
+                    frame_state.previous_tables = spec.tables();
+                    frame_state.repeated_offsets = decoded.repeated_offsets;
+                    try blocks.append(allocator, prepared);
+                    shape.sequence_count = try checkedAdd(shape.sequence_count, section.sequence_count);
+                    shape.sequence_block_count += 1;
+                    switch (path) {
+                        .generic => shape.generic_block_count += 1,
+                        .bounded_all_fse => shape.bounded_all_fse_block_count += 1,
+                        .wide_all_fse => shape.wide_all_fse_block_count += 1,
+                    }
+                }
+                offset += block_len;
+            },
+            else => return error.CorruptFrame,
+        }
+        if (last) break;
+    }
+    if (shape.sequence_count == 0) return error.InvalidBlockPlan;
+    if (shape.sequence_count != validated_profile.sequence_count) return error.CorruptFrame;
+    if (header.content_size) |expected| if (try checkedUsizeToU64(produced) != expected) return error.SizeMismatch;
+    if (header.has_checksum) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        offset += 4;
+    }
+    if (offset != frame.len) return error.TrailingData;
+    const owned_blocks = try blocks.toOwnedSlice(allocator);
+    errdefer allocator.free(owned_blocks);
+    const expected = try decodePreparedNativeSequenceBlocks(owned_blocks);
+    return .{
+        .allocator = allocator,
+        .blocks = owned_blocks,
+        .prepared_shape = shape,
+        .expected_checksum = expected.checksum,
+    };
 }
 
 fn sequenceCopyLengthBucket(length: usize) usize {

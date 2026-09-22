@@ -1484,6 +1484,26 @@ Recommended next comparison steps:
   improve README, `build.zig`, roadmap, and `src/zstd.zig` by median `1.0200x`,
   `1.0061x`, `1.0045x`, and `1.0047x`; `large_json` remains neutral at
   `1.0011x`.
+  A dedicated `run-zstd-sequence-decode-stage-bench` now removes frame/header,
+  literal parsing, Huffman decode, FSE-table construction, and output copies
+  from the timed region. Preparation first runs the checked sequence-profile
+  oracle, resolves Repeat_Mode tables and repcodes block by block, and stores
+  borrowed bitstreams plus final FSE tables; each timed iteration only
+  initializes the reverse reader/FSE states and decodes every sequence into a
+  stable checksum. The stage chooses the same bounded/wide all-FSE reader
+  policy as the production split-Huffman executors rather than measuring the
+  generic `readModeSequence` path. On an idle Apple M1, two independent
+  1,000-iteration, seven-round runs measured README at `7.816`/`8.112`,
+  `build.zig` at `10.580`/`10.512`, roadmap at `9.002`/`9.007`, and
+  `src/zstd.zig` at `10.092`/`10.108` ns/sequence. The two large rows differ by
+  only 0.06% and 0.16%, providing a stable causal gate for reader/FSE changes.
+  All blocks in the four source rows use a production all-FSE route (zero
+  generic blocks); roadmap and `src/zstd.zig` cover 9/15 blocks with 85,632/
+  93,363 sequences. A nearby attempt to replace each libzstd-style grouped
+  safety preflight with one persistent wide-reader state was rejected: the
+  large rows regressed to `9.207` and `10.284` ns/sequence, confirming that the
+  current per-sequence proof is cheaper than the resulting code-generation and
+  state costs.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

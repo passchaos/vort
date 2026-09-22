@@ -3196,6 +3196,27 @@ pub fn build(b: *std.Build) void {
         &zstd_decode_profile_path_smoke.step,
     );
 
+    const zstd_sequence_decode_stage_bench_exe = b.addExecutable(.{
+        .name = "vort-zstd-sequence-decode-stage-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/sequence_decode_stage_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_zstd_sequence_decode_stage_bench = b.addRunArtifact(zstd_sequence_decode_stage_bench_exe);
+    if (b.args) |args| run_zstd_sequence_decode_stage_bench.addArgs(args);
+    const zstd_sequence_decode_stage_bench_step = b.step(
+        "run-zstd-sequence-decode-stage-bench",
+        "Benchmark prepared Zstd sequence bit/FSE decode without literal or match copies",
+    );
+    zstd_sequence_decode_stage_bench_step.dependOn(&run_zstd_sequence_decode_stage_bench.step);
+
     const zstd_encode_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-encode-bench",
         .root_module = b.createModule(.{
