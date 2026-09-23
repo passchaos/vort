@@ -15603,3 +15603,25 @@ reuse, so production keeps the simpler independently owned plans.
   same-process README ratio is 1,262.07 versus 1,411.03 MiB/s (`0.8962x`)
   against libzstd 1.5.7. All 645 focused tests, 276 compatibility cases, and
   9,900 decodecorpus frames pass.
+  Added a libzstd-inspired two-symbol Huffman decoder for selected large, dense
+  four-stream literal sections. Its separate Zig object keeps the 8-KiB X2
+  decode table and refill loop from perturbing main-module X1/sequence code
+  layout. Each 2,048-entry table slot stores one or two decoded bytes, consumed
+  bits, and symbol count; four persistent reverse-bit reservoirs perform up to
+  five lookups per stream before refill. The bounded production route requires
+  at least 12 KiB of regenerated literals and compressed/regenerated literal
+  size no greater than 0.66, falls back to X1 for unsupported trees, and maps
+  malformed input to the existing errors. A dedicated 64-KiB 16-symbol test
+  proves the selector hit and X1 byte parity, then checks direct-ABI truncation,
+  every stream end marker, OutputTooSmall, and untouched caller suffix bytes.
+  Against the frozen clean pre-change executable, 15 alternating pairs improve
+  README by `1.0299x` median / `1.0314x` geometric throughput (15/15 wins),
+  `build.zig` by `1.0023x` / `1.0036x` (11/15), this roadmap by `1.0243x` /
+  `1.0248x` (15/15), and `src/zstd.zig` by `1.0045x` / `1.0049x` (14/15). A
+  final high-load 11-pair README control records `1.0339x` median / `1.0301x`
+  geometric gain with 10/11 wins. Eleven independent absolute runs under that
+  load measure 1,251.43 versus 1,400.87 MiB/s for libzstd 1.5.7 (`0.8926x`),
+  leaving about 10.7%; this is a real gain, not a parity claim. All 645 focused
+  ReleaseFast tests, 276 compatibility cases, all 9,900 upstream decodecorpus
+  frames across 64/64 sequence-mode combinations, and the complete compile
+  check pass.

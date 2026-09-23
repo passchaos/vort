@@ -1579,6 +1579,31 @@ Recommended next comparison steps:
   now measures 1,262.07 MiB/s versus 1,411.03 MiB/s for libzstd 1.5.7
   (`0.8962x`), leaving about 10.4%. The combined path passes 645 focused
   ReleaseFast tests, 276 compatibility cases, and all 9,900 decodecorpus frames.
+  The next decoder step adopts libzstd's `HUF_decompress4X2` table shape for
+  large, dense four-stream literal sections. A separate Zig object builds an
+  8-KiB, 2,048-entry table whose four-byte entries contain one or two decoded
+  symbols, consumed bits, and symbol count; four persistent reverse-bit
+  reservoirs issue up to five X2 lookups per stream before refill. Keeping the
+  implementation outside the main Zstd module avoids shifting the established
+  X1 and sequence hot code when the route is not selected. The production
+  selector requires at least 12 KiB of regenerated literals and a compressed-
+  to-regenerated literal ratio no greater than 0.66, amortizing the larger
+  table build; unsupported trees fall back to X1, while truncated and corrupt
+  streams retain their exact errors. A 64-KiB, 16-symbol fixture proves the
+  production selector is hit, compares X2 output with both the payload and an
+  explicitly forced X1 decode, checks direct-ABI truncation, all four stream
+  end markers, short output, and the caller suffix. Against the frozen clean
+  pre-change executable, the original 15-pair matrix improves README by
+  `1.0299x` median / `1.0314x` geometric throughput (15/15 wins), `build.zig`
+  by `1.0023x` / `1.0036x` (11/15), this roadmap by `1.0243x` / `1.0248x`
+  (15/15), and `src/zstd.zig` by `1.0045x` / `1.0049x` (14/15). A final
+  high-load 11-pair README rerun remains positive at `1.0339x` median /
+  `1.0301x` geometric (10/11). Eleven independent same-process absolute runs
+  under the same elevated load measure medians of 1,251.43 MiB/s for Vort and
+  1,400.87 MiB/s for libzstd 1.5.7 (`0.8926x`), so the remaining measured gap
+  is about 10.7% and parity is not claimed. All 645 focused ReleaseFast tests,
+  276 libzstd compatibility cases, the complete 9,900-frame decodecorpus with
+  all 64 sequence-mode combinations, and `zig build check -j1` pass.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

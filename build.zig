@@ -30,6 +30,22 @@ pub fn build(b: *std.Build) void {
             .optimize = .ReleaseFast,
         }),
     });
+    const zstd_huffman_x2_obj = b.addObject(.{
+        .name = "vort-zstd-huffman-x2",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/zstd_huffman_x2_object.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const zstd_huffman_x2_releasefast_obj = b.addObject(.{
+        .name = "vort-zstd-huffman-x2-releasefast",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/zstd_huffman_x2_object.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+        }),
+    });
     const br_record_classifier_tests = b.addTest(.{
         .name = "vort-br-record-classifier-tests",
         .root_module = b.createModule(.{
@@ -49,7 +65,9 @@ pub fn build(b: *std.Build) void {
     });
     const run_br_record_optimal_object_tests = b.addRunArtifact(br_record_optimal_object_tests);
     vort_mod.addObject(br_record_optimal_obj);
+    vort_mod.addObject(zstd_huffman_x2_obj);
     vort_mod_releasefast.addObject(br_record_optimal_releasefast_obj);
+    vort_mod_releasefast.addObject(zstd_huffman_x2_releasefast_obj);
     const benchmark_provenance_mod = b.createModule(.{
         .root_source_file = b.path("tools/benchmark_provenance.zig"),
         .target = target,
@@ -68,6 +86,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     tests_mod.addObject(br_record_optimal_obj);
+    tests_mod.addObject(zstd_huffman_x2_obj);
 
     const tests = b.addTest(.{
         .name = "vort-tests",
