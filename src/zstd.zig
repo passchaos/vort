@@ -10036,18 +10036,54 @@ noinline fn decodeAllFseHuffmanSequences(
     var huffman_state = initial_huffman;
     var literal_offset: usize = 0;
     while (state.remaining != 0) {
-        const ll_symbol = spec.literal_fse.symbolUnchecked(state.ll_state);
-        const of_symbol = spec.offset_fse.symbolUnchecked(state.of_state);
-        const ml_symbol = spec.match_fse.symbolUnchecked(state.ml_state);
-        const offset_extra = try state.reader.readSequenceField(of_symbol.additional_bits);
-        const match_len = @as(usize, ml_symbol.base) + try state.reader.readSequenceField(ml_symbol.additional_bits);
-        const literal_len = @as(usize, ll_symbol.base) + try state.reader.readSequenceField(ll_symbol.additional_bits);
-        const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
+        const ll_word = spec.literal_fse.symbolWordUnchecked(state.ll_state);
+        const of_word = spec.offset_fse.symbolWordUnchecked(state.of_state);
+        const ml_word = spec.match_fse.symbolWordUnchecked(state.ml_state);
+        const literal_base_value = sequenceSymbolBase(ll_word);
+        const offset_base_value = sequenceSymbolBase(of_word);
+        const match_base_value = sequenceSymbolBase(ml_word);
+        const ll_additional_bits = sequenceSymbolAdditionalBits(ll_word);
+        const of_additional_bits = sequenceSymbolAdditionalBits(of_word);
+        const ml_additional_bits = sequenceSymbolAdditionalBits(ml_word);
+        const ll_state_bits = sequenceSymbolStateBits(ll_word);
+        const of_state_bits = sequenceSymbolStateBits(of_word);
+        const ml_state_bits = sequenceSymbolStateBits(ml_word);
+        const ll_next_state = sequenceSymbolNextState(ll_word);
+        const of_next_state = sequenceSymbolNextState(of_word);
+        const ml_next_state = sequenceSymbolNextState(ml_word);
         state.remaining -= 1;
+        const transition_bits: u8 = if (state.remaining == 0)
+            0
+        else
+            ll_state_bits + ml_state_bits + of_state_bits;
+        const total_bits: u8 = of_additional_bits + ml_additional_bits +
+            ll_additional_bits + transition_bits;
+        var field_group: ?sequence_field_group.Group =
+            sequence_field_group.Group.init(&state.reader, total_bits);
+        const fields_are_grouped = field_group != null;
+        const offset_extra = if (fields_are_grouped)
+            field_group.?.read(of_additional_bits)
+        else
+            try state.reader.readSequenceField(of_additional_bits);
+        const match_len = match_base_value + if (fields_are_grouped)
+            field_group.?.read(ml_additional_bits)
+        else
+            try state.reader.readSequenceField(ml_additional_bits);
+        const literal_len = literal_base_value + if (fields_are_grouped)
+            field_group.?.read(ll_additional_bits)
+        else
+            try state.reader.readSequenceField(ll_additional_bits);
+        const match_offset = try resolveSequenceOffset(offset_base_value, of_additional_bits, offset_extra, literal_len, &state.repeated_offsets);
         if (state.remaining != 0) {
-            state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
-            state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
-            state.of_state = try nextSequenceState(&state.reader, of_symbol);
+            if (fields_are_grouped) {
+                state.ll_state = ll_next_state + field_group.?.read(ll_state_bits);
+                state.ml_state = ml_next_state + field_group.?.read(ml_state_bits);
+                state.of_state = of_next_state + field_group.?.read(of_state_bits);
+            } else {
+                state.ll_state = ll_next_state + try state.reader.readSequenceField(ll_state_bits);
+                state.ml_state = ml_next_state + try state.reader.readSequenceField(ml_state_bits);
+                state.of_state = of_next_state + try state.reader.readSequenceField(of_state_bits);
+            }
         } else try state.reader.expectEnd();
 
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;

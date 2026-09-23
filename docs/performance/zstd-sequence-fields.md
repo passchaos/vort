@@ -104,6 +104,32 @@ checksum oracle and generic comparison remain enabled. These timings include
 stage bookkeeping and use a separate executable layout; they diagnose the
 sequence kernel and do not substitute for the public-API results above.
 
+## Interleaved-path extension
+
+The split decoder only accepts four-stream sections up to 32 KiB and at least
+1,024 sequences. Blocks just below that count, or with larger regenerated
+sections, decode through `decodeAllFseHuffmanSequences`, which interleaves
+per-symbol Huffman decoding with sequence fields. The change following this
+note applies the same one-load grouping to that path: six-field extraction
+uses `sequence_field_group.Group`, with the checked `readSequenceField`
+reader retained for overlong groups and the physical stream tail. Literal
+Huffman per-symbol decoding, copy bounds, and error routing are unchanged.
+
+Paired A/B (same host/executable protocol as above; old = `72ed5ea6`,
+11 alternating pairs for roadmap/source, 7 for build/readme):
+
+| Input | Median new/old | Geometric new/old | Wins | Vort MiB/s | libzstd MiB/s | Vort/libzstd |
+| --- | ---: | ---: | --- | ---: | ---: | ---: |
+| roadmap | 1.0385x | 1.0366x | 11/11 | 865.8 | 1249.5 | 0.6933x |
+| source | 1.0012x | 1.0013x | 6/11 | 1489.8 | 1791.4 | 0.8303x |
+| build | 0.9897x | 0.9969x | 3/7 | 1935.97 | 2184.39 | 0.8813x |
+| readme | 0.9851x | 0.9940x | 3/7 | 1307.62 | 1346.96 | 0.9708x |
+
+The gain is concentrated on roadmap, whose per-block sequence counts average
+just under the 1,024 split threshold and therefore previously never used the
+grouped reader. The other three inputs remain within run-to-run noise.
+`zig build test` exits 0 with the change.
+
 ## Goal audit
 
 This optimization is a bounded improvement toward industry-leading Zstd
