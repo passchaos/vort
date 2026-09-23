@@ -7,6 +7,7 @@ const dictionary_mod = @import("dictionary.zig");
 const sequence_predefined = @import("zstd/sequence/predefined.zig");
 const sequence_bit_reader = @import("zstd/sequence/bit_reader.zig");
 const sequence_field_group = @import("zstd/sequence/field_group.zig");
+const sequence_decode_policy = @import("zstd/sequence/decode_policy.zig");
 const single_predefined = @import("zstd/sequence/single_predefined.zig");
 const sequence_continuation = @import("zstd/sequence/continuation.zig");
 const sequence_match_copy = @import("zstd/sequence/match_copy.zig");
@@ -35,6 +36,7 @@ const large_state_handoff_test = if (builtin.is_test) @import("zstd/sequence/lar
 const single_beam_match = @import("zstd/match/single_beam.zig");
 const optimal_four_match = @import("zstd/match/optimal_four.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
+const decode_policy_tests = if (builtin.is_test) @import("zstd/sequence/decode_policy_test.zig") else struct {};
 const huffman = @import("huffman.zig");
 const large_transition = @import("zstd/sequence/large/transition.zig");
 const large_fse_table = @import("zstd/sequence/large/fse_table.zig");
@@ -147,7 +149,6 @@ const split_dense_literal_decode_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
-const split_small_huffman_literal_limit = 4 * 1024;
 const split_x2_huffman_literal_min = 12 * 1024;
 const split_huffman_literal_capacity = 16 * 1024;
 const split_wide_huffman_literal_capacity = 32 * 1024;
@@ -9547,7 +9548,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
         var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
-        if (section.regenerated_size <= split_small_huffman_literal_limit) {
+        if (sequence_decode_policy.preferSmall(section.regenerated_size, section.sequence_count)) {
             if (try tryDecodeAllFseSplitHuffmanSequences(
                 section,
                 output,
@@ -9744,7 +9745,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
         var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
-        if (section.regenerated_size <= split_small_huffman_literal_limit) {
+        if (sequence_decode_policy.preferSmall(section.regenerated_size, section.sequence_count)) {
             if (try tryDecodeAllFseSplitHuffmanSequences(
                 section,
                 output,
@@ -11737,7 +11738,7 @@ pub fn prepareNativeSequenceDecodeStage(
                         (section.kind == .compressed or section.kind == .treeless) and
                         section.sequence_count >= 1024 and
                         section.huffman_streams == .four and
-                        section.regenerated_size <= split_wide_huffman_literal_capacity) if (section.regenerated_size <= split_small_huffman_literal_limit)
+                        section.regenerated_size <= split_wide_huffman_literal_capacity) if (sequence_decode_policy.preferSmall(section.regenerated_size, section.sequence_count))
                         .bounded_all_fse
                     else
                         .wide_all_fse else if (spec.ll_mode == .compressed and
@@ -29362,6 +29363,10 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     }
     try std.testing.expect(mutation_cases >= 100);
     try std.testing.expect(saw_invalid_match);
+}
+
+test "zstd dense sparse-literal blocks select grouped decode" {
+    try decode_policy_tests.run(@This(), &test_disable_split_huffman_decode, &test_split_huffman_field_group_hits);
 }
 
 test "zstd split Huffman all-FSE path matches generic decode" {
