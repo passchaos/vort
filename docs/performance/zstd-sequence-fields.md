@@ -130,6 +130,38 @@ just under the 1,024 split threshold and therefore previously never used the
 grouped reader. The other three inputs remain within run-to-run noise.
 `zig build test` exits 0 with the change.
 
+## Long-literal bulk fast path
+
+The split fast path (`decodeAllFseSplitHuffmanSequences`) previously required
+`literal_len <= 15`; any sequence with a longer literal run fell through to
+`executeSplitHuffmanSequenceCold`, which rebuilds bounds and uses the generic
+match copy. Temporary instrumentation of the real roadmap level-1 frame
+counted 152,362 path decisions: 146,812 (96.4%) take the wildcopy fast path,
+5,550 (3.6%) reach the cold path. Of those cold failures, 5,382 (96.9%) are
+caused solely by `literal_len > 15`; the other 168 are `match_offset < 16`.
+No failures come from literal bounds, offset upper bounds, or output space.
+
+A new `appendBulkWildcopy16` in `src/zstd/literals/copy.zig` copies whole
+16-byte chunks directly and handles the 1--15 trailing bytes with one
+16-byte window, using the same source-padding/destination-overwrite contract
+as `appendUpTo15Wildcopy16`. A dedicated branch handles `literal_len > 15`
+before the cold path, leaving the original <=15 branch unchanged.
+
+Paired A/B (same protocol; old = `fc2c6982`):
+
+| Input | Median new/old | Geometric new/old | Wins |
+| --- | ---: | ---: | ---: |
+| roadmap | 1.0402x | 1.0409x | 11/11 |
+| readme | 1.0380x | 1.0274x | 7/9 |
+| source | 1.0207x | 1.0212x | 9/9 |
+| build | 0.9865x | 0.9954x | 5/11 |
+
+The net is a solid improvement. Build's ~1% negative is a codegen-layout
+effect near the run-to-run noise floor; it has only 160 cold sequences and no
+long-literal cases, so it pays branch-layout cost without benefit. The new
+copy helper is covered by a length/alignment oracle test; `zig build test`
+exits 0.
+
 ## Goal audit
 
 This optimization is a bounded improvement toward industry-leading Zstd

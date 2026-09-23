@@ -10325,6 +10325,30 @@ inline fn decodeAllFseSplitHuffmanSequences(
             );
             continue;
         }
+        if (use_wide_state_reads and
+            allow_wildcopy and
+            literal_len > 15 and
+            literal_offset + literal_len <= section.regenerated_size and
+            frame_output_start <= written.* and
+            match_offset >= 16 and
+            match_offset <= written.* - frame_output_start + literal_len and
+            output.len - written.* >= literal_len + rounded_match_len)
+        {
+            literal_copy.appendBulkWildcopy16(
+                output,
+                written,
+                &literals,
+                &literal_offset,
+                literal_len,
+            );
+            sequence_match_copy.appendForwardWildcopy16(
+                output,
+                written,
+                written.* - match_offset,
+                match_len,
+            );
+            continue;
+        }
         if (use_wide_state_reads and allow_wildcopy) {
             @branchHint(.unlikely);
             try executeSplitHuffmanSequenceCold(
