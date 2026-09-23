@@ -6,6 +6,7 @@ const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
 const sequence_predefined = @import("zstd/sequence/predefined.zig");
 const sequence_bit_reader = @import("zstd/sequence/bit_reader.zig");
+const sequence_field_group = @import("zstd/sequence/field_group.zig");
 const single_predefined = @import("zstd/sequence/single_predefined.zig");
 const sequence_continuation = @import("zstd/sequence/continuation.zig");
 const sequence_match_copy = @import("zstd/sequence/match_copy.zig");
@@ -197,6 +198,7 @@ var test_split_huffman_positive_rep0_hits: usize = 0;
 var test_split_huffman_direct_offset_hits: usize = 0;
 var test_split_huffman_short_literal_hits: usize = 0;
 var test_split_huffman_common_sequence_hits: usize = 0;
+var test_split_huffman_field_group_hits: usize = 0;
 var test_large_fse_no_low_builder_hits: usize = 0;
 var test_small_mixed_fse_fast_literal_hits: usize = 0;
 var test_small_mixed_fse_match_56_hits: usize = 0;
@@ -10189,25 +10191,26 @@ inline fn decodeAllFseSplitHuffmanSequences(
             ll_state_bits + ml_state_bits + of_state_bits;
         const total_bits: u8 = of_additional_bits + ml_additional_bits +
             ll_additional_bits + transition_bits;
-        const fields_are_wide = use_wide_state_reads and
-            wide_reader.canReadSequenceFieldsWide(total_bits);
+        var field_group: ?sequence_field_group.Group = if (use_wide_state_reads) sequence_field_group.Group.init(&wide_reader, total_bits) else null;
+        const fields_are_grouped = field_group != null;
+        if (builtin.is_test and fields_are_grouped) test_split_huffman_field_group_hits += 1;
         const offset_extra = if (use_wide_state_reads)
-            if (fields_are_wide)
-                wide_reader.readSequenceFieldWide(of_additional_bits)
+            if (fields_are_grouped)
+                field_group.?.read(of_additional_bits)
             else
                 try wide_reader.readSequenceField(of_additional_bits)
         else
             try state.reader.readSequenceField(of_additional_bits);
         const match_len = match_base_value + if (use_wide_state_reads)
-            if (fields_are_wide)
-                wide_reader.readSequenceFieldWide(ml_additional_bits)
+            if (fields_are_grouped)
+                field_group.?.read(ml_additional_bits)
             else
                 try wide_reader.readSequenceField(ml_additional_bits)
         else
             try state.reader.readSequenceField(ml_additional_bits);
         const literal_len = literal_base_value + if (use_wide_state_reads)
-            if (fields_are_wide)
-                wide_reader.readSequenceFieldWide(ll_additional_bits)
+            if (fields_are_grouped)
+                field_group.?.read(ll_additional_bits)
             else
                 try wide_reader.readSequenceField(ll_additional_bits)
         else
@@ -10226,10 +10229,10 @@ inline fn decodeAllFseSplitHuffmanSequences(
         remaining -= 1;
         if (remaining != 0) {
             if (use_wide_state_reads) {
-                if (fields_are_wide) {
-                    state.ll_state = ll_next_state + wide_reader.readSequenceFieldWide(ll_state_bits);
-                    state.ml_state = ml_next_state + wide_reader.readSequenceFieldWide(ml_state_bits);
-                    state.of_state = of_next_state + wide_reader.readSequenceFieldWide(of_state_bits);
+                if (fields_are_grouped) {
+                    state.ll_state = ll_next_state + field_group.?.read(ll_state_bits);
+                    state.ml_state = ml_next_state + field_group.?.read(ml_state_bits);
+                    state.of_state = of_next_state + field_group.?.read(of_state_bits);
                 } else {
                     state.ll_state = ll_next_state + try wide_reader.readSequenceField(ll_state_bits);
                     state.ml_state = ml_next_state + try wide_reader.readSequenceField(ml_state_bits);
@@ -11093,17 +11096,18 @@ noinline fn decodePreparedNativeSequenceBlockAllFse(
             ll_state_bits + ml_state_bits + of_state_bits;
         const total_bits: u8 = of_additional_bits + ml_additional_bits +
             ll_additional_bits + transition_bits;
-        const fields_are_wide = wide and cursor.reader.canReadSequenceFieldsWide(total_bits);
-        const offset_extra = if (fields_are_wide)
-            cursor.reader.readSequenceFieldWide(of_additional_bits)
+        var field_group: ?sequence_field_group.Group = if (wide) sequence_field_group.Group.init(&cursor.reader, total_bits) else null;
+        const fields_are_grouped = field_group != null;
+        const offset_extra = if (fields_are_grouped)
+            field_group.?.read(of_additional_bits)
         else
             try cursor.reader.readSequenceField(of_additional_bits);
-        const match_len = sequenceSymbolBase(ml_word) + if (fields_are_wide)
-            cursor.reader.readSequenceFieldWide(ml_additional_bits)
+        const match_len = sequenceSymbolBase(ml_word) + if (fields_are_grouped)
+            field_group.?.read(ml_additional_bits)
         else
             try cursor.reader.readSequenceField(ml_additional_bits);
-        const literal_len = sequenceSymbolBase(ll_word) + if (fields_are_wide)
-            cursor.reader.readSequenceFieldWide(ll_additional_bits)
+        const literal_len = sequenceSymbolBase(ll_word) + if (fields_are_grouped)
+            field_group.?.read(ll_additional_bits)
         else
             try cursor.reader.readSequenceField(ll_additional_bits);
         const match_offset = if (wide and of_additional_bits > 1) blk: {
@@ -11120,10 +11124,10 @@ noinline fn decodePreparedNativeSequenceBlockAllFse(
 
         cursor.remaining -= 1;
         if (cursor.remaining != 0) {
-            if (fields_are_wide) {
-                cursor.ll_state = sequenceSymbolNextState(ll_word) + cursor.reader.readSequenceFieldWide(ll_state_bits);
-                cursor.ml_state = sequenceSymbolNextState(ml_word) + cursor.reader.readSequenceFieldWide(ml_state_bits);
-                cursor.of_state = sequenceSymbolNextState(of_word) + cursor.reader.readSequenceFieldWide(of_state_bits);
+            if (fields_are_grouped) {
+                cursor.ll_state = sequenceSymbolNextState(ll_word) + field_group.?.read(ll_state_bits);
+                cursor.ml_state = sequenceSymbolNextState(ml_word) + field_group.?.read(ml_state_bits);
+                cursor.of_state = sequenceSymbolNextState(of_word) + field_group.?.read(of_state_bits);
             } else if (wide) {
                 cursor.ll_state = sequenceSymbolNextState(ll_word) + try cursor.reader.readSequenceField(ll_state_bits);
                 cursor.ml_state = sequenceSymbolNextState(ml_word) + try cursor.reader.readSequenceField(ml_state_bits);
@@ -29371,6 +29375,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         test_split_huffman_direct_offset_hits = 0;
         test_split_huffman_short_literal_hits = 0;
         test_split_huffman_common_sequence_hits = 0;
+        test_split_huffman_field_group_hits = 0;
         test_large_fse_no_low_builder_hits = 0;
     }
     const encoded_hex_file = @embedFile("zstd/testdata/libzstd-large-json-128k.frame.hex");
@@ -29450,6 +29455,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     );
     test_split_huffman_direct_offset_hits = 0;
     test_split_huffman_short_literal_hits = 0;
+    test_split_huffman_field_group_hits = 0;
     try std.testing.expect(try decodeAllFseSplitHuffmanSequences(
         split_huffman_literal_capacity,
         true,
@@ -29466,6 +29472,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expectEqual(expected.len, fast_written);
     try std.testing.expectEqual(fast_written, generic_written);
     try std.testing.expectEqual(fast_written, dense_written);
+    try std.testing.expect(test_split_huffman_field_group_hits > 1000);
     try std.testing.expectEqualSlices(u8, expected, fast_output[0..fast_written]);
     try std.testing.expectEqualSlices(u8, fast_output, generic_output);
     try std.testing.expectEqualSlices(u8, fast_output, dense_output);
@@ -29527,6 +29534,46 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         try std.testing.expectEqual(before_hits + 1, test_split_huffman_decode_hits);
         test_disable_split_huffman_decode = true;
         const generic_result = decodeNativeFrameInto(mutated, generic_output);
+        // Exercise grouped reads directly even though this compact fixture's
+        // public selector prefers the small-literal specialization.
+        @memset(wide_output, 0xa5);
+        var mutated_wide_written: usize = 0;
+        var mutated_wide_frame_state: SequenceFrameState = .{};
+        const wide_result: Error!bool = blk: {
+            const reader = ReverseBitReader.init(mutated[bitstream_start..first_block.next_header_offset]) catch |err| break :blk err;
+            var mutated_wide_state = initSequenceDecodeState(spec, section.sequence_count, reader, initial_repeated_offsets) catch |err| break :blk err;
+            break :blk tryDecodeAllFseSplitWideHuffmanSequences(
+                section,
+                wide_output[0..expected.len],
+                &mutated_wide_written,
+                0,
+                &mutated_wide_frame_state,
+                .terminal,
+                &mutated_wide_state,
+                true,
+            );
+        };
+        // Compare block errors at the same layer, excluding the frame checksum.
+        @memset(dense_output, 0xa5);
+        var block_reference_written: usize = 0;
+        var block_reference_state: SequenceFrameState = .{};
+        const block_reference = decodeRleSequencesCompressedBlockIntoBuffer(
+            mutated[first_block.payload_offset..first_block.next_header_offset],
+            section,
+            dense_output[0..expected.len],
+            &block_reference_written,
+            0,
+            &.{},
+            &block_reference_state,
+            .terminal,
+            false,
+        );
+        if (block_reference) |_| {
+            try std.testing.expect(try wide_result);
+            try std.testing.expectEqual(block_reference_written, mutated_wide_written);
+            try std.testing.expectEqualSlices(u8, dense_output[0..block_reference_written], wide_output[0..mutated_wide_written]);
+        } else |err| try std.testing.expectError(err, wide_result);
+        for (wide_output[expected.len..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
         if (fast_result) |fast_len| {
             const generic_len = try generic_result;
             try std.testing.expectEqual(fast_len, generic_len);

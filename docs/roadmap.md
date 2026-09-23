@@ -15625,3 +15625,17 @@ reuse, so production keeps the simpler independently owned plans.
   ReleaseFast tests, 276 compatibility cases, all 9,900 upstream decodecorpus
   frames across 64/64 sequence-mode combinations, and the complete compile
   check pass.
+  The dense/wide all-FSE sequence loop now loads up to 56 bits for an entire
+  sequence through one bounded 64-bit input load. The field reader lives in
+  `zstd/sequence/field_group.zig`; larger groups and the last bytes use the
+  checked reader. Tests compare bit-exact output for zero-width fields, every
+  alignment, rejected groups without cursor progress, and directly forced
+  grouped decoding of mutated upstream sequences. The prepared stage shares
+  this reader and retains its ordered generic oracle. Eleven alternating
+  independent-binary pairs against `ad167131` improve frozen README, build,
+  roadmap, and source inputs by `1.1118x`, `1.0196x`, `1.0512x`, and `1.0709x`
+  medians, with all 44 file pairs ahead. README reaches 1,388.05 MiB/s versus
+  1,393.93 MiB/s for libzstd 1.5.7 (`0.9974x` median same-process ratio), while
+  the other three files remain at `0.6417x`, `0.6696x`, and `0.7888x`. Controls
+  remain near neutral by median, with retained host jitter on binary_mixed.
+  See [protocol, results, and outstanding goal coverage](performance/zstd-sequence-fields.md).
