@@ -8914,7 +8914,7 @@ const SequenceModeSpec = struct {
     match_fse: SequenceFseTable = .{},
     bitstream_offset: usize,
 
-    fn tables(self: SequenceModeSpec) SequenceTables {
+    fn tables(self: *const SequenceModeSpec) SequenceTables {
         return .{
             .ll_mode = self.ll_mode,
             .of_mode = self.of_mode,
@@ -9559,7 +9559,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         dictionary_history.len == 0 and
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
-        var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+        var state = try initSequenceDecodeState(&spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
         if (sequence_decode_policy.preferSmall(section.regenerated_size, section.sequence_count)) {
             if (try tryDecodeAllFseSplitHuffmanSequences(
                 section,
@@ -9593,7 +9593,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             allow_wildcopy,
         )) return;
     }
-    var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+    var state = try initSequenceDecodeState(&spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
     if ((!builtin.is_test or !test_disable_split_huffman_decode) and
         (section.kind == .compressed or section.kind == .treeless) and
         sequence_decode_policy.preferGenericSplit(section.regenerated_size, section.sequence_count) and
@@ -9623,7 +9623,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         return try decodeAllFseRawSequences(
             block,
             section,
-            spec,
+            &spec,
             output,
             written,
             frame_output_start,
@@ -9642,7 +9642,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         return try decodeFseFseRleSequences(
             block,
             section,
-            spec,
+            &spec,
             output,
             written,
             frame_output_start,
@@ -9663,7 +9663,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         return try decodeFseRleRleRawSequences(
             block,
             section,
-            spec,
+            &spec,
             output,
             written,
             frame_output_start,
@@ -9681,7 +9681,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     {
         return try decodeAllFseHuffmanSequences(
             section,
-            spec,
+            &spec,
             output,
             written,
             frame_output_start,
@@ -9774,7 +9774,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         dictionary_history.len == 0 and
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
-        var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+        var state = try initSequenceDecodeState(&spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
         if (sequence_decode_policy.preferSmall(section.regenerated_size, section.sequence_count)) {
             if (try tryDecodeAllFseSplitHuffmanSequences(
                 section,
@@ -9808,7 +9808,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
             allow_wildcopy,
         )) return;
     }
-    var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+    var state = try initSequenceDecodeState(&spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
     if ((!builtin.is_test or !test_disable_split_huffman_decode) and
         (section.kind == .compressed or section.kind == .treeless) and
         sequence_decode_policy.preferGenericSplit(section.regenerated_size, section.sequence_count) and
@@ -9838,7 +9838,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         return try decodeAllFseRawSequences(
             block,
             section,
-            spec,
+            &spec,
             output,
             written,
             frame_output_start,
@@ -9857,7 +9857,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         return try decodeFseFseRleSequences(
             block,
             section,
-            spec,
+            &spec,
             output,
             written,
             frame_output_start,
@@ -9878,7 +9878,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         return try decodeFseRleRleRawSequences(
             block,
             section,
-            spec,
+            &spec,
             output,
             written,
             frame_output_start,
@@ -9895,7 +9895,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
     {
         return try decodeAllFseHuffmanSequences(
             section,
-            spec,
+            &spec,
             output,
             written,
             frame_output_start,
@@ -10017,7 +10017,7 @@ test "cached sequence spec copies only active compressed tables" {
 noinline fn decodeAllFseRawSequences(
     block: []const u8,
     section: LiteralOnlySection,
-    spec: SequenceModeSpec,
+    spec: *const SequenceModeSpec,
     output: []u8,
     written: *usize,
     frame_output_start: usize,
@@ -10164,7 +10164,7 @@ noinline fn decodeAllFseRawSequences(
 
 noinline fn decodeAllFseHuffmanSequences(
     section: LiteralOnlySection,
-    spec: SequenceModeSpec,
+    spec: *const SequenceModeSpec,
     output: []u8,
     written: *usize,
     frame_output_start: usize,
@@ -10338,7 +10338,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
     // Successful sequence copies only advance `written`, so prove this once
     // instead of repeating it in every hot-path match-copy predicate.
     if (frame_output_start > written.*) return error.CorruptFrame;
-    const spec = &state.spec;
+    const spec = state.spec;
     var literals: [literal_capacity + 16]u8 = undefined;
     if (!try decodeLargeFourStreamHuffman(section, literals[0..section.regenerated_size])) return false;
     @memset(literals[section.regenerated_size..][0..16], 0);
@@ -10693,7 +10693,7 @@ noinline fn executeSplitHuffmanSequenceCold(
 noinline fn decodeFseFseRleSequences(
     block: []const u8,
     section: LiteralOnlySection,
-    spec: SequenceModeSpec,
+    spec: *const SequenceModeSpec,
     output: []u8,
     written: *usize,
     frame_output_start: usize,
@@ -10749,7 +10749,7 @@ noinline fn decodeFseFseRleSequences(
 noinline fn decodeFseRleRleRawSequences(
     block: []const u8,
     section: LiteralOnlySection,
-    spec: SequenceModeSpec,
+    spec: *const SequenceModeSpec,
     output: []u8,
     written: *usize,
     frame_output_start: usize,
@@ -10860,7 +10860,7 @@ test "zstd FSE RLE RLE raw sequence loop matches generic decode" {
     var expected: [output_len]u8 = undefined;
     for (expected[0..prefix_len], 0..) |*byte, index| byte.* = @truncate(index * 19 + 7);
     var expected_written: usize = prefix_len;
-    var expected_state = try initSequenceDecodeState(spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
+    var expected_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
     var literal_offset: usize = 0;
     while (expected_state.remaining != 0) {
         const sequence = try readModeSequence(&expected_state);
@@ -10875,12 +10875,12 @@ test "zstd FSE RLE RLE raw sequence loop matches generic decode" {
     @memcpy(actual[0..prefix_len], expected[0..prefix_len]);
     @memset(actual[prefix_len..], 0xa5);
     var actual_written: usize = prefix_len;
-    var actual_state = try initSequenceDecodeState(spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
+    var actual_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
     var actual_frame_state: SequenceFrameState = .{ .repeated_offsets = .{ prefix_len, 4, 8 } };
     try decodeFseRleRleRawSequences(
         &literals,
         section,
-        spec,
+        &spec,
         &actual,
         &actual_written,
         0,
@@ -10896,13 +10896,13 @@ test "zstd FSE RLE RLE raw sequence loop matches generic decode" {
     try std.testing.expectEqual(SymbolMode.rle, actual_frame_state.previous_tables.?.of_mode);
     try std.testing.expectEqual(SymbolMode.rle, actual_frame_state.previous_tables.?.ml_mode);
 
-    var short_state = try initSequenceDecodeState(spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
+    var short_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
     var short_written: usize = prefix_len;
     var short_frame_state: SequenceFrameState = .{ .repeated_offsets = .{ prefix_len, 4, 8 } };
     try std.testing.expectError(error.OutputTooSmall, decodeFseRleRleRawSequences(
         &literals,
         section,
-        spec,
+        &spec,
         actual[0 .. actual.len - 1],
         &short_written,
         0,
@@ -10911,13 +10911,13 @@ test "zstd FSE RLE RLE raw sequence loop matches generic decode" {
         &short_state,
     ));
 
-    var invalid_state = try initSequenceDecodeState(spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len + literal_len + 1, 4, 8 });
+    var invalid_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len + literal_len + 1, 4, 8 });
     var invalid_written: usize = prefix_len;
     var invalid_frame_state: SequenceFrameState = .{ .repeated_offsets = .{ prefix_len + literal_len + 1, 4, 8 } };
     try std.testing.expectError(error.InvalidMatch, decodeFseRleRleRawSequences(
         &literals,
         section,
-        spec,
+        &spec,
         &actual,
         &invalid_written,
         0,
@@ -11001,7 +11001,7 @@ fn rleSequencesCompressedBlockDecodedSize(
     try expectConsumedBlock(offset, block.len);
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
-    var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+    var state = try initSequenceDecodeState(&spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
     var literal_offset: usize = 0;
     var produced: usize = 0;
     while (state.remaining != 0) {
@@ -11025,7 +11025,10 @@ fn rleSequencesCompressedBlockDecodedSize(
 }
 
 const SequenceDecodeState = struct {
-    spec: SequenceModeSpec,
+    // The parsed tables remain owned by the surrounding block decoder. Keep a
+    // borrowed pointer here so every cursor and specialized executor does not
+    // copy the three 512-entry table buffers across its hot call boundary.
+    spec: *const SequenceModeSpec,
     reader: ReverseBitReader,
     ll_state: usize = 0,
     of_state: usize = 0,
@@ -11033,6 +11036,10 @@ const SequenceDecodeState = struct {
     repeated_offsets: [3]usize = initial_repeated_offsets,
     remaining: usize,
 };
+
+comptime {
+    std.debug.assert(@sizeOf(SequenceDecodeState) <= 128);
+}
 
 /// Resumable sequence cursor used by the incremental block-stream path. The
 /// resolved tables live in `SequenceFrameState`, avoiding another copy of the
@@ -11106,7 +11113,7 @@ fn currentStreamingSymbol(
 }
 
 fn initSequenceDecodeState(
-    spec: SequenceModeSpec,
+    spec: *const SequenceModeSpec,
     sequence_count: usize,
     reader: ReverseBitReader,
     repeated_offsets: [3]usize,
@@ -11138,8 +11145,8 @@ fn readInitialSequenceState(reader: *ReverseBitReader, mode: SymbolMode, fse_acc
 fn readModeSequence(state: *SequenceDecodeState) Error!DecodedSequence {
     if (state.remaining == 0) return error.CorruptFrame;
 
-    // SequenceDecodeState embeds three FSE decode tables. Passing it by value
-    // here made every symbol lookup copy the complete tables on hot paths.
+    // Keep the compact cursor behind a pointer so symbol lookup shares both the
+    // cursor and its borrowed tables without copying either one on hot paths.
     const ll_symbol = try currentLiteralSymbol(state);
     const of_symbol = try currentOffsetSymbol(state);
     const ml_symbol = try currentMatchSymbol(state);
@@ -11868,7 +11875,7 @@ pub fn benchmarkNativeSequenceCopyProfile(frame: []const u8) Error!NativeSequenc
                     const spec = try resolveSequenceModeSpec(parsed_spec, frame_state.previous_tables);
                     try expectConsumedBlock(sequence_offset, block.len);
                     var state = try initSequenceDecodeState(
-                        spec,
+                        &spec,
                         section.sequence_count,
                         try ReverseBitReader.init(block[spec.bitstream_offset..]),
                         frame_state.repeated_offsets,
@@ -19670,7 +19677,7 @@ fn prepareSequenceCandidateForFrameWithScratch(
         const match_lens = scratch.values.items[section.sequence_count * 2 .. section.sequence_count * 3];
         const literal_ends = scratch.values.items[section.sequence_count * 3 .. section.sequence_count * 4];
         var decode_state = try initSequenceDecodeState(
-            original_spec,
+            &original_spec,
             section.sequence_count,
             try ReverseBitReader.init(payload[original_spec.bitstream_offset..]),
             initial_repeated_offsets,
@@ -19745,7 +19752,7 @@ fn prepareSequenceCandidateForFrameWithScratch(
         null,
     );
     var decode_state = try initSequenceDecodeState(
-        original_spec,
+        &original_spec,
         section.sequence_count,
         try ReverseBitReader.init(payload[original_spec.bitstream_offset..]),
         initial_repeated_offsets,
@@ -19808,7 +19815,7 @@ fn appendSequenceCandidateAndCommit(
             next.previous_tables,
         );
         var decode_state = try initSequenceDecodeState(
-            spec,
+            &spec,
             section.sequence_count,
             try ReverseBitReader.init(payload[spec.bitstream_offset..]),
             next.repeated_offsets,
@@ -28857,7 +28864,7 @@ test "zstd native sequence reader updates repeated offsets across positive selec
     };
     try emitReverseBitstreamFromReadOrder(std.testing.allocator, &sequence_bits, &read_fields);
 
-    var state = try initSequenceDecodeState(.{
+    var spec: SequenceModeSpec = .{
         .ll_mode = .rle,
         .of_mode = .rle,
         .ml_mode = .rle,
@@ -28865,14 +28872,15 @@ test "zstd native sequence reader updates repeated offsets across positive selec
         .offset_rle = .{ .base = 0, .additional_bits = 0, .next_state = 0, .state_bits = 0 },
         .match_rle = .{ .base = 3, .additional_bits = 0, .next_state = 0, .state_bits = 0 },
         .bitstream_offset = 0,
-    }, 3, try ReverseBitReader.init(sequence_bits.items), initial_repeated_offsets);
+    };
+    var state = try initSequenceDecodeState(&spec, 3, try ReverseBitReader.init(sequence_bits.items), initial_repeated_offsets);
 
     const first = try readModeSequence(&state);
     try std.testing.expectEqual(@as(usize, 1), first.literal_len);
     try std.testing.expectEqual(@as(usize, 1), first.match_offset);
     try std.testing.expectEqual([3]usize{ 1, 4, 8 }, state.repeated_offsets);
 
-    state.spec.offset_rle = .{ .base = 1, .additional_bits = 1, .next_state = 0, .state_bits = 0 };
+    spec.offset_rle = .{ .base = 1, .additional_bits = 1, .next_state = 0, .state_bits = 0 };
     const second = try readModeSequence(&state);
     try std.testing.expectEqual(@as(usize, 1), second.literal_len);
     try std.testing.expectEqual(@as(usize, 4), second.match_offset);
@@ -28912,7 +28920,7 @@ test "zstd native sequence reader applies compressed offset selectors" {
         .state_bits = 0,
     };
 
-    var state = try initSequenceDecodeState(.{
+    const spec: SequenceModeSpec = .{
         .ll_mode = .rle,
         .of_mode = .compressed,
         .ml_mode = .rle,
@@ -28921,7 +28929,8 @@ test "zstd native sequence reader applies compressed offset selectors" {
         .offset_fse = offset_fse,
         .match_rle = .{ .base = 3, .additional_bits = 0, .next_state = 0, .state_bits = 0 },
         .bitstream_offset = 0,
-    }, 2, try ReverseBitReader.init(sequence_bits.items), initial_repeated_offsets);
+    };
+    var state = try initSequenceDecodeState(&spec, 2, try ReverseBitReader.init(sequence_bits.items), initial_repeated_offsets);
     try std.testing.expectEqual(@as(usize, 0), state.of_state);
 
     const first = try readModeSequence(&state);
@@ -29705,7 +29714,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     var dense_written: usize = 0;
     var dense_frame_state: SequenceFrameState = .{};
     var dense_state = try initSequenceDecodeState(
-        spec,
+        &spec,
         section.sequence_count,
         try ReverseBitReader.init(block[spec.bitstream_offset..]),
         dense_frame_state.repeated_offsets,
@@ -29741,7 +29750,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     @memset(wide_output, 0xa5);
     var wide_frame_state: SequenceFrameState = .{};
     var wide_state = try initSequenceDecodeState(
-        spec,
+        &spec,
         section.sequence_count,
         try ReverseBitReader.init(block[spec.bitstream_offset..]),
         wide_frame_state.repeated_offsets,
@@ -29765,7 +29774,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     @memset(generic_split_output, 0xa5);
     var generic_split_frame_state: SequenceFrameState = .{};
     var generic_split_state = try initSequenceDecodeState(
-        spec,
+        &spec,
         section.sequence_count,
         try ReverseBitReader.init(block[spec.bitstream_offset..]),
         initial_repeated_offsets,
@@ -29784,7 +29793,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expectEqualSlices(u8, fast_output, generic_split_output);
 
     var invalid_frame_start_state = try initSequenceDecodeState(
-        spec,
+        &spec,
         section.sequence_count,
         try ReverseBitReader.init(block[spec.bitstream_offset..]),
         initial_repeated_offsets,
@@ -29839,7 +29848,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         var mutated_wide_frame_state: SequenceFrameState = .{};
         const wide_result: Error!bool = blk: {
             const reader = ReverseBitReader.init(mutated[bitstream_start..first_block.next_header_offset]) catch |err| break :blk err;
-            var mutated_wide_state = initSequenceDecodeState(spec, section.sequence_count, reader, initial_repeated_offsets) catch |err| break :blk err;
+            var mutated_wide_state = initSequenceDecodeState(&spec, section.sequence_count, reader, initial_repeated_offsets) catch |err| break :blk err;
             break :blk tryDecodeAllFseSplitWideHuffmanSequences(
                 section,
                 wide_output[0..expected.len],

@@ -110,3 +110,38 @@ Vort/libzstd time-aggregated ratios are 0.8878x for level-1 one-shot, 0.8903x
 for level-1 reusable, 0.7956x for level 3, and 0.7040x for level 9. Absolute
 ratios vary with host load; the alternating independent-binary figures above
 are the evidence for the routing change itself.
+
+## Borrowed sequence-table follow-up
+
+The sequence cursor and its specialized executors previously received the
+resolved `SequenceModeSpec` by value. That structure owns three 512-entry FSE
+tables and is 12,384 bytes on x86-64. Disassembly of the raw/all-FSE executor
+showed a `0x3060`-byte `memcpy` at every block entry, in addition to the table
+copy embedded in the cursor. The cursor now borrows the caller-owned immutable
+specification, every specialized executor accepts the same pointer, and a
+compile-time size gate keeps the cursor at or below 128 bytes.
+
+The 2026-09-25 validation used Zig 0.16.0 ReleaseFast on an Intel Core
+i9-13900K, pinned to CPU 8. All performance inputs came from `~/Downloads`, as
+requested. Baseline (`b0ee9012`) and candidate executables were frozen and run
+in alternating order. Each pair reports the ratio of complete pure-Vort frame
+decode time; the decoder verified the source bytes before timing.
+
+| Download input / libzstd level | Iterations per run | Pairs won | Median speedup |
+| --- | ---: | ---: | ---: |
+| `白话机器学习中的数学.pdf`, level 3 | 400 | 14/15 | 1.0303x |
+| `白话机器学习中的数学.pdf`, level 9 | 300 | 9/9 | 1.0160x |
+| `Controller.log.2025-09-01-11`, level 3 | 20 | 8/9 | 1.0028x |
+| `trace_1751546764.3447797.json`, level 3 | 30 | 9/9 | 1.0072x |
+
+One longer same-process reference run on the 6,105,445-byte PDF reached
+3,984.10 MiB/s at level 3 and 3,398.67 MiB/s at level 9, or 0.6509x and
+0.6561x of system libzstd 1.5.5 respectively. The change is a measured
+improvement, but these absolute ratios explicitly show that it does not yet
+establish an industry-leading decoder.
+
+Correctness validation passed all 653 direct Zstd tests, the 276-case libzstd
+compatibility probe, the 13-row reference benchmark gate, the five-row decode
+profile gate, and nine upstream decodecorpus campaigns totaling 9,900 frames
+and all 64 sequence-mode combinations. The complete project test step also
+passed using an isolated Zig global cache.
