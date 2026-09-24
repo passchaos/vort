@@ -608,6 +608,17 @@ Recommended next comparison steps:
   0.7321x/0.8056x to 0.8803x/0.9173x versus libzstd 1.5.7. See
   `docs/performance/zstd-raw-fse-executor.md` for controls, higher levels, and
   the rejected long-literal vector loop.
+  Because raw literals need no bulk-decode scratch, the all-FSE route now has a
+  separate `32 sequences or 32 KiB literals` threshold instead of inheriting
+  the Huffman split path's 1,024-sequence floor. A level-3 `nndl-v2` profile
+  found 32 eligible wide all-FSE blocks among 360 sequence-bearing blocks.
+  Against independent `ac4ef4ae` binaries, 15 alternating pairs improve
+  level-3 `nndl-v2`, `nndl-practice`, and `llm-agent` by 1.0849x, 1.1149x,
+  and 1.1439x median respectively, all with 15/15 wins. Routing every non-empty
+  raw/all-FSE block added no target coverage and was rejected. The final
+  100-combination mixed-corpus matrix reports 0.8878x/0.8903x aggregate at
+  level-1 one-shot/reusable, 0.7956x at level 3, and 0.7040x at level 9 versus
+  libzstd 1.5.7; these absolute measurements remain below the target.
   The split executor now hoists its frame-output-start validation out of every
   sequence branch. The invariant holds because successful copies only advance
   the output cursor. Against `34e63ba9`, 21 alternating pairs improve

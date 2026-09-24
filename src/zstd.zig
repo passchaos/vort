@@ -9617,7 +9617,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         spec.of_mode == .compressed and
         spec.ml_mode == .compressed and
         section.kind == .raw and
-        sequence_decode_policy.preferSplit(section.regenerated_size, section.sequence_count) and
+        sequence_decode_policy.preferRawAllFse(section.regenerated_size, section.sequence_count) and
         dictionary_history.len == 0)
     {
         return try decodeAllFseRawSequences(
@@ -9633,8 +9633,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             allow_wildcopy,
         );
     }
-    if ((!builtin.is_test or !test_disable_all_fse_raw_decode) and
-        spec.ll_mode == .compressed and
+    if (spec.ll_mode == .compressed and
         spec.of_mode == .compressed and
         spec.ml_mode == .rle and
         section.kind == .raw and
@@ -9828,11 +9827,12 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
     }
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
-    if (spec.ll_mode == .compressed and
+    if ((!builtin.is_test or !test_disable_all_fse_raw_decode) and
+        spec.ll_mode == .compressed and
         spec.of_mode == .compressed and
         spec.ml_mode == .compressed and
         section.kind == .raw and
-        sequence_decode_policy.preferSplit(section.regenerated_size, section.sequence_count) and
+        sequence_decode_policy.preferRawAllFse(section.regenerated_size, section.sequence_count) and
         dictionary_history.len == 0)
     {
         return try decodeAllFseRawSequences(
@@ -11988,6 +11988,12 @@ pub fn prepareNativeSequenceDecodeStage(
                         .bounded_all_fse
                     else
                         .wide_all_fse else if (spec.ll_mode == .compressed and
+                        spec.of_mode == .compressed and
+                        spec.ml_mode == .compressed and
+                        section.kind == .raw and
+                        sequence_decode_policy.preferRawAllFse(section.regenerated_size, section.sequence_count))
+                        .wide_all_fse
+                    else if (spec.ll_mode == .compressed and
                         spec.of_mode == .compressed and
                         spec.ml_mode == .compressed and
                         section.sequence_count >= 1024)

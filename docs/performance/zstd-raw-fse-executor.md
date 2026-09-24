@@ -79,3 +79,34 @@ These results establish a substantial improvement for a common PDF shape and
 a broad mixed-corpus gain. They do not establish industry-leading Zstd decode
 performance: the time-aggregated corpus ratios remain below libzstd, especially
 for higher-level PDF frames.
+
+## Small-block routing follow-up
+
+A level-3 `nndl-v2 (1).pdf` profile collected 6,495 stacks and attributed
+1,612 top-of-stack samples to the generic `readModeSequence` path. This input
+contains 871 blocks and 14,919 sequences, but its compressed blocks average
+only about 41 sequences. The original `1,024 sequences or 32 KiB literals`
+gate therefore excluded most raw-literal/all-FSE blocks even though this
+executor has no Huffman scratch to amortize.
+
+Raw/all-FSE routing now uses its own `32 sequences or 32 KiB literals` policy.
+The prepared sequence-stage diagnostic classifies 32 of 360 sequence-bearing
+blocks in `nndl-v2` level 3 as wide all-FSE and still compares every selected
+block with the generic sequence oracle. Fifteen alternating pure-Vort pairs
+against `ac4ef4ae` measure:
+
+| Level-3 input | Pairs won | Median speedup | Geometric mean |
+| --- | ---: | ---: | ---: |
+| `nndl-v2 (1).pdf` | 15/15 | 1.0849x | 1.0843x |
+| `nndl-practice.pdf` | 15/15 | 1.1149x | 1.1130x |
+| `llm-agent (1).pdf` | 15/15 | 1.1439x | 1.1443x |
+
+Routing every non-empty raw/all-FSE block did not add target coverage:
+`nndl-v2` measured 0.9994x versus the 32-sequence policy. The broader route
+also measured 0.9963x on the small `3852_001.pdf` control, so it was rejected.
+
+The final 25-file matrix validates all 100 level/API combinations. Its current
+Vort/libzstd time-aggregated ratios are 0.8878x for level-1 one-shot, 0.8903x
+for level-1 reusable, 0.7956x for level 3, and 0.7040x for level 9. Absolute
+ratios vary with host load; the alternating independent-binary figures above
+are the evidence for the routing change itself.
