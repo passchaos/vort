@@ -15683,3 +15683,14 @@ reuse, so production keeps the simpler independently owned plans.
   the other three files remain at `0.6417x`, `0.6696x`, and `0.7888x`. Controls
   remain near neutral by median, with retained host jitter on binary_mixed.
   See [protocol, results, and outstanding goal coverage](performance/zstd-sequence-fields.md).
+  A Linux Downloads profile then exposed 234 small-literal blocks that still
+  used per-field checked state reads. Blocks with at least 2,048 sequences now
+  reuse the existing grouped executor; the 128 KiB long-match specialization
+  remains selected below that threshold. Seven fixed-CPU-5 level-1 pairs
+  improve `trace_1751546764.3447797.json` by 1.6880x with 7/7 wins, while two
+  PDFs and the 63 MiB log remain within 0.4% of baseline. The trace's prepared
+  stage changes from 6 generic / 234 bounded / 2 wide blocks to 6 / 12 / 224
+  and from 22.510 to 11.456 ns/sequence; end-to-end throughput reaches 2711.30
+  MiB/s, or 0.7166x system libzstd 1.5.5. A 1,536-sequence threshold was
+  rejected because it displaced the validated 1,834-sequence long-match path
+  and was slower on the target smoke run.

@@ -9560,7 +9560,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
         var state = try initSequenceDecodeState(&spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
-        if (sequence_decode_policy.preferSmall(section.regenerated_size, section.sequence_count)) {
+        if (sequence_decode_policy.preferBoundedSmall(section.regenerated_size, section.sequence_count)) {
             if (try tryDecodeAllFseSplitHuffmanSequences(
                 section,
                 output,
@@ -9775,7 +9775,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
         var state = try initSequenceDecodeState(&spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
-        if (sequence_decode_policy.preferSmall(section.regenerated_size, section.sequence_count)) {
+        if (sequence_decode_policy.preferBoundedSmall(section.regenerated_size, section.sequence_count)) {
             if (try tryDecodeAllFseSplitHuffmanSequences(
                 section,
                 output,
@@ -11991,7 +11991,7 @@ pub fn prepareNativeSequenceDecodeStage(
                         (section.kind == .compressed or section.kind == .treeless) and
                         sequence_decode_policy.preferSplit(section.regenerated_size, section.sequence_count) and
                         section.huffman_streams == .four and
-                        section.regenerated_size <= split_wide_huffman_literal_capacity) if (sequence_decode_policy.preferSmall(section.regenerated_size, section.sequence_count))
+                        section.regenerated_size <= split_wide_huffman_literal_capacity) if (sequence_decode_policy.preferBoundedSmall(section.regenerated_size, section.sequence_count))
                         .bounded_all_fse
                     else
                         .wide_all_fse else if (spec.ll_mode == .compressed and

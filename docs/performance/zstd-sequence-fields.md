@@ -209,3 +209,40 @@ The small `binary_mixed` movement is below one percent and is treated as
 noise. Experiments that cached all FSE states locally, borrowed the full table
 specification, split out zero-literal sequences, or used an eight-byte short
 match wildcopy all regressed the target loops and were removed.
+
+## Dense small-literal routing on Downloads (2026-09-25)
+
+Profiling the level-1 frame generated from
+`~/Downloads/trace_1751546764.3447797.json` showed 65.81% of cycles in the
+all-FSE split sequence executor. The prepared-stage report classified 234 of
+242 sequence blocks as bounded and only two as wide, leaving their state
+transitions on repeated checked `peekSmall`/`readSmall` calls even though the
+blocks contain thousands of sequences.
+
+The bounded small-literal path is now limited to fewer than 2,048 sequences.
+Denser blocks reuse the existing same-capacity grouped executor, which reads up
+to all six extra/state fields from one preflighted 64-bit group and uses the
+already-validated copy kernels. This changes neither the maximum stack buffer
+nor the generic, dictionary, or low-density route. A policy
+boundary test pins 2,047/2,048 selection, while the existing split-Huffman and
+dense sparse-literal tests retain fast/generic byte parity, malformed-input
+classification, output-suffix guards, and reusable-state coverage.
+
+The candidate and commit `63b60760` executables were frozen and alternated on
+CPU 5 of the Intel Core i9-13900K host. Every invocation regenerated the same
+level-1 frame from the Downloads source, checked Vort and system libzstd 1.5.5
+output, and timed five decodes in each of five best-of rounds.
+
+| Input | Pairs won | Median candidate/baseline | Candidate MiB/s | Candidate/libzstd |
+| --- | ---: | ---: | ---: | ---: |
+| `白话机器学习中的数学.pdf` | 2/7 | 0.9982x | 4656.95 | 0.6565x |
+| `part1_22.pdf` | 2/7 | 0.9968x | 5366.51 | 0.7269x |
+| `Controller.log.2025-09-01-11` | 3/7 | 0.9999x | 2976.18 | 0.7165x |
+| `trace_1751546764.3447797.json` | 7/7 | 1.6880x | 2711.30 | 0.7166x |
+
+The three unaffected files remain within 0.4% of the baseline median. On the
+trace, routing changes the prepared-stage mix from 6 generic / 234 bounded / 2
+wide blocks to 6 / 12 / 224 and reduces the isolated stage from 22.510 to
+11.456 ns/sequence. A 1,536-sequence threshold was rejected: it displaced the
+existing 1,834-sequence long-match fixture from its specialized path and was
+slower on the trace smoke measurement.
