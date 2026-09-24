@@ -2551,6 +2551,18 @@ reuse, so production keeps the simpler independently owned plans.
   `~/Downloads/part1_22.pdf` by 2.4731x median (7/7 wins), from 11.59 to about
   41.63 MiB/s. The original PDF remains neutral, the log is modestly positive,
   and trace movement stays within roughly 0.2%.
+  A follow-up now covers all 256 literal context trees without putting the
+  largest lookup array in the common stack frame: the existing 64-tree route
+  remains separate, with noinline 128- and 256-entry tiers for packed trees.
+  Packed dense and single-symbol trees use the external lookup directly, while
+  codes longer than ten bits retain the cached canonical fallback. Against a
+  clean rebuild of commit `c55d7bad`, seven alternating q5 pairs on fixed CPU 5
+  improve the 78-tree `part1_22.pdf` by 4.1923x and the 169-tree Downloads JSON
+  trace by 1.8296x, both with 7/7 wins. The 26-tree log is neutral at 0.9984x;
+  the 16-tree PDF is 0.9913x, a measured code-layout cost that an explicitly
+  aligned variant failed to recover without larger control-corpus regressions.
+  Candidate throughput is 177.04 MiB/s for `part1_22.pdf` and 1717.46 MiB/s
+  for the trace, respectively 0.5132x and 0.7078x libbrotli 1.1.0.
 
 - Expanded the Zstd/libzstd gate with 512 KiB multi-block text, numbered JSON,
   and mixed structured/binary corpora. The easy repeated-text shape already
