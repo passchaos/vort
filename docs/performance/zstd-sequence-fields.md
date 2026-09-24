@@ -179,3 +179,33 @@ establish that performance objective.
 | Preserve dictionaries and streaming | 276-case compatibility matrix and 9,900-frame corpus; grouped routing still excludes dictionary history. |
 | No memory cost for the speedup | Group contains one u64 on the stack; no allocator, table, or persistent-state additions. This is a source-level bound, not a cross-competitor peak-RSS measurement. |
 | Industry-leading performance | Not established: broader standard corpora, levels, APIs, CPUs, and competitor builds remain to be measured and improved. |
+
+## Frame-start invariant hoist (2026-09-24)
+
+The split executor now validates `frame_output_start <= written` once before
+decoding any sequence. Since every successful literal and match copy only
+advances `written`, the relation is an invariant for the rest of the block.
+Removing the repeated comparison from the common wildcopy predicate and the
+bounded fallback cases shortens the hottest loop without weakening malformed
+input handling. A direct test also pins the entry rejection before any output
+or sequence state is consumed.
+
+The baseline is local commit `34e63ba9`; candidate and baseline binaries use
+the same frozen inputs and runtime libzstd 1.5.7 on Apple M1 Pro with Zig
+0.16.0 ReleaseFast. Each result alternates process order and compares input
+hash, encoded size, and decoded checksum.
+
+| Input | Pairs won | Median candidate/baseline | Geometric mean | Candidate/libzstd median |
+| --- | ---: | ---: | ---: | ---: |
+| build.zig | 18/21 | 1.0123x | 1.0122x | 0.8841x |
+| src/zstd.zig | 19/21 | 1.0067x | 1.0076x | 0.8408x |
+| large_json | 15/15 | 1.0402x | 1.0396x | 0.9768x |
+| README.md | 12/15 | 1.0093x | 1.0055x | 1.0080x |
+| roadmap | 10/15 | 1.0029x | 1.0035x | 0.9868x |
+| ascii64k | 9/15 | 1.0002x | 0.9999x | 1.0645x |
+| binary_mixed | 6/15 | 0.9957x | 0.9969x | 1.1561x |
+
+The small `binary_mixed` movement is below one percent and is treated as
+noise. Experiments that cached all FSE states locally, borrowed the full table
+specification, split out zero-literal sequences, or used an eight-byte short
+match wildcopy all regressed the target loops and were removed.

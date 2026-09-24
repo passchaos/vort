@@ -580,6 +580,14 @@ Recommended next comparison steps:
   allocation-free path's bounded stack scratch; blocks above 64 KiB retain the
   interleaved fallback. See `docs/performance/zstd-wide-split-capacity.md` for
   controls, provenance, and rejected variants.
+  The split executor now hoists its frame-output-start validation out of every
+  sequence branch. The invariant holds because successful copies only advance
+  the output cursor. Against `34e63ba9`, 21 alternating pairs improve
+  `build.zig` by 1.0123x median and `src/zstd.zig` by 1.0067x; a 15-pair
+  `large_json` control improves by 1.0402x while `ascii64k` remains neutral and
+  `binary_mixed` moves by -0.43%, below the one-percent noise threshold. See
+  `docs/performance/zstd-sequence-fields.md` for the full matrix and rejected
+  variants.
   Multi-sequence candidate arbitration now computes the exact RLE, predefined,
   and mixed-table payload lengths first, preserves the existing RLE-first tie
   order, and emits only the selected wire instead of serializing and copying all
