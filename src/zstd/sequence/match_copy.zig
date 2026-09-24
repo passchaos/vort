@@ -157,6 +157,23 @@ pub inline fn appendNonOverlapping6Or7(
     written.* += match_len;
 }
 
+/// Copy the minimum three-byte Zstd match without entering the dynamic
+/// memmove path. The caller proves that the source and destination do not
+/// overlap, so three exact byte stores preserve both LZ semantics and the
+/// caller's output suffix.
+pub inline fn appendNonOverlapping3(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+) void {
+    const destination_start = written.*;
+    std.debug.assert(destination_start - repeat_start >= 3);
+    output[destination_start] = output[repeat_start];
+    output[destination_start + 1] = output[repeat_start + 1];
+    output[destination_start + 2] = output[repeat_start + 2];
+    written.* += 3;
+}
+
 /// Copy a non-overlapping 4--7-byte match. The exact form uses first/last
 /// four-byte stores. `allow_wildcopy` may write through byte eight only when
 /// the caller has clipped `output` to the declared frame end, so bytes beyond
@@ -335,6 +352,18 @@ test "Zstd fixed eight through fifteen byte matches preserve output tail" {
         try std.testing.expectEqual(expected_written, actual_written);
         try std.testing.expectEqualSlices(u8, &expected, &actual);
     }
+}
+
+test "Zstd fixed three-byte match preserves output tail" {
+    var expected: [32]u8 = undefined;
+    for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+    var actual = expected;
+    var expected_written: usize = 17;
+    var actual_written = expected_written;
+    append(&expected, &expected_written, 5, 3);
+    appendNonOverlapping3(&actual, &actual_written, 5);
+    try std.testing.expectEqual(expected_written, actual_written);
+    try std.testing.expectEqualSlices(u8, &expected, &actual);
 }
 
 test "Zstd fixed sixteen through thirty-one byte matches preserve output tail" {

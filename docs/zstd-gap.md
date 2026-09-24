@@ -596,6 +596,18 @@ Recommended next comparison steps:
   by 1.4454x and `zellij` by 1.0519x median, both with 15/15 wins. Explicit
   32-byte alignment keeps build/source/roadmap/large_json controls within
   0.51% of neutral by median.
+  Raw-literal blocks with all three sequence tables compressed now share the
+  packed-entry/grouped-bit reader used by the dense split executor. Their hot
+  sequence path also uses bounded 16-byte forward match copies when the frame
+  content size proves writable tail space, with exact vector copies for common
+  non-overlapping 3--63-byte matches and the established 68--71-byte cases.
+  Against independent `d7047e6a` binaries, 15 alternating pairs improve
+  `nndl-v2 (1).pdf` by 1.1851x median and `nndl-practice.pdf` by 1.4110x,
+  both with 15/15 wins; `zellij` remains at 1.0053x. The complete 25-file
+  matrix raises level-1 one-shot/reusable time aggregation from
+  0.7321x/0.8056x to 0.8803x/0.9173x versus libzstd 1.5.7. See
+  `docs/performance/zstd-raw-fse-executor.md` for controls, higher levels, and
+  the rejected long-literal vector loop.
   The split executor now hoists its frame-output-start validation out of every
   sequence branch. The invariant holds because successful copies only advance
   the output cursor. Against `34e63ba9`, 21 alternating pairs improve

@@ -215,6 +215,9 @@ var test_small_mixed_fse_match_56_hits: usize = 0;
 var test_small_mixed_fse_match_6_7_hits: usize = 0;
 var test_reusable_match_56_hits: usize = 0;
 var test_reusable_match_6_7_hits: usize = 0;
+var test_disable_all_fse_raw_decode = false;
+var test_all_fse_raw_wildcopy_hits: usize = 0;
+var test_all_fse_raw_field_group_hits: usize = 0;
 var test_disable_fast_direct_match_commit = false;
 var test_fast_direct_match_commit_hits: usize = 0;
 var test_disable_fast_large_direct_transitions = false;
@@ -9609,7 +9612,8 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     }
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
-    if (spec.ll_mode == .compressed and
+    if ((!builtin.is_test or !test_disable_all_fse_raw_decode) and
+        spec.ll_mode == .compressed and
         spec.of_mode == .compressed and
         spec.ml_mode == .compressed and
         section.kind == .raw and
@@ -9626,9 +9630,11 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             frame_state,
             continuation,
             &state,
+            allow_wildcopy,
         );
     }
-    if (spec.ll_mode == .compressed and
+    if ((!builtin.is_test or !test_disable_all_fse_raw_decode) and
+        spec.ll_mode == .compressed and
         spec.of_mode == .compressed and
         spec.ml_mode == .rle and
         section.kind == .raw and
@@ -9839,6 +9845,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
             frame_state,
             continuation,
             &state,
+            allow_wildcopy,
         );
     }
     if (spec.ll_mode == .compressed and
@@ -10017,36 +10024,126 @@ noinline fn decodeAllFseRawSequences(
     frame_state: *SequenceFrameState,
     continuation: sequence_continuation.Context,
     state: *SequenceDecodeState,
+    allow_wildcopy: bool,
 ) linksection(raw_fse_decode_text_section) Error!void {
     std.debug.assert(section.kind == .raw);
     const literals = block[section.literal_payload_offset..][0..section.regenerated_size];
+    if (frame_output_start > written.*) return error.CorruptFrame;
     var literal_offset: usize = 0;
-    while (state.remaining != 0) {
-        const ll_symbol = spec.literal_fse.symbolUnchecked(state.ll_state);
-        const of_symbol = spec.offset_fse.symbolUnchecked(state.of_state);
-        const ml_symbol = spec.match_fse.symbolUnchecked(state.ml_state);
-        const offset_extra = try state.reader.readSequenceField(of_symbol.additional_bits);
-        const match_len = @as(usize, ml_symbol.base) + try state.reader.readSequenceField(ml_symbol.additional_bits);
-        const literal_len = @as(usize, ll_symbol.base) + try state.reader.readSequenceField(ll_symbol.additional_bits);
-        const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
-        state.remaining -= 1;
-        if (state.remaining != 0) {
-            state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
-            state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
-            state.of_state = try nextSequenceState(&state.reader, of_symbol);
-        } else try state.reader.expectEnd();
+    var reader = state.reader;
+    var remaining = state.remaining;
+    while (remaining != 0) {
+        const ll_word = spec.literal_fse.symbolWordUnchecked(state.ll_state);
+        const of_word = spec.offset_fse.symbolWordUnchecked(state.of_state);
+        const ml_word = spec.match_fse.symbolWordUnchecked(state.ml_state);
+        const literal_base_value = sequenceSymbolBase(ll_word);
+        const offset_base_value = sequenceSymbolBase(of_word);
+        const match_base_value = sequenceSymbolBase(ml_word);
+        const ll_additional_bits = sequenceSymbolAdditionalBits(ll_word);
+        const of_additional_bits = sequenceSymbolAdditionalBits(of_word);
+        const ml_additional_bits = sequenceSymbolAdditionalBits(ml_word);
+        const ll_state_bits = sequenceSymbolStateBits(ll_word);
+        const of_state_bits = sequenceSymbolStateBits(of_word);
+        const ml_state_bits = sequenceSymbolStateBits(ml_word);
+        const ll_next_state = sequenceSymbolNextState(ll_word);
+        const of_next_state = sequenceSymbolNextState(of_word);
+        const ml_next_state = sequenceSymbolNextState(ml_word);
+        const transition_bits: u8 = if (remaining == 1)
+            0
+        else
+            ll_state_bits + ml_state_bits + of_state_bits;
+        const total_bits: u8 = of_additional_bits + ml_additional_bits +
+            ll_additional_bits + transition_bits;
+        var field_group = sequence_field_group.Group.init(&reader, total_bits);
+        const fields_are_grouped = field_group != null;
+        if (builtin.is_test and fields_are_grouped) test_all_fse_raw_field_group_hits += 1;
+        const offset_extra = if (fields_are_grouped)
+            field_group.?.read(of_additional_bits)
+        else
+            try reader.readSequenceField(of_additional_bits);
+        const match_len = match_base_value + if (fields_are_grouped)
+            field_group.?.read(ml_additional_bits)
+        else
+            try reader.readSequenceField(ml_additional_bits);
+        const literal_len = literal_base_value + if (fields_are_grouped)
+            field_group.?.read(ll_additional_bits)
+        else
+            try reader.readSequenceField(ll_additional_bits);
+        const match_offset = if (of_additional_bits > 1) blk: {
+            const offset = offset_base_value + offset_extra;
+            const previous_0 = state.repeated_offsets[0];
+            const previous_1 = state.repeated_offsets[1];
+            state.repeated_offsets = .{ offset, previous_0, previous_1 };
+            break :blk offset;
+        } else if (of_additional_bits == 0 and literal_len != 0)
+            try large_offset.positiveLiteralRep0(&state.repeated_offsets)
+        else
+            try resolveSequenceOffset(offset_base_value, of_additional_bits, offset_extra, literal_len, &state.repeated_offsets);
+        remaining -= 1;
+        if (remaining != 0) {
+            if (fields_are_grouped) {
+                state.ll_state = ll_next_state + field_group.?.read(ll_state_bits);
+                state.ml_state = ml_next_state + field_group.?.read(ml_state_bits);
+                state.of_state = of_next_state + field_group.?.read(of_state_bits);
+            } else {
+                state.ll_state = ll_next_state + try reader.readSequenceField(ll_state_bits);
+                state.ml_state = ml_next_state + try reader.readSequenceField(ml_state_bits);
+                state.of_state = of_next_state + try reader.readSequenceField(of_state_bits);
+            }
+        } else try reader.expectEnd();
 
         if (literal_offset > literals.len or literals.len - literal_offset < literal_len) return error.CorruptFrame;
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
-        if (literal_len != 0) {
+        const rounded_match_len = (match_len + 15) & ~@as(usize, 15);
+        if (allow_wildcopy and
+            match_offset >= 16 and
+            match_offset <= written.* - frame_output_start + literal_len and
+            output.len - written.* - literal_len >= rounded_match_len)
+        {
+            if (literal_len == 1) {
+                output[written.*] = literals[literal_offset];
+                written.* += 1;
+                literal_offset += 1;
+            } else if (literal_len >= 2 and literal_len <= 15) {
+                literal_copy.append2To15(output, written, literals, &literal_offset, literal_len);
+            } else if (literal_len != 0) {
+                @memcpy(output[written.*..][0..literal_len], literals[literal_offset..][0..literal_len]);
+                written.* += literal_len;
+                literal_offset += literal_len;
+            }
+            if (builtin.is_test) test_all_fse_raw_wildcopy_hits += 1;
+            sequence_match_copy.appendForwardWildcopy16(output, written, written.* - match_offset, match_len);
+            continue;
+        }
+
+        if (literal_len == 1) {
+            output[written.*] = literals[literal_offset];
+            written.* += 1;
+            literal_offset += 1;
+        } else if (literal_len >= 2 and literal_len <= 15) {
+            literal_copy.append2To15(output, written, literals, &literal_offset, literal_len);
+        } else if (literal_len != 0) {
             @memcpy(output[written.*..][0..literal_len], literals[literal_offset..][0..literal_len]);
             written.* += literal_len;
             literal_offset += literal_len;
         }
-        if (frame_output_start > written.*) return error.CorruptFrame;
         if (match_offset == 0 or match_offset > written.* - frame_output_start) return error.InvalidMatch;
         if (output.len - written.* < match_len) return error.OutputTooSmall;
-        if (match_len == 8 and match_offset == 7)
+        if (match_len == 3 and match_offset >= 3)
+            sequence_match_copy.appendNonOverlapping3(output, written, written.* - match_offset)
+        else if (match_len >= 4 and match_len <= 7 and match_offset >= match_len)
+            sequence_match_copy.appendNonOverlapping4To7(output, written, written.* - match_offset, match_len, false)
+        else if (match_len >= 8 and match_len <= 15 and match_offset >= match_len)
+            sequence_match_copy.appendNonOverlapping8To15(output, written, written.* - match_offset, match_len, false)
+        else if (match_len >= 16 and match_len <= 31 and match_offset >= match_len)
+            sequence_match_copy.appendNonOverlapping16To31(output, written, written.* - match_offset, match_len)
+        else if (match_len >= 32 and match_len <= 63 and match_offset >= match_len)
+            sequence_match_copy.appendNonOverlapping32To63(output, written, written.* - match_offset, match_len)
+        else if (match_len >= 68 and match_len <= 70 and match_offset >= match_len)
+            sequence_match_copy.appendNonOverlapping68To70(output, written, written.* - match_offset, match_len)
+        else if (match_len == 71 and match_offset >= 71)
+            sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset)
+        else if (match_len == 8 and match_offset == 7)
             sequence_match_copy.appendOverlapping8Offset7(output, written)
         else if (match_len == 23 and match_offset >= 23)
             sequence_match_copy.appendNonOverlapping23(output, written, written.* - match_offset)
@@ -10057,6 +10154,8 @@ noinline fn decodeAllFseRawSequences(
     if (output.len - written.* < last_literals) return error.OutputTooSmall;
     @memcpy(output[written.*..][0..last_literals], literals[literal_offset..]);
     written.* += last_literals;
+    state.remaining = remaining;
+    state.reader = reader;
     if (continuation.retainsState()) {
         frame_state.previous_tables = spec.tables();
         frame_state.repeated_offsets = state.repeated_offsets;
@@ -29849,6 +29948,8 @@ test "zstd native decoder preserves previous offsets for direct offsets" {
 }
 
 test "zstd native decoder streams large raw-literal all-FSE sequence blocks" {
+    test_disable_all_fse_raw_decode = false;
+    defer test_disable_all_fse_raw_decode = false;
     const encoded_hex_file = @embedFile("zstd/testdata/libzstd-all-fse-raw.frame.hex");
     const encoded_hex = std.mem.trim(
         u8,
@@ -29874,8 +29975,12 @@ test "zstd native decoder streams large raw-literal all-FSE sequence blocks" {
     try std.testing.expectEqualSlices(u8, &payload, decoded);
 
     var output: [payload.len]u8 = undefined;
+    test_all_fse_raw_wildcopy_hits = 0;
+    test_all_fse_raw_field_group_hits = 0;
     try std.testing.expectEqual(payload.len, try decodeNativeFrameInto(&encoded, &output));
     try std.testing.expectEqualSlices(u8, &payload, &output);
+    try std.testing.expect(test_all_fse_raw_wildcopy_hits != 0);
+    try std.testing.expect(test_all_fse_raw_field_group_hits != 0);
 
     var reusable = NativeFrameDecoder.init(std.testing.allocator);
     defer reusable.deinit();
@@ -29905,7 +30010,10 @@ test "zstd native decoder streams large raw-literal all-FSE sequence blocks" {
     for (mutated_indices) |byte_index| {
         for (0..8) |bit_index| {
             mutated[byte_index] ^= @as(u8, 1) << @as(u3, @intCast(bit_index));
-            if (decodeNativeFrameInto(&mutated, reference_output)) |reference_len| {
+            test_disable_all_fse_raw_decode = true;
+            const reference_result = decodeNativeFrameInto(&mutated, reference_output);
+            test_disable_all_fse_raw_decode = false;
+            if (reference_result) |reference_len| {
                 const actual_len = try reusable.decodeIntoSlice(&mutated, &output);
                 try std.testing.expectEqual(reference_len, actual_len);
                 try std.testing.expectEqualSlices(u8, reference_output[0..reference_len], output[0..actual_len]);
