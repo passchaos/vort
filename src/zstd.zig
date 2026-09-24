@@ -151,9 +151,9 @@ const split_dense_literal_decode_text_section = switch (builtin.object_format) {
 
 const split_x2_huffman_literal_min = 12 * 1024;
 const split_huffman_literal_capacity = 16 * 1024;
-// Keep larger four-stream literal sections on the bulk decoder while bounding
-// this allocation-free path to half of Zstd's maximum decoded block size.
-const split_wide_huffman_literal_capacity = 64 * 1024;
+// Keep all valid four-stream literal sections eligible for the allocation-free
+// bulk decoder. Zstd bounds each regenerated block to this size.
+const split_wide_huffman_literal_capacity = std.compress.zstd.block_size_max;
 
 const multi_sequence_winner_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_multi_sequence_winner",
@@ -9545,7 +9545,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         spec.of_mode == .compressed and
         spec.ml_mode == .compressed and
         (section.kind == .compressed or section.kind == .treeless) and
-        section.sequence_count >= 1024 and
+        sequence_decode_policy.preferSplit(section.regenerated_size, section.sequence_count) and
         dictionary_history.len == 0 and
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
@@ -9590,7 +9590,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         spec.of_mode == .compressed and
         spec.ml_mode == .compressed and
         section.kind == .raw and
-        section.sequence_count >= 1024 and
+        sequence_decode_policy.preferSplit(section.regenerated_size, section.sequence_count) and
         dictionary_history.len == 0)
     {
         return try decodeAllFseRawSequences(
@@ -9742,7 +9742,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         spec.of_mode == .compressed and
         spec.ml_mode == .compressed and
         (section.kind == .compressed or section.kind == .treeless) and
-        section.sequence_count >= 1024 and
+        sequence_decode_policy.preferSplit(section.regenerated_size, section.sequence_count) and
         dictionary_history.len == 0 and
         section.regenerated_size <= split_wide_huffman_literal_capacity)
     {
@@ -9787,7 +9787,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         spec.of_mode == .compressed and
         spec.ml_mode == .compressed and
         section.kind == .raw and
-        section.sequence_count >= 1024 and
+        sequence_decode_policy.preferSplit(section.regenerated_size, section.sequence_count) and
         dictionary_history.len == 0)
     {
         return try decodeAllFseRawSequences(
@@ -11794,7 +11794,7 @@ pub fn prepareNativeSequenceDecodeStage(
                         spec.of_mode == .compressed and
                         spec.ml_mode == .compressed and
                         (section.kind == .compressed or section.kind == .treeless) and
-                        section.sequence_count >= 1024 and
+                        sequence_decode_policy.preferSplit(section.regenerated_size, section.sequence_count) and
                         section.huffman_streams == .four and
                         section.regenerated_size <= split_wide_huffman_literal_capacity) if (sequence_decode_policy.preferSmall(section.regenerated_size, section.sequence_count))
                         .bounded_all_fse
