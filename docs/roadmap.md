@@ -2547,11 +2547,10 @@ reuse, so production keeps the simpler independently owned plans.
   Keeping the output position local to the external-lookup loop adds another
   1.0329x median on the PDF while remaining neutral on a second PDF, the log,
   and the trace; the q5 result reaches about 179.10 MiB/s (0.4778x libbrotli).
-  Keeping the output position local to the external-lookup payload loop removes
-  another per-literal caller-pointer load/store pair. It adds a 1.0329x median
-  on PDF q5 while the second PDF, log, and trace controls remain neutral to
-  slightly positive; the resulting PDF measurement is about 179.10 MiB/s, or
-  0.4778x of libbrotli.
+  Expanding the lookup array to the complete 64-tree inline tier then improves
+  `~/Downloads/part1_22.pdf` by 2.4731x median (7/7 wins), from 11.59 to about
+  41.63 MiB/s. The original PDF remains neutral, the log is modestly positive,
+  and trace movement stays within roughly 0.2%.
 
 - Expanded the Zstd/libzstd gate with 512 KiB multi-block text, numbered JSON,
   and mixed structured/binary corpora. The easy repeated-text shape already

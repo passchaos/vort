@@ -103,18 +103,19 @@ trace controls remained neutral to slightly positive by median at 1.0016x,
 or 0.4778x libbrotli 1.1.0. An attempted literal-block-run cache was rejected
 because it regressed the trace control.
 
-## Local output-cursor follow-up
+## Full inline-tree coverage
 
-The external-lookup loop formerly loaded and stored the caller's `written`
-pointer for every literal. It now keeps the position local for the complete
-meta-block and writes it back with `defer`, including all error exits. Match and
-dictionary copies use the same local cursor, so successful and partial-error
-progress semantics remain consistent.
+The original 16-tree cap left most of `~/Downloads/part1_22.pdf` on the scalar
+decoder; its quality-5 stream reaches 78 context trees overall and decoded at
+only 11.59 MiB/s, or 0.0388x libbrotli. Raising the external lookup capacity to
+the decoder's complete 64-tree inline tier covers more of those meta-blocks
+without changing the packed-tree fallback.
 
-Eleven fixed-CPU alternating q5 pairs on
-`~/Downloads/白话机器学习中的数学.pdf` all improved, with a 1.0329x median.
-The `part1_22.pdf`, 63 MiB log, and 31 MiB trace controls were neutral to
-slightly positive by median (1.0016x, 1.0004x, and 1.0020x respectively).
-A longer same-process comparison measured 179.10 MiB/s, or 0.4778x of
-libbrotli 1.1.0. Caching literal-block state and grouping block runs was also
-tested, but it regressed the trace control and was removed.
+Seven alternating comparisons improve this second PDF by 2.4731x median with
+7/7 wins. The resulting same-process measurement is 41.63 MiB/s, or 0.1203x
+libbrotli 1.1.0. The first PDF is neutral at 0.9994x median because all its
+blocks were already covered. The 63 MiB log has a positive but noisy 1.0163x
+median, while the 31 MiB trace is effectively neutral at 0.9983x. A 128-tree
+prototype was rejected because it crossed the 64-entry inline-tree boundary;
+the retained bound is tied directly to `inline_literal_tree_count` and guarded
+at compile time.

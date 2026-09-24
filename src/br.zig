@@ -6519,9 +6519,13 @@ noinline fn processLargeCompressedMetaBlockLargeWindow(
 }
 
 const clustered_literal_tree_threshold: u16 = 16;
-const external_literal_lookup_tree_limit: usize = 16;
+const external_literal_lookup_tree_limit: usize = inline_literal_tree_count;
 const external_literal_lookup_meta_block_min: usize = 64 * 1024;
 const ExternalLiteralLookup = huffman.PackedLookup(10);
+
+comptime {
+    std.debug.assert(external_literal_lookup_tree_limit <= inline_literal_tree_count);
+}
 
 fn prepareLiteralTailLookups(header: *MinimalCompressedHeader) bool {
     if (header.literal_tree_count > inline_literal_tree_count) return false;
@@ -6552,10 +6556,10 @@ fn prepareExternalLiteralLookups(
 ) Error!void {
     if (header.literal_tree_count > lookups.len) return error.UnsupportedBrotliFeature;
     for (header.literal_trees[0..header.literal_tree_count], 0..) |*tree, index| {
-        if (tree.single_symbol) |symbol|
-            lookups[index] = try ExternalLiteralLookup.initSingle(symbol)
+        lookups[index] = if (tree.single_symbol) |symbol|
+            try ExternalLiteralLookup.initSingle(symbol)
         else
-            lookups[index] = try ExternalLiteralLookup.init(&tree.table);
+            try ExternalLiteralLookup.init(&tree.table);
     }
 }
 
