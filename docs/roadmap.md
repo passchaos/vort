@@ -2539,6 +2539,11 @@ reuse, so production keeps the simpler independently owned plans.
   and `--quality` for reproducible file-backed comparisons. Absolute q5
   throughput on the PDF is now about 154.55 MiB/s, still only 0.4117x of
   libbrotli 1.1.0, so further payload-loop work remains required.
+  A follow-up encodes single-symbol trees directly in the packed lookup and
+  defers the large canonical-tree address calculation until a long-code miss.
+  This adds another `1.14x/1.12x/1.12x` median improvement for PDF q1/q5/q9,
+  with `1.01x/1.02x` medians on the Downloads log/trace controls. PDF q5 now
+  reaches about 173.49 MiB/s, or 0.4589x of libbrotli.
 
 - Expanded the Zstd/libzstd gate with 512 KiB multi-block text, numbered JSON,
   and mixed structured/binary corpora. The easy repeated-text shape already

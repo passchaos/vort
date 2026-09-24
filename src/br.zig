@@ -6552,7 +6552,9 @@ fn prepareExternalLiteralLookups(
 ) Error!void {
     if (header.literal_tree_count > lookups.len) return error.UnsupportedBrotliFeature;
     for (header.literal_trees[0..header.literal_tree_count], 0..) |*tree, index| {
-        if (tree.single_symbol == null)
+        if (tree.single_symbol) |symbol|
+            lookups[index] = try ExternalLiteralLookup.initSingle(symbol)
+        else
             lookups[index] = try ExternalLiteralLookup.init(&tree.table);
     }
 }
@@ -6731,11 +6733,9 @@ noinline fn processExternalLiteralLookupCompressedPayload(
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= header.literal_tree_count or tree_index >= literal_lookups.len)
                 return error.CorruptFrame;
-            const tree = &header.literal_trees[tree_index];
-            const literal = if (tree.single_symbol) |symbol|
-                symbol
-            else
-                try literal_lookups[tree_index].decodeValue(&tree.table, reader);
+            const lookup = &literal_lookups[tree_index];
+            const literal = (try lookup.decodeValueFast(reader)) orelse
+                try lookup.decodeValueLong(&header.literal_trees[tree_index].table, reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;

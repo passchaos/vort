@@ -64,3 +64,27 @@ taskset -c 8 zig build -Doptimize=ReleaseFast run-br-reference-bench -- \
 
 The built-in reference gate and upstream multi-block differential remain the
 broader compatibility checks for this path.
+
+## Deferred canonical-tree access follow-up
+
+The first external-lookup implementation still resolved the large canonical
+`PrefixCode(256)` object and checked its single-symbol tag before every lookup,
+even when the packed root table contained the answer. The lookup now represents
+single-symbol trees directly and exposes separate fast-hit and long-code
+fallback operations. The payload loop touches the original canonical tree only
+after a root-table miss.
+
+Against the first 10-bit implementation, fixed-CPU interleaved measurements on
+the same Downloads corpus produced:
+
+| Input / quality | Pairs won | Median speedup |
+| --- | ---: | ---: |
+| `白话机器学习中的数学.pdf`, q1 | 5/5 | 1.1385x |
+| `白话机器学习中的数学.pdf`, q5 | 9/9 | 1.1181x |
+| `白话机器学习中的数学.pdf`, q9 | 5/5 | 1.1161x |
+| `Controller.log.2025-09-01-11`, q5 | 6/7 | 1.0075x |
+| `trace_1751546764.3447797.json`, q5 | 7/7 | 1.0212x |
+
+The longer PDF q5 comparison now measures 173.49 MiB/s, or 0.4589x of
+libbrotli 1.1.0. The remaining profile is dominated by the context-dependent
+literal loop and bit-reservoir refill rather than canonical-tree scans.

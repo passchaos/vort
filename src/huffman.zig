@@ -788,21 +788,32 @@ pub fn PackedLookup(comptime lookup_bits: u4) type {
             return lookup;
         }
 
-        pub inline fn decodeValue(self: *const Self, table: anytype, reader: anytype) Error!u16 {
-            const packed_entry = self.slots[reader.peekBitsPadded(u16, lookup_bits)];
-            if (packed_entry != 0) {
-                @branchHint(.likely);
-                const bits: u4 = @truncate(packed_entry);
-                if (!hasDecodedBits(reader, bits)) {
-                    @branchHint(.unlikely);
-                    return error.TruncatedFrame;
-                }
-                reader.advanceBitsStagedAssumeAvailable(bits);
-                return (packed_entry >> 4) - 1;
-            } else {
-                @branchHint(.unlikely);
-            }
+        pub fn initSingle(symbol: u16) Error!Self {
+            if (symbol >= 4095) return error.InvalidHuffmanCode;
+            return .{ .slots = @splat((symbol + 1) << 4) };
+        }
 
+        pub inline fn decodeValueFast(self: *const Self, reader: anytype) Error!?u16 {
+            const packed_entry = self.slots[reader.peekBitsPadded(u16, lookup_bits)];
+            if (packed_entry == 0) {
+                @branchHint(.unlikely);
+                return null;
+            }
+            const bits: u4 = @truncate(packed_entry);
+            if (!hasDecodedBits(reader, bits)) {
+                @branchHint(.unlikely);
+                return error.TruncatedFrame;
+            }
+            reader.advanceBitsStagedAssumeAvailable(bits);
+            return (packed_entry >> 4) - 1;
+        }
+
+        pub inline fn decodeValue(self: *const Self, table: anytype, reader: anytype) Error!u16 {
+            if (try self.decodeValueFast(reader)) |value| return value;
+            return self.decodeValueLong(table, reader);
+        }
+
+        pub inline fn decodeValueLong(_: *const Self, table: anytype, reader: anytype) Error!u16 {
             if (table.max_bits == 0) return error.InvalidHuffmanCode;
             if (table.max_bits <= lookup_bits) {
                 if (!hasDecodedBits(reader, table.max_bits)) return error.TruncatedFrame;
@@ -2111,6 +2122,11 @@ test "tail lookup decoder matches compact decoder" {
 }
 
 test "external packed lookup covers dense tables and long-code fallback" {
+    const single_lookup = try PackedLookup(10).initSingle(211);
+    var empty_reader = bitstream.BitReader.init(&.{});
+    try std.testing.expectEqual(@as(?u16, 211), try single_lookup.decodeValueFast(&empty_reader));
+    try std.testing.expectEqual(@as(usize, 0), empty_reader.bitPosition());
+
     const dense_lengths = [_]u4{8} ** 256;
     const dense_table = try HuffmanTable(256).init(&dense_lengths);
     const dense_lookup = try PackedLookup(10).init(&dense_table);
