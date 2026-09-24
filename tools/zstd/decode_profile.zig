@@ -4,6 +4,7 @@ const libzstd = @import("libzstd_runtime.zig");
 const benchmark_provenance = @import("benchmark_provenance");
 
 const Case = struct { name: []const u8, payload: []const u8, level: c_int = 1 };
+const max_file_input_size = 256 * 1024 * 1024;
 const Options = struct {
     iterations: usize = 1000,
     only_case: ?[]const u8 = null,
@@ -34,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
             init.io,
             path,
             init.gpa,
-            .limited(128 * 1024 * 1024),
+            .limited(max_file_input_size),
         );
         defer init.gpa.free(payload);
         if (payload.len == 0) return error.InputTooSmall;

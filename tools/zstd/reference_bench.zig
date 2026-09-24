@@ -56,6 +56,7 @@ const Options = struct {
 };
 
 const Sample = struct { elapsed_ns: u64, mix: u64 };
+const max_file_input_size = 256 * 1024 * 1024;
 const incompressible_payload = incompressiblePayload();
 const rle_payload = [_]u8{0} ** (64 * 1024);
 
@@ -81,7 +82,7 @@ pub fn main(init: std.process.Init) !void {
             init.io,
             path,
             init.gpa,
-            .limited(128 * 1024 * 1024),
+            .limited(max_file_input_size),
         );
         defer init.gpa.free(payload);
         if (payload.len == 0) return error.InputTooSmall;

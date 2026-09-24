@@ -580,6 +580,15 @@ Recommended next comparison steps:
   allocation-free path's bounded stack scratch; blocks above 64 KiB retain the
   interleaved fallback. See `docs/performance/zstd-wide-split-capacity.md` for
   controls, provenance, and rejected variants.
+  A 25-file, 474,251,686-byte mixed corpus under `~/Downloads/vort-test` then
+  exposed literal-heavy blocks with fewer than 1,024 sequences. The split
+  policy now also accepts blocks with at least 32 KiB of regenerated literals,
+  and its bounded scratch covers the full 128 KiB Zstd block size. Against
+  `7715d03e`, 15 alternating pairs improve `nndl-v2 (1).pdf` by 1.6025x and
+  `zellij` by 1.6722x median, both with 15/15 wins; six existing control rows
+  stay within 0.7% of neutral by median. The resulting complete one-shot and
+  reusable comparison is recorded in
+  `docs/performance/zstd-vort-test-corpus.md`.
   The split executor now hoists its frame-output-start validation out of every
   sequence branch. The invariant holds because successful copies only advance
   the output cursor. Against `34e63ba9`, 21 alternating pairs improve
