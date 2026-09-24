@@ -2529,6 +2529,17 @@ reuse, so production keeps the simpler independently owned plans.
   quality-4 frame and catches offset, omit, affix, and uppercase drift without
   making the production library depend on the system runtime.
 
+- Added a packed external 10-bit literal lookup for standard Brotli meta-blocks
+  of at least 64 KiB with at most 16 context trees. Dense 256-symbol trees cannot
+  use the existing lookup stored in unused canonical-table entries and formerly
+  decoded every literal with a bit-at-a-time scan. Fixed-CPU independent-binary
+  measurements on `~/Downloads/白话机器学习中的数学.pdf` improve q1/q5/q9 by
+  about `9.38x/7.85x/8.61x`; a 63 MiB log and 31 MiB JSON trace improve by
+  about `1.11x/1.07x`. The reference benchmark now accepts `--input`, `--name`,
+  and `--quality` for reproducible file-backed comparisons. Absolute q5
+  throughput on the PDF is now about 154.55 MiB/s, still only 0.4117x of
+  libbrotli 1.1.0, so further payload-loop work remains required.
+
 - Expanded the Zstd/libzstd gate with 512 KiB multi-block text, numbered JSON,
   and mixed structured/binary corpora. The easy repeated-text shape already
   reaches about `1.08x` libzstd, while realistic multi-sequence JSON and mixed

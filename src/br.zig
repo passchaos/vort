@@ -41,6 +41,8 @@ const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
 const incremental_planned_encoder_tests = @import("br/incremental/planned_encoder_tests.zig");
 const fast_bit_reader = @import("br/fast_bit_reader.zig");
 
+var test_external_literal_lookup_hits: usize = 0;
+
 const large_window_text_section = switch (builtin.object_format) {
     .elf => ".vort_br_large_window",
     .macho => "__TEXT,__vort_br_lgwin",
@@ -6470,8 +6472,22 @@ fn processLargeCompressedMetaBlock(
     if (meta_block_end > output.len) return error.OutputTooSmall;
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
-    if (header.literal_tree_count < clustered_literal_tree_threshold or !prepareLiteralTailLookups(&header))
+    if (header.literal_tree_count < clustered_literal_tree_threshold or !prepareLiteralTailLookups(&header)) {
+        if (meta_block_len >= external_literal_lookup_meta_block_min and
+            header.literal_tree_count <= external_literal_lookup_tree_limit)
+        {
+            var literal_lookups: [external_literal_lookup_tree_limit]ExternalLiteralLookup = undefined;
+            try prepareExternalLiteralLookups(&header, &literal_lookups);
+            if (builtin.is_test) test_external_literal_lookup_hits += 1;
+            const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(&header);
+            var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
+            defer fast_reader.syncTo(reader);
+            if (auxiliary_tail_lookups)
+                return processExternalLiteralLookupCompressedPayload(true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, &header, &literal_lookups);
+            return processExternalLiteralLookupCompressedPayload(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, &header, &literal_lookups);
+        }
         return processDecodedCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, &header);
+    }
     const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(&header);
     var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
     defer fast_reader.syncTo(reader);
@@ -6503,6 +6519,9 @@ noinline fn processLargeCompressedMetaBlockLargeWindow(
 }
 
 const clustered_literal_tree_threshold: u16 = 16;
+const external_literal_lookup_tree_limit: usize = 16;
+const external_literal_lookup_meta_block_min: usize = 64 * 1024;
+const ExternalLiteralLookup = huffman.PackedLookup(10);
 
 fn prepareLiteralTailLookups(header: *MinimalCompressedHeader) bool {
     if (header.literal_tree_count > inline_literal_tree_count) return false;
@@ -6525,6 +6544,17 @@ fn prepareAuxiliaryTailLookups(header: *MinimalCompressedHeader) bool {
     for (header.distance_trees[0..header.distance_tree_count]) |*tree|
         std.debug.assert(tree.single_symbol != null or tree.table.buildTailLookup9());
     return true;
+}
+
+fn prepareExternalLiteralLookups(
+    header: *const MinimalCompressedHeader,
+    lookups: *[external_literal_lookup_tree_limit]ExternalLiteralLookup,
+) Error!void {
+    if (header.literal_tree_count > lookups.len) return error.UnsupportedBrotliFeature;
+    for (header.literal_trees[0..header.literal_tree_count], 0..) |*tree, index| {
+        if (tree.single_symbol == null)
+            lookups[index] = try ExternalLiteralLookup.init(&tree.table);
+    }
 }
 
 fn prepareLargeLiteralTailLookups(header: *LargeWindowCompressedHeader) bool {
@@ -6641,6 +6671,71 @@ noinline fn processTailLookupCompressedPayload(
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
             const tree = try literalPrefixForDecode(header, tree_index);
             const literal = try tree.decodeTailLookup(reader);
+            if (literal > 0xff) return error.InvalidHuffmanCode;
+            output[written.*] = @intCast(literal);
+            written.* += 1;
+            second_previous = previous;
+            previous = @intCast(literal);
+            if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
+        }
+        if (written.* == meta_block_end) return;
+        const decoded_distance = if (comptime auxiliary_tail_lookups)
+            try readMinimalDistanceTailLookup(header, reader, lengths, last_distances)
+        else
+            try readMinimalDistance(header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
+        if (distance == 0) return error.InvalidMatch;
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            continue;
+        }
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
+        if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
+        match_copy.append(output, written, distance, lengths.copy_len);
+    }
+}
+
+noinline fn processExternalLiteralLookupCompressedPayload(
+    comptime auxiliary_tail_lookups: bool,
+    reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: *const [external_literal_lookup_tree_limit]ExternalLiteralLookup,
+) Error!void {
+    var transformed_dictionary_word: [64]u8 = undefined;
+    const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
+    while (written.* < meta_block_end) {
+        const command_symbol = if (comptime auxiliary_tail_lookups)
+            try readCommandSymbolTailLookup(header, reader)
+        else
+            try readCommandSymbolAny(header, reader);
+        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
+        var previous: u8 = if (written.* == 0) 0 else output[written.* - 1];
+        var second_previous: u8 = if (written.* < 2) 0 else output[written.* - 2];
+        var i: usize = 0;
+        while (i < lengths.insert_len) : (i += 1) {
+            try ensureLiteralBlockAny(header, reader);
+            const context = if (utf8_context_only)
+                literal_context.valueUtf8Clustered(previous, second_previous)
+            else
+                literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
+            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
+            if (tree_index >= header.literal_tree_count or tree_index >= literal_lookups.len)
+                return error.CorruptFrame;
+            const tree = &header.literal_trees[tree_index];
+            const literal = if (tree.single_symbol) |symbol|
+                symbol
+            else
+                try literal_lookups[tree_index].decodeValue(&tree.table, reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;
@@ -12204,6 +12299,8 @@ test "br literal block length encoder covers every RFC range boundary" {
 }
 
 test "br ratio planner selects a profitable literal entropy split" {
+    test_external_literal_lookup_hits = 0;
+    defer test_external_literal_lookup_hits = 0;
     const payload = try std.testing.allocator.alloc(u8, 96 * 1024);
     defer std.testing.allocator.free(payload);
     var state: u32 = 0x1234_5678;
@@ -12220,6 +12317,7 @@ test "br ratio planner selects a profitable literal entropy split" {
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectEqual(@as(usize, 1), test_external_literal_lookup_hits);
 }
 
 test "br ratio planner selects a profitable three-type command entropy split" {

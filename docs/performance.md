@@ -10,6 +10,9 @@ and paired comparison with libzstd 1.5.7 on Apple M1 Pro.
 [Zstd raw-literal all-FSE execution](performance/zstd-raw-fse-executor.md)
 records grouped bit reads, bounded match-copy specialization, and the resulting
 25-file mixed-corpus comparison.
+[Brotli external literal lookup](performance/brotli-external-literal-lookup.md)
+records the dense-tree fallback optimization and fixed-CPU measurements on
+real files under `~/Downloads`.
 
 ## Current local benchmark entrypoints
 
@@ -21,6 +24,7 @@ zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
 zig build -Doptimize=ReleaseFast run-br-reference-bench-gate
+zig build -Doptimize=ReleaseFast run-br-reference-bench -- --input path/to/file --name corpus_case --quality 5 --iterations 10
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench -- --libzstd /path/to/libzstd
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench -- --input path/to/file --name corpus_case --level 1
