@@ -8,6 +8,7 @@ const bit_reader = @import("bit_reader.zig");
 /// callers must read exactly total_bits, in fields of at most 32 bits.
 pub const Group = struct {
     bits: u64,
+    consumed: u8 = 0,
 
     pub inline fn init(reader: *bit_reader.Reader, total_bits: u8) ?Group {
         if (total_bits > 56 or reader.remaining_bits < 64) return null;
@@ -21,10 +22,13 @@ pub const Group = struct {
 
     pub inline fn read(self: *Group, width: u8) usize {
         std.debug.assert(width <= 32);
-        // Splitting the right shift also defines a zero-width field.
-        const value = (self.bits >> 1) >> @intCast(63 - width);
-        self.bits <<= @intCast(width);
-        return @intCast(value);
+        const consumed = self.consumed + width;
+        std.debug.assert(consumed <= 56);
+        // The group is left-aligned. Splitting the shift keeps the zero-width
+        // case defined while avoiding a full-reservoir shift after every field.
+        const value = (self.bits >> 1) >> @intCast(63 - consumed);
+        self.consumed = consumed;
+        return @intCast(value & ((@as(u64, 1) << @intCast(width)) - 1));
     }
 };
 

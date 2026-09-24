@@ -246,3 +246,24 @@ wide blocks to 6 / 12 / 224 and reduces the isolated stage from 22.510 to
 11.456 ns/sequence. A 1,536-sequence threshold was rejected: it displaced the
 existing 1,834-sequence long-match fixture from its specialized path and was
 slower on the trace smoke measurement.
+
+## Immutable grouped reservoir
+
+The grouped reader originally advanced each field by left-shifting the complete
+64-bit reservoir. Its replacement keeps that word immutable and advances a
+small consumed-bit cursor; each extraction uses the cumulative offset and a
+width mask. This removes the loop-carried reservoir write dependency while
+preserving the same one-load safety proof and zero-width behavior.
+
+Seven fixed-CPU-5 level-1 pairs against commit `3b81b575` measured:
+
+| Input | Pairs won | Median candidate/baseline | Candidate MiB/s | Candidate/libzstd |
+| --- | ---: | ---: | ---: | ---: |
+| `白话机器学习中的数学.pdf` | 5/7 | 1.0042x | 4689.27 | 0.6647x |
+| `part1_22.pdf` | 5/7 | 1.0019x | 5411.59 | 0.7405x |
+| `Controller.log.2025-09-01-11` | 7/7 | 1.0182x | 3021.75 | 0.7289x |
+| `trace_1751546764.3447797.json` | 7/7 | 1.0070x | 2730.78 | 0.7152x |
+
+The isolated trace sequence stage also moves from 11.456 to 11.389
+ns/sequence in a five-round screen. All 14 reverse-reader and grouped-field
+oracles pass before the end-to-end compatibility gates.

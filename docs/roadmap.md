@@ -15694,3 +15694,9 @@ reuse, so production keeps the simpler independently owned plans.
   MiB/s, or 0.7166x system libzstd 1.5.5. A 1,536-sequence threshold was
   rejected because it displaced the validated 1,834-sequence long-match path
   and was slower on the target smoke run.
+  The grouped field reader now leaves its loaded 64-bit word immutable and
+  advances a small consumed-bit cursor, removing one loop-carried reservoir
+  shift per field. Against `3b81b575`, seven more fixed-CPU-5 pairs improve the
+  two Downloads PDFs by 1.0042x/1.0019x, the log by 1.0182x, and the trace by
+  1.0070x; all four medians are positive and the latter two win 7/7. Final
+  throughputs are 4689.27, 5411.59, 3021.75, and 2730.78 MiB/s respectively.
