@@ -275,6 +275,29 @@ pub inline fn appendForwardWildcopy32(
     written.* += match_len;
 }
 
+pub inline fn appendForwardWildcopy64(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+    match_len: usize,
+) void {
+    const destination_start = written.*;
+    const distance = destination_start - repeat_start;
+    const rounded_len = (match_len + 63) & ~@as(usize, 63);
+    std.debug.assert(match_len != 0);
+    std.debug.assert(distance >= 64);
+    std.debug.assert(output.len - destination_start >= rounded_len);
+
+    var copied: usize = 0;
+    while (copied < rounded_len) : (copied += 64) {
+        const first: @Vector(32, u8) = output[repeat_start + copied ..][0..32].*;
+        const second: @Vector(32, u8) = output[repeat_start + copied + 32 ..][0..32].*;
+        output[destination_start + copied ..][0..32].* = first;
+        output[destination_start + copied + 32 ..][0..32].* = second;
+    }
+    written.* += match_len;
+}
+
 pub inline fn appendForwardWildcopy(
     output: []u8,
     written: *usize,
@@ -283,6 +306,11 @@ pub inline fn appendForwardWildcopy(
 ) bool {
     const destination_start = written.*;
     const distance = destination_start - repeat_start;
+    const rounded_len_64 = (match_len + 63) & ~@as(usize, 63);
+    if (distance >= 64 and output.len - destination_start >= rounded_len_64) {
+        appendForwardWildcopy64(output, written, repeat_start, match_len);
+        return true;
+    }
     const rounded_len_32 = (match_len + 31) & ~@as(usize, 31);
     if (distance >= 32 and output.len - destination_start >= rounded_len_32) {
         appendForwardWildcopy32(output, written, repeat_start, match_len);
@@ -562,6 +590,26 @@ test "Zstd bounded 32-byte forward wildcopy handles overlapping matches" {
             var actual_written: usize = destination_start;
             append(&expected, &expected_written, destination_start - distance, match_len);
             appendForwardWildcopy32(actual[0..logical_end], &actual_written, destination_start - distance, match_len);
+            try std.testing.expectEqual(expected_written, actual_written);
+            try std.testing.expectEqualSlices(u8, expected[0..expected_written], actual[0..actual_written]);
+            try std.testing.expectEqualSlices(u8, expected[logical_end..], actual[logical_end..]);
+        }
+    }
+}
+
+test "Zstd bounded 64-byte forward wildcopy handles overlapping matches" {
+    inline for (.{ @as(usize, 3), 31, 63, 64, 65, 95, 127, 128, 191 }) |match_len| {
+        inline for (.{ @as(usize, 64), 95, 128 }) |distance| {
+            var expected: [384]u8 = undefined;
+            for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 47 + 19);
+            var actual = expected;
+            const destination_start = 160;
+            const rounded_len = (match_len + 63) & ~@as(usize, 63);
+            const logical_end = destination_start + rounded_len;
+            var expected_written: usize = destination_start;
+            var actual_written: usize = destination_start;
+            append(&expected, &expected_written, destination_start - distance, match_len);
+            appendForwardWildcopy64(actual[0..logical_end], &actual_written, destination_start - distance, match_len);
             try std.testing.expectEqual(expected_written, actual_written);
             try std.testing.expectEqualSlices(u8, expected[0..expected_written], actual[0..actual_written]);
             try std.testing.expectEqualSlices(u8, expected[logical_end..], actual[logical_end..]);

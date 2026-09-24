@@ -295,3 +295,26 @@ Seven fixed-CPU-5 level-1 pairs against commit `f9e9c02c` measured:
 
 The second PDF remains within 0.25% of baseline; the other three medians are
 positive, with the copy-heavy log and trace showing the intended gain.
+
+## Adaptive 64-byte match wildcopy
+
+Matches with offsets of at least 64 bytes now have a third bounded tier. It
+copies two 32-byte vectors per loop iteration and requires writable space
+through the match length rounded up to 64. The adaptive dispatcher continues
+to use the 32- and 16-byte implementations whenever either the history distance
+or destination suffix is too short. Its direct oracle covers overlapping
+distances 64/95/128 and match lengths 3 through 191.
+
+Seven fixed-CPU-5 level-1 pairs against commit `b401f6dc` measured:
+
+| Input | Pairs won | Median candidate/baseline | Candidate MiB/s | Candidate/libzstd |
+| --- | ---: | ---: | ---: | ---: |
+| `白话机器学习中的数学.pdf` | 3/7 | 0.9989x | 4711.79 | 0.6676x |
+| `part1_22.pdf` | 6/7 | 1.0034x | 5357.22 | 0.7243x |
+| `Controller.log.2025-09-01-11` | 7/7 | 1.0529x | 3359.26 | 0.8067x |
+| `trace_1751546764.3447797.json` | 7/7 | 1.0462x | 2983.43 | 0.7820x |
+
+The first PDF is neutral within 0.2%; the second is slightly positive, and the
+copy-heavy log and trace both gain another four to five percent. The complete
+32/64-byte dispatcher therefore raises the Downloads log and trace from the
+pre-wildcopy 3021.75/2730.78 MiB/s results to 3359.26/2983.43 MiB/s.

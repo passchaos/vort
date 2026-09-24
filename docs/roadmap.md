@@ -15708,3 +15708,9 @@ reuse, so production keeps the simpler independently owned plans.
   the first PDF, log, and trace by 1.0111x, 1.0558x, and 1.0436x; the second PDF
   is neutral at 0.9976x. Final log/trace throughput reaches 3182.47/2833.50
   MiB/s, or 0.7716x/0.7472x system libzstd 1.5.5.
+  A second bounded tier copies two 32-byte vectors per iteration when distance
+  and frame-tail space both cover 64 bytes, retaining the 32/16-byte fallbacks.
+  Against `b401f6dc`, seven more fixed-CPU-5 Downloads pairs improve the log and
+  trace by 1.0529x/1.0462x with 7/7 wins, leave the PDFs at 0.9989x/1.0034x,
+  and reach 3359.26/2983.43 MiB/s on the two targets. This is 0.8067x/0.7820x
+  system libzstd 1.5.5; broad decode leadership remains unproven.
