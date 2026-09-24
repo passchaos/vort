@@ -159,3 +159,35 @@ regression despite retaining the same 64-entry stack tier. An explicit
 log and trace by about 1.9% and 1.0%, so it was rejected. The remaining
 libbrotli gap also means these results are an incremental decoder improvement,
 not an industry-leadership claim.
+
+## Distance-result writeback
+
+A CPU-sampling profile of the committed tiered decoder placed 19.35% of the
+trace workload in `readMinimalDistanceTailLookup`. That helper returned an
+error union containing a two-field distance result, then called another
+error-union helper even for the implicit last-distance symbol used directly by
+many Brotli commands.
+
+The tail-lookup helper now writes its distance and ring-update flag into
+caller-owned storage and returns only an error. The implicit symbol-zero case
+copies the newest ring entry directly, while explicit short and regular
+distances keep the existing validation and bit consumption. The decoder,
+external-lookup, wide-lookup, and summary loops all use the same helper. A
+focused oracle covers implicit symbol zero, an explicit short distance, and a
+regular distance with extra bits.
+
+Against commit `8f95429b`, seven alternating q5 pairs on CPU 5 produced:
+
+| Input / quality | Pairs won | Median speedup | Candidate MiB/s | Candidate / libbrotli |
+| --- | ---: | ---: | ---: | ---: |
+| `白话机器学习中的数学.pdf`, q5 | 7/7 | 1.0058x | 178.70 | 0.4730x |
+| `part1_22.pdf`, q5 | 6/7 | 1.0057x | 176.71 | 0.5124x |
+| `Controller.log.2025-09-01-11`, q5 | 7/7 | 1.0107x | 1487.12 | 0.7203x |
+| `trace_1751546764.3447797.json`, q5 | 7/7 | 1.0149x | 1743.78 | 0.7209x |
+
+Two more aggressive variants were rejected early. An 8-bit lookup for only
+the wide tiers reduced table footprint but dropped `part1_22.pdf` to 145.81
+MiB/s because of extra canonical fallbacks. Copying the four-entry distance
+ring into each payload function regressed all four files by roughly
+1.2%--2.6%; force-inlining the implicit-symbol branch likewise regressed the
+log and trace by about 1.6% and 1.1%.

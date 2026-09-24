@@ -2563,6 +2563,15 @@ reuse, so production keeps the simpler independently owned plans.
   aligned variant failed to recover without larger control-corpus regressions.
   Candidate throughput is 177.04 MiB/s for `part1_22.pdf` and 1717.46 MiB/s
   for the trace, respectively 0.5132x and 0.7078x libbrotli 1.1.0.
+  A profile-guided distance follow-up replaces the tail-lookup helper's
+  aggregate error-union return with caller-owned result storage and handles
+  implicit distance symbol zero without a second error-union call. Seven
+  alternating q5 pairs against `8f95429b` improve the two PDFs, log, and trace
+  by 1.0058x, 1.0057x, 1.0107x, and 1.0149x medians, with 27/28 total wins.
+  Absolute throughput reaches 178.70, 176.71, 1487.12, and 1743.78 MiB/s on
+  those Downloads files. An 8-bit wide lookup, per-payload local distance ring,
+  and force-inlined implicit-distance branch were measured and rejected for
+  regressions before the broader gates.
 
 - Expanded the Zstd/libzstd gate with 512 KiB multi-block text, numbered JSON,
   and mixed structured/binary corpora. The easy repeated-text shape already

@@ -6740,10 +6740,11 @@ noinline fn processTailLookupCompressedPayload(
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
         if (written.* == meta_block_end) return;
-        const decoded_distance = if (comptime auxiliary_tail_lookups)
-            try readMinimalDistanceTailLookup(header, reader, lengths, last_distances)
+        var decoded_distance: DecodedBrotliDistance = undefined;
+        if (comptime auxiliary_tail_lookups)
+            try readMinimalDistanceTailLookupInto(header, reader, lengths, last_distances, &decoded_distance)
         else
-            try readMinimalDistance(header, reader, lengths, last_distances);
+            decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
@@ -6805,10 +6806,11 @@ noinline fn processExternalLiteralLookupCompressedPayload(
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
         if (output_cursor == meta_block_end) return;
-        const decoded_distance = if (comptime auxiliary_tail_lookups)
-            try readMinimalDistanceTailLookup(header, reader, lengths, last_distances)
+        var decoded_distance: DecodedBrotliDistance = undefined;
+        if (comptime auxiliary_tail_lookups)
+            try readMinimalDistanceTailLookupInto(header, reader, lengths, last_distances, &decoded_distance)
         else
-            try readMinimalDistance(header, reader, lengths, last_distances);
+            decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, output_cursor);
@@ -6877,10 +6879,11 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
         if (output_cursor == meta_block_end) return;
-        const decoded_distance = if (comptime auxiliary_tail_lookups)
-            try readMinimalDistanceTailLookup(header, reader, lengths, last_distances)
+        var decoded_distance: DecodedBrotliDistance = undefined;
+        if (comptime auxiliary_tail_lookups)
+            try readMinimalDistanceTailLookupInto(header, reader, lengths, last_distances, &decoded_distance)
         else
-            try readMinimalDistance(header, reader, lengths, last_distances);
+            decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, output_cursor);
@@ -7098,10 +7101,11 @@ noinline fn skipDecodedCompressedPayload(
         if (written == meta_block_end) {
             return;
         }
-        const decoded_distance = if (auxiliary_tail_lookups)
-            try readMinimalDistanceTailLookup(header, reader, lengths, last_distances)
+        var decoded_distance: DecodedBrotliDistance = undefined;
+        if (auxiliary_tail_lookups)
+            try readMinimalDistanceTailLookupInto(header, reader, lengths, last_distances, &decoded_distance)
         else
-            try readMinimalDistance(header, reader, lengths, last_distances);
+            decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written);
@@ -10127,25 +10131,37 @@ fn readMinimalDistanceLargeWindow(
         try readRegularDistanceWithOptions(true, header, reader, symbol), .update_ring = true };
 }
 
-fn readMinimalDistanceTailLookup(
+noinline fn readMinimalDistanceTailLookupInto(
     header: *MinimalCompressedHeader,
     reader: anytype,
     lengths: InsertCopyLengths,
     last_distances: *[4]usize,
-) Error!DecodedBrotliDistance {
-    const symbol = if (lengths.distance_symbol_zero) 0 else blk: {
-        try ensureDistanceBlock(header, reader);
-        const context = distanceContext(lengths.copy_len);
-        if (header.distance_block.current_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
-        const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
-        if (tree_index >= inline_distance_tree_count) return error.UnsupportedBrotliFeature;
-        const decoded = try header.distance_trees[tree_index].decodeTailLookup9(reader);
-        if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
-        break :blk decoded;
-    };
-    if (symbol < 16) return .{ .distance = try resolveShortDistance(symbol, last_distances), .update_ring = symbol != 0 };
+    decoded_distance: *DecodedBrotliDistance,
+) Error!void {
+    if (lengths.distance_symbol_zero) {
+        decoded_distance.* = .{ .distance = last_distances[3], .update_ring = false };
+        return;
+    }
+    try ensureDistanceBlock(header, reader);
+    const context = distanceContext(lengths.copy_len);
+    if (header.distance_block.current_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
+    const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
+    if (tree_index >= inline_distance_tree_count) return error.UnsupportedBrotliFeature;
+    const symbol = try header.distance_trees[tree_index].decodeTailLookup9(reader);
+    if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
+    if (symbol < 16) {
+        try resolveShortDistanceInto(symbol, last_distances, &decoded_distance.distance);
+        decoded_distance.update_ring = symbol != 0;
+        return;
+    }
     const direct_index = symbol - 16;
-    return .{ .distance = if (direct_index < header.ndirect) @as(usize, direct_index) + 1 else try readRegularDistance(header, reader, symbol), .update_ring = true };
+    decoded_distance.* = .{
+        .distance = if (direct_index < header.ndirect)
+            @as(usize, direct_index) + 1
+        else
+            try readRegularDistance(header, reader, symbol),
+        .update_ring = true,
+    };
 }
 
 fn readMinimalDistanceTailLookupLargeWindow(
@@ -20829,6 +20845,54 @@ test "br short distance resolver covers RFC table" {
     try std.testing.expectError(error.InvalidMatch, resolveShortDistance(4, &small_last));
     try std.testing.expectError(error.InvalidMatch, resolveShortDistance(12, &small_last));
     try std.testing.expectError(error.InvalidHuffmanCode, resolveShortDistance(16, &small_last));
+}
+
+test "br tail distance decoder writes implicit short and regular results" {
+    var last_distances = [_]usize{ 16, 15, 11, 4 };
+    var header: MinimalCompressedHeader = undefined;
+    header.npostfix = 0;
+    header.ndirect = 0;
+    header.distance_block = .{};
+    header.distance_context_map[2] = 0;
+    var decoded: DecodedBrotliDistance = undefined;
+
+    var implicit_reader = bitstream.BitReader.init(&.{});
+    try readMinimalDistanceTailLookupInto(
+        &header,
+        &implicit_reader,
+        .{ .insert_len = 0, .copy_len = 4, .distance_symbol_zero = true },
+        &last_distances,
+        &decoded,
+    );
+    try std.testing.expectEqual(@as(usize, 4), decoded.distance);
+    try std.testing.expect(!decoded.update_ring);
+    try std.testing.expectEqual(@as(usize, 0), implicit_reader.bitPosition());
+
+    header.distance_trees[0] = .{ .single_symbol = 5 };
+    var short_reader = bitstream.BitReader.init(&.{});
+    try readMinimalDistanceTailLookupInto(
+        &header,
+        &short_reader,
+        .{ .insert_len = 0, .copy_len = 4, .distance_symbol_zero = false },
+        &last_distances,
+        &decoded,
+    );
+    try std.testing.expectEqual(try resolveShortDistance(5, &last_distances), decoded.distance);
+    try std.testing.expect(decoded.update_ring);
+    try std.testing.expectEqual(@as(usize, 0), short_reader.bitPosition());
+
+    header.distance_trees[0] = .{ .single_symbol = 20 };
+    var regular_reader = bitstream.BitReader.init(&.{0b0000_0011});
+    try readMinimalDistanceTailLookupInto(
+        &header,
+        &regular_reader,
+        .{ .insert_len = 0, .copy_len = 4, .distance_symbol_zero = false },
+        &last_distances,
+        &decoded,
+    );
+    try std.testing.expectEqual(try resolveRegularDistance(0, 0, 20, 3), decoded.distance);
+    try std.testing.expect(decoded.update_ring);
+    try std.testing.expectEqual(@as(usize, 3), regular_reader.bitPosition());
 }
 
 test "br regular distance resolver covers postfix and extra bits" {
