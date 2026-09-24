@@ -151,7 +151,9 @@ const split_dense_literal_decode_text_section = switch (builtin.object_format) {
 
 const split_x2_huffman_literal_min = 12 * 1024;
 const split_huffman_literal_capacity = 16 * 1024;
-const split_wide_huffman_literal_capacity = 32 * 1024;
+// Keep larger four-stream literal sections on the bulk decoder while bounding
+// this allocation-free path to half of Zstd's maximum decoded block size.
+const split_wide_huffman_literal_capacity = 64 * 1024;
 
 const multi_sequence_winner_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_multi_sequence_winner",

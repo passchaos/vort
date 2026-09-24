@@ -570,6 +570,16 @@ Recommended next comparison steps:
   1.0010x, and a 31-pair, 5,000-decode `binary_mixed` confirmation recovers to
   0.9950x. A final 5,000-iteration libzstd 1.5.7 run measures 4900.73 versus
   6640.37 MiB/s (`0.7380x`), so the reference floor rises from 0.55x to 0.65x.
+  The wide split-literal scratch limit now covers up to 64 KiB rather than
+  32 KiB. This moves a previously interleaved level-1 roadmap block onto the
+  existing bulk-Huffman/grouped-sequence path. Against independent binaries,
+  15 alternating one-shot pairs improve the frozen 1.16 MiB roadmap input by
+  1.3646x median / 1.3645x geometric mean with 15/15 wins; 11 reusable pairs
+  improve by 1.3761x / 1.3800x with 11/11 wins. Candidate throughput reaches
+  about 0.98x libzstd 1.5.7 on this host. The change adds 32 KiB to this
+  allocation-free path's bounded stack scratch; blocks above 64 KiB retain the
+  interleaved fallback. See `docs/performance/zstd-wide-split-capacity.md` for
+  controls, provenance, and rejected variants.
   Multi-sequence candidate arbitration now computes the exact RLE, predefined,
   and mixed-table payload lengths first, preserves the existing RLE-first tie
   order, and emits only the selected wire instead of serializing and copying all
