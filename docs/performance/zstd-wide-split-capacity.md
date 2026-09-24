@@ -78,3 +78,24 @@ roadmap 1.0005x, large_json 1.0069x, binary_mixed 1.0005x, and ascii64k
 0.9999x by median. This follow-up adds another bounded 64 KiB of stack scratch
 to the wide specialization, for 128 KiB plus its 16-byte overcopy guard in
 total.
+
+## Mixed-table split follow-up (2026-09-24)
+
+The remaining PDF samples still spent most decode time in
+`copyLiteralsFromHuffmanState`, because mixed/predefined sequence-table blocks
+could not use the all-FSE split executor. A generic split path now bulk-decodes
+four-stream Huffman literals for blocks with at least 1,024 sequences or 4 KiB
+of regenerated literals, then preserves the existing checked `readModeSequence`
+and match-copy semantics. The all-FSE specialization remains first in routing.
+
+Against `f6fd1b0b`, the final 32-byte-aligned candidate measures:
+
+| Input | Pairs won | Median speedup | Geometric mean | Candidate/libzstd median |
+| --- | ---: | ---: | ---: | ---: |
+| `nndl-v2 (1).pdf` | 15/15 | 1.4454x | 1.4446x | 0.5991x |
+| `zellij` | 15/15 | 1.0519x | 1.0528x | 0.8804x |
+
+Fifteen-pair controls retain build 0.9951x, source 1.0007x, roadmap 1.0019x,
+large_json 0.9997x, binary_mixed 1.0097x, and ascii64k 1.0000x by median.
+Without explicit alignment, inserting the new cold function moved the dense
+all-FSE loop and reduced build to 0.9478x; that layout was rejected.

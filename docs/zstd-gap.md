@@ -589,6 +589,13 @@ Recommended next comparison steps:
   stay within 0.7% of neutral by median. The resulting complete one-shot and
   reusable comparison is recorded in
   `docs/performance/zstd-vort-test-corpus.md`.
+  Mixed/predefined sequence-table blocks now use a generic split executor once
+  four-stream Huffman literals reach 4 KiB (or sequence count reaches 1,024).
+  It bulk-decodes literals but retains the checked generic sequence state
+  machine. Against `f6fd1b0b`, 15 alternating pairs improve `nndl-v2 (1).pdf`
+  by 1.4454x and `zellij` by 1.0519x median, both with 15/15 wins. Explicit
+  32-byte alignment keeps build/source/roadmap/large_json controls within
+  0.51% of neutral by median.
   The split executor now hoists its frame-output-start validation out of every
   sequence branch. The invariant holds because successful copies only advance
   the output cursor. Against `34e63ba9`, 21 alternating pairs improve

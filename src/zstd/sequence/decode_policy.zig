@@ -3,6 +3,7 @@ const std = @import("std");
 pub const small_literal_limit = 4 * 1024;
 pub const split_sequence_min = 1024;
 pub const split_literal_min = 32 * 1024;
+pub const generic_split_literal_min = 4 * 1024;
 
 /// The small executor specializes long matches. More than 4,096 sequences in
 /// a <=128-KiB block implies less than 32 output bytes per sequence, so use the
@@ -19,6 +20,11 @@ pub inline fn preferSplit(literal_bytes: usize, sequence_count: usize) bool {
         literal_bytes >= split_literal_min;
 }
 
+pub inline fn preferGenericSplit(literal_bytes: usize, sequence_count: usize) bool {
+    return sequence_count >= split_sequence_min or
+        literal_bytes >= generic_split_literal_min;
+}
+
 test "small sequence executor excludes dense sparse-literal blocks" {
     try std.testing.expect(preferSmall(4096, 4096));
     try std.testing.expect(preferSmall(2083, 1834));
@@ -32,4 +38,6 @@ test "split Huffman executor covers sequence-dense and literal-dense blocks" {
     try std.testing.expect(preferSplit(0, split_sequence_min));
     try std.testing.expect(preferSplit(split_literal_min, 1));
     try std.testing.expect(!preferSplit(split_literal_min - 1, split_sequence_min - 1));
+    try std.testing.expect(preferGenericSplit(generic_split_literal_min, 1));
+    try std.testing.expect(!preferGenericSplit(generic_split_literal_min - 1, split_sequence_min - 1));
 }

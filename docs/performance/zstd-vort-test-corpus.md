@@ -19,36 +19,36 @@ the 135,912,332-byte largest file is included.
 
 | File | Bytes | one-shot Vort/libzstd | reusable Vort/libzstd |
 | --- | ---: | ---: | ---: |
-| `3852_001.pdf` | 55,966 | 0.4751x | 0.5428x |
-| `MIT-CSAIL-TR-2012-021.pdf` | 241,230 | 0.5526x | 0.6006x |
-| `P23122276601US_...pdf` | 192,404 | 0.6123x | 0.6680x |
-| `Potato_ a hybrid CPU_GPU 2D renderer design.pdf` | 171,705 | 0.4887x | 0.5329x |
-| `Potato_ a hybrid CPU_GPU 2D renderer design.zip` | 11,191 | 1.8249x | 1.9747x |
-| `PotatoahybridCPUGPU2Drendererdesign.html` | 38,977 | 0.9624x | 1.1096x |
-| `launch` | 947 | 0.3307x | 0.4516x |
-| `left_hand_img_origin.mp4` | 9,679,689 | 0.9547x | 0.9816x |
-| `llm-agent (1).pdf` | 4,143,466 | 0.6266x | 0.6187x |
-| `nndl-practice.pdf` | 4,514,176 | 0.5084x | 0.4707x |
-| `nndl-v2 (1).pdf` | 7,587,144 | 0.4029x | 0.4018x |
-| `output 4/siri-agent@...tar.xz` | 11,720,216 | 1.0034x | 1.0623x |
-| `output 4/siri-agent_...arm64.deb` | 11,719,292 | 0.8804x | 1.0135x |
-| `release_aarch64.tar.gz` | 23,447,421 | 0.8788x | 1.0593x |
-| `release_mininav-exec.tar.gz` | 32,720,642 | 0.9794x | 0.9992x |
-| `release_mininav-network.tar.gz` | 24,398,119 | 0.9913x | 1.0085x |
-| `release_neuro-setting.tar.gz` | 135,912,332 | 1.0443x | 1.0082x |
-| `release_ota-service.tar.gz` | 37,885,681 | 1.0778x | 1.0398x |
-| `release_performance-monitor.tar.gz` | 71,424,528 | 1.0030x | 0.9954x |
-| `release_robot-boot.tar.gz` | 10,754 | 1.9133x | 1.9328x |
-| `release_ros2.tar.gz` | 31,505,008 | 0.9963x | 1.0067x |
-| `siri-agent.tar.gz` | 10,584,365 | 1.0866x | 0.9415x |
-| `zellij` | 38,933,880 | 0.8358x | 0.8367x |
-| `zellij-no-web-aarch64-unknown-linux-musl.tar.gz` | 14,489,265 | 1.0605x | 1.0101x |
-| `微信图片_20260909154248_3_313.jpg` | 2,863,288 | 0.9950x | 1.0199x |
+| `3852_001.pdf` | 55,966 | 0.4653x | 0.5536x |
+| `MIT-CSAIL-TR-2012-021.pdf` | 241,230 | 0.5280x | 0.5723x |
+| `P23122276601US_...pdf` | 192,404 | 0.6085x | 0.6430x |
+| `Potato_ a hybrid CPU_GPU 2D renderer design.pdf` | 171,705 | 0.4701x | 0.5329x |
+| `Potato_ a hybrid CPU_GPU 2D renderer design.zip` | 11,191 | 2.1773x | 2.0291x |
+| `PotatoahybridCPUGPU2Drendererdesign.html` | 38,977 | 0.9443x | 1.1018x |
+| `launch` | 947 | 0.3256x | 0.4548x |
+| `left_hand_img_origin.mp4` | 9,679,689 | 0.9793x | 1.0027x |
+| `llm-agent (1).pdf` | 4,143,466 | 0.6484x | 0.6192x |
+| `nndl-practice.pdf` | 4,514,176 | 0.4738x | 0.4815x |
+| `nndl-v2 (1).pdf` | 7,587,144 | 0.5848x | 0.5987x |
+| `output 4/siri-agent@...tar.xz` | 11,720,216 | 0.9405x | 0.9427x |
+| `output 4/siri-agent_...arm64.deb` | 11,719,292 | 0.9342x | 0.9596x |
+| `release_aarch64.tar.gz` | 23,447,421 | 0.9453x | 0.9633x |
+| `release_mininav-exec.tar.gz` | 32,720,642 | 0.9905x | 0.9912x |
+| `release_mininav-network.tar.gz` | 24,398,119 | 0.9744x | 0.9778x |
+| `release_neuro-setting.tar.gz` | 135,912,332 | 1.0123x | 0.9721x |
+| `release_ota-service.tar.gz` | 37,885,681 | 0.9482x | 1.0086x |
+| `release_performance-monitor.tar.gz` | 71,424,528 | 0.9919x | 1.0208x |
+| `release_robot-boot.tar.gz` | 10,754 | 2.0423x | 2.1333x |
+| `release_ros2.tar.gz` | 31,505,008 | 0.9840x | 0.9886x |
+| `siri-agent.tar.gz` | 10,584,365 | 1.0462x | 0.9776x |
+| `zellij` | 38,933,880 | 0.8796x | 0.8802x |
+| `zellij-no-web-aarch64-unknown-linux-musl.tar.gz` | 14,489,265 | 0.9923x | 0.9534x |
+| `微信图片_20260909154248_3_313.jpg` | 2,863,288 | 0.9692x | 1.0042x |
 
-The one-shot matrix has 8/25 rows above libzstd, a 0.9624x median ratio, a
-0.8271x geometric mean, and a time-aggregated 0.7233x ratio. The reusable
-matrix has 12/25 rows above libzstd, a 0.9992x median, a 0.8628x geometric mean,
-and a 0.7865x aggregate ratio. Absolute ratios moved with host load even though
+The one-shot matrix has 4/25 rows above libzstd, a 0.9453x median ratio, a
+0.8356x geometric mean, and a time-aggregated 0.7321x ratio. The reusable
+matrix has 7/25 rows above libzstd, a 0.9633x median, a 0.8680x geometric mean,
+and a 0.8056x aggregate ratio. Absolute ratios moved with host load even though
 each Vort/libzstd pair ran in one process; use the independent-binary A/B
 figures for claims about the routing change itself.
 
@@ -58,10 +58,10 @@ per file:
 
 | Compression level/API | Files | Vort wins | Median ratio | Geometric mean | Time-aggregated ratio |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| level 1 one-shot | 25 | 8 | 0.9624x | 0.8271x | 0.7233x |
-| level 1 reusable | 25 | 12 | 0.9992x | 0.8628x | 0.7865x |
-| level 3 one-shot | 25 | 7 | 0.9384x | 0.7527x | 0.6118x |
-| level 9 one-shot | 25 | 4 | 0.9890x | 0.7804x | 0.6413x |
+| level 1 one-shot | 25 | 4 | 0.9453x | 0.8356x | 0.7321x |
+| level 1 reusable | 25 | 7 | 0.9633x | 0.8680x | 0.8056x |
+| level 3 one-shot | 25 | 5 | 0.9721x | 0.7716x | 0.6527x |
+| level 9 one-shot | 25 | 7 | 0.9620x | 0.7952x | 0.6492x |
 
 Thus the matrix validates 100 file/mode combinations: all 25 files in both
 level-1 APIs and all 25 files at each additional compression level. All source

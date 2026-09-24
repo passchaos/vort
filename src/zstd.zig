@@ -149,6 +149,13 @@ const split_dense_literal_decode_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const split_generic_literal_decode_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_split_zz",
+    .macho => "__TEXT,__vort_zstd_slz",
+    .coff => ".text$vort_zstd_split_zz",
+    else => ".text",
+};
+
 const split_x2_huffman_literal_min = 12 * 1024;
 const split_huffman_literal_capacity = 16 * 1024;
 // Keep all valid four-stream literal sections eligible for the allocation-free
@@ -9584,6 +9591,22 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         )) return;
     }
     var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+    if ((!builtin.is_test or !test_disable_split_huffman_decode) and
+        (section.kind == .compressed or section.kind == .treeless) and
+        sequence_decode_policy.preferGenericSplit(section.regenerated_size, section.sequence_count) and
+        dictionary_history.len == 0 and
+        section.regenerated_size <= split_wide_huffman_literal_capacity)
+    {
+        if (try tryDecodeGenericSplitHuffmanSequences(
+            section,
+            output,
+            written,
+            frame_output_start,
+            frame_state,
+            continuation,
+            &state,
+        )) return;
+    }
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
     if (spec.ll_mode == .compressed and
@@ -9781,6 +9804,22 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         )) return;
     }
     var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+    if ((!builtin.is_test or !test_disable_split_huffman_decode) and
+        (section.kind == .compressed or section.kind == .treeless) and
+        sequence_decode_policy.preferGenericSplit(section.regenerated_size, section.sequence_count) and
+        dictionary_history.len == 0 and
+        section.regenerated_size <= split_wide_huffman_literal_capacity)
+    {
+        if (try tryDecodeGenericSplitHuffmanSequences(
+            section,
+            output,
+            written,
+            frame_output_start,
+            frame_state,
+            continuation,
+            &state,
+        )) return;
+    }
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
     if (spec.ll_mode == .compressed and
@@ -10144,7 +10183,7 @@ noinline fn tryDecodeAllFseSplitDenseHuffmanSequences(
     continuation: sequence_continuation.Context,
     state: *SequenceDecodeState,
     comptime allow_wildcopy: bool,
-) linksection(split_dense_literal_decode_text_section) Error!bool {
+) align(32) linksection(split_dense_literal_decode_text_section) Error!bool {
     return try decodeAllFseSplitHuffmanSequences(
         split_huffman_literal_capacity,
         true,
@@ -10474,6 +10513,56 @@ inline fn decodeAllFseSplitHuffmanSequences(
     if (use_wide_state_reads) state.reader = wide_reader;
     if (continuation.retainsState()) {
         frame_state.previous_tables = spec.tables();
+        frame_state.repeated_offsets = state.repeated_offsets;
+    }
+    return true;
+}
+
+noinline fn tryDecodeGenericSplitHuffmanSequences(
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+) linksection(split_generic_literal_decode_text_section) Error!bool {
+    if (section.huffman_streams != .four) return false;
+    if (frame_output_start > written.*) return error.CorruptFrame;
+
+    var literals: [split_wide_huffman_literal_capacity]u8 = undefined;
+    if (!try decodeLargeFourStreamHuffman(section, literals[0..section.regenerated_size])) return false;
+    var literal_offset: usize = 0;
+    while (state.remaining != 0) {
+        const sequence = try readModeSequence(state);
+        if (literal_offset > section.regenerated_size or
+            section.regenerated_size - literal_offset < sequence.literal_len)
+            return error.CorruptFrame;
+        if (output.len - written.* < sequence.literal_len) return error.OutputTooSmall;
+        if (sequence.literal_len != 0) {
+            @memcpy(
+                output[written.*..][0..sequence.literal_len],
+                literals[literal_offset..][0..sequence.literal_len],
+            );
+            written.* += sequence.literal_len;
+            literal_offset += sequence.literal_len;
+        }
+        try copyMatchFromHistory(
+            output,
+            written,
+            frame_output_start,
+            &.{},
+            sequence.match_offset,
+            sequence.match_len,
+        );
+    }
+
+    const last_literals = section.regenerated_size - literal_offset;
+    if (output.len - written.* < last_literals) return error.OutputTooSmall;
+    @memcpy(output[written.*..][0..last_literals], literals[literal_offset..][0..last_literals]);
+    written.* += last_literals;
+    if (continuation.retainsState()) {
+        frame_state.previous_tables = state.spec.tables();
         frame_state.repeated_offsets = state.repeated_offsets;
     }
     return true;
@@ -29565,6 +29654,29 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     ));
     try std.testing.expectEqual(fast_written, wide_written);
     try std.testing.expectEqualSlices(u8, fast_output, wide_output);
+
+    const generic_split_output = try std.testing.allocator.alloc(u8, output_len);
+    defer std.testing.allocator.free(generic_split_output);
+    @memset(generic_split_output, 0xa5);
+    var generic_split_frame_state: SequenceFrameState = .{};
+    var generic_split_state = try initSequenceDecodeState(
+        spec,
+        section.sequence_count,
+        try ReverseBitReader.init(block[spec.bitstream_offset..]),
+        initial_repeated_offsets,
+    );
+    var generic_split_written: usize = 0;
+    try std.testing.expect(try tryDecodeGenericSplitHuffmanSequences(
+        section,
+        generic_split_output,
+        &generic_split_written,
+        0,
+        &generic_split_frame_state,
+        .terminal,
+        &generic_split_state,
+    ));
+    try std.testing.expectEqual(fast_written, generic_split_written);
+    try std.testing.expectEqualSlices(u8, fast_output, generic_split_output);
 
     var invalid_frame_start_state = try initSequenceDecodeState(
         spec,
