@@ -15700,3 +15700,11 @@ reuse, so production keeps the simpler independently owned plans.
   two Downloads PDFs by 1.0042x/1.0019x, the log by 1.0182x, and the trace by
   1.0070x; all four medians are positive and the latter two win 7/7. Final
   throughputs are 4689.27, 5411.59, 3021.75, and 2730.78 MiB/s respectively.
+  The same grouped executor now selects a bounded 32-byte vector wildcopy when
+  both the match distance and rounded destination span permit it, retaining
+  the 16-byte path for smaller overlaps and tight output tails. Direct oracles
+  cover distances 32/47/64, lengths 3...128, adaptive selection, and untouched
+  suffix bytes. Against `f9e9c02c`, seven fixed-CPU-5 Downloads pairs improve
+  the first PDF, log, and trace by 1.0111x, 1.0558x, and 1.0436x; the second PDF
+  is neutral at 0.9976x. Final log/trace throughput reaches 3182.47/2833.50
+  MiB/s, or 0.7716x/0.7472x system libzstd 1.5.5.

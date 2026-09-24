@@ -10459,7 +10459,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 &literal_offset,
                 literal_len,
             );
-            sequence_match_copy.appendForwardWildcopy16(
+            _ = sequence_match_copy.appendForwardWildcopy(
                 output,
                 written,
                 written.* - match_offset,
@@ -10482,7 +10482,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 &literal_offset,
                 literal_len,
             );
-            sequence_match_copy.appendForwardWildcopy16(
+            _ = sequence_match_copy.appendForwardWildcopy(
                 output,
                 written,
                 written.* - match_offset,

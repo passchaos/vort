@@ -267,3 +267,31 @@ Seven fixed-CPU-5 level-1 pairs against commit `3b81b575` measured:
 The isolated trace sequence stage also moves from 11.456 to 11.389
 ns/sequence in a five-round screen. All 14 reverse-reader and grouped-field
 oracles pass before the end-to-end compatibility gates.
+
+## Adaptive 32-byte match wildcopy
+
+After the grouped-reader changes, `appendForwardWildcopy16` accounted for
+9.59% of the Downloads trace profile. When the match offset is at least 32 and
+the declared frame slice contains the rounded 32-byte destination span, the
+split executor now copies one 32-byte vector per iteration. Smaller offsets or
+tighter output tails retain the existing 16-byte implementation. The caller
+still clips the writable slice to the declared frame size, so the wider copy
+does not expand the public overwrite allowance.
+
+The direct oracle compares the 32-byte implementation with generic LZ replay
+over overlapping distances 32/47/64 and match lengths 3 through 128. A second
+oracle requires the adaptive wrapper to choose the wide path only when its
+full rounded destination is available, and verifies that the fallback leaves
+the caller suffix untouched.
+
+Seven fixed-CPU-5 level-1 pairs against commit `f9e9c02c` measured:
+
+| Input | Pairs won | Median candidate/baseline | Candidate MiB/s | Candidate/libzstd |
+| --- | ---: | ---: | ---: | ---: |
+| `白话机器学习中的数学.pdf` | 5/7 | 1.0111x | 4711.30 | 0.6672x |
+| `part1_22.pdf` | 3/7 | 0.9976x | 5406.35 | 0.7322x |
+| `Controller.log.2025-09-01-11` | 7/7 | 1.0558x | 3182.47 | 0.7716x |
+| `trace_1751546764.3447797.json` | 7/7 | 1.0436x | 2833.50 | 0.7472x |
+
+The second PDF remains within 0.25% of baseline; the other three medians are
+positive, with the copy-heavy log and trace showing the intended gain.

@@ -251,6 +251,47 @@ pub inline fn appendForwardWildcopy16(
     written.* += match_len;
 }
 
+/// Copy a match in 32-byte forward chunks when the initialized history and
+/// caller-owned frame suffix both cover the wider access. Callers retain the
+/// 16-byte helper when either side has less than one complete 32-byte window.
+pub inline fn appendForwardWildcopy32(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+    match_len: usize,
+) void {
+    const destination_start = written.*;
+    const distance = destination_start - repeat_start;
+    const rounded_len = (match_len + 31) & ~@as(usize, 31);
+    std.debug.assert(match_len != 0);
+    std.debug.assert(distance >= 32);
+    std.debug.assert(output.len - destination_start >= rounded_len);
+
+    var copied: usize = 0;
+    while (copied < rounded_len) : (copied += 32) {
+        const chunk: @Vector(32, u8) = output[repeat_start + copied ..][0..32].*;
+        output[destination_start + copied ..][0..32].* = chunk;
+    }
+    written.* += match_len;
+}
+
+pub inline fn appendForwardWildcopy(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+    match_len: usize,
+) bool {
+    const destination_start = written.*;
+    const distance = destination_start - repeat_start;
+    const rounded_len_32 = (match_len + 31) & ~@as(usize, 31);
+    if (distance >= 32 and output.len - destination_start >= rounded_len_32) {
+        appendForwardWildcopy32(output, written, repeat_start, match_len);
+        return true;
+    }
+    appendForwardWildcopy16(output, written, repeat_start, match_len);
+    return false;
+}
+
 pub inline fn appendNonOverlapping16To31(
     output: []u8,
     written: *usize,
@@ -506,4 +547,46 @@ test "Zstd bounded forward wildcopy handles overlapping long matches" {
         try std.testing.expectEqualSlices(u8, expected[0..expected_written], actual[0..actual_written]);
         try std.testing.expectEqualSlices(u8, expected[logical_end..], actual[logical_end..]);
     }
+}
+
+test "Zstd bounded 32-byte forward wildcopy handles overlapping matches" {
+    inline for (.{ @as(usize, 3), 15, 31, 32, 33, 63, 64, 95, 128 }) |match_len| {
+        inline for (.{ @as(usize, 32), 47, 64 }) |distance| {
+            var expected: [256]u8 = undefined;
+            for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 29 + 13);
+            var actual = expected;
+            const destination_start = 96;
+            const rounded_len = (match_len + 31) & ~@as(usize, 31);
+            const logical_end = destination_start + rounded_len;
+            var expected_written: usize = destination_start;
+            var actual_written: usize = destination_start;
+            append(&expected, &expected_written, destination_start - distance, match_len);
+            appendForwardWildcopy32(actual[0..logical_end], &actual_written, destination_start - distance, match_len);
+            try std.testing.expectEqual(expected_written, actual_written);
+            try std.testing.expectEqualSlices(u8, expected[0..expected_written], actual[0..actual_written]);
+            try std.testing.expectEqualSlices(u8, expected[logical_end..], actual[logical_end..]);
+        }
+    }
+}
+
+test "Zstd adaptive forward wildcopy selects only a fully bounded wide copy" {
+    var expected: [256]u8 = undefined;
+    for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 43 + 17);
+
+    var wide = expected;
+    var expected_written: usize = 96;
+    var wide_written = expected_written;
+    append(&expected, &expected_written, 64, 33);
+    try std.testing.expect(appendForwardWildcopy(&wide, &wide_written, 64, 33));
+    try std.testing.expectEqual(expected_written, wide_written);
+    try std.testing.expectEqualSlices(u8, expected[0..expected_written], wide[0..wide_written]);
+
+    var bounded = expected;
+    expected_written = 96;
+    var bounded_written = expected_written;
+    append(&expected, &expected_written, 64, 33);
+    try std.testing.expect(!appendForwardWildcopy(bounded[0 .. 96 + 48], &bounded_written, 64, 33));
+    try std.testing.expectEqual(expected_written, bounded_written);
+    try std.testing.expectEqualSlices(u8, expected[0..expected_written], bounded[0..bounded_written]);
+    try std.testing.expectEqualSlices(u8, expected[96 + 48 ..], bounded[96 + 48 ..]);
 }
