@@ -6714,15 +6714,17 @@ noinline fn processExternalLiteralLookupCompressedPayload(
 ) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
-    while (written.* < meta_block_end) {
+    var output_cursor = written.*;
+    defer written.* = output_cursor;
+    while (output_cursor < meta_block_end) {
         const command_symbol = if (comptime auxiliary_tail_lookups)
             try readCommandSymbolTailLookup(header, reader)
         else
             try readCommandSymbolAny(header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
-        if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
-        var previous: u8 = if (written.* == 0) 0 else output[written.* - 1];
-        var second_previous: u8 = if (written.* < 2) 0 else output[written.* - 2];
+        if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;
+        var previous: u8 = if (output_cursor == 0) 0 else output[output_cursor - 1];
+        var second_previous: u8 = if (output_cursor < 2) 0 else output[output_cursor - 2];
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
             try ensureLiteralBlockAny(header, reader);
@@ -6737,30 +6739,30 @@ noinline fn processExternalLiteralLookupCompressedPayload(
             const literal = (try lookup.decodeValueFast(reader)) orelse
                 try lookup.decodeValueLong(&header.literal_trees[tree_index].table, reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
-            output[written.*] = @intCast(literal);
-            written.* += 1;
+            output[output_cursor] = @intCast(literal);
+            output_cursor += 1;
             second_previous = previous;
             previous = @intCast(literal);
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
-        if (written.* == meta_block_end) return;
+        if (output_cursor == meta_block_end) return;
         const decoded_distance = if (comptime auxiliary_tail_lookups)
             try readMinimalDistanceTailLookup(header, reader, lengths, last_distances)
         else
             try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
-        const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
+        const max_distance = maxBackwardDistanceForWindow(window_bits, output_cursor);
         if (distance > max_distance) {
             const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
-            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
-            @memcpy(output[written.*..][0..word.len], word);
-            written.* += word.len;
+            if (word.len > meta_block_end - output_cursor) return error.CorruptFrame;
+            @memcpy(output[output_cursor..][0..word.len], word);
+            output_cursor += word.len;
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
-        if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
-        match_copy.append(output, written, distance, lengths.copy_len);
+        if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
+        match_copy.append(output, &output_cursor, distance, lengths.copy_len);
     }
 }
 

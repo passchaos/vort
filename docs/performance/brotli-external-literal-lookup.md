@@ -88,3 +88,33 @@ the same Downloads corpus produced:
 The longer PDF q5 comparison now measures 173.49 MiB/s, or 0.4589x of
 libbrotli 1.1.0. The remaining profile is dominated by the context-dependent
 literal loop and bit-reservoir refill rather than canonical-tree scans.
+
+## Local output cursor
+
+The external-lookup executor now keeps its output position in a local cursor
+for the full meta-block and commits it through `defer`, including error exits.
+This removes a caller-pointer load and store from every decoded literal without
+changing partial-progress behavior.
+
+Eleven alternating q5 runs on `~/Downloads/白话机器学习中的数学.pdf` all
+improved, with a 1.0329x median. The `part1_22.pdf`, 63 MiB log, and 31 MiB
+trace controls remained neutral to slightly positive by median at 1.0016x,
+1.0004x, and 1.0020x. A longer same-process comparison measured 179.10 MiB/s,
+or 0.4778x libbrotli 1.1.0. An attempted literal-block-run cache was rejected
+because it regressed the trace control.
+
+## Local output-cursor follow-up
+
+The external-lookup loop formerly loaded and stored the caller's `written`
+pointer for every literal. It now keeps the position local for the complete
+meta-block and writes it back with `defer`, including all error exits. Match and
+dictionary copies use the same local cursor, so successful and partial-error
+progress semantics remain consistent.
+
+Eleven fixed-CPU alternating q5 pairs on
+`~/Downloads/白话机器学习中的数学.pdf` all improved, with a 1.0329x median.
+The `part1_22.pdf`, 63 MiB log, and 31 MiB trace controls were neutral to
+slightly positive by median (1.0016x, 1.0004x, and 1.0020x respectively).
+A longer same-process comparison measured 179.10 MiB/s, or 0.4778x of
+libbrotli 1.1.0. Caching literal-block state and grouping block runs was also
+tested, but it regressed the trace control and was removed.

@@ -2544,6 +2544,14 @@ reuse, so production keeps the simpler independently owned plans.
   This adds another `1.14x/1.12x/1.12x` median improvement for PDF q1/q5/q9,
   with `1.01x/1.02x` medians on the Downloads log/trace controls. PDF q5 now
   reaches about 173.49 MiB/s, or 0.4589x of libbrotli.
+  Keeping the output position local to the external-lookup loop adds another
+  1.0329x median on the PDF while remaining neutral on a second PDF, the log,
+  and the trace; the q5 result reaches about 179.10 MiB/s (0.4778x libbrotli).
+  Keeping the output position local to the external-lookup payload loop removes
+  another per-literal caller-pointer load/store pair. It adds a 1.0329x median
+  on PDF q5 while the second PDF, log, and trace controls remain neutral to
+  slightly positive; the resulting PDF measurement is about 179.10 MiB/s, or
+  0.4778x of libbrotli.
 
 - Expanded the Zstd/libzstd gate with 512 KiB multi-block text, numbered JSON,
   and mixed structured/binary corpora. The easy repeated-text shape already
