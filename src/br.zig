@@ -10199,7 +10199,7 @@ fn readMinimalDistanceLargeWindow(
         try readRegularDistanceWithOptions(true, header, reader, symbol), .update_ring = true };
 }
 
-noinline fn readMinimalDistanceTailLookupInto(
+inline fn readMinimalDistanceTailLookupInto(
     header: *MinimalCompressedHeader,
     reader: anytype,
     lengths: InsertCopyLengths,

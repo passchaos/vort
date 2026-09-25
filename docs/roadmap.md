@@ -15815,3 +15815,9 @@ reuse, so production keeps the simpler independently owned plans.
   improve by 1.0496x/1.0524x, q5 by 1.0160x/1.0297x, and q9 by
   1.0204x/1.0280x; every one of those pairs wins. PDF medians range from
   0.9980x to 1.0059x, an explicit sub-0.2% tradeoff on the two negative rows.
+  The prepared auxiliary distance decoder now follows the same upstream-style
+  forced-inlining strategy while retaining its output-parameter ABI and all
+  malformed-distance checks. Against `b14cb65f`, q5 log/JSON improve by
+  1.0218x/1.0237x and q9 by 1.0144x/1.0244x. The confirmed costs are q1 JSON
+  at 0.9940x and q5 PDF-B at 0.9967x; the other measured rows range from
+  0.9978x to 1.0035x.

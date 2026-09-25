@@ -394,3 +394,27 @@ quality-9 log/JSON rows win 5/5. The first PDF gives up 0.20% at quality 5 and
 small control costs are retained explicitly because the multi-percent log and
 JSON gains materially improve the overall tradeoff without establishing
 libbrotli parity.
+
+## Inlined auxiliary distance lookup
+
+The prepared auxiliary distance decoder now follows upstream Brotli's hot-path
+shape and is forced inline beside command execution. This removes its error
+return call boundary while retaining the output-parameter result, which proved
+faster than a packed scalar return in separate screening. Distance block
+switches, tree bounds, short-distance validation, extra-bit reads, and ring
+updates are unchanged.
+
+Against commit `b14cb65f`, independent ReleaseFast binaries were alternated on
+CPU 5. Values are candidate/baseline medians; the two confirmed negative rows
+use eleven higher-iteration pairs.
+
+| Quality | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.0009x | 1.0019x | 0.9978x | 0.9940x |
+| 5 | 1.0028x | 0.9967x | 1.0218x | 1.0237x |
+| 9 | 1.0035x | 0.9980x | 1.0144x | 1.0244x |
+
+Quality-5 log/JSON win 7/7 pairs. Quality-9 JSON wins 5/5; its smallest pair
+is 1.0194x. The q1 JSON and q5 PDF-B controls give up 0.60% and 0.33%,
+respectively, and are retained explicitly as the cost of the broader
+multi-percent improvement.
