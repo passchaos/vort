@@ -407,3 +407,30 @@ industry leadership remains unproven.
 The routing boundary, all 19 match-copy oracles, fast/generic split parity,
 124-case libzstd-generated probe, 9,900-frame decodecorpus with every sequence
 mode combination, reference benchmark gate, and full test/check graph pass.
+
+## Minimum-width compact wildcopy
+
+The compact executor now caps matches through 16 bytes at one 16-byte
+wildcopy, even when the adaptive dispatcher could legally select a 32- or
+64-byte store. This keeps the branch-light route above while avoiding up to
+four times the necessary writes for the most common short-match buckets. Dense
+and wide executors retain their established adaptive policy.
+
+Against commit `437377b9`, independent ReleaseFast binaries were alternated on
+CPU 5. Values are candidate/baseline medians; Log/JSON use seven pairs except
+for the 15-pair q5 Log confirmation.
+
+| Level | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.0052x | 0.9982x | 0.9999x | 0.9994x |
+| 5 | 0.9967x | 1.0028x | 1.0037x | 1.0064x |
+| 9 | 0.9986x | 0.9978x | 1.0266x | 1.0320x |
+
+The q5 Log confirmation wins 9/15 pairs with a 1.0036x geometric mean. All
+other controls remain within 0.4%; the substantial q9 gains are isolated to
+the intended short-match-heavy path. A 17--32-byte single-vector extension was
+rejected after q9 Log/JSON measured 0.9988x/1.0003x over seven pairs.
+
+Same-process q9 throughput reaches 4,172.74 MiB/s on Log and 4,014.74 MiB/s on
+JSON, or 0.7755x/0.7262x system libzstd 1.5.5. The full correctness and
+compatibility gates were repeated after this follow-up and remain green.

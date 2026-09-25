@@ -10508,12 +10508,20 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 &literal_offset,
                 literal_len,
             );
-            _ = sequence_match_copy.appendForwardWildcopy(
-                output,
-                written,
-                written.* - match_offset,
-                match_len,
-            );
+            if (!use_wide_copies and match_len <= 16)
+                sequence_match_copy.appendForwardWildcopy16(
+                    output,
+                    written,
+                    written.* - match_offset,
+                    match_len,
+                )
+            else
+                _ = sequence_match_copy.appendForwardWildcopy(
+                    output,
+                    written,
+                    written.* - match_offset,
+                    match_len,
+                );
             continue;
         }
         if (use_sequence_wildcopy and
@@ -10531,12 +10539,20 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 &literal_offset,
                 literal_len,
             );
-            _ = sequence_match_copy.appendForwardWildcopy(
-                output,
-                written,
-                written.* - match_offset,
-                match_len,
-            );
+            if (!use_wide_copies and match_len <= 16)
+                sequence_match_copy.appendForwardWildcopy16(
+                    output,
+                    written,
+                    written.* - match_offset,
+                    match_len,
+                )
+            else
+                _ = sequence_match_copy.appendForwardWildcopy(
+                    output,
+                    written,
+                    written.* - match_offset,
+                    match_len,
+                );
             continue;
         }
         if (use_sequence_wildcopy and allow_wildcopy) {

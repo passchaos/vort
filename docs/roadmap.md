@@ -15841,3 +15841,10 @@ reuse, so production keeps the simpler independently owned plans.
   q9 Log/JSON throughput reaches 4,071.26/3,897.95 MiB/s, or
   0.7630x/0.7056x system libzstd 1.5.5, so sequence execution remains the main
   gap rather than an industry-leadership result.
+  Compact matches through 16 bytes now bypass the adaptive width selection and
+  issue exactly one bounded 16-byte copy. Against `437377b9`, this adds
+  1.0266x/1.0320x on q9 Log/JSON and 1.0037x/1.0064x on q5, while the remaining
+  eight controls stay within 0.4%. A 17--32-byte extension was neutral and
+  removed. Current q9 throughput is 4,172.74/4,014.74 MiB/s, respectively
+  0.7755x/0.7262x system libzstd 1.5.5; all compatibility and full-build gates
+  pass, leaving the broader leadership target open.
