@@ -11,30 +11,35 @@ pub const Reader = struct {
     next_byte: usize,
     bit_buffer: u64 = 0,
     bit_count: usize = 0,
-    consumed_bits: usize,
 
     pub fn initFrom(source: bitstream.BitReader) Reader {
+        const consumed_bits = source.bitPosition();
         var reader = Reader{
             .input = source.input,
             .bit_len = source.bit_len,
             .next_byte = source.byte_index,
-            .consumed_bits = source.bitPosition(),
         };
         if (source.bit_index != 0 and source.byte_index < source.input.len) {
             reader.bit_buffer = source.input[source.byte_index] >> source.bit_index;
-            reader.bit_count = @min(8 - @as(usize, source.bit_index), source.bit_len -| reader.consumed_bits);
+            reader.bit_count = @min(8 - @as(usize, source.bit_index), source.bit_len -| consumed_bits);
             reader.next_byte += 1;
         }
         return reader;
     }
 
     pub fn syncTo(self: Reader, target: *bitstream.BitReader) void {
-        target.byte_index = self.consumed_bits / 8;
-        target.bit_index = @intCast(self.consumed_bits % 8);
+        const position = self.bitPosition();
+        target.byte_index = position / 8;
+        target.bit_index = @intCast(position % 8);
     }
 
     pub fn bitPosition(self: Reader) usize {
-        return self.consumed_bits;
+        // next_byte points just past the last staged source byte. Clipping its
+        // bit position handles a final partial byte, so subtracting the live
+        // reservoir count reconstructs the exact consumed position.
+        const staged_end = @min(self.next_byte * 8, self.bit_len);
+        std.debug.assert(self.bit_count <= staged_end);
+        return staged_end - self.bit_count;
     }
 
     pub fn readBits(self: *Reader, comptime T: type, count: u6) core.Error!T {
@@ -59,8 +64,8 @@ pub const Reader = struct {
     }
 
     pub fn hasBits(self: Reader, count: u6) bool {
-        return self.consumed_bits <= self.bit_len and
-            @as(usize, count) <= self.bit_len - self.consumed_bits;
+        const position = self.bitPosition();
+        return @as(usize, count) <= self.bit_len - position;
     }
 
     pub fn hasStagedBits(self: Reader, count: u6) bool {
@@ -76,7 +81,6 @@ pub const Reader = struct {
         std.debug.assert(self.hasStagedBits(count));
         self.bit_buffer >>= @intCast(count);
         self.bit_count -= count;
-        self.consumed_bits += count;
     }
 
     inline fn peekStaged(self: Reader, comptime T: type, count: u6) T {
@@ -89,7 +93,7 @@ pub const Reader = struct {
         if (self.bit_count >= requested_bits or self.next_byte >= self.input.len) return;
 
         const remaining = self.input.len - self.next_byte;
-        const valid_unstaged_bits = self.bit_len -| (self.consumed_bits + self.bit_count);
+        const valid_unstaged_bits = self.bit_len - @min(self.next_byte * 8, self.bit_len);
         if (requested_bits <= 8 and self.bit_count <= 8 and remaining >= 8 and valid_unstaged_bits >= 56) {
             const word = std.mem.readInt(u64, self.input[self.next_byte..][0..8], .little);
             self.bit_buffer |= word << @intCast(self.bit_count);
@@ -107,7 +111,7 @@ pub const Reader = struct {
             self.next_byte += 4;
         }
         while (self.bit_count < requested_bits and self.next_byte < self.input.len and self.bit_count <= 56) {
-            const valid_bits = self.bit_len -| (self.consumed_bits + self.bit_count);
+            const valid_bits = self.bit_len - @min(self.next_byte * 8, self.bit_len);
             if (valid_bits == 0) break;
             self.bit_buffer |= @as(u64, self.input[self.next_byte]) << @intCast(self.bit_count);
             self.bit_count += @min(valid_bits, 8);

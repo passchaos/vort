@@ -297,3 +297,27 @@ the JSON control measures 0.9966x. At quality 9 the PDFs and JSON improve by
 median / 0.9958x geometric mean. These sub-percent negative controls are kept
 explicit rather than presented as gains. A wider 7-byte refill was rejected
 after losing about 1.8% on both PDF targets relative to this implementation.
+
+## Derived fast-reader cursor
+
+The fast payload reader no longer stores and updates a separate absolute
+`consumed_bits` counter for every decoded symbol. Its exact cursor is derived
+when needed as the clipped end of staged input minus the number of unread
+staged bits. This identity also covers a non-byte-aligned start and a final
+partial byte. Existing mixed-read, truncated-tail, synchronization, and
+specialized-peek oracles compare the derived cursor against the scalar reader.
+
+Against commit `890a53e5`, fixed-CPU-5 quality-5 runs measured:
+
+| Input | Wins | Median | Geometric mean | Candidate MiB/s | Candidate/libbrotli |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| private-pdf-a | 7/7 | 1.0149x | 1.0147x | 277.09 | 0.7376x |
+| private-pdf-b | 7/7 | 1.0103x | 1.0104x | 240.56 | 0.6966x |
+| private-log | 15/15 | 1.0291x | 1.0292x | 1523.51 | 0.7432x |
+| private-json | 15/15 | 1.0206x | 1.0197x | 1775.89 | 0.7476x |
+
+Quality-1 medians are 1.0088x/1.0095x/1.0023x/1.0158x across the two PDFs,
+log, and JSON; the log confirmation wins 14/15 pairs with a 1.0026x geometric
+mean. Quality-9 improves all four rows by
+1.0117x/1.0097x/1.0354x/1.0200x. This is a broad hot-path gain, although the
+absolute results remain below libbrotli.

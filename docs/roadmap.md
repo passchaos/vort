@@ -15782,3 +15782,14 @@ reuse, so production keeps the simpler independently owned plans.
   throughput reaches 272.57/236.79/1479.33/1720.64 MiB/s, or
   0.7308x/0.6939x/0.7243x/0.7255x libbrotli 1.1.0. A 7-byte refill variant was
   rejected after regressing both PDF targets by about 1.8%.
+  The fast Brotli reservoir no longer stores a separately updated absolute bit
+  cursor. It derives that cursor at synchronization and query boundaries from
+  the clipped staged-input end minus the unread staged bits, removing a
+  loop-carried write from every decoded symbol. Existing scalar-equivalence,
+  short-tail, cursor, and truncation tests cover the invariant. Against
+  `890a53e5`, q5 fixed-CPU medians improve the two private PDFs by
+  1.0149x/1.0103x, the log by 1.0291x, and JSON by 1.0206x; all 44 pairs win.
+  Quality-1 medians improve by 1.0023x--1.0158x and quality-9 by
+  1.0097x--1.0354x. Quality-5 throughput reaches
+  277.09/240.56/1523.51/1775.89 MiB/s, or
+  0.7376x/0.6966x/0.7432x/0.7476x libbrotli 1.1.0.
