@@ -15771,3 +15771,14 @@ reuse, so production keeps the simpler independently owned plans.
   1.0374x/1.0257x while its controls stay within 0.2%. Quality-5 throughput is
   257.57/226.89/1482.47/1705.92 MiB/s, or
   0.6865x/0.6594x/0.7190x/0.7237x libbrotli 1.1.0.
+  The external literal table now calls a fixed 10-bit bit-reservoir peek rather
+  than the dynamic-width entry point. The refill, staged-bit checks, fallback,
+  and cursor semantics remain shared, with a direct equivalence oracle over
+  every starting bit offset and short input tail. Against `524e0716`, q5 PDF
+  medians improve by 1.0593x/1.0486x with 7/7 wins, JSON improves by 1.0043x,
+  and the log is within 0.2% at 0.9984x. Quality-1 PDF gains reach
+  1.0658x/1.0687x and quality-9 PDF gains 1.0603x/1.0475x. The weakest extended
+  controls are q1 JSON at 0.9966x and q9 log at 0.9940x median. Quality-5
+  throughput reaches 272.57/236.79/1479.33/1720.64 MiB/s, or
+  0.7308x/0.6939x/0.7243x/0.7255x libbrotli 1.1.0. A 7-byte refill variant was
+  rejected after regressing both PDF targets by about 1.8%.

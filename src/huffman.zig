@@ -808,6 +808,22 @@ pub fn PackedLookup(comptime lookup_bits: u4) type {
             return (packed_entry >> 4) - 1;
         }
 
+        pub inline fn decodeValueFast10(self: *const Self, reader: anytype) Error!?u16 {
+            comptime std.debug.assert(lookup_bits == 10);
+            const packed_entry = self.slots[reader.peekBits10Padded()];
+            if (packed_entry == 0) {
+                @branchHint(.unlikely);
+                return null;
+            }
+            const bits: u4 = @truncate(packed_entry);
+            if (!hasDecodedBits(reader, bits)) {
+                @branchHint(.unlikely);
+                return error.TruncatedFrame;
+            }
+            reader.advanceBitsStagedAssumeAvailable(bits);
+            return (packed_entry >> 4) - 1;
+        }
+
         pub inline fn decodeValue(self: *const Self, table: anytype, reader: anytype) Error!u16 {
             if (try self.decodeValueFast(reader)) |value| return value;
             return self.decodeValueLong(table, reader);

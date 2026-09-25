@@ -6826,7 +6826,7 @@ noinline fn processExternalLiteralLookupCompressedPayload(
                 std.debug.assert(run_len != 0);
                 const run_end = i + run_len;
                 while (i < run_end) : (i += 1) {
-                    const literal = (try lookup.decodeValueFast(reader)) orelse
+                    const literal = (try lookup.decodeValueFast10(reader)) orelse
                         try lookup.decodeValueLong(&header.literal_trees[tree_index].table, reader);
                     if (literal > 0xff) return error.InvalidHuffmanCode;
                     output[output_cursor] = @intCast(literal);
@@ -6856,7 +6856,7 @@ noinline fn processExternalLiteralLookupCompressedPayload(
                         literal_context.valueClustered(context_mode, previous, second_previous);
                     const tree_index = header.literal_context_map[map_start + context];
                     const lookup = &literal_lookup_ptr[tree_index];
-                    const literal = (try lookup.decodeValueFast(reader)) orelse
+                    const literal = (try lookup.decodeValueFast10(reader)) orelse
                         try lookup.decodeValueLong(&header.literal_trees[tree_index].table, reader);
                     if (literal > 0xff) return error.InvalidHuffmanCode;
                     output[output_cursor] = @intCast(literal);
@@ -6929,7 +6929,7 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
                 literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             const lookup = &literal_lookup_ptr[tree_index];
-            const literal = (try lookup.decodeValueFast(reader)) orelse blk: {
+            const literal = (try lookup.decodeValueFast10(reader)) orelse blk: {
                 const tree = try literalPrefixForDecode(header, tree_index);
                 break :blk if (tree_index < inline_literal_tree_count)
                     try lookup.decodeValueLong(&tree.table, reader)

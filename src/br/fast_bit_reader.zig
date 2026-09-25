@@ -53,6 +53,11 @@ pub const Reader = struct {
         return self.peekStaged(T, count);
     }
 
+    pub fn peekBits10Padded(self: *Reader) u10 {
+        self.fill(10);
+        return @truncate(self.bit_buffer);
+    }
+
     pub fn hasBits(self: Reader, count: u6) bool {
         return self.consumed_bits <= self.bit_len and
             @as(usize, count) <= self.bit_len - self.consumed_bits;
@@ -161,5 +166,40 @@ test "Brotli fast bit reader loads complete short tails" {
         const width: u6 = @intCast(count);
         try std.testing.expectEqual(try scalar.readBits(u32, width), try fast.readBits(u32, width));
         try std.testing.expectEqual(scalar.bitPosition(), fast.bitPosition());
+    }
+}
+
+test "Brotli fast bit reader specialized 10-bit peek matches generic reads" {
+    var input: [33]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 17);
+    }
+
+    for (0..input.len + 1) |byte_len| {
+        for (0..8) |start_bit| {
+            if (byte_len == 0 and start_bit != 0) continue;
+            const bit_len = byte_len * 8;
+            if (start_bit > bit_len) continue;
+            var source = bitstream.BitReader.initBitLength(input[0..byte_len], bit_len);
+            source.byte_index = start_bit / 8;
+            source.bit_index = @intCast(start_bit % 8);
+            var generic = Reader.initFrom(source);
+            var specialized = Reader.initFrom(source);
+            var operation: usize = 0;
+            while (true) : (operation += 1) {
+                try std.testing.expectEqual(
+                    generic.peekBitsPadded(u10, 10),
+                    specialized.peekBits10Padded(),
+                );
+                if (generic.bitPosition() == bit_len) break;
+                const remaining = bit_len - generic.bitPosition();
+                const consumed: u6 = @intCast(@min(remaining, 1 + operation % 10));
+                generic.advanceBitsStagedAssumeAvailable(consumed);
+                specialized.advanceBitsStagedAssumeAvailable(consumed);
+                try std.testing.expectEqual(generic.bitPosition(), specialized.bitPosition());
+            }
+        }
     }
 }

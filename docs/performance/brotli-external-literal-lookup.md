@@ -271,3 +271,29 @@ log and JSON controls remain within 0.2% of baseline at 0.9987x/0.9981x by
 median. The quality-5 controls are neutral by both median and geometric mean.
 The remaining absolute reference gap means broad Brotli leadership is still
 open.
+
+## Specialized 10-bit reservoir peek
+
+The external literal tables always use a 10-bit root lookup, but the fast bit
+reader previously handled that operation through its dynamic-width padded-peek
+entry point. A dedicated 10-bit entry point lets the compiler fold the width
+tests and variable mask while retaining the same refill implementation,
+staged-bit validation, long-code fallback, and cursor accounting. A focused
+oracle compares the specialized and generic readers across every starting bit
+offset, short tails, and varying cursor advances.
+
+Against commit `524e0716`, fixed-CPU-5 quality-5 runs measured:
+
+| Input | Wins | Median | Geometric mean | Candidate MiB/s | Candidate/libbrotli |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| private-pdf-a | 7/7 | 1.0593x | 1.0595x | 272.57 | 0.7308x |
+| private-pdf-b | 7/7 | 1.0486x | 1.0485x | 236.79 | 0.6939x |
+| private-log | 5/15 | 0.9984x | 0.9987x | 1479.33 | 0.7243x |
+| private-json | 13/15 | 1.0043x | 1.0048x | 1720.64 | 0.7255x |
+
+At quality 1 the two PDFs and log improve by 1.0658x, 1.0687x, and 1.0052x;
+the JSON control measures 0.9966x. At quality 9 the PDFs and JSON improve by
+1.0603x, 1.0475x, and 1.0027x; a 15-pair log confirmation measures 0.9940x
+median / 0.9958x geometric mean. These sub-percent negative controls are kept
+explicit rather than presented as gains. A wider 7-byte refill was rejected
+after losing about 1.8% on both PDF targets relative to this implementation.
