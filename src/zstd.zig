@@ -9620,6 +9620,20 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         sequence_decode_policy.preferRawAllFse(section.regenerated_size, section.sequence_count) and
         dictionary_history.len == 0)
     {
+        if (sequence_decode_policy.preferWideRawMatchCopy(section.regenerated_size))
+            return try decodeAllFseRawSequences(
+                block,
+                section,
+                &spec,
+                output,
+                written,
+                frame_output_start,
+                frame_state,
+                continuation,
+                &state,
+                allow_wildcopy,
+                true,
+            );
         return try decodeAllFseRawSequences(
             block,
             section,
@@ -9631,6 +9645,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             continuation,
             &state,
             allow_wildcopy,
+            false,
         );
     }
     if (spec.ll_mode == .compressed and
@@ -9835,6 +9850,20 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         sequence_decode_policy.preferRawAllFse(section.regenerated_size, section.sequence_count) and
         dictionary_history.len == 0)
     {
+        if (sequence_decode_policy.preferWideRawMatchCopy(section.regenerated_size))
+            return try decodeAllFseRawSequences(
+                block,
+                section,
+                &spec,
+                output,
+                written,
+                frame_output_start,
+                frame_state,
+                continuation,
+                &state,
+                allow_wildcopy,
+                true,
+            );
         return try decodeAllFseRawSequences(
             block,
             section,
@@ -9846,6 +9875,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
             continuation,
             &state,
             allow_wildcopy,
+            false,
         );
     }
     if (spec.ll_mode == .compressed and
@@ -10025,6 +10055,7 @@ noinline fn decodeAllFseRawSequences(
     continuation: sequence_continuation.Context,
     state: *SequenceDecodeState,
     allow_wildcopy: bool,
+    comptime adaptive_match_copy: bool,
 ) linksection(raw_fse_decode_text_section) Error!void {
     std.debug.assert(section.kind == .raw);
     const literals = block[section.literal_payload_offset..][0..section.regenerated_size];
@@ -10112,7 +10143,10 @@ noinline fn decodeAllFseRawSequences(
                 literal_offset += literal_len;
             }
             if (builtin.is_test) test_all_fse_raw_wildcopy_hits += 1;
-            sequence_match_copy.appendForwardWildcopy16(output, written, written.* - match_offset, match_len);
+            if (comptime adaptive_match_copy)
+                _ = sequence_match_copy.appendForwardWildcopy(output, written, written.* - match_offset, match_len)
+            else
+                sequence_match_copy.appendForwardWildcopy16(output, written, written.* - match_offset, match_len);
             continue;
         }
 
@@ -10282,7 +10316,7 @@ noinline fn tryDecodeAllFseSplitDenseHuffmanSequences(
     continuation: sequence_continuation.Context,
     state: *SequenceDecodeState,
     comptime allow_wildcopy: bool,
-) align(32) linksection(split_dense_literal_decode_text_section) Error!bool {
+) align(64) linksection(split_dense_literal_decode_text_section) Error!bool {
     return try decodeAllFseSplitHuffmanSequences(
         split_huffman_literal_capacity,
         true,

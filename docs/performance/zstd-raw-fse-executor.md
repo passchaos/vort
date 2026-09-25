@@ -145,3 +145,35 @@ compatibility probe, the 13-row reference benchmark gate, the five-row decode
 profile gate, and nine upstream decodecorpus campaigns totaling 9,900 frames
 and all 64 sequence-mode combinations. The complete project test step also
 passed using an isolated Zig global cache.
+
+## Large raw-literal adaptive match copies
+
+The first 2026-09-25 Downloads profile showed that the raw/all-FSE executor
+still spent 10.38% of the PDF workload in its fixed 16-byte match-copy loop.
+It now selects a separate specialization for raw literal sections of at least
+4 KiB. That specialization reuses the bounded 64/32/16-byte dispatcher already
+proven by the split-Huffman path; smaller literal sections retain the exact old
+16-byte loop without a per-sequence policy branch. The dense split executor is
+aligned to 64 bytes so growth in the preceding raw section does not move its
+hot entry onto a half-cache-line boundary.
+
+This block-level split is important. Applying the adaptive copy to every raw
+block improved the PDFs but regressed the `huffman80k` control by about 2.3%:
+that frame contains only 19 literals and all 5,161 matches are shorter than 32
+bytes. The 4 KiB policy restores its original specialization. Its boundary is
+covered directly, while the existing raw/all-FSE production test and match-copy
+oracles cover output equality and suffix safety.
+
+Seven fixed-CPU-5 level-1 pairs against commit `1e8e7620` measured:
+
+| Input | Pairs won | Median candidate/baseline | Candidate MiB/s | Candidate/libzstd |
+| --- | ---: | ---: | ---: | ---: |
+| `白话机器学习中的数学.pdf` | 7/7 | 1.0485x | 4901.08 | 0.6962x |
+| `part1_22.pdf` | 7/7 | 1.0083x | 5439.05 | 0.7353x |
+| `Controller.log.2025-09-01-11` | 1/7 | 0.9968x | 3339.21 | 0.8037x |
+| `trace_1751546764.3447797.json` | 3/7 | 1.0000x | 2972.81 | 0.7822x |
+| generated `huffman80k` control | 5/7 | 1.0022x | 1569.88 | 0.7226x |
+
+The two raw-literal PDFs improve, while the compressed-literal log/trace and
+small-literal control remain within 0.4% of baseline. These figures still do
+not establish libzstd parity.

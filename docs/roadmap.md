@@ -15714,3 +15714,11 @@ reuse, so production keeps the simpler independently owned plans.
   trace by 1.0529x/1.0462x with 7/7 wins, leave the PDFs at 0.9989x/1.0034x,
   and reach 3359.26/2983.43 MiB/s on the two targets. This is 0.8067x/0.7820x
   system libzstd 1.5.5; broad decode leadership remains unproven.
+  The raw/all-FSE executor now selects the same adaptive 64/32/16-byte match
+  copy only for raw literal sections of at least 4 KiB. Smaller sections keep
+  a separately compiled 16-byte loop, avoiding the 2.3% regression measured
+  when the 19-literal/5,161-sequence `huffman80k` control used wide copies.
+  Seven fixed-CPU-5 pairs against `1e8e7620` improve the two Downloads PDFs by
+  1.0485x and 1.0083x with 7/7 wins; log, trace, and `huffman80k` stay within
+  0.4% of baseline. The PDFs reach 4901.08/5439.05 MiB/s, or 0.6962x/0.7353x
+  system libzstd 1.5.5.

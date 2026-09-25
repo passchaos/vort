@@ -7,6 +7,7 @@ pub const split_literal_min = 32 * 1024;
 pub const generic_split_literal_min = 4 * 1024;
 pub const raw_all_fse_sequence_min = 32;
 pub const raw_all_fse_literal_min = split_literal_min;
+pub const raw_wide_match_literal_min = 4 * 1024;
 
 /// The small executor specializes long matches. More than 4,096 sequences in
 /// a <=128-KiB block implies less than 32 output bytes per sequence, so use the
@@ -42,6 +43,10 @@ pub inline fn preferRawAllFse(literal_bytes: usize, sequence_count: usize) bool 
         literal_bytes >= raw_all_fse_literal_min;
 }
 
+pub inline fn preferWideRawMatchCopy(literal_bytes: usize) bool {
+    return literal_bytes >= raw_wide_match_literal_min;
+}
+
 test "small sequence executor excludes dense sparse-literal blocks" {
     try std.testing.expect(preferSmall(4096, 4096));
     try std.testing.expect(preferSmall(2083, 1834));
@@ -62,4 +67,6 @@ test "split Huffman executor covers sequence-dense and literal-dense blocks" {
     try std.testing.expect(preferRawAllFse(0, raw_all_fse_sequence_min));
     try std.testing.expect(preferRawAllFse(raw_all_fse_literal_min, 1));
     try std.testing.expect(!preferRawAllFse(raw_all_fse_literal_min - 1, raw_all_fse_sequence_min - 1));
+    try std.testing.expect(!preferWideRawMatchCopy(raw_wide_match_literal_min - 1));
+    try std.testing.expect(preferWideRawMatchCopy(raw_wide_match_literal_min));
 }
