@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub const small_literal_limit = 4 * 1024;
-pub const grouped_small_sequence_min = 2048;
+pub const wide_copy_sequence_min = 2048;
 pub const split_sequence_min = 1024;
 pub const split_literal_min = 32 * 1024;
 pub const generic_split_literal_min = 4 * 1024;
@@ -17,11 +17,11 @@ pub inline fn preferSmall(literal_bytes: usize, sequence_count: usize) bool {
         sequence_count <= std.compress.zstd.block_size_max / 32;
 }
 
-/// Dense small-literal blocks amortize the grouped field reader once their
-/// sequence count reaches the measured threshold. Keep lower-density blocks
-/// on the compact executor with its specialized long-match copies.
-pub inline fn preferBoundedSmall(literal_bytes: usize, sequence_count: usize) bool {
-    return preferSmall(literal_bytes, sequence_count) and sequence_count < grouped_small_sequence_min;
+/// Keep lower-density blocks on the compact executor's specialized long-match
+/// copies. Denser blocks use the wide-copy policy; both decode their sequence
+/// fields through the grouped reader.
+pub inline fn preferSmallCopies(literal_bytes: usize, sequence_count: usize) bool {
+    return preferSmall(literal_bytes, sequence_count) and sequence_count < wide_copy_sequence_min;
 }
 
 /// Bulk-decode four Huffman streams when either sequence pressure or literal
@@ -54,8 +54,8 @@ test "small sequence executor excludes dense sparse-literal blocks" {
     try std.testing.expect(!preferSmall(0, 4097));
     try std.testing.expect(!preferSmall(2101, 6016));
     try std.testing.expect(!preferSmall(4097, 1024));
-    try std.testing.expect(preferBoundedSmall(small_literal_limit, grouped_small_sequence_min - 1));
-    try std.testing.expect(!preferBoundedSmall(small_literal_limit, grouped_small_sequence_min));
+    try std.testing.expect(preferSmallCopies(small_literal_limit, wide_copy_sequence_min - 1));
+    try std.testing.expect(!preferSmallCopies(small_literal_limit, wide_copy_sequence_min));
 }
 
 test "split Huffman executor covers sequence-dense and literal-dense blocks" {

@@ -15722,3 +15722,12 @@ reuse, so production keeps the simpler independently owned plans.
   1.0485x and 1.0083x with 7/7 wins; log, trace, and `huffman80k` stay within
   0.4% of baseline. The PDFs reach 4901.08/5439.05 MiB/s, or 0.6962x/0.7353x
   system libzstd 1.5.5.
+  Grouped sequence-field reads are now independent of the wide-copy policy.
+  The below-2,048-sequence executor consumes one bounded field group but keeps
+  its single-literal, rep0, and 68--71-byte match kernels; denser blocks retain
+  wide copies. Across seven fixed-CPU-5 pairs for all four Downloads files at
+  levels 1/3/9, level-3 log improves 1.3828x, level-9 log 1.4408x, and level-9
+  trace 1.4236x, all with 7/7 wins. PDF medians and other level-1 rows remain
+  within 0.6%, except a positive 1.0174x level-1 trace. Level-9 trace moves
+  from 16/221/5 generic/bounded/wide stage blocks at 21.590 ns/sequence to
+  16/0/226 at 11.356 ns/sequence, but remains only 0.5869x libzstd 1.5.5.

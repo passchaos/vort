@@ -318,3 +318,35 @@ The first PDF is neutral within 0.2%; the second is slightly positive, and the
 copy-heavy log and trace both gain another four to five percent. The complete
 32/64-byte dispatcher therefore raises the Downloads log and trace from the
 pre-wildcopy 3021.75/2730.78 MiB/s results to 3359.26/2983.43 MiB/s.
+
+## Grouped fields with compact copy policy
+
+Downloads level-9 frames exposed a second population of small-literal blocks:
+the trace placed 221 of 242 sequence blocks on the bounded field reader, and
+the log placed 479 of 485 there. Lowering the previous 2,048-sequence cutoff
+directly was not viable because it also replaced the compact executor's common
+68--71-byte match kernels.
+
+Field decoding and copy policy are now independent compile-time choices. The
+existing below-2,048-sequence executor uses the grouped 64-bit field reader but
+retains its compact literal and match paths; denser blocks continue to use both
+grouped fields and wide copies. No extra executor instance is emitted. The
+1,834-sequence fixed frame now requires more than 1,000 production grouped
+reads while retaining all of its single-literal, rep0, 68--71-byte match, and
+fast/generic byte-parity assertions.
+
+Seven baseline/candidate pairs were alternated on CPU 5 for every combination
+of four Downloads inputs and libzstd levels 1, 3, and 9:
+
+| Level | First PDF | Second PDF | Log | Trace |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.0011x | 0.9992x | 0.9991x | **1.0174x** |
+| 3 | 1.0002x | 1.0051x | **1.3828x** | **1.0259x** |
+| 9 | 0.9975x | 0.9942x | **1.4408x** | **1.4236x** |
+
+The level-9 trace stage changes from 16 generic / 221 bounded / 5 wide blocks
+at 21.590 ns/sequence to 16 / 0 / 226 at 11.356 ns/sequence. Fixed-CPU
+same-process reference runs measure level-3 log/trace at 2698.69/3039.34 MiB/s
+(`0.6973x`/`0.8118x` libzstd 1.5.5) and level-9 log/trace at
+3275.72/3206.22 MiB/s (`0.6188x`/`0.5869x`). The remaining level-9 reference
+gap is still substantial.
