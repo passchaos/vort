@@ -418,3 +418,35 @@ Quality-5 log/JSON win 7/7 pairs. Quality-9 JSON wins 5/5; its smallest pair
 is 1.0194x. The q1 JSON and q5 PDF-B controls give up 0.60% and 0.33%,
 respectively, and are retained explicitly as the cost of the broader
 multi-percent improvement.
+
+## Prepared distance parameters
+
+The standard-window decoder now follows the upstream Brotli
+`CalculateDistanceLut` design: each compressed meta-block prepares the extra-bit
+width and zero-extra offset for its distance alphabet once. Direct and regular
+distance codes then share a compact lookup in the command loop instead of
+rebuilding the RFC distance formula for every copy. Large Window decoding keeps
+its separately bounded 32-bit path.
+
+An exhaustive oracle compares the prepared result with the reference formula
+for all 64 legal `NPOSTFIX` / encoded-`NDIRECT` combinations and every active
+distance symbol. Existing tail-path tests cover implicit, short, regular,
+invalid, underflowing, and maximum-distance cases.
+
+Against commit `ef4d4a86`, independently built ReleaseFast binaries were
+alternated on CPU 5. Values are candidate/baseline medians; the q1 PDF-B row
+uses 15 higher-iteration pairs, while the other rows use five or seven pairs.
+
+| Quality | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.0003x | 0.9997x | 1.0134x | 1.0154x |
+| 5 | 1.0014x | 1.0037x | 1.0059x | 1.0116x |
+| 9 | 1.0005x | 1.0037x | 1.0046x | 1.0132x |
+
+The extended q1 PDF-B control has a 1.0006x geometric mean and spans
+0.9977x--1.0068x, so its 0.9997x median is treated as neutral. Two closer C
+translations were rejected: group-at-a-time table construction regressed the
+q9 PDF-A control to 0.9937x, while retaining the old direct-distance branch
+regressed q9 JSON to 0.9946x. This keeps the upstream invariant but selects the
+layout that is consistently better under Zig's generated code. It is another
+incremental improvement, not a claim of overall libbrotli leadership.

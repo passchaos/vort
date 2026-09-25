@@ -1510,6 +1510,8 @@ const MinimalCompressedHeader = struct {
     packed_distance_trees: [max_distance_context_trees - inline_distance_tree_count]PackedPrefixCode(max_distance_alphabet_size) = @splat(.{}),
     active_packed_distance_tree: PrefixCode(max_distance_alphabet_size) = .{},
     active_packed_distance_tree_index: u16 = std.math.maxInt(u16),
+    distance_extra_bits: [max_distance_alphabet_size]u5 = undefined,
+    distance_offsets: [max_distance_alphabet_size]u32 = undefined,
 };
 const large_literal_alphabet_capacity = 257;
 const large_command_alphabet_capacity = 705;
@@ -5883,6 +5885,32 @@ inline fn finishCompressedHeader(header: *MinimalCompressedHeader, shape: Compre
     header.ndirect = shape.ndirect;
     header.literal_tree_count = tree_counts.literal;
     header.distance_tree_count = tree_counts.distance;
+    prepareDistanceLookup(header, shape.distance_alphabet_size);
+}
+
+/// Brotli's distance parameters are fixed for one meta-block. Mirror the
+/// reference decoder's prepared `dist_extra_bits` / `dist_offset` tables so
+/// the command loop does not rebuild the RFC distance formula per copy.
+fn prepareDistanceLookup(header: *MinimalCompressedHeader, alphabet_size: usize) void {
+    std.debug.assert(alphabet_size <= max_distance_alphabet_size);
+    var symbol: usize = 16;
+    while (symbol < 16 + @as(usize, header.ndirect)) : (symbol += 1) {
+        header.distance_extra_bits[symbol] = 0;
+        header.distance_offsets[symbol] = @intCast(symbol - 15);
+    }
+    while (symbol < alphabet_size) : (symbol += 1) {
+        const xcode = symbol - @as(usize, header.ndirect) - 16;
+        const npostfix: usize = header.npostfix;
+        const extra_bits: u5 = @intCast(1 + (xcode >> @intCast(npostfix + 1)));
+        header.distance_extra_bits[symbol] = extra_bits;
+        header.distance_offsets[symbol] = @intCast(resolveRegularDistanceParts(
+            header.npostfix,
+            header.ndirect,
+            xcode,
+            extra_bits,
+            0,
+        ));
+    }
 }
 
 const LargeCompressedHeaderShape = struct {
@@ -10162,11 +10190,7 @@ fn readMinimalDistance(
         .distance = try resolveShortDistance(symbol, last_distances),
         .update_ring = symbol != 0,
     };
-    const direct_index = symbol - 16;
-    return .{ .distance = if (direct_index < header.ndirect)
-        @as(usize, direct_index) + 1
-    else
-        try readRegularDistance(header, reader, symbol), .update_ring = true };
+    return .{ .distance = try readPreparedDistance(header, reader, symbol), .update_ring = true };
 }
 
 fn readMinimalDistanceLargeWindow(
@@ -10222,12 +10246,8 @@ inline fn readMinimalDistanceTailLookupInto(
         decoded_distance.update_ring = symbol != 0;
         return;
     }
-    const direct_index = symbol - 16;
     decoded_distance.* = .{
-        .distance = if (direct_index < header.ndirect)
-            @as(usize, direct_index) + 1
-        else
-            try readRegularDistance(header, reader, symbol),
+        .distance = try readPreparedDistance(header, reader, symbol),
         .update_ring = true,
     };
 }
@@ -10346,6 +10366,13 @@ fn largeLiteralContext(header: *const LargeWindowCompressedHeader, output: []con
 fn distanceContext(copy_len: usize) usize {
     if (copy_len <= 4) return copy_len - 2;
     return 3;
+}
+
+fn readPreparedDistance(header: *const MinimalCompressedHeader, reader: anytype, symbol: u16) Error!usize {
+    if (symbol >= max_distance_alphabet_size) return error.InvalidHuffmanCode;
+    const extra_bits = header.distance_extra_bits[symbol];
+    const extra = if (extra_bits == 0) 0 else try reader.readBits(u32, extra_bits);
+    return @as(usize, header.distance_offsets[symbol]) + (@as(usize, extra) << header.npostfix);
 }
 
 fn readRegularDistance(header: *const MinimalCompressedHeader, reader: anytype, symbol: u16) Error!usize {
@@ -20925,6 +20952,7 @@ test "br tail distance decoder writes implicit short and regular results" {
     var header: MinimalCompressedHeader = undefined;
     header.npostfix = 0;
     header.ndirect = 0;
+    prepareDistanceLookup(&header, 16 + 48);
     header.distance_block = .{};
     header.distance_context_map[2] = 0;
     var decoded: DecodedBrotliDistance = undefined;
@@ -20973,6 +21001,28 @@ test "br regular distance resolver covers postfix and extra bits" {
     try std.testing.expectEqual(@as(usize, 3), try resolveRegularDistance(0, 1, 17, 1));
     try std.testing.expectEqual(@as(usize, 18), try resolveRegularDistance(2, 4, 25, 1));
     try std.testing.expectError(error.InvalidHuffmanCode, resolveRegularDistance(0, 4, 19, 0));
+}
+
+test "br prepared distance lookup matches RFC resolver" {
+    var header: MinimalCompressedHeader = undefined;
+    for (0..4) |npostfix_value| {
+        header.npostfix = @intCast(npostfix_value);
+        for (0..16) |ndirect_high| {
+            header.ndirect = @intCast(ndirect_high << @intCast(header.npostfix));
+            const alphabet_size = 16 + @as(usize, header.ndirect) + (@as(usize, 48) << header.npostfix);
+            prepareDistanceLookup(&header, alphabet_size);
+            for (16..alphabet_size) |symbol| {
+                const extra_bits = header.distance_extra_bits[symbol];
+                const max_extra = (@as(usize, 1) << extra_bits) - 1;
+                const prepared = @as(usize, header.distance_offsets[symbol]) + (max_extra << header.npostfix);
+                const expected = if (symbol < 16 + @as(usize, header.ndirect))
+                    symbol - 15
+                else
+                    try resolveRegularDistance(header.npostfix, header.ndirect, @intCast(symbol), max_extra);
+                try std.testing.expectEqual(expected, prepared);
+            }
+        }
+    }
 }
 
 test "br regular distance resolver remains bounded at RFC maxima" {

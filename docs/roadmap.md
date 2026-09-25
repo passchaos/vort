@@ -15821,3 +15821,13 @@ reuse, so production keeps the simpler independently owned plans.
   1.0218x/1.0237x and q9 by 1.0144x/1.0244x. The confirmed costs are q1 JSON
   at 0.9940x and q5 PDF-B at 0.9967x; the other measured rows range from
   0.9978x to 1.0035x.
+  Standard Brotli meta-block headers now prepare the distance extra-bit widths
+  and offsets used by the payload loop, following upstream Brotli's
+  `CalculateDistanceLut` invariant while retaining Vort's separately bounded
+  Large Window path. Against `ef4d4a86`, fixed-CPU-5 medians improve anonymous
+  Log/JSON inputs by 1.0134x/1.0154x at q1, 1.0059x/1.0116x at q5, and
+  1.0046x/1.0132x at q9. PDF controls range from 0.9997x to 1.0037x; the sole
+  sub-baseline median has a positive 1.0006x geometric mean over 15 pairs.
+  Exhaustive parameter/symbol oracles, the full test/check graph, the upstream
+  7,056-case one-shot and progressive matrices, and the four-category real
+  corpus differential remain green. Overall Brotli leadership is still open.
