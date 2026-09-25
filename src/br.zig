@@ -6774,6 +6774,9 @@ noinline fn processExternalLiteralLookupCompressedPayload(
 ) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
+    // Context-map parsing rejects indexes outside literal_tree_count, and the
+    // caller prepares exactly the complete inline lookup capacity.
+    const literal_lookup_ptr: [*]const ExternalLiteralLookup = @ptrCast(literal_lookups);
     var output_cursor = written.*;
     defer written.* = output_cursor;
     while (output_cursor < meta_block_end) {
@@ -6793,9 +6796,7 @@ noinline fn processExternalLiteralLookupCompressedPayload(
             else
                 literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
-            if (tree_index >= header.literal_tree_count or tree_index >= literal_lookups.len)
-                return error.CorruptFrame;
-            const lookup = &literal_lookups[tree_index];
+            const lookup = &literal_lookup_ptr[tree_index];
             const literal = (try lookup.decodeValueFast(reader)) orelse
                 try lookup.decodeValueLong(&header.literal_trees[tree_index].table, reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
@@ -6843,6 +6844,9 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
 ) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
+    // The parsed context map is already bounded by literal_tree_count, which
+    // the wrapper proves fits in this prepared lookup slice.
+    const literal_lookup_ptr = literal_lookups.ptr;
     var output_cursor = written.*;
     defer written.* = output_cursor;
     while (output_cursor < meta_block_end) {
@@ -6862,8 +6866,7 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
             else
                 literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
-            if (tree_index >= literal_lookups.len) return error.CorruptFrame;
-            const lookup = &literal_lookups[tree_index];
+            const lookup = &literal_lookup_ptr[tree_index];
             const literal = (try lookup.decodeValueFast(reader)) orelse blk: {
                 const tree = try literalPrefixForDecode(header, tree_index);
                 break :blk if (tree_index < inline_literal_tree_count)

@@ -15738,3 +15738,14 @@ reuse, so production keeps the simpler independently owned plans.
   gains are level-9 log 1.0779x and trace 1.0624x; level-3 log/trace improve
   1.0315x/1.0109x. Level-9 absolute throughput reaches 3528.15/3390.75 MiB/s,
   or 0.6578x/0.6265x libzstd 1.5.5, so further sequence/copy work remains.
+  Brotli external-literal lookup executors now consume their parsed context-map
+  indexes without repeating per-literal tree-count and slice-length checks. The
+  parser already rejects indexes outside the declared tree count, while lookup
+  preparation proves that complete count fits its fixed or tiered capacity.
+  Against `646a48bb`, seven fixed-CPU-5 quality-5 Downloads pairs improve the
+  two PDFs by 1.0291x/1.0293x (7/7 wins each) and trace by 1.0035x (7/7); a
+  longer 15-pair log control is neutral at 0.9997x median / 1.0003x geometric.
+  Same-process absolute results are 183.67/182.57/1483.90/1720.45 MiB/s, or
+  0.4885x/0.5329x/0.7195x/0.7101x libbrotli 1.1.0. The upstream differential,
+  including 32 one-shot and 32 progressive real-file cases with the four
+  Downloads inputs, remains green; broad Brotli decode leadership is still open.

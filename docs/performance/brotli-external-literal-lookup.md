@@ -191,3 +191,31 @@ MiB/s because of extra canonical fallbacks. Copying the four-entry distance
 ring into each payload function regressed all four files by roughly
 1.2%--2.6%; force-inlining the implicit-symbol branch likewise regressed the
 log and trace by about 1.6% and 1.1%.
+
+## Validated external lookup indexing
+
+The external-literal executors no longer repeat a bounds check for every
+decoded literal. `readContextMap` rejects every encoded tree index outside the
+declared literal-tree count, including before inverse move-to-front expansion,
+and the two lookup builders reject a tree count beyond their complete prepared
+capacity. The hot loops therefore use the already-proven index through the
+lookup slice pointer. Generic and non-prepared literal paths retain their local
+checks.
+
+Against commit `646a48bb`, seven alternating quality-5 pairs pinned to CPU 5
+produced:
+
+| Input | Pairs won | Median candidate/baseline | Candidate MiB/s | Candidate/libbrotli |
+| --- | ---: | ---: | ---: | ---: |
+| `白话机器学习中的数学.pdf` | 7/7 | 1.0291x | 183.67 | 0.4885x |
+| `part1_22.pdf` | 7/7 | 1.0293x | 182.57 | 0.5329x |
+| `Controller.log.2025-09-01-11` | 7/15 | 0.9997x | 1483.90 | 0.7195x |
+| `trace_1751546764.3447797.json` | 7/7 | 1.0035x | 1720.45 | 0.7101x |
+
+The longer log run has a `1.0003x` geometric mean and is treated as neutral.
+ReleaseSafe context-map and external-lookup tests, the 13-row reference gate,
+and the upstream differential all pass; the latter covers 100 base cases,
+7,056 one-shot cases, 7,056 progressive cases, 1,401 progress-matrix runs, and
+32 one-shot plus 32 progressive cases from the repository corpus and the four
+Downloads files. These results improve the PDF bottleneck but do not establish
+overall Brotli decode leadership.
