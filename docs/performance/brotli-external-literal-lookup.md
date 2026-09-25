@@ -345,3 +345,27 @@ The quality-5 target log wins 7/7 pairs with a 1.0168x geometric mean; both
 quality-9 non-PDF inputs win 5/5. All PDF and quality-1 controls remain within
 0.1% of baseline except the positive quality-9 PDF-A median. This is a bounded
 hot-path improvement and does not establish overall Brotli decode leadership.
+
+## Prepared tail-tree indexing
+
+The tail-lookup executor now indexes the prepared inline literal tree directly.
+The context-map parser already rejects indexes outside the declared tree count,
+and `prepareLiteralTailLookups` admits this executor only when the complete
+declared set fits the 64-tree inline tier. Removing the repeated general-purpose
+tree resolver and its two bounds branches leaves malformed-map rejection at the
+parser boundary and does not affect non-tail or wide-tree paths.
+
+Against commit `1f63d49b`, independent ReleaseFast binaries were alternated on
+CPU 5. Values are candidate/baseline medians over five pairs unless noted.
+
+| Quality | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.0003x | 1.0005x | 0.9999x | 1.0006x |
+| 5 | 1.0016x | 1.0001x | 1.0054x | 1.0032x |
+| 9 | 1.0007x | 0.9990x | 1.0011x | 0.9996x |
+
+The quality-5 log/JSON confirmations use eleven pairs, win 11/11 and 8/11,
+and have 1.0052x/1.0027x geometric means. The quality-9 JSON control also uses
+eleven pairs; its 0.9992x geometric mean and 0.9996x median remain within one
+tenth of one percent of baseline. The remaining rows are neutral to positive
+at this scale.

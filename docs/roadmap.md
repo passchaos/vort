@@ -15801,3 +15801,11 @@ reuse, so production keeps the simpler independently owned plans.
   1.0013x. Quality-9 log/JSON improve by 1.0093x/1.0068x with 5/5 wins; all
   quality-1 controls remain within 0.2%. Brotli remains below libbrotli on the
   current corpus, so the broader leadership objective remains open.
+  The high-tree tail executor now directly indexes its prepared inline literal
+  trees. Context-map parsing proves each index is below the declared tree count,
+  and tail preparation proves the whole set fits the 64-tree inline tier, so
+  the general resolver's repeated bounds branches are redundant on this path.
+  Against `1f63d49b`, the q5 anonymous log wins 11/11 fixed-CPU pairs at
+  1.0054x median / 1.0052x geometric mean; q5 JSON improves 1.0032x and both
+  PDFs remain neutral. Quality-1 and quality-9 controls stay within 0.1% of
+  baseline except positive q1 JSON and q9 PDF-A rows.

@@ -6753,8 +6753,9 @@ noinline fn processTailLookupCompressedPayload(
             else
                 literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
-            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
-            const tree = try literalPrefixForDecode(header, tree_index);
+            // Context-map parsing bounds every index by literal_tree_count,
+            // and tail-lookup preparation only admits the complete inline tier.
+            const tree = &header.literal_trees[tree_index];
             const literal = try tree.decodeTailLookup(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[output_cursor] = @intCast(literal);
