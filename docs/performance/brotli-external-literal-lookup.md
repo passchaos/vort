@@ -321,3 +321,27 @@ log, and JSON; the log confirmation wins 14/15 pairs with a 1.0026x geometric
 mean. Quality-9 improves all four rows by
 1.0117x/1.0097x/1.0354x/1.0200x. This is a broad hot-path gain, although the
 absolute results remain below libbrotli.
+
+## Tail-lookup output cursor
+
+The high-literal-tree tail-lookup executor now keeps its output cursor in a
+local value for the duration of the meta-block and writes it back on exit.
+Literal history, distance validation, dictionary copies, exact output bounds,
+and match-copy behavior are unchanged. This removes repeated pointer-backed
+loads and stores from the per-literal loop while preserving partial progress
+on every error return through the deferred write-back.
+
+Against commit `546a5721`, independently built ReleaseFast binaries were
+alternated on CPU 5. The table reports candidate/baseline medians; PDF labels
+are anonymous and the private file mapping remains outside version control.
+
+| Quality | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 0.9992x | 1.0001x | 1.0015x | 1.0000x |
+| 5 | 1.0003x | 0.9993x | 1.0160x | 1.0013x |
+| 9 | 1.0024x | 1.0000x | 1.0093x | 1.0068x |
+
+The quality-5 target log wins 7/7 pairs with a 1.0168x geometric mean; both
+quality-9 non-PDF inputs win 5/5. All PDF and quality-1 controls remain within
+0.1% of baseline except the positive quality-9 PDF-A median. This is a bounded
+hot-path improvement and does not establish overall Brotli decode leadership.

@@ -15793,3 +15793,11 @@ reuse, so production keeps the simpler independently owned plans.
   1.0097x--1.0354x. Quality-5 throughput reaches
   277.09/240.56/1523.51/1775.89 MiB/s, or
   0.7376x/0.6966x/0.7432x/0.7476x libbrotli 1.1.0.
+  The high-tree tail-lookup executor now keeps its output cursor local across
+  each meta-block and writes it back on every exit, removing pointer-backed
+  cursor traffic from its literal loop without changing bounds or partial
+  progress. Against `546a5721`, fixed-CPU-5 q5 medians are neutral on the two
+  anonymous PDFs, improve the log by 1.0160x (7/7 wins), and improve JSON by
+  1.0013x. Quality-9 log/JSON improve by 1.0093x/1.0068x with 5/5 wins; all
+  quality-1 controls remain within 0.2%. Brotli remains below libbrotli on the
+  current corpus, so the broader leadership objective remains open.
