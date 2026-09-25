@@ -42,6 +42,7 @@ const incremental_planned_encoder_tests = @import("br/incremental/planned_encode
 const fast_bit_reader = @import("br/fast_bit_reader.zig");
 
 var test_external_literal_lookup_hits: usize = 0;
+var test_context_independent_literal_lookup_hits: usize = 0;
 
 const large_window_text_section = switch (builtin.object_format) {
     .elf => ".vort_br_large_window",
@@ -6647,12 +6648,33 @@ fn allLiteralContextModesAreUtf8(modes: []const u2) bool {
     return true;
 }
 
+fn allLiteralContextMapsAreIndependent(header: *const MinimalCompressedHeader) bool {
+    for (0..header.literal_block.block_type_count) |block_type| {
+        const map_start = block_type * 64;
+        const tree_index = header.literal_context_map[map_start];
+        for (header.literal_context_map[map_start..][1..64]) |candidate|
+            if (candidate != tree_index) return false;
+    }
+    return true;
+}
+
 test "br all-UTF8 literal context classifier covers mixed modes" {
     try std.testing.expect(allLiteralContextModesAreUtf8(&.{literal_context.mode_utf8}));
     try std.testing.expect(allLiteralContextModesAreUtf8(&.{ literal_context.mode_utf8, literal_context.mode_utf8, literal_context.mode_utf8 }));
     try std.testing.expect(!allLiteralContextModesAreUtf8(&.{ 0, literal_context.mode_utf8 }));
     try std.testing.expect(!allLiteralContextModesAreUtf8(&.{ literal_context.mode_utf8, 1 }));
     try std.testing.expect(!allLiteralContextModesAreUtf8(&.{ literal_context.mode_utf8, 3 }));
+}
+
+test "br context-independent literal maps require a uniform tree per block type" {
+    var header: MinimalCompressedHeader = undefined;
+    header.literal_block = .{ .block_type_count = 2 };
+    header.literal_tree_count = 2;
+    @memset(header.literal_context_map[0..64], 0);
+    @memset(header.literal_context_map[64..128], 1);
+    try std.testing.expect(allLiteralContextMapsAreIndependent(&header));
+    header.literal_context_map[95] = 0;
+    try std.testing.expect(!allLiteralContextMapsAreIndependent(&header));
 }
 
 noinline fn processDecodedCompressedPayload(
@@ -6774,6 +6796,8 @@ noinline fn processExternalLiteralLookupCompressedPayload(
 ) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
+    const context_independent = allLiteralContextMapsAreIndependent(header);
+    if (builtin.is_test and context_independent) test_context_independent_literal_lookup_hits += 1;
     // Context-map parsing rejects indexes outside literal_tree_count, and the
     // caller prepares exactly the complete inline lookup capacity.
     const literal_lookup_ptr: [*]const ExternalLiteralLookup = @ptrCast(literal_lookups);
@@ -6789,6 +6813,20 @@ noinline fn processExternalLiteralLookupCompressedPayload(
         var previous: u8 = if (output_cursor == 0) 0 else output[output_cursor - 1];
         var second_previous: u8 = if (output_cursor < 2) 0 else output[output_cursor - 2];
         var i: usize = 0;
+        if (context_independent) {
+            while (i < lengths.insert_len) : (i += 1) {
+                try ensureLiteralBlockAny(header, reader);
+                const map_index = @as(usize, header.literal_block.current_type) * 64;
+                const tree_index = header.literal_context_map[map_index];
+                const lookup = &literal_lookup_ptr[tree_index];
+                const literal = (try lookup.decodeValueFast(reader)) orelse
+                    try lookup.decodeValueLong(&header.literal_trees[tree_index].table, reader);
+                if (literal > 0xff) return error.InvalidHuffmanCode;
+                output[output_cursor] = @intCast(literal);
+                output_cursor += 1;
+                if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
+            }
+        }
         while (i < lengths.insert_len) : (i += 1) {
             try ensureLiteralBlockAny(header, reader);
             const context = if (utf8_context_only)
@@ -12452,7 +12490,11 @@ test "br literal block length encoder covers every RFC range boundary" {
 
 test "br ratio planner selects a profitable literal entropy split" {
     test_external_literal_lookup_hits = 0;
-    defer test_external_literal_lookup_hits = 0;
+    test_context_independent_literal_lookup_hits = 0;
+    defer {
+        test_external_literal_lookup_hits = 0;
+        test_context_independent_literal_lookup_hits = 0;
+    }
     const payload = try std.testing.allocator.alloc(u8, 96 * 1024);
     defer std.testing.allocator.free(payload);
     var state: u32 = 0x1234_5678;
@@ -12470,6 +12512,7 @@ test "br ratio planner selects a profitable literal entropy split" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expectEqual(@as(usize, 1), test_external_literal_lookup_hits);
+    try std.testing.expectEqual(@as(usize, 1), test_context_independent_literal_lookup_hits);
 }
 
 test "br ratio planner selects a profitable three-type command entropy split" {
