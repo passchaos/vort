@@ -9569,7 +9569,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
                 frame_state,
                 continuation,
                 &state,
-                false,
+                allow_wildcopy,
             )) return;
         } else if (section.regenerated_size <= split_huffman_literal_capacity) {
             if (try tryDecodeAllFseSplitDenseHuffmanSequences(
@@ -9799,7 +9799,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
                 frame_state,
                 continuation,
                 &state,
-                false,
+                allow_wildcopy,
             )) return;
         } else if (section.regenerated_size <= split_huffman_literal_capacity) {
             if (try tryDecodeAllFseSplitDenseHuffmanSequences(
@@ -10297,6 +10297,7 @@ noinline fn tryDecodeAllFseSplitHuffmanSequences(
         split_huffman_literal_capacity,
         true,
         false,
+        true,
         section,
         output,
         written,
@@ -10322,6 +10323,7 @@ noinline fn tryDecodeAllFseSplitDenseHuffmanSequences(
         split_huffman_literal_capacity,
         true,
         true,
+        false,
         section,
         output,
         written,
@@ -10347,6 +10349,7 @@ noinline fn tryDecodeAllFseSplitWideHuffmanSequences(
         split_wide_huffman_literal_capacity,
         true,
         true,
+        false,
         section,
         output,
         written,
@@ -10362,6 +10365,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
     comptime literal_capacity: usize,
     comptime use_grouped_fields: bool,
     comptime use_wide_copies: bool,
+    comptime use_long_match_wildcopy: bool,
     section: LiteralOnlySection,
     output: []u8,
     written: *usize,
@@ -10444,6 +10448,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             if (builtin.is_test) test_split_huffman_positive_rep0_hits += 1;
             break :blk try large_offset.positiveLiteralRep0(&state.repeated_offsets);
         } else try resolveSequenceOffset(offset_base_value, of_additional_bits, offset_extra, literal_len, &state.repeated_offsets);
+        const use_sequence_wildcopy = use_wide_copies or (use_long_match_wildcopy and match_len >= 72);
         remaining -= 1;
         if (remaining != 0) {
             if (use_grouped_fields) {
@@ -10481,7 +10486,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
         }
 
         const rounded_match_len = (match_len + 15) & ~@as(usize, 15);
-        if (use_wide_copies and
+        if (use_sequence_wildcopy and
             allow_wildcopy and
             literal_len <= 15 and
             literal_offset <= section.regenerated_size and
@@ -10505,7 +10510,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             );
             continue;
         }
-        if (use_wide_copies and
+        if (use_sequence_wildcopy and
             allow_wildcopy and
             literal_len > 15 and
             literal_offset + literal_len <= section.regenerated_size and
@@ -10528,7 +10533,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             );
             continue;
         }
-        if (use_wide_copies and allow_wildcopy) {
+        if (use_sequence_wildcopy and allow_wildcopy) {
             @branchHint(.unlikely);
             try executeSplitHuffmanSequenceCold(
                 &literals,
@@ -29765,6 +29770,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         split_huffman_literal_capacity,
         true,
         true,
+        false,
         section,
         dense_output,
         &dense_written,

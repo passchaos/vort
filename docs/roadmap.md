@@ -15731,3 +15731,10 @@ reuse, so production keeps the simpler independently owned plans.
   within 0.6%, except a positive 1.0174x level-1 trace. Level-9 trace moves
   from 16/221/5 generic/bounded/wide stage blocks at 21.590 ns/sequence to
   16/0/226 at 11.356 ns/sequence, but remains only 0.5869x libzstd 1.5.5.
+  The compact copy policy now uses bounded 64/32/16-byte wildcopies only for
+  matches of at least 72 bytes, retaining its exact 68--71-byte cluster and all
+  shorter copies. Seven fixed-CPU-5 pairs against `399aa51f` are positive at
+  the median on all twelve Downloads file/level rows. The largest follow-up
+  gains are level-9 log 1.0779x and trace 1.0624x; level-3 log/trace improve
+  1.0315x/1.0109x. Level-9 absolute throughput reaches 3528.15/3390.75 MiB/s,
+  or 0.6578x/0.6265x libzstd 1.5.5, so further sequence/copy work remains.

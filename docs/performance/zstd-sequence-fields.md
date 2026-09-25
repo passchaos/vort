@@ -350,3 +350,28 @@ same-process reference runs measure level-3 log/trace at 2698.69/3039.34 MiB/s
 (`0.6973x`/`0.8118x` libzstd 1.5.5) and level-9 log/trace at
 3275.72/3206.22 MiB/s (`0.6188x`/`0.5869x`). The remaining level-9 reference
 gap is still substantial.
+
+## Compact long-match wildcopy
+
+After grouped fields removed most sequence-bit overhead, level-9 profiles put
+roughly 13% in generic match replay and its dynamic copies. The compact copy
+policy now enables the bounded 64/32/16-byte dispatcher only for matches of at
+least 72 bytes. Short matches, including the established 68--71-byte cluster,
+retain their exact specialized copies. Known-size callers pass their existing
+wildcopy proof into the compact executor; no-size callers continue to use the
+checked path.
+
+Seven fixed-CPU-5 pairs against commit `399aa51f` produced the following
+candidate/baseline medians:
+
+| Level | First PDF | Second PDF | Log | Trace |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.0232x | 1.0145x | 1.0014x | 1.0068x |
+| 3 | 1.0131x | 1.0069x | 1.0315x | 1.0109x |
+| 9 | 1.0109x | 1.0071x | 1.0779x | 1.0624x |
+
+All twelve row medians are positive. Same-process fixed-CPU measurements put
+level-3 log/trace at 2777.53/3087.66 MiB/s (`0.7177x`/`0.8118x` libzstd
+1.5.5) and level-9 log/trace at 3528.15/3390.75 MiB/s
+(`0.6578x`/`0.6265x`). Correctness remains tied to the same bounded copy
+oracles, fast/generic frame comparison, and caller-suffix checks.
