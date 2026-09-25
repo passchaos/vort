@@ -10041,7 +10041,7 @@ fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitRea
     return readCommandSymbolAny(header, reader);
 }
 
-fn readCommandSymbolTailLookup(header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
+inline fn readCommandSymbolTailLookup(header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
     if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0)
         try switchBlockAny(max_command_block_types, &header.command_block, reader);
     if (header.command_block.current_type >= inline_command_tree_count) return error.UnsupportedBrotliFeature;

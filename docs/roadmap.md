@@ -15809,3 +15809,9 @@ reuse, so production keeps the simpler independently owned plans.
   1.0054x median / 1.0052x geometric mean; q5 JSON improves 1.0032x and both
   PDFs remain neutral. Quality-1 and quality-9 controls stay within 0.1% of
   baseline except positive q1 JSON and q9 PDF-A rows.
+  Prepared auxiliary command lookup is now forced into each payload executor,
+  removing its error-union call boundary and exposing the following length
+  decode to the same optimization scope. Against `775368c6`, q1 log/JSON
+  improve by 1.0496x/1.0524x, q5 by 1.0160x/1.0297x, and q9 by
+  1.0204x/1.0280x; every one of those pairs wins. PDF medians range from
+  0.9980x to 1.0059x, an explicit sub-0.2% tradeoff on the two negative rows.

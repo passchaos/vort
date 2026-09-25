@@ -369,3 +369,28 @@ and have 1.0052x/1.0027x geometric means. The quality-9 JSON control also uses
 eleven pairs; its 0.9992x geometric mean and 0.9996x median remain within one
 tenth of one percent of baseline. The remaining rows are neutral to positive
 at this scale.
+
+## Inlined auxiliary command lookup
+
+The auxiliary-tail path now forces its compact command-symbol decoder into the
+payload executors. This removes the error-union call boundary and lets the
+compiler retain the fast reader and command block state across the immediately
+following insert/copy-length decode. The generic command decoder and all paths
+without prepared auxiliary tables are unchanged.
+
+Against commit `775368c6`, independent ReleaseFast binaries were alternated on
+CPU 5. Values are candidate/baseline medians over five pairs, with seven pairs
+for the quality-5 log and JSON confirmation.
+
+| Quality | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.0059x | 1.0037x | 1.0496x | 1.0524x |
+| 5 | 0.9980x | 1.0036x | 1.0160x | 1.0297x |
+| 9 | 0.9987x | 1.0020x | 1.0204x | 1.0280x |
+
+Both quality-5 non-PDF inputs win 7/7 pairs; all four quality-1 rows and the
+quality-9 log/JSON rows win 5/5. The first PDF gives up 0.20% at quality 5 and
+0.13% at quality 9, while the other PDF improves at those qualities. These
+small control costs are retained explicitly because the multi-percent log and
+JSON gains materially improve the overall tradeoff without establishing
+libbrotli parity.
