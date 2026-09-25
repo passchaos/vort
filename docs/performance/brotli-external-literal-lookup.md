@@ -450,3 +450,33 @@ q9 PDF-A control to 0.9937x, while retaining the old direct-distance branch
 regressed q9 JSON to 0.9946x. This keeps the upstream invariant but selects the
 layout that is consistently better under Zig's generated code. It is another
 incremental improvement, not a claim of overall libbrotli leadership.
+
+## Tail-lookup long-code continuation
+
+The in-table 9-bit Huffman decoder now preserves the already-read prefix when a
+slot misses. If at least nine bits are available and the tree contains longer
+codes, an out-of-line fallback consumes that prefix once and continues one bit
+at a time from width 10. Short inputs and trees whose maximum width fits the
+lookup retain the original compact decoder, preserving exact truncation and
+invalid-code progress.
+
+This avoids both rejected extremes: restarting at bit 1 repeats nine reads,
+while peeking the complete prefix again at every larger width adds expensive
+variable-width reservoir work. Fast/scalar equivalence covers a complete
+384-symbol tree with 10-bit codes, and a dedicated truncated-long-code oracle
+checks the error and final bit position.
+
+Against commit `d4246691`, independent ReleaseFast binaries were alternated on
+CPU 5. Values are candidate/baseline medians.
+
+| Quality | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.0019x | 1.0041x | 0.9984x | 0.9999x |
+| 5 | 1.0163x | 1.0280x | 1.0519x | 1.0213x |
+| 9 | 1.0289x | 1.0320x | 1.0563x | 1.0149x |
+
+Every q5/q9 row wins all five or seven pairs. The q1 Log/JSON controls remain
+within 0.2% of baseline. Same-process q5 Log/JSON throughput reaches
+1,696.61/1,954.45 MiB/s, or 0.8245x/0.7994x libbrotli 1.1.0; q9 reaches
+1,771.61/2,148.04 MiB/s, or 0.8302x/0.8190x. The improvement substantially
+reduces the long-code penalty but does not establish overall leadership.

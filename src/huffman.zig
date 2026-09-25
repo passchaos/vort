@@ -419,11 +419,34 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             if (comptime max_symbols < entry_count) return self.decodeValue(reader);
             const lookup: *const [lookup_len]u16 = @ptrCast(&self.entries[max_symbols - entry_count]);
             const packed_entry = lookup[reader.peekBitsPadded(u16, lookup_bits)];
-            if (packed_entry == 0) return self.decodeValue(reader);
+            if (packed_entry == 0) {
+                @branchHint(.unlikely);
+                return self.decodeValueLongAfterLookup(reader, lookup_bits);
+            }
             const bits: u4 = @truncate(packed_entry);
             if (!hasDecodedBits(reader, bits)) return error.TruncatedFrame;
             reader.advanceBitsStagedAssumeAvailable(bits);
             return (packed_entry >> 4) - 1;
+        }
+
+        noinline fn decodeValueLongAfterLookup(self: *const Self, reader: anytype, comptime lookup_bits: u4) Error!u16 {
+            if (self.max_bits <= lookup_bits or !hasDecodedBits(reader, lookup_bits))
+                return self.decodeValue(reader);
+
+            var code = reader.peekBitsPadded(u16, lookup_bits);
+            reader.advanceBitsStagedAssumeAvailable(lookup_bits);
+            var bits: u4 = lookup_bits + 1;
+            while (bits <= self.max_bits) {
+                code |= try reader.readBits(u16, 1) << @intCast(bits - 1);
+                const first = self.first_by_bits[bits];
+                const end = first + self.count_by_bits[bits];
+                for (self.entries[first..end]) |entry| {
+                    if (entry.code == code) return entry.symbol;
+                }
+                if (bits == self.max_bits) break;
+                bits += 1;
+            }
+            return error.InvalidHuffmanCode;
         }
 
         fn decodeValueWithBits(self: *const Self, reader: anytype) Error!Symbol {
@@ -2135,6 +2158,24 @@ test "tail lookup decoder matches compact decoder" {
 
     var too_dense9 = try HuffmanTable(520).init(&([_]u4{9} ** 512 ++ [_]u4{0} ** 8));
     try std.testing.expect(!too_dense9.buildTailLookup9());
+
+    const long_lengths = [_]u4{8} ** 192 ++ [_]u4{9} ** 64 ++ [_]u4{10} ** 128 ++ [_]u4{0} ** 320;
+    var long_lookup_table = try HuffmanTable(704).init(&long_lengths);
+    try std.testing.expect(long_lookup_table.buildTailLookup9());
+    const long_encoder = try HuffmanTable(704).Encoder.init(&long_lengths);
+    var long_writer: bitstream.BitWriter = .{};
+    defer long_writer.deinit(std.testing.allocator);
+    try long_encoder.writeSymbol(&long_writer, std.testing.allocator, 256);
+    const long_encoded = try long_writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(long_encoded);
+
+    var full_long_reader = bitstream.BitReader.init(long_encoded);
+    try std.testing.expectEqual(@as(u16, 256), try long_lookup_table.decodeValueTailLookup9(&full_long_reader));
+    var truncated_long_reference = bitstream.BitReader.initBitLength(long_encoded, 9);
+    var truncated_long_lookup = bitstream.BitReader.initBitLength(long_encoded, 9);
+    try std.testing.expectError(error.TruncatedFrame, long_lookup_table.decodeValue(&truncated_long_reference));
+    try std.testing.expectError(error.TruncatedFrame, long_lookup_table.decodeValueTailLookup9(&truncated_long_lookup));
+    try std.testing.expectEqual(truncated_long_reference.bitPosition(), truncated_long_lookup.bitPosition());
 }
 
 test "external packed lookup covers dense tables and long-code fallback" {

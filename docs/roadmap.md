@@ -15855,3 +15855,11 @@ reuse, so production keeps the simpler independently owned plans.
   0.9981x median / 0.9993x geometric mean. A 3--16-byte by three-distance
   full-buffer oracle and all compatibility/full-build gates pass. Zstd still
   measures about 0.73x--0.76x libzstd on these q9 inputs.
+  Brotli's 9-bit in-table Huffman miss path now preserves its already-peeked
+  prefix and continues out of line from bit 10, instead of restarting the
+  compact decoder at bit 1. Against `d4246691`, fixed-CPU-5 Log/JSON medians
+  improve by 1.0519x/1.0213x at q5 and 1.0563x/1.0149x at q9; both PDF controls
+  improve 1.0163x--1.0320x at those qualities, while all q1 rows stay within
+  0.2%. Current q9 Log/JSON throughput reaches 1,771.61/2,148.04 MiB/s, or
+  0.8302x/0.8190x libbrotli 1.1.0. Full upstream, real-corpus, test, check, and
+  reference gates pass; broad Brotli leadership remains open.
