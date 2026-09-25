@@ -434,3 +434,22 @@ rejected after q9 Log/JSON measured 0.9988x/1.0003x over seven pairs.
 Same-process q9 throughput reaches 4,172.74 MiB/s on Log and 4,014.74 MiB/s on
 JSON, or 0.7755x/0.7262x system libzstd 1.5.5. The full correctness and
 compatibility gates were repeated after this follow-up and remain green.
+
+## Single-move compact short copies
+
+The compact <=16-byte route now calls a dedicated one-move kernel instead of
+the general 16-byte loop. Its preconditions prove a complete 16-byte source and
+destination span, while the logical cursor still advances by the exact match
+length. A full-buffer oracle covers every length from 3 through 16 at distances
+16, 23, and 32 and verifies both logical bytes and the untouched caller suffix.
+
+Against commit `3d27921e`, seven fixed-CPU-5 pairs improve q9 Log/JSON by
+1.0029x/1.0090x and q5 by 1.0025x/1.0067x. The q5 Log result was confirmed over
+15 higher-iteration pairs at 1.0037x median / 1.0036x geometric mean. The other
+eight matrix controls range from 0.99495x to 1.0047x; the weakest q1 PDF-B row
+measures 0.9981x median / 0.9993x geometric mean over 15 higher-iteration
+pairs, while its 0.9950x five-pair screen included wider noise.
+
+Same-process q9 throughput is 4,166.73 MiB/s on Log and 4,097.32 MiB/s on JSON,
+or 0.7620x/0.7275x system libzstd 1.5.5 in that run. The small incremental gain
+does not close the remaining reference gap.

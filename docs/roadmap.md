@@ -15848,3 +15848,10 @@ reuse, so production keeps the simpler independently owned plans.
   removed. Current q9 throughput is 4,172.74/4,014.74 MiB/s, respectively
   0.7755x/0.7262x system libzstd 1.5.5; all compatibility and full-build gates
   pass, leaving the broader leadership target open.
+  The compact <=16-byte match path now uses a dedicated single-vector copy
+  rather than entering the general 16-byte loop. Against `3d27921e`, q9
+  Log/JSON improve another 1.0029x/1.0090x and q5 by 1.0037x/1.0067x; the
+  remaining controls stay within 0.6%, with the weakest extended control at
+  0.9981x median / 0.9993x geometric mean. A 3--16-byte by three-distance
+  full-buffer oracle and all compatibility/full-build gates pass. Zstd still
+  measures about 0.73x--0.76x libzstd on these q9 inputs.
