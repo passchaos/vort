@@ -10448,7 +10448,13 @@ inline fn decodeAllFseSplitHuffmanSequences(
             if (builtin.is_test) test_split_huffman_positive_rep0_hits += 1;
             break :blk try large_offset.positiveLiteralRep0(&state.repeated_offsets);
         } else try resolveSequenceOffset(offset_base_value, of_additional_bits, offset_extra, literal_len, &state.repeated_offsets);
-        const use_sequence_wildcopy = use_wide_copies or (use_long_match_wildcopy and match_len >= 72);
+        // Keep the measured 68--71-byte compact kernels, but otherwise mirror
+        // libzstd's common offset>=16 path for short as well as long matches.
+        const use_sequence_wildcopy = shouldUseSplitSequenceWildcopy(
+            use_wide_copies,
+            use_long_match_wildcopy,
+            match_len,
+        );
         remaining -= 1;
         if (remaining != 0) {
             if (use_grouped_fields) {
@@ -10658,6 +10664,28 @@ inline fn decodeAllFseSplitHuffmanSequences(
         frame_state.repeated_offsets = state.repeated_offsets;
     }
     return true;
+}
+
+inline fn shouldUseSplitSequenceWildcopy(
+    comptime use_wide_copies: bool,
+    comptime use_long_match_wildcopy: bool,
+    match_len: usize,
+) bool {
+    return use_wide_copies or
+        (use_long_match_wildcopy and (match_len < 68 or match_len >= 72));
+}
+
+test "zstd compact split wildcopy preserves fixed match cluster" {
+    for (3..68) |match_len|
+        try std.testing.expect(shouldUseSplitSequenceWildcopy(false, true, match_len));
+    for (68..72) |match_len|
+        try std.testing.expect(!shouldUseSplitSequenceWildcopy(false, true, match_len));
+    for (72..129) |match_len|
+        try std.testing.expect(shouldUseSplitSequenceWildcopy(false, true, match_len));
+    for (3..129) |match_len| {
+        try std.testing.expect(!shouldUseSplitSequenceWildcopy(false, false, match_len));
+        try std.testing.expect(shouldUseSplitSequenceWildcopy(true, false, match_len));
+    }
 }
 
 noinline fn tryDecodeGenericSplitHuffmanSequences(

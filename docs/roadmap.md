@@ -15831,3 +15831,13 @@ reuse, so production keeps the simpler independently owned plans.
   Exhaustive parameter/symbol oracles, the full test/check graph, the upstream
   7,056-case one-shot and progressive matrices, and the four-category real
   corpus differential remain green. Overall Brotli leadership is still open.
+  The compact all-FSE Zstd executor now extends libzstd-style bounded wildcopy
+  to 3--67-byte matches with offsets of at least 16, while preserving the
+  measured 68--71-byte exact kernels and the existing >=72-byte route. Against
+  `d0b7486d`, fixed-CPU-5 Log/JSON medians improve by 1.1984x/1.0201x at level
+  5 and 1.1647x/1.1265x at level 9; level-1 and PDF controls remain within
+  0.1% after extended confirmation. A q9 Log hardware-counter run reduces
+  cycles by about 9.2%, branches by 3.6%, and branch misses by 32.5%. Current
+  q9 Log/JSON throughput reaches 4,071.26/3,897.95 MiB/s, or
+  0.7630x/0.7056x system libzstd 1.5.5, so sequence execution remains the main
+  gap rather than an industry-leadership result.

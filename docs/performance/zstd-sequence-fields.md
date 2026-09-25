@@ -374,3 +374,36 @@ level-3 log/trace at 2777.53/3087.66 MiB/s (`0.7177x`/`0.8118x` libzstd
 1.5.5) and level-9 log/trace at 3528.15/3390.75 MiB/s
 (`0.6578x`/`0.6265x`). Correctness remains tied to the same bounded copy
 oracles, fast/generic frame comparison, and caller-suffix checks.
+
+## Compact short-match wildcopy
+
+The compact all-FSE split executor now follows libzstd's common sequence-copy
+shape for short matches as well as long ones. When the frame declares its output
+size, the match offset is at least 16, and the rounded destination remains
+inside that declared frame, matches of 3--67 bytes use the existing bounded
+16/32/64-byte forward wildcopy. The measured 68--71-byte cluster keeps its
+exact specialized kernels, and matches of at least 72 bytes retain the previous
+adaptive wildcopy route. Unknown-size, dictionary, generic, and fallback paths
+are unchanged.
+
+Against commit `d0b7486d`, independent ReleaseFast binaries were alternated on
+CPU 5. Values are candidate/baseline medians; the q5 PDF-B and both q9 PDF
+controls use 15 higher-iteration pairs.
+
+| Level | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.0013x | 1.0002x | 0.9992x | 1.0018x |
+| 5 | 1.0025x | 0.9996x | 1.1984x | 1.0201x |
+| 9 | 0.9994x | 0.9996x | 1.1647x | 1.1265x |
+
+The controls stay within 0.1% at their confirmed medians. A 50-decode q9 Log
+hardware-counter run reduced P-core cycles by about 9.2%, branches by 3.6%,
+and branch misses by 32.5%; instructions increased by about 1.2%, consistent
+with trading a branch-heavy exact-length dispatcher for bounded fixed-width
+copies. Same-process q9 throughput is 4,071.26/3,897.95 MiB/s on Log/JSON,
+or 0.7630x/0.7056x system libzstd 1.5.5. The gap is materially smaller but
+industry leadership remains unproven.
+
+The routing boundary, all 19 match-copy oracles, fast/generic split parity,
+124-case libzstd-generated probe, 9,900-frame decodecorpus with every sequence
+mode combination, reference benchmark gate, and full test/check graph pass.
