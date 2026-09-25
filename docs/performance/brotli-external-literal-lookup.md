@@ -245,3 +245,29 @@ cross-quality checks improve all four quality-1 rows by
 noise at 0.9980x. The specialization materially closes the PDF gap without
 claiming overall parity: quality-5 Vort remains at 0.6646x/0.6414x of
 libbrotli on the two PDF files.
+
+## Literal-block run batching
+
+Both external-lookup loops now resolve literal block switches once per
+contiguous block run instead of once per byte. The context-independent path
+also resolves its tree and lookup once per run; the context-dependent path
+keeps per-byte context selection but hoists its block type, context mode, map
+base, and remaining-count update. A branch-layout hint keeps the established
+context-dependent loop as the fall-through path.
+
+Against commit `6843f8c4`, independent ReleaseFast binaries were alternated on
+CPU 5. Quality-5 results were:
+
+| Input | Wins | Median | Geometric mean | Candidate MiB/s | Candidate/libbrotli |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| private-pdf-a | 7/7 | 1.0303x | 1.0307x | 257.57 | 0.6865x |
+| private-pdf-b | 7/7 | 1.0263x | 1.0262x | 226.89 | 0.6594x |
+| private-log | 7/15 | 0.9998x | 1.0003x | 1482.47 | 0.7190x |
+| private-json | 9/15 | 1.0001x | 0.9995x | 1705.92 | 0.7237x |
+
+Five-pair cross-quality checks improve every quality-1 input by
+1.0235x--1.0458x. At quality 9 the PDFs improve by 1.0374x/1.0257x, while the
+log and JSON controls remain within 0.2% of baseline at 0.9987x/0.9981x by
+median. The quality-5 controls are neutral by both median and geometric mean.
+The remaining absolute reference gap means broad Brotli leadership is still
+open.

@@ -15760,3 +15760,14 @@ reuse, so production keeps the simpler independently owned plans.
   throughput is 248.52/221.36/1484.90/1729.88 MiB/s, or
   0.6646x/0.6414x/0.7197x/0.7134x libbrotli 1.1.0. The broad leadership goal
   therefore remains open.
+  External-lookup literal decoding now batches each contiguous literal-block
+  run. Block-switch checks and remaining-count updates move out of the
+  per-byte loop; context-independent runs additionally hoist their tree lookup,
+  while context-dependent runs retain per-byte context selection. Against
+  `6843f8c4`, fixed-CPU-5 quality-5 medians improve the two private PDFs by
+  1.0303x/1.0263x with 7/7 wins. Fifteen-pair log/JSON controls are neutral at
+  0.9998x/1.0001x median and 1.0003x/0.9995x geometric mean. Quality-1 improves
+  all four inputs by 1.0235x--1.0458x; quality-9 improves the PDFs by
+  1.0374x/1.0257x while its controls stay within 0.2%. Quality-5 throughput is
+  257.57/226.89/1482.47/1705.92 MiB/s, or
+  0.6865x/0.6594x/0.7190x/0.7237x libbrotli 1.1.0.

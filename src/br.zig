@@ -6810,39 +6810,63 @@ noinline fn processExternalLiteralLookupCompressedPayload(
             try readCommandSymbolAny(header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
         if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;
-        var previous: u8 = if (output_cursor == 0) 0 else output[output_cursor - 1];
-        var second_previous: u8 = if (output_cursor < 2) 0 else output[output_cursor - 2];
         var i: usize = 0;
         if (context_independent) {
-            while (i < lengths.insert_len) : (i += 1) {
+            @branchHint(.unlikely);
+            while (i < lengths.insert_len) {
                 try ensureLiteralBlockAny(header, reader);
                 const map_index = @as(usize, header.literal_block.current_type) * 64;
                 const tree_index = header.literal_context_map[map_index];
                 const lookup = &literal_lookup_ptr[tree_index];
-                const literal = (try lookup.decodeValueFast(reader)) orelse
-                    try lookup.decodeValueLong(&header.literal_trees[tree_index].table, reader);
-                if (literal > 0xff) return error.InvalidHuffmanCode;
-                output[output_cursor] = @intCast(literal);
-                output_cursor += 1;
-                if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
+                const remaining_insert = lengths.insert_len - i;
+                const run_len = if (header.literal_block.block_type_count > 1)
+                    @min(remaining_insert, header.literal_block.remaining)
+                else
+                    remaining_insert;
+                std.debug.assert(run_len != 0);
+                const run_end = i + run_len;
+                while (i < run_end) : (i += 1) {
+                    const literal = (try lookup.decodeValueFast(reader)) orelse
+                        try lookup.decodeValueLong(&header.literal_trees[tree_index].table, reader);
+                    if (literal > 0xff) return error.InvalidHuffmanCode;
+                    output[output_cursor] = @intCast(literal);
+                    output_cursor += 1;
+                }
+                if (header.literal_block.block_type_count > 1)
+                    header.literal_block.remaining -= run_len;
             }
-        }
-        while (i < lengths.insert_len) : (i += 1) {
-            try ensureLiteralBlockAny(header, reader);
-            const context = if (utf8_context_only)
-                literal_context.valueUtf8Clustered(previous, second_previous)
-            else
-                literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
-            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
-            const lookup = &literal_lookup_ptr[tree_index];
-            const literal = (try lookup.decodeValueFast(reader)) orelse
-                try lookup.decodeValueLong(&header.literal_trees[tree_index].table, reader);
-            if (literal > 0xff) return error.InvalidHuffmanCode;
-            output[output_cursor] = @intCast(literal);
-            output_cursor += 1;
-            second_previous = previous;
-            previous = @intCast(literal);
-            if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
+        } else {
+            var previous: u8 = if (output_cursor == 0) 0 else output[output_cursor - 1];
+            var second_previous: u8 = if (output_cursor < 2) 0 else output[output_cursor - 2];
+            while (i < lengths.insert_len) {
+                try ensureLiteralBlockAny(header, reader);
+                const remaining_insert = lengths.insert_len - i;
+                const run_len = if (header.literal_block.block_type_count > 1)
+                    @min(remaining_insert, header.literal_block.remaining)
+                else
+                    remaining_insert;
+                std.debug.assert(run_len != 0);
+                const map_start = @as(usize, header.literal_block.current_type) * 64;
+                const context_mode = header.literal_context_modes[header.literal_block.current_type];
+                const run_end = i + run_len;
+                while (i < run_end) : (i += 1) {
+                    const context = if (utf8_context_only)
+                        literal_context.valueUtf8Clustered(previous, second_previous)
+                    else
+                        literal_context.valueClustered(context_mode, previous, second_previous);
+                    const tree_index = header.literal_context_map[map_start + context];
+                    const lookup = &literal_lookup_ptr[tree_index];
+                    const literal = (try lookup.decodeValueFast(reader)) orelse
+                        try lookup.decodeValueLong(&header.literal_trees[tree_index].table, reader);
+                    if (literal > 0xff) return error.InvalidHuffmanCode;
+                    output[output_cursor] = @intCast(literal);
+                    output_cursor += 1;
+                    second_previous = previous;
+                    previous = @intCast(literal);
+                }
+                if (header.literal_block.block_type_count > 1)
+                    header.literal_block.remaining -= run_len;
+            }
         }
         if (output_cursor == meta_block_end) return;
         var decoded_distance: DecodedBrotliDistance = undefined;
