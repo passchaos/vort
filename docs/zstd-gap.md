@@ -580,20 +580,20 @@ Recommended next comparison steps:
   allocation-free path's bounded stack scratch; blocks above 64 KiB retain the
   interleaved fallback. See `docs/performance/zstd-wide-split-capacity.md` for
   controls, provenance, and rejected variants.
-  A 25-file, 474,251,686-byte mixed corpus under `~/Downloads/vort-test` then
+  A 25-file, approximately 452 MiB private mixed-file corpus then
   exposed literal-heavy blocks with fewer than 1,024 sequences. The split
   policy now also accepts blocks with at least 32 KiB of regenerated literals,
   and its bounded scratch covers the full 128 KiB Zstd block size. Against
-  `7715d03e`, 15 alternating pairs improve `nndl-v2 (1).pdf` by 1.6025x and
-  `zellij` by 1.6722x median, both with 15/15 wins; six existing control rows
+  `7715d03e`, 15 alternating pairs improve private-pdf-c by 1.6025x and
+  private-binary-a by 1.6722x median, both with 15/15 wins; six existing control rows
   stay within 0.7% of neutral by median. The resulting complete one-shot and
   reusable comparison is recorded in
-  `docs/performance/zstd-vort-test-corpus.md`.
+  `docs/performance/zstd-private-mixed-corpus.md`.
   Mixed/predefined sequence-table blocks now use a generic split executor once
   four-stream Huffman literals reach 4 KiB (or sequence count reaches 1,024).
   It bulk-decodes literals but retains the checked generic sequence state
-  machine. Against `f6fd1b0b`, 15 alternating pairs improve `nndl-v2 (1).pdf`
-  by 1.4454x and `zellij` by 1.0519x median, both with 15/15 wins. Explicit
+  machine. Against `f6fd1b0b`, 15 alternating pairs improve private-pdf-c
+  by 1.4454x and private-binary-a by 1.0519x median, both with 15/15 wins. Explicit
   32-byte alignment keeps build/source/roadmap/large_json controls within
   0.51% of neutral by median.
   Raw-literal blocks with all three sequence tables compressed now share the
@@ -602,18 +602,18 @@ Recommended next comparison steps:
   content size proves writable tail space, with exact vector copies for common
   non-overlapping 3--63-byte matches and the established 68--71-byte cases.
   Against independent `d7047e6a` binaries, 15 alternating pairs improve
-  `nndl-v2 (1).pdf` by 1.1851x median and `nndl-practice.pdf` by 1.4110x,
-  both with 15/15 wins; `zellij` remains at 1.0053x. The complete 25-file
+  private-pdf-c by 1.1851x median and private-pdf-d by 1.4110x,
+  both with 15/15 wins; private-binary-a remains at 1.0053x. The complete 25-file
   matrix raises level-1 one-shot/reusable time aggregation from
   0.7321x/0.8056x to 0.8803x/0.9173x versus libzstd 1.5.7. See
   `docs/performance/zstd-raw-fse-executor.md` for controls, higher levels, and
   the rejected long-literal vector loop.
   Because raw literals need no bulk-decode scratch, the all-FSE route now has a
   separate `32 sequences or 32 KiB literals` threshold instead of inheriting
-  the Huffman split path's 1,024-sequence floor. A level-3 `nndl-v2` profile
+  the Huffman split path's 1,024-sequence floor. A level-3 private-pdf-c profile
   found 32 eligible wide all-FSE blocks among 360 sequence-bearing blocks.
   Against independent `ac4ef4ae` binaries, 15 alternating pairs improve
-  level-3 `nndl-v2`, `nndl-practice`, and `llm-agent` by 1.0849x, 1.1149x,
+  level-3 private-pdf-c, private-pdf-d, and private-pdf-e by 1.0849x, 1.1149x,
   and 1.1439x median respectively, all with 15/15 wins. Routing every non-empty
   raw/all-FSE block added no target coverage and was rejected. The final
   100-combination mixed-corpus matrix reports 0.8878x/0.8903x aggregate at

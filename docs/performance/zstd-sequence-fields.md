@@ -210,10 +210,9 @@ noise. Experiments that cached all FSE states locally, borrowed the full table
 specification, split out zero-literal sequences, or used an eight-byte short
 match wildcopy all regressed the target loops and were removed.
 
-## Dense small-literal routing on Downloads (2026-09-25)
+## Dense small-literal routing on a private corpus (2026-09-25)
 
-Profiling the level-1 frame generated from
-`~/Downloads/trace_1751546764.3447797.json` showed 65.81% of cycles in the
+Profiling the level-1 frame generated from private-json showed 65.81% of cycles in the
 all-FSE split sequence executor. The prepared-stage report classified 234 of
 242 sequence blocks as bounded and only two as wide, leaving their state
 transitions on repeated checked `peekSmall`/`readSmall` calls even though the
@@ -230,15 +229,15 @@ classification, output-suffix guards, and reusable-state coverage.
 
 The candidate and commit `63b60760` executables were frozen and alternated on
 CPU 5 of the Intel Core i9-13900K host. Every invocation regenerated the same
-level-1 frame from the Downloads source, checked Vort and system libzstd 1.5.5
+level-1 frame from the private source, checked Vort and system libzstd 1.5.5
 output, and timed five decodes in each of five best-of rounds.
 
 | Input | Pairs won | Median candidate/baseline | Candidate MiB/s | Candidate/libzstd |
 | --- | ---: | ---: | ---: | ---: |
-| `白话机器学习中的数学.pdf` | 2/7 | 0.9982x | 4656.95 | 0.6565x |
-| `part1_22.pdf` | 2/7 | 0.9968x | 5366.51 | 0.7269x |
-| `Controller.log.2025-09-01-11` | 3/7 | 0.9999x | 2976.18 | 0.7165x |
-| `trace_1751546764.3447797.json` | 7/7 | 1.6880x | 2711.30 | 0.7166x |
+| private-pdf-a | 2/7 | 0.9982x | 4656.95 | 0.6565x |
+| private-pdf-b | 2/7 | 0.9968x | 5366.51 | 0.7269x |
+| private-log | 3/7 | 0.9999x | 2976.18 | 0.7165x |
+| private-json | 7/7 | 1.6880x | 2711.30 | 0.7166x |
 
 The three unaffected files remain within 0.4% of the baseline median. On the
 trace, routing changes the prepared-stage mix from 6 generic / 234 bounded / 2
@@ -259,10 +258,10 @@ Seven fixed-CPU-5 level-1 pairs against commit `3b81b575` measured:
 
 | Input | Pairs won | Median candidate/baseline | Candidate MiB/s | Candidate/libzstd |
 | --- | ---: | ---: | ---: | ---: |
-| `白话机器学习中的数学.pdf` | 5/7 | 1.0042x | 4689.27 | 0.6647x |
-| `part1_22.pdf` | 5/7 | 1.0019x | 5411.59 | 0.7405x |
-| `Controller.log.2025-09-01-11` | 7/7 | 1.0182x | 3021.75 | 0.7289x |
-| `trace_1751546764.3447797.json` | 7/7 | 1.0070x | 2730.78 | 0.7152x |
+| private-pdf-a | 5/7 | 1.0042x | 4689.27 | 0.6647x |
+| private-pdf-b | 5/7 | 1.0019x | 5411.59 | 0.7405x |
+| private-log | 7/7 | 1.0182x | 3021.75 | 0.7289x |
+| private-json | 7/7 | 1.0070x | 2730.78 | 0.7152x |
 
 The isolated trace sequence stage also moves from 11.456 to 11.389
 ns/sequence in a five-round screen. All 14 reverse-reader and grouped-field
@@ -271,7 +270,7 @@ oracles pass before the end-to-end compatibility gates.
 ## Adaptive 32-byte match wildcopy
 
 After the grouped-reader changes, `appendForwardWildcopy16` accounted for
-9.59% of the Downloads trace profile. When the match offset is at least 32 and
+9.59% of the private-json profile. When the match offset is at least 32 and
 the declared frame slice contains the rounded 32-byte destination span, the
 split executor now copies one 32-byte vector per iteration. Smaller offsets or
 tighter output tails retain the existing 16-byte implementation. The caller
@@ -288,10 +287,10 @@ Seven fixed-CPU-5 level-1 pairs against commit `f9e9c02c` measured:
 
 | Input | Pairs won | Median candidate/baseline | Candidate MiB/s | Candidate/libzstd |
 | --- | ---: | ---: | ---: | ---: |
-| `白话机器学习中的数学.pdf` | 5/7 | 1.0111x | 4711.30 | 0.6672x |
-| `part1_22.pdf` | 3/7 | 0.9976x | 5406.35 | 0.7322x |
-| `Controller.log.2025-09-01-11` | 7/7 | 1.0558x | 3182.47 | 0.7716x |
-| `trace_1751546764.3447797.json` | 7/7 | 1.0436x | 2833.50 | 0.7472x |
+| private-pdf-a | 5/7 | 1.0111x | 4711.30 | 0.6672x |
+| private-pdf-b | 3/7 | 0.9976x | 5406.35 | 0.7322x |
+| private-log | 7/7 | 1.0558x | 3182.47 | 0.7716x |
+| private-json | 7/7 | 1.0436x | 2833.50 | 0.7472x |
 
 The second PDF remains within 0.25% of baseline; the other three medians are
 positive, with the copy-heavy log and trace showing the intended gain.
@@ -309,19 +308,19 @@ Seven fixed-CPU-5 level-1 pairs against commit `b401f6dc` measured:
 
 | Input | Pairs won | Median candidate/baseline | Candidate MiB/s | Candidate/libzstd |
 | --- | ---: | ---: | ---: | ---: |
-| `白话机器学习中的数学.pdf` | 3/7 | 0.9989x | 4711.79 | 0.6676x |
-| `part1_22.pdf` | 6/7 | 1.0034x | 5357.22 | 0.7243x |
-| `Controller.log.2025-09-01-11` | 7/7 | 1.0529x | 3359.26 | 0.8067x |
-| `trace_1751546764.3447797.json` | 7/7 | 1.0462x | 2983.43 | 0.7820x |
+| private-pdf-a | 3/7 | 0.9989x | 4711.79 | 0.6676x |
+| private-pdf-b | 6/7 | 1.0034x | 5357.22 | 0.7243x |
+| private-log | 7/7 | 1.0529x | 3359.26 | 0.8067x |
+| private-json | 7/7 | 1.0462x | 2983.43 | 0.7820x |
 
 The first PDF is neutral within 0.2%; the second is slightly positive, and the
 copy-heavy log and trace both gain another four to five percent. The complete
-32/64-byte dispatcher therefore raises the Downloads log and trace from the
+32/64-byte dispatcher therefore raises private-log and private-json from the
 pre-wildcopy 3021.75/2730.78 MiB/s results to 3359.26/2983.43 MiB/s.
 
 ## Grouped fields with compact copy policy
 
-Downloads level-9 frames exposed a second population of small-literal blocks:
+Private-corpus level-9 frames exposed a second population of small-literal blocks:
 the trace placed 221 of 242 sequence blocks on the bounded field reader, and
 the log placed 479 of 485 there. Lowering the previous 2,048-sequence cutoff
 directly was not viable because it also replaced the compact executor's common
@@ -336,7 +335,7 @@ reads while retaining all of its single-literal, rep0, 68--71-byte match, and
 fast/generic byte-parity assertions.
 
 Seven baseline/candidate pairs were alternated on CPU 5 for every combination
-of four Downloads inputs and libzstd levels 1, 3, and 9:
+of four private inputs and libzstd levels 1, 3, and 9:
 
 | Level | First PDF | Second PDF | Log | Trace |
 | ---: | ---: | ---: | ---: | ---: |

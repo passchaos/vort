@@ -11,8 +11,8 @@ and paired comparison with libzstd 1.5.7 on Apple M1 Pro.
 records grouped bit reads, bounded match-copy specialization, and the resulting
 25-file mixed-corpus comparison.
 [Brotli external literal lookup](performance/brotli-external-literal-lookup.md)
-records the dense-tree fallback optimization and fixed-CPU measurements on
-real files under `~/Downloads`.
+records the dense-tree fallback optimization and fixed-CPU measurements on an
+anonymized private corpus.
 
 ## Current local benchmark entrypoints
 

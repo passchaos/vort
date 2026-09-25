@@ -11,9 +11,9 @@ to CPU 8; the packed-tree-tier follow-up pinned it to CPU 5.
 The existing fast path stores an 8-bit lookup in the unused tail of each
 canonical Huffman table. That works well for sparse, highly clustered streams,
 but a dense 256-symbol tree has no spare entries. Such a tree fell back to a
-bit-at-a-time canonical scan for every literal. A `perf` profile of
-`~/Downloads/白话机器学习中的数学.pdf`, compressed by libbrotli at quality 5,
-attributed 71.64% of samples to that scalar 256-symbol decoder. Vort reached
+bit-at-a-time canonical scan for every literal. A `perf` profile of an
+anonymized private PDF input, compressed by libbrotli at quality 5, attributed
+71.64% of samples to that scalar 256-symbol decoder. Vort reached
 only 17.71 MiB/s, or 0.0476x libbrotli throughput.
 
 Large meta-blocks with at most 16 literal trees now build separate packed
@@ -29,7 +29,7 @@ and truncated-input oracle. A Brotli production test also requires the new
 large-meta-block route to execute while round-tripping a two-tree entropy-split
 stream.
 
-## Downloads corpus evidence
+## Private corpus evidence
 
 The baseline and candidate executables were frozen and alternated in each
 pair. Every invocation regenerated the Brotli frame through libbrotli and
@@ -37,13 +37,13 @@ verified Vort's complete output before entering five best-of timing rounds.
 
 | Input / quality | Pairs won | Median speedup |
 | --- | ---: | ---: |
-| `白话机器学习中的数学.pdf`, q1 | 5/5 | 9.3776x |
-| `白话机器学习中的数学.pdf`, q5 | 7/7 | 7.8520x |
-| `白话机器学习中的数学.pdf`, q9 | 5/5 | 8.6144x |
-| `Controller.log.2025-09-01-11`, q5 | 7/7 | 1.1103x |
-| `trace_1751546764.3447797.json`, q5 | 7/7 | 1.0734x |
+| private-pdf-a, q1 | 5/5 | 9.3776x |
+| private-pdf-a, q5 | 7/7 | 7.8520x |
+| private-pdf-a, q9 | 5/5 | 8.6144x |
+| private-log, q5 | 7/7 | 1.1103x |
+| private-json, q5 | 7/7 | 1.0734x |
 
-A longer same-process q5 comparison on the 6,105,445-byte PDF measured Vort at
+A longer same-process q5 comparison on private-pdf-a measured Vort at
 154.55 MiB/s and libbrotli at 375.41 MiB/s, a 0.4117x ratio. This is a large
 improvement over the 17.71 MiB/s / 0.0476x baseline, but it is not yet a claim
 of Brotli decode parity or industry leadership.
@@ -59,8 +59,8 @@ retained.
 
 ```sh
 taskset -c 8 zig build -Doptimize=ReleaseFast run-br-reference-bench -- \
-  --input "$HOME/Downloads/白话机器学习中的数学.pdf" \
-  --name download_pdf_q5 --quality 5 --iterations 8
+  --input "$VORT_PRIVATE_INPUT" \
+  --name private_pdf_a_q5 --quality 5 --iterations 8
 ```
 
 The built-in reference gate and upstream multi-block differential remain the
@@ -76,15 +76,15 @@ fallback operations. The payload loop touches the original canonical tree only
 after a root-table miss.
 
 Against the first 10-bit implementation, fixed-CPU interleaved measurements on
-the same Downloads corpus produced:
+the same private corpus produced:
 
 | Input / quality | Pairs won | Median speedup |
 | --- | ---: | ---: |
-| `白话机器学习中的数学.pdf`, q1 | 5/5 | 1.1385x |
-| `白话机器学习中的数学.pdf`, q5 | 9/9 | 1.1181x |
-| `白话机器学习中的数学.pdf`, q9 | 5/5 | 1.1161x |
-| `Controller.log.2025-09-01-11`, q5 | 6/7 | 1.0075x |
-| `trace_1751546764.3447797.json`, q5 | 7/7 | 1.0212x |
+| private-pdf-a, q1 | 5/5 | 1.1385x |
+| private-pdf-a, q5 | 9/9 | 1.1181x |
+| private-pdf-a, q9 | 5/5 | 1.1161x |
+| private-log, q5 | 6/7 | 1.0075x |
+| private-json, q5 | 7/7 | 1.0212x |
 
 The longer PDF q5 comparison now measures 173.49 MiB/s, or 0.4589x of
 libbrotli 1.1.0. The remaining profile is dominated by the context-dependent
@@ -97,17 +97,17 @@ for the full meta-block and commits it through `defer`, including error exits.
 This removes a caller-pointer load and store from every decoded literal without
 changing partial-progress behavior.
 
-Eleven alternating q5 runs on `~/Downloads/白话机器学习中的数学.pdf` all
-improved, with a 1.0329x median. The `part1_22.pdf`, 63 MiB log, and 31 MiB
-trace controls remained neutral to slightly positive by median at 1.0016x,
+Eleven alternating q5 runs on private-pdf-a all improved, with a 1.0329x
+median. The private-pdf-b, private-log, and private-json controls remained
+neutral to slightly positive by median at 1.0016x,
 1.0004x, and 1.0020x. A longer same-process comparison measured 179.10 MiB/s,
 or 0.4778x libbrotli 1.1.0. An attempted literal-block-run cache was rejected
 because it regressed the trace control.
 
 ## Full inline-tree coverage
 
-The original 16-tree cap left most of `~/Downloads/part1_22.pdf` on the scalar
-decoder; its quality-5 stream reaches 78 context trees overall and decoded at
+The original 16-tree cap left most of private-pdf-b on the scalar decoder; its
+quality-5 stream reaches 78 context trees overall and decoded at
 only 11.59 MiB/s, or 0.0388x libbrotli. Raising the external lookup capacity to
 the decoder's complete 64-tree inline tier covers more of those meta-blocks
 without changing the packed-tree fallback.
@@ -124,9 +124,9 @@ the safe packed-tree design is described below.
 
 ## Packed-tree lookup tiers
 
-The 64-tree limit still left meta-blocks in two Downloads files on the scalar
-literal decoder: `part1_22.pdf` reaches 78 literal context trees and the JSON
-trace reaches 169. Reserving a 256-entry lookup array in the common path made
+The 64-tree limit still left meta-blocks in two private inputs on the scalar
+literal decoder: private-pdf-b reaches 78 literal context trees and private-json
+reaches 169. Reserving a 256-entry lookup array in the common path made
 low-tree streams slower through its larger stack frame and code layout.
 
 The decoder therefore keeps three separately compiled stack tiers. Streams
@@ -141,16 +141,16 @@ test.
 
 The final comparison rebuilt the baseline from commit `c55d7bad` in a clean
 temporary checkout. Seven baseline/candidate pairs were alternated on CPU 5;
-each invocation regenerated a quality-5 frame from the named Downloads file,
+each invocation regenerated a quality-5 frame from the corresponding private input,
 verified both Vort and libbrotli output, and measured three decodes in each of
 five best-of timing rounds.
 
 | Input / quality | Peak literal trees | Pairs won | Median speedup | Candidate MiB/s | Candidate / libbrotli |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `白话机器学习中的数学.pdf`, q5 | 16 | 0/7 | 0.9913x | 177.46 | 0.4740x |
-| `part1_22.pdf`, q5 | 78 | 7/7 | 4.1923x | 177.04 | 0.5132x |
-| `Controller.log.2025-09-01-11`, q5 | 26 | 2/7 | 0.9984x | 1468.96 | 0.7117x |
-| `trace_1751546764.3447797.json`, q5 | 169 | 7/7 | 1.8296x | 1717.46 | 0.7078x |
+| private-pdf-a, q5 | 16 | 0/7 | 0.9913x | 177.46 | 0.4740x |
+| private-pdf-b, q5 | 78 | 7/7 | 4.1923x | 177.04 | 0.5132x |
+| private-log, q5 | 26 | 2/7 | 0.9984x | 1468.96 | 0.7117x |
+| private-json, q5 | 169 | 7/7 | 1.8296x | 1717.46 | 0.7078x |
 
 The two newly covered high-tree streams improve decisively. The 26-tree log is
 effectively neutral, while the 16-tree PDF has a repeatable 0.9% code-layout
@@ -180,13 +180,13 @@ Against commit `8f95429b`, seven alternating q5 pairs on CPU 5 produced:
 
 | Input / quality | Pairs won | Median speedup | Candidate MiB/s | Candidate / libbrotli |
 | --- | ---: | ---: | ---: | ---: |
-| `白话机器学习中的数学.pdf`, q5 | 7/7 | 1.0058x | 178.70 | 0.4730x |
-| `part1_22.pdf`, q5 | 6/7 | 1.0057x | 176.71 | 0.5124x |
-| `Controller.log.2025-09-01-11`, q5 | 7/7 | 1.0107x | 1487.12 | 0.7203x |
-| `trace_1751546764.3447797.json`, q5 | 7/7 | 1.0149x | 1743.78 | 0.7209x |
+| private-pdf-a, q5 | 7/7 | 1.0058x | 178.70 | 0.4730x |
+| private-pdf-b, q5 | 6/7 | 1.0057x | 176.71 | 0.5124x |
+| private-log, q5 | 7/7 | 1.0107x | 1487.12 | 0.7203x |
+| private-json, q5 | 7/7 | 1.0149x | 1743.78 | 0.7209x |
 
 Two more aggressive variants were rejected early. An 8-bit lookup for only
-the wide tiers reduced table footprint but dropped `part1_22.pdf` to 145.81
+the wide tiers reduced table footprint but dropped private-pdf-b to 145.81
 MiB/s because of extra canonical fallbacks. Copying the four-entry distance
 ring into each payload function regressed all four files by roughly
 1.2%--2.6%; force-inlining the implicit-symbol branch likewise regressed the
@@ -207,15 +207,41 @@ produced:
 
 | Input | Pairs won | Median candidate/baseline | Candidate MiB/s | Candidate/libbrotli |
 | --- | ---: | ---: | ---: | ---: |
-| `白话机器学习中的数学.pdf` | 7/7 | 1.0291x | 183.67 | 0.4885x |
-| `part1_22.pdf` | 7/7 | 1.0293x | 182.57 | 0.5329x |
-| `Controller.log.2025-09-01-11` | 7/15 | 0.9997x | 1483.90 | 0.7195x |
-| `trace_1751546764.3447797.json` | 7/7 | 1.0035x | 1720.45 | 0.7101x |
+| private-pdf-a | 7/7 | 1.0291x | 183.67 | 0.4885x |
+| private-pdf-b | 7/7 | 1.0293x | 182.57 | 0.5329x |
+| private-log | 7/15 | 0.9997x | 1483.90 | 0.7195x |
+| private-json | 7/7 | 1.0035x | 1720.45 | 0.7101x |
 
 The longer log run has a `1.0003x` geometric mean and is treated as neutral.
 ReleaseSafe context-map and external-lookup tests, the 13-row reference gate,
 and the upstream differential all pass; the latter covers 100 base cases,
 7,056 one-shot cases, 7,056 progressive cases, 1,401 progress-matrix runs, and
-32 one-shot plus 32 progressive cases from the repository corpus and the four
-Downloads files. These results improve the PDF bottleneck but do not establish
+32 one-shot plus 32 progressive cases from the repository corpus and four
+private inputs. These results improve the PDF bottleneck but do not establish
 overall Brotli decode leadership.
+
+## Context-independent literal maps
+
+The external lookup path now recognizes meta-blocks where every literal block
+type maps all 64 contexts to one tree. The check runs once per meta-block. Each
+command then either uses a short context-free literal loop or the established
+UTF-8/generic context loop; the high-tree wide executor remains unchanged. A
+focused invariant test covers multiple uniform block types and a single-entry
+rejection.
+
+Against commit `4a9efbc3`, fixed-CPU-5 quality-5 runs measured:
+
+| Input | Pairs | Median candidate/baseline | Candidate MiB/s | Candidate/libbrotli |
+| --- | ---: | ---: | ---: | ---: |
+| private-pdf-a | 7 | 1.3648x | 248.52 | 0.6646x |
+| private-pdf-b | 7 | 1.2110x | 221.36 | 0.6414x |
+| private-log | 15 | 0.9975x | 1484.90 | 0.7197x |
+| private-json | 15 | 0.9981x | 1729.88 | 0.7134x |
+
+The two non-independent controls remain within 0.3% of baseline. Five-pair
+cross-quality checks improve all four quality-1 rows by
+1.1152x/1.1168x/1.0264x/1.0104x. At quality 9 the two PDFs improve by
+1.3395x/1.1929x, the log is positive at 1.0025x, and the trace remains within
+noise at 0.9980x. The specialization materially closes the PDF gap without
+claiming overall parity: quality-5 Vort remains at 0.6646x/0.6414x of
+libbrotli on the two PDF files.

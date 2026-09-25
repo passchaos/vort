@@ -2533,7 +2533,7 @@ reuse, so production keeps the simpler independently owned plans.
   of at least 64 KiB with at most 16 context trees. Dense 256-symbol trees cannot
   use the existing lookup stored in unused canonical-table entries and formerly
   decoded every literal with a bit-at-a-time scan. Fixed-CPU independent-binary
-  measurements on `~/Downloads/白话机器学习中的数学.pdf` improve q1/q5/q9 by
+  measurements on private-pdf-a improve q1/q5/q9 by
   about `9.38x/7.85x/8.61x`; a 63 MiB log and 31 MiB JSON trace improve by
   about `1.11x/1.07x`. The reference benchmark now accepts `--input`, `--name`,
   and `--quality` for reproducible file-backed comparisons. Absolute q5
@@ -2542,13 +2542,13 @@ reuse, so production keeps the simpler independently owned plans.
   A follow-up encodes single-symbol trees directly in the packed lookup and
   defers the large canonical-tree address calculation until a long-code miss.
   This adds another `1.14x/1.12x/1.12x` median improvement for PDF q1/q5/q9,
-  with `1.01x/1.02x` medians on the Downloads log/trace controls. PDF q5 now
+  with `1.01x/1.02x` medians on the private log/trace controls. PDF q5 now
   reaches about 173.49 MiB/s, or 0.4589x of libbrotli.
   Keeping the output position local to the external-lookup loop adds another
   1.0329x median on the PDF while remaining neutral on a second PDF, the log,
   and the trace; the q5 result reaches about 179.10 MiB/s (0.4778x libbrotli).
   Expanding the lookup array to the complete 64-tree inline tier then improves
-  `~/Downloads/part1_22.pdf` by 2.4731x median (7/7 wins), from 11.59 to about
+  private-pdf-b by 2.4731x median (7/7 wins), from 11.59 to about
   41.63 MiB/s. The original PDF remains neutral, the log is modestly positive,
   and trace movement stays within roughly 0.2%.
   A follow-up now covers all 256 literal context trees without putting the
@@ -2557,11 +2557,11 @@ reuse, so production keeps the simpler independently owned plans.
   Packed dense and single-symbol trees use the external lookup directly, while
   codes longer than ten bits retain the cached canonical fallback. Against a
   clean rebuild of commit `c55d7bad`, seven alternating q5 pairs on fixed CPU 5
-  improve the 78-tree `part1_22.pdf` by 4.1923x and the 169-tree Downloads JSON
+  improve the 78-tree private-pdf-b by 4.1923x and the 169-tree private JSON
   trace by 1.8296x, both with 7/7 wins. The 26-tree log is neutral at 0.9984x;
   the 16-tree PDF is 0.9913x, a measured code-layout cost that an explicitly
   aligned variant failed to recover without larger control-corpus regressions.
-  Candidate throughput is 177.04 MiB/s for `part1_22.pdf` and 1717.46 MiB/s
+  Candidate throughput is 177.04 MiB/s for private-pdf-b and 1717.46 MiB/s
   for the trace, respectively 0.5132x and 0.7078x libbrotli 1.1.0.
   A profile-guided distance follow-up replaces the tail-lookup helper's
   aggregate error-union return with caller-owned result storage and handles
@@ -2569,7 +2569,7 @@ reuse, so production keeps the simpler independently owned plans.
   alternating q5 pairs against `8f95429b` improve the two PDFs, log, and trace
   by 1.0058x, 1.0057x, 1.0107x, and 1.0149x medians, with 27/28 total wins.
   Absolute throughput reaches 178.70, 176.71, 1487.12, and 1743.78 MiB/s on
-  those Downloads files. An 8-bit wide lookup, per-payload local distance ring,
+  those private inputs. An 8-bit wide lookup, per-payload local distance ring,
   and force-inlined implicit-distance branch were measured and rejected for
   regressions before the broader gates.
 
@@ -15683,11 +15683,11 @@ reuse, so production keeps the simpler independently owned plans.
   the other three files remain at `0.6417x`, `0.6696x`, and `0.7888x`. Controls
   remain near neutral by median, with retained host jitter on binary_mixed.
   See [protocol, results, and outstanding goal coverage](performance/zstd-sequence-fields.md).
-  A Linux Downloads profile then exposed 234 small-literal blocks that still
+  A Linux private-corpus profile then exposed 234 small-literal blocks that still
   used per-field checked state reads. Blocks with at least 2,048 sequences now
   reuse the existing grouped executor; the 128 KiB long-match specialization
   remains selected below that threshold. Seven fixed-CPU-5 level-1 pairs
-  improve `trace_1751546764.3447797.json` by 1.6880x with 7/7 wins, while two
+  improve private-json by 1.6880x with 7/7 wins, while two
   PDFs and the 63 MiB log remain within 0.4% of baseline. The trace's prepared
   stage changes from 6 generic / 234 bounded / 2 wide blocks to 6 / 12 / 224
   and from 22.510 to 11.456 ns/sequence; end-to-end throughput reaches 2711.30
@@ -15697,20 +15697,20 @@ reuse, so production keeps the simpler independently owned plans.
   The grouped field reader now leaves its loaded 64-bit word immutable and
   advances a small consumed-bit cursor, removing one loop-carried reservoir
   shift per field. Against `3b81b575`, seven more fixed-CPU-5 pairs improve the
-  two Downloads PDFs by 1.0042x/1.0019x, the log by 1.0182x, and the trace by
+  two private PDFs by 1.0042x/1.0019x, the log by 1.0182x, and the trace by
   1.0070x; all four medians are positive and the latter two win 7/7. Final
   throughputs are 4689.27, 5411.59, 3021.75, and 2730.78 MiB/s respectively.
   The same grouped executor now selects a bounded 32-byte vector wildcopy when
   both the match distance and rounded destination span permit it, retaining
   the 16-byte path for smaller overlaps and tight output tails. Direct oracles
   cover distances 32/47/64, lengths 3...128, adaptive selection, and untouched
-  suffix bytes. Against `f9e9c02c`, seven fixed-CPU-5 Downloads pairs improve
+  suffix bytes. Against `f9e9c02c`, seven fixed-CPU-5 private-corpus pairs improve
   the first PDF, log, and trace by 1.0111x, 1.0558x, and 1.0436x; the second PDF
   is neutral at 0.9976x. Final log/trace throughput reaches 3182.47/2833.50
   MiB/s, or 0.7716x/0.7472x system libzstd 1.5.5.
   A second bounded tier copies two 32-byte vectors per iteration when distance
   and frame-tail space both cover 64 bytes, retaining the 32/16-byte fallbacks.
-  Against `b401f6dc`, seven more fixed-CPU-5 Downloads pairs improve the log and
+  Against `b401f6dc`, seven more fixed-CPU-5 private-corpus pairs improve the log and
   trace by 1.0529x/1.0462x with 7/7 wins, leave the PDFs at 0.9989x/1.0034x,
   and reach 3359.26/2983.43 MiB/s on the two targets. This is 0.8067x/0.7820x
   system libzstd 1.5.5; broad decode leadership remains unproven.
@@ -15718,14 +15718,14 @@ reuse, so production keeps the simpler independently owned plans.
   copy only for raw literal sections of at least 4 KiB. Smaller sections keep
   a separately compiled 16-byte loop, avoiding the 2.3% regression measured
   when the 19-literal/5,161-sequence `huffman80k` control used wide copies.
-  Seven fixed-CPU-5 pairs against `1e8e7620` improve the two Downloads PDFs by
+  Seven fixed-CPU-5 pairs against `1e8e7620` improve the two private PDFs by
   1.0485x and 1.0083x with 7/7 wins; log, trace, and `huffman80k` stay within
   0.4% of baseline. The PDFs reach 4901.08/5439.05 MiB/s, or 0.6962x/0.7353x
   system libzstd 1.5.5.
   Grouped sequence-field reads are now independent of the wide-copy policy.
   The below-2,048-sequence executor consumes one bounded field group but keeps
   its single-literal, rep0, and 68--71-byte match kernels; denser blocks retain
-  wide copies. Across seven fixed-CPU-5 pairs for all four Downloads files at
+  wide copies. Across seven fixed-CPU-5 pairs for all four private inputs at
   levels 1/3/9, level-3 log improves 1.3828x, level-9 log 1.4408x, and level-9
   trace 1.4236x, all with 7/7 wins. PDF medians and other level-1 rows remain
   within 0.6%, except a positive 1.0174x level-1 trace. Level-9 trace moves
@@ -15734,7 +15734,7 @@ reuse, so production keeps the simpler independently owned plans.
   The compact copy policy now uses bounded 64/32/16-byte wildcopies only for
   matches of at least 72 bytes, retaining its exact 68--71-byte cluster and all
   shorter copies. Seven fixed-CPU-5 pairs against `399aa51f` are positive at
-  the median on all twelve Downloads file/level rows. The largest follow-up
+  the median on all twelve private-corpus file/level rows. The largest follow-up
   gains are level-9 log 1.0779x and trace 1.0624x; level-3 log/trace improve
   1.0315x/1.0109x. Level-9 absolute throughput reaches 3528.15/3390.75 MiB/s,
   or 0.6578x/0.6265x libzstd 1.5.5, so further sequence/copy work remains.
@@ -15742,10 +15742,21 @@ reuse, so production keeps the simpler independently owned plans.
   indexes without repeating per-literal tree-count and slice-length checks. The
   parser already rejects indexes outside the declared tree count, while lookup
   preparation proves that complete count fits its fixed or tiered capacity.
-  Against `646a48bb`, seven fixed-CPU-5 quality-5 Downloads pairs improve the
+  Against `646a48bb`, seven fixed-CPU-5 quality-5 private-corpus pairs improve the
   two PDFs by 1.0291x/1.0293x (7/7 wins each) and trace by 1.0035x (7/7); a
   longer 15-pair log control is neutral at 0.9997x median / 1.0003x geometric.
   Same-process absolute results are 183.67/182.57/1483.90/1720.45 MiB/s, or
   0.4885x/0.5329x/0.7195x/0.7101x libbrotli 1.1.0. The upstream differential,
   including 32 one-shot and 32 progressive real-file cases with the four
-  Downloads inputs, remains green; broad Brotli decode leadership is still open.
+  private inputs, remains green; broad Brotli decode leadership is still open.
+  External-literal meta-blocks now detect whether every literal block type maps
+  all 64 contexts to one Huffman tree. Each command in that case uses a compact
+  context-free literal loop; non-independent maps and the high-tree wide loop
+  retain their established implementations. Against `4a9efbc3`, fixed-CPU-5
+  quality-5 private-corpus medians improve the PDFs by 1.3648x/1.2110x. Fifteen-pair
+  log/trace controls stay within 0.3% at 0.9975x/0.9981x. Quality-1 improves all
+  four files by 1.0104x--1.1168x; quality-9 improves the PDFs by
+  1.3395x/1.1929x while log/trace remain at 1.0025x/0.9980x. Absolute q5
+  throughput is 248.52/221.36/1484.90/1729.88 MiB/s, or
+  0.6646x/0.6414x/0.7197x/0.7134x libbrotli 1.1.0. The broad leadership goal
+  therefore remains open.

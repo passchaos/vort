@@ -60,7 +60,7 @@ parity and mutation test plus the native compatibility/decodecorpus suites.
 
 ## Full-block follow-up (2026-09-24)
 
-Testing every file under `~/Downloads/vort-test` exposed a second routing gap:
+Testing every file in a private mixed-file corpus exposed a second routing gap:
 large literal-heavy blocks with fewer than 1,024 sequences remained on the
 per-symbol Huffman path. The wide scratch is therefore extended to Zstd's
 128 KiB maximum decoded block size, and the split path is selected when either
@@ -68,9 +68,9 @@ the block has at least 1,024 sequences or at least 32 KiB of regenerated
 literals. The latter threshold amortizes bulk Huffman setup without routing
 small blocks away from the established decoder.
 
-Against the preceding `7715d03e` decoder, 15 alternating pairs improve the
-7,587,144-byte `nndl-v2 (1).pdf` input by 1.6025x median / 1.5994x geometric
-mean and the 38,933,880-byte `zellij` input by 1.6722x / 1.6685x; both win
+Against the preceding `7715d03e` decoder, 15 alternating pairs improve
+private-pdf-c by 1.6025x median / 1.5994x geometric mean and private-binary-a
+by 1.6722x / 1.6685x; both win
 15/15 pairs with identical input hashes, encoded sizes, and decoded checksums.
 The corresponding reusable-decoder medians are 1.6038x and 1.6747x, again with
 15/15 wins. Fifteen-pair controls are neutral: build 1.0020x, source 1.0003x,
@@ -92,8 +92,8 @@ Against `f6fd1b0b`, the final 32-byte-aligned candidate measures:
 
 | Input | Pairs won | Median speedup | Geometric mean | Candidate/libzstd median |
 | --- | ---: | ---: | ---: | ---: |
-| `nndl-v2 (1).pdf` | 15/15 | 1.4454x | 1.4446x | 0.5991x |
-| `zellij` | 15/15 | 1.0519x | 1.0528x | 0.8804x |
+| private-pdf-c | 15/15 | 1.4454x | 1.4446x | 0.5991x |
+| private-binary-a | 15/15 | 1.0519x | 1.0528x | 0.8804x |
 
 Fifteen-pair controls retain build 0.9951x, source 1.0007x, roadmap 1.0019x,
 large_json 0.9997x, binary_mixed 1.0097x, and ascii64k 1.0000x by median.
