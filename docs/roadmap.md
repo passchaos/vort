@@ -15878,3 +15878,13 @@ reuse, so production keeps the simpler independently owned plans.
   0.7965x/0.7345x system libzstd 1.5.5. Compatibility, decodecorpus, full-build,
   and reference gates pass, while the broader leadership objective remains
   open.
+  Prepared Brotli command/distance tail tables now use a fixed 9-bit fast-reader
+  peek in the tail, small-external, and >128-tree external executors, while the
+  layout-sensitive 65--128-tree tier keeps the generic reader. The wide
+  external executor is 64-byte aligned to isolate its unchanged middle-tier
+  specialization. Against `f9815650`, fixed-CPU-5 Log/JSON medians improve by
+  1.0280x/1.0394x at q1, 1.0249x/1.0242x at q5, and 1.0229x/1.0202x at q9;
+  extended PDF controls remain within 0.2%. Current q9 throughput reaches
+  1,831.89/2,184.38 MiB/s, or 0.8620x/0.8491x libbrotli 1.1.0. Full upstream,
+  real-corpus, test/check, and reference gates pass, but industry leadership is
+  not yet established.

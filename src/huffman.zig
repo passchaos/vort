@@ -405,20 +405,31 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
 
         /// Decode through a lookup previously installed by `buildTailLookup8`.
         pub inline fn decodeValueTailLookup8(self: *const Self, reader: anytype) Error!u16 {
-            return self.decodeValueTailLookup(reader, 8);
+            return self.decodeValueTailLookup(reader, 8, false);
         }
 
         pub inline fn decodeValueTailLookup9(self: *const Self, reader: anytype) Error!u16 {
-            return self.decodeValueTailLookup(reader, 9);
+            return self.decodeValueTailLookup(reader, 9, false);
         }
 
-        inline fn decodeValueTailLookup(self: *const Self, reader: anytype, comptime lookup_bits: u4) Error!u16 {
+        /// Use a reader's fixed nine-bit primitive after the caller has chosen
+        /// a code-layout specialization where it is measurably beneficial.
+        pub inline fn decodeValueTailLookup9Fixed(self: *const Self, reader: anytype) Error!u16 {
+            return self.decodeValueTailLookup(reader, 9, true);
+        }
+
+        inline fn decodeValueTailLookup(self: *const Self, reader: anytype, comptime lookup_bits: u4, comptime fixed_nine_bit_peek: bool) Error!u16 {
             const lookup_len = 1 << lookup_bits;
             const lookup_bytes = lookup_len * @sizeOf(u16);
             const entry_count = (lookup_bytes + @sizeOf(Entry) - 1) / @sizeOf(Entry);
             if (comptime max_symbols < entry_count) return self.decodeValue(reader);
             const lookup: *const [lookup_len]u16 = @ptrCast(&self.entries[max_symbols - entry_count]);
-            const packed_entry = lookup[reader.peekBitsPadded(u16, lookup_bits)];
+            if (comptime fixed_nine_bit_peek) std.debug.assert(lookup_bits == 9);
+            const prefix: usize = if (comptime fixed_nine_bit_peek)
+                reader.peekBits9Padded()
+            else
+                reader.peekBitsPadded(u16, lookup_bits);
+            const packed_entry = lookup[prefix];
             if (packed_entry == 0) {
                 @branchHint(.unlikely);
                 return self.decodeValueLongAfterLookup(reader, lookup_bits);
@@ -2152,14 +2163,21 @@ test "tail lookup decoder matches compact decoder" {
     const compact9 = try HuffmanTable(704).init(&lengths9);
     var reference9 = bitstream.BitReader.init(encoded9);
     var lookup9 = bitstream.BitReader.init(encoded9);
-    for (0..320) |_|
+    var fixed_reference9 = bitstream.BitReader.init(encoded9);
+    var fixed_lookup9 = bitstream.BitReader.init(encoded9);
+    for (0..320) |_| {
         try std.testing.expectEqual(try compact9.decodeValue(&reference9), try table9.decodeValueTailLookup9(&lookup9));
+        try std.testing.expectEqual(try compact9.decodeValue(&fixed_reference9), try table9.decodeValueTailLookup9Fixed(&fixed_lookup9));
+    }
     try std.testing.expectEqual(reference9.bitPosition(), lookup9.bitPosition());
+    try std.testing.expectEqual(reference9.bitPosition(), fixed_lookup9.bitPosition());
     const short9 = try HuffmanTable(704).init(&([_]u4{9} ++ [_]u4{0} ** 703));
     var short_with_lookup9 = short9;
     try std.testing.expect(short_with_lookup9.buildTailLookup9());
     var truncated9 = bitstream.BitReader.initBitLength(&.{0}, 8);
     try std.testing.expectError(error.TruncatedFrame, short_with_lookup9.decodeValueTailLookup9(&truncated9));
+    var truncated_fixed9 = bitstream.BitReader.initBitLength(&.{0}, 8);
+    try std.testing.expectError(error.TruncatedFrame, short_with_lookup9.decodeValueTailLookup9Fixed(&truncated_fixed9));
 
     var too_dense9 = try HuffmanTable(520).init(&([_]u4{9} ** 512 ++ [_]u4{0} ** 8));
     try std.testing.expect(!too_dense9.buildTailLookup9());

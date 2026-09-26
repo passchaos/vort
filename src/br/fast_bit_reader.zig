@@ -58,6 +58,13 @@ pub const Reader = struct {
         return self.peekStaged(T, count);
     }
 
+    pub fn peekBits9Padded(self: *Reader) u9 {
+        // Auxiliary command/distance tables always probe exactly nine bits.
+        // Keep that hot path free of the generic width check and mask.
+        self.fill(9);
+        return @truncate(self.bit_buffer);
+    }
+
     pub fn peekBits10Padded(self: *Reader) u10 {
         self.fill(10);
         return @truncate(self.bit_buffer);
@@ -173,7 +180,7 @@ test "Brotli fast bit reader loads complete short tails" {
     }
 }
 
-test "Brotli fast bit reader specialized 10-bit peek matches generic reads" {
+test "Brotli fast bit reader specialized fixed-width peeks match generic reads" {
     var input: [33]u8 = undefined;
     var state: u32 = 0x9e37_79b9;
     for (&input) |*byte| {
@@ -193,6 +200,10 @@ test "Brotli fast bit reader specialized 10-bit peek matches generic reads" {
             var specialized = Reader.initFrom(source);
             var operation: usize = 0;
             while (true) : (operation += 1) {
+                try std.testing.expectEqual(
+                    generic.peekBitsPadded(u9, 9),
+                    specialized.peekBits9Padded(),
+                );
                 try std.testing.expectEqual(
                     generic.peekBitsPadded(u10, 10),
                     specialized.peekBits10Padded(),

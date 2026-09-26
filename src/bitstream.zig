@@ -100,6 +100,11 @@ pub const BitReader = struct {
         return @intCast(shifted & mask);
     }
 
+    /// Fixed-width counterpart used by prepared nine-bit Huffman tables.
+    pub inline fn peekBits9Padded(self: BitReader) u9 {
+        return self.peekBitsPadded(u9, 9);
+    }
+
     pub fn alignToByte(self: *BitReader) void {
         if (self.bit_index != 0) {
             self.bit_index = 0;

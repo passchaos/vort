@@ -503,3 +503,38 @@ within 0.1%. Same-process q9 throughput reaches 1,802.29 MiB/s on Log and
 2,139.19 MiB/s on JSON, or 0.8424x/0.8374x libbrotli 1.1.0. This retains the
 successful one-prefix continuation while avoiding the poor locality and branch
 dependence measured for binary-search and secondary-table alternatives.
+
+## Fixed-width auxiliary tail peeks
+
+A q9 Log hardware profile after the two-entry long-code scan placed 39.13% of
+cycles in the tail-lookup payload executor. The generic bit reader used by its
+9-bit command and distance tables accounted for another 6.39% in
+`peekBitsPadded`, including checks and mask construction that are constant for
+these prepared tables. The fast reader now exposes a fixed 9-bit peek, and the
+Huffman decoder selects it only for prepared auxiliary lookups.
+
+The specialization follows the existing fixed 10-bit literal lookup design but
+is deliberately tiered. Tail and small external executors use it, as does the
+full >128-tree external executor; the 65--128-tree middle executor retains the
+generic lookup. The wide external function is aligned to 64 bytes so emitting
+the additional specialization cannot displace the unchanged middle tier onto
+an unfavorable instruction-cache boundary.
+
+Against commit `f9815650`, independent ReleaseFast binaries were alternated on
+CPU 5. Values are candidate/baseline medians; Log/JSON use seven pairs, PDF-A
+uses five except for the 25-pair q5 confirmation, and PDF-B uses five except
+for the 23-pair q5/q9 confirmations.
+
+| Quality | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 0.9999x | 0.9994x | 1.0280x | 1.0394x |
+| 5 | 0.9980x | 0.9984x | 1.0249x | 1.0242x |
+| 9 | 1.0010x | 0.9986x | 1.0229x | 1.0202x |
+
+The extended PDF controls remain within 0.2% of baseline, while every Log/JSON
+row wins all measured pairs. Same-process candidate
+throughput reaches 1,758.09/1,984.57 MiB/s on q5 Log/JSON and
+1,831.89/2,184.38 MiB/s on q9, respectively 0.8620x/0.8491x libbrotli 1.1.0
+for the latter pair. The reader/Huffman oracles, upstream 7,056 one-shot plus
+7,056 progressive matrix, four-category real corpus, full test/check graph,
+and 13-row reference gate pass. Brotli decode leadership remains open.

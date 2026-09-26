@@ -1378,6 +1378,11 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
             if (self.single_symbol) |symbol| return symbol;
             return self.table.decodeValueTailLookup9(reader);
         }
+
+        pub inline fn decodeTailLookup9Fixed(self: *const Self, reader: anytype) Error!u16 {
+            if (self.single_symbol) |symbol| return symbol;
+            return self.table.decodeValueTailLookup9Fixed(reader);
+        }
     };
 }
 
@@ -6642,9 +6647,23 @@ noinline fn processWideExternalLiteralLookupMetaBlock(
     const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(header);
     var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
     defer fast_reader.syncTo(reader);
+    // The middle 65--128-tree tier keeps the generic auxiliary peek: its
+    // smaller executor is sensitive to code placement. The full 256-tree tier
+    // amortizes a dedicated fixed-width lookup and receives its own instance.
     if (auxiliary_tail_lookups)
-        return processWideExternalLiteralLookupCompressedPayload(true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count]);
-    return processWideExternalLiteralLookupCompressedPayload(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count]);
+        return processWideExternalLiteralLookupCompressedPayload(
+            true,
+            capacity == max_literal_context_trees,
+            &fast_reader,
+            output,
+            written,
+            meta_block_end,
+            last_distances,
+            window_bits,
+            header,
+            literal_lookups[0..header.literal_tree_count],
+        );
+    return processWideExternalLiteralLookupCompressedPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count]);
 }
 
 fn prepareLargeLiteralTailLookups(header: *LargeWindowCompressedHeader) bool {
@@ -6766,7 +6785,7 @@ noinline fn processTailLookupCompressedPayload(
     defer written.* = output_cursor;
     while (output_cursor < meta_block_end) {
         const command_symbol = if (comptime auxiliary_tail_lookups)
-            try readCommandSymbolTailLookup(header, reader)
+            try readCommandSymbolTailLookupFixed9(header, reader)
         else
             try readCommandSymbolAny(header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
@@ -6795,7 +6814,7 @@ noinline fn processTailLookupCompressedPayload(
         if (output_cursor == meta_block_end) return;
         var decoded_distance: DecodedBrotliDistance = undefined;
         if (comptime auxiliary_tail_lookups)
-            try readMinimalDistanceTailLookupInto(header, reader, lengths, last_distances, &decoded_distance)
+            try readMinimalDistanceTailLookupIntoFixed9(header, reader, lengths, last_distances, &decoded_distance)
         else
             decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
@@ -6836,7 +6855,7 @@ noinline fn processExternalLiteralLookupCompressedPayload(
     defer written.* = output_cursor;
     while (output_cursor < meta_block_end) {
         const command_symbol = if (comptime auxiliary_tail_lookups)
-            try readCommandSymbolTailLookup(header, reader)
+            try readCommandSymbolTailLookupFixed9(header, reader)
         else
             try readCommandSymbolAny(header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
@@ -6902,7 +6921,7 @@ noinline fn processExternalLiteralLookupCompressedPayload(
         if (output_cursor == meta_block_end) return;
         var decoded_distance: DecodedBrotliDistance = undefined;
         if (comptime auxiliary_tail_lookups)
-            try readMinimalDistanceTailLookupInto(header, reader, lengths, last_distances, &decoded_distance)
+            try readMinimalDistanceTailLookupIntoFixed9(header, reader, lengths, last_distances, &decoded_distance)
         else
             decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
@@ -6926,6 +6945,7 @@ noinline fn processExternalLiteralLookupCompressedPayload(
 /// expansion path so the full canonical decoder remains the correctness oracle.
 noinline fn processWideExternalLiteralLookupCompressedPayload(
     comptime auxiliary_tail_lookups: bool,
+    comptime fixed_nine_bit_peek: bool,
     reader: anytype,
     output: []u8,
     written: *usize,
@@ -6934,7 +6954,7 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
     window_bits: u5,
     header: *MinimalCompressedHeader,
     literal_lookups: []const ExternalLiteralLookup,
-) Error!void {
+) align(64) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     // The parsed context map is already bounded by literal_tree_count, which
@@ -6944,7 +6964,10 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
     defer written.* = output_cursor;
     while (output_cursor < meta_block_end) {
         const command_symbol = if (comptime auxiliary_tail_lookups)
-            try readCommandSymbolTailLookup(header, reader)
+            if (comptime fixed_nine_bit_peek)
+                try readCommandSymbolTailLookupFixed9(header, reader)
+            else
+                try readCommandSymbolTailLookup(header, reader)
         else
             try readCommandSymbolAny(header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
@@ -6977,7 +7000,10 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
         if (output_cursor == meta_block_end) return;
         var decoded_distance: DecodedBrotliDistance = undefined;
         if (comptime auxiliary_tail_lookups)
-            try readMinimalDistanceTailLookupInto(header, reader, lengths, last_distances, &decoded_distance)
+            if (comptime fixed_nine_bit_peek)
+                try readMinimalDistanceTailLookupIntoFixed9(header, reader, lengths, last_distances, &decoded_distance)
+            else
+                try readMinimalDistanceTailLookupInto(header, reader, lengths, last_distances, &decoded_distance)
         else
             decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
@@ -10070,10 +10096,22 @@ fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitRea
 }
 
 inline fn readCommandSymbolTailLookup(header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
+    return readCommandSymbolTailLookupWithOptions(false, header, reader);
+}
+
+inline fn readCommandSymbolTailLookupFixed9(header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
+    return readCommandSymbolTailLookupWithOptions(true, header, reader);
+}
+
+inline fn readCommandSymbolTailLookupWithOptions(comptime fixed_nine_bit_peek: bool, header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
     if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0)
         try switchBlockAny(max_command_block_types, &header.command_block, reader);
     if (header.command_block.current_type >= inline_command_tree_count) return error.UnsupportedBrotliFeature;
-    const symbol = try header.insert_copy_trees[header.command_block.current_type].decodeTailLookup9(reader);
+    const tree = &header.insert_copy_trees[header.command_block.current_type];
+    const symbol = if (comptime fixed_nine_bit_peek)
+        try tree.decodeTailLookup9Fixed(reader)
+    else
+        try tree.decodeTailLookup9(reader);
     if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
     return symbol;
 }
@@ -10230,6 +10268,27 @@ inline fn readMinimalDistanceTailLookupInto(
     last_distances: *[4]usize,
     decoded_distance: *DecodedBrotliDistance,
 ) Error!void {
+    return readMinimalDistanceTailLookupIntoWithOptions(false, header, reader, lengths, last_distances, decoded_distance);
+}
+
+inline fn readMinimalDistanceTailLookupIntoFixed9(
+    header: *MinimalCompressedHeader,
+    reader: anytype,
+    lengths: InsertCopyLengths,
+    last_distances: *[4]usize,
+    decoded_distance: *DecodedBrotliDistance,
+) Error!void {
+    return readMinimalDistanceTailLookupIntoWithOptions(true, header, reader, lengths, last_distances, decoded_distance);
+}
+
+inline fn readMinimalDistanceTailLookupIntoWithOptions(
+    comptime fixed_nine_bit_peek: bool,
+    header: *MinimalCompressedHeader,
+    reader: anytype,
+    lengths: InsertCopyLengths,
+    last_distances: *[4]usize,
+    decoded_distance: *DecodedBrotliDistance,
+) Error!void {
     if (lengths.distance_symbol_zero) {
         decoded_distance.* = .{ .distance = last_distances[3], .update_ring = false };
         return;
@@ -10239,7 +10298,11 @@ inline fn readMinimalDistanceTailLookupInto(
     if (header.distance_block.current_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
     const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
     if (tree_index >= inline_distance_tree_count) return error.UnsupportedBrotliFeature;
-    const symbol = try header.distance_trees[tree_index].decodeTailLookup9(reader);
+    const tree = &header.distance_trees[tree_index];
+    const symbol = if (comptime fixed_nine_bit_peek)
+        try tree.decodeTailLookup9Fixed(reader)
+    else
+        try tree.decodeTailLookup9(reader);
     if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
     if (symbol < 16) {
         try resolveShortDistanceInto(symbol, last_distances, &decoded_distance.distance);
@@ -20781,9 +20844,14 @@ test "br fast bit reader preserves tail lookup symbols and positions" {
     var fast = fast_bit_reader.Reader.initFrom(scalar);
     for (0..64) |_|
         try std.testing.expectEqual(try literal_table.decodeValueTailLookup8(&scalar), try literal_table.decodeValueTailLookup8(&fast));
+    var fixed_scalar = scalar;
+    var fixed_fast = fast;
     for (0..384) |_|
         try std.testing.expectEqual(try auxiliary_table.decodeValueTailLookup9(&scalar), try auxiliary_table.decodeValueTailLookup9(&fast));
+    for (0..384) |_|
+        try std.testing.expectEqual(try auxiliary_table.decodeValueTailLookup9(&fixed_scalar), try auxiliary_table.decodeValueTailLookup9Fixed(&fixed_fast));
     try std.testing.expectEqual(scalar.bitPosition(), fast.bitPosition());
+    try std.testing.expectEqual(scalar.bitPosition(), fixed_fast.bitPosition());
     fast.syncTo(&scalar);
     try std.testing.expectEqual(fast.bitPosition(), scalar.bitPosition());
 
