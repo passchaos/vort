@@ -15918,3 +15918,14 @@ reuse, so production keeps the simpler independently owned plans.
   0.7827x/0.7386x system libzstd 1.5.5. Randomized table equivalence, malformed
   tree, native, compatibility, 9,900-frame decodecorpus, full-build, and
   reference gates pass; broad Zstd decode leadership remains open.
+- Standard-window Brotli meta-blocks with 16--64 eligible literal trees now
+  build a libbrotli-inspired compact 8-bit root plane in an isolated noinline
+  wrapper. Each tree uses 256 two-byte entries; single-symbol trees consume no
+  bits, and long codes continue through the existing pairwise canonical oracle.
+  Against `3234bcc7`, fixed-CPU-5 Log/JSON medians improve by
+  1.0050x/1.0035x at q1 and 1.0094x/1.0072x at q5; q9 Log improves 1.0076x,
+  while extended q9 JSON and PDF-A controls are neutral by median and positive
+  by geometric mean. Final q9 Log/JSON throughput is 1905.82/2258.91 MiB/s,
+  or 0.8937x/0.8810x libbrotli 1.1.0. The full upstream, progress, real-corpus,
+  test/check, and 13-row reference gates pass. The remaining gap means Brotli
+  decode leadership is still open.

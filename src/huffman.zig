@@ -440,7 +440,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             return (packed_entry >> 4) - 1;
         }
 
-        noinline fn decodeValueLongAfterLookup(self: *const Self, reader: anytype, comptime lookup_bits: u4) Error!u16 {
+        pub noinline fn decodeValueLongAfterLookup(self: *const Self, reader: anytype, comptime lookup_bits: u4) Error!u16 {
             if (self.max_bits <= lookup_bits or !hasDecodedBits(reader, lookup_bits))
                 return self.decodeValue(reader);
 

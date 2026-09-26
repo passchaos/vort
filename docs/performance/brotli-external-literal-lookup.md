@@ -606,3 +606,60 @@ test/check graph, upstream 7,056 one-shot plus 7,056 progressive matrix,
 four-category real corpus, and 13-row reference gate pass. This is an
 incremental upstream-informed improvement; Vort still does not claim overall
 Brotli decode leadership.
+
+## Compact literal-root plane
+
+The standard-window tail executor previously selected a context tree and then
+indexed its full `PrefixCode(256)` object for every literal. A q9 Log profile
+attributed 5.69% of the executor's samples to the corresponding address-scale
+operation and another 5.26% to its single-symbol branch. A direct 64-entry
+tree-pointer cache removed the multiply but regressed the same workload, so it
+was rejected.
+
+The retained design follows the decoding invariant in libbrotli 1.2.0 rather
+than copying its representation. Upstream `DecodeSymbol` uses an 8-bit root
+table, forwards long roots to a second-level table, and keeps the short-input
+decoder out of line. Vort now builds a contiguous 256-entry `u16` root lookup
+for each eligible literal tree, encodes single-symbol trees as zero-bit entries,
+and reuses its authoritative pairwise canonical continuation only after an
+8-bit miss. Unlike upstream's four-byte entries and per-tree secondary tables,
+the Vort root plane occupies 512 bytes per tree and at most 32 KiB for the
+64-tree inline tier.
+
+Preparation first proves that every tree is eligible and only then writes the
+plane, so failure is atomic. A separate noinline wrapper owns the fixed-size
+plane; meta-blocks outside the 16--64-tree tier never acquire its stack frame.
+The `>64` route also bypasses the wrapper before allocation. This isolation was
+required in practice: placing the plane in the common caller regressed q1
+streams even when they never used the new lookup. In the final ReleaseFast
+binary, the large-meta-block dispatcher shrinks from `0x9a1` to `0x5fa` bytes,
+the two tail specializations shrink from `0x77c`/`0xda0` to
+`0x6d3`/`0xc82`, and the hot per-literal `imul $0x658` remains only in the
+cold long-code fallback.
+
+Against commit `3234bcc7`, independent ReleaseFast binaries were alternated on
+CPU 5 using the same anonymous inputs. Values are candidate/baseline ratios;
+rows use five pairs except the marked eleven-pair controls.
+
+| Quality | Input | Pairs | Median | Geometric mean |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | PDF-A | 5 | 0.999552x | 0.999379x |
+| 1 | PDF-B | 5 | 1.000571x | 1.000187x |
+| 1 | Log | 5 | 1.004980x | 1.004251x |
+| 1 | JSON | 5 | 1.003456x | 1.003911x |
+| 5 | PDF-A | 5 | 0.998816x | 0.998575x |
+| 5 | PDF-B | 5 | 0.999118x | 0.998721x |
+| 5 | Log | 5 | 1.009446x | 1.008893x |
+| 5 | JSON | 5 | 1.007154x | 1.007738x |
+| 9 | PDF-A | 11 | 1.000287x | 1.000252x |
+| 9 | PDF-B | 5 | 0.999731x | 1.000218x |
+| 9 | Log | 5 | 1.007616x | 1.005408x |
+| 9 | JSON | 11 | 1.000056x | 1.002538x |
+
+The final q9 candidate reaches 1905.82 MiB/s on Log and 2258.91 MiB/s on
+JSON, respectively 0.8937x and 0.8810x the benchmark's libbrotli 1.1.0.
+Focused dense/single/long-code and atomic-preparation tests pass, as do the
+7,056-case upstream one-shot and progressive matrices, 1,401 progress-matrix
+runs, four-category real-corpus one-shot/progressive differential, full
+test/check graph, and 13-row reference gate. The compact plane improves the
+dominant multi-tree workloads without hiding the remaining libbrotli gap.
