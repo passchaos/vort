@@ -567,3 +567,42 @@ distance oracles pass, together with the upstream 7,056 one-shot plus 7,056
 progressive matrix, four-category real corpus, full test/check graph, and
 13-row reference gate. The remaining Brotli decode gap is smaller but still
 measurable.
+
+## Packed short-distance deltas
+
+The short-distance resolver now follows the compact indexing invariant used by
+upstream Brotli's ring-buffer path. Symbols 0 through 3 index the four-entry
+history directly; symbols 4 through 15 select one of two history entries and
+extract a signed delta from a packed immediate. Vort retains its explicit
+invalid-symbol, negative-distance, and positive-overflow errors rather than
+adopting upstream's caller assumptions. In the measured ReleaseFast binary,
+the resolver shrank from `0x199` to `0x80` bytes and no longer contains an
+indirect jump table.
+
+Against commit `e7a87933`, independent ReleaseFast binaries were alternated on
+CPU 5. Values are candidate/baseline ratios; Log/JSON use seven pairs except
+the 17-pair q1 Log confirmation, while PDF rows use five pairs except the
+15-pair q5 PDF-B confirmation.
+
+| Quality | Input | Wins | Median | Geometric mean |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | PDF-A | 3/5 | 1.0018x | 1.0006x |
+| 1 | PDF-B | 3/5 | 1.0008x | 1.0004x |
+| 1 | Log | 4/17 | 0.9972x | 0.9979x |
+| 1 | JSON | 4/7 | 1.0007x | 1.0009x |
+| 5 | PDF-A | 4/5 | 1.0020x | 1.0021x |
+| 5 | PDF-B | 8/15 | 1.0003x | 1.0000x |
+| 5 | Log | 7/7 | 1.0117x | 1.0105x |
+| 5 | JSON | 6/7 | 1.0175x | 1.0161x |
+| 9 | PDF-A | 3/5 | 1.0019x | 1.0008x |
+| 9 | PDF-B | 4/5 | 1.0008x | 1.0002x |
+| 9 | Log | 6/7 | 1.0078x | 1.0058x |
+| 9 | JSON | 6/7 | 1.0092x | 1.0085x |
+
+The q1 Log control gives up 0.28% at the median, while every q5/q9 Log and
+JSON row improves and the PDF controls are neutral to slightly positive. The
+RFC short-distance oracle, implicit/explicit tail-distance oracle, full
+test/check graph, upstream 7,056 one-shot plus 7,056 progressive matrix,
+four-category real corpus, and 13-row reference gate pass. This is an
+incremental upstream-informed improvement; Vort still does not claim overall
+Brotli decode leadership.

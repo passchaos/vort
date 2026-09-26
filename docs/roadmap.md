@@ -15897,3 +15897,12 @@ reuse, so production keeps the simpler independently owned plans.
   1,879.24/2,260.71 MiB/s, or 0.8783x/0.8674x libbrotli 1.1.0. Reader,
   command/distance, upstream, real-corpus, full-build, and reference gates pass;
   the overall leadership target remains open.
+  Brotli short-distance resolution now uses upstream's compact ring-index and
+  packed-delta invariant while preserving Vort's invalid-symbol, underflow, and
+  overflow errors. The ReleaseFast helper shrinks from `0x199` to `0x80` bytes
+  and loses its indirect jump table. Against `e7a87933`, fixed-CPU-5 q5
+  Log/JSON medians improve by 1.0117x/1.0175x and q9 by 1.0078x/1.0092x;
+  PDF controls are neutral to slightly positive. The explicit tradeoff is q1
+  Log at 0.9972x median / 0.9979x geometric mean over 17 pairs. Short-distance,
+  tail-distance, upstream, real-corpus, full-build, and reference gates pass;
+  broad Brotli decode leadership remains unproven.

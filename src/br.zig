@@ -10531,25 +10531,18 @@ fn resolveShortDistance(symbol: u16, last_distances: *const [4]usize) Error!usiz
 /// every malformed-distance check while avoiding a 16-byte error-union return
 /// and copy in each inlined decoder caller.
 noinline fn resolveShortDistanceInto(symbol: u16, last_distances: *const [4]usize, distance: *usize) Error!void {
-    distance.* = switch (symbol) {
-        0 => last_distances[3],
-        1 => last_distances[2],
-        2 => last_distances[1],
-        3 => last_distances[0],
-        4 => try distanceWithDelta(last_distances[3], -1),
-        5 => try distanceWithDelta(last_distances[3], 1),
-        6 => try distanceWithDelta(last_distances[3], -2),
-        7 => try distanceWithDelta(last_distances[3], 2),
-        8 => try distanceWithDelta(last_distances[3], -3),
-        9 => try distanceWithDelta(last_distances[3], 3),
-        10 => try distanceWithDelta(last_distances[2], -1),
-        11 => try distanceWithDelta(last_distances[2], 1),
-        12 => try distanceWithDelta(last_distances[2], -2),
-        13 => try distanceWithDelta(last_distances[2], 2),
-        14 => try distanceWithDelta(last_distances[2], -3),
-        15 => try distanceWithDelta(last_distances[2], 3),
-        else => return error.InvalidHuffmanCode,
-    };
+    if (symbol >= 16) return error.InvalidHuffmanCode;
+    if (symbol <= 3) {
+        distance.* = last_distances[3 - symbol];
+        return;
+    }
+
+    const newest = symbol < 10;
+    const delta_index = symbol - @as(u16, if (newest) 4 else 10);
+    const packed_deltas: u24 = 0x605142;
+    const encoded_delta: u4 = @truncate(packed_deltas >> @intCast(delta_index * 4));
+    const delta: i8 = @as(i8, @intCast(encoded_delta)) - 3;
+    distance.* = try distanceWithDelta(last_distances[if (newest) 3 else 2], delta);
 }
 
 fn distanceWithDelta(base: usize, delta: i8) Error!usize {
