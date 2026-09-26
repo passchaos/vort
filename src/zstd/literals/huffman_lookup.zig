@@ -112,6 +112,73 @@ pub fn Table(comptime max_bits: u4) type {
     };
 }
 
+/// Compact lookup for callers that require complete canonical coverage before
+/// decoding. Keeping the bit count as a full byte lets the hot X1 loop consume
+/// it directly after one 16-bit load; incomplete tables keep using `Table` and
+/// its explicit validity tag.
+pub fn CompleteTable(comptime max_bits: u4) type {
+    return struct {
+        pub const bit_width = max_bits;
+        pub const len = @as(usize, 1) << max_bits;
+        pub const CompleteEntry = packed struct(u16) {
+            symbol: u8,
+            bit_count: u8,
+        };
+
+        entries: [len]CompleteEntry,
+
+        pub noinline fn buildComplete(self: *@This(), tree: anytype) bool {
+            const tree_max_bits = tree.max_bit_count;
+            if (tree_max_bits == 0 or tree_max_bits > max_bits) return false;
+            const max_code_bits = @as(u5, tree_max_bits) + 1;
+            var next_start: usize = 0;
+            for (tree.nodes[0 .. @as(usize, tree.symbol_count_minus_one) + 1]) |node| {
+                if (node.weight == 0) continue;
+                if (node.weight > max_code_bits) return false;
+                const bit_count: u4 = @intCast(max_code_bits - node.weight);
+                if (bit_count == 0 or bit_count > max_bits) return false;
+                const suffix_bits = max_bits - bit_count;
+                const start = @as(usize, node.prefix) << suffix_bits;
+                const count = @as(usize, 1) << suffix_bits;
+                if (start != next_start or count > len - start) return false;
+                next_start += count;
+                fillCompleteRange(self.entries[start..][0..count], .{
+                    .symbol = node.symbol,
+                    .bit_count = bit_count,
+                });
+            }
+            return next_start == len;
+        }
+
+        pub inline fn lookupAssumeComplete(self: *const @This(), bits: usize) CompleteEntry {
+            std.debug.assert(bits < len);
+            return self.entries[bits];
+        }
+
+        inline fn fillCompleteRange(dest: []CompleteEntry, entry: CompleteEntry) void {
+            switch (dest.len) {
+                1 => dest[0] = entry,
+                2 => {
+                    dest[0] = entry;
+                    dest[1] = entry;
+                },
+                4 => {
+                    const wide: *align(1) [4]CompleteEntry = @ptrCast(dest.ptr);
+                    wide.* = @splat(entry);
+                },
+                else => {
+                    std.debug.assert(dest.len >= 8 and dest.len % 8 == 0);
+                    var index: usize = 0;
+                    while (index < dest.len) : (index += 8) {
+                        const wide: *align(1) [8]CompleteEntry = @ptrCast(dest[index..].ptr);
+                        wide.* = @splat(entry);
+                    }
+                },
+            }
+        }
+    };
+}
+
 /// Decode a contiguous literal run while borrowing the already parsed tree.
 /// The caller owns stream transitions and cold canonical fallback through the
 /// supplied callbacks; this helper only keeps the complete-table hot path
@@ -231,7 +298,9 @@ test "complete Huffman lookup rejects incomplete coverage" {
         .nodes = .{.{ .symbol = 'a', .prefix = 0, .weight = 1 }},
     };
     var table: Table(3) = undefined;
+    var compact: CompleteTable(3) = undefined;
     try std.testing.expect(!table.buildComplete(tree));
+    try std.testing.expect(!compact.buildComplete(tree));
 }
 
 test "complete Huffman lookup rejects overlapping prefixes" {
@@ -250,7 +319,9 @@ test "complete Huffman lookup rejects overlapping prefixes" {
         },
     };
     var table: Table(3) = undefined;
+    var compact: CompleteTable(3) = undefined;
     try std.testing.expect(!table.buildComplete(tree));
+    try std.testing.expect(!compact.buildComplete(tree));
 }
 
 test "complete Huffman lookup rejects excessive weights" {
@@ -266,7 +337,9 @@ test "complete Huffman lookup rejects excessive weights" {
         .nodes = .{.{ .symbol = 'a', .prefix = 0, .weight = 4 }},
     };
     var table: Table(3) = undefined;
+    var compact: CompleteTable(3) = undefined;
     try std.testing.expect(!table.buildComplete(tree));
+    try std.testing.expect(!compact.buildComplete(tree));
 }
 
 test "complete Huffman lookup matches reference fill for randomized canonical trees" {
@@ -328,7 +401,9 @@ test "complete Huffman lookup matches reference fill for randomized canonical tr
 
         const reference = Table(11).build(&tree);
         var actual: Table(11) = undefined;
+        var compact: CompleteTable(11) = undefined;
         try std.testing.expect(actual.buildComplete(&tree));
+        try std.testing.expect(compact.buildComplete(&tree));
         try std.testing.expectEqualSlices(
             u8,
             std.mem.asBytes(&reference.entries),
@@ -336,6 +411,8 @@ test "complete Huffman lookup matches reference fill for randomized canonical tr
         );
         const suffix_bits: u4 = Table(11).bit_width - max_depth;
         for (actual.entries, 0..) |entry, prefix| {
+            try std.testing.expectEqual(entry.symbol, compact.entries[prefix].symbol);
+            try std.testing.expectEqual(@as(u8, entry.bit_count), compact.entries[prefix].bit_count);
             const tree_width_index = (prefix >> suffix_bits) << suffix_bits;
             try std.testing.expectEqual(
                 actual.entries[tree_width_index],

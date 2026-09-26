@@ -15906,3 +15906,15 @@ reuse, so production keeps the simpler independently owned plans.
   Log at 0.9972x median / 0.9979x geometric mean over 17 pairs. Short-distance,
   tail-distance, upstream, real-corpus, full-build, and reference gates pass;
   broad Brotli decode leadership remains unproven.
+  Complete four-stream Zstd X1 tables now use a dedicated two-byte symbol plus
+  full-byte bit-count entry, following libzstd's invariant that a proven-full
+  table needs no validity tag. Tagged entries remain authoritative for
+  incomplete and malformed trees. The ReleaseFast reservoir helper shrinks
+  from `0x624` to `0x5cc` bytes and removes 28 mask instructions. Against
+  `1011e1d8`, fixed-CPU-5 Log/JSON medians improve by 1.0096x/1.0054x at level
+  1, 1.0084x/1.0041x at level 5, and 1.0074x/1.0082x at level 9. PDF-B is
+  positive at all levels; PDF-A is neutral except for a measured 0.9980x q1
+  control. Current q9 Log/JSON throughput is 4,232.21/4,073.28 MiB/s, or
+  0.7827x/0.7386x system libzstd 1.5.5. Randomized table equivalence, malformed
+  tree, native, compatibility, 9,900-frame decodecorpus, full-build, and
+  reference gates pass; broad Zstd decode leadership remains open.

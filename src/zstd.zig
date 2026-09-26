@@ -391,6 +391,7 @@ const of_bits = [_]u8{
 const StdZstdLiteralsSection = std.compress.zstd.Decompress.LiteralsSection;
 const StdZstdHuffmanTree = StdZstdLiteralsSection.HuffmanTree;
 const HuffmanLiteralLookup = huffman_lookup.Table(11);
+const CompleteHuffmanLiteralLookup = huffman_lookup.CompleteTable(11);
 const NarrowHuffmanLiteralLookup = huffman_lookup.Table(7);
 
 extern fn vortZstdHuffmanX2Decode(request: *const huffman_x2_abi.Request) callconv(.c) c_int;
@@ -7950,7 +7951,7 @@ noinline fn decodeLargeFourStreamHuffman(
             .corrupt => return error.CorruptFrame,
         }
     }
-    var lookup: HuffmanLiteralLookup = undefined;
+    var lookup: CompleteHuffmanLiteralLookup = undefined;
     if (!lookup.buildComplete(&huffman_tree)) return false;
     const segment_len = (section.regenerated_size + 3) / 4;
     const streams = section.huffman_streams.four;
@@ -7992,7 +7993,7 @@ noinline fn decodeLargeFourStreamHuffman(
                 const prefix: usize = @intCast((bits >> @intCast(shift)) & mask);
                 const entry = lookup.lookupAssumeComplete(prefix << @intCast(11 - width));
                 dest[segment_start + index] = entry.symbol;
-                consumed += entry.bit_count;
+                consumed += @intCast(entry.bit_count);
             }
             stream_cursor.reader.skipBulkHuffman(consumed);
             segment_start += 5;
@@ -8000,9 +8001,10 @@ noinline fn decodeLargeFourStreamHuffman(
         while (segment_end - segment_start >= 2 and stream_cursor.reader.available() >= @as(usize, huffman_tree.max_bit_count) * 2) {
             const pair = stream_cursor.reader.peekBulkHuffmanPair(width);
             const first = lookup.lookupAssumeComplete((pair >> width) << @intCast(11 - width));
-            const second_prefix = (pair >> @intCast(width - first.bit_count)) & ((@as(u32, 1) << width) - 1);
+            const first_bit_count: u4 = @intCast(first.bit_count);
+            const second_prefix = (pair >> @intCast(width - first_bit_count)) & ((@as(u32, 1) << width) - 1);
             const second = lookup.lookupAssumeComplete(second_prefix << @intCast(11 - width));
-            stream_cursor.reader.skipBulkHuffman(@intCast(@as(u5, first.bit_count) + second.bit_count));
+            stream_cursor.reader.skipBulkHuffman(@intCast(@as(u9, first.bit_count) + second.bit_count));
             dest[segment_start] = first.symbol;
             dest[segment_start + 1] = second.symbol;
             segment_start += 2;
@@ -8026,7 +8028,7 @@ noinline fn decodeFourStreamHuffmanReservoir(
     positions: *[4]usize,
     ends: [4]usize,
     width: u4,
-    lookup: *const HuffmanLiteralLookup,
+    lookup: *const CompleteHuffmanLiteralLookup,
     dest: []u8,
 ) align(64) linksection(huffman_only_decode_text_section) void {
     var output_positions = positions.*;
@@ -8048,7 +8050,7 @@ noinline fn decodeFourStreamHuffmanReservoir(
                 // canonical prefix. Index it directly from the reservoir's
                 // high bits, matching libzstd's fast X1 loop and avoiding an
                 // extra width-dependent shift for every decoded symbol.
-                const prefix = reservoirs[stream_index].peek(HuffmanLiteralLookup.bit_width);
+                const prefix = reservoirs[stream_index].peek(CompleteHuffmanLiteralLookup.bit_width);
                 const entry = lookup.lookupAssumeComplete(prefix);
                 dest[output_positions[stream_index] + symbol_index] = entry.symbol;
                 reservoirs[stream_index].consume(entry.bit_count);

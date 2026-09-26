@@ -482,3 +482,45 @@ with 1.0061x/1.0081x geometric means. Same-process candidate medians reach
 The 124-case libzstd-generated probe, 9,900-frame decodecorpus, full test/check
 graph, and 13-row reference benchmark gate all pass. Zstd decode leadership is
 still not established.
+
+## Complete X1 Huffman entries
+
+The four-stream X1 decoder now uses a dedicated two-byte entry after canonical
+table construction has proved complete prefix coverage. This follows
+libzstd's fast-X1 invariant that a complete table needs no per-entry validity
+tag: the entry stores one symbol and a full-byte bit count. Incomplete or
+malformed tables retain the existing tagged lookup and checked fallback.
+
+The ReleaseFast reservoir helper shrinks from `0x624` to `0x5cc` bytes. Its
+disassembly contains 11 nibble-mask instructions instead of 39, while the
+adjacent sequence executor remains the same size. A 256-tree randomized oracle
+compares every compact symbol and bit count with the tagged reference table;
+separate tests cover incomplete, overlapping, and excessive-weight trees.
+
+Against commit `1011e1d8`, independent ReleaseFast binaries were alternated on
+CPU 5. The table reports candidate/baseline throughput; longer confirmations
+were used for q1/q9 PDF-A and q5 JSON.
+
+| Level | Input | Pairs | Wins | Median | Geometric mean |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 1 | PDF-A | 15 | 4 | 0.9980x | 0.9980x |
+| 1 | PDF-B | 5 | 5 | 1.0140x | 1.0152x |
+| 1 | Log | 5 | 5 | 1.0096x | 1.0085x |
+| 1 | JSON | 5 | 5 | 1.0054x | 1.0053x |
+| 5 | PDF-A | 5 | 3 | 1.0013x | 1.0053x |
+| 5 | PDF-B | 5 | 4 | 1.0033x | 1.0002x |
+| 5 | Log | 5 | 4 | 1.0084x | 1.0031x |
+| 5 | JSON | 11 | 9 | 1.0041x | 1.0039x |
+| 9 | PDF-A | 15 | 7 | 0.9999x | 1.0003x |
+| 9 | PDF-B | 5 | 5 | 1.0035x | 1.0039x |
+| 9 | Log | 5 | 5 | 1.0074x | 1.0078x |
+| 9 | JSON | 7 | 5 | 1.0082x | 1.0043x |
+
+The sole confirmed negative control is q1 PDF-A at about -0.20%; q9 PDF-A is
+neutral, and the other ten row medians are positive. Same-process q9
+throughput reaches 4,232.21/4,073.28 MiB/s on Log/JSON, respectively
+`0.7827x`/`0.7386x` system libzstd 1.5.5. The compact/reference table tests,
+four-stream tail and corruption tests, 364-case native probe, 276-case
+compatibility matrix, 9,900-frame decodecorpus across all 64 sequence-mode
+combinations, full test/check graph, and 13-row reference gate pass. This
+narrows one Huffman cost but does not establish Zstd decode leadership.
