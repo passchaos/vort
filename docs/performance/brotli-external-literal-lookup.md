@@ -663,3 +663,51 @@ Focused dense/single/long-code and atomic-preparation tests pass, as do the
 runs, four-category real-corpus one-shot/progressive differential, full
 test/check graph, and 13-row reference gate. The compact plane improves the
 dominant multi-tree workloads without hiding the remaining libbrotli gap.
+
+## Tail-only packed command metadata
+
+The same libbrotli 1.2.0 source audit found that upstream's command LUT uses an
+eight-byte `CmdLutElement`: four byte-sized control fields followed by two
+16-bit length bases. Vort's general-purpose Zig entry occupies 12 bytes. The
+compact-tail specialization now reads a separate eight-byte packed `u64`
+entry, placing both bases and the bit-count flags in one load before extracting
+them in registers. All other decoder tiers keep the established table and code
+shape; this avoids the q9 JSON regression measured when the smaller entry was
+made global.
+
+The compact table is generated at compile time from the authoritative 704-entry
+table. A compile-time size assertion fixes its eight-byte representation, an
+exhaustive oracle compares every field of all 704 entries, and the staged
+high-extra-bit test compares decoded lengths and reader position with the
+general table.
+
+Against commit `deb72111`, independent ReleaseFast binaries were alternated on
+CPU 5. Values are candidate/baseline ratios; rows use five pairs except the
+seven-pair q9 JSON control.
+
+| Quality | Input | Wins | Median | Geometric mean |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | PDF-A | 2/5 | 0.999672x | 0.998806x |
+| 1 | PDF-B | 5/5 | 1.000648x | 1.000830x |
+| 1 | Log | 1/5 | 0.998352x | 0.998520x |
+| 1 | JSON | 3/5 | 1.000264x | 0.999935x |
+| 5 | PDF-A | 3/5 | 1.000097x | 1.000465x |
+| 5 | PDF-B | 2/5 | 0.999950x | 0.999956x |
+| 5 | Log | 5/5 | 1.005540x | 1.006269x |
+| 5 | JSON | 3/5 | 1.000742x | 1.002316x |
+| 9 | PDF-A | 3/5 | 1.001626x | 1.000182x |
+| 9 | PDF-B | 2/5 | 0.999799x | 0.998733x |
+| 9 | Log | 5/5 | 1.005846x | 1.005242x |
+| 9 | JSON | 3/7 | 0.998791x | 0.999264x |
+
+The unweighted geometric mean of the twelve row-level geometric means is
+1.000874x. The largest retained control cost is 0.15% on q1 Log, while the two
+directly affected Log rows improve by 0.63% at q5 and 0.52% at q9. A q9 Log
+counter run reduces core cycles by about 0.75%; the packed extraction raises
+retired instructions by about 0.79%, so the win comes from a shorter dependency
+and denser lookup rather than lower instruction count.
+
+Final higher-iteration q9 measurements reach 1903.04 MiB/s on Log and
+2250.20 MiB/s on JSON, or 0.8946x and 0.8819x libbrotli 1.1.0. The upstream,
+real-corpus, full test/check, and 13-row reference gates remain green. This is
+another measured step toward parity, not an industry-best claim.

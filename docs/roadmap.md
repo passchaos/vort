@@ -15929,3 +15929,12 @@ reuse, so production keeps the simpler independently owned plans.
   or 0.8937x/0.8810x libbrotli 1.1.0. The full upstream, progress, real-corpus,
   test/check, and 13-row reference gates pass. The remaining gap means Brotli
   decode leadership is still open.
+- The 16--64-tree compact Brotli tail tier now uses a compile-time packed
+  eight-byte command metadata table derived from the authoritative 704-entry
+  table, following libbrotli's cache-dense command-LUT invariant while keeping
+  other decoder tiers unchanged. Fixed-CPU-5 q5/q9 Log improves by
+  1.0055x/1.0058x median with 5/5 wins; the twelve-row matrix geometric mean is
+  1.0009x and the largest control cost is 0.15%. Final q9 Log/JSON throughput
+  is 1903.04/2250.20 MiB/s, or 0.8946x/0.8819x libbrotli 1.1.0. Exhaustive
+  table equivalence, high-extra-bit decode, compatibility, full-build, and
+  reference gates pass; overall Brotli leadership remains open.

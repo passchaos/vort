@@ -6369,6 +6369,21 @@ inline fn readInsertCopyLengthsStaged(symbol: u16, reader: anytype) Error!Insert
     };
 }
 
+inline fn readInsertCopyLengthsStagedCompact(
+    symbol: u16,
+    reader: anytype,
+) Error!InsertCopyLengths {
+    if (symbol >= command_lut.entries.len) return error.InvalidHuffmanCode;
+    const entry = command_lut.compact_entries[symbol];
+    const insert_extra = if (entry.insert_extra_bits == 0) 0 else try reader.readBits24StagedFirst(entry.insert_extra_bits);
+    const copy_extra = if (entry.copy_extra_bits == 0) 0 else try reader.readBits24StagedFirst(entry.copy_extra_bits);
+    return .{
+        .insert_len = entry.insert_base + insert_extra,
+        .copy_len = entry.copy_base + copy_extra,
+        .distance_symbol_zero = entry.distance_code == 0,
+    };
+}
+
 fn processMinimalCompressedMetaBlock(
     reader: *bitstream.BitReader,
     output: []u8,
@@ -6836,7 +6851,7 @@ noinline fn processTailLookupCompressedPayload(
         else
             try readCommandSymbolAny(header, reader);
         const lengths = if (comptime auxiliary_tail_lookups)
-            try readInsertCopyLengthsStaged(command_symbol, reader)
+            try readInsertCopyLengthsStagedCompact(command_symbol, reader)
         else
             try readInsertCopyLengths(command_symbol, reader);
         if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;
@@ -11924,6 +11939,17 @@ test "br explicit command index matches exhaustive LUT search" {
             try std.testing.expectEqual(expected.symbol, indexed.symbol);
             _ = symbol;
         };
+    }
+}
+
+test "br compact command table preserves every upstream field" {
+    for (command_lut.entries, command_lut.compact_entries) |entry, compact| {
+        try std.testing.expectEqual(entry.insert_extra_bits, compact.insert_extra_bits);
+        try std.testing.expectEqual(entry.copy_extra_bits, compact.copy_extra_bits);
+        try std.testing.expectEqual(entry.distance_code, compact.distance_code);
+        try std.testing.expectEqual(entry.context, compact.context);
+        try std.testing.expectEqual(entry.insert_base, compact.insert_base);
+        try std.testing.expectEqual(entry.copy_base, compact.copy_base);
     }
 }
 
@@ -21076,8 +21102,15 @@ test "br insert-copy length decoder handles high range extra bits" {
     try std.testing.expectEqual(lengths, staged);
     try std.testing.expectEqual(reader.bitPosition(), staged_reader.bitPosition());
 
+    var compact_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(encoded.items));
+    const compact = try readInsertCopyLengthsStagedCompact(640 + (4 << 3) + 6, &compact_reader);
+    try std.testing.expectEqual(lengths, compact);
+    try std.testing.expectEqual(reader.bitPosition(), compact_reader.bitPosition());
+
     var invalid_reader = bitstream.BitReader.init(&.{});
     try std.testing.expectError(error.InvalidHuffmanCode, readInsertCopyLengths(704, &invalid_reader));
+    var invalid_compact_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+    try std.testing.expectError(error.InvalidHuffmanCode, readInsertCopyLengthsStagedCompact(704, &invalid_compact_reader));
 }
 
 test "br short distance resolver covers RFC table" {

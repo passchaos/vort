@@ -716,6 +716,43 @@ pub const entries = [_]Entry{
     .{ .insert_extra_bits = 24, .copy_extra_bits = 24, .distance_code = -1, .context = 3, .insert_base = 22594, .copy_base = 2118 },
 };
 
+/// Cache-dense command representation used only by the compact literal-tail
+/// executor. Other decoder tiers keep their established `Entry` lookup and
+/// field extraction.
+pub const CompactEntry = packed struct(u64) {
+    insert_base: u16,
+    copy_base: u16,
+    insert_extra_bits: u5,
+    copy_extra_bits: u5,
+    distance_code: i2,
+    context: u2,
+    padding: u18 = 0,
+};
+
+pub inline fn compact(entry: Entry) CompactEntry {
+    return .{
+        .insert_extra_bits = entry.insert_extra_bits,
+        .copy_extra_bits = entry.copy_extra_bits,
+        .distance_code = entry.distance_code,
+        .context = entry.context,
+        .insert_base = @intCast(entry.insert_base),
+        .copy_base = @intCast(entry.copy_base),
+    };
+}
+
+pub const compact_entries = makeCompactEntries();
+
+fn makeCompactEntries() [entries.len]CompactEntry {
+    @setEvalBranchQuota(2_000);
+    var result: [entries.len]CompactEntry = undefined;
+    for (entries, 0..) |entry, index| result[index] = compact(entry);
+    return result;
+}
+
+comptime {
+    if (@sizeOf(CompactEntry) != 8) @compileError("compact Brotli command entries must remain eight bytes");
+}
+
 pub fn formula(symbol: u16) Entry {
     const insert_extra = [_]u5{ 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 12, 14, 24 };
     const copy_extra = [_]u5{ 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 24 };
