@@ -15870,3 +15870,11 @@ reuse, so production keeps the simpler independently owned plans.
   within 0.1%. Current q9 Log/JSON throughput reaches 1,802.29/2,139.19 MiB/s,
   or 0.8424x/0.8374x libbrotli 1.1.0. All upstream, real-corpus, test, check,
   and reference gates pass; the remaining gap is explicit.
+  The x86-64 ReleaseFast all-FSE split executors now apply libzstd's deliberate
+  sequence-loop instruction alignment after Huffman setup. Against `7b246260`,
+  fixed-CPU-5 q9 Log/JSON medians improve by 1.0083x/1.0079x, q5 by
+  1.0090x/1.0026x, and q1 remains neutral; PDF controls range from 0.9986x to
+  1.0089x. Current q9 throughput is 4,213.69/4,030.42 MiB/s, or
+  0.7965x/0.7345x system libzstd 1.5.5. Compatibility, decodecorpus, full-build,
+  and reference gates pass, while the broader leadership objective remains
+  open.

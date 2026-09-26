@@ -453,3 +453,32 @@ pairs, while its 0.9950x five-pair screen included wider noise.
 Same-process q9 throughput is 4,166.73 MiB/s on Log and 4,097.32 MiB/s on JSON,
 or 0.7620x/0.7275x system libzstd 1.5.5 in that run. The small incremental gain
 does not close the remaining reference gap.
+
+## X86-64 sequence-loop alignment
+
+The ReleaseFast all-FSE split executors now mirror the deliberate instruction
+layout used by libzstd's `ZSTD_decompressSequences_body*` loops. On x86-64 an
+inline assembler boundary places the sequence-loop entry 48 bytes into a
+64-byte cache line, after the Huffman setup that makes function-entry alignment
+alone insufficient. Builds other than x86-64 ReleaseFast omit the layout
+directive, so the optimization has no semantic or portability surface outside
+its measured target.
+
+Against commit `7b246260`, independent ReleaseFast binaries were alternated on
+CPU 5 with identical inputs and 50 iterations per process. Values are
+candidate/baseline medians; Log/JSON q9 use seven pairs and all other rows use
+five.
+
+| Level | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 0.9986x | 1.0029x | 1.0012x | 1.0013x |
+| 5 | 1.0010x | 0.9996x | 1.0090x | 1.0026x |
+| 9 | 1.0008x | 1.0089x | 1.0083x | 1.0079x |
+
+The weakest control, q1 PDF-A, has a 0.9980x geometric mean; q5 PDF-B is
+effectively neutral at 0.99997x. The q9 Log/JSON rows win 5/7 and 6/7 pairs,
+with 1.0061x/1.0081x geometric means. Same-process candidate medians reach
+4,213.69/4,030.42 MiB/s, or 0.7965x/0.7345x system libzstd 1.5.5 in this run.
+The 124-case libzstd-generated probe, 9,900-frame decodecorpus, full test/check
+graph, and 13-row reference benchmark gate all pass. Zstd decode leadership is
+still not established.

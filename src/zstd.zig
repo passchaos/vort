@@ -10388,6 +10388,18 @@ inline fn decodeAllFseSplitHuffmanSequences(
     var literal_offset: usize = 0;
     var wide_reader: ReverseBitReader = if (use_grouped_fields) state.reader else undefined;
     var remaining = state.remaining;
+    if (comptime builtin.cpu.arch == .x86_64 and builtin.mode == .ReleaseFast) {
+        // Keep the sequence loop on the same µop-cache-friendly boundary used
+        // by libzstd's x86-64 decompressor. Aligning only the function entry is
+        // insufficient because Huffman setup precedes this loop.
+        asm volatile (
+            \\.p2align 6
+            \\nop
+            \\.p2align 5
+            \\nop
+            \\.p2align 4
+        );
+    }
     while (remaining != 0) {
         const ll_symbol: SequenceSymbol = if (use_grouped_fields) undefined else spec.literal_fse.symbolUnchecked(state.ll_state);
         const of_symbol: SequenceSymbol = if (use_grouped_fields) undefined else spec.offset_fse.symbolUnchecked(state.of_state);
