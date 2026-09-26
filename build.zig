@@ -2936,6 +2936,17 @@ pub fn build(b: *std.Build) void {
         "Validate optional Vort/libbrotli caller-owned decode comparison",
     );
     br_reference_bench_gate_step.dependOn(&br_reference_bench_gate.step);
+    const br_reference_bench_path_smoke = b.addSystemCommand(&.{
+        "python3", "tools/br/reference_bench_path_smoke.py",
+    });
+    br_reference_bench_path_smoke.addArtifactArg(br_reference_bench_exe);
+    const br_reference_bench_path_smoke_step = b.step(
+        "run-br-reference-bench-path-smoke",
+        "Validate raw and pre-encoded file inputs for the Brotli benchmark",
+    );
+    br_reference_bench_path_smoke_step.dependOn(
+        &br_reference_bench_path_smoke.step,
+    );
 
     const br_compressed_header_profile_exe = b.addExecutable(.{
         .name = "vort-br-compressed-header-profile",

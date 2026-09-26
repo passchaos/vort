@@ -16,6 +16,7 @@ const Options = struct {
     csv_path: ?[]const u8 = null,
     only_case: ?[]const u8 = null,
     input_path: ?[]const u8 = null,
+    encoded_input_path: ?[]const u8 = null,
     input_name: ?[]const u8 = null,
     quality_override: ?c_int = null,
     print_encoded_hex: bool = false,
@@ -68,6 +69,8 @@ pub fn main(init: std.process.Init) !void {
 
     var file_payload: ?[]u8 = null;
     defer if (file_payload) |payload| init.gpa.free(payload);
+    var file_encoded: ?[]u8 = null;
+    defer if (file_encoded) |encoded| init.gpa.free(encoded);
     var file_case: [1]Case = undefined;
     const selected_cases: []const Case = if (options.input_path) |path| blk: {
         if (options.only_case != null) return error.InvalidCaseSelection;
@@ -79,6 +82,16 @@ pub fn main(init: std.process.Init) !void {
         );
         file_payload = payload;
         if (payload.len == 0) return error.InputTooSmall;
+        if (options.encoded_input_path) |encoded_path| {
+            const encoded = try std.Io.Dir.cwd().readFileAlloc(
+                init.io,
+                encoded_path,
+                init.gpa,
+                .limited(max_file_input_size),
+            );
+            if (encoded.len == 0) return error.InputTooSmall;
+            file_encoded = encoded;
+        }
         const name = options.input_name orelse std.fs.path.basename(path);
         if (name.len == 0 or std.mem.indexOfAny(u8, name, ",\r\n") != null)
             return error.InvalidCaseName;
@@ -90,7 +103,8 @@ pub fn main(init: std.process.Init) !void {
         };
         break :blk &file_case;
     } else blk: {
-        if (options.input_name != null) return error.MissingCorpusPath;
+        if (options.input_name != null or options.encoded_input_path != null)
+            return error.MissingCorpusPath;
         break :blk &cases;
     };
 
@@ -104,8 +118,12 @@ pub fn main(init: std.process.Init) !void {
         if (options.only_case) |wanted| {
             if (!std.mem.eql(u8, wanted, case.name)) continue;
         }
-        const encoded = try runtime.encodeAlloc(init.gpa, case.payload, options.quality_override orelse case.quality);
-        defer init.gpa.free(encoded);
+        const generated = if (file_encoded == null)
+            try runtime.encodeAlloc(init.gpa, case.payload, options.quality_override orelse case.quality)
+        else
+            null;
+        defer if (generated) |encoded| init.gpa.free(encoded);
+        const encoded = file_encoded orelse generated.?;
         const iterations = @max(1, options.iterations / case.iteration_divisor);
         if (options.print_encoded_hex) {
             var stderr_buffer: [4096]u8 = undefined;
@@ -234,6 +252,8 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.only_case = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--input")) {
             options.input_path = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--encoded-input")) {
+            options.encoded_input_path = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--name")) {
             options.input_name = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--quality")) {

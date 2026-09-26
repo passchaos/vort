@@ -25,6 +25,7 @@ zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
 zig build -Doptimize=ReleaseFast run-br-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-br-reference-bench -- --input path/to/file --name corpus_case --quality 5 --iterations 10
+zig build -Doptimize=ReleaseFast run-br-reference-bench -- --input path/to/file --encoded-input path/to/file.br --name corpus_case --iterations 10 --vort-only
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench -- --libzstd /path/to/libzstd
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench -- --input path/to/file --name corpus_case --level 1
@@ -117,11 +118,12 @@ zig build run-rust-deflate-bench-gate-smoke
 taskset -c 8 zig build -j1 run-competitor-gap-report
 ```
 
-`--encoded-input` lets both Zstd decode benchmarks reuse a frozen frame instead
-of recompressing the file supplied by `--input`. Each benchmark still checks
-the Vort output against the original input before timing; the reference
-benchmark additionally checks libzstd. This keeps independent-binary A/B runs
-on an identical frame while avoiding setup work outside the measured decoder.
+`--encoded-input` lets the Brotli reference benchmark and both Zstd decode
+benchmarks reuse a frozen frame instead of recompressing the file supplied by
+`--input`. Each benchmark still checks the Vort output against the original
+input before timing; reference runs additionally check the corresponding
+system library. This keeps independent-binary A/B runs on identical bytes
+while avoiding setup work outside the measured decoder.
 
 `run-br-planned-encode-bench` accepts `-- --case <name>` to isolate one of
 its built-in Brotli rows, for example `dictionary`, `mixed`, or `source32k`.
