@@ -13,6 +13,9 @@ records grouped bit reads, bounded match-copy specialization, and the resulting
 [Brotli external literal lookup](performance/brotli-external-literal-lookup.md)
 records the dense-tree fallback optimization and fixed-CPU measurements on an
 anonymized private corpus.
+[Brotli zero-insert fast path](performance/brotli-zero-insert-fast-path.md)
+records the command-loop shortcut, cross-quality controls, and compatibility
+coverage.
 
 ## Current local benchmark entrypoints
 

@@ -286,7 +286,7 @@ test "Zstd 256-state no-low mapped builder matches generic table" {
     var prng = std.Random.DefaultPrng.init(0x4653_4532_3536);
     const random = prng.random();
     for (0..256) |_| {
-        const symbol_count = random.intRangeAtMost(usize, 2, 64);
+        const symbol_count = random.intRangeAtMost(usize, 2, 53);
         @memset(values[0..symbol_count], 1);
         var remaining: usize = 256;
         while (remaining != 0) {
@@ -295,7 +295,7 @@ test "Zstd 256-state no-low mapped builder matches generic table" {
             remaining -= 1;
         }
         try buildMapped(values[0..symbol_count], &expected, bases[0..symbol_count], bits[0..symbol_count]);
-        try large_fse_table.buildNoLowProbability(values[0..symbol_count], &actual, bases[0..symbol_count], bits[0..symbol_count]);
+        large_fse_table.buildNoLowProbabilityAssumeValid(values[0..symbol_count], &actual, bases[0..symbol_count], bits[0..symbol_count]);
         try std.testing.expectEqualSlices(Mapped, &expected, &actual);
     }
     inline for (.{
@@ -304,7 +304,7 @@ test "Zstd 256-state no-low mapped builder matches generic table" {
         &[_]u16{ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 256 },
     }) |fixture| {
         try buildMapped(fixture, &expected, bases[0..fixture.len], bits[0..fixture.len]);
-        try large_fse_table.buildNoLowProbability(fixture, &actual, bases[0..fixture.len], bits[0..fixture.len]);
+        large_fse_table.buildNoLowProbabilityAssumeValid(fixture, &actual, bases[0..fixture.len], bits[0..fixture.len]);
         try std.testing.expectEqualSlices(Mapped, &expected, &actual);
     }
 
@@ -314,4 +314,7 @@ test "Zstd 256-state no-low mapped builder matches generic table" {
     try std.testing.expectError(error.CorruptFrame, large_fse_table.buildNoLowProbability(&invalid, actual[0..128], &bases, &bits));
     invalid[6] = 0;
     try std.testing.expectError(error.CorruptFrame, large_fse_table.buildNoLowProbability(&invalid, &actual, &bases, &bits));
+
+    const too_many_symbols = [_]u16{1} ** 54;
+    try std.testing.expectError(error.CorruptFrame, large_fse_table.buildNoLowProbability(&too_many_symbols, &actual, &bases, &bits));
 }

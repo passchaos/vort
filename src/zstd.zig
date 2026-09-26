@@ -9230,12 +9230,13 @@ fn readFseSequenceTableInto(
         for (normalized) |value| no_low_probability = no_low_probability and value != 0;
         if (no_low_probability) {
             if (builtin.is_test) test_large_fse_no_low_builder_hits += 1;
-            return large_fse_table.buildNoLowProbability(
+            large_fse_table.buildNoLowProbabilityAssumeValid(
                 normalized,
                 table.entries[0..decoded.table_len],
                 bases,
                 bits,
             );
+            return;
         }
     }
     try sequence_fse_builder.buildMapped(normalized, table.entries[0..decoded.table_len], bases, bits);

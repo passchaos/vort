@@ -15938,3 +15938,12 @@ reuse, so production keeps the simpler independently owned plans.
   is 1903.04/2250.20 MiB/s, or 0.8946x/0.8819x libbrotli 1.1.0. Exhaustive
   table equivalence, high-extra-bit decode, compatibility, full-build, and
   reference gates pass; overall Brotli leadership remains open.
+- Brotli's compact, external, and wide-external payload executors now follow
+  libbrotli's zero-insert command transition and skip literal-context setup
+  when there are no literals to decode. Against `53e16bd4`, fixed-CPU-5
+  Log medians improve by 1.0033x/1.0144x/1.0128x at q1/q5/q9; JSON improves
+  by 1.0014x/1.0083x/1.0061x. Two PDF controls remain neutral across all
+  qualities, and the equal-weight geometric mean of the twelve row means is
+  1.0047x. Focused decoder tests, upstream differential, real-corpus
+  differential, reference benchmark, and compile-check gates pass; Brotli
+  decode is improved but still below libbrotli on the measured large inputs.
