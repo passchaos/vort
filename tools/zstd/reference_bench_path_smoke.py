@@ -32,6 +32,12 @@ def main() -> int:
         empty = root / "empty.txt"
         source.write_bytes(b"source-like payload with repeated words 0123456789\n" * 32)
         empty.write_bytes(b"")
+        payload = source.read_bytes()
+        assert 256 <= len(payload) <= 65535 + 256
+        frame = root / "source data.zst"
+        frame_header = bytes.fromhex("28b52ffd") + bytes([0x60]) + (len(payload) - 256).to_bytes(2, "little")
+        block_header = ((len(payload) << 3) | 1).to_bytes(3, "little")
+        frame.write_bytes(frame_header + block_header + payload)
 
         result = run(
             executable,
@@ -58,8 +64,30 @@ def main() -> int:
         assert int(row["total_literal_bytes"]) + int(row["total_match_bytes"]) == int(row["input_bytes"]), row
         assert "/source%20data.txt" in row["command"], row
 
+        prepared = run(
+            executable,
+            "--input",
+            str(source),
+            "--encoded-input",
+            str(frame),
+            "--name",
+            "prepared_source",
+            "--iterations",
+            "1",
+        )
+        prepared_rows = list(csv.DictReader(io.StringIO(prepared.stdout)))
+        assert len(prepared_rows) == 1, prepared_rows
+        prepared_row = prepared_rows[0]
+        assert prepared_row["case"] == "prepared_source", prepared_row
+        assert int(prepared_row["input_bytes"]) == len(payload), prepared_row
+        assert int(prepared_row["encoded_bytes"]) == frame.stat().st_size, prepared_row
+        assert prepared_row["input_sha256"] == hashlib.sha256(payload).hexdigest(), prepared_row
+        assert "/source%20data.zst" in prepared_row["command"], prepared_row
+
         for invalid_args in (
             ("--input", str(empty)),
+            ("--input", str(source), "--encoded-input", str(empty)),
+            ("--encoded-input", str(frame)),
             ("--input", str(source), "--name", "bad,name"),
             ("--name", "orphan"),
             ("--level", "3"),
@@ -68,7 +96,7 @@ def main() -> int:
             failed = run(executable, *invalid_args, check=False)
             assert failed.returncode != 0, (invalid_args, failed.stdout, failed.stderr)
 
-    print("zstd_reference_bench_path_smoke=ok rows=1 invalid=5")
+    print("zstd_reference_bench_path_smoke=ok rows=2 invalid=7")
     return 0
 
 

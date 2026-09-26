@@ -49,6 +49,7 @@ const Options = struct {
     csv_path: ?[]const u8 = null,
     only_case: ?[]const u8 = null,
     input_path: ?[]const u8 = null,
+    encoded_input_path: ?[]const u8 = null,
     input_name: ?[]const u8 = null,
     input_level: c_int = 1,
     reusable: bool = false,
@@ -86,6 +87,17 @@ pub fn main(init: std.process.Init) !void {
         );
         defer init.gpa.free(payload);
         if (payload.len == 0) return error.InputTooSmall;
+        const encoded_input = if (options.encoded_input_path) |encoded_path|
+            try std.Io.Dir.cwd().readFileAlloc(
+                init.io,
+                encoded_path,
+                init.gpa,
+                .limited(max_file_input_size),
+            )
+        else
+            null;
+        defer if (encoded_input) |encoded| init.gpa.free(encoded);
+        if (encoded_input) |encoded| if (encoded.len == 0) return error.InputTooSmall;
         const name = options.input_name orelse std.fs.path.basename(path);
         if (name.len == 0 or std.mem.indexOfAny(u8, name, ",\r\n") != null)
             return error.InvalidCaseName;
@@ -93,10 +105,10 @@ pub fn main(init: std.process.Init) !void {
             .name = name,
             .payload = payload,
             .level = options.input_level,
-        }, options.iterations, options.reusable);
+        }, options.iterations, options.reusable, encoded_input);
         return try writeOutput(init, options.csv_path, &.{row}, provenance);
     }
-    if (options.input_name != null or options.input_level != 1)
+    if (options.input_name != null or options.encoded_input_path != null or options.input_level != 1)
         return error.MissingCorpusPath;
 
     const raw_large_payload = try init.gpa.alloc(u8, 256 * 1024);
@@ -179,7 +191,7 @@ pub fn main(init: std.process.Init) !void {
         }
         try rows.append(
             init.gpa,
-            try measureCase(init, runtime, case, options.iterations, options.reusable),
+            try measureCase(init, runtime, case, options.iterations, options.reusable, null),
         );
     }
 
@@ -223,6 +235,8 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.only_case = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--input")) {
             options.input_path = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--encoded-input")) {
+            options.encoded_input_path = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--name")) {
             options.input_name = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--level")) {
@@ -247,9 +261,14 @@ fn measureCase(
     case: Case,
     iterations: usize,
     reusable: bool,
+    encoded_input: ?[]const u8,
 ) !Row {
-    const encoded = try runtime.encodeAlloc(init.gpa, case.payload, case.level);
-    defer init.gpa.free(encoded);
+    const generated = if (encoded_input == null)
+        try runtime.encodeAlloc(init.gpa, case.payload, case.level)
+    else
+        null;
+    defer if (generated) |encoded| init.gpa.free(encoded);
+    const encoded = encoded_input orelse generated.?;
     const summary = try vort.zstdSummarizeNativeFrameBlocks(encoded);
     const first_block = try vort.zstdInspectNativeFrameFirstBlock(encoded);
     const sequence_summary =

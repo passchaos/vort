@@ -10,6 +10,7 @@ const Options = struct {
     only_case: ?[]const u8 = null,
     csv_path: ?[]const u8 = null,
     input_path: ?[]const u8 = null,
+    encoded_input_path: ?[]const u8 = null,
     input_name: ?[]const u8 = null,
     input_level: c_int = 1,
     reusable: bool = false,
@@ -39,6 +40,17 @@ pub fn main(init: std.process.Init) !void {
         );
         defer init.gpa.free(payload);
         if (payload.len == 0) return error.InputTooSmall;
+        const encoded_input = if (options.encoded_input_path) |encoded_path|
+            try std.Io.Dir.cwd().readFileAlloc(
+                init.io,
+                encoded_path,
+                init.gpa,
+                .limited(max_file_input_size),
+            )
+        else
+            null;
+        defer if (encoded_input) |encoded| init.gpa.free(encoded);
+        if (encoded_input) |encoded| if (encoded.len == 0) return error.InputTooSmall;
         const name = options.input_name orelse std.fs.path.basename(path);
         if (name.len == 0 or std.mem.indexOfAny(u8, name, ",\r\n") != null)
             return error.InvalidCaseName;
@@ -48,9 +60,10 @@ pub fn main(init: std.process.Init) !void {
             &.{.{ .name = name, .payload = payload, .level = options.input_level }},
             options,
             provenance,
+            encoded_input,
         );
     }
-    if (options.input_name != null or options.input_level != 1)
+    if (options.input_name != null or options.encoded_input_path != null or options.input_level != 1)
         return error.MissingCorpusPath;
 
     var numbered_json: std.ArrayList(u8) = .empty;
@@ -94,7 +107,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "binary_mixed", .payload = binary_mixed },
     };
 
-    try runCases(init, runtime, &cases, options, provenance);
+    try runCases(init, runtime, &cases, options, provenance, null);
 }
 
 fn runCases(
@@ -103,6 +116,7 @@ fn runCases(
     cases: []const Case,
     options: Options,
     provenance: benchmark_provenance.Info,
+    encoded_input: ?[]const u8,
 ) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
@@ -111,8 +125,12 @@ fn runCases(
     for (cases) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
         selected += 1;
-        const encoded = try runtime.encodeAlloc(init.gpa, case.payload, case.level);
-        defer init.gpa.free(encoded);
+        const generated = if (encoded_input == null)
+            try runtime.encodeAlloc(init.gpa, case.payload, case.level)
+        else
+            null;
+        defer if (generated) |encoded| init.gpa.free(encoded);
+        const encoded = encoded_input orelse generated.?;
         const output = try init.gpa.alloc(u8, case.payload.len);
         defer init.gpa.free(output);
         const written = try vort.zstdDecodeFrameInto(encoded, output);
@@ -197,6 +215,8 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.csv_path = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--input"))
             options.input_path = args.next() orelse return error.MissingCorpusPath
+        else if (std.mem.eql(u8, arg, "--encoded-input"))
+            options.encoded_input_path = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--name"))
             options.input_name = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--level"))
