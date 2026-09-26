@@ -15888,3 +15888,12 @@ reuse, so production keeps the simpler independently owned plans.
   1,831.89/2,184.38 MiB/s, or 0.8620x/0.8491x libbrotli 1.1.0. Full upstream,
   real-corpus, test/check, and reference gates pass, but industry leadership is
   not yet established.
+  Brotli command and distance extra-bit reads now take an inline staged fast
+  path immediately after their fixed 9-bit Huffman lookup, while reservoir
+  refill and truncation remain in the original out-of-line reader. Against
+  `6ec3a13e`, all 12 fixed-CPU-5 matrix rows improve: Log/JSON medians are
+  1.0286x/1.0409x at q1, 1.0201x/1.0295x at q5, and 1.0199x/1.0250x at q9;
+  PDF gains range from 1.0030x to 1.0075x. Current q9 throughput reaches
+  1,879.24/2,260.71 MiB/s, or 0.8783x/0.8674x libbrotli 1.1.0. Reader,
+  command/distance, upstream, real-corpus, full-build, and reference gates pass;
+  the overall leadership target remains open.

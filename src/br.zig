@@ -6357,6 +6357,18 @@ fn readInsertCopyLengths(symbol: u16, reader: anytype) Error!InsertCopyLengths {
     };
 }
 
+inline fn readInsertCopyLengthsStaged(symbol: u16, reader: anytype) Error!InsertCopyLengths {
+    if (symbol >= 704) return error.InvalidHuffmanCode;
+    const entry = command_lut.entries[symbol];
+    const insert_extra = if (entry.insert_extra_bits == 0) 0 else try reader.readBits24StagedFirst(entry.insert_extra_bits);
+    const copy_extra = if (entry.copy_extra_bits == 0) 0 else try reader.readBits24StagedFirst(entry.copy_extra_bits);
+    return .{
+        .insert_len = entry.insert_base + insert_extra,
+        .copy_len = entry.copy_base + copy_extra,
+        .distance_symbol_zero = entry.distance_code == 0,
+    };
+}
+
 fn processMinimalCompressedMetaBlock(
     reader: *bitstream.BitReader,
     output: []u8,
@@ -6788,7 +6800,10 @@ noinline fn processTailLookupCompressedPayload(
             try readCommandSymbolTailLookupFixed9(header, reader)
         else
             try readCommandSymbolAny(header, reader);
-        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        const lengths = if (comptime auxiliary_tail_lookups)
+            try readInsertCopyLengthsStaged(command_symbol, reader)
+        else
+            try readInsertCopyLengths(command_symbol, reader);
         if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;
         var previous: u8 = if (output_cursor == 0) 0 else output[output_cursor - 1];
         var second_previous: u8 = if (output_cursor < 2) 0 else output[output_cursor - 2];
@@ -6858,7 +6873,10 @@ noinline fn processExternalLiteralLookupCompressedPayload(
             try readCommandSymbolTailLookupFixed9(header, reader)
         else
             try readCommandSymbolAny(header, reader);
-        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        const lengths = if (comptime auxiliary_tail_lookups)
+            try readInsertCopyLengthsStaged(command_symbol, reader)
+        else
+            try readInsertCopyLengths(command_symbol, reader);
         if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;
         var i: usize = 0;
         if (context_independent) {
@@ -6970,7 +6988,10 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
                 try readCommandSymbolTailLookup(header, reader)
         else
             try readCommandSymbolAny(header, reader);
-        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        const lengths = if (comptime auxiliary_tail_lookups and fixed_nine_bit_peek)
+            try readInsertCopyLengthsStaged(command_symbol, reader)
+        else
+            try readInsertCopyLengths(command_symbol, reader);
         if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;
         var previous: u8 = if (output_cursor == 0) 0 else output[output_cursor - 1];
         var second_previous: u8 = if (output_cursor < 2) 0 else output[output_cursor - 2];
@@ -10310,7 +10331,10 @@ inline fn readMinimalDistanceTailLookupIntoWithOptions(
         return;
     }
     decoded_distance.* = .{
-        .distance = try readPreparedDistance(header, reader, symbol),
+        .distance = if (comptime fixed_nine_bit_peek)
+            try readPreparedDistanceStaged(header, reader, symbol)
+        else
+            try readPreparedDistance(header, reader, symbol),
         .update_ring = true,
     };
 }
@@ -10435,6 +10459,13 @@ fn readPreparedDistance(header: *const MinimalCompressedHeader, reader: anytype,
     if (symbol >= max_distance_alphabet_size) return error.InvalidHuffmanCode;
     const extra_bits = header.distance_extra_bits[symbol];
     const extra = if (extra_bits == 0) 0 else try reader.readBits(u32, extra_bits);
+    return @as(usize, header.distance_offsets[symbol]) + (@as(usize, extra) << header.npostfix);
+}
+
+inline fn readPreparedDistanceStaged(header: *const MinimalCompressedHeader, reader: anytype, symbol: u16) Error!usize {
+    if (symbol >= max_distance_alphabet_size) return error.InvalidHuffmanCode;
+    const extra_bits = header.distance_extra_bits[symbol];
+    const extra = if (extra_bits == 0) 0 else try reader.readBits24StagedFirst(extra_bits);
     return @as(usize, header.distance_offsets[symbol]) + (@as(usize, extra) << header.npostfix);
 }
 
@@ -20998,6 +21029,11 @@ test "br insert-copy length decoder handles high range extra bits" {
     try std.testing.expectEqual(@as(usize, 1111), lengths.copy_len);
     try std.testing.expect(!lengths.distance_symbol_zero);
 
+    var staged_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(encoded.items));
+    const staged = try readInsertCopyLengthsStaged(640 + (4 << 3) + 6, &staged_reader);
+    try std.testing.expectEqual(lengths, staged);
+    try std.testing.expectEqual(reader.bitPosition(), staged_reader.bitPosition());
+
     var invalid_reader = bitstream.BitReader.init(&.{});
     try std.testing.expectError(error.InvalidHuffmanCode, readInsertCopyLengths(704, &invalid_reader));
 }
@@ -21062,6 +21098,19 @@ test "br tail distance decoder writes implicit short and regular results" {
     try std.testing.expectEqual(try resolveRegularDistance(0, 0, 20, 3), decoded.distance);
     try std.testing.expect(decoded.update_ring);
     try std.testing.expectEqual(@as(usize, 3), regular_reader.bitPosition());
+
+    var staged_last_distances = [_]usize{ 16, 15, 11, 4 };
+    var staged_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{0b0000_0011}));
+    var staged_decoded: DecodedBrotliDistance = undefined;
+    try readMinimalDistanceTailLookupIntoFixed9(
+        &header,
+        &staged_reader,
+        .{ .insert_len = 0, .copy_len = 4, .distance_symbol_zero = false },
+        &staged_last_distances,
+        &staged_decoded,
+    );
+    try std.testing.expectEqual(decoded, staged_decoded);
+    try std.testing.expectEqual(regular_reader.bitPosition(), staged_reader.bitPosition());
 }
 
 test "br regular distance resolver covers postfix and extra bits" {

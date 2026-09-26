@@ -51,6 +51,21 @@ pub const Reader = struct {
         return value;
     }
 
+    /// Read a Brotli payload field of at most 24 bits. The prepared command and
+    /// distance paths normally have enough bits staged by the preceding Huffman
+    /// lookup, so keep that case inline and leave refill/truncation handling in
+    /// the general out-of-line reader.
+    pub inline fn readBits24StagedFirst(self: *Reader, count: u5) core.Error!u32 {
+        std.debug.assert(count <= 24);
+        if (@as(usize, count) <= self.bit_count) {
+            const mask = (@as(u64, 1) << count) - 1;
+            const value: u32 = @intCast(self.bit_buffer & mask);
+            self.advanceBitsStagedAssumeAvailable(count);
+            return value;
+        }
+        return self.readBits(u32, count);
+    }
+
     pub fn peekBitsPadded(self: *Reader, comptime T: type, count: u6) T {
         std.debug.assert(count <= @bitSizeOf(T));
         if (count == 0) return 0;
@@ -139,12 +154,16 @@ test "Brotli fast bit reader matches scalar mixed reads and cursors" {
         var scalar = bitstream.BitReader.init(&input);
         scalar.bit_index = @intCast(start_bit);
         var fast = Reader.initFrom(scalar);
+        var staged_first = Reader.initFrom(scalar);
         var operation: usize = 0;
         while (scalar.hasBits(24)) : (operation += 1) {
-            const count: u6 = @intCast(1 + (operation * 7 + start_bit) % 24);
+            const count: u5 = @intCast(1 + (operation * 7 + start_bit) % 24);
             try std.testing.expectEqual(scalar.peekBitsPadded(u32, count), fast.peekBitsPadded(u32, count));
             try std.testing.expectEqual(try scalar.readBits(u32, count), try fast.readBits(u32, count));
+            var staged_reference = staged_first;
+            try std.testing.expectEqual(try staged_reference.readBits(u32, count), try staged_first.readBits24StagedFirst(count));
             try std.testing.expectEqual(scalar.bitPosition(), fast.bitPosition());
+            try std.testing.expectEqual(scalar.bitPosition(), staged_first.bitPosition());
         }
         fast.syncTo(&scalar);
         try std.testing.expectEqual(fast.bitPosition(), scalar.bitPosition());

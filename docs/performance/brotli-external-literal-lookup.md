@@ -538,3 +538,32 @@ throughput reaches 1,758.09/1,984.57 MiB/s on q5 Log/JSON and
 for the latter pair. The reader/Huffman oracles, upstream 7,056 one-shot plus
 7,056 progressive matrix, four-category real corpus, full test/check graph,
 and 13-row reference gate pass. Brotli decode leadership remains open.
+
+## Staged-first payload bit reads
+
+After the fixed 9-bit auxiliary lookup, a fresh q9 Log profile still attributed
+7.40% of cycles to the general fast-reader `readBits` function. Command and
+distance extra fields immediately follow a Huffman lookup, so their bits are
+usually already resident in the reader's reservoir. A new at-most-24-bit
+primitive handles that staged case inline and calls the existing reader only
+when refill or truncation handling is required. It is restricted to the same
+executor tiers selected for fixed 9-bit auxiliary lookup, avoiding the code
+growth of the previously rejected fully inlined 24-bit reader.
+
+Against commit `6ec3a13e`, independent ReleaseFast binaries were alternated on
+CPU 5 for seven Log/JSON pairs and five PDF pairs at every quality:
+
+| Quality | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.0062x | 1.0075x | 1.0286x | 1.0409x |
+| 5 | 1.0030x | 1.0056x | 1.0201x | 1.0295x |
+| 9 | 1.0068x | 1.0046x | 1.0199x | 1.0250x |
+
+All twelve rows are positive and every pair wins. Same-process candidate
+throughput reaches 1,797.10/2,072.03 MiB/s on q5 Log/JSON and
+1,879.24/2,260.71 MiB/s on q9, respectively 0.8783x/0.8674x libbrotli 1.1.0
+for the latter pair. Mixed-width, refill, truncation, cursor, insert/copy, and
+distance oracles pass, together with the upstream 7,056 one-shot plus 7,056
+progressive matrix, four-category real corpus, full test/check graph, and
+13-row reference gate. The remaining Brotli decode gap is smaller but still
+measurable.
