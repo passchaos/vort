@@ -440,9 +440,14 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 code |= try reader.readBits(u16, 1) << @intCast(bits - 1);
                 const first = self.first_by_bits[bits];
                 const end = first + self.count_by_bits[bits];
-                for (self.entries[first..end]) |entry| {
-                    if (entry.code == code) return entry.symbol;
+                var index = first;
+                while (index + 1 < end) : (index += 2) {
+                    const first_entry = self.entries[index];
+                    if (first_entry.code == code) return first_entry.symbol;
+                    const second_entry = self.entries[index + 1];
+                    if (second_entry.code == code) return second_entry.symbol;
                 }
+                if (index < end and self.entries[index].code == code) return self.entries[index].symbol;
                 if (bits == self.max_bits) break;
                 bits += 1;
             }

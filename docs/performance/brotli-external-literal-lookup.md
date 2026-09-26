@@ -480,3 +480,26 @@ within 0.2% of baseline. Same-process q5 Log/JSON throughput reaches
 1,696.61/1,954.45 MiB/s, or 0.8245x/0.7994x libbrotli 1.1.0; q9 reaches
 1,771.61/2,148.04 MiB/s, or 0.8302x/0.8190x. The improvement substantially
 reduces the long-code penalty but does not establish overall leadership.
+
+## Pairwise long-code bucket scan
+
+The out-of-line tail-lookup fallback now checks two adjacent canonical entries
+per loop iteration. Entries remain grouped by code width and are read in their
+existing sequential order, preserving cache locality while halving the loop
+control on command-heavy long-code buckets. An odd final entry is handled by a
+single bounded tail check; reader and error semantics are unchanged.
+
+Against commit `edd58f51`, independent ReleaseFast binaries were alternated on
+CPU 5. Values are candidate/baseline medians.
+
+| Quality | PDF-A | PDF-B | Log | JSON |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.0014x | 0.9999x | 1.0005x | 1.0008x |
+| 5 | 1.0042x | 1.0021x | 1.0083x | 1.0112x |
+| 9 | 1.0066x | 1.0012x | 1.0133x | 1.0090x |
+
+All q5/q9 rows win at least five of seven or all five measured pairs; q1 stays
+within 0.1%. Same-process q9 throughput reaches 1,802.29 MiB/s on Log and
+2,139.19 MiB/s on JSON, or 0.8424x/0.8374x libbrotli 1.1.0. This retains the
+successful one-prefix continuation while avoiding the poor locality and branch
+dependence measured for binary-search and secondary-table alternatives.

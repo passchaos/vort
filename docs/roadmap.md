@@ -15863,3 +15863,10 @@ reuse, so production keeps the simpler independently owned plans.
   0.2%. Current q9 Log/JSON throughput reaches 1,771.61/2,148.04 MiB/s, or
   0.8302x/0.8190x libbrotli 1.1.0. Full upstream, real-corpus, test, check, and
   reference gates pass; broad Brotli leadership remains open.
+  The out-of-line Brotli tail-lookup fallback now scans two adjacent canonical
+  entries per iteration while retaining its sequential per-width layout.
+  Against `edd58f51`, fixed-CPU-5 Log/JSON medians improve 1.0083x/1.0112x at
+  q5 and 1.0133x/1.0090x at q9; both PDFs are positive at q5/q9 and q1 remains
+  within 0.1%. Current q9 Log/JSON throughput reaches 1,802.29/2,139.19 MiB/s,
+  or 0.8424x/0.8374x libbrotli 1.1.0. All upstream, real-corpus, test, check,
+  and reference gates pass; the remaining gap is explicit.
