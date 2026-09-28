@@ -632,3 +632,48 @@ Against the direct-builder baseline `fa050e76`, 15 alternating pairs measure
 `binary_mixed` is 1.0035x / 1.0024x with 9/15 wins, and `huffman80k` is neutral
 at 1.0004x / 1.0053x. This isolates the transition precomputation from the
 larger scratch-removal gain reported above.
+
+## Rejected post-transition probes
+
+Follow-up profiling at `13f323a3` attributed roughly 72% of `large_json`
+samples to the small-copy split-Huffman sequence executor, 6.5% to its
+four-stream Huffman reservoir, and 4.6% to the specialized 256-state FSE
+builder. The four Huffman blocks have maximum code widths `10/7/7/7`; their
+FSE descriptions are all different, so a within-frame exact-description cache
+cannot remove the one-shot table builds.
+
+Several narrowly scoped candidates were measured and removed:
+
+- A six-symbol reservoir batch for widths at most nine improved `large_json`
+  by only 1.0097x median / 1.0065x geometric mean in a five-pair screen, while
+  growing the helper by `0xa0` bytes and reducing the raw/all-FSE `huffman80k`
+  control to 0.9306x median with 0/5 wins.
+- Moving grouped-reader fallback behind a checked noinline call shrank the
+  target helper from 5,192 to 3,708 bytes and improved `large_json` by 1.0191x
+  median / 1.0187x geometric mean over 15 pairs, but `binary_mixed` regressed
+  to 0.9840x / 0.9861x. Keeping only the 68--71-byte match clusters inline and
+  calling out for the remaining twelve sequences was worse: a five-pair screen
+  put `large_json` at 0.9208x median.
+- Reordering the direct-offset and positive-rep0 tests lost all five target
+  pairs at a 0.9766x median. Marking the 6,059-of-7,299 common fused sequence
+  branch likely also lost all five pairs, with a 0.9712x median.
+- Reducing the small-copy instance's literal scratch bound from 16 KiB to its
+  policy-proven 4 KiB changed only the stack decrement (`0x71a0` to `0x41a0`)
+  and retained every key function address, but reached only 0.9911x median on
+  `large_json` in five pairs.
+- Carrying a no-low-probability flag out of normalized-count parsing removed a
+  second symbol scan but reached only 0.9964x median on the target. Keeping each
+  FSE bitset word in a local during set-bit enumeration initially screened
+  positive, but a complete 15-pair 13-row matrix put `large_json` at 0.9967x
+  median / 0.9973x geometric mean and `large_text` at 0.9790x; the row-median
+  geometric mean was only 1.0013x.
+- A dedicated 128-entry complete X1 table for four-stream trees of width seven
+  or less passed forced-X1 and split-Huffman output checks, but its five-pair
+  `large_json` median was only 1.0018x and the moved `binary_mixed` control was
+  0.9752x. The existing full-width X1 path remains smaller overall.
+
+These results reinforce that this AArch64 decode path is unusually sensitive
+to instruction placement and register allocation. Future work should avoid
+adding branches or helper calls to the established small-copy loop and should
+prefer a separately measured one-shot table-state design or a genuinely
+smaller, size-stable replacement rather than another additive specialization.

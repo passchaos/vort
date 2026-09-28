@@ -16034,3 +16034,16 @@ reuse, so production keeps the simpler independently owned plans.
   `binary_mixed` improves 1.0035x and `huffman80k` remains neutral. The same
   table oracle, profile/reference gates, compatibility matrix, and decodecorpus
   validate the finalized implementation.
+- Follow-up `large_json` probes retained the `13f323a3` implementation. A
+  six-symbol width-at-most-nine Huffman batch improved the target by only
+  1.0097x in five pairs while reducing `huffman80k` to 0.9306x. Grouped-reader
+  fallback isolation improved the target by 1.0191x over 15 pairs but reduced
+  `binary_mixed` to 0.9840x; a tighter hot/cold split around the 68--71-byte
+  match clusters reduced the target to 0.9208x. Rep0 branch reordering, a likely
+  hint on the 6,059-hit fused branch, a 4 KiB stack bound, and parser-carried
+  low-probability metadata were neutral or negative. Register-local FSE bitset
+  enumeration failed the complete 15-pair matrix (`large_json` 0.9967x), and a
+  separate 128-entry width-seven X1 path was neutral at 1.0018x while moving a
+  control to 0.9752x. All candidates were removed; detailed evidence and the
+  resulting size-stable next-step constraint are recorded in
+  `docs/performance/zstd-sequence-fields.md`.
