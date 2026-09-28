@@ -103,3 +103,47 @@ executor:
 
 These results narrow the next work to changes that reduce payload-loop work
 without adding executor instances or moving small checks across call boundaries.
+
+## Fused zero-extra command entries
+
+The 10-bit command table originally stored only `(symbol + 1, Huffman bits)` in
+each 16-bit slot. A root hit then indexed the separate 704-entry compact command
+table to recover insert/copy bases, extra-bit widths, and implicit-distance
+state. The two formats cannot overlap: every ordinary command slot is below bit
+15 because the alphabet has only 704 symbols.
+
+The unused high bit now tags a fused slot for commands whose insert and copy
+lengths have no extra bits. The remaining bits hold the Huffman width, the
+complete insert and copy bases, and the implicit-distance flag. Such a root hit
+therefore returns `InsertCopyLengths` directly. Commands with either extra-bit
+field keep the ordinary symbol slot and compact metadata lookup; codes longer
+than 10 bits keep the canonical fallback. The table remains 2 KiB per command
+tree and no decoder-state structure grows.
+
+The builder checks all command and distance capacities before writing any tail
+table. Unit coverage exhaustively checks all 704 command metadata rows for
+ordinary/fused encoding separation and exact field recovery. Decoder tests
+cover a fused root hit, an extra-bit root hit, an 11-bit fallback, dense-tree
+rejection, and the original invalid-symbol path.
+
+Against commit `cf9b124c`, 15 alternating-order `clustered_q8` pairs on the
+same aarch64 macOS host produced:
+
+| metric | symbol-only lookup | fused zero-extra lookup |
+| --- | ---: | ---: |
+| median Vort throughput | 1518.06 MiB/s | 1577.54 MiB/s |
+| median Vort/libbrotli ratio | 0.7923x | 0.8195x |
+| paired median speedup | 1.0000x | 1.0414x |
+| paired geometric-mean speedup | 1.0000x | 1.0387x |
+| paired wins | - | 15 / 15 |
+
+Individual ratios range from 1.0086x to 1.0768x. A separate full 13-row run
+passes the reference gate and measures `clustered_q8` at 1581.52 MiB/s, or
+0.8281x local libbrotli 1.2.0. Because that matrix was not paired under a fixed
+host load, its large apparent movement on unrelated small rows is not used as
+a performance claim.
+
+The full command-table oracle, 10-bit Huffman lookup oracle, focused decoder
+tests, seven-test real-corpus manifest smoke, and upstream differential all
+pass. The latter covers 7,056 one-shot cases, 7,056 progressive cases, 99 core
+cases, and 64 high-tree truncation cases. Broad Brotli leadership remains open.

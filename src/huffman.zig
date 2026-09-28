@@ -435,6 +435,38 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             return self.decodeValueTailLookup(reader, 10, true);
         }
 
+        /// Return the raw 10-bit tail slot after consuming its Huffman bits.
+        /// Format-specific callers may use otherwise-unused packed bits while
+        /// zero continues to mean that canonical long-code decoding is needed.
+        pub inline fn decodePackedTailLookup10Fixed(self: *const Self, reader: anytype) Error!?u16 {
+            const lookup_len = 1 << 10;
+            const lookup_bytes = lookup_len * @sizeOf(u16);
+            const entry_count = (lookup_bytes + @sizeOf(Entry) - 1) / @sizeOf(Entry);
+            comptime std.debug.assert(max_symbols >= entry_count);
+            const lookup: *const [lookup_len]u16 = @ptrCast(&self.entries[max_symbols - entry_count]);
+            const packed_entry = lookup[reader.peekBits10Padded()];
+            if (packed_entry == 0) {
+                @branchHint(.unlikely);
+                return null;
+            }
+            const bits: u4 = @truncate(packed_entry);
+            if (!hasDecodedBits(reader, bits)) {
+                @branchHint(.unlikely);
+                return error.TruncatedFrame;
+            }
+            reader.advanceBitsStagedAssumeAvailable(bits);
+            return packed_entry;
+        }
+
+        pub fn tailLookup10Slots(self: *Self) *[1 << 10]u16 {
+            const lookup_len = 1 << 10;
+            const lookup_bytes = lookup_len * @sizeOf(u16);
+            const entry_count = (lookup_bytes + @sizeOf(Entry) - 1) / @sizeOf(Entry);
+            comptime std.debug.assert(max_symbols >= entry_count);
+            std.debug.assert(self.canBuildTailLookup10());
+            return @ptrCast(&self.entries[max_symbols - entry_count]);
+        }
+
         inline fn decodeValueTailLookup(self: *const Self, reader: anytype, comptime lookup_bits: u4, comptime fixed_width_peek: bool) Error!u16 {
             const lookup_len = 1 << lookup_bits;
             const lookup_bytes = lookup_len * @sizeOf(u16);

@@ -6653,8 +6653,14 @@ fn prepareCommand10AuxiliaryTailLookups(header: *MinimalCompressedHeader) bool {
         if (tree.single_symbol == null and !tree.table.canBuildTailLookup10()) return false;
     for (header.distance_trees[0..header.distance_tree_count]) |*tree|
         if (tree.single_symbol == null and !tree.table.canBuildTailLookup9()) return false;
-    for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree|
-        std.debug.assert(tree.single_symbol != null or tree.table.buildTailLookup10());
+    for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree| {
+        if (tree.single_symbol == null) {
+            const built = tree.table.buildTailLookup10();
+            std.debug.assert(built);
+            for (tree.table.tailLookup10Slots()) |*slot|
+                slot.* = command_lut.fuseLookupSlot(slot.*);
+        }
+    }
     for (header.distance_trees[0..header.distance_tree_count]) |*tree|
         std.debug.assert(tree.single_symbol != null or tree.table.buildTailLookup9());
     return true;
@@ -6870,16 +6876,18 @@ noinline fn processTailLookupCompressedPayload(
     var output_cursor = written.*;
     defer written.* = output_cursor;
     while (output_cursor < meta_block_end) {
-        const command_symbol = if (comptime command_lookup10)
-            try readCommandSymbolTailLookupFixed10(header, reader)
-        else if (comptime auxiliary_tail_lookups)
-            try readCommandSymbolTailLookupFixed9(header, reader)
-        else
-            try readCommandSymbolAny(header, reader);
-        const lengths = if (comptime auxiliary_tail_lookups)
-            try readInsertCopyLengthsStagedCompact(command_symbol, reader)
-        else
-            try readInsertCopyLengths(command_symbol, reader);
+        const lengths = if (comptime command_lookup10)
+            try readInsertCopyLengthsTailLookup10(header, reader)
+        else blk: {
+            const command_symbol = if (comptime auxiliary_tail_lookups)
+                try readCommandSymbolTailLookupFixed9(header, reader)
+            else
+                try readCommandSymbolAny(header, reader);
+            break :blk if (comptime auxiliary_tail_lookups)
+                try readInsertCopyLengthsStagedCompact(command_symbol, reader)
+            else
+                try readInsertCopyLengths(command_symbol, reader);
+        };
         if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;
         if (lengths.insert_len != 0) {
             var previous: u8 = if (output_cursor == 0) 0 else output[output_cursor - 1];
@@ -10215,6 +10223,28 @@ inline fn readCommandSymbolTailLookupFixed10(header: *MinimalCompressedHeader, r
     const symbol = try tree.decodeTailLookup10Fixed(reader);
     if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
     return symbol;
+}
+
+inline fn readInsertCopyLengthsTailLookup10(header: *MinimalCompressedHeader, reader: anytype) Error!InsertCopyLengths {
+    if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0)
+        try switchBlockAny(max_command_block_types, &header.command_block, reader);
+    if (header.command_block.current_type >= inline_command_tree_count) return error.UnsupportedBrotliFeature;
+    const tree = &header.insert_copy_trees[header.command_block.current_type];
+    const symbol = if (tree.single_symbol) |single| single else blk: {
+        const packed_slot = (try tree.table.decodePackedTailLookup10Fixed(reader)) orelse
+            break :blk try tree.table.decodeValueLongAfterLookup(reader, 10);
+        if (command_lut.fusedLookupEntry(packed_slot)) |entry| {
+            if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
+            return .{
+                .insert_len = entry.insert_base,
+                .copy_len = @as(usize, entry.copy_base_minus_two) + 2,
+                .distance_symbol_zero = entry.distance_symbol_zero,
+            };
+        }
+        break :blk (packed_slot >> 4) - 1;
+    };
+    if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
+    return readInsertCopyLengthsStagedCompact(symbol, reader);
 }
 
 inline fn readCommandSymbolTailLookupWithOptions(comptime fixed_nine_bit_peek: bool, header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
@@ -20972,7 +21002,43 @@ test "br adaptive auxiliary lookup builds ten command bits atomically" {
     defer std.testing.allocator.free(encoded);
     const scalar = bitstream.BitReader.init(encoded);
     var fast = fast_bit_reader.Reader.initFrom(scalar);
-    try std.testing.expectEqual(@as(u16, 10), try header.insert_copy_trees[0].decodeTailLookup10Fixed(&fast));
+    try std.testing.expectEqual(
+        InsertCopyLengths{ .insert_len = 1, .copy_len = 4, .distance_symbol_zero = true },
+        try readInsertCopyLengthsTailLookup10(&header, &fast),
+    );
+
+    const extra_command_lengths = [_]u4{1} ++ [_]u4{0} ** 47 ++ [_]u4{1} ++ [_]u4{0} ** 655;
+    header.insert_copy_trees[0] = .{ .table = try huffman.HuffmanTable(704).init(&extra_command_lengths) };
+    try std.testing.expect(prepareCommand10AuxiliaryTailLookups(&header));
+    const extra_encoder = try huffman.HuffmanTable(704).Encoder.init(&extra_command_lengths);
+    var extra_writer: bitstream.BitWriter = .{};
+    defer extra_writer.deinit(std.testing.allocator);
+    try extra_encoder.writeSymbol(&extra_writer, std.testing.allocator, 48);
+    try extra_writer.writeBits(std.testing.allocator, 1, 1);
+    const extra_encoded = try extra_writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(extra_encoded);
+    var extra_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(extra_encoded));
+    try std.testing.expectEqual(
+        InsertCopyLengths{ .insert_len = 7, .copy_len = 2, .distance_symbol_zero = true },
+        try readInsertCopyLengthsTailLookup10(&header, &extra_reader),
+    );
+    try std.testing.expectEqual(@as(usize, 2), extra_reader.bitPosition());
+
+    const long_command_lengths = [_]u4{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11 } ++ [_]u4{0} ** 692;
+    header.insert_copy_trees[0] = .{ .table = try huffman.HuffmanTable(704).init(&long_command_lengths) };
+    try std.testing.expect(prepareCommand10AuxiliaryTailLookups(&header));
+    const long_encoder = try huffman.HuffmanTable(704).Encoder.init(&long_command_lengths);
+    var long_writer: bitstream.BitWriter = .{};
+    defer long_writer.deinit(std.testing.allocator);
+    try long_encoder.writeSymbol(&long_writer, std.testing.allocator, 11);
+    const long_encoded = try long_writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(long_encoded);
+    var long_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(long_encoded));
+    try std.testing.expectEqual(
+        InsertCopyLengths{ .insert_len = 1, .copy_len = 5, .distance_symbol_zero = true },
+        try readInsertCopyLengthsTailLookup10(&header, &long_reader),
+    );
+    try std.testing.expectEqual(@as(usize, 11), long_reader.bitPosition());
 
     const dense_command_lengths = [_]u4{8} ** 192 ++ [_]u4{9} ** 64 ++ [_]u4{10} ** 128 ++ [_]u4{0} ** 320;
     header.insert_copy_trees[0] = .{ .table = try huffman.HuffmanTable(704).init(&dense_command_lengths) };

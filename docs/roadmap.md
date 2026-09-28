@@ -15986,3 +15986,14 @@ reuse, so production keeps the simpler independently owned plans.
   negative and were removed. Future work should reduce payload-loop work
   without multiplying executor instances or shifting small checks across hot
   call boundaries.
+- The sparse 10-bit command lookup now fuses complete zero-extra-bit command
+  metadata into the same 16-bit slots by using the otherwise unreachable high
+  bit as a tag. Root hits recover Huffman width, insert/copy bases, and implicit
+  distance state without a second access to the 704-entry command table;
+  extra-bit commands and >10-bit codes retain their existing paths. Against
+  `cf9b124c`, 15 alternating-order `clustered_q8` pairs improve median
+  throughput from 1518.06 to 1577.54 MiB/s, a 1.0414x paired median and 1.0387x
+  geometric-mean gain with 15/15 wins. The median Vort/libbrotli 1.2.0 ratio
+  rises from 0.7923x to 0.8195x. Exhaustive 704-command slot checks, root-hit /
+  extra-bit / long-code decoder tests, the 13-row reference gate, and the
+  7,056-case one-shot/progressive upstream matrices pass.

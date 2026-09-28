@@ -24,7 +24,8 @@ records the zero-copy identity transform, full transform equivalence coverage,
 and paired dictionary-heavy decode measurements.
 [Brotli adaptive command lookup](performance/brotli-command-tail-lookup.md)
 records the capacity-checked 10-bit command table, atomic nine-bit fallback,
-sampling evidence, and paired decode measurements.
+fused zero-extra command metadata, sampling evidence, and paired decode
+measurements.
 
 ## Current local benchmark entrypoints
 

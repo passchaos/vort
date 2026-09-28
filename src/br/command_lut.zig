@@ -1,5 +1,7 @@
 //! Generated from upstream Brotli dec/prefix_inc.h command table.
 
+const std = @import("std");
+
 pub const Entry = struct {
     insert_extra_bits: u5,
     copy_extra_bits: u5,
@@ -742,6 +744,39 @@ pub inline fn compact(entry: Entry) CompactEntry {
 
 pub const compact_entries = makeCompactEntries();
 
+/// A command root-table hit can carry complete lengths when neither field has
+/// extra bits. Ordinary packed Huffman entries use fewer than 15 bits for this
+/// alphabet, leaving the high bit available as an unambiguous fused marker.
+pub const FusedLookupEntry = packed struct(u16) {
+    huffman_bits: u4,
+    insert_base: u3,
+    copy_base_minus_two: u3,
+    distance_symbol_zero: bool,
+    reserved: u4 = 0,
+    fused: bool = true,
+};
+
+pub fn fuseLookupSlot(slot: u16) u16 {
+    if (slot == 0) return 0;
+    const symbol = (slot >> 4) - 1;
+    if (symbol >= entries.len) return slot;
+    const entry = compact_entries[symbol];
+    if (entry.insert_extra_bits != 0 or entry.copy_extra_bits != 0) return slot;
+    std.debug.assert(entry.insert_base <= 7);
+    std.debug.assert(entry.copy_base >= 2 and entry.copy_base <= 9);
+    return @bitCast(FusedLookupEntry{
+        .huffman_bits = @truncate(slot),
+        .insert_base = @intCast(entry.insert_base),
+        .copy_base_minus_two = @intCast(entry.copy_base - 2),
+        .distance_symbol_zero = entry.distance_code == 0,
+    });
+}
+
+pub inline fn fusedLookupEntry(slot: u16) ?FusedLookupEntry {
+    const entry: FusedLookupEntry = @bitCast(slot);
+    return if (entry.fused) entry else null;
+}
+
 fn makeCompactEntries() [entries.len]CompactEntry {
     @setEvalBranchQuota(2_000);
     var result: [entries.len]CompactEntry = undefined;
@@ -751,6 +786,8 @@ fn makeCompactEntries() [entries.len]CompactEntry {
 
 comptime {
     if (@sizeOf(CompactEntry) != 8) @compileError("compact Brotli command entries must remain eight bytes");
+    if (@sizeOf(FusedLookupEntry) != 2) @compileError("fused Brotli command lookup entries must remain two bytes");
+    if ((entries.len + 1) << 4 >= 1 << 15) @compileError("ordinary command lookup entries overlap the fused marker");
 }
 
 pub fn formula(symbol: u16) Entry {
@@ -777,4 +814,24 @@ pub fn formula(symbol: u16) Entry {
 test "upstream Brotli command table matches formula" {
     for (entries, 0..) |entry, symbol|
         try @import("std").testing.expectEqual(entry, formula(@intCast(symbol)));
+}
+
+test "fused lookup slots preserve every command or encode complete lengths" {
+    for (entries, 0..) |entry, symbol| {
+        const huffman_bits: u4 = @intCast(1 + symbol % 15);
+        const ordinary: u16 = (@as(u16, @intCast(symbol + 1)) << 4) | huffman_bits;
+        const fused = fuseLookupSlot(ordinary);
+        if (entry.insert_extra_bits == 0 and entry.copy_extra_bits == 0) {
+            const decoded = fusedLookupEntry(fused).?;
+            try std.testing.expectEqual(huffman_bits, decoded.huffman_bits);
+            try std.testing.expectEqual(@as(u32, decoded.insert_base), entry.insert_base);
+            try std.testing.expectEqual(@as(u32, decoded.copy_base_minus_two) + 2, entry.copy_base);
+            try std.testing.expectEqual(entry.distance_code == 0, decoded.distance_symbol_zero);
+        } else {
+            try std.testing.expectEqual(ordinary, fused);
+            try std.testing.expect(fusedLookupEntry(fused) == null);
+        }
+    }
+    try std.testing.expectEqual(@as(u16, 0), fuseLookupSlot(0));
+    try std.testing.expect(fusedLookupEntry(0) == null);
 }
