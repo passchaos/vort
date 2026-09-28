@@ -921,3 +921,40 @@ production selector. All 664 ReleaseFast Zstd tests, the five-row profile gate,
 decodecorpus, and `zig build check -j1` pass. `ascii64k` is therefore removed
 from the below-floor list; `raw256k`, `numbered_json`, and `large_json` remain
 open.
+
+## Prepared narrow lookup and single-stream literal batches
+
+The small `numbered_json` frame rebuilds an FSE-compressed seven-bit Huffman
+tree, then executes 39 LL-predefined/OF-FSE/ML-predefined sequences. Its fixed
+oracle contains 36 one-byte literal runs and begins with one 64-byte literal
+run. The decoder now fills the complete 128-entry narrow lookup while assigning
+canonical tree prefixes, instead of walking the completed tree a second time.
+Thirty-three non-tail one-byte runs use one direct checked lookup. The initial
+single-stream run keeps the same reverse reservoir across eight symbols per
+refill and covers at least 48 literal bytes before returning its tail to the
+existing checked cursor. Other literal lengths, stream tails, and malformed
+input retain the established fallback and error ordering.
+
+Against the frozen `13bb21a4` profile binary (SHA-256
+`77da7ba1ca86a4e55c3d46f004e8a516020d984a648bcf9a57b82daac3bcded1`),
+the final candidate (SHA-256
+`bc578bf0bf25c1ce7feffba804d063c4fe707ff858de94a519a8c211a2e30216`)
+improves focused `numbered_json` by 1.1604x median / 1.1601x geometric
+throughput over 15 alternating pairs with 15/15 wins. A separate 15-pair
+five-row matrix records 1.1441x / 1.1474x on the target. Control medians are
+`huffman80k` 0.9948x, `ascii64k` 0.9916x, `large_json` 1.0108x, and
+`binary_mixed` 0.9870x; all stay within 1.4% on the loaded host.
+
+Fifteen independent 50,000-iteration comparisons using the final reference
+binary (SHA-256
+`18f7ae363e7cd73d3efcc6fc743289e4a64cfd98093a46d430842934f032c6d7`)
+measure Vort/libzstd 1.5.7 at 1.3195x median / 1.3204x geometric throughput.
+The minimum is 1.2935x and all 15 runs clear the required 1.20x floor; the
+separate complete 13-row gate records 1.3059x. The fixed-frame oracle compares
+specialized and generic output, requires 33 direct
+single-literal hits and at least 48 reservoir literal hits, checks short-output
+progress, and differentially mutates every sequence byte. `numbered_json` is
+therefore removed from the below-floor list; only `raw256k` and `large_json`
+remain open.
+All 664 ReleaseFast Zstd tests, the profile/reference gates, 276 compatibility
+cases, the 9,900-frame/64-mode decodecorpus, and `zig build check -j1` pass.

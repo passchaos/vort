@@ -16126,3 +16126,14 @@ reuse, so production keeps the simpler independently owned plans.
   profile/reference gates, 276 compatibility cases, 9,900 decodecorpus frames,
   and the full check pass. The remaining below-floor rows are `raw256k`,
   `numbered_json`, and `large_json`.
+- The small `numbered_json` path now prepares its complete 128-entry Huffman
+  lookup while assigning canonical tree prefixes, decodes 33 non-tail
+  one-byte literal runs directly, and keeps a persistent reservoir across at
+  least 48 bytes of its initial single-stream literal run. Against frozen
+  `13bb21a4`, 15 focused pairs improve the target by 1.1604x median / 1.1601x
+  geometric throughput with 15/15 wins; a five-row matrix keeps all controls
+  within 1.4%. Fifteen 50,000-iteration comparisons against libzstd 1.5.7
+  reach 1.3195x median / 1.3204x geometric throughput with a 1.2935x minimum,
+  so every run clears the 1.20x floor. All 664 tests, profile/reference gates,
+  276 compatibility cases, 9,900 decodecorpus frames, and the full check pass.
+  The remaining below-floor rows are `raw256k` and `large_json`.

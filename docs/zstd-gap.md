@@ -1701,6 +1701,14 @@ Recommended next comparison steps:
   geometric throughput, with a 1.4979x minimum and 15/15 runs above the 1.20x
   floor. Guarded-output, truncation, selector, full test, compatibility, and
   decodecorpus coverage pass, so `ascii64k` is no longer an open decode gap.
+- The small `numbered_json` path now constructs its complete seven-bit Huffman
+  lookup alongside canonical tree prefixes, decodes 33 one-byte literal runs
+  directly, and batches at least 48 bytes of its initial single-stream literal
+  run through a persistent reservoir. A 15-pair five-row matrix improves the
+  target by 1.1604x median / 1.1601x geometric throughput with 15/15 wins.
+  Fifteen long comparisons against libzstd 1.5.7 reach 1.3195x median / 1.3204x
+  geometric throughput, with a 1.2935x minimum and 15/15 runs above the 1.20x
+  floor. `numbered_json` is no longer an open decode gap.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
@@ -1708,7 +1716,7 @@ Recommended next comparison steps:
    warmed and reaches `0.9559x` one-shot after successor-aware table retention
    plus compact literal/rep0 field decoding. The acceptance target is now at
    least `1.20x` libzstd on every locked row; prioritize the remaining
-   `large_json`, `raw256k`, and `numbered_json` gaps
+   `large_json` and `raw256k` gaps
    without
    perturbing already-leading raw/RLE, single-sequence, or one-shot paths.
 2. Add library-level range-latency rows for the public seekability tiers

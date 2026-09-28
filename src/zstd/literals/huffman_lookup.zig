@@ -109,6 +109,23 @@ pub fn Table(comptime max_bits: u4) type {
             std.debug.assert(self.entries[bits].valid);
             return self.entries[bits];
         }
+
+        /// Fill one canonical code range while a caller constructs a complete
+        /// table alongside its tree. Completion and overlap remain the
+        /// caller's responsibility; this only validates the range.
+        pub inline fn fillCanonical(self: *@This(), prefix: u16, bit_count: u4, symbol: u8) bool {
+            if (bit_count == 0 or bit_count > max_bits) return false;
+            const suffix_bits = max_bits - bit_count;
+            const start = @as(usize, prefix) << suffix_bits;
+            const count = @as(usize, 1) << suffix_bits;
+            if (start > len or count > len - start) return false;
+            fillCompleteRange(self.entries[start..][0..count], .{
+                .symbol = symbol,
+                .bit_count = bit_count,
+                .valid = true,
+            });
+            return true;
+        }
     };
 }
 
