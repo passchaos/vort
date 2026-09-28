@@ -879,9 +879,28 @@ pub fn PackedLookup(comptime lookup_bits: u4) type {
             return lookup;
         }
 
+        pub fn initMapped(table: anytype, comptime mapPacked: fn (u16) u16) Error!Self {
+            var lookup: Self = .{};
+            for (table.entries[0..table.len]) |entry| {
+                if (entry.bits > lookup_bits) continue;
+                if (entry.symbol >= 4095) return error.InvalidHuffmanCode;
+                const packed_entry = mapPacked((entry.symbol + 1) << 4 | entry.bits);
+                const fill = @as(usize, 1) << @intCast(lookup_bits - entry.bits);
+                var i: usize = 0;
+                while (i < fill) : (i += 1)
+                    lookup.slots[entry.code | (i << entry.bits)] = packed_entry;
+            }
+            return lookup;
+        }
+
         pub fn initSingle(symbol: u16) Error!Self {
             if (symbol >= 4095) return error.InvalidHuffmanCode;
             return .{ .slots = @splat((symbol + 1) << 4) };
+        }
+
+        pub fn initSingleMapped(symbol: u16, comptime mapPacked: fn (u16) u16) Error!Self {
+            if (symbol >= 4095) return error.InvalidHuffmanCode;
+            return .{ .slots = @splat(mapPacked((symbol + 1) << 4)) };
         }
 
         pub inline fn decodeValueFast(self: *const Self, reader: anytype) Error!?u16 {
@@ -902,6 +921,38 @@ pub fn PackedLookup(comptime lookup_bits: u4) type {
         pub inline fn decodeValueFast10(self: *const Self, reader: anytype) Error!?u16 {
             comptime std.debug.assert(lookup_bits == 10);
             const packed_entry = self.slots[reader.peekBits10Padded()];
+            if (packed_entry == 0) {
+                @branchHint(.unlikely);
+                return null;
+            }
+            const bits: u4 = @truncate(packed_entry);
+            if (!hasDecodedBits(reader, bits)) {
+                @branchHint(.unlikely);
+                return error.TruncatedFrame;
+            }
+            reader.advanceBitsStagedAssumeAvailable(bits);
+            return (packed_entry >> 4) - 1;
+        }
+
+        pub inline fn decodePackedValueFast10(self: *const Self, reader: anytype) Error!?u16 {
+            comptime std.debug.assert(lookup_bits == 10);
+            const packed_entry = self.slots[reader.peekBits10Padded()];
+            if (packed_entry == 0) {
+                @branchHint(.unlikely);
+                return null;
+            }
+            const bits: u4 = @truncate(packed_entry);
+            if (!hasDecodedBits(reader, bits)) {
+                @branchHint(.unlikely);
+                return error.TruncatedFrame;
+            }
+            reader.advanceBitsStagedAssumeAvailable(bits);
+            return packed_entry;
+        }
+
+        pub inline fn decodeValueFast9(self: *const Self, reader: anytype) Error!?u16 {
+            comptime std.debug.assert(lookup_bits == 9);
+            const packed_entry = self.slots[reader.peekBits9Padded()];
             if (packed_entry == 0) {
                 @branchHint(.unlikely);
                 return null;
@@ -947,6 +998,39 @@ pub fn PackedLookup(comptime lookup_bits: u4) type {
 }
 
 pub const code_length_order = [_]u8{ 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
+
+fn markPackedLookupSlot(slot: u16) u16 {
+    return slot | 0x8000;
+}
+
+test "mapped packed lookups preserve fixed-width symbols and slots" {
+    const lengths = [_]u4{ 1, 1 } ++ [_]u4{0} ** 14;
+    const table = try HuffmanTable(16).init(&lengths);
+    const encoder = try HuffmanTable(16).Encoder.init(&lengths);
+    var writer: bitstream.BitWriter = .{};
+    defer writer.deinit(std.testing.allocator);
+    try encoder.writeSymbol(&writer, std.testing.allocator, 0);
+    try encoder.writeSymbol(&writer, std.testing.allocator, 1);
+    const encoded = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+
+    const FastReader = @import("br/fast_bit_reader.zig").Reader;
+    const lookup9 = try PackedLookup(9).init(&table);
+    var reader9 = FastReader.initFrom(bitstream.BitReader.init(encoded));
+    try std.testing.expectEqual(@as(?u16, 0), try lookup9.decodeValueFast9(&reader9));
+    try std.testing.expectEqual(@as(?u16, 1), try lookup9.decodeValueFast9(&reader9));
+
+    const mapped = try PackedLookup(10).initMapped(&table, markPackedLookupSlot);
+    var mapped_reader = FastReader.initFrom(bitstream.BitReader.init(encoded));
+    try std.testing.expectEqual(@as(?u16, 0x8011), try mapped.decodePackedValueFast10(&mapped_reader));
+    try std.testing.expectEqual(@as(?u16, 0x8021), try mapped.decodePackedValueFast10(&mapped_reader));
+
+    const single = try PackedLookup(10).initSingleMapped(7, markPackedLookupSlot);
+    var empty_reader = FastReader.initFrom(bitstream.BitReader.init(&.{}));
+    try std.testing.expectEqual(@as(?u16, 0x8080), try single.decodePackedValueFast10(&empty_reader));
+    try std.testing.expectEqual(@as(usize, 0), empty_reader.bitPosition());
+}
+
 pub const CodeLengthTable = HuffmanTable(19);
 
 pub const DynamicHeader = struct {

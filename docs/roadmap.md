@@ -16157,3 +16157,17 @@ reuse, so production keeps the simpler independently owned plans.
   libzstd 1.5.7 runs reach 1.2269x median / 1.2266x geometric and 1.2121x
   minimum, closing `large_json`; `raw256k` is the remaining locked row below
   the every-run 1.20x target.
+- The 16--64-literal-tree Brotli executor now materializes its eligible
+  10-bit command and 9-bit distance root planes contiguously instead of
+  revisiting tail tables separated by full canonical-tree strides. Command
+  metadata fusion happens while the external plane is built, and root misses
+  retain the canonical decoder. A focused dictionary-copy module uses exact
+  first/last 4-, 8-, and 16-byte moves for 4--31-byte transformed words.
+  Against clean pre-change `ef85a56d`, 15 alternating Apple M1 Pro pairs
+  improve `clustered_q8` by 1.0563x median / 1.0584x geometric throughput with
+  15/15 wins and identical output; a separate 13-row run measures 0.8613x
+  local libbrotli 1.2.0. The reference gate, 7,056
+  one-shot plus 7,056 progressive upstream cases, 1,401 fragmentation runs,
+  64 high-tree truncation cases, and real-corpus driver smoke pass. Brotli
+  leadership remains open, and vector-copy, circular-ring, literal-width,
+  alignment, countdown, and outlining follow-ups were measured and removed.

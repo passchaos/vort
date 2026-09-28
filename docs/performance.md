@@ -26,6 +26,9 @@ and paired dictionary-heavy decode measurements.
 records the capacity-checked 10-bit command table, atomic nine-bit fallback,
 fused zero-extra command metadata, sampling evidence, and paired decode
 measurements.
+[Brotli contiguous auxiliary lookups](performance/brotli-contiguous-auxiliary-lookups.md)
+records cache-dense command/distance root planes, exact short dictionary
+copies, rejected follow-ups, and paired Apple M1 Pro measurements.
 
 ## Current local benchmark entrypoints
 
