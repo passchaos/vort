@@ -272,7 +272,12 @@ pub fn transform(address: usize, word_len: usize, out: []u8) ?[]const u8 {
     if (transform_index >= transforms.len) return null;
     const start = offsets[word_len] + word_index * word_len;
     if (start > data.len or data.len - start < word_len) return null;
-    return transformWord(transform_index, data[start..][0..word_len], out);
+    const word = data[start..][0..word_len];
+    // Transform zero is the unmodified word. Decode callers immediately copy
+    // the returned bytes into their output, so borrowing the embedded slice
+    // avoids materializing the same bytes in scratch first.
+    if (transform_index == 0) return word;
+    return transformWord(transform_index, word, out);
 }
 
 /// Apply an RFC transform to an already resolved dictionary word. Indexed
@@ -419,6 +424,16 @@ test "full Brotli dictionary resolves quality-four omit transforms" {
     var out: [64]u8 = undefined;
     try std.testing.expectEqualSlices(u8, "service", transform((27 << 10) | 161, 9, &out).?);
     try std.testing.expectEqualSlices(u8, "value", transform((42 << 10) | 721, 9, &out).?);
+}
+
+test "static dictionary identity transform borrows embedded word slice" {
+    var scratch: [64]u8 = @splat(0xcc);
+    const word = baseWord(9, 0).?;
+
+    const identity = transform(0, 9, &scratch).?;
+    try std.testing.expectEqual(@intFromPtr(word.ptr), @intFromPtr(identity.ptr));
+    try std.testing.expectEqualSlices(u8, word, identity);
+    try std.testing.expectEqualSlices(u8, &(@as([64]u8, @splat(0xcc))), &scratch);
 }
 
 test "static dictionary reference matcher returns copy length and address" {

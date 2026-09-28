@@ -15956,3 +15956,12 @@ reuse, so production keeps the simpler independently owned plans.
   13-row reference gate and the 7,056-case one-shot/progressive upstream
   matrices pass. This workload still trails local libbrotli 1.2.0, so broad
   Brotli decode leadership remains open.
+- Brotli static-dictionary transform zero now borrows its immutable embedded
+  base-word slice instead of copying into a 64-byte scratch buffer before the
+  decoder copies it again. All non-identity transforms retain the existing
+  materialization path. Against `d1ffc878`, 15 alternating-order
+  `clustered_q8` pairs improve median throughput from 1203.25 to 1244.89 MiB/s,
+  a 1.0355x paired median and 1.0366x geometric-mean gain with 15/15 wins. The
+  median Vort/libbrotli 1.2.0 ratio rises from 0.7551x to 0.7834x. Six focused
+  dictionary tests, the 13-row reference gate, and the 7,056-case one-shot and
+  progressive upstream matrices pass; broad Brotli leadership remains open.

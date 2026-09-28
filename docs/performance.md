@@ -19,6 +19,9 @@ coverage.
 [Brotli bounded short match copy](performance/brotli-bounded-short-copy.md)
 records the meta-block-bounded 16-byte move, its direct boundary oracle, and
 paired comparison against the preceding decoder.
+[Brotli identity dictionary borrowing](performance/brotli-static-dictionary-borrow.md)
+records the zero-copy identity transform, full transform equivalence coverage,
+and paired dictionary-heavy decode measurements.
 
 ## Current local benchmark entrypoints
 
