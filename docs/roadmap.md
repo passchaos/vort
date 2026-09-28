@@ -15983,9 +15983,12 @@ reuse, so production keeps the simpler independently owned plans.
   alignment regressed to 0.9956x with 2/15 wins. The 256-byte alignment,
   zero-extra command branch, trusted symbol/index paths, compile-time UTF-8
   split, and inlined dictionary-transform screens were also neutral or
-  negative and were removed. Future work should reduce payload-loop work
-  without multiplying executor instances or shifting small checks across hot
-  call boundaries.
+  negative and were removed. Reusing the second spare command-slot bit for
+  copy-extra-zero hints likewise measured only 0.9990x median / 1.0012x
+  geometric mean with 7/15 wins, so fusion remains restricted to commands with
+  both extra widths zero. Future work should reduce payload-loop work without
+  multiplying executor instances or shifting small checks across hot call
+  boundaries.
 - The sparse 10-bit command lookup now fuses complete zero-extra-bit command
   metadata into the same 16-bit slots by using the otherwise unreachable high
   bit as a tag. Root hits recover Huffman width, insert/copy bases, and implicit

@@ -100,6 +100,11 @@ executor:
 - Screens for a combined zero-extra-bit branch, a trusted command-symbol entry,
   compile-time UTF-8 specialization, and an inlined dictionary transform ranged
   from neutral to roughly 2% slower. None advanced to the retained tree.
+- Reusing the second spare slot bit to tag commands with only copy extra bits
+  equal to zero was also rejected. Although a short screen was positive, 15
+  alternating pairs measured 0.9990x median, 1.0012x geometric mean, and only
+  7/15 wins. Tag dispatch remains restricted to commands with both extra-bit
+  widths zero.
 
 These results narrow the next work to changes that reduce payload-loop work
 without adding executor instances or moving small checks across call boundaries.
