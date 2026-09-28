@@ -16061,3 +16061,19 @@ reuse, so production keeps the simpler independently owned plans.
   versus 6,509.45 MiB/s (`0.9375x`), while `binary_mixed` remains ahead at
   `1.2343x`. All 659 tests, profile/reference gates, 276 compatibility cases,
   9,900 decodecorpus frames with 64/64 modes, and `zig build check -j1` pass.
+- The compact split-Huffman loop now recognizes its dominant LL=one-literal and
+  OF=rep0 shape from the already loaded entries. It skips the two zero-width
+  field reads and general offset dispatch while still decoding ML extra bits;
+  the existing exact 71-byte copy remains the output oracle and fast executor.
+  The helper shrinks by 68 bytes. Against frozen `f131da21`, 15 alternating
+  20,000-decode pairs improve `large_json` by 1.0158x at the median with 13/15
+  wins; a complete 13-row matrix measures 1.0064x median on the target and
+  1.0050x across row medians. A noisy `large_text` result recovers to 1.0076x
+  over 21 longer pairs. The formal libzstd 1.5.7 ratio reaches 0.9559x.
+- Zstd decode now has an explicit per-row performance target of at least 1.20x
+  libzstd, not merely aggregate leadership. The current formal rows still below
+  that floor are `huffman80k` 0.9193x, `large_json` 0.9559x, `raw256k` 0.9822x,
+  `numbered_json` 1.0566x, and `ascii64k` 1.0612x; the required additional
+  speedups are respectively 1.3053x, 1.2554x, 1.2217x, 1.1357x, and 1.1308x.
+  `binary_mixed` already clears the new floor at 1.2273x. All 659 tests, formal
+  gates, compatibility/decodecorpus coverage, and the full check pass.

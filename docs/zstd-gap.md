@@ -1665,9 +1665,11 @@ Recommended next comparison steps:
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
    multi-block all-FSE/Huffman `large_json` row now leads by about `1.027x`
-   warmed and reaches `0.9375x` one-shot after successor-aware sequence-table
-   retention. Prioritize the remaining roughly 6% one-shot large-frame
-   setup and sequence execution plus broader corpus coverage without
+   warmed and reaches `0.9559x` one-shot after successor-aware table retention
+   plus compact literal/rep0 field decoding. The acceptance target is now at
+   least `1.20x` libzstd on every locked row; prioritize the remaining
+   `huffman80k`, `large_json`, `raw256k`, `numbered_json`, and `ascii64k` gaps
+   without
    perturbing already-leading raw/RLE, single-sequence, or one-shot paths.
 2. Add library-level range-latency rows for the public seekability tiers
    (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because even the

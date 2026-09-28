@@ -205,6 +205,7 @@ var test_split_huffman_single_literal_hits: usize = 0;
 var test_split_huffman_match_68_70_hits: usize = 0;
 var test_split_huffman_match_6_63_hits: usize = 0;
 var test_split_huffman_positive_rep0_hits: usize = 0;
+var test_split_huffman_compact_literal_rep0_hits: usize = 0;
 var test_split_huffman_direct_offset_hits: usize = 0;
 var test_split_huffman_short_literal_hits: usize = 0;
 var test_split_huffman_common_sequence_hits: usize = 0;
@@ -10477,6 +10478,10 @@ inline fn decodeAllFseSplitHuffmanSequences(
         const ll_next_state = if (use_grouped_fields) sequenceSymbolNextState(ll_word) else @as(usize, ll_symbol.next_state);
         const of_next_state = if (use_grouped_fields) sequenceSymbolNextState(of_word) else @as(usize, of_symbol.next_state);
         const ml_next_state = if (use_grouped_fields) sequenceSymbolNextState(ml_word) else @as(usize, ml_symbol.next_state);
+        const compact_literal_rep0 = !use_wide_copies and
+            literal_base_value == 1 and ll_additional_bits == 0 and
+            of_additional_bits == 0;
+        if (builtin.is_test and compact_literal_rep0) test_split_huffman_compact_literal_rep0_hits += 1;
         const transition_bits: u8 = if (remaining == 1)
             0
         else
@@ -10486,7 +10491,9 @@ inline fn decodeAllFseSplitHuffmanSequences(
         var field_group: ?sequence_field_group.Group = if (use_grouped_fields) sequence_field_group.Group.init(&wide_reader, total_bits) else null;
         const fields_are_grouped = field_group != null;
         if (builtin.is_test and fields_are_grouped) test_split_huffman_field_group_hits += 1;
-        const offset_extra = if (use_grouped_fields)
+        const offset_extra = if (compact_literal_rep0)
+            0
+        else if (use_grouped_fields)
             if (fields_are_grouped)
                 field_group.?.read(of_additional_bits)
             else
@@ -10500,14 +10507,20 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 try wide_reader.readSequenceField(ml_additional_bits)
         else
             try state.reader.readSequenceField(ml_additional_bits);
-        const literal_len = literal_base_value + if (use_grouped_fields)
-            if (fields_are_grouped)
-                field_group.?.read(ll_additional_bits)
-            else
-                try wide_reader.readSequenceField(ll_additional_bits)
+        const literal_len = if (compact_literal_rep0)
+            1
         else
-            try state.reader.readSequenceField(ll_additional_bits);
-        const match_offset = if (use_grouped_fields and of_additional_bits > 1) blk: {
+            literal_base_value + if (use_grouped_fields)
+                if (fields_are_grouped)
+                    field_group.?.read(ll_additional_bits)
+                else
+                    try wide_reader.readSequenceField(ll_additional_bits)
+            else
+                try state.reader.readSequenceField(ll_additional_bits);
+        const match_offset = if (compact_literal_rep0) blk: {
+            if (builtin.is_test) test_split_huffman_positive_rep0_hits += 1;
+            break :blk try large_offset.positiveLiteralRep0(&state.repeated_offsets);
+        } else if (use_grouped_fields and of_additional_bits > 1) blk: {
             const offset = offset_base_value + offset_extra;
             const previous_0 = state.repeated_offsets[0];
             const previous_1 = state.repeated_offsets[1];
@@ -10547,7 +10560,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
         else
             try state.reader.expectEnd();
 
-        if (!use_wide_copies and literal_len == 1 and match_len == 71 and of_additional_bits == 0 and match_offset >= 71) {
+        if (compact_literal_rep0 and match_len == 71 and match_offset >= 71) {
             if (literal_offset >= section.regenerated_size) return error.CorruptFrame;
             if (output.len - written.* < 1) return error.OutputTooSmall;
             output[written.*] = literals[literal_offset];
@@ -29791,6 +29804,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         test_split_huffman_match_68_70_hits = 0;
         test_split_huffman_match_6_63_hits = 0;
         test_split_huffman_positive_rep0_hits = 0;
+        test_split_huffman_compact_literal_rep0_hits = 0;
         test_split_huffman_direct_offset_hits = 0;
         test_split_huffman_short_literal_hits = 0;
         test_split_huffman_common_sequence_hits = 0;
@@ -29847,6 +29861,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     test_split_huffman_match_68_70_hits = 0;
     test_split_huffman_match_6_63_hits = 0;
     test_split_huffman_positive_rep0_hits = 0;
+    test_split_huffman_compact_literal_rep0_hits = 0;
     test_split_huffman_direct_offset_hits = 0;
     test_split_huffman_short_literal_hits = 0;
     test_split_huffman_common_sequence_hits = 0;
@@ -29859,6 +29874,7 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expect(test_split_huffman_match_68_70_hits > 100);
     try std.testing.expect(test_split_huffman_match_6_63_hits > 0);
     try std.testing.expect(test_split_huffman_positive_rep0_hits > 1000);
+    try std.testing.expect(test_split_huffman_compact_literal_rep0_hits > 1000);
     try std.testing.expect(test_split_huffman_common_sequence_hits > 500);
     try std.testing.expect(test_split_huffman_field_group_hits > 1000);
 

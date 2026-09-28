@@ -718,3 +718,45 @@ reference gate, 276-case compatibility matrix, and the full 9,900-frame
 decodecorpus pass. The corpus covers 2,699 block-stream cases, 76,578 streamed
 sequence blocks, every one of the 64 sequence-mode combinations, and reusable
 cache hits; `zig build check -j1` also passes.
+
+## Compact literal-plus-rep0 field decode
+
+The small split-Huffman executor now recognizes its dominant one-literal,
+OF-code-zero shape from the already loaded LL/OF words. That shape has no LL or
+OF extra bits, so it skips both dynamic zero-width reads and selects rep0
+directly; ML extra bits remain fully decoded because the common 71-byte match
+is represented by a shorter base plus extra bits. The later exact one-literal
+plus 71-byte copy continues to provide all literal, history, output, and caller-
+suffix checks. A production-only hit counter in the fixed 128 KiB oracle proves
+that more than 1,000 sequences use the compact field route before the existing
+generic and 128-mutation comparisons.
+
+The change shrinks the ReleaseFast small-copy helper from roughly 4,796 to
+4,728 bytes. Against the frozen `f131da21` binary, 15 alternating 20,000-decode
+profile pairs improve `large_json` by 1.0158x at the median with 13/15 wins.
+The raw controls are neutral: `huffman80k` is 0.9962x and `binary_mixed` is
+1.0055x at their medians. One 1.55x scheduling outlier inflates the target
+geometric mean to 1.0426x and is not treated as representative evidence.
+
+A separate 15-pair complete 13-row reference matrix measures `large_json` at
+1.0064x median / 1.0016x geometric throughput with 10/15 wins and a 1.0050x
+row-median geometric mean. Its short `large_text` control initially measured
+0.9728x, but a 21-pair 10,000-decode rerun recovers to 1.0076x median / 1.0040x
+geometric throughput with 13/21 wins. The formal libzstd 1.5.7 gate now reports
+6,306.49 versus 6,597.31 MiB/s on `large_json` (`0.9559x`).
+
+The explicit long-term decode requirement is at least `1.20x` libzstd on every
+locked reference row, rather than aggregate or selected-row leadership. In the
+current formal snapshot, five rows remain below that floor:
+
+| Case | Vort/libzstd | Further Vort speedup needed for 1.20x |
+| --- | ---: | ---: |
+| `huffman80k` | 0.9193x | 1.3053x |
+| `large_json` | 0.9559x | 1.2554x |
+| `raw256k` | 0.9822x | 1.2217x |
+| `numbered_json` | 1.0566x | 1.1357x |
+| `ascii64k` | 1.0612x | 1.1308x |
+
+`binary_mixed` is the first sequence-heavy row above the new floor at 1.2273x.
+The complete 659-test suite, profile/reference gates, 276-case compatibility
+matrix, 9,900-frame/64-mode decodecorpus, and `zig build check -j1` pass.
