@@ -16077,3 +16077,14 @@ reuse, so production keeps the simpler independently owned plans.
   speedups are respectively 1.3053x, 1.2554x, 1.2217x, 1.1357x, and 1.1308x.
   `binary_mixed` already clears the new floor at 1.2273x. All 659 tests, formal
   gates, compatibility/decodecorpus coverage, and the full check pass.
+- Large AArch64 Zstd raw blocks now bypass runtime-sized libc `memcpy` dispatch
+  with an isolated, 256-byte-aligned 128-byte vector loop; small blocks and
+  non-AArch64 targets keep `@memcpy`, exact tails are preserved, and the frame
+  is still fully validated before output mutation. Against frozen `c715ffc2`,
+  15 alternating 20,000-decode `raw256k` pairs improve by 1.0891x median /
+  1.0675x geometric throughput with 13/15 wins. The candidate/libzstd 1.5.7
+  median is 1.1716x (4/15 runs reach 1.20x), while a loaded-host complete matrix
+  records 1.1304x; this is retained progress, not completion of the 1.20x row
+  target. All 660 tests, decode-profile/reference gates, 276 compatibility
+  cases, 9,900 decodecorpus frames, x86-64 cross compilation, and
+  `zig build check -j1` pass.

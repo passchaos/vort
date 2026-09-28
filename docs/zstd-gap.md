@@ -1662,6 +1662,18 @@ Recommended next comparison steps:
   276 libzstd compatibility cases, the complete 9,900-frame decodecorpus with
   all 64 sequence-mode combinations, and `zig build check -j1` pass.
 
+- Large AArch64 raw blocks now use a 256-byte-aligned, 128-byte unrolled vector
+  copy after the existing complete frame validation. Small blocks and other
+  architectures retain `@memcpy`, exact tails remain bounded, and unsupported
+  frames still leave caller output untouched. Against frozen `c715ffc2`, 15
+  alternating 20,000-decode `raw256k` pairs improve by 1.0891x median /
+  1.0675x geometric throughput with 13/15 wins. Candidate/libzstd 1.5.7 is
+  1.1716x at the median, and a separate loaded-host full matrix records
+  1.1304x, so the 1.20x row target remains explicitly open rather than being
+  inferred from four passing individual samples. All 660 tests,
+  profile/reference gates, 276 compatibility cases, 9,900 decodecorpus frames,
+  x86-64 cross compilation, and the full check pass.
+
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
    multi-block all-FSE/Huffman `large_json` row now leads by about `1.027x`

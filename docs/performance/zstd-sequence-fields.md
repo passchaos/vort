@@ -760,3 +760,41 @@ current formal snapshot, five rows remain below that floor:
 `binary_mixed` is the first sequence-heavy row above the new floor at 1.2273x.
 The complete 659-test suite, profile/reference gates, 276-case compatibility
 matrix, 9,900-frame/64-mode decodecorpus, and `zig build check -j1` pass.
+
+## AArch64 raw-block vector copy
+
+Profiling the two-block `raw256k` frame showed that the complete structural
+scan costs only about 6--7 ns per frame, while copying the two 128 KiB payloads
+dominates the roughly 4 us decode. Recording block offsets or recognizing the
+canonical two-block shape therefore cannot close the gap by itself. The
+retained AArch64 path instead copies validated raw blocks of at least 4 KiB in
+a 128-byte loop made from four 32-byte vectors. Other architectures and small
+blocks keep `@memcpy`, and a non-multiple tail is copied exactly. Validation
+still completes before the first output write, so unsupported frames preserve
+the existing no-mutation fallback contract.
+
+Against the frozen `c715ffc2` executable (SHA-256
+`7f75f068cab21bed94cfe06721e65fa188a3cc6a435492c790a8abed737a5553`),
+15 alternating 20,000-decode pairs improve `raw256k` by 1.0891x median /
+1.0675x geometric throughput with 13/15 wins. The candidate executable is
+SHA-256 `f9266d3129862c49070b9937dd9f6ae1a616919a027fb8b4c9f2d2dff423b1a3`;
+`tryDecode` moves from `0x100047990` to `0x100047a30`, its real body grows by
+only four bytes (612 to 616), and the isolated 96-byte copy helper starts at
+the requested 256-byte boundary `0x100047d00`.
+
+The same 15-run campaign measures a candidate/libzstd 1.5.7 median of 1.1716x
+and geometric mean of 1.1591x, with only 4/15 individual runs at or above the
+1.20x floor. A separate complete 13-row run records 60,792.61 MiB/s versus
+53,779.15 MiB/s (`1.1304x`) for `raw256k`. This is a retained, reproducible raw
+decode gain, but it does not satisfy the per-row 1.20x acceptance target; the
+remaining median gap is about 2.4%, and the full-matrix observation leaves
+about 6.2%. The host was concurrently loaded during these measurements, so the
+relative paired result is the optimization evidence and neither absolute run
+is promoted as an idle-host ceiling.
+
+All 660 ReleaseFast Zstd tests, the five-row decode-profile gate, 13-row
+reference gate, 276-case compatibility matrix, and the full 9,900-frame
+decodecorpus pass. The corpus still covers 2,699 block-stream cases, 76,578
+streamed sequence blocks, every one of the 64 sequence-mode combinations, and
+reusable cache hits; the AArch64 helper also compiles out cleanly for an
+`x86_64-linux-gnu` target, and `zig build check -j1` passes.

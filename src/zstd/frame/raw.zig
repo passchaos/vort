@@ -17,6 +17,7 @@ pub const Error = error{
 
 const frame_magic: u32 = 0xfd2f_b528;
 const block_size_max: usize = 128 * 1024;
+const vector_copy_min_len: usize = 4 * 1024;
 
 const Plan = struct {
     payload_offset: usize,
@@ -49,7 +50,7 @@ pub fn tryDecode(frame: []const u8, output: []u8) Error!?usize {
         const len: usize = @intCast(header >> 3);
         const block_type = (header >> 1) & 0x03;
         if (block_type == 0) {
-            @memcpy(
+            copyRawBlock(
                 output[output_offset..][0..len],
                 frame[input_offset..][0..len],
             );
@@ -68,6 +69,34 @@ pub fn tryDecode(frame: []const u8, output: []u8) Error!?usize {
     std.debug.assert(input_offset == frame.len);
     std.debug.assert(output_offset == plan.content_size);
     return output_offset;
+}
+
+/// Copy a validated raw block without the generic libc dispatch used by
+/// `@memcpy` for runtime-sized spans. On AArch64, Zstd's full 128 KiB raw
+/// blocks are faster with a compact 128-byte paired-vector loop. Keep this out
+/// of line so compressed frames and small raw blocks do not inherit its code.
+noinline fn copyRawBlock(destination: []u8, source: []const u8) align(256) void {
+    std.debug.assert(destination.len == source.len);
+    if (comptime builtin.cpu.arch == .aarch64) {
+        if (source.len >= vector_copy_min_len) {
+            const Vector = @Vector(32, u8);
+            const vectors_per_loop = 4;
+            const loop_bytes = @sizeOf(Vector) * vectors_per_loop;
+            var offset: usize = 0;
+            while (source.len - offset >= loop_bytes) : (offset += loop_bytes) {
+                inline for (0..vectors_per_loop) |vector_index| {
+                    const vector_offset = offset + vector_index * @sizeOf(Vector);
+                    const value: Vector = source[vector_offset..][0..@sizeOf(Vector)].*;
+                    destination[vector_offset..][0..@sizeOf(Vector)].* = value;
+                }
+            }
+            if (offset != source.len) {
+                @memcpy(destination[offset..], source[offset..]);
+            }
+            return;
+        }
+    }
+    @memcpy(destination, source);
 }
 
 /// Decode a complete one-byte-content-size, one-block raw frame in one pass.
@@ -209,4 +238,15 @@ test "Zstd raw frame fast path decodes eligible frame without mutation on miss" 
         &([_]u8{0xa5} ** untouched.len),
         &untouched,
     );
+}
+
+test "Zstd raw frame vector copy covers tail lengths" {
+    const source = try std.testing.allocator.alloc(u8, vector_copy_min_len + 37);
+    defer std.testing.allocator.free(source);
+    const destination = try std.testing.allocator.alloc(u8, source.len);
+    defer std.testing.allocator.free(destination);
+    for (source, 0..) |*byte, index| byte.* = @truncate(index *% 131);
+    @memset(destination, 0);
+    copyRawBlock(destination, source);
+    try std.testing.expectEqualSlices(u8, source, destination);
 }
