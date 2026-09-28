@@ -677,3 +677,44 @@ to instruction placement and register allocation. Future work should avoid
 adding branches or helper calls to the established small-copy loop and should
 prefer a separately measured one-shot table-state design or a genuinely
 smaller, size-stable replacement rather than another additive specialization.
+
+## Successor-aware sequence-table retention
+
+The caller-owned multi-block decoder no longer copies the current block's
+roughly 12 KiB LL/OF/ML table state when the immediately following compressed
+block proves that all three sequence modes are independently defined. A small
+out-of-line lookahead reads only the next block header, literals-section sizes,
+sequence count, and mode byte. Any truncation, reserved mode bit, raw/RLE
+successor, zero-sequence block, or Repeat_Mode field conservatively keeps the
+old commit. Repeat offsets remain committed independently on every nonterminal
+split-Huffman block.
+
+The split-Huffman helper now owns only sequence execution and repcode progress;
+its caller performs the large table copy when the frame-state flag requires it.
+Other sequence executors, allocating APIs, incremental decoding, and the
+reusable workspace retain their original table policy. Focused tests force both
+an independent successor and a later Repeat_Mode block, and directly verify
+that a followed split-Huffman block can preserve output and repcodes while
+leaving `previous_tables` empty.
+
+Against the frozen `13f323a3` profile binary, 15 alternating 20,000-decode
+pairs measured `large_json` at 1.0254x median / 1.0236x geometric throughput
+with 13/15 wins. `huffman80k` was neutral at 0.9971x median and `binary_mixed`
+was positive at 1.0054x. A separate 15-pair complete 13-row matrix measured the
+target at 1.0213x median / 1.0262x geometric throughput with 15/15 wins and a
+1.0020x row-median geometric mean. A 21-pair, 10,000-decode `large_text`
+control recovered the short matrix's noisy result to 0.9985x median. One later
+campaign was discarded rather than reported because the frozen control
+unexpectedly collapsed from roughly 5.9 GiB/s to 2.9 GiB/s while the candidate
+stayed in its established range.
+
+The final formal Homebrew libzstd 1.5.7 gate measures `large_json` at 6,102.34
+MiB/s versus 6,509.45 MiB/s (`0.9375x`), up from the prior roughly `0.918x`
+one-shot ratio without claiming parity. `huffman80k` reaches `0.9619x`, while
+`binary_mixed` remains ahead at `1.2343x`.
+
+All 659 ReleaseFast Zstd tests, the five-row decode-profile gate, 13-row
+reference gate, 276-case compatibility matrix, and the full 9,900-frame
+decodecorpus pass. The corpus covers 2,699 block-stream cases, 76,578 streamed
+sequence blocks, every one of the 64 sequence-mode combinations, and reusable
+cache hits; `zig build check -j1` also passes.

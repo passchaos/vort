@@ -16047,3 +16047,17 @@ reuse, so production keeps the simpler independently owned plans.
   control to 0.9752x. All candidates were removed; detailed evidence and the
   resulting size-stable next-step constraint are recorded in
   `docs/performance/zstd-sequence-fields.md`.
+- Caller-owned multi-block Zstd decode now skips the roughly 12 KiB LL/OF/ML
+  state copy after a split-Huffman block only when a bounded lookahead proves
+  that the immediately following compressed block defines all three tables
+  independently. Truncation, raw/RLE or zero-sequence successors, reserved
+  bits, and any Repeat_Mode field retain the established copy; repcodes always
+  advance on nonterminal blocks. The hot split helper no longer contains the
+  table assignment, while its caller and reusable workspace restore it when
+  required. Fifteen alternating 20,000-decode pairs improve `large_json` by
+  1.0254x median / 1.0236x geometric throughput; a separate complete 13-row
+  matrix measures 1.0213x / 1.0262x with 15/15 target wins and a 1.0020x
+  row-median geometric mean. The final libzstd 1.5.7 gate reaches 6,102.34
+  versus 6,509.45 MiB/s (`0.9375x`), while `binary_mixed` remains ahead at
+  `1.2343x`. All 659 tests, profile/reference gates, 276 compatibility cases,
+  9,900 decodecorpus frames with 64/64 modes, and `zig build check -j1` pass.

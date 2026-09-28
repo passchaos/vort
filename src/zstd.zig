@@ -7578,6 +7578,9 @@ fn decodeRawOrRleZstandardFrameIntoBuffer(
             },
             2 => {
                 if (frame.len - offset.* < block_len) return error.TruncatedFrame;
+                const retain_split_sequence_tables = !last and
+                    nextBlockMayUsePreviousSequenceTables(frame, offset.* + block_len);
+                frame_state.retain_sequence_tables = retain_split_sequence_tables;
                 decodeLiteralOnlyCompressedBlockIntoBufferSelected(
                     frame[offset.*..][0..block_len],
                     frame_output,
@@ -8897,6 +8900,39 @@ fn parseSequenceCount(block: []const u8, offset: *usize) Error!usize {
     return count;
 }
 
+/// Conservatively determine whether the immediately following block can use
+/// the current block's sequence tables. A fully present compressed successor
+/// with at least one sequence and no Repeat_Mode field proves that the current
+/// tables can be discarded; every malformed, literal-only, raw, or RLE shape
+/// keeps the established retention behavior.
+noinline fn nextBlockMayUsePreviousSequenceTables(frame: []const u8, header_offset: usize) bool {
+    if (header_offset > frame.len or frame.len - header_offset < 3) return true;
+    const block_header = std.mem.readInt(u24, frame[header_offset..][0..3], .little);
+    const block_type = (block_header >> 1) & 0x3;
+    const block_len: usize = @intCast(block_header >> 3);
+    if (block_type != 2 or frame.len - header_offset - 3 < block_len) return true;
+
+    const block = frame[header_offset + 3 ..][0..block_len];
+    var offset: usize = 0;
+    const literal_header = parseLiteralsHeader(block, &offset) catch return true;
+    const literal_payload_len: usize = switch (literal_header.kind) {
+        .raw => literal_header.regenerated_size,
+        .rle => 1,
+        .compressed, .treeless => literal_header.compressed_size,
+    };
+    if (offset > block.len or block.len - offset < literal_payload_len) return true;
+    offset += literal_payload_len;
+    const sequence_count = parseSequenceCount(block, &offset) catch return true;
+    if (sequence_count == 0 or offset >= block.len) return true;
+
+    const mode = block[offset];
+    if ((mode & 0x03) != 0) return true;
+    const repeat_value = @intFromEnum(SymbolMode.repeat);
+    return mode >> 6 == repeat_value or
+        ((mode >> 4) & 0x03) == repeat_value or
+        ((mode >> 2) & 0x03) == repeat_value;
+}
+
 const SymbolMode = enum(u2) {
     predefined = 0,
     rle = 1,
@@ -9017,6 +9053,7 @@ const SequenceFrameState = struct {
     previous_tables: ?SequenceTables = null,
     repeated_offsets: [3]usize = initial_repeated_offsets,
     previous_huffman_tree: ?StdZstdHuffmanTree = null,
+    retain_sequence_tables: bool = true,
 };
 
 // Four entries retain every compressed block in the common 512 KiB frame. The
@@ -9573,7 +9610,10 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
                 continuation,
                 &state,
                 allow_wildcopy,
-            )) return;
+            )) {
+                if (frame_state.retain_sequence_tables) frame_state.previous_tables = spec.tables();
+                return;
+            }
         } else if (section.regenerated_size <= split_huffman_literal_capacity) {
             if (try tryDecodeAllFseSplitDenseHuffmanSequences(
                 section,
@@ -9584,7 +9624,10 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
                 continuation,
                 &state,
                 allow_wildcopy,
-            )) return;
+            )) {
+                if (frame_state.retain_sequence_tables) frame_state.previous_tables = spec.tables();
+                return;
+            }
         } else if (try tryDecodeAllFseSplitWideHuffmanSequences(
             section,
             output,
@@ -9594,7 +9637,10 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             continuation,
             &state,
             allow_wildcopy,
-        )) return;
+        )) {
+            if (frame_state.retain_sequence_tables) frame_state.previous_tables = spec.tables();
+            return;
+        }
     }
     var state = try initSequenceDecodeState(&spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
     if ((!builtin.is_test or !test_disable_split_huffman_decode) and
@@ -9803,7 +9849,10 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
                 continuation,
                 &state,
                 allow_wildcopy,
-            )) return;
+            )) {
+                if (continuation.retainsState()) frame_state.previous_tables = spec.tables();
+                return;
+            }
         } else if (section.regenerated_size <= split_huffman_literal_capacity) {
             if (try tryDecodeAllFseSplitDenseHuffmanSequences(
                 section,
@@ -9814,7 +9863,10 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
                 continuation,
                 &state,
                 allow_wildcopy,
-            )) return;
+            )) {
+                if (continuation.retainsState()) frame_state.previous_tables = spec.tables();
+                return;
+            }
         } else if (try tryDecodeAllFseSplitWideHuffmanSequences(
             section,
             output,
@@ -9824,7 +9876,10 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
             continuation,
             &state,
             allow_wildcopy,
-        )) return;
+        )) {
+            if (continuation.retainsState()) frame_state.previous_tables = spec.tables();
+            return;
+        }
     }
     var state = try initSequenceDecodeState(&spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
     if ((!builtin.is_test or !test_disable_split_huffman_decode) and
@@ -10691,7 +10746,6 @@ inline fn decodeAllFseSplitHuffmanSequences(
     state.remaining = remaining;
     if (use_grouped_fields) state.reader = wide_reader;
     if (continuation.retainsState()) {
-        frame_state.previous_tables = spec.tables();
         frame_state.repeated_offsets = state.repeated_offsets;
     }
     return true;
@@ -29807,6 +29861,25 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expect(test_split_huffman_positive_rep0_hits > 1000);
     try std.testing.expect(test_split_huffman_common_sequence_hits > 500);
     try std.testing.expect(test_split_huffman_field_group_hits > 1000);
+
+    var discarded_table_state: SequenceFrameState = .{ .retain_sequence_tables = false };
+    var discarded_output: [expected.len]u8 = undefined;
+    var discarded_written: usize = 0;
+    try decodeRleSequencesCompressedBlockIntoBuffer(
+        block,
+        section,
+        &discarded_output,
+        &discarded_written,
+        0,
+        &.{},
+        &discarded_table_state,
+        .followed_by_block,
+        true,
+    );
+    try std.testing.expectEqual(expected.len, discarded_written);
+    try std.testing.expectEqualSlices(u8, expected, &discarded_output);
+    try std.testing.expectEqual(@as(?SequenceTables, null), discarded_table_state.previous_tables);
+
     test_disable_split_huffman_decode = true;
     defer test_disable_split_huffman_decode = false;
     const generic_written = try decodeNativeFrameInto(&encoded, generic_output);
@@ -35167,12 +35240,15 @@ test "zstd sequence emitter reuses compressed FSE tables across blocks" {
     var second: std.ArrayList(u8) = .empty;
     defer second.deinit(std.testing.allocator);
     try std.testing.expect(try emitBestSequenceCompressedBlock(std.testing.allocator, &second, payload.items, true, &literal_lens, &offsets, &match_lens, &literal_ends, payload.items.len));
+    try std.testing.expect(!nextBlockMayUsePreviousSequenceTables(second.items, 0));
     const without_repeat_len = second.items.len;
     try std.testing.expect(try prepareSequenceCandidateForFrame(std.testing.allocator, &second, payload.items, true, &state));
     try std.testing.expect(second.items.len < without_repeat_len);
+    try std.testing.expect(nextBlockMayUsePreviousSequenceTables(second.items, 0));
     try frame.appendSlice(std.testing.allocator, second.items);
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    try std.testing.expect(nextBlockMayUsePreviousSequenceTables(frame.items, first_block.next_header_offset));
     const first_modes = try inspectNativeFrameBlockSequenceModes(frame.items, first_block);
     try std.testing.expectEqual(NativeSequenceTableMode.compressed, first_modes.literal_length_mode);
     try std.testing.expectEqual(NativeSequenceTableMode.compressed, first_modes.offset_mode);
