@@ -294,6 +294,7 @@ fn measureCase(
     defer init.gpa.free(alloc_output);
     if (!std.mem.eql(u8, case.payload, alloc_output)) return error.SizeMismatch;
 
+    var paired_reference_sample: ?Sample = null;
     const vort_sample = if (reusable) blk: {
         var decoder = vort.ZstdNativeFrameDecoder.init(init.gpa);
         defer decoder.deinit();
@@ -306,14 +307,18 @@ fn measureCase(
             vort_output,
             iterations,
         );
-    } else try measureRepeated(
-        init.io,
-        .vort,
-        runtime,
-        encoded,
-        vort_output,
-        iterations,
-    );
+    } else blk: {
+        const paired = try measurePairedRepeated(
+            init.io,
+            runtime,
+            encoded,
+            vort_output,
+            reference_output,
+            iterations,
+        );
+        paired_reference_sample = paired.reference;
+        break :blk paired.vort;
+    };
     const alloc_sample = try measureAllocRepeated(
         init.io,
         init.gpa,
@@ -321,7 +326,7 @@ fn measureCase(
         case.payload.len,
         iterations,
     );
-    const reference_sample = try measureRepeated(
+    const reference_sample = paired_reference_sample orelse try measureRepeated(
         init.io,
         .reference,
         runtime,
@@ -394,6 +399,7 @@ fn measureCase(
 
 const Codec = enum { vort, reference };
 const InspectStage = enum { header, block, sequence };
+const PairedSample = struct { vort: Sample, reference: Sample };
 
 fn measureReusable(
     io: std.Io,
@@ -428,24 +434,61 @@ fn measureRepeated(
 ) !Sample {
     var best = Sample{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 };
     for (0..5) |_| {
-        var mix: u64 = 0;
-        const start = std.Io.Clock.awake.now(io);
-        for (0..iterations) |_| {
-            switch (codec) {
-                .vort => mix +%= try vort.zstdDecodeFrameInto(encoded, output),
-                .reference => {
-                    try runtime.decode(encoded, output);
-                    mix +%= output.len;
-                },
-            }
-            if (output.len != 0) mix +%= output[0];
-        }
-        const elapsed_ns = elapsedNs(io, start);
-        if (elapsed_ns < best.elapsed_ns) {
-            best = .{ .elapsed_ns = elapsed_ns, .mix = mix };
+        const sample = try measureRepeatedOnce(io, codec, runtime, encoded, output, iterations);
+        if (sample.elapsed_ns < best.elapsed_ns) best = sample;
+    }
+    return best;
+}
+
+fn measurePairedRepeated(
+    io: std.Io,
+    runtime: libzstd.Runtime,
+    encoded: []const u8,
+    vort_output: []u8,
+    reference_output: []u8,
+    iterations: usize,
+) !PairedSample {
+    var best = PairedSample{
+        .vort = .{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 },
+        .reference = .{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 },
+    };
+    for (0..5) |round| {
+        const order = if (round & 1 == 0)
+            [_]Codec{ .vort, .reference }
+        else
+            [_]Codec{ .reference, .vort };
+        for (order) |codec| {
+            const output = if (codec == .vort) vort_output else reference_output;
+            const sample = try measureRepeatedOnce(io, codec, runtime, encoded, output, iterations);
+            const current = if (codec == .vort) &best.vort else &best.reference;
+            if (sample.elapsed_ns < current.elapsed_ns) current.* = sample;
         }
     }
     return best;
+}
+
+fn measureRepeatedOnce(
+    io: std.Io,
+    codec: Codec,
+    runtime: libzstd.Runtime,
+    encoded: []const u8,
+    output: []u8,
+    iterations: usize,
+) !Sample {
+    var mix: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        switch (codec) {
+            .vort => mix +%= try vort.zstdDecodeFrameInto(encoded, output),
+            .reference => {
+                try runtime.decode(encoded, output);
+                mix +%= output.len;
+            },
+        }
+        if (output.len != 0) mix +%= output[0];
+    }
+    const elapsed_ns = elapsedNs(io, start);
+    return .{ .elapsed_ns = elapsed_ns, .mix = mix };
 }
 
 fn measureAllocRepeated(

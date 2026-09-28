@@ -58,6 +58,40 @@ pub noinline fn buildNoLowProbabilityAssumeValid(
     for (values, 0..) |value, symbol| {
         if (value == 1) continue;
         const probability: usize = value - 1;
+        if (probability == table_size - 1) {
+            const gap_state = (position + probability * spread_step) & (table_size - 1);
+            const first_state: usize = if (gap_state == 0) 1 else 0;
+            entries[first_state] = .{
+                .base = @intCast(bases[symbol]),
+                .additional_bits = additional_bits[symbol],
+                .next_state = table_size - 2,
+                .state_bits = 1,
+            };
+            var state = first_state + 1;
+            var next_state: u16 = 0;
+            while (state < gap_state) : (state += 1) {
+                entries[state] = .{
+                    .base = @intCast(bases[symbol]),
+                    .additional_bits = additional_bits[symbol],
+                    .next_state = next_state,
+                    .state_bits = 0,
+                };
+                next_state += 1;
+            }
+            if (state == gap_state) state += 1;
+            while (state < table_size) : (state += 1) {
+                entries[state] = .{
+                    .base = @intCast(bases[symbol]),
+                    .additional_bits = additional_bits[symbol],
+                    .next_state = next_state,
+                    .state_bits = 0,
+                };
+                next_state += 1;
+            }
+            std.debug.assert(next_state == table_size - 2);
+            position = gap_state;
+            continue;
+        }
         const state_share_dividend = std.math.ceilPowerOfTwo(usize, probability) catch unreachable;
         const share_size = table_size / state_share_dividend;
         const double_state_count = state_share_dividend - probability;

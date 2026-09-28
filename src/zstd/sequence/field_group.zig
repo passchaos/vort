@@ -20,6 +20,18 @@ pub const Group = struct {
         return .{ .bits = bits << padding };
     }
 
+    /// Load a group after the caller has proved that a full eight-byte suffix
+    /// remains. This leaves progress unchanged so a multi-sequence decoder can
+    /// commit the exact combined bit count only after validating every shape.
+    pub inline fn initProven(reader: *const bit_reader.Reader) Group {
+        std.debug.assert(reader.remaining_bits >= 64);
+        std.debug.assert(reader.remaining_bits <= reader.bytes.len * 8);
+        const end_byte = (reader.remaining_bits + 7) >> 3;
+        const padding: u3 = @intCast(end_byte * 8 - reader.remaining_bits);
+        const bits = std.mem.readInt(u64, reader.bytes[end_byte - 8 ..][0..8], .little);
+        return .{ .bits = bits << padding };
+    }
+
     pub inline fn read(self: *Group, width: u8) usize {
         std.debug.assert(width <= 32);
         if (width == 0) return 0;
@@ -101,4 +113,15 @@ test "sequence field groups match exact reverse reads at every alignment" {
             }
         }
     }
+}
+
+test "proven sequence field groups preserve reader progress" {
+    const bytes = [_]u8{ 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf1, 0x01 };
+    var reader = try bit_reader.Reader.init(&bytes);
+    const remaining = reader.remaining_bits;
+    var proven = Group.initProven(&reader);
+    var ordinary = Group.init(&reader, 0).?;
+    try std.testing.expectEqual(ordinary.read(32), proven.read(32));
+    try std.testing.expectEqual(ordinary.read(24), proven.read(24));
+    try std.testing.expectEqual(remaining, reader.remaining_bits);
 }

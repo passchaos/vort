@@ -84,11 +84,14 @@ noinline fn copyRawBlock(destination: []u8, source: []const u8) align(256) void 
             const loop_bytes = @sizeOf(Vector) * vectors_per_loop;
             var offset: usize = 0;
             while (source.len - offset >= loop_bytes) : (offset += loop_bytes) {
-                inline for (0..vectors_per_loop) |vector_index| {
-                    const vector_offset = offset + vector_index * @sizeOf(Vector);
-                    const value: Vector = source[vector_offset..][0..@sizeOf(Vector)].*;
-                    destination[vector_offset..][0..@sizeOf(Vector)].* = value;
-                }
+                const first: Vector = source[offset..][0..@sizeOf(Vector)].*;
+                const second: Vector = source[offset + 32 ..][0..@sizeOf(Vector)].*;
+                const third: Vector = source[offset + 64 ..][0..@sizeOf(Vector)].*;
+                const fourth: Vector = source[offset + 96 ..][0..@sizeOf(Vector)].*;
+                destination[offset..][0..@sizeOf(Vector)].* = first;
+                destination[offset + 32 ..][0..@sizeOf(Vector)].* = second;
+                destination[offset + 64 ..][0..@sizeOf(Vector)].* = third;
+                destination[offset + 96 ..][0..@sizeOf(Vector)].* = fourth;
             }
             if (offset != source.len) {
                 @memcpy(destination[offset..], source[offset..]);

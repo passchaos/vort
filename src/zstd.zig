@@ -207,8 +207,14 @@ var test_split_huffman_match_6_63_hits: usize = 0;
 var test_split_huffman_positive_rep0_hits: usize = 0;
 var test_split_huffman_compact_literal_rep0_hits: usize = 0;
 var test_split_huffman_direct_offset_hits: usize = 0;
+var test_split_huffman_direct_offset_single_literal_hits: usize = 0;
+var test_split_huffman_direct_offset_match_68_71_hits: usize = 0;
+var test_split_huffman_direct_offset_fast_hits: usize = 0;
 var test_split_huffman_short_literal_hits: usize = 0;
 var test_split_huffman_common_sequence_hits: usize = 0;
+var test_split_huffman_compact_direct_hits: usize = 0;
+var test_split_huffman_compact_pair_hits: usize = 0;
+var test_split_huffman_short_rep0_fast_hits: usize = 0;
 var test_split_huffman_field_group_hits: usize = 0;
 var test_large_fse_no_low_builder_hits: usize = 0;
 var test_small_mixed_fse_fast_literal_hits: usize = 0;
@@ -10681,12 +10687,228 @@ inline fn decodeAllFseSplitHuffmanSequences(
         );
     }
     while (remaining != 0) {
+        if (comptime use_grouped_fields and !use_wide_copies and use_long_match_wildcopy) {
+            const additional_bits_mask = @as(u64, 0xff) << 48;
+            const literal_one_no_extra_mask = additional_bits_mask | std.math.maxInt(u32);
+            pair: {
+                if (remaining < 2 or wide_reader.remaining_bits < 64) break :pair;
+                const first_ll_word = spec.literal_fse.symbolWordUnchecked(state.ll_state);
+                const first_of_word = spec.offset_fse.symbolWordUnchecked(state.of_state);
+                if (first_ll_word & literal_one_no_extra_mask != 1 or
+                    first_of_word & additional_bits_mask != 0) break :pair;
+                const first_ml_word = spec.match_fse.symbolWordUnchecked(state.ml_state);
+                var fields = sequence_field_group.Group.initProven(&wide_reader);
+                const first_ml_additional_bits: u8 = @truncate(first_ml_word >> 48);
+                const first_ll_state_bits: u8 = @truncate(first_ll_word >> 56);
+                const first_ml_state_bits: u8 = @truncate(first_ml_word >> 56);
+                const first_of_state_bits: u8 = @truncate(first_of_word >> 56);
+                const first_match_len = sequenceSymbolBase(first_ml_word) + fields.read(first_ml_additional_bits);
+                const second_ll_state = sequenceSymbolNextState(first_ll_word) + fields.read(first_ll_state_bits);
+                const second_ml_state = sequenceSymbolNextState(first_ml_word) + fields.read(first_ml_state_bits);
+                const second_of_state = sequenceSymbolNextState(first_of_word) + fields.read(first_of_state_bits);
+                const second_ll_word = spec.literal_fse.symbolWordUnchecked(second_ll_state);
+                const second_of_word = spec.offset_fse.symbolWordUnchecked(second_of_state);
+                if (second_ll_word & literal_one_no_extra_mask != 1 or
+                    second_of_word & additional_bits_mask != 0) break :pair;
+                const second_ml_word = spec.match_fse.symbolWordUnchecked(second_ml_state);
+                const second_ml_additional_bits: u8 = @truncate(second_ml_word >> 48);
+                const second_ll_state_bits: u8 = @truncate(second_ll_word >> 56);
+                const second_ml_state_bits: u8 = @truncate(second_ml_word >> 56);
+                const second_of_state_bits: u8 = @truncate(second_of_word >> 56);
+                const first_total_bits = first_ml_additional_bits + first_ll_state_bits +
+                    first_ml_state_bits + first_of_state_bits;
+                const second_transition_bits: u8 = if (remaining == 2)
+                    0
+                else
+                    second_ll_state_bits + second_ml_state_bits + second_of_state_bits;
+                const pair_total_bits = first_total_bits + second_ml_additional_bits + second_transition_bits;
+                if (pair_total_bits > 56) break :pair;
+                const second_match_len = sequenceSymbolBase(second_ml_word) + fields.read(second_ml_additional_bits);
+                if (remaining != 2) {
+                    state.ll_state = sequenceSymbolNextState(second_ll_word) + fields.read(second_ll_state_bits);
+                    state.ml_state = sequenceSymbolNextState(second_ml_word) + fields.read(second_ml_state_bits);
+                    state.of_state = sequenceSymbolNextState(second_of_word) + fields.read(second_of_state_bits);
+                }
+                wide_reader.remaining_bits -= pair_total_bits;
+                remaining -= 2;
+                if (remaining == 0) try wide_reader.expectEnd();
+
+                const match_offset = try large_offset.positiveLiteralRep0(&state.repeated_offsets);
+                const pair_match_lengths = [2]usize{ first_match_len, second_match_len };
+                if (comptime allow_wildcopy) {
+                    if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < 2) return error.CorruptFrame;
+                    const pair_output_len = 2 + first_match_len + second_match_len;
+                    if (output.len - written.* < pair_output_len) return error.OutputTooSmall;
+                    if (match_offset > written.* - frame_output_start + 1) return error.InvalidMatch;
+                }
+                inline for (pair_match_lengths) |match_len| {
+                    if (!allow_wildcopy and literal_offset >= section.regenerated_size) return error.CorruptFrame;
+                    if (!allow_wildcopy and output.len - written.* < 1) return error.OutputTooSmall;
+                    output[written.*] = literals[literal_offset];
+                    written.* += 1;
+                    literal_offset += 1;
+                    if (!allow_wildcopy and match_offset > written.* - frame_output_start) return error.InvalidMatch;
+                    if (!allow_wildcopy and output.len - written.* < match_len) return error.OutputTooSmall;
+                    if (match_len == 71 and match_offset >= 71) {
+                        if (builtin.is_test) test_split_huffman_common_sequence_hits += 1;
+                        sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
+                    } else if (match_len == 70 and match_offset >= 70) {
+                        if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
+                        sequence_match_copy.appendNonOverlapping68To70(output, written, written.* - match_offset, 70);
+                    } else if (match_len >= 68 and match_len <= 69 and match_offset >= match_len) {
+                        if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
+                        sequence_match_copy.appendNonOverlapping68To70(
+                            output,
+                            written,
+                            written.* - match_offset,
+                            match_len,
+                        );
+                    } else {
+                        try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+                    }
+                }
+                if (builtin.is_test) {
+                    test_split_huffman_compact_literal_rep0_hits += 2;
+                    test_split_huffman_positive_rep0_hits += 2;
+                    test_split_huffman_field_group_hits += 2;
+                    test_split_huffman_single_literal_hits += 2;
+                    test_split_huffman_compact_direct_hits += 2;
+                    test_split_huffman_compact_pair_hits += 1;
+                }
+                continue;
+            }
+        }
         const ll_symbol: SequenceSymbol = if (use_grouped_fields) undefined else spec.literal_fse.symbolUnchecked(state.ll_state);
         const of_symbol: SequenceSymbol = if (use_grouped_fields) undefined else spec.offset_fse.symbolUnchecked(state.of_state);
         const ml_symbol: SequenceSymbol = if (use_grouped_fields) undefined else spec.match_fse.symbolUnchecked(state.ml_state);
         const ll_word: u64 = if (use_grouped_fields) spec.literal_fse.symbolWordUnchecked(state.ll_state) else undefined;
         const of_word: u64 = if (use_grouped_fields) spec.offset_fse.symbolWordUnchecked(state.of_state) else undefined;
         const ml_word: u64 = if (use_grouped_fields) spec.match_fse.symbolWordUnchecked(state.ml_state) else undefined;
+        if (comptime use_grouped_fields and !use_wide_copies and use_long_match_wildcopy) {
+            const additional_bits_mask = @as(u64, 0xff) << 48;
+            const literal_len: usize = @as(u32, @truncate(ll_word));
+            if (ll_word & additional_bits_mask == 0 and
+                literal_len >= 1 and literal_len <= 4 and
+                of_word & additional_bits_mask == 0)
+            {
+                const ml_additional_bits: u8 = @truncate(ml_word >> 48);
+                const ll_state_bits: u8 = @truncate(ll_word >> 56);
+                const ml_state_bits: u8 = @truncate(ml_word >> 56);
+                const of_state_bits: u8 = @truncate(of_word >> 56);
+                const transition_bits: u8 = if (remaining == 1)
+                    0
+                else
+                    ll_state_bits + ml_state_bits + of_state_bits;
+                const total_bits = ml_additional_bits + transition_bits;
+                if (sequence_field_group.Group.init(&wide_reader, total_bits)) |initial_fields| {
+                    var fields = initial_fields;
+                    const match_len = sequenceSymbolBase(ml_word) + fields.read(ml_additional_bits);
+                    const match_offset = try large_offset.positiveLiteralRep0(&state.repeated_offsets);
+                    remaining -= 1;
+                    if (remaining != 0) {
+                        state.ll_state = sequenceSymbolNextState(ll_word) + fields.read(ll_state_bits);
+                        state.ml_state = sequenceSymbolNextState(ml_word) + fields.read(ml_state_bits);
+                        state.of_state = sequenceSymbolNextState(of_word) + fields.read(of_state_bits);
+                    } else try wide_reader.expectEnd();
+
+                    if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
+                    if (output.len - written.* < literal_len) return error.OutputTooSmall;
+                    if (literal_len == 1) {
+                        output[written.*] = literals[literal_offset];
+                        written.* += 1;
+                        literal_offset += 1;
+                    } else {
+                        literal_copy.append2To15(output, written, &literals, &literal_offset, literal_len);
+                    }
+                    if (match_offset > written.* - frame_output_start) return error.InvalidMatch;
+                    if (output.len - written.* < match_len) return error.OutputTooSmall;
+                    if (builtin.is_test) {
+                        test_split_huffman_compact_literal_rep0_hits += 1;
+                        test_split_huffman_positive_rep0_hits += 1;
+                        test_split_huffman_field_group_hits += 1;
+                        test_split_huffman_single_literal_hits += @intFromBool(literal_len == 1);
+                        test_split_huffman_compact_direct_hits += @intFromBool(literal_len == 1);
+                        test_split_huffman_short_rep0_fast_hits += @intFromBool(literal_len > 1);
+                    }
+                    if (match_len == 71 and match_offset >= 71) {
+                        if (builtin.is_test) test_split_huffman_common_sequence_hits += 1;
+                        sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
+                    } else if (match_len >= 68 and match_len <= 70 and match_offset >= match_len) {
+                        if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
+                        sequence_match_copy.appendNonOverlapping68To70(
+                            output,
+                            written,
+                            written.* - match_offset,
+                            match_len,
+                        );
+                    } else {
+                        try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+                    }
+                    continue;
+                }
+            }
+        }
+        if (comptime use_grouped_fields and !use_wide_copies and use_long_match_wildcopy) {
+            const additional_bits_mask = @as(u64, 0xff) << 48;
+            const literal_one_no_extra_mask = additional_bits_mask | std.math.maxInt(u32);
+            const of_additional_bits: u8 = @truncate(of_word >> 48);
+            if (ll_word & literal_one_no_extra_mask == 1 and of_additional_bits > 1) {
+                const ml_additional_bits: u8 = @truncate(ml_word >> 48);
+                const ll_state_bits: u8 = @truncate(ll_word >> 56);
+                const ml_state_bits: u8 = @truncate(ml_word >> 56);
+                const of_state_bits: u8 = @truncate(of_word >> 56);
+                const transition_bits: u8 = if (remaining == 1)
+                    0
+                else
+                    ll_state_bits + ml_state_bits + of_state_bits;
+                const total_bits = of_additional_bits + ml_additional_bits + transition_bits;
+                if (sequence_field_group.Group.init(&wide_reader, total_bits)) |initial_fields| {
+                    var fields = initial_fields;
+                    const offset_extra = fields.read(of_additional_bits);
+                    const match_len = sequenceSymbolBase(ml_word) + fields.read(ml_additional_bits);
+                    const match_offset = sequenceSymbolBase(of_word) + offset_extra;
+                    const previous_0 = state.repeated_offsets[0];
+                    const previous_1 = state.repeated_offsets[1];
+                    state.repeated_offsets = .{ match_offset, previous_0, previous_1 };
+                    remaining -= 1;
+                    if (remaining != 0) {
+                        state.ll_state = sequenceSymbolNextState(ll_word) + fields.read(ll_state_bits);
+                        state.ml_state = sequenceSymbolNextState(ml_word) + fields.read(ml_state_bits);
+                        state.of_state = sequenceSymbolNextState(of_word) + fields.read(of_state_bits);
+                    } else try wide_reader.expectEnd();
+
+                    if (literal_offset >= section.regenerated_size) return error.CorruptFrame;
+                    if (output.len - written.* < 1) return error.OutputTooSmall;
+                    output[written.*] = literals[literal_offset];
+                    written.* += 1;
+                    literal_offset += 1;
+                    if (match_offset > written.* - frame_output_start) return error.InvalidMatch;
+                    if (output.len - written.* < match_len) return error.OutputTooSmall;
+                    if (builtin.is_test) {
+                        test_split_huffman_direct_offset_hits += 1;
+                        test_split_huffman_direct_offset_single_literal_hits += 1;
+                        test_split_huffman_direct_offset_match_68_71_hits += @intFromBool(match_len >= 68 and match_len <= 71);
+                        test_split_huffman_direct_offset_fast_hits += 1;
+                        test_split_huffman_field_group_hits += 1;
+                        test_split_huffman_single_literal_hits += 1;
+                    }
+                    if (match_len == 71 and match_offset >= 71) {
+                        sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
+                    } else if (match_len >= 68 and match_len <= 70 and match_offset >= match_len) {
+                        if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
+                        sequence_match_copy.appendNonOverlapping68To70(
+                            output,
+                            written,
+                            written.* - match_offset,
+                            match_len,
+                        );
+                    } else {
+                        try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+                    }
+                    continue;
+                }
+            }
+        }
         const literal_base_value = if (use_grouped_fields) sequenceSymbolBase(ll_word) else @as(usize, ll_symbol.base);
         const offset_base_value = if (use_grouped_fields) sequenceSymbolBase(of_word) else @as(usize, of_symbol.base);
         const match_base_value = if (use_grouped_fields) sequenceSymbolBase(ml_word) else @as(usize, ml_symbol.base);
@@ -10746,7 +10968,11 @@ inline fn decodeAllFseSplitHuffmanSequences(
             const previous_0 = state.repeated_offsets[0];
             const previous_1 = state.repeated_offsets[1];
             state.repeated_offsets = .{ offset, previous_0, previous_1 };
-            if (builtin.is_test) test_split_huffman_direct_offset_hits += 1;
+            if (builtin.is_test) {
+                test_split_huffman_direct_offset_hits += 1;
+                test_split_huffman_direct_offset_single_literal_hits += @intFromBool(literal_len == 1);
+                test_split_huffman_direct_offset_match_68_71_hits += @intFromBool(match_len >= 68 and match_len <= 71);
+            }
             break :blk offset;
         } else if (of_additional_bits == 0 and literal_len != 0) blk: {
             if (builtin.is_test) test_split_huffman_positive_rep0_hits += 1;
@@ -30053,8 +30279,14 @@ test "zstd split Huffman all-FSE path matches generic decode" {
         test_split_huffman_positive_rep0_hits = 0;
         test_split_huffman_compact_literal_rep0_hits = 0;
         test_split_huffman_direct_offset_hits = 0;
+        test_split_huffman_direct_offset_single_literal_hits = 0;
+        test_split_huffman_direct_offset_match_68_71_hits = 0;
+        test_split_huffman_direct_offset_fast_hits = 0;
         test_split_huffman_short_literal_hits = 0;
         test_split_huffman_common_sequence_hits = 0;
+        test_split_huffman_compact_direct_hits = 0;
+        test_split_huffman_compact_pair_hits = 0;
+        test_split_huffman_short_rep0_fast_hits = 0;
         test_split_huffman_field_group_hits = 0;
         test_large_fse_no_low_builder_hits = 0;
     }
@@ -30093,7 +30325,6 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expectEqual(SymbolMode.compressed, spec.ll_mode);
     try std.testing.expectEqual(SymbolMode.compressed, spec.of_mode);
     try std.testing.expectEqual(SymbolMode.compressed, spec.ml_mode);
-
     const output_len = expected.len + 64;
     const fast_output = try std.testing.allocator.alloc(u8, output_len);
     defer std.testing.allocator.free(fast_output);
@@ -30110,8 +30341,14 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     test_split_huffman_positive_rep0_hits = 0;
     test_split_huffman_compact_literal_rep0_hits = 0;
     test_split_huffman_direct_offset_hits = 0;
+    test_split_huffman_direct_offset_single_literal_hits = 0;
+    test_split_huffman_direct_offset_match_68_71_hits = 0;
+    test_split_huffman_direct_offset_fast_hits = 0;
     test_split_huffman_short_literal_hits = 0;
     test_split_huffman_common_sequence_hits = 0;
+    test_split_huffman_compact_direct_hits = 0;
+    test_split_huffman_compact_pair_hits = 0;
+    test_split_huffman_short_rep0_fast_hits = 0;
     test_split_huffman_field_group_hits = 0;
     test_large_fse_no_low_builder_hits = 0;
     const fast_written = try decodeNativeFrameInto(&encoded, fast_output);
@@ -30123,6 +30360,10 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expect(test_split_huffman_positive_rep0_hits > 1000);
     try std.testing.expect(test_split_huffman_compact_literal_rep0_hits > 1000);
     try std.testing.expect(test_split_huffman_common_sequence_hits > 500);
+    try std.testing.expect(test_split_huffman_compact_direct_hits > 500);
+    try std.testing.expect(test_split_huffman_compact_pair_hits > 100);
+    try std.testing.expect(test_split_huffman_direct_offset_fast_hits > 100);
+    try std.testing.expect(test_split_huffman_short_rep0_fast_hits > 100);
     try std.testing.expect(test_split_huffman_field_group_hits > 1000);
 
     var discarded_table_state: SequenceFrameState = .{ .retain_sequence_tables = false };

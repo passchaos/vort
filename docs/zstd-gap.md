@@ -1709,16 +1709,29 @@ Recommended next comparison steps:
   Fifteen long comparisons against libzstd 1.5.7 reach 1.3195x median / 1.3204x
   geometric throughput, with a 1.2935x minimum and 15/15 runs above the 1.20x
   floor. `numbered_json` is no longer an open decode gap.
+- The compact split-Huffman executor now decodes two adjacent one-literal
+  rep0 sequences from one proven 64-bit field load, covers the remaining
+  2--4-byte positive-rep0 runs directly, and specializes the dominant 70-byte
+  pair copy. Exact 71-byte copies preload one initialized eight-byte source
+  window before writing their bounded tail. A focused 21-pair comparison
+  against the frozen direct-offset candidate improves `large_json` by 1.0469x
+  median / 1.0460x geometric throughput with 21/21 wins. Fifteen long libzstd
+  1.5.7 comparisons reach 1.1979x median / 1.1990x geometric with a 1.1881x
+  minimum, so the strict every-run 1.20x target remains open by about 0.2% at
+  the median rather than being rounded up.
+- The caller-owned reference benchmark now alternates its five Vort/libzstd
+  samples before selecting each codec's best observation, reducing the former
+  scheduling-order bias on heterogeneous Apple cores without changing the
+  workload or any floor. `raw256k` remains strongly bimodal under sustained
+  host load. Its retained AArch64 loop now loads four independent 32-byte
+  vectors before issuing stores, but the available paired evidence is not yet
+  strong enough to close its 1.20x requirement.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
-   mixed-FSE `numbered_json` row leads libzstd in both modes, and the
-   multi-block all-FSE/Huffman `large_json` row now leads by about `1.027x`
-   warmed and reaches `0.9559x` one-shot after successor-aware table retention
-   plus compact literal/rep0 field decoding. The acceptance target is now at
-   least `1.20x` libzstd on every locked row; prioritize the remaining
-   `large_json` and `raw256k` gaps
-   without
-   perturbing already-leading raw/RLE, single-sequence, or one-shot paths.
+   mixed-FSE `numbered_json` row is complete, while `large_json` is within
+   about 0.2% of the 1.20x median target and `raw256k` remains scheduler- and
+   memory-bandwidth-sensitive. Close both rows without perturbing the already
+   leading compressed, RLE, single-sequence, or one-shot paths.
 2. Add library-level range-latency rows for the public seekability tiers
    (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because even the
    ReleaseFast tier sweep still measures through the CLI bench surface.

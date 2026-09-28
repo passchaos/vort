@@ -45,9 +45,23 @@ pub inline fn appendNonOverlapping71(
     std.debug.assert(destination_start - repeat_start >= 71);
     const first: @Vector(32, u8) = output[repeat_start..][0..32].*;
     const second: @Vector(32, u8) = output[repeat_start + 32 ..][0..32].*;
+    const tail = output[repeat_start + 63 ..][0..8].*;
     output[destination_start..][0..32].* = first;
     output[destination_start + 32 ..][0..32].* = second;
-    @memcpy(output[destination_start + 64 ..][0..7], output[repeat_start + 64 ..][0..7]);
+    if (output.len - destination_start >= 72) {
+        const source_tail = std.mem.readInt(u64, &tail, .little) >> 8;
+        const preserved_suffix = @as(u64, output[destination_start + 71]) << 56;
+        std.mem.writeInt(
+            u64,
+            output[destination_start + 64 ..][0..8],
+            source_tail | preserved_suffix,
+            .little,
+        );
+    } else {
+        output[destination_start + 64 ..][0..4].* = tail[1..5].*;
+        output[destination_start + 68 ..][0..2].* = tail[5..7].*;
+        output[destination_start + 70] = tail[7];
+    }
     written.* += 71;
 }
 
@@ -400,6 +414,16 @@ test "Zstd fixed 71-byte match copy preserves output tail" {
     appendNonOverlapping71(&actual, &actual_written, 17);
     try std.testing.expectEqual(expected_written, actual_written);
     try std.testing.expectEqualSlices(u8, &expected, &actual);
+
+    var tight_expected: [167]u8 = undefined;
+    for (&tight_expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + index / 11);
+    var tight_actual = tight_expected;
+    expected_written = 96;
+    actual_written = expected_written;
+    append(&tight_expected, &expected_written, 17, 71);
+    appendNonOverlapping71(&tight_actual, &actual_written, 17);
+    try std.testing.expectEqual(expected_written, actual_written);
+    try std.testing.expectEqualSlices(u8, &tight_expected, &tight_actual);
 }
 
 test "Zstd fixed 68 through 70 byte match copies preserve output tail" {

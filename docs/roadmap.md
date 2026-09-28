@@ -16137,3 +16137,15 @@ reuse, so production keeps the simpler independently owned plans.
   so every run clears the 1.20x floor. All 664 tests, profile/reference gates,
   276 compatibility cases, 9,900 decodecorpus frames, and the full check pass.
   The remaining below-floor rows are `raw256k` and `large_json`.
+- The `large_json` split-Huffman path now pairs adjacent one-literal rep0
+  sequences, directly handles the remaining 2--4-byte rep0 runs, commits pair
+  bounds once on known-size output, and specializes its dominant 70-byte
+  copies. The exact 71-byte kernel preloads its initialized tail once before
+  bounded stores. A 21-pair comparison against the frozen direct-offset
+  candidate improves the target by 1.0469x median / 1.0460x geometric with
+  21/21 wins. Fifteen long libzstd 1.5.7 comparisons reach 1.1979x median /
+  1.1990x geometric and a 1.1881x minimum, so the strict every-run 1.20x
+  requirement remains open. The AArch64 raw loop also issues four independent
+  32-byte loads before stores, while the reference benchmark alternates
+  Vort/libzstd samples to reduce heterogeneous-core ordering bias; `raw256k`
+  remains open under the same hard floor.

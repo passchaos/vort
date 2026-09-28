@@ -958,3 +958,50 @@ therefore removed from the below-floor list; only `raw256k` and `large_json`
 remain open.
 All 664 ReleaseFast Zstd tests, the profile/reference gates, 276 compatibility
 cases, the 9,900-frame/64-mode decodecorpus, and `zig build check -j1` pass.
+
+## Compact split-Huffman sequence pairs and exact long-match tails
+
+The `large_json` blocks contain 1,834 sequences per full block. Their dominant
+shape is a one-byte literal followed by positive-literal rep0; 663 pairs can be
+decoded from one 64-bit sequence-field load. The retained pair path validates
+both FSE transitions before committing reader progress, checks the pair's
+literal/output/history bounds once when the frame content size provides a
+bounded output slice, and falls back to the complete single-sequence decoder
+for every other shape. A second single-sequence path covers 111 positive-rep0
+sequences whose literal lengths are 2--4 and whose matches are all 68--71
+bytes. Direct offsets retain their separate one-literal fast path.
+
+The 68--71-byte copy cluster keeps exact logical writes. The 71-byte kernel
+loads its seven-byte tail once from an eight-byte initialized window; when one
+destination suffix byte exists it preserves that byte and emits one packed
+eight-byte store, while a tight slice uses the exact 4+2+1-byte fallback. The
+paired executor also gives the dominant 70-byte case a constant-length branch. The 256-state no-low FSE
+builder has a linear one-gap path for a 255/256-probability symbol, and paired
+field decoding uses `Group.initProven` after its existing 64-bit availability
+proof. These are portable scalar/vector Zig paths selected by format shape;
+the AArch64 raw-copy loop separately keeps four independent 32-byte loads live
+before its four stores.
+
+Against frozen `/tmp/vort-large-direct-offset` (SHA-256
+`912e5bda8b3ef97d0381ea8f16542278e94dd1c237c36ae68a42d846bdad0af6`),
+the final candidate improves focused `large_json` throughput by `1.0469x`
+median / `1.0460x` geometric over 21 alternating pairs with 21/21 wins. The
+70-byte branch separately measures `1.0073x` median / `1.0098x` geometric
+with 14/15 wins, and the preloaded exact 71-byte tail measures `1.0138x` /
+`1.0151x` with 14/15 wins. Fifteen long comparisons against libzstd 1.5.7
+measure `1.1979x` median / `1.1990x` geometric, range `1.1881x`--`1.2095x`;
+5/15 runs clear 1.20x. The row is therefore materially improved but remains
+open under the strict every-run 1.20x requirement.
+
+The reference benchmark now alternates the five Vort and libzstd samples
+instead of measuring all Vort samples, then allocation, then all reference
+samples. It still reports each codec's best sample and uses the same payload,
+iteration count, correctness checks, and throughput formula. This removes a
+large ordering bias on heterogeneous Apple cores without changing a floor.
+Even with that correction, `raw256k` remains strongly bimodal under sustained
+`mobileassetd`, `dasd`, Defender, and concurrent Zig load. The load-first
+128-byte kernel is retained because its independent-load schedule improves
+the two noisy alternating campaigns by `1.0059x` median / `1.0124x` geometric
+(12/21 wins) and `1.0216x` / `1.0424x` (9/15 wins), but those results are not
+strong enough to declare the raw row complete. No Downloads corpus was run,
+because the requested all-row 1.20x precondition is not yet satisfied.
