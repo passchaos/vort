@@ -56,7 +56,16 @@ pub noinline fn buildNoLowProbabilityAssumeValid(
 
     var position: usize = 0;
     for (values, 0..) |value, symbol| {
+        if (value == 1) continue;
         const probability: usize = value - 1;
+        const state_share_dividend = std.math.ceilPowerOfTwo(usize, probability) catch unreachable;
+        const share_size = table_size / state_share_dividend;
+        const double_state_count = state_share_dividend - probability;
+        const single_state_count = probability - double_state_count;
+        const share_size_log: u8 = @intCast(std.math.log2_int(usize, share_size));
+        var state_bits = share_size_log + @intFromBool(double_state_count != 0);
+        var baseline = if (double_state_count != 0) single_state_count * share_size else 0;
+        var baseline_step = if (double_state_count != 0) 2 * share_size else share_size;
         var states: [4]u64 = if (probability >= table_size / 2) @splat(std.math.maxInt(u64)) else @splat(0);
         if (probability >= table_size / 2) {
             const symbol_end = (position + probability * spread_step) & (table_size - 1);
@@ -79,15 +88,20 @@ pub noinline fn buildNoLowProbabilityAssumeValid(
             while (word.* != 0) {
                 const state = word_index * 64 + @ctz(word.*);
                 word.* &= word.* - 1;
-                const next_state: u16 = @intCast(probability + ordinal);
-                const state_bits: u8 = 8 - std.math.log2_int(u16, next_state);
                 entries[state] = .{
                     .base = @intCast(bases[symbol]),
                     .additional_bits = additional_bits[symbol],
-                    .next_state = @intCast((@as(u32, next_state) << @intCast(state_bits)) - table_size),
+                    .next_state = @intCast(baseline),
                     .state_bits = state_bits,
                 };
                 ordinal += 1;
+                if (ordinal == double_state_count) {
+                    state_bits = share_size_log;
+                    baseline = 0;
+                    baseline_step = share_size;
+                } else {
+                    baseline += baseline_step;
+                }
             }
         }
         std.debug.assert(ordinal == probability);

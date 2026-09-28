@@ -594,19 +594,41 @@ matrix pairs used independent ReleaseFast binaries and Homebrew libzstd 1.5.7:
 
 | Case | Pairs won | Median speedup | Geometric mean | Candidate MiB/s | Candidate/libzstd |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `large_json` | 15/15 | 1.0425x | 1.0516x | 5931.82 | 0.9136x |
-| `binary_mixed` | 14/15 | 1.0275x | 1.0305x | 8383.31 | 1.2364x |
-| `huffman80k` | 8/15 | 1.0052x | 1.0040x | 1863.47 | 0.9502x |
+| `large_json` | 15/15 | 1.0422x | 1.0443x | 6037.25 | 0.9179x |
+| `binary_mixed` | 15/15 | 1.0284x | 1.0286x | 8464.84 | 1.2235x |
+| `huffman80k` | 12/15 | 1.0025x | 1.0061x | 1923.83 | 0.9488x |
 
-The geometric mean of all 13 row medians is 1.0065x. The weakest row is the
-sequence-free `ascii64k` control at 0.9878x. Normalized symbol inspection shows
-that `decodeFrameInto`, both raw/all-FSE executors, all split-Huffman executors,
-and the four-stream Huffman decoder retain identical addresses between the two
-binaries, so unrelated control movement is not caused by shifted decode code.
+The geometric mean of all 13 row medians is 1.0046x. The initial matrix's
+short `tiny` and `text` controls measured 0.9721x/0.9792x amid large individual
+outliers. Longer 31-pair reruns recover them to 0.9967x/0.9926x medians.
+Normalized symbol inspection shows that `decodeFrameInto`, both raw/all-FSE
+executors, all split-Huffman executors, and the four-stream Huffman decoder
+retain identical addresses between the two binaries, so unrelated control
+movement is not caused by shifted decode code.
 
 A five-second `large_json` sample reduces direct
 `buildNoLowProbabilityAssumeValid` attribution from 351/3,987 samples (8.80%)
-to 224/4,066 (5.51%). The 256-case randomized table oracle and pinned dense
+to 162/3,630 (4.46%). The 256-case randomized table oracle and pinned dense
 226/208/255 distributions remain exact. The five-row decode-profile gate,
 13-row reference gate, 276-case compatibility matrix, and all 9,900 upstream
 decodecorpus frames across 64/64 sequence modes pass.
+
+### Per-symbol transition ranges
+
+The restored builder initially still recomputed `log2(next_state)`, the state
+width, and the shifted transition baseline for every one of the 256 final
+states. For one symbol, `next_state` walks the contiguous range
+`[probability, 2 * probability)`, so its width crosses at most one power-of-two
+boundary.
+
+The finalized builder computes the share size, boundary count, and the two
+baseline strides once per symbol. Its ascending set-bit walk advances a running
+baseline and changes width only at that boundary. Values encoding an absent
+symbol are skipped before this calculation; the randomized oracle includes
+those zero-probability entries.
+
+Against the direct-builder baseline `fa050e76`, 15 alternating pairs measure
+`large_json` at 1.0151x median / 1.0164x geometric throughput with 14/15 wins.
+`binary_mixed` is 1.0035x / 1.0024x with 9/15 wins, and `huffman80k` is neutral
+at 1.0004x / 1.0053x. This isolates the transition precomputation from the
+larger scratch-removal gain reported above.

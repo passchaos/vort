@@ -16018,9 +16018,19 @@ reuse, so production keeps the simpler independently owned plans.
   symbol-indexed transition pass. The restored builder enumerates final states
   directly and visits the complement for dense 226/208/255 probabilities.
   Against `e15013d1`, 15 alternating-order complete 13-row pairs improve
-  `large_json` by 1.0425x (15/15), `binary_mixed` by 1.0275x (14/15), and keep
-  `huffman80k` neutral-positive at 1.0052x. The row-median geometric mean is
-  1.0065x. Sampling reduces direct builder attribution from 8.80% to 5.51%,
+  `large_json` by 1.0422x (15/15), `binary_mixed` by 1.0284x (15/15), and keep
+  `huffman80k` neutral-positive at 1.0025x. The row-median geometric mean is
+  1.0046x; longer noisy-control reruns recover `tiny`/`text` to 0.9967x/0.9926x.
+  Sampling reduces direct builder attribution from 8.80% to 4.46%,
   while all major decode helper addresses remain identical. The table oracle,
   five-row profile gate, 13-row reference gate, 276-case compatibility matrix,
   and 9,900-frame decodecorpus pass.
+- The restored 256-state builder now computes transition widths and baseline
+  strides once per symbol instead of calling `log2(next_state)` and shifting
+  for every final state. Each symbol's contiguous `[p, 2p)` next-state range
+  crosses at most one power-of-two boundary; absent symbols are skipped before
+  the calculation. Against `fa050e76`, 15 alternating pairs improve
+  `large_json` by 1.0151x median / 1.0164x geometric throughput with 14/15 wins;
+  `binary_mixed` improves 1.0035x and `huffman80k` remains neutral. The same
+  table oracle, profile/reference gates, compatibility matrix, and decodecorpus
+  validate the finalized implementation.
