@@ -993,6 +993,20 @@ measure `1.1979x` median / `1.1990x` geometric, range `1.1881x`--`1.2095x`;
 5/15 runs clear 1.20x. The row is therefore materially improved but remains
 open under the strict every-run 1.20x requirement.
 
+A follow-up AArch64 builder specializes normalized tables whose dominant
+symbol owns at least 192 of 256 states. It enumerates only the sparse gap
+states, then writes each contiguous dominant-symbol run in four packed table
+entries at a time; all lower-density distributions retain the established
+bitset/`ctz` builder. The existing randomized 256-state oracle and the three
+locked `large_json` distributions compare every generated entry with the
+generic mapped builder. Against frozen committed candidate
+`5247b6e2be7fc9999cc57f07411af17265366c72960996e63844942e3fc4742b`,
+21 alternating pairs improve `large_json` by `1.0197x` median / `1.0202x`
+geometric throughput with 21/21 wins and a `1.0121x` minimum. Fifteen
+5,000-iteration comparisons against libzstd 1.5.7 reach `1.2269x` median /
+`1.2266x` geometric, range `1.2121x`--`1.2382x`; every run now clears the
+strict 1.20x floor, so `large_json` is closed.
+
 The reference benchmark now alternates the five Vort and libzstd samples
 instead of measuring all Vort samples, then allocation, then all reference
 samples. It still reports each codec's best sample and uses the same payload,

@@ -11,6 +11,94 @@ pub const text_section = switch (builtin.object_format) {
 pub const Error = error{CorruptFrame};
 const max_sequence_symbol_count = 53;
 
+inline fn writePackedMappedPhase(
+    entries: anytype,
+    start: usize,
+    count: usize,
+    base: u32,
+    additional_bits: u8,
+    state_bits: u8,
+    baseline: usize,
+    baseline_step: usize,
+) void {
+    const Entry = @TypeOf(entries[0]);
+    comptime {
+        std.debug.assert(@sizeOf(Entry) == 8);
+        std.debug.assert(@offsetOf(Entry, "base") == 0);
+        std.debug.assert(@offsetOf(Entry, "next_state") == 4);
+        std.debug.assert(@offsetOf(Entry, "additional_bits") == 6);
+        std.debug.assert(@offsetOf(Entry, "state_bits") == 7);
+    }
+    const fixed_word = @as(u64, base) |
+        (@as(u64, additional_bits) << 48) |
+        (@as(u64, state_bits) << 56);
+    var index: usize = 0;
+    while (count - index >= 4) : (index += 4) {
+        const next_words: @Vector(4, u64) = .{
+            baseline + index * baseline_step,
+            baseline + (index + 1) * baseline_step,
+            baseline + (index + 2) * baseline_step,
+            baseline + (index + 3) * baseline_step,
+        };
+        const packed_words = @as(@Vector(4, u64), @splat(fixed_word)) |
+            (next_words << @as(@Vector(4, u6), @splat(32)));
+        const destination: *align(1) @Vector(4, u64) = @ptrCast(&entries[start + index]);
+        destination.* = packed_words;
+    }
+    while (index < count) : (index += 1) {
+        entries[start + index] = .{
+            .base = base,
+            .additional_bits = additional_bits,
+            .next_state = @intCast(baseline + index * baseline_step),
+            .state_bits = state_bits,
+        };
+    }
+}
+
+inline fn writeDenseMappedRun(
+    entries: anytype,
+    start: usize,
+    end: usize,
+    base: u32,
+    additional_bits: u8,
+    double_state_count: usize,
+    single_state_count: usize,
+    share_size_log: u8,
+    share_size: usize,
+    ordinal: *usize,
+) void {
+    var state = start;
+    if (ordinal.* < double_state_count) {
+        const count = @min(end - state, double_state_count - ordinal.*);
+        writePackedMappedPhase(
+            entries,
+            state,
+            count,
+            base,
+            additional_bits,
+            share_size_log + 1,
+            (single_state_count + ordinal.* * 2) * share_size,
+            2 * share_size,
+        );
+        state += count;
+        ordinal.* += count;
+    }
+    if (state < end) {
+        const count = end - state;
+        writePackedMappedPhase(
+            entries,
+            state,
+            count,
+            base,
+            additional_bits,
+            share_size_log,
+            (ordinal.* - double_state_count) * share_size,
+            share_size,
+        );
+        ordinal.* += count;
+    }
+}
+
 /// Build a 256-state mapped FSE table after the wire parser has verified the
 /// normalized-count sum and established that no `-1` probability is present.
 /// Per-symbol state bitsets construct final mapped entries directly, removing
@@ -114,6 +202,48 @@ pub noinline fn buildNoLowProbabilityAssumeValid(
             for (0..probability) |_| {
                 states[position >> 6] |= @as(u64, 1) << @intCast(position & 63);
                 position = (position + spread_step) & (table_size - 1);
+            }
+        }
+
+        if (comptime builtin.cpu.arch == .aarch64) {
+            if (probability >= 192) {
+                const base: u32 = @intCast(bases[symbol]);
+                var ordinal: usize = 0;
+                var run_start: usize = 0;
+                for (states, 0..) |word, word_index| {
+                    var gaps = ~word;
+                    while (gaps != 0) {
+                        const gap = word_index * 64 + @ctz(gaps);
+                        writeDenseMappedRun(
+                            entries,
+                            run_start,
+                            gap,
+                            base,
+                            additional_bits[symbol],
+                            double_state_count,
+                            single_state_count,
+                            share_size_log,
+                            share_size,
+                            &ordinal,
+                        );
+                        run_start = gap + 1;
+                        gaps &= gaps - 1;
+                    }
+                }
+                writeDenseMappedRun(
+                    entries,
+                    run_start,
+                    table_size,
+                    base,
+                    additional_bits[symbol],
+                    double_state_count,
+                    single_state_count,
+                    share_size_log,
+                    share_size,
+                    &ordinal,
+                );
+                std.debug.assert(ordinal == probability);
+                continue;
             }
         }
 

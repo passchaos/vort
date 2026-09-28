@@ -1719,6 +1719,14 @@ Recommended next comparison steps:
   1.5.7 comparisons reach 1.1979x median / 1.1990x geometric with a 1.1881x
   minimum, so the strict every-run 1.20x target remains open by about 0.2% at
   the median rather than being rounded up.
+- A subsequent AArch64 256-state builder writes dominant-symbol runs in four
+  packed entries while enumerating only sparse gaps for probabilities of at
+  least 192/256. All other distributions keep the existing bitset builder.
+  Against the committed split-sequence candidate, 21 alternating pairs improve
+  `large_json` by 1.0197x median / 1.0202x geometric with 21/21 wins. Fifteen
+  long libzstd 1.5.7 comparisons reach 1.2269x median / 1.2266x geometric and
+  1.2121x minimum, so `large_json` now clears the strict floor and only
+  `raw256k` remains open.
 - The caller-owned reference benchmark now alternates its five Vort/libzstd
   samples before selecting each codec's best observation, reducing the former
   scheduling-order bias on heterogeneous Apple cores without changing the
@@ -1728,10 +1736,10 @@ Recommended next comparison steps:
   strong enough to close its 1.20x requirement.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
-   mixed-FSE `numbered_json` row is complete, while `large_json` is within
-   about 0.2% of the 1.20x median target and `raw256k` remains scheduler- and
-   memory-bandwidth-sensitive. Close both rows without perturbing the already
-   leading compressed, RLE, single-sequence, or one-shot paths.
+   mixed-FSE `numbered_json` and multi-block `large_json` rows are complete,
+   while `raw256k` remains scheduler- and memory-bandwidth-sensitive. Close
+   that final row without perturbing the already leading compressed, RLE,
+   single-sequence, or one-shot paths.
 2. Add library-level range-latency rows for the public seekability tiers
    (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because even the
    ReleaseFast tier sweep still measures through the CLI bench surface.

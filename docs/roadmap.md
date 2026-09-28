@@ -16149,3 +16149,11 @@ reuse, so production keeps the simpler independently owned plans.
   32-byte loads before stores, while the reference benchmark alternates
   Vort/libzstd samples to reduce heterogeneous-core ordering bias; `raw256k`
   remains open under the same hard floor.
+- An AArch64-only dense FSE-table fill now enumerates the sparse gaps for a
+  symbol with probability at least 192/256 and writes each contiguous run as
+  four packed entries. The existing randomized table oracle remains exact.
+  Relative to committed candidate `5247b6e2`, 21/21 alternating pairs improve
+  `large_json` by 1.0197x median / 1.0202x geometric throughput. Fifteen long
+  libzstd 1.5.7 runs reach 1.2269x median / 1.2266x geometric and 1.2121x
+  minimum, closing `large_json`; `raw256k` is the remaining locked row below
+  the every-run 1.20x target.
