@@ -8,6 +8,8 @@ pub const generic_split_literal_min = 4 * 1024;
 pub const raw_all_fse_sequence_min = 32;
 pub const raw_all_fse_literal_min = split_literal_min;
 pub const raw_wide_match_literal_min = 4 * 1024;
+pub const raw_short_pair_literal_max = 64;
+pub const raw_short_pair_sequence_min = 4 * 1024;
 
 /// The small executor specializes long matches. More than 4,096 sequences in
 /// a <=128-KiB block implies less than 32 output bytes per sequence, so use the
@@ -47,6 +49,14 @@ pub inline fn preferWideRawMatchCopy(literal_bytes: usize) bool {
     return literal_bytes >= raw_wide_match_literal_min;
 }
 
+/// Very sparse raw literals plus high sequence density commonly represent a
+/// short repeating alphabet. Keep its zero-field paired-match specialization
+/// in a separate executor instance so ordinary all-FSE blocks pay no branch.
+pub inline fn preferRawShortPairs(literal_bytes: usize, sequence_count: usize) bool {
+    return literal_bytes <= raw_short_pair_literal_max and
+        sequence_count >= raw_short_pair_sequence_min;
+}
+
 test "small sequence executor excludes dense sparse-literal blocks" {
     try std.testing.expect(preferSmall(4096, 4096));
     try std.testing.expect(preferSmall(2083, 1834));
@@ -69,4 +79,7 @@ test "split Huffman executor covers sequence-dense and literal-dense blocks" {
     try std.testing.expect(!preferRawAllFse(raw_all_fse_literal_min - 1, raw_all_fse_sequence_min - 1));
     try std.testing.expect(!preferWideRawMatchCopy(raw_wide_match_literal_min - 1));
     try std.testing.expect(preferWideRawMatchCopy(raw_wide_match_literal_min));
+    try std.testing.expect(preferRawShortPairs(raw_short_pair_literal_max, raw_short_pair_sequence_min));
+    try std.testing.expect(!preferRawShortPairs(raw_short_pair_literal_max + 1, raw_short_pair_sequence_min));
+    try std.testing.expect(!preferRawShortPairs(raw_short_pair_literal_max, raw_short_pair_sequence_min - 1));
 }

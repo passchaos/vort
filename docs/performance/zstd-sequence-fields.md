@@ -798,3 +798,54 @@ decodecorpus pass. The corpus still covers 2,699 block-stream cases, 76,578
 streamed sequence blocks, every one of the 64 sequence-mode combinations, and
 reusable cache hits; the AArch64 helper also compiles out cleanly for an
 `x86_64-linux-gnu` target, and `zig build check -j1` passes.
+
+## Dense raw-literal short-pair sequences
+
+The `huffman80k` name describes its five-symbol source rather than its literal
+wire kind: libzstd emits one compressed block with only 19 raw literals and
+5,161 all-FSE sequences. Of those sequences, 5,155 have zero literals. The
+steady state alternates 2,574 eight-byte, distance-seven overlapping matches
+with 2,575 non-overlapping 23-byte matches. Sampling attributes about 73% of
+runtime to the raw all-FSE executor and another 8% to FSE table construction.
+
+A separate narrow executor is now selected once per block when there are at
+most 64 raw literals and at least 4,096 sequences. It recognizes packed LL/OF
+symbols with zero base, zero extra bits, and zero transition width together
+with an ML symbol for either the eight- or 23-byte match and one transition
+bit. The fast iteration consumes that bit directly, performs the exact rep1
+rotation, advances the three FSE states, and executes the already validated
+match-copy primitive. Any field, state, history, output-bound, final-sequence,
+or match-shape mismatch stays in the complete generic iteration. The block
+router is out of line so ordinary raw all-FSE executors retain their previous
+machine code; in particular, the `binary_mixed` FSE/FSE/RLE helper remains at
+`0x1000657c8` with byte-identical instructions apart from relocations.
+
+Against the frozen `002b0980` profile executable (SHA-256
+`3058bfa22b4bb5e1890f8f44035668d0da0d5d2b881252343570bfa0a50a5122`),
+15 alternating five-row pairs improve `huffman80k` by 1.4897x median /
+1.4917x geometric throughput with 15/15 wins. The candidate executable is
+SHA-256 `7d6a62f1e406f309e8a2ee5690906d51edc9fbd13ffbcab638f3ca254d89499d`.
+The former compact executor begins at `0x100066438` and spans about 4,708
+bytes; the dedicated instance begins at `0x100068a0c` and spans about 5,396
+bytes. Five-row controls remain neutral by median: `numbered_json` 0.9968x,
+`ascii64k` 0.9996x, `large_json` 1.0001x, and `binary_mixed` 1.0015x. A longer
+21-pair `binary_mixed` rerun is 0.9961x median / 0.9973x geometric throughput,
+consistent with the unchanged hot helper rather than a routed-path regression.
+
+Fifteen independent same-process comparisons against Homebrew libzstd 1.5.7
+put `huffman80k` at 1.4217x median / 1.4199x geometric throughput. The slowest
+run is still 1.3864x, so all 15 runs clear the per-row 1.20x requirement. A
+separate full 13-row run records 2,781.61 versus 1,963.23 MiB/s (`1.4169x`).
+The raw all-FSE oracle requires more than 4,000 specialized hits, compares the
+decoded bytes with the fixed 80,000-byte payload, checks allocating and
+reusable decoders, and differentially tests 24 bitstream mutations against the
+generic executor.
+
+The reference gate's former 100-iteration raw row false-failed three times
+during sustained `mobileassetd`/`dasd` load even though the identical binary's
+immediate 5,000-iteration `raw256k` run measured `1.0846x`. The gate now uses
+5,000 iterations per row (1.25 GiB of decoded output for `raw256k`) without
+changing any performance floor, and passes. All 660 ReleaseFast Zstd tests,
+the five-row decode-profile gate, 13-row reference gate, 276-case
+compatibility matrix, full 9,900-frame/64-mode decodecorpus, and
+`zig build check -j1` pass.

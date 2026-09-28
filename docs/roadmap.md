@@ -16088,3 +16088,19 @@ reuse, so production keeps the simpler independently owned plans.
   target. All 660 tests, decode-profile/reference gates, 276 compatibility
   cases, 9,900 decodecorpus frames, x86-64 cross compilation, and
   `zig build check -j1` pass.
+- Dense raw-literal all-FSE Zstd blocks now route once into a dedicated
+  short-pair executor when at most 64 literals feed at least 4,096 sequences.
+  Its steady loop recognizes zero-field LL/OF symbols plus one-bit ML
+  transitions directly from packed table words, rotates rep1 exactly, and
+  handles the dominant 8-byte/distance-7 and 23-byte match pair without the
+  general field group or match dispatcher. Against frozen `002b0980`, a
+  15-pair five-row matrix improves `huffman80k` by 1.4897x median / 1.4917x
+  geometric throughput with 15/15 wins; all four controls are neutral by
+  median, and a 21-pair `binary_mixed` control is 0.9961x median / 0.9973x
+  geometric with byte-identical hot instructions. Fifteen libzstd 1.5.7 runs
+  measure 1.4217x median, 1.4199x geometric, and 1.3864x minimum, so this row
+  now clears the 1.20x floor on every recorded run. The reference gate now uses
+  5,000 rather than 100 iterations per row after the old raw micro-sample
+  repeatedly false-failed under sustained system load; no floor was lowered.
+  All 660 tests, profile/reference gates, 276 compatibility cases, 9,900
+  decodecorpus frames, and the full check pass.

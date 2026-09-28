@@ -1673,6 +1673,18 @@ Recommended next comparison steps:
   inferred from four passing individual samples. All 660 tests,
   profile/reference gates, 276 compatibility cases, 9,900 decodecorpus frames,
   x86-64 cross compilation, and the full check pass.
+- The formerly largest decode gap, `huffman80k`, now routes its 19 raw literals
+  and 5,161 all-FSE sequences through a dedicated dense short-pair executor.
+  Packed zero-field LL/OF shapes plus a one-bit ML transition cover the 2,574
+  eight-byte/distance-seven matches and 2,575 23-byte matches while every
+  mismatch retains the full decoder. A 15-pair five-row matrix improves the
+  target by 1.4897x median / 1.4917x geometric throughput with 15/15 wins and
+  neutral control medians. Fifteen independent libzstd 1.5.7 comparisons reach
+  1.4217x median and 1.3864x minimum, so `huffman80k` is removed from the list
+  of rows below the 1.20x floor. The reference gate now uses 5,000 iterations
+  per row to replace a scheduler-sensitive 100-iteration raw sample without
+  lowering any floor. All 660 tests, profile/reference gates, 276 compatibility
+  cases, 9,900 decodecorpus frames, and the full check pass.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
@@ -1680,7 +1692,7 @@ Recommended next comparison steps:
    warmed and reaches `0.9559x` one-shot after successor-aware table retention
    plus compact literal/rep0 field decoding. The acceptance target is now at
    least `1.20x` libzstd on every locked row; prioritize the remaining
-   `huffman80k`, `large_json`, `raw256k`, `numbered_json`, and `ascii64k` gaps
+   `large_json`, `raw256k`, `numbered_json`, and `ascii64k` gaps
    without
    perturbing already-leading raw/RLE, single-sequence, or one-shot paths.
 2. Add library-level range-latency rows for the public seekability tiers
