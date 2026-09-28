@@ -1693,6 +1693,14 @@ Recommended next comparison steps:
   1.1375x, leaving about 5.5% additional Vort throughput before this row clears
   the required 1.20x floor. All 660 tests, profile/reference gates, 276
   compatibility cases, 9,900 decodecorpus frames, and the full check pass.
+- The 64 KiB `ascii64k` row now routes its seven-bit, four-stream literal block
+  through a 14-bit X2 table whose entries always decode two symbols. A final
+  15-pair focused comparison improves the row by 1.3054x median / 1.3088x geometric
+  throughput with 15/15 wins and sub-one-percent control movement. Fifteen
+  same-process comparisons against libzstd 1.5.7 reach 1.5182x median / 1.5205x
+  geometric throughput, with a 1.4979x minimum and 15/15 runs above the 1.20x
+  floor. Guarded-output, truncation, selector, full test, compatibility, and
+  decodecorpus coverage pass, so `ascii64k` is no longer an open decode gap.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the
@@ -1700,7 +1708,7 @@ Recommended next comparison steps:
    warmed and reaches `0.9559x` one-shot after successor-aware table retention
    plus compact literal/rep0 field decoding. The acceptance target is now at
    least `1.20x` libzstd on every locked row; prioritize the remaining
-   `large_json`, `raw256k`, `numbered_json`, and `ascii64k` gaps
+   `large_json`, `raw256k`, and `numbered_json` gaps
    without
    perturbing already-leading raw/RLE, single-sequence, or one-shot paths.
 2. Add library-level range-latency rows for the public seekability tiers

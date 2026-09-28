@@ -399,6 +399,7 @@ const CompleteHuffmanLiteralLookup = huffman_lookup.CompleteTable(11);
 const NarrowHuffmanLiteralLookup = huffman_lookup.Table(7);
 
 extern fn vortZstdHuffmanX2Decode(request: *const huffman_x2_abi.Request) callconv(.c) c_int;
+extern fn vortZstdHuffmanWideX2Decode(request: *const huffman_x2_abi.Request) callconv(.c) c_int;
 
 pub const FrameOptions = struct {
     include_content_size: bool = true,
@@ -7929,9 +7930,12 @@ noinline fn decodeLargeFourStreamHuffman(
     dest: []u8,
 ) align(64) linksection(huffman_only_decode_text_section) Error!bool {
     const huffman_tree = section.huffman_tree orelse return false;
+    const use_wide_x2 = huffman_tree.max_bit_count == 7 and
+        section.regenerated_size >= 64 * 1024 and
+        section.compressed_size * 1000 <= section.regenerated_size * 900;
     if ((!builtin.is_test or !test_disable_x2_huffman_decode) and
         section.regenerated_size >= split_x2_huffman_literal_min and
-        section.compressed_size * 1000 <= section.regenerated_size * 660)
+        (section.compressed_size * 1000 <= section.regenerated_size * 660 or use_wide_x2))
     {
         const streams = switch (section.huffman_streams) {
             .four => |four| four,
@@ -7944,8 +7948,13 @@ noinline fn decodeLargeFourStreamHuffman(
             .dest_ptr = dest.ptr,
             .dest_len = dest.len,
         };
-        const status: huffman_x2_abi.Status = if (builtin.is_test)
-            huffman_x2_test.decodeRequest(&request)
+        const status: huffman_x2_abi.Status = if (builtin.is_test) status: {
+            break :status if (use_wide_x2)
+                huffman_x2_test.decodeWideRequest(&request)
+            else
+                huffman_x2_test.decodeRequest(&request);
+        } else if (use_wide_x2)
+            @enumFromInt(vortZstdHuffmanWideX2Decode(&request))
         else
             @enumFromInt(vortZstdHuffmanX2Decode(&request));
         switch (status) {
@@ -8045,6 +8054,29 @@ noinline fn decodeFourStreamHuffmanReservoir(
         huffman_reservoir.Reservoir.init(readers[2]) orelse unreachable,
         huffman_reservoir.Reservoir.init(readers[3]) orelse unreachable,
     };
+    if (width <= 7) {
+        while (ends[3] - output_positions[3] >= 8 and
+            reservoirs[0].canDecodeEight(width) and
+            reservoirs[1].canDecodeEight(width) and
+            reservoirs[2].canDecodeEight(width) and
+            reservoirs[3].canDecodeEight(width))
+        {
+            for (0..4) |stream_index| {
+                var decoded: [8]u8 = undefined;
+                inline for (0..8) |symbol_index| {
+                    const prefix = reservoirs[stream_index].peek(CompleteHuffmanLiteralLookup.bit_width);
+                    const entry = lookup.lookupAssumeComplete(prefix);
+                    decoded[symbol_index] = entry.symbol;
+                    reservoirs[stream_index].consume(entry.bit_count);
+                }
+                dest[output_positions[stream_index]..][0..8].* = decoded;
+            }
+            inline for (0..4) |stream_index| {
+                reservoirs[stream_index].reload();
+                output_positions[stream_index] += 8;
+            }
+        }
+    }
     while (ends[3] - output_positions[3] >= 5 and
         reservoirs[0].canDecodeFive(width) and
         reservoirs[1].canDecodeFive(width) and
@@ -33644,6 +33676,61 @@ test "zstd literal-only writer emits large four-stream Huffman literals" {
         corrupt[block_offset + 3 + stream_offset + stream.len - 1] = 0;
         try std.testing.expectError(error.CorruptFrame, decodeNativeFrameInto(corrupt, corrupt_output));
     }
+}
+
+test "zstd wide X2 table decodes seven-bit four-stream literals" {
+    const payload = try std.testing.allocator.alloc(u8, 64 * 1024);
+    defer std.testing.allocator.free(payload);
+    var state: u32 = 31;
+    for (payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast(32 + ((state >> 16) % 95));
+    }
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(HuffmanLiteralStreams.four, std.meta.activeTag(section.huffman_streams));
+    try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+    const tree = section.huffman_tree orelse return error.CorruptFrame;
+    try std.testing.expectEqual(@as(u4, 7), tree.max_bit_count);
+    try std.testing.expect(section.compressed_size * 1000 > section.regenerated_size * 660);
+    try std.testing.expect(section.compressed_size * 1000 <= section.regenerated_size * 900);
+
+    const streams = section.huffman_streams.four;
+    const guarded = try std.testing.allocator.alloc(u8, payload.len + 64);
+    defer std.testing.allocator.free(guarded);
+    @memset(guarded, 0xa5);
+    var request: huffman_x2_abi.Request = .{
+        .tree = &tree,
+        .stream_ptrs = .{ streams[0].ptr, streams[1].ptr, streams[2].ptr, streams[3].ptr },
+        .stream_lens = .{ streams[0].len, streams[1].len, streams[2].len, streams[3].len },
+        .dest_ptr = guarded.ptr,
+        .dest_len = payload.len,
+    };
+    try std.testing.expectEqual(huffman_x2_abi.Status.success, huffman_x2_test.decodeWideRequest(&request));
+    try std.testing.expectEqualSlices(u8, payload, guarded[0..payload.len]);
+    for (guarded[payload.len..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
+    request.stream_lens[0] -= 1;
+    try std.testing.expectEqual(huffman_x2_abi.Status.truncated, huffman_x2_test.decodeWideRequest(&request));
+
+    test_disable_x2_huffman_decode = false;
+    test_x2_huffman_decode_hits = 0;
+    defer {
+        test_disable_x2_huffman_decode = false;
+        test_x2_huffman_decode_hits = 0;
+    }
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectEqual(@as(usize, 1), test_x2_huffman_decode_hits);
 }
 
 test "zstd literal-only writer reuses Huffman tree across blocks" {

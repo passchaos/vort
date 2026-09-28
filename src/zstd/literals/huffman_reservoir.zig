@@ -37,6 +37,20 @@ pub const Reservoir = struct {
         return self.byte_offset >= 7;
     }
 
+    /// Eight symbols consume at most 56 bits when the complete tree is at most
+    /// seven bits wide, leaving the low sentinel available for refill.
+    pub inline fn canDecodeEight(self: Reservoir, width: u4) bool {
+        std.debug.assert(width != 0 and width <= 7);
+        return self.byte_offset >= 7;
+    }
+
+    /// Four wide X2 entries consume at most 56 bits when the lookup spans at
+    /// most fourteen bits, matching the same seven-byte refill bound.
+    pub inline fn canDecodeFourWide(self: Reservoir, width: u4) bool {
+        std.debug.assert(width != 0 and width <= 14);
+        return self.byte_offset >= 7;
+    }
+
     pub inline fn peek(self: Reservoir, width: u4) usize {
         std.debug.assert(width != 0 and width <= self.remainingBits());
         return @intCast(self.bits >> @intCast(64 - @as(u7, width)));
@@ -132,5 +146,37 @@ test "persistent Huffman reservoir batches match reverse reader and preserve tai
             try reference.expectEnd();
             try tail.expectEnd();
         }
+    }
+}
+
+test "persistent Huffman reservoir decodes eight narrow prefixes per refill" {
+    var bytes: [40]u8 = undefined;
+    for (&bytes, 0..) |*byte, index| byte.* = @truncate(index * 61 + 23);
+    bytes[bytes.len - 1] = 0x80;
+    var reference = try bit_reader.Reader.init(&bytes);
+    var reservoir = Reservoir.init(reference) orelse unreachable;
+    while (reservoir.canDecodeEight(7)) {
+        inline for (0..8) |_| {
+            try std.testing.expectEqual(try reference.read(7), reservoir.peek(7));
+            reservoir.consume(7);
+        }
+        reservoir.reload();
+        try std.testing.expectEqual(reference.available(), reservoir.remainingBits());
+    }
+}
+
+test "persistent Huffman reservoir decodes four wide prefixes per refill" {
+    var bytes: [40]u8 = undefined;
+    for (&bytes, 0..) |*byte, index| byte.* = @truncate(index * 47 + 29);
+    bytes[bytes.len - 1] = 0x80;
+    var reference = try bit_reader.Reader.init(&bytes);
+    var reservoir = Reservoir.init(reference) orelse unreachable;
+    while (reservoir.canDecodeFourWide(14)) {
+        inline for (0..4) |_| {
+            try std.testing.expectEqual(try reference.read(14), reservoir.peek(14));
+            reservoir.consume(14);
+        }
+        reservoir.reload();
+        try std.testing.expectEqual(reference.available(), reservoir.remainingBits());
     }
 }

@@ -16114,3 +16114,15 @@ reuse, so production keeps the simpler independently owned plans.
   the row still needs about 5.5% and remains below the 1.20x acceptance floor.
   All 660 tests, profile/reference gates, 276 compatibility cases, 9,900
   decodecorpus frames, and the full check pass.
+- Seven-bit, sequence-free four-stream Huffman sections of at least 64 KiB now
+  use a 16,384-entry, 14-bit X2 table when their literal ratio is at most 0.90.
+  Every lookup emits exactly two symbols, so four persistent reservoirs produce
+  32 bytes from 16 dependent table lookups instead of the X1 loop's 32. Against
+  frozen X1 `e92e5b70`, 15 focused alternating pairs improve `ascii64k` by
+  1.3054x median / 1.3088x geometric throughput with 15/15 wins; all four
+  controls remain within one percent. Fifteen independent libzstd 1.5.7 runs
+  reach 1.5182x median / 1.5205x geometric throughput with a 1.4979x minimum,
+  so every run clears the per-row 1.20x floor. All 664 ReleaseFast Zstd tests,
+  profile/reference gates, 276 compatibility cases, 9,900 decodecorpus frames,
+  and the full check pass. The remaining below-floor rows are `raw256k`,
+  `numbered_json`, and `large_json`.

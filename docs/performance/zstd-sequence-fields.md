@@ -882,3 +882,42 @@ reaches 1.20x, so this row remains open and needs another roughly 5.5% median
 Vort improvement rather than being declared complete. All 660 ReleaseFast
 Zstd tests, the profile/reference gates, 276-case compatibility matrix, full
 9,900-frame/64-mode decodecorpus, and `zig build check -j1` pass.
+
+## Wide two-symbol table for seven-bit literals
+
+The sequence-free `ascii64k` frame has a 7-bit Huffman tree and a compressed-
+literal ratio near 0.83. The existing 11-bit X2 table cannot represent two
+worst-case symbols in one entry, so its larger entries do not remove the hot
+dependent lookup and it loses to the tuned X1 reservoir on this shape. The new
+wide route builds a 16,384-entry, 14-bit table only for 7-bit four-stream
+sections of at least 64 KiB whose literal ratio is at most 0.90. Every table
+entry contains exactly two output bytes and their combined bit count. Four
+persistent reservoirs therefore emit eight bytes per stream from four lookups
+before refill, halving the steady-state lookup chain. Other X2 and X1 shapes
+retain their established routes.
+
+The initial X1 follow-up remains useful as the fallback: widths up to seven
+decode eight symbols per stream before refill. Against the frozen X1 profile
+binary (SHA-256
+`e92e5b7092c06c6af38931544e46c9426522605692db5376f3665cb1fd719035`),
+the final wide-table profile binary (SHA-256
+`77da7ba1ca86a4e55c3d46f004e8a516020d984a648bcf9a57b82daac3bcded1`)
+improves focused `ascii64k` by 1.3054x median / 1.3088x geometric throughput
+over 15 alternating pairs with 15/15 wins. A separate 15-pair five-row matrix
+with the same hot instructions records control medians of `numbered_json`
+0.9995x, `huffman80k` 1.0024x, `large_json` 0.9949x, and `binary_mixed`
+1.0013x; all movements are below one percent and are treated as layout/noise,
+not cross-row gains or regressions.
+
+Fifteen independent same-process comparisons using the final reference binary
+(SHA-256
+`04a188870b68250f933516ab3e744f767f044c4150f28e840608c24ba2aaa1e9`)
+measure Vort/libzstd 1.5.7 at 1.5182x median / 1.5205x geometric throughput.
+The minimum is 1.4979x and all 15 runs clear the required 1.20x floor. A
+separate 5,000-iteration complete reference gate records 1.5017x. The dedicated
+oracle covers the 7-bit table, direct ABI, guarded output, truncation, and the
+production selector. All 664 ReleaseFast Zstd tests, the five-row profile gate,
+13-row reference gate, 276-case compatibility matrix, full 9,900-frame/64-mode
+decodecorpus, and `zig build check -j1` pass. `ascii64k` is therefore removed
+from the below-floor list; `raw256k`, `numbered_json`, and `large_json` remain
+open.
