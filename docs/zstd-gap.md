@@ -1685,6 +1685,14 @@ Recommended next comparison steps:
   per row to replace a scheduler-sensitive 100-iteration raw sample without
   lowering any floor. All 660 tests, profile/reference gates, 276 compatibility
   cases, 9,900 decodecorpus frames, and the full check pass.
+- The one-shot `numbered_json` path now keeps a persistent reverse reservoir
+  across three pairs of Huffman-weight FSE states and groups each safely
+  bounded mixed-FSE sequence's fields into one load. Fifteen five-row A/B pairs
+  improve the target by 1.0822x median / 1.0853x geometric throughput with
+  14/15 wins and neutral control medians. Its 15-run libzstd 1.5.7 median is
+  1.1375x, leaving about 5.5% additional Vort throughput before this row clears
+  the required 1.20x floor. All 660 tests, profile/reference gates, 276
+  compatibility cases, 9,900 decodecorpus frames, and the full check pass.
 
 1. Keep closing the remaining measured one-shot general decode gap: the small
    mixed-FSE `numbered_json` row leads libzstd in both modes, and the

@@ -214,6 +214,8 @@ var test_large_fse_no_low_builder_hits: usize = 0;
 var test_small_mixed_fse_fast_literal_hits: usize = 0;
 var test_small_mixed_fse_match_56_hits: usize = 0;
 var test_small_mixed_fse_match_6_7_hits: usize = 0;
+var test_small_mixed_field_group_hits: usize = 0;
+var test_huffman_weight_pair_group_hits: usize = 0;
 var test_reusable_match_56_hits: usize = 0;
 var test_reusable_match_6_7_hits: usize = 0;
 var test_disable_all_fse_raw_decode = false;
@@ -8682,6 +8684,34 @@ inline fn decodeHuffmanWeightsFse(compressed: []const u8, weights: *[256]u4) Err
     var index: usize = 0;
     var power_sum: u32 = 0;
     var counts: [16]u16 = @splat(0);
+    if (huffman_reservoir.Reservoir.init(reverse)) |initial_reservoir| {
+        var reservoir = initial_reservoir;
+        while (index <= 248 and reservoir.canDecodeFive(6)) {
+            inline for (0..3) |_| {
+                const even = entries[even_state];
+                const odd = entries[odd_state];
+                try recordDecodedHuffmanWeight(weights, index, even.symbol, &power_sum, &counts);
+                try recordDecodedHuffmanWeight(weights, index + 1, odd.symbol, &power_sum, &counts);
+                index += 2;
+                const even_bits = if (even.bits == 0) 0 else blk: {
+                    const value = reservoir.peek(@intCast(even.bits));
+                    reservoir.consume(even.bits);
+                    break :blk value;
+                };
+                const odd_bits = if (odd.bits == 0) 0 else blk: {
+                    const value = reservoir.peek(@intCast(odd.bits));
+                    reservoir.consume(odd.bits);
+                    break :blk value;
+                };
+                even_state = even.baseline + even_bits;
+                odd_state = odd.baseline + odd_bits;
+                if (even_state >= table_len or odd_state >= table_len) return error.CorruptFrame;
+                if (builtin.is_test) test_huffman_weight_pair_group_hits += 1;
+            }
+            reservoir.reload();
+        }
+        reverse.remaining_bits = reservoir.remainingBits();
+    }
     while (index < 254) {
         const even = entries[even_state];
         try recordDecodedHuffmanWeight(weights, index, even.symbol, &power_sum, &counts);
@@ -8818,7 +8848,10 @@ test "zstd linear Huffman tree builder matches standard direct and FSE trees" {
         "8751108babaaaaaaaaaaaaaaaaaaaaaaaaaaaa6a82";
     var fse: [fse_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&fse, fse_hex);
+    test_huffman_weight_pair_group_hits = 0;
+    defer test_huffman_weight_pair_group_hits = 0;
     try expectLinearHuffmanTreeMatchesStd(&fse);
+    try std.testing.expect(test_huffman_weight_pair_group_hits != 0);
 
     var weights: [256]u4 = undefined;
     const compressed_size: usize = fse[0];
@@ -29693,10 +29726,12 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     test_small_mixed_fse_fast_literal_hits = 0;
     test_small_mixed_fse_match_56_hits = 0;
     test_small_mixed_fse_match_6_7_hits = 0;
+    test_small_mixed_field_group_hits = 0;
     defer {
         test_small_mixed_fse_fast_literal_hits = 0;
         test_small_mixed_fse_match_56_hits = 0;
         test_small_mixed_fse_match_6_7_hits = 0;
+        test_small_mixed_field_group_hits = 0;
     }
     const encoded_hex_file = @embedFile("zstd/testdata/libzstd-numbered-json.frame.hex");
     const encoded_hex = std.mem.trim(u8, encoded_hex_file, " \r\n\t");
@@ -29765,6 +29800,7 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     try std.testing.expectEqual(generic_section.regenerated_size, test_small_mixed_fse_fast_literal_hits);
     try std.testing.expectEqual(@as(usize, 17), test_small_mixed_fse_match_56_hits);
     try std.testing.expectEqual(@as(usize, 18), test_small_mixed_fse_match_6_7_hits);
+    try std.testing.expect(test_small_mixed_field_group_hits > 30);
 
     try std.testing.expectEqual(payload.items.len, generic_written);
     try std.testing.expectEqual(generic_written, specialized_written);
@@ -39576,16 +39612,42 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
         const ll_symbol = sequence_predefined.literal_symbols[ll_state];
         const of_symbol = offset_fse.entries[of_state];
         const ml_symbol = sequence_predefined.match_symbols[ml_state];
-        const offset_extra = try reader.readSequenceField(of_symbol.additional_bits);
-        const match_len = std.math.add(usize, ml_symbol.base, try reader.readSequenceField(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
-        const literal_len = std.math.add(usize, ll_symbol.base, try reader.readSequenceField(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
-        const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &repcodes);
-        remaining -= 1;
-        if (remaining != 0) {
-            ll_state = try nextSequenceState(&reader, ll_symbol);
-            ml_state = try nextSequenceState(&reader, ml_symbol);
-            of_state = try nextSequenceState(&reader, of_symbol);
-        } else try reader.expectEnd();
+        const transition_bits: u8 = if (remaining == 1)
+            0
+        else
+            ll_symbol.state_bits + ml_symbol.state_bits + of_symbol.state_bits;
+        const total_bits = of_symbol.additional_bits + ml_symbol.additional_bits +
+            ll_symbol.additional_bits + transition_bits;
+        const sequence: DecodedSequence = if (total_bits <= 56 and reader.remaining_bits >= 64) grouped: {
+            var fields = sequence_field_group.Group.init(&reader, total_bits) orelse unreachable;
+            if (builtin.is_test) test_small_mixed_field_group_hits += 1;
+            const offset_extra = fields.read(of_symbol.additional_bits);
+            const match_len = std.math.add(usize, ml_symbol.base, fields.read(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
+            const literal_len = std.math.add(usize, ll_symbol.base, fields.read(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+            const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &repcodes);
+            remaining -= 1;
+            if (remaining != 0) {
+                ll_state = ll_symbol.next_state + fields.read(ll_symbol.state_bits);
+                ml_state = ml_symbol.next_state + fields.read(ml_symbol.state_bits);
+                of_state = of_symbol.next_state + fields.read(of_symbol.state_bits);
+            } else try reader.expectEnd();
+            break :grouped .{ .literal_len = literal_len, .match_len = match_len, .match_offset = match_offset };
+        } else fallback: {
+            const offset_extra = try reader.readSequenceField(of_symbol.additional_bits);
+            const match_len = std.math.add(usize, ml_symbol.base, try reader.readSequenceField(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
+            const literal_len = std.math.add(usize, ll_symbol.base, try reader.readSequenceField(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+            const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &repcodes);
+            remaining -= 1;
+            if (remaining != 0) {
+                ll_state = try nextSequenceState(&reader, ll_symbol);
+                ml_state = try nextSequenceState(&reader, ml_symbol);
+                of_state = try nextSequenceState(&reader, of_symbol);
+            } else try reader.expectEnd();
+            break :fallback .{ .literal_len = literal_len, .match_len = match_len, .match_offset = match_offset };
+        };
+        const literal_len = sequence.literal_len;
+        const match_len = sequence.match_len;
+        const match_offset = sequence.match_offset;
 
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
         try huffman_lookup.copyBorrowed(

@@ -16104,3 +16104,13 @@ reuse, so production keeps the simpler independently owned plans.
   repeatedly false-failed under sustained system load; no floor was lowered.
   All 660 tests, profile/reference gates, 276 compatibility cases, 9,900
   decodecorpus frames, and the full check pass.
+- FSE-compressed Huffman weights now retain a reverse reservoir across three
+  even/odd state pairs before refilling, and the small mixed-FSE decoder groups
+  each fully bounded sequence's extra and transition fields into one load.
+  Against frozen `b55f2111`, a 15-pair five-row matrix improves
+  `numbered_json` by 1.0822x median / 1.0853x geometric throughput with 14/15
+  wins and a 1.0156x row-median geometric mean; control medians remain between
+  0.9950x and 1.0035x. Fifteen libzstd 1.5.7 runs reach only 1.1375x median, so
+  the row still needs about 5.5% and remains below the 1.20x acceptance floor.
+  All 660 tests, profile/reference gates, 276 compatibility cases, 9,900
+  decodecorpus frames, and the full check pass.

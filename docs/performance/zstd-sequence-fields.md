@@ -849,3 +849,36 @@ changing any performance floor, and passes. All 660 ReleaseFast Zstd tests,
 the five-row decode-profile gate, 13-row reference gate, 276-case
 compatibility matrix, full 9,900-frame/64-mode decodecorpus, and
 `zig build check -j1` pass.
+
+## Persistent Huffman-weight reservoir and grouped small fields
+
+The `numbered_json` one-shot path still spends substantial time rebuilding its
+FSE-compressed Huffman tree and then decoding 39 mixed-table sequences. The
+weight stream has two independent FSE states, so its retained fast path keeps a
+64-bit reverse reservoir across three even/odd pairs before refilling instead
+of reconstructing a small reservoir for every transition. The last fewer than
+64 bits retain the checked reader, including legal partial final transitions.
+
+The same frame's LL=Predefined/OF=Compressed/ML=Predefined executor now groups
+all extra fields and nonterminal transitions when the complete sequence fits
+within 56 bits and at least eight physical bytes remain. A separate fallback
+retains the original per-field checked reads. The fixed-frame oracle proves
+that more than 30 of 39 sequences use grouped fields, while the existing
+specialized/generic comparison, short-output progress check, and every
+single-bit sequence mutation retain exact results and error ordering.
+
+Against the frozen `b55f2111` profile binary (SHA-256
+`7d6a62f1e406f309e8a2ee5690906d51edc9fbd13ffbcab638f3ca254d89499d`),
+15 alternating five-row pairs improve `numbered_json` by 1.0822x median /
+1.0853x geometric throughput with 14/15 wins. The candidate binary is SHA-256
+`a1db3f61094c9fcb54e5e362c599b81b7a7ea462176194a80f6233fff7440984`.
+Control medians are `huffman80k` 0.9997x, `ascii64k` 1.0003x, `large_json`
+0.9950x, and `binary_mixed` 1.0035x; the five-row median geometric mean is
+1.0156x.
+
+Fifteen independent same-process comparisons against libzstd 1.5.7 measure
+`numbered_json` at 1.1375x median / 1.1365x geometric throughput. No run yet
+reaches 1.20x, so this row remains open and needs another roughly 5.5% median
+Vort improvement rather than being declared complete. All 660 ReleaseFast
+Zstd tests, the profile/reference gates, 276-case compatibility matrix, full
+9,900-frame/64-mode decodecorpus, and `zig build check -j1` pass.
