@@ -15965,3 +15965,13 @@ reuse, so production keeps the simpler independently owned plans.
   median Vort/libbrotli 1.2.0 ratio rises from 0.7551x to 0.7834x. Six focused
   dictionary tests, the 13-row reference gate, and the 7,056-case one-shot and
   progressive upstream matrices pass; broad Brotli leadership remains open.
+- Sparse Brotli command trees in the flat 16--64 literal-tree tier now build a
+  capacity-checked 10-bit lookup in their existing unused entry storage while
+  distance trees retain the established 9-bit lookup. Dense command trees fall
+  back atomically to the prior 9-bit route. Against `206f18ee`, 15
+  alternating-order `clustered_q8` pairs improve median throughput from
+  1234.51 to 1241.19 MiB/s, a 1.0076x paired median and 1.0084x geometric-mean
+  gain with 13/15 wins. Five-second sampling reduces observed 704-symbol
+  long-code fallback from 2.77% to 1.44%. Lookup equivalence, atomic fallback,
+  the 13-row reference gate, and the 7,056-case one-shot/progressive upstream
+  matrices pass; broad Brotli leadership remains open.

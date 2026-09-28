@@ -1383,6 +1383,11 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
             if (self.single_symbol) |symbol| return symbol;
             return self.table.decodeValueTailLookup9Fixed(reader);
         }
+
+        pub inline fn decodeTailLookup10Fixed(self: *const Self, reader: anytype) Error!u16 {
+            if (self.single_symbol) |symbol| return symbol;
+            return self.table.decodeValueTailLookup10Fixed(reader);
+        }
     };
 }
 
@@ -6628,13 +6633,30 @@ noinline fn processFlatLiteralTailLookupMetaBlock(
 ) Error!bool {
     var literal_lookups: [inline_literal_tree_count]TailLiteralLookup = undefined;
     if (!try prepareFlatLiteralTailLookups(header, &literal_lookups)) return false;
-    const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(header);
     var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
     defer fast_reader.syncTo(reader);
-    if (auxiliary_tail_lookups)
-        try processTailLookupCompressedPayload(true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups)
+    if (prepareCommand10AuxiliaryTailLookups(header))
+        try processTailLookupCompressedPayload(true, true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups)
+    else if (prepareAuxiliaryTailLookups(header))
+        try processTailLookupCompressedPayload(true, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups)
     else
-        try processTailLookupCompressedPayload(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
+        try processTailLookupCompressedPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups);
+    return true;
+}
+
+fn prepareCommand10AuxiliaryTailLookups(header: *MinimalCompressedHeader) bool {
+    // Check every table before writing any tail so a failed wider attempt can
+    // fall back to the existing atomic nine-bit preparation unchanged.
+    if (header.command_block.block_type_count > inline_command_tree_count or
+        header.distance_tree_count > inline_distance_tree_count) return false;
+    for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree|
+        if (tree.single_symbol == null and !tree.table.canBuildTailLookup10()) return false;
+    for (header.distance_trees[0..header.distance_tree_count]) |*tree|
+        if (tree.single_symbol == null and !tree.table.canBuildTailLookup9()) return false;
+    for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree|
+        std.debug.assert(tree.single_symbol != null or tree.table.buildTailLookup10());
+    for (header.distance_trees[0..header.distance_tree_count]) |*tree|
+        std.debug.assert(tree.single_symbol != null or tree.table.buildTailLookup9());
     return true;
 }
 
@@ -6831,6 +6853,7 @@ noinline fn processDecodedCompressedPayload(
 
 noinline fn processTailLookupCompressedPayload(
     comptime auxiliary_tail_lookups: bool,
+    comptime command_lookup10: bool,
     reader: anytype,
     output: []u8,
     written: *usize,
@@ -6840,13 +6863,16 @@ noinline fn processTailLookupCompressedPayload(
     header: *MinimalCompressedHeader,
     literal_lookups: *const [inline_literal_tree_count]TailLiteralLookup,
 ) Error!void {
+    comptime std.debug.assert(!command_lookup10 or auxiliary_tail_lookups);
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     const literal_lookup_ptr: [*]const TailLiteralLookup = @ptrCast(literal_lookups);
     var output_cursor = written.*;
     defer written.* = output_cursor;
     while (output_cursor < meta_block_end) {
-        const command_symbol = if (comptime auxiliary_tail_lookups)
+        const command_symbol = if (comptime command_lookup10)
+            try readCommandSymbolTailLookupFixed10(header, reader)
+        else if (comptime auxiliary_tail_lookups)
             try readCommandSymbolTailLookupFixed9(header, reader)
         else
             try readCommandSymbolAny(header, reader);
@@ -10179,6 +10205,16 @@ inline fn readCommandSymbolTailLookup(header: *MinimalCompressedHeader, reader: 
 
 inline fn readCommandSymbolTailLookupFixed9(header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
     return readCommandSymbolTailLookupWithOptions(true, header, reader);
+}
+
+inline fn readCommandSymbolTailLookupFixed10(header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
+    if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0)
+        try switchBlockAny(max_command_block_types, &header.command_block, reader);
+    if (header.command_block.current_type >= inline_command_tree_count) return error.UnsupportedBrotliFeature;
+    const tree = &header.insert_copy_trees[header.command_block.current_type];
+    const symbol = try tree.decodeTailLookup10Fixed(reader);
+    if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
+    return symbol;
 }
 
 inline fn readCommandSymbolTailLookupWithOptions(comptime fixed_nine_bit_peek: bool, header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
@@ -20916,6 +20952,34 @@ test "br auxiliary tail lookup preparation is atomic and decodes both families" 
     var distance_reader = bitstream.BitReader.init(&.{ 1, 0 });
     try std.testing.expectEqual(@as(u16, 0), try header.insert_copy_trees[0].decodeTailLookup9(&command_reader));
     try std.testing.expectEqual(@as(u16, 1), try header.distance_trees[0].decodeTailLookup9(&distance_reader));
+}
+
+test "br adaptive auxiliary lookup builds ten command bits atomically" {
+    var header: MinimalCompressedHeader = undefined;
+    header.command_block = .{ .block_type_count = 1 };
+    header.distance_tree_count = 1;
+    const command_lengths = [_]u4{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10 } ++ [_]u4{0} ** 693;
+    header.insert_copy_trees[0] = .{ .table = try huffman.HuffmanTable(704).init(&command_lengths) };
+    const distance_lengths = [_]u4{ 1, 1 } ++ [_]u4{0} ** (max_distance_alphabet_size - 2);
+    header.distance_trees[0] = .{ .table = try huffman.HuffmanTable(max_distance_alphabet_size).init(&distance_lengths) };
+    try std.testing.expect(prepareCommand10AuxiliaryTailLookups(&header));
+
+    const encoder = try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
+    var writer: bitstream.BitWriter = .{};
+    defer writer.deinit(std.testing.allocator);
+    try encoder.writeSymbol(&writer, std.testing.allocator, 10);
+    const encoded = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+    const scalar = bitstream.BitReader.init(encoded);
+    var fast = fast_bit_reader.Reader.initFrom(scalar);
+    try std.testing.expectEqual(@as(u16, 10), try header.insert_copy_trees[0].decodeTailLookup10Fixed(&fast));
+
+    const dense_command_lengths = [_]u4{8} ** 192 ++ [_]u4{9} ** 64 ++ [_]u4{10} ** 128 ++ [_]u4{0} ** 320;
+    header.insert_copy_trees[0] = .{ .table = try huffman.HuffmanTable(704).init(&dense_command_lengths) };
+    const before = header.insert_copy_trees[0];
+    try std.testing.expect(!prepareCommand10AuxiliaryTailLookups(&header));
+    try std.testing.expectEqualSlices(u8, std.mem.asBytes(&before), std.mem.asBytes(&header.insert_copy_trees[0]));
+    try std.testing.expect(prepareAuxiliaryTailLookups(&header));
 }
 
 test "br fast bit reader preserves tail lookup symbols and positions" {
