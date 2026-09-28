@@ -16171,3 +16171,13 @@ reuse, so production keeps the simpler independently owned plans.
   64 high-tree truncation cases, and real-corpus driver smoke pass. Brotli
   leadership remains open, and vector-copy, circular-ring, literal-width,
   alignment, countdown, and outlining follow-ups were measured and removed.
+- The same Brotli high-tree executor now keeps its active command root/tree and
+  distance context-map base in local state, refreshing them only after their
+  respective block switches. Against `1124aafc`, 21 alternating Apple M1 Pro
+  pairs improve `clustered_q8` by another 1.0160x median / 1.0136x geometric
+  throughput with 20/21 wins; after one 0.9780x scheduling outlier, all 20
+  remaining pairs are at least 1.0085x. A separate 13-row run reaches 0.8810x
+  libbrotli 1.2.0. Longer tiny/text/structured-q11 controls are neutral, and
+  the reference, upstream differential, and real-corpus smoke gates pass.
+  Wider prepared-distance slots, context-bearing literal slots, and four-way
+  distance pointer caches all regressed and were removed.

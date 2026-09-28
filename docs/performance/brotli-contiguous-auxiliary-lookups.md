@@ -92,3 +92,29 @@ An error-branch layout experiment improved the target by less than one percent
 but caused a repeatable tiny-input regression, so it was also removed. These
 results leave the next useful target in the core command/distance execution
 work rather than copy width, lookup alignment, or recent-distance layout.
+
+## Active auxiliary state follow-up
+
+The payload loop formerly recovered the current command tree and its external
+root plane from the header on every command. It also recomputed the current
+four-entry distance context-map base on every explicit distance. Both values
+change only when their corresponding block switch fires. The executor now
+keeps the active command root/tree pointers and distance context-map pointer in
+local state, refreshing them immediately after a validated switch. The generic
+and non-external decoders retain their original state access.
+
+Against committed baseline `1124aafc`, 21 alternating ReleaseFast pairs improve
+`clustered_q8` by 1.0160x median / 1.0136x geometric throughput with 20/21
+wins. The first pair was a 0.9780x host-scheduling outlier; the remaining 20
+pairs range from 1.0085x to 1.0237x and all win. A separate 13-row gate run
+measures 1,699.17 MiB/s versus 1,928.59 MiB/s for libbrotli 1.2.0, or 0.8810x.
+Longer isolated controls remain neutral: `tiny` is 1.0003x median, `text` is
+1.0015x, and `structured_q11` is 0.9986x with a 1.0005x geometric mean.
+
+The reference gate, upstream differential, and real-corpus driver smoke pass
+again. Three more dependency-reduction experiments were rejected: embedding
+prepared distance metadata in 64-bit roots measured 0.9977x with 2/15 wins;
+embedding UTF-8 classes in 32-bit literal roots measured 0.9790x with 0/15
+wins; and expanding all four distance contexts into pointer arrays measured
+0.9808x with 0/15 wins. Keeping only one active map base has the better M1
+cache/register tradeoff.

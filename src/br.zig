@@ -6907,9 +6907,29 @@ noinline fn processTailLookupCompressedPayload(
     const literal_lookup_ptr: [*]const TailLiteralLookup = @ptrCast(literal_lookups);
     var output_cursor = written.*;
     defer written.* = output_cursor;
+    var active_command_lookup: *const ExternalCommandLookup = undefined;
+    var active_command_tree: *const PrefixCode(704) = undefined;
+    var active_distance_context_map: [*]const u8 = undefined;
+    if (comptime command_lookup10) {
+        const command_type = header.command_block.current_type;
+        if (command_type >= header.command_block.block_type_count) return error.CorruptFrame;
+        active_command_lookup = &command_lookups.?[command_type];
+        active_command_tree = &header.insert_copy_trees[command_type];
+        const distance_type = header.distance_block.current_type;
+        if (distance_type >= header.distance_block.block_type_count) return error.CorruptFrame;
+        active_distance_context_map = @ptrCast(&header.distance_context_map[@as(usize, distance_type) * 4]);
+    }
     while (output_cursor < meta_block_end) {
+        if (comptime command_lookup10) {
+            if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0) {
+                try switchBlockAny(max_command_block_types, &header.command_block, reader);
+                const command_type = header.command_block.current_type;
+                active_command_lookup = &command_lookups.?[command_type];
+                active_command_tree = &header.insert_copy_trees[command_type];
+            }
+        }
         const lengths = if (comptime command_lookup10)
-            try readInsertCopyLengthsExternalLookup10(header, reader, command_lookups.?)
+            try readInsertCopyLengthsExternalLookup10Current(header, reader, active_command_lookup, active_command_tree)
         else blk: {
             const command_symbol = if (comptime auxiliary_tail_lookups)
                 try readCommandSymbolTailLookupFixed9(header, reader)
@@ -6946,9 +6966,18 @@ noinline fn processTailLookupCompressedPayload(
             }
         }
         if (output_cursor == meta_block_end) return;
+        if (comptime command_lookup10) {
+            if (!lengths.distance_symbol_zero and
+                header.distance_block.block_type_count > 1 and
+                header.distance_block.remaining == 0)
+            {
+                try switchBlockAny(max_distance_block_types, &header.distance_block, reader);
+                active_distance_context_map = @ptrCast(&header.distance_context_map[@as(usize, header.distance_block.current_type) * 4]);
+            }
+        }
         var decoded_distance: DecodedBrotliDistance = undefined;
         if (comptime command_lookup10)
-            try readMinimalDistanceExternalLookupIntoFixed9(header, reader, lengths, last_distances, &decoded_distance, distance_lookups.?)
+            try readMinimalDistanceExternalLookupIntoFixed9Current(header, reader, lengths, last_distances, &decoded_distance, distance_lookups.?, active_distance_context_map)
         else if (comptime auxiliary_tail_lookups)
             try readMinimalDistanceTailLookupIntoFixed9(header, reader, lengths, last_distances, &decoded_distance)
         else
@@ -10289,9 +10318,16 @@ inline fn readInsertCopyLengthsExternalLookup10(
         try switchBlockAny(max_command_block_types, &header.command_block, reader);
     if (header.command_block.current_type >= header.command_block.block_type_count) return error.CorruptFrame;
     const tree_index = header.command_block.current_type;
-    const lookup = &command_lookups[tree_index];
+    return readInsertCopyLengthsExternalLookup10Current(header, reader, &command_lookups[tree_index], &header.insert_copy_trees[tree_index]);
+}
+
+inline fn readInsertCopyLengthsExternalLookup10Current(
+    header: *MinimalCompressedHeader,
+    reader: anytype,
+    lookup: *const ExternalCommandLookup,
+    tree: *const PrefixCode(704),
+) Error!InsertCopyLengths {
     const packed_slot = (try lookup.decodePackedValueFast10(reader)) orelse {
-        const tree = &header.insert_copy_trees[tree_index];
         const symbol = if (tree.single_symbol) |single|
             single
         else
@@ -10496,14 +10532,28 @@ inline fn readMinimalDistanceExternalLookupIntoFixed9(
     decoded_distance: *DecodedBrotliDistance,
     distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
 ) Error!void {
+    if (!lengths.distance_symbol_zero) try ensureDistanceBlock(header, reader);
+    const distance_type = header.distance_block.current_type;
+    if (distance_type >= header.distance_block.block_type_count) return error.CorruptFrame;
+    const context_map: [*]const u8 = @ptrCast(&header.distance_context_map[@as(usize, distance_type) * 4]);
+    return readMinimalDistanceExternalLookupIntoFixed9Current(header, reader, lengths, last_distances, decoded_distance, distance_lookups, context_map);
+}
+
+inline fn readMinimalDistanceExternalLookupIntoFixed9Current(
+    header: *MinimalCompressedHeader,
+    reader: anytype,
+    lengths: InsertCopyLengths,
+    last_distances: *[4]usize,
+    decoded_distance: *DecodedBrotliDistance,
+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
+    context_map: [*]const u8,
+) Error!void {
     if (lengths.distance_symbol_zero) {
         decoded_distance.* = .{ .distance = last_distances[3], .update_ring = false };
         return;
     }
-    try ensureDistanceBlock(header, reader);
     const context = distanceContext(lengths.copy_len);
-    if (header.distance_block.current_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
-    const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
+    const tree_index = context_map[context];
     if (tree_index >= header.distance_tree_count) return error.CorruptFrame;
     const lookup = &distance_lookups[tree_index];
     const symbol = (try lookup.decodeValueFast9(reader)) orelse
