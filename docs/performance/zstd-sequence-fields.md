@@ -570,3 +570,43 @@ Aligning the raw/all-FSE function to 16 bytes moved its page-edge entry by eight
 bytes but measured 0.9983x with 8/21 wins; 64-byte alignment screened at
 0.9764x. The retained gain comes from removing a dependent shift, not from
 function placement.
+
+## Restored direct 256-state FSE construction
+
+A source/history audit found that the documented bitset builder had drifted
+back to a three-stage implementation: fill a 264-byte contiguous symbol array,
+scatter those symbols into the table, then revisit all 256 entries to derive
+their transitions through a symbol-indexed counter. The decoder still selected
+that path as `buildNoLowProbabilityAssumeValid`, so the extra work appeared in
+every cold `large_json` frame.
+
+The validated builder again constructs each symbol's final entries directly.
+Four 64-bit masks represent its spread states; probabilities below 128 set the
+occupied states, while dense probabilities start full and clear the smaller
+complement. Ascending set-bit enumeration supplies the exact ordinal required
+for `next_state`, eliminating both the symbol scratch and the final
+symbol-indexed transition pass. The existing caller continues to prove the
+256-state total and absence of low-probability `-1` symbols before entering the
+unchecked implementation.
+
+Against commit `e15013d1`, 15 alternating-order complete 13-row reference
+matrix pairs used independent ReleaseFast binaries and Homebrew libzstd 1.5.7:
+
+| Case | Pairs won | Median speedup | Geometric mean | Candidate MiB/s | Candidate/libzstd |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `large_json` | 15/15 | 1.0425x | 1.0516x | 5931.82 | 0.9136x |
+| `binary_mixed` | 14/15 | 1.0275x | 1.0305x | 8383.31 | 1.2364x |
+| `huffman80k` | 8/15 | 1.0052x | 1.0040x | 1863.47 | 0.9502x |
+
+The geometric mean of all 13 row medians is 1.0065x. The weakest row is the
+sequence-free `ascii64k` control at 0.9878x. Normalized symbol inspection shows
+that `decodeFrameInto`, both raw/all-FSE executors, all split-Huffman executors,
+and the four-stream Huffman decoder retain identical addresses between the two
+binaries, so unrelated control movement is not caused by shifted decode code.
+
+A five-second `large_json` sample reduces direct
+`buildNoLowProbabilityAssumeValid` attribution from 351/3,987 samples (8.80%)
+to 224/4,066 (5.51%). The 256-case randomized table oracle and pinned dense
+226/208/255 distributions remain exact. The five-row decode-profile gate,
+13-row reference gate, 276-case compatibility matrix, and all 9,900 upstream
+decodecorpus frames across 64/64 sequence modes pass.

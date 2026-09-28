@@ -16012,3 +16012,15 @@ reuse, so production keeps the simpler independently owned plans.
   frame, 13-row reference gate, 276-case compatibility matrix, and 9,900-frame
   decodecorpus pass. Moving the sequence decrement and aligning the executor to
   16/64 bytes were independently rejected by 21-pair or focused measurements.
+- Restored the documented direct bitset/complement implementation behind the
+  validated 256-state no-low-probability FSE builder after an unrelated later
+  change had replaced it with a 264-byte symbol scratch, scatter pass, and
+  symbol-indexed transition pass. The restored builder enumerates final states
+  directly and visits the complement for dense 226/208/255 probabilities.
+  Against `e15013d1`, 15 alternating-order complete 13-row pairs improve
+  `large_json` by 1.0425x (15/15), `binary_mixed` by 1.0275x (14/15), and keep
+  `huffman80k` neutral-positive at 1.0052x. The row-median geometric mean is
+  1.0065x. Sampling reduces direct builder attribution from 8.80% to 5.51%,
+  while all major decode helper addresses remain identical. The table oracle,
+  five-row profile gate, 13-row reference gate, 276-case compatibility matrix,
+  and 9,900-frame decodecorpus pass.
