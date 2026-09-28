@@ -15975,3 +15975,14 @@ reuse, so production keeps the simpler independently owned plans.
   long-code fallback from 2.77% to 1.44%. Lookup equivalence, atomic fallback,
   the 13-row reference gate, and the 7,056-case one-shot/progressive upstream
   matrices pass; broad Brotli leadership remains open.
+- Follow-up probes kept the command-10/distance-9 split unchanged. Widening
+  distance tables too removed the sampled distance fallback but regressed to
+  0.9950x median / 0.9940x geometric mean with 2/15 wins. A fixed eight-bit
+  literal peek reached only 1.0006x / 1.0016x with 9/15 wins; explicit window
+  bound hoisting reached 1.0013x / 1.0043x with 9/15 wins; and 64-byte executor
+  alignment regressed to 0.9956x with 2/15 wins. The 256-byte alignment,
+  zero-extra command branch, trusted symbol/index paths, compile-time UTF-8
+  split, and inlined dictionary-transform screens were also neutral or
+  negative and were removed. Future work should reduce payload-loop work
+  without multiplying executor instances or shifting small checks across hot
+  call boundaries.

@@ -77,3 +77,29 @@ relying on throughput alone.
 The result is a narrow improvement for sparse command trees. Dense command
 trees still use the established 9-bit lookup, and broad Brotli decode
 leadership remains open.
+
+## Follow-up experiments rejected
+
+The same independent-binary, alternating-order protocol was used to avoid
+keeping source-level simplifications that only reshuffled this layout-sensitive
+executor:
+
+- Widening both command and distance tables to 10 bits eliminated the sampled
+  distance long-code fallback (8/4,016 samples to zero), but 15 pairs measured
+  a 0.9950x median, 0.9940x geometric mean, and only 2/15 wins. The committed
+  command-10/distance-9 split remains faster.
+- A fixed eight-bit reader entry point for the flat literal root lookup
+  measured 1.0006x median, 1.0016x geometric mean, and 9/15 wins. This is below
+  the retention threshold despite a positive short screen.
+- Explicitly hoisting the window-distance limit measured 1.0013x median,
+  1.0043x geometric mean, and 9/15 wins. LLVM already removes enough of this
+  invariant work that the source change is not justified.
+- Aligning all three payload executor instances to 64 bytes measured 0.9956x
+  median and 2/15 wins. A 256-byte alignment screen measured 0.9903x, so fixed
+  alignment was rejected rather than used to mask layout sensitivity.
+- Screens for a combined zero-extra-bit branch, a trusted command-symbol entry,
+  compile-time UTF-8 specialization, and an inlined dictionary transform ranged
+  from neutral to roughly 2% slower. None advanced to the retained tree.
+
+These results narrow the next work to changes that reduce payload-loop work
+without adding executor instances or moving small checks across call boundaries.
