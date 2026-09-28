@@ -15947,3 +15947,12 @@ reuse, so production keeps the simpler independently owned plans.
   1.0047x. Focused decoder tests, upstream differential, real-corpus
   differential, reference benchmark, and compile-check gates pass; Brotli
   decode is improved but still below libbrotli on the measured large inputs.
+- Brotli short non-overlapping matches now use a meta-block-bounded fixed
+  16-byte move when the logical length is at most 16 and the distance is at
+  least 16, following libbrotli's first-copy strategy without assuming padding
+  beyond caller-owned output. Against `7c89e5df`, 15 alternating-order
+  `clustered_q8` pairs improve median throughput from 1136.18 to 1201.12 MiB/s,
+  a 1.0551x paired median and 1.0568x geometric-mean gain with 15/15 wins. The
+  13-row reference gate and the 7,056-case one-shot/progressive upstream
+  matrices pass. This workload still trails local libbrotli 1.2.0, so broad
+  Brotli decode leadership remains open.

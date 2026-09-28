@@ -6428,7 +6428,7 @@ fn processMinimalCompressedMetaBlock(
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
-        match_copy.append(output, written, distance, lengths.copy_len);
+        match_copy.append(output, written, distance, lengths.copy_len, meta_block_end);
     }
 }
 
@@ -6502,7 +6502,7 @@ fn processMinimalCompressedMetaBlockLargeWindowImpl(
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
-        match_copy.append(output, written, distance, lengths.copy_len);
+        match_copy.append(output, written, distance, lengths.copy_len, meta_block_end);
     }
 }
 
@@ -6825,7 +6825,7 @@ noinline fn processDecodedCompressedPayload(
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
-        match_copy.append(output, written, distance, lengths.copy_len);
+        match_copy.append(output, written, distance, lengths.copy_len, meta_block_end);
     }
 }
 
@@ -6897,7 +6897,7 @@ noinline fn processTailLookupCompressedPayload(
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
-        match_copy.append(output, &output_cursor, distance, lengths.copy_len);
+        match_copy.append(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
     }
 }
 
@@ -7009,7 +7009,7 @@ noinline fn processExternalLiteralLookupCompressedPayload(
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
-        match_copy.append(output, &output_cursor, distance, lengths.copy_len);
+        match_copy.append(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
     }
 }
 
@@ -7096,7 +7096,7 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
-        match_copy.append(output, &output_cursor, distance, lengths.copy_len);
+        match_copy.append(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
     }
 }
 
@@ -7141,7 +7141,7 @@ noinline fn processDecodedCompressedPayloadLargeWindow(
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
-        match_copy.append(output, written, distance, lengths.copy_len);
+        match_copy.append(output, written, distance, lengths.copy_len, meta_block_end);
     }
 }
 
@@ -7201,7 +7201,7 @@ noinline fn processTailLookupCompressedPayloadLargeWindow(
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
-        match_copy.append(output, written, distance, lengths.copy_len);
+        match_copy.append(output, written, distance, lengths.copy_len, meta_block_end);
     }
 }
 

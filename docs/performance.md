@@ -16,6 +16,9 @@ anonymized private corpus.
 [Brotli zero-insert fast path](performance/brotli-zero-insert-fast-path.md)
 records the command-loop shortcut, cross-quality controls, and compatibility
 coverage.
+[Brotli bounded short match copy](performance/brotli-bounded-short-copy.md)
+records the meta-block-bounded 16-byte move, its direct boundary oracle, and
+paired comparison against the preceding decoder.
 
 ## Current local benchmark entrypoints
 
