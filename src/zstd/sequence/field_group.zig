@@ -22,11 +22,10 @@ pub const Group = struct {
 
     pub inline fn read(self: *Group, width: u8) usize {
         std.debug.assert(width <= 32);
+        if (width == 0) return 0;
         const consumed = self.consumed + width;
         std.debug.assert(consumed <= 56);
-        // The group is left-aligned. Splitting the shift keeps the zero-width
-        // case defined while avoiding a full-reservoir shift after every field.
-        const value = (self.bits >> 1) >> @intCast(63 - consumed);
+        const value = self.bits >> @intCast(64 - consumed);
         self.consumed = consumed;
         return @intCast(value & ((@as(u64, 1) << @intCast(width)) - 1));
     }

@@ -524,3 +524,49 @@ four-stream tail and corruption tests, 364-case native probe, 276-case
 compatibility matrix, 9,900-frame decodecorpus across all 64 sequence-mode
 combinations, full test/check graph, and 13-row reference gate pass. This
 narrows one Huffman cost but does not establish Zstd decode leadership.
+
+## Zero-width split and single-shift field extraction
+
+The grouped field reader stores one sequence's reverse bit fields in a
+left-aligned immutable `u64`. Its original branch-free extraction used two
+dependent shifts so a zero-width field never requested an undefined 64-bit
+shift. Every nonzero field paid for both shifts, up to six times per sequence.
+
+The reader now returns zero immediately for a zero-width field. Nonzero fields
+use the directly defined `bits >> (64 - consumed)` extraction, reducing that
+path to one variable shift while preserving the same mask and monotonically
+advanced cursor. The change stays in `zstd/sequence/field_group.zig`, so it does
+not add another large sequence-executor instance.
+
+Against commit `62563067`, 15 alternating-order complete 13-row reference
+matrix pairs used independently built ReleaseFast binaries and explicit
+Homebrew libzstd 1.5.7. Each row ran 1,000 decodes and retained identical input
+hashes, encoded sizes, and checksums.
+
+| Case | Pairs won | Median speedup | Geometric mean | Candidate MiB/s | Candidate/libzstd |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `huffman80k` | 15/15 | 1.3016x | 1.2951x | 1923.14 | 0.9474x |
+| `large_json` | 15/15 | 1.1048x | 1.1055x | 5842.99 | 0.8744x |
+| `binary_mixed` | 11/15 | 1.0036x | 1.0057x | 8280.79 | 1.1984x |
+| `numbered_json` | 10/15 | 1.0028x | 1.0103x | 700.74 | 1.0550x |
+| `ascii64k` | 7/15 | 0.9996x | 1.0008x | 1125.08 | 1.0642x |
+
+The geometric mean of all 13 row medians is 1.0273x. The weakest non-tiny row
+is the sequence-free `incompressible` control at 0.9916x; the 12-byte `tiny`
+row measures 0.9829x while remaining 18.67x faster than the reference. Neither
+control executes the optimized grouped reader, so these movements are treated
+as fixed-overhead and host noise rather than an algorithmic regression.
+
+The 14 direct reader tests cover zero-width fields, all starting alignments,
+mixed six-field groups, rejected unsafe loads, cursor equality, and subsequent
+reads. The fixed 80,000-byte raw/all-FSE frame passes one-shot and reusable
+decode plus mutation/error recovery. The 13-row reference gate, 276-case
+libzstd compatibility matrix, and all 9,900 upstream decodecorpus frames across
+64/64 sequence-mode combinations pass.
+
+Two nearby alternatives were rejected. Moving the sequence decrement before
+field extraction measured only 0.9994x median with 10/21 wins on `huffman80k`.
+Aligning the raw/all-FSE function to 16 bytes moved its page-edge entry by eight
+bytes but measured 0.9983x with 8/21 wins; 64-byte alignment screened at
+0.9764x. The retained gain comes from removing a dependent shift, not from
+function placement.

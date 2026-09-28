@@ -16000,3 +16000,15 @@ reuse, so production keeps the simpler independently owned plans.
   rises from 0.7923x to 0.8195x. Exhaustive 704-command slot checks, root-hit /
   extra-bit / long-code decoder tests, the 13-row reference gate, and the
   7,056-case one-shot/progressive upstream matrices pass.
+- Zstd's grouped sequence-field reader now branches once for a zero-width field
+  and extracts every nonzero field with one `64 - consumed` shift instead of
+  two dependent shifts. The left-aligned reservoir and cursor contract are
+  unchanged, and the implementation remains isolated in
+  `zstd/sequence/field_group.zig`. Against `62563067`, 15 alternating-order
+  complete 13-row pairs improve `huffman80k` by 1.3016x and `large_json` by
+  1.1048x, both with 15/15 wins; `binary_mixed` improves 1.0036x and the row-
+  median geometric mean is 1.0273x. Candidate/reference medians reach 0.9474x,
+  0.8744x, and 1.1984x respectively. All 14 reader tests, the fixed raw/all-FSE
+  frame, 13-row reference gate, 276-case compatibility matrix, and 9,900-frame
+  decodecorpus pass. Moving the sequence decrement and aligning the executor to
+  16/64 bytes were independently rejected by 21-pair or focused measurements.
