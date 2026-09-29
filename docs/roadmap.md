@@ -16181,3 +16181,15 @@ reuse, so production keeps the simpler independently owned plans.
   the reference, upstream differential, and real-corpus smoke gates pass.
   Wider prepared-distance slots, context-bearing literal slots, and four-way
   distance pointer caches all regressed and were removed.
+- Large standard-window Brotli meta-blocks with exactly one literal block/type,
+  command block/type, and distance block/type now use a dedicated single-tree
+  executor. It decodes directly from one 10-bit literal root, one fused 10-bit
+  command root, and one 9-bit distance root without per-symbol block-switch or
+  context-map work. Against `51d5c13f`, 15 alternating Apple M1 Pro pairs
+  improve a repository source q1 stream by 1.2029x median / 1.2028x geometric
+  throughput and a documentation q1 stream by 1.2478x / 1.2483x, both with
+  15/15 wins. Fifteen candidate/libbrotli 1.2.0 runs reach 0.9203x and 0.9050x
+  median respectively, so the remaining parity gap is explicit. The focused
+  route test, 13-row reference gate, upstream 7,056 one-shot plus 7,056
+  progressive cases, 1,401 fragmentation runs, 64 high-tree truncation cases,
+  and real-corpus driver smoke pass.

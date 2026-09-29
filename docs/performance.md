@@ -29,6 +29,8 @@ measurements.
 [Brotli contiguous auxiliary lookups](performance/brotli-contiguous-auxiliary-lookups.md)
 records cache-dense command/distance root planes, exact short dictionary
 copies, rejected follow-ups, and paired Apple M1 Pro measurements.
+[Brotli large single-tree executor](performance/brotli-single-tree-executor.md)
+records the structure-gated q1 fast path and real source/document comparisons.
 
 ## Current local benchmark entrypoints
 
