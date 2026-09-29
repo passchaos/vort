@@ -16381,3 +16381,16 @@ reuse, so production keeps the simpler independently owned plans.
   Production code is restored. Future work should shorten the existing
   interleaved dependency chain without another per-sequence dispatch branch or
   separate literal-copy pass.
+
+- Per-PC sampling now divides the medium interleaved executor into 44.73%
+  sequence-field/repcode work, 33.44% Huffman literal work, 19.89% match work,
+  and 1.94% tail/exit work. The file-backed sequence-stage benchmark accepts
+  256 MiB inputs and measures all 1,287,096 SVG sequences at 12.882 ns each.
+  All 824 medium blocks prove a <=53-bit table maximum; 765,970/771,365 actual
+  sequences take the 64-bit group path and the other 5,395 are block tails.
+  Nevertheless, retaining that proof was neutral at 1.0012x. Three alternative
+  group extraction forms measured 0.9698x, 0.9720x, and 0.9939x; local
+  repcodes measured 0.9116x, a corrected persistent Huffman reservoir 0.9919x,
+  and removing the medium instance's fixed-71 branch 0.9786x. All were removed.
+  This closes more local rewrites and points the next work toward a genuinely
+  smaller sequence-state representation or separately compiled executor.

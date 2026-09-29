@@ -90,7 +90,7 @@ fn measureCase(
         init.io,
         case.path,
         init.gpa,
-        .limited(128 * 1024 * 1024),
+        .limited(256 * 1024 * 1024),
     );
     defer init.gpa.free(input);
     if (input.len == 0) return error.InputTooSmall;

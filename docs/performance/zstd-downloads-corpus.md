@@ -225,6 +225,29 @@ dispatch or a second literal-copy pass costs more than the saved work on this
 AArch64 target. The next kernel should therefore reduce the existing loop's
 dependency chain without adding another per-sequence branch.
 
+A 10-second, 1 kHz per-PC sample of the frozen aggregate-stage binary assigns
+44.73% of its 8,296 executor leaf samples to FSE fields and repcode resolution,
+33.44% to interleaved Huffman literal decoding, 19.89% to match dispatch/copy,
+and 1.94% to the block tail and exit. The sequence-stage tool now accepts
+inputs through 256 MiB so the 171.3 MiB SVG can be measured directly: its full
+1,287,096-sequence stage takes 16.580 ms, or 12.882 ns per sequence, across 92
+generic, 824 bounded-all-FSE, and 461 wide-all-FSE blocks.
+
+An untimed field-group audit found that all 824 medium blocks have a
+table-derived maximum of at most 53 bits per sequence. At runtime 765,970
+sequences use the existing 64-bit grouped load, none exceeds its 56-bit bound,
+and only 5,395 block-tail sequences have fewer than 64 source bits remaining.
+Persisting that proof in each FSE table removed the width comparison but was
+neutral at 1.0012x in the aggregate screen. Three alternative `Group.read`
+forms were worse: left/right extraction measured 0.9698x, a libzstd-style mask
+table measured 0.9720x, and mutating the shifted group measured 0.9939x.
+Keeping repcodes local reduced the stage to 0.9116x, confirming register
+pressure, while the corrected four-stream persistent Huffman reservoir was
+also slightly negative at 0.9919x. Removing the almost-unused fixed-71 branch
+from only the medium instance measured 0.9786x. All production experiments
+were removed; the retained profile points to a more compact representation of
+sequence state rather than more source-level branches or live local scalars.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
