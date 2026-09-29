@@ -195,6 +195,36 @@ median / 1.0122x geometric, and the longer complete-frame campaign reaches only
 makes the stage useful for representative kernel attribution while preserving
 the complete-frame gate as the final acceptance criterion.
 
+The aggregate stage also closed several follow-ups that looked attractive from
+the first block or from coarse whole-frame counters. Keeping only the mutable
+Huffman cursor local while borrowing the immutable tree and lookup removed the
+5,240-byte entry copy and reduced the helper stack frame by about 5 KiB. Across
+all 824 blocks it improved **1.0132x median / 1.0115x geometric** with 14/15
+wins, but complete-frame reusable decode reached only **1.0051x / 1.0059x**
+with 12/15 wins. The accompanying libzstd control moved 1.0043x geometrically;
+normalizing by that control leaves only **1.0016x geometric**, so the production
+change was removed.
+
+A temporary untimed shape pass showed why more broad branches are unlikely to
+help. None of the selected blocks has at most 512 literals, 596/824 fit 1 KiB,
+818/824 fit 2 KiB, and the maximum is 2,939 bytes. Their 771,365 sequences have
+literal lengths distributed as 286,465 zero, 296,898 one, 177,626 two-to-four,
+9,866 five-to-fifteen, and 510 larger runs. Offset symbols use zero additional
+bits 637,697 times, one bit zero times, and direct offsets 133,668 times. The
+dominant exact match is 48 bytes at 208,029 occurrences; long clusters include
+78,318 matches at 290 bytes and 60,463/69,554 at 308/309 bytes.
+
+Those counts were screened against the aggregate or complete-frame benchmark,
+then the implementations were removed. Dedicated 1 KiB and 2 KiB split-literal
+staging reduced the Vort/libzstd snapshot from roughly 0.63x to 0.60x. A
+128-byte adaptive match wildcopy measured 0.9442x when broadly selected and
+0.9655x when restricted to matches of at least 128 bytes. An exact 48-byte
+branch measured 0.9629x, and pairing adjacent zero-bit-offset sequences into
+one 64-bit field load measured 0.9666x. The common shapes are real, but adding
+dispatch or a second literal-copy pass costs more than the saved work on this
+AArch64 target. The next kernel should therefore reduce the existing loop's
+dependency chain without adding another per-sequence branch.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;

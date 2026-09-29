@@ -16366,3 +16366,18 @@ reuse, so production keeps the simpler independently owned plans.
   median / 1.0122x geometric, and the longer complete frame only 1.0044x /
   1.0030x with 10/15 wins. The production change was removed; the stage remains
   as a representative lower-noise screen before complete-frame acceptance.
+
+- The aggregate medium-block stage rejected another set of apparently common
+  shortcuts. A hybrid Huffman state with a local cursor and borrowed immutable
+  tables removed the 5,240-byte entry copy and improved the stage by 1.0132x
+  median / 1.0115x geometric with 14/15 wins, but complete-frame reusable
+  decode reached only 1.0051x / 1.0059x; normalization by the simultaneously
+  measured libzstd control leaves 1.0016x geometric, so it was removed. Shape
+  profiling found no <=512-literal target blocks, 596/824 <=1 KiB and 818/824
+  <=2 KiB, yet both dedicated split-staging sizes reduced the complete-frame
+  Vort/libzstd snapshot to about 0.60x. Aggregate screens also rejected a
+  128-byte match wildcopy (0.9442x broad, 0.9655x long-only), an exact 48-byte
+  match branch (0.9629x), and a two-sequence zero-bit-offset path (0.9666x).
+  Production code is restored. Future work should shorten the existing
+  interleaved dependency chain without another per-sequence dispatch branch or
+  separate literal-copy pass.
