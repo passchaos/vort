@@ -53,3 +53,25 @@ whose literal, command, and distance state cannot switch. Multi-tree,
 multi-block-type, small-stream, and Large Window inputs keep their existing
 decoders. This removes work only when the parsed Brotli header proves it is
 unnecessary.
+
+## Zero-insert command-root follow-up
+
+A profile of the source q1 stream shows that 75.2% of its commands insert no
+literals, while the original 16-bit fused root can carry complete metadata for
+only the 54.5% whose insert and copy lengths both have zero extra bits. The
+single-tree executor now uses a private 32-bit command root. Entries with zero
+insert length also carry copy base, copy extra-bit width, and implicit-distance
+state, while all other root hits retain the compact command symbol. Long
+Huffman codes continue through the canonical table.
+
+Against committed baseline `bb6e2dfa`, 15 alternating ReleaseFast pairs improve
+source q1 by 1.0403x median / 1.0412x geometric throughput with 15/15 wins.
+Documentation q1 improves by 1.0078x / 1.0121x with 14/15 wins. Fifteen
+candidate/reference runs reach 0.9496x and 0.9062x median libbrotli 1.2.0
+throughput respectively. The unrelated `clustered_q8` route remains neutral at
+1.0001x median / 1.0024x geometric mean.
+
+The dedicated lookup has a direct metadata/cursor oracle. The single-tree route
+test, 13-row reference gate, upstream 7,056 one-shot plus 7,056 progressive
+cases, 1,401 fragmentation runs, 64 high-tree truncation cases, and real-corpus
+driver smoke all pass.

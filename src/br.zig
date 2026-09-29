@@ -6,6 +6,7 @@ const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
 const match_copy = @import("br/match_copy.zig");
 const dictionary_copy = @import("br/dictionary_copy.zig");
+const single_command_lookup = @import("br/single_command_lookup.zig");
 const static_dictionary = @import("br/static_dictionary.zig");
 const command_lut = @import("br/command_lut.zig");
 const pattern = @import("br/pattern.zig");
@@ -6557,9 +6558,9 @@ fn processLargeCompressedMetaBlock(
         {
             if (builtin.is_test) test_single_tree_external_lookup_hits += 1;
             var command_lookup = if (header.insert_copy_trees[0].single_symbol) |symbol|
-                try ExternalCommandLookup.initSingleMapped(symbol, command_lut.fuseLookupSlot)
+                try single_command_lookup.Lookup.initSingle(symbol)
             else
-                try ExternalCommandLookup.initMapped(&header.insert_copy_trees[0].table, command_lut.fuseLookupSlot);
+                try single_command_lookup.Lookup.init(&header.insert_copy_trees[0].table);
             var distance_lookup = if (header.distance_trees[0].single_symbol) |symbol|
                 try ExternalDistanceLookup.initSingle(symbol)
             else
@@ -6603,7 +6604,7 @@ noinline fn processSingleTreeExternalLookupCompressedPayload(
     window_bits: u5,
     header: *MinimalCompressedHeader,
     literal_lookup: *const ExternalLiteralLookup,
-    command_lookup: *const ExternalCommandLookup,
+    command_lookup: *const single_command_lookup.Lookup,
     distance_lookup: *const ExternalDistanceLookup,
 ) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
@@ -10436,24 +10437,25 @@ inline fn readInsertCopyLengthsExternalLookup10Current(
 inline fn readInsertCopyLengthsSingleExternalLookup10(
     header: *MinimalCompressedHeader,
     reader: anytype,
-    lookup: *const ExternalCommandLookup,
+    lookup: *const single_command_lookup.Lookup,
 ) Error!InsertCopyLengths {
     const tree = &header.insert_copy_trees[0];
-    const packed_slot = (try lookup.decodePackedValueFast10(reader)) orelse {
+    const root_entry = (try lookup.decodeFast(reader)) orelse {
         const symbol = if (tree.single_symbol) |single|
             single
         else
-            try lookup.decodeValueLong(&tree.table, reader);
+            try tree.table.decodeValueLongAfterLookup(reader, 10);
         return readInsertCopyLengthsStagedCompact(symbol, reader);
     };
-    if (command_lut.fusedLookupEntry(packed_slot)) |entry| {
+    if (root_entry.zero_insert) {
+        const copy_extra = if (root_entry.copy_extra_bits == 0) 0 else try reader.readBits24StagedFirst(root_entry.copy_extra_bits);
         return .{
-            .insert_len = entry.insert_base,
-            .copy_len = @as(usize, entry.copy_base_minus_two) + 2,
-            .distance_symbol_zero = entry.distance_symbol_zero,
+            .insert_len = 0,
+            .copy_len = @as(usize, root_entry.value) + copy_extra,
+            .distance_symbol_zero = root_entry.distance_symbol_zero,
         };
     }
-    return readInsertCopyLengthsStagedCompact((packed_slot >> 4) - 1, reader);
+    return readInsertCopyLengthsStagedCompact(root_entry.value, reader);
 }
 
 inline fn readCommandSymbolTailLookupWithOptions(comptime fixed_nine_bit_peek: bool, header: *MinimalCompressedHeader, reader: anytype) Error!u16 {

@@ -16202,3 +16202,12 @@ reuse, so production keeps the simpler independently owned plans.
   0.6378x--0.6573x, so the literal-rich wide path is still the largest Brotli
   decode gap. The reference gate, upstream differential, and real-corpus
   driver smoke pass.
+- The large single-tree Brotli executor now uses a private 32-bit command root
+  that embeds copy metadata for zero-insert commands. This expands complete
+  root fusion from commands with two zero-width fields to the 75.2% zero-insert
+  share observed in the source q1 stream. Against `bb6e2dfa`, 15 alternating
+  pairs improve source q1 by 1.0403x median / 1.0412x geometric throughput with
+  15/15 wins, and documentation q1 by 1.0078x / 1.0121x with 14/15 wins.
+  Absolute candidate/libbrotli 1.2.0 medians reach 0.9496x and 0.9062x;
+  `clustered_q8` remains neutral. The focused lookup/route tests, reference
+  gate, upstream differential, and real-corpus smoke pass.
