@@ -16303,3 +16303,18 @@ reuse, so production keeps the simpler independently owned plans.
   1.0002x geometric with 10/21 wins, so no decoder hot-path change remains.
   The isolated profiler, 671 direct tests, reference/profile/compatibility
   gates, and the 9,900-frame/64-mode decodecorpus pass.
+
+- Byte-aligned LL/OF/ML normalized-count headers now decode through an isolated
+  64-bit little-endian reservoir in `zstd/sequence/normalized_counts.zig`.
+  Adjacent 1--9-bit fields reuse the loaded word, and final byte consumption is
+  derived from loaded minus remaining bits rather than updated after every
+  field. The original forward-bit parser remains an independent differential
+  oracle and continues to serve non-byte-aligned callers. Against frozen
+  `b7ca21c9`, fifteen alternating pairs across all six compressed Downloads
+  files are positive at the median: reusable SVG/log/JSON improve
+  1.0167x/1.0118x/1.0114x and one-shot improve 1.0176x/1.0155x/1.0111x.
+  Reusable and one-shot row-geometric means improve 1.0101x and 1.0120x.
+  A separate 256-byte-aligned attribution pair keeps the parser gain at
+  1.0205x median on SVG and 1.0190x on the robot log. All 672 direct tests,
+  both reference gates, profile/path gates, 276 compatibility cases, and the
+  9,900-frame/64-mode decodecorpus pass.

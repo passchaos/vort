@@ -12,6 +12,7 @@ const single_predefined = @import("zstd/sequence/single_predefined.zig");
 const sequence_continuation = @import("zstd/sequence/continuation.zig");
 const sequence_match_copy = @import("zstd/sequence/match_copy.zig");
 const sequence_fse_builder = @import("zstd/sequence/fse_builder.zig");
+const sequence_normalized_counts = @import("zstd/sequence/normalized_counts.zig");
 const sequence_decode_cache = @import("zstd/sequence/decode_cache.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
@@ -9394,10 +9395,9 @@ fn readFseSequenceTableInto(
     // directly. This avoids the former 512-entry intermediate table plus a
     // second full conversion pass for every compressed LL/OF/ML table.
     if (offset.* >= block.len) return error.TruncatedFrame;
-    var reader: ForwardBitReader = .{ .bytes = block[offset.*..] };
     var values: [256]u16 = undefined;
-    const decoded = try decodeFseNormalizedCounts(&reader, expected_symbol_count, max_accuracy_log, &values);
-    offset.* = std.math.add(usize, offset.*, reader.byteIndex()) catch return error.IntegerOverflow;
+    const decoded = try sequence_normalized_counts.parse(block[offset.*..], expected_symbol_count, max_accuracy_log, &values);
+    offset.* = std.math.add(usize, offset.*, decoded.bytes_consumed) catch return error.IntegerOverflow;
     if (offset.* > block.len) return error.TruncatedFrame;
 
     table.len = decoded.table_len;
@@ -9505,6 +9505,26 @@ test "zstd Huffman weight normalized-count parser matches generic decoder" {
         }
     };
     try huffman_weight_fse.expectMatchesGeneric(Adapter.parse);
+}
+
+test "zstd sequence normalized-count reservoir matches generic decoder" {
+    const Adapter = struct {
+        fn parse(
+            bytes: []const u8,
+            expected_symbol_count: usize,
+            max_accuracy_log: u4,
+            values: *[256]u16,
+        ) Error!sequence_normalized_counts.Result {
+            var reader: ForwardBitReader = .{ .bytes = bytes };
+            const decoded = try decodeFseNormalizedCounts(&reader, expected_symbol_count, max_accuracy_log, values);
+            return .{
+                .value_count = decoded.value_count,
+                .table_len = decoded.table_len,
+                .bytes_consumed = reader.byteIndex(),
+            };
+        }
+    };
+    try sequence_normalized_counts.expectMatchesGeneric(Adapter.parse);
 }
 
 fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {

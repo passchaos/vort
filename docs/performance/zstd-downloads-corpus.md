@@ -145,44 +145,77 @@ existing 256-state verification scan was also neutral on the robot log:
 **0.9977x median / 1.0002x geometric, 10/21 wins**. All three production-path
 experiments were removed.
 
+## Sequence-table normalized-count reservoir
+
+Production sampling attributed about 11% of the SVG decode samples to sequence
+mode parsing and FSE table construction. The byte-aligned LL/OF/ML normalized-
+count parser now keeps a 64-bit little-endian reservoir and refills it only as
+needed, instead of reconstructing neighboring bytes for every 1--9-bit field.
+It derives the final byte count from loaded bytes minus remaining reservoir
+bits, so the hot read no longer increments a separate consumed-bit counter.
+The older bit reader remains the independent differential oracle and continues
+to serve callers whose input is not at a byte boundary.
+
+Against the frozen `b7ca21c9` binary, fifteen alternating pairs on all six
+compressed files are positive at the median. Ratios below are candidate over
+baseline:
+
+| Case | One-shot median / geometric | Wins | Reusable median / geometric | Wins |
+| --- | ---: | ---: | ---: | ---: |
+| large SVG | 1.0176x / 1.0189x | 15/15 | 1.0167x / 1.0177x | 14/15 |
+| robot log | 1.0155x / 1.0143x | 13/15 | 1.0118x / 1.0130x | 14/15 |
+| trace JSON | 1.0111x / 1.0117x | 14/15 | 1.0114x / 1.0158x | 15/15 |
+| shared library | 1.0044x / 1.0029x | 11/15 | 1.0049x / 1.0016x | 10/15 |
+| executable | 1.0103x / 1.0093x | 13/15 | 1.0075x / 1.0059x | 13/15 |
+| large C header | 1.0147x / 1.0151x | 14/15 | 1.0081x / 1.0066x | 12/15 |
+
+The geometric mean across row geometric means is 1.0120x for one-shot and
+1.0101x for reusable decoding. A separate matched-layout experiment aligned
+the four-stream Huffman and split-sequence helpers to 256 bytes in both
+binaries; the parser alone remained positive at 1.0205x/1.0235x on SVG,
+1.0190x/1.0203x on the log, and 1.0050x/1.0022x on the shared library. Those
+temporary alignment changes were removed from production.
+
 ## Current loaded-host snapshot
 
-These rows additionally use the large-frame cache bypass. Ratios are
-Vort/libzstd; the full input hashes, exact byte counts, binary hashes, and A/B
-observations are in the [JSON record](data/zstd-downloads-m1-20260929.json).
+The six compressed rows below use medians from the normalized-count-reservoir
+campaign. Video and ZIP retain the preceding raw-path snapshot because they do
+not contain explicit FSE tables. Ratios are Vort/libzstd; the full input hashes,
+exact byte counts, binary hashes, and A/B observations are in the
+[JSON record](data/zstd-downloads-m1-20260929.json).
 
 | Case | Input MiB | Encoded % | One-shot | Reusable | Vort reusable MiB/s | libzstd DCtx MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| large SVG | 171.3 | 1.39 | 0.6258x | 0.6228x | 5,893.4 | 9,462.0 |
-| robot log | 105.0 | 6.69 | 0.7380x | 0.7326x | 3,269.4 | 4,462.8 |
-| trace JSON | 30.2 | 6.10 | 0.8055x | 0.7876x | 2,714.4 | 3,446.5 |
-| shared library | 77.7 | 40.81 | 0.8220x | 0.8180x | 1,040.1 | 1,271.4 |
-| executable | 37.1 | 40.01 | 0.8155x | 0.8100x | 971.5 | 1,199.4 |
+| large SVG | 171.3 | 1.39 | 0.6373x | 0.6305x | 6,084.3 | 9,661.2 |
+| robot log | 105.0 | 6.69 | 0.7521x | 0.7400x | 3,353.7 | 4,547.6 |
+| trace JSON | 30.2 | 6.10 | 0.8078x | 0.8002x | 2,871.7 | 3,573.4 |
+| shared library | 77.7 | 40.81 | 0.8242x | 0.8199x | 1,025.3 | 1,251.4 |
+| executable | 37.1 | 40.01 | 0.8199x | 0.8156x | 988.1 | 1,210.8 |
 | video | 163.8 | 99.99 | 0.9656x | 1.0210x | 40,262.3 | 39,435.2 |
 | ZIP archive | 153.7 | 99.91 | 0.9987x | 0.9415x | 32,418.3 | 34,433.2 |
-| large C header | 28.5 | 4.40 | 0.7660x | 0.7488x | 2,627.8 | 3,509.6 |
+| large C header | 28.5 | 4.40 | 0.7655x | 0.7593x | 2,694.8 | 3,555.3 |
 
 The ZIP reusable snapshot is an outlier under the recorded host load. Its raw
 fast path returns before the cache policy and is byte-for-byte unchanged, so
 the drop is not attributed to this change.
 
 This is meaningful progress, not leadership. Real compressed multi-block files
-remain 17--39% behind libzstd after both changes. The next profile should
+remain 18--37% behind libzstd after the retained changes. The next profile should
 separate split-decoder rejection reasons, incomplete-Huffman literal decoding,
 FSE table rebuilds, and the remaining exact-copy traffic rather than broadening
 wildcopy again.
 
 ## Validation
 
-- 671/671 direct Zstd tests pass in ReleaseFast.
+- 672/672 direct Zstd tests pass in ReleaseFast.
 - The one-shot and reusable 13-row reference gates pass against libzstd 1.5.7.
 - The decode-profile gate and three-row/two-API path smoke pass.
 - The 276-case compatibility matrix passes with zero unsupported cases.
 - All nine upstream decodecorpus campaigns pass: 9,900 frames, all 64 sequence
   mode combinations, and real reusable table hits.
 
-The broad `zig build check -Doptimize=ReleaseFast -j1` was not completed: its
-dependency on the monolithic all-codec `vort-tests` root remained in LLVM code
-generation for tens of minutes. This is not reported as a pass. The direct
-Zstd suite and codec-specific gates above are the authoritative validation for
-this change.
+The broad `zig build check -Doptimize=ReleaseFast -j1` was stopped after more
+than 25 minutes while its monolithic all-codec tools were still consuming CPU
+in LLVM code generation. This is not reported as a pass. The direct Zstd suite,
+x86-64 cross-compilation, and codec-specific gates above are the authoritative
+validation for this change.
