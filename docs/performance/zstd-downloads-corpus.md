@@ -120,6 +120,31 @@ The sub-percent mixed controls remain inside the observed loaded-host jitter;
 none shows a consistent directional loss. A generated >512 KiB compressed
 frame verifies two correct decodes without allocating the cache workspace.
 
+## FSE table distribution and rejected generalization
+
+The decode profiler now reports sequence-block counts, all four table modes,
+low-probability usage, and accuracy-log histograms. Its extra normalized-count
+pass is diagnostic-only; production decoding does not retain or update the new
+bookkeeping. A fresh profile of the six compressed files produced:
+
+| Case | Explicit FSE tables | No-low tables | No-low share | Accuracy-log distribution (5/6/7/8/9) |
+| --- | ---: | ---: | ---: | --- |
+| large SVG | 4,130 | 4,130 | 100.00% | 66 / 117 / 2,573 / 1,374 / 0 |
+| robot log | 2,652 | 2,489 | 93.85% | 2 / 30 / 130 / 2,378 / 112 |
+| trace JSON | 741 | 149 | 20.11% | 0 / 2 / 31 / 270 / 438 |
+| shared library | 2,260 | 841 | 37.21% | 1 / 77 / 315 / 837 / 1,030 |
+| executable | 1,185 | 316 | 26.67% | 0 / 8 / 46 / 513 / 618 |
+| large C header | 678 | 218 | 32.15% | 0 / 2 / 1 / 307 / 368 |
+
+The distribution suggested extending the specialized no-low builder beyond
+256 states, but the real-file A/B results rejected that direction. A 128-state
+route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
+the 512-state route measured 0.9899x median on the header and 0.9977x on the
+executable. Recording the no-low count while parsing and using it to remove the
+existing 256-state verification scan was also neutral on the robot log:
+**0.9977x median / 1.0002x geometric, 10/21 wins**. All three production-path
+experiments were removed.
+
 ## Current loaded-host snapshot
 
 These rows additionally use the large-frame cache bypass. Ratios are

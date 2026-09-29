@@ -16291,3 +16291,15 @@ reuse, so production keeps the simpler independently owned plans.
   real-file controls remain within loaded-host noise. The
   generated large-frame oracle, 671 direct Zstd tests, reusable reference gate,
   profile gate/path smoke, and 9,900-frame decodecorpus pass.
+
+- Zstd decode profiling now records sequence blocks, explicit/repeat/RLE/
+  predefined table modes, low-probability use, and FSE accuracy-log
+  histograms through a diagnostic-only parser pass. The six compressed
+  Downloads inputs contain 8,143 no-low tables out of 11,646 explicit tables,
+  but the distribution is workload-specific: 100% for the SVG and 20.1% for
+  trace JSON. Real-file A/B rejected 128- and 512-state generalizations of the
+  no-low builder. Removing the 256-state verification scan by retaining a
+  parse-time count was also neutral on the robot log at 0.9977x median /
+  1.0002x geometric with 10/21 wins, so no decoder hot-path change remains.
+  The isolated profiler, 671 direct tests, reference/profile/compatibility
+  gates, and the 9,900-frame/64-mode decodecorpus pass.

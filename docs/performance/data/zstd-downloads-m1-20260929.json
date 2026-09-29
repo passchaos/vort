@@ -13,6 +13,7 @@
   "candidate_256_sha256": "0515b2b69f5c29f408d520920f4cc657d0c318f5cd4b368de8bcd25137563185",
   "candidate_medium_4k_wildcopy_sha256": "b8c76b9a292d78eccdccc130da97c9da2e5c2688312bd52a84fb01f20efca230",
   "candidate_cache_bypass_sha256": "33a4c405de650f8c5bb21b77ef8b4de23df26379c7fb1552c3136f627106133f",
+  "fse_table_profile_sha256": "2c101771b80e2f9bcce64b15a6136086d731cfb6d9b5fc0e227d6b55bcf254d5",
   "api_pairs": {
     "one_shot": ["decodeFrameInto", "ZSTD_decompress"],
     "reusable": ["NativeFrameDecoder.decodeIntoSlice", "ZSTD_decompressDCtx"]
@@ -65,6 +66,20 @@
       "large_header": {"compressed_blocks":229,"sequence_hits":0,"huffman_hits":0}
     },
     "small_control": {"case":"numbered_json","iterations":10,"sequence_hits":10,"huffman_hits":10}
+  },
+  "fse_table_profile": {
+    "large_svg": {"sequence_blocks":1377,"compressed_tables":4130,"no_low_tables":4130,"low_tables":0,"accuracy_log_histogram":[0,0,0,0,0,66,117,2573,1374,0],"no_low_accuracy_log_histogram":[0,0,0,0,0,66,117,2573,1374,0]},
+    "robot_log": {"sequence_blocks":884,"compressed_tables":2652,"no_low_tables":2489,"low_tables":163,"accuracy_log_histogram":[0,0,0,0,0,2,30,130,2378,112],"no_low_accuracy_log_histogram":[0,0,0,0,0,2,30,130,2323,4]},
+    "trace_json": {"sequence_blocks":247,"compressed_tables":741,"no_low_tables":149,"low_tables":592,"accuracy_log_histogram":[0,0,0,0,0,0,2,31,270,438],"no_low_accuracy_log_histogram":[0,0,0,0,0,0,2,31,61,55]},
+    "shared_library": {"sequence_blocks":762,"compressed_tables":2260,"no_low_tables":841,"low_tables":1419,"accuracy_log_histogram":[0,0,0,0,0,1,77,315,837,1030],"no_low_accuracy_log_histogram":[0,0,0,0,0,1,77,315,367,81]},
+    "executable": {"sequence_blocks":396,"compressed_tables":1185,"no_low_tables":316,"low_tables":869,"accuracy_log_histogram":[0,0,0,0,0,0,8,46,513,618],"no_low_accuracy_log_histogram":[0,0,0,0,0,0,8,46,234,28]},
+    "large_header": {"sequence_blocks":229,"compressed_tables":678,"no_low_tables":218,"low_tables":460,"accuracy_log_histogram":[0,0,0,0,0,0,2,1,307,368],"no_low_accuracy_log_histogram":[0,0,0,0,0,0,2,1,124,91]}
+  },
+  "rejected_fse_no_low_variants": {
+    "state_128_large_svg": {"pairs":21,"median":0.995124,"geomean":0.989114,"wins":5},
+    "state_512_large_header": {"pairs":21,"median":0.989944,"geomean":0.990992,"wins":4},
+    "state_512_executable": {"pairs":21,"median":0.997718,"geomean":0.995887,"wins":6},
+    "parsed_count_256_robot_log": {"baseline_sha256":"33a4c405de650f8c5bb21b77ef8b4de23df26379c7fb1552c3136f627106133f","candidate_sha256":"f063fda5ae1c3c991edecf64188da4d7d60fe85df929b4fb45a9ea3cda487a44","ratios":[1.037475,1.008939,1.069091,0.975780,1.001030,0.979537,1.020952,0.995666,1.002071,0.993674,0.979179,1.003805,0.997723,0.981936,1.002941,0.994465,1.004908,0.982342,0.986511,0.982348,1.007868],"median":0.997723,"geomean":1.000172,"wins":10}
   },
   "large_frame_cache_bypass_vs_wildcopy": {
     "large_svg": {"pairs":[1.0101,1.0445,1.0267,1.0087,1.0102,0.9934,1.0249,1.0246,0.9892,1.0187,1.0139,1.0277,1.0347,1.0015,1.0126],"median":1.013874,"geomean":1.015992,"wins":13,"baseline_libzstd_median":0.6126,"candidate_libzstd_median":0.6192},

@@ -7178,6 +7178,7 @@ pub const NativeSequenceModeSummary = struct {
 pub const NativeSequenceCopyProfile = struct {
     pub const length_bucket_count = 8;
     pub const offset_bucket_count = 9;
+    pub const fse_accuracy_log_bucket_count = 10;
     pub const medium_length_min = 3;
     pub const medium_length_max = 31;
 
@@ -7191,9 +7192,18 @@ pub const NativeSequenceCopyProfile = struct {
     non_overlapping_match_bytes: usize = 0,
     vector32_eligible_matches: usize = 0,
     vector32_eligible_bytes: usize = 0,
+    sequence_block_count: usize = 0,
+    compressed_table_modes: usize = 0,
+    no_low_probability_tables: usize = 0,
+    low_probability_tables: usize = 0,
+    repeat_table_modes: usize = 0,
+    rle_table_modes: usize = 0,
+    predefined_table_modes: usize = 0,
     match_length_histogram: [length_bucket_count]usize = @splat(0),
     offset_histogram: [offset_bucket_count]usize = @splat(0),
     medium_length_histogram: [medium_length_max - medium_length_min + 1]usize = @splat(0),
+    fse_accuracy_log_histogram: [fse_accuracy_log_bucket_count]usize = @splat(0),
+    no_low_fse_accuracy_log_histogram: [fse_accuracy_log_bucket_count]usize = @splat(0),
 };
 
 pub const NativeSequenceDecodeStageShape = struct {
@@ -9440,7 +9450,6 @@ noinline fn decodeFseNormalizedCounts(
     const accuracy_log = accuracy_log_biased + 5;
 
     var value_count: usize = 0;
-
     const total_probability = @as(u16, 1) << accuracy_log;
     var accumulated_probability: u16 = 0;
     while (accumulated_probability < total_probability) {
@@ -12460,6 +12469,67 @@ pub fn inspectNativeFrameBlockSequenceModes(frame: []const u8, block: NativeFram
     return try inspectNativeFrameBlockSequenceModesWithState(frame, block, &frame_state);
 }
 
+fn profileNativeSequenceTableMode(
+    profile: *NativeSequenceCopyProfile,
+    mode: SymbolMode,
+    block: []const u8,
+    offset: *usize,
+    expected_symbol_count: usize,
+    max_accuracy_log: u4,
+) Error!void {
+    switch (mode) {
+        .compressed => {
+            if (offset.* >= block.len) return error.TruncatedFrame;
+            var reader: ForwardBitReader = .{ .bytes = block[offset.*..] };
+            var values: [256]u16 = undefined;
+            const decoded = try decodeFseNormalizedCounts(&reader, expected_symbol_count, max_accuracy_log, &values);
+            offset.* = std.math.add(usize, offset.*, reader.byteIndex()) catch return error.IntegerOverflow;
+            if (offset.* > block.len) return error.TruncatedFrame;
+
+            profile.compressed_table_modes += 1;
+            const accuracy_log = std.math.log2_int(usize, decoded.table_len);
+            if (accuracy_log >= profile.fse_accuracy_log_histogram.len) return error.CorruptFrame;
+            profile.fse_accuracy_log_histogram[accuracy_log] += 1;
+            var no_low_probability = true;
+            for (values[0..decoded.value_count]) |value| no_low_probability = no_low_probability and value != 0;
+            if (no_low_probability) {
+                profile.no_low_probability_tables += 1;
+                profile.no_low_fse_accuracy_log_histogram[accuracy_log] += 1;
+            } else {
+                profile.low_probability_tables += 1;
+            }
+        },
+        .repeat => profile.repeat_table_modes += 1,
+        .rle => {
+            if (offset.* >= block.len) return error.TruncatedFrame;
+            offset.* += 1;
+            profile.rle_table_modes += 1;
+        },
+        .predefined => profile.predefined_table_modes += 1,
+    }
+}
+
+/// Profile serialized sequence-table descriptions separately from production
+/// parsing so the diagnostic does not add bookkeeping to decoder hot paths.
+fn profileNativeSequenceTables(
+    profile: *NativeSequenceCopyProfile,
+    block: []const u8,
+    offset: *usize,
+) Error!void {
+    if (offset.* >= block.len) return error.TruncatedFrame;
+    const mode_byte = block[offset.*];
+    offset.* += 1;
+    if ((mode_byte & 0x03) != 0) return error.CorruptFrame;
+    const ll_mode: SymbolMode = @enumFromInt(mode_byte >> 6);
+    const of_mode: SymbolMode = @enumFromInt((mode_byte >> 4) & 0x03);
+    const ml_mode: SymbolMode = @enumFromInt((mode_byte >> 2) & 0x03);
+
+    profile.sequence_block_count += 1;
+    try profileNativeSequenceTableMode(profile, ll_mode, block, offset, sequence_table_symbol_count_max.literal, sequence_table_accuracy_log_max.literal);
+    try profileNativeSequenceTableMode(profile, of_mode, block, offset, sequence_table_symbol_count_max.offset, sequence_table_accuracy_log_max.offset);
+    try profileNativeSequenceTableMode(profile, ml_mode, block, offset, sequence_table_symbol_count_max.match, sequence_table_accuracy_log_max.match);
+}
+
 /// Inspect decoded sequence-copy shapes without executing output writes. This
 /// diagnostic is intentionally kept out of the production decode loop.
 pub fn benchmarkNativeSequenceCopyProfile(frame: []const u8) Error!NativeSequenceCopyProfile {
@@ -12502,9 +12572,12 @@ pub fn benchmarkNativeSequenceCopyProfile(frame: []const u8) Error!NativeSequenc
                     produced = try checkedAdd(produced, section.regenerated_size);
                 } else {
                     var sequence_offset = section.sequence_payload_offset;
+                    var table_profile_offset = sequence_offset;
+                    try profileNativeSequenceTables(&profile, block, &table_profile_offset);
                     const parsed_spec = try parseSequenceModeSpec(block, &sequence_offset, section.sequence_count);
                     const spec = try resolveSequenceModeSpec(parsed_spec, frame_state.previous_tables);
                     try expectConsumedBlock(sequence_offset, block.len);
+                    if (table_profile_offset != parsed_spec.bitstream_offset) return error.CorruptFrame;
                     var state = try initSequenceDecodeState(
                         &spec,
                         section.sequence_count,

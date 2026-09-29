@@ -63,6 +63,8 @@ def main() -> int:
         assert row["input_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest(), row
         assert int(row["encoded_bytes"]) > 0, row
         assert int(row["literal_bytes"]) + int(row["match_bytes"]) == int(row["input_bytes"]), row
+        assert sum(int(row[key]) for key in ("compressed_table_modes", "repeat_table_modes", "rle_table_modes", "predefined_table_modes")) == int(row["sequence_blocks"]) * 3, row
+        assert int(row["no_low_probability_tables"]) + int(row["low_probability_tables"]) == int(row["compressed_table_modes"]), row
         assert "/source%20data.txt" in row["command"], row
 
         reusable = run(
