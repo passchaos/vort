@@ -16356,3 +16356,13 @@ reuse, so production keeps the simpler independently owned plans.
   A persistent Huffman reservoir also failed the full-SVG correctness check at
   a four-stream boundary. Production code is restored; future work should use
   a separately isolated execution kernel rather than grow this fragile loop.
+
+- Added `run-zstd-interleaved-block-bench`, which prepares the first real
+  all-FSE/four-stream-Huffman block and repeatedly executes its production
+  literal, sequence, and match-copy kernel while preserving real match history.
+  The SVG block has 997 sequences, 2,939 literals, and 131,072 output bytes.
+  Borrowing its 5,240-byte Huffman state improves the isolated stage by 1.1736x
+  median / 1.1719x geometric with 15/15 wins, but the longer complete-frame
+  campaign improves only 1.0068x / 1.0042x with 11/15 wins. The optimization is
+  therefore not retained; the new stage remains as a lower-noise attribution
+  tool and cannot substitute for the complete-frame acceptance gate.

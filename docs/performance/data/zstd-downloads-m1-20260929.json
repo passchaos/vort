@@ -87,6 +87,12 @@
     "executable": {"blocks":[378,14,4,0,0,0],"sequences":[1546947,9864,2875,0,0,0],"literal_bytes":[13623492,285916,257021,0,0,0],"match_bytes":[23901364,172836,37891,0,0,0]},
     "large_header": {"blocks":[219,7,0,1,2,0],"sequences":[623701,11061,0,199,7011,0],"literal_bytes":[242345,11494,0,525,477,0],"match_bytes":[28462423,906010,0,7333,261667,0]}
   },
+  "interleaved_block_stage": {
+    "date": "2026-09-30",
+    "large_svg_first_block": {"compressed_bytes":3895,"decoded_bytes":131072,"literal_bytes":2939,"sequences":997},
+    "borrowed_huffman_state": {"pairs":15,"baseline_sha256":"59b9689425df9d9740c154d787d9e736dc88ca0a93e9abaa4e96b306084ca89d","candidate_sha256":"a5a3ee30ada991d956c0d6170014247bf868091429f5dd9446261df1ed36cc95","ratios":[1.189672,1.185320,1.182353,1.160377,1.173541,1.154537,1.173652,1.166975,1.173360,1.179386,1.147180,1.173636,1.175871,1.169269,1.174263],"median":1.173636,"geomean":1.171909,"wins":15,"baseline_ns_per_block":23595.083,"candidate_ns_per_block":20127.042},
+    "complete_frame": {"pairs":15,"baseline_sha256":"a58d0fc43f09d50889507ca786f4ba68deef2a634486794b74d2769954842293","candidate_sha256":"bd9e045e5a2d6db4808f431427e52abd0960f3b246163437b48fe9a54da2cedb","ratios":[0.996437,1.012031,1.007142,1.000726,1.015750,0.974045,1.030962,0.967206,0.986966,1.006815,1.034398,1.005944,1.001125,1.013977,1.011350],"median":1.006815,"geomean":1.004170,"wins":11}
+  },
   "rejected_fse_no_low_variants": {
     "state_128_large_svg": {"pairs":21,"median":0.995124,"geomean":0.989114,"wins":5},
     "state_512_large_header": {"pairs":21,"median":0.989944,"geomean":0.990992,"wins":4},

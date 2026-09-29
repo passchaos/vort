@@ -183,6 +183,18 @@ roughly 0.85--0.86x code-generation regime. A persistent Huffman reservoir
 prototype was removed before timing because the full SVG round trip exposed a
 four-stream progress mismatch that the fixed fixture did not cover.
 
+An isolated complete-block benchmark now prepares the first real all-FSE/
+Huffman block once, preserves its initial history, and repeatedly executes the
+production interleaved literal, sequence, and match-copy kernel. The first SVG
+block contains 997 sequences, 2,939 literals, 3,895 compressed bytes, and
+131,072 decoded bytes. In this stage, borrowing the 5,240-byte Huffman state
+instead of copying it at entry improved 15/15 matched-layout pairs by 1.1736x
+median / 1.1719x geometric, from 23.595 to 20.127 us per block. The corresponding
+longer complete-frame experiment reached only 1.0068x median / 1.0042x
+geometric with 11/15 wins, so the production change was removed. This makes the
+stage useful for localizing kernel costs, but also demonstrates that isolated
+stage wins must still pass the complete-frame acceptance gate.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
