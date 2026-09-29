@@ -9870,17 +9870,10 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         sequence_decode_policy.preferHuffmanAllFse(section.sequence_count) and
         dictionary_history.len == 0)
     {
-        return try decodeAllFseHuffmanSequences(
-            section,
-            &spec,
-            output,
-            written,
-            frame_output_start,
-            frame_state,
-            continuation,
-            &state,
-            huffman_literals orelse return error.CorruptFrame,
-        );
+        const initial_huffman = huffman_literals orelse return error.CorruptFrame;
+        if (sequence_decode_policy.preferHuffmanMatchWildcopy(block.len, section.sequence_count))
+            return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, true, initial_huffman);
+        return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, false, initial_huffman);
     }
     while (state.remaining != 0) {
         const sequence = try readModeSequence(&state);
@@ -10108,17 +10101,10 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         (section.kind == .compressed or section.kind == .treeless) and
         sequence_decode_policy.preferHuffmanAllFse(section.sequence_count))
     {
-        return try decodeAllFseHuffmanSequences(
-            section,
-            &spec,
-            output,
-            written,
-            frame_output_start,
-            frame_state,
-            continuation,
-            &state,
-            huffman_literals orelse return error.CorruptFrame,
-        );
+        const initial_huffman = huffman_literals orelse return error.CorruptFrame;
+        if (sequence_decode_policy.preferHuffmanMatchWildcopy(block.len, section.sequence_count))
+            return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, true, initial_huffman);
+        return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, false, initial_huffman);
     }
     while (state.remaining != 0) {
         const sequence = try readModeSequence(&state);
@@ -10500,6 +10486,8 @@ noinline fn decodeAllFseHuffmanSequences(
     frame_state: *SequenceFrameState,
     continuation: sequence_continuation.Context,
     state: *SequenceDecodeState,
+    comptime allow_wildcopy: bool,
+    comptime use_match_wildcopy: bool,
     initial_huffman: HuffmanLiteralDecodeState,
 ) align(256) Error!void {
     var huffman_state = initial_huffman;
@@ -10560,9 +10548,23 @@ noinline fn decodeAllFseHuffmanSequences(
         try copyLiteralsFromHuffmanStateFast(&huffman_state, &section, literal_offset, output[written.*..][0..literal_len]);
         written.* += literal_len;
         literal_offset += literal_len;
+        const rounded_match_len = (match_len + 15) & ~@as(usize, 15);
         if (match_len == 71 and match_offset >= 71 and frame_output_start <= written.* and match_offset <= written.* - frame_output_start) {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
             sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
+        } else if (use_match_wildcopy and allow_wildcopy and
+            frame_output_start <= written.* and
+            match_len >= 16 and
+            match_offset >= 16 and
+            match_offset <= written.* - frame_output_start and
+            output.len - written.* >= rounded_match_len)
+        {
+            _ = sequence_match_copy.appendForwardWildcopy(
+                output,
+                written,
+                written.* - match_offset,
+                match_len,
+            );
         } else {
             try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
         }

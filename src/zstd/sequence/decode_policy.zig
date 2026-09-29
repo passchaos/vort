@@ -6,6 +6,7 @@ pub const split_sequence_min = 1024;
 pub const split_literal_min = 32 * 1024;
 pub const generic_split_literal_min = 4 * 1024;
 pub const huffman_all_fse_sequence_min = 512;
+pub const huffman_match_wildcopy_block_max = 4 * 1024;
 pub const raw_all_fse_sequence_min = 32;
 pub const raw_all_fse_literal_min = split_literal_min;
 pub const raw_wide_match_literal_min = 4 * 1024;
@@ -43,6 +44,14 @@ pub inline fn preferGenericSplit(literal_bytes: usize, sequence_count: usize) bo
 /// packed all-FSE sequence fields before the larger split threshold.
 pub inline fn preferHuffmanAllFse(sequence_count: usize) bool {
     return sequence_count >= huffman_all_fse_sequence_min;
+}
+
+/// The newly covered medium-density range has long-match-heavy real-world
+/// blocks, while denser blocks keep the established exact-copy executor.
+pub inline fn preferHuffmanMatchWildcopy(compressed_block_bytes: usize, sequence_count: usize) bool {
+    return sequence_count >= huffman_all_fse_sequence_min and
+        sequence_count < split_sequence_min and
+        compressed_block_bytes <= huffman_match_wildcopy_block_max;
 }
 
 /// Raw literals need no temporary decode buffer, so the packed all-FSE
@@ -83,6 +92,11 @@ test "split Huffman executor covers sequence-dense and literal-dense blocks" {
     try std.testing.expect(!preferGenericSplit(generic_split_literal_min - 1, split_sequence_min - 1));
     try std.testing.expect(!preferHuffmanAllFse(huffman_all_fse_sequence_min - 1));
     try std.testing.expect(preferHuffmanAllFse(huffman_all_fse_sequence_min));
+    try std.testing.expect(!preferHuffmanMatchWildcopy(huffman_match_wildcopy_block_max, huffman_all_fse_sequence_min - 1));
+    try std.testing.expect(preferHuffmanMatchWildcopy(huffman_match_wildcopy_block_max, huffman_all_fse_sequence_min));
+    try std.testing.expect(preferHuffmanMatchWildcopy(huffman_match_wildcopy_block_max, split_sequence_min - 1));
+    try std.testing.expect(!preferHuffmanMatchWildcopy(huffman_match_wildcopy_block_max, split_sequence_min));
+    try std.testing.expect(!preferHuffmanMatchWildcopy(huffman_match_wildcopy_block_max + 1, huffman_all_fse_sequence_min));
     try std.testing.expect(preferRawAllFse(0, raw_all_fse_sequence_min));
     try std.testing.expect(preferRawAllFse(raw_all_fse_literal_min, 1));
     try std.testing.expect(!preferRawAllFse(raw_all_fse_literal_min - 1, raw_all_fse_sequence_min - 1));

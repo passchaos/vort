@@ -57,28 +57,63 @@ Lowering the threshold again from 512 to 256 did not help the SVG: eleven
 pairs measured 0.9984x median / 0.9957x geometric with 5/11 wins. That variant
 was removed.
 
+## Selective medium-block match wildcopy
+
+After the threshold change, the 512--1023-sequence all-FSE Huffman executor
+still sent every match except the fixed 71-byte case through exact copying.
+The retained follow-up uses the existing bounded 16/32/64-byte adaptive
+wildcopy only when all of these conditions hold:
+
+- the decoder entry has already proved wildcopy output padding;
+- the match is at least 16 bytes and its offset is at least 16 bytes;
+- the match source is inside the current frame rather than a dictionary;
+- the compressed block is at most 4 KiB and has 512--1023 sequences.
+
+The compressed-size condition is a measured proxy for the long-match-heavy
+SVG blocks. Applying the branch to every all-FSE block improved the SVG but
+regressed trace JSON; limiting it only by sequence count left a roughly 1%
+large-header regression. The 4 KiB gate removes the hot-loop branch from those
+existing dense paths.
+
+Against the aligned 512-threshold baseline, fifteen alternating SVG pairs
+improve by **1.0972x median / 1.0932x geometric**, with **15/15 wins** and a
+1.0398x minimum. The reusable Vort/libzstd median moves from 0.5581x to
+0.6122x. Together with the preceding threshold change, the two retained steps
+improve this workload by roughly 1.433x.
+
+| Case | Candidate/baseline median | Geometric mean | Wins |
+| --- | ---: | ---: | ---: |
+| robot log | 1.0076x | 1.0109x | 6/7 |
+| trace JSON | 1.0237x | 1.0073x | 4/7 |
+| shared library | 0.9964x | 1.0002x | 3/7 |
+| executable | 1.0002x | 0.9992x | 4/7 |
+| large C header | 1.0073x | 1.0023x | 4/7 |
+
+A 32-byte minimum was also rejected: it lost 1.65% median on the SVG versus
+the retained 16-byte minimum and did not improve JSON.
+
 ## Current loaded-host snapshot
 
-These rows use the retained 512 threshold. Ratios are Vort/libzstd; the full
-input hashes, exact byte counts, binary hashes, and A/B observations are in the
-[JSON record](data/zstd-downloads-m1-20260929.json).
+These rows use the retained 512 threshold and selective medium-block wildcopy.
+Ratios are Vort/libzstd; the full input hashes, exact byte counts, binary hashes,
+and A/B observations are in the [JSON record](data/zstd-downloads-m1-20260929.json).
 
 | Case | Input MiB | Encoded % | One-shot | Reusable | Vort reusable MiB/s | libzstd DCtx MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| large SVG | 171.3 | 1.39 | 0.5681x | 0.5517x | 5,330.0 | 9,661.1 |
-| robot log | 105.0 | 6.69 | 0.7391x | 0.7257x | 3,296.5 | 4,542.6 |
-| trace JSON | 30.2 | 6.10 | 0.7926x | 0.7979x | 2,829.5 | 3,546.2 |
-| shared library | 77.7 | 40.81 | 0.8174x | 0.8182x | 1,030.9 | 1,259.9 |
-| executable | 37.1 | 40.01 | 0.8126x | 0.8089x | 970.2 | 1,199.3 |
-| video | 163.8 | 99.99 | 0.9950x | 0.9835x | 38,860.5 | 39,511.2 |
-| ZIP archive | 153.7 | 99.91 | 0.9847x | 1.0012x | 34,432.8 | 34,389.9 |
-| large C header | 28.5 | 4.40 | 0.7578x | 0.7325x | 2,519.4 | 3,439.3 |
+| large SVG | 171.3 | 1.39 | 0.6279x | 0.6113x | 5,973.5 | 9,771.5 |
+| robot log | 105.0 | 6.69 | 0.7419x | 0.7243x | 3,325.6 | 4,591.6 |
+| trace JSON | 30.2 | 6.10 | 0.7983x | 0.7918x | 2,750.7 | 3,473.8 |
+| shared library | 77.7 | 40.81 | 0.8213x | 0.8266x | 1,040.9 | 1,259.3 |
+| executable | 37.1 | 40.01 | 0.8127x | 0.8136x | 987.5 | 1,213.8 |
+| video | 163.8 | 99.99 | 0.9363x | 1.0269x | 41,522.4 | 40,435.9 |
+| ZIP archive | 153.7 | 99.91 | 0.9687x | 1.0107x | 34,823.0 | 34,454.7 |
+| large C header | 28.5 | 4.40 | 0.7607x | 0.7456x | 2,640.1 | 3,540.7 |
 
 This is meaningful progress, not leadership. Real compressed multi-block files
-remain 18--45% behind libzstd after the change. Production sampling points next
-to the generic/incomplete-Huffman fallback, literal decode, FSE table rebuilds,
-and match-copy traffic. Those paths should be measured separately before
-expanding the 512 threshold or adding more copy special cases.
+remain 17--39% behind libzstd after both changes. The next profile should
+separate split-decoder rejection reasons, incomplete-Huffman literal decoding,
+FSE table rebuilds, and the remaining exact-copy traffic rather than broadening
+wildcopy again.
 
 ## Validation
 

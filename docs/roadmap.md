@@ -16268,3 +16268,15 @@ reuse, so production keeps the simpler independently owned plans.
   0.5573x of warmed libzstd, so generic/incomplete-Huffman fallback, literal
   decode, table rebuilds, and copy traffic remain the next measured targets.
   See `docs/performance/zstd-downloads-corpus.md` and its JSON record.
+
+- The medium all-FSE Huffman executor now applies bounded adaptive match
+  wildcopy only to highly compressed blocks of at most 4 KiB with 512--1023
+  sequences. The caller proves output padding, a current-frame source, and
+  match length/offset of at least 16 bytes; dictionary and tail cases retain
+  exact copying. Against the aligned 512-threshold baseline, 15 alternating
+  large-SVG pairs improve by 1.0972x median / 1.0932x geometric with 15/15 wins.
+  Five real-file controls are neutral or positive by geometric mean within
+  noise. Unrestricted all-FSE wildcopy, an ungated medium executor, and a
+  32-byte minimum were rejected because they regressed JSON/header controls or
+  lost SVG throughput. The combined retained SVG gain from `4c98febd` is about
+  1.433x, but it still reaches only 0.6122x of warmed libzstd.
