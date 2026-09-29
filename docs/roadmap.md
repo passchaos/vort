@@ -16342,3 +16342,15 @@ reuse, so production keeps the simpler independently owned plans.
   916 of 1,377 blocks and 66.38% of output below the current threshold. This
   narrows the next production experiment to its 512--1023-sequence blocks
   instead of globally widening the split decoder.
+
+- The resulting SVG routing experiment rejected 512/768/896 split thresholds:
+  seven matched-layout pairs produced 0.9642x/0.9629x/0.9556x medians and 0/7
+  wins at every threshold. A 1 kHz pure-Vort profile instead places 45.42% of
+  samples in the retained interleaved all-FSE/Huffman loop and 24.57% in the
+  existing split loop. Small interleaved-loop changes were also rejected:
+  fixed loop padding was neutral, a matched direct-offset shortcut and local
+  sequence reader did not improve, borrowed Huffman-state variants exposed a
+  large code-layout cliff, and two-symbol literal lookup fell to about 0.86x.
+  A persistent Huffman reservoir also failed the full-SVG correctness check at
+  a four-stream boundary. Production code is restored; future work should use
+  a separately isolated execution kernel rather than grow this fragile loop.

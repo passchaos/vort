@@ -160,6 +160,26 @@ sequence-block output for every compressed input except the SVG. The SVG's
 512--1023-sequence blocks are the focused threshold experiment; widening split
 routing globally is not justified by the other five rows.
 
+A 1 kHz pure-Vort SVG sample attributes 45.42% of samples to the interleaved
+all-FSE/Huffman executor, 24.57% to the existing split executor, 6.80% to the
+two FSE-table builders, and 2.26% to Huffman-tree construction. Lowering the
+split threshold was nevertheless counterproductive under matched 256-byte
+helper alignment: 512, 768, and 896 sequences measured 0.9642x, 0.9629x, and
+0.9556x medians over seven alternating pairs, all with 0/7 wins. Bulk literal
+staging does not amortize on these sparse-literal medium blocks.
+
+Several interleaved-loop changes were also rejected. Five fixed AArch64 NOPs
+that moved the loop head to a 64-byte boundary were neutral at 1.0027x median /
+1.0000x geometric with 4/7 wins. With that loop placement fixed, bypassing the
+generic direct-offset resolver measured only 0.9882x / 0.9976x with 2/7 wins.
+Keeping only the sequence reader local measured 0.9978x / 0.9936x with 2/7
+wins. Borrowing the 5,240-byte Huffman state through a `noalias` pointer was
+also neutral at 1.0081x / 1.0037x with 4/7 wins, while less constrained pointer
+forms and a two-literal lookup increased register/code pressure and fell into a
+roughly 0.85--0.86x code-generation regime. A persistent Huffman reservoir
+prototype was removed before timing because the full SVG round trip exposed a
+four-stream progress mismatch that the fixed fixture did not cover.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
