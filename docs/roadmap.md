@@ -16211,3 +16211,10 @@ reuse, so production keeps the simpler independently owned plans.
   Absolute candidate/libbrotli 1.2.0 medians reach 0.9496x and 0.9062x;
   `clustered_q8` remains neutral. The focused lookup/route tests, reference
   gate, upstream differential, and real-corpus smoke pass.
+- Two additional M1 `raw256k` copy shapes were rejected. Recognizing the exact
+  two-full-128-KiB-block frame and copying through fixed-boundary loops measured
+  0.9423x median / 0.9575x geometric throughput with 7/21 wins; replacing the
+  remaining-byte loop with an end-pointer comparison measured 0.9603x /
+  0.9649x with 6/21 wins. Both were removed, leaving the committed 128-byte
+  load-first loop as the measured best path while the 1.20x target remains
+  open.

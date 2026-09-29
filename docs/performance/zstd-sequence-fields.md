@@ -1019,3 +1019,12 @@ the two noisy alternating campaigns by `1.0059x` median / `1.0124x` geometric
 (12/21 wins) and `1.0216x` / `1.0424x` (9/15 wins), but those results are not
 strong enough to declare the raw row complete. No Downloads corpus was run,
 because the requested all-row 1.20x precondition is not yet satisfied.
+
+Two later M1 raw-copy follow-ups were measured and removed. A canonical
+two-full-128-KiB-block detector plus fixed-boundary copier measured 0.9423x
+median / 0.9575x geometric throughput with only 7/21 wins against the retained
+kernel. Rewriting the same 128-byte loop around an end pointer removed one
+`sub` from each iteration, but measured only 0.9603x / 0.9649x with 6/21 wins;
+the extra mask/tail setup and changed register layout outweighed the saved
+instruction. The committed remaining-length loop therefore stays authoritative
+for `raw256k`.
