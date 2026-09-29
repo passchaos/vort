@@ -183,17 +183,17 @@ roughly 0.85--0.86x code-generation regime. A persistent Huffman reservoir
 prototype was removed before timing because the full SVG round trip exposed a
 four-stream progress mismatch that the fixed fixture did not cover.
 
-An isolated complete-block benchmark now prepares the first real all-FSE/
-Huffman block once, preserves its initial history, and repeatedly executes the
-production interleaved literal, sequence, and match-copy kernel. The first SVG
-block contains 997 sequences, 2,939 literals, 3,895 compressed bytes, and
-131,072 decoded bytes. In this stage, borrowing the 5,240-byte Huffman state
-instead of copying it at entry improved 15/15 matched-layout pairs by 1.1736x
-median / 1.1719x geometric, from 23.595 to 20.127 us per block. The corresponding
-longer complete-frame experiment reached only 1.0068x median / 1.0042x
-geometric with 11/15 wins, so the production change was removed. This makes the
-stage useful for localizing kernel costs, but also demonstrates that isolated
-stage wins must still pass the complete-frame acceptance gate.
+An isolated complete-block benchmark now prepares all matching medium all-FSE/
+Huffman blocks once, preserves their original frame-history prefixes, and
+repeatedly executes the production interleaved literal, sequence, and match-
+copy kernel. The SVG contributes 824 blocks, 771,365 sequences, 784,738
+literals, and 107,914,672 decoded bytes to this stage. Its first 997-sequence
+block alone misleadingly suggested a 1.1736x median gain from borrowing the
+5,240-byte Huffman state. The complete 824-block stage reduces that to 1.0137x
+median / 1.0122x geometric, and the longer complete-frame campaign reaches only
+1.0044x / 1.0030x with 10/15 wins. The production change was removed. This
+makes the stage useful for representative kernel attribution while preserving
+the complete-frame gate as the final acceptance criterion.
 
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state

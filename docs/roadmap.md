@@ -16357,12 +16357,12 @@ reuse, so production keeps the simpler independently owned plans.
   a four-stream boundary. Production code is restored; future work should use
   a separately isolated execution kernel rather than grow this fragile loop.
 
-- Added `run-zstd-interleaved-block-bench`, which prepares the first real
-  all-FSE/four-stream-Huffman block and repeatedly executes its production
-  literal, sequence, and match-copy kernel while preserving real match history.
-  The SVG block has 997 sequences, 2,939 literals, and 131,072 output bytes.
-  Borrowing its 5,240-byte Huffman state improves the isolated stage by 1.1736x
-  median / 1.1719x geometric with 15/15 wins, but the longer complete-frame
-  campaign improves only 1.0068x / 1.0042x with 11/15 wins. The optimization is
-  therefore not retained; the new stage remains as a lower-noise attribution
-  tool and cannot substitute for the complete-frame acceptance gate.
+- Added `run-zstd-interleaved-block-bench`, which prepares every matching
+  medium all-FSE/four-stream-Huffman block and repeatedly executes its
+  production literal, sequence, and match-copy kernel against the original
+  frame history. The SVG contributes 824 blocks, 771,365 sequences, and
+  107,914,672 output bytes. Borrowing its 5,240-byte Huffman state improved the
+  first block by a misleading 1.1736x; the complete stage measured only 1.0137x
+  median / 1.0122x geometric, and the longer complete frame only 1.0044x /
+  1.0030x with 10/15 wins. The production change was removed; the stage remains
+  as a representative lower-noise screen before complete-frame acceptance.

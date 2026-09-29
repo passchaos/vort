@@ -54,7 +54,7 @@ pub fn main(init: std.process.Init) !void {
     const written = try vort.zstdDecodeFrameInto(encoded, decoded);
     if (written != input.len or !std.mem.eql(u8, input, decoded)) return error.SizeMismatch;
 
-    var stage = try vort.zstd.prepareNativeInterleavedBlockDecodeStage(init.gpa, encoded, input);
+    var stage = try vort.zstd.prepareNativeInterleavedDecodeStage(init.gpa, encoded, input, .{});
     defer stage.deinit();
     const shape = stage.shape();
     const warmed = try stage.decode();
@@ -66,7 +66,7 @@ pub fn main(init: std.process.Init) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     try csv.writer.print(
-        "case,input_bytes,input_sha256,encoded_bytes,reference_version,level,iterations,rounds,block_compressed_bytes,block_decoded_bytes,literal_bytes,sequence_count,match_wildcopy,best_ns,ns_per_iteration,ns_per_output_byte,checksum,{s}\n",
+        "case,input_bytes,input_sha256,encoded_bytes,reference_version,level,iterations,rounds,selected_blocks,selected_compressed_bytes,selected_decoded_bytes,literal_bytes,sequence_count,best_ns,ns_per_iteration,ns_per_output_byte,checksum,{s}\n",
         .{benchmark_provenance.csv_columns},
     );
     const input_sha256 = benchmark_provenance.sha256Hex(input);
@@ -81,11 +81,11 @@ pub fn main(init: std.process.Init) !void {
             options.input_level,
             options.iterations,
             options.rounds,
+            shape.block_count,
             shape.compressed_bytes,
             shape.decoded_bytes,
             shape.literal_bytes,
             shape.sequence_count,
-            @intFromBool(shape.match_wildcopy),
             sample.elapsed_ns,
             perUnit(sample.elapsed_ns, options.iterations),
             perUnit(sample.elapsed_ns, total_output_bytes),
@@ -107,7 +107,7 @@ pub fn main(init: std.process.Init) !void {
 
 fn measureStage(
     io: std.Io,
-    stage: *vort.zstd.NativeInterleavedBlockDecodeStage,
+    stage: *vort.zstd.NativeInterleavedDecodeStage,
     iterations: usize,
     rounds: usize,
 ) !Sample {

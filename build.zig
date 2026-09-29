@@ -3282,7 +3282,7 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_zstd_interleaved_block_bench.addArgs(args);
     const zstd_interleaved_block_bench_step = b.step(
         "run-zstd-interleaved-block-bench",
-        "Benchmark one prepared all-FSE/Huffman block with real match copies",
+        "Benchmark prepared medium all-FSE/Huffman blocks with real match copies",
     );
     zstd_interleaved_block_bench_step.dependOn(&run_zstd_interleaved_block_bench.step);
 

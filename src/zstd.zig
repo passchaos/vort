@@ -7257,15 +7257,17 @@ pub const NativeSequenceDecodeStage = struct {
     }
 };
 
-pub const NativeInterleavedBlockDecodeStageShape = struct {
+pub const NativeInterleavedDecodeStageShape = struct {
+    block_count: usize,
+    match_wildcopy_block_count: usize,
     compressed_bytes: usize,
     decoded_bytes: usize,
     literal_bytes: usize,
     sequence_count: usize,
-    match_wildcopy: bool,
 };
 
-pub const NativeInterleavedBlockDecodeStageResult = struct {
+pub const NativeInterleavedDecodeStageResult = struct {
+    block_count: usize,
     decoded_bytes: usize,
     checksum: u64,
 };
@@ -7275,90 +7277,53 @@ const PreparedNativeInterleavedBlock = struct {
     section: LiteralOnlySection,
     spec: SequenceModeSpec,
     repeated_offsets: [3]usize,
+    output_offset: usize,
+    decoded_bytes: usize,
     use_match_wildcopy: bool,
 };
 
-/// Prepared benchmark state for one dictionary-free all-FSE/Huffman block.
-/// Parsing and table construction happen once; `decode` measures the complete
-/// interleaved literal/sequence/match executor against real frame history.
-/// The encoded frame borrowed by `prepareNativeInterleavedBlockDecodeStage`
-/// must remain alive until `deinit`.
-pub const NativeInterleavedBlockDecodeStage = struct {
-    allocator: std.mem.Allocator,
-    prepared: *PreparedNativeInterleavedBlock,
-    output: []u8,
-    expected_decoded_bytes: usize,
+pub const NativeInterleavedDecodeStageOptions = struct {
+    min_sequence_count: usize = sequence_decode_policy.huffman_all_fse_sequence_min,
+    max_sequence_count: usize = sequence_decode_policy.split_sequence_min - 1,
+    require_match_wildcopy: bool = true,
+};
 
-    pub fn deinit(self: *NativeInterleavedBlockDecodeStage) void {
+/// Prepared benchmark state for every dictionary-free medium all-FSE/Huffman
+/// block in a frame. Parsing and table construction happen once; `decode`
+/// measures the complete interleaved literal/sequence/match executor against
+/// the original frame history. The encoded frame borrowed by `prepare` must
+/// remain alive until `deinit`.
+pub const NativeInterleavedDecodeStage = struct {
+    allocator: std.mem.Allocator,
+    prepared: []PreparedNativeInterleavedBlock,
+    output: []u8,
+    expected_output: []const u8,
+    prepared_shape: NativeInterleavedDecodeStageShape,
+
+    pub fn deinit(self: *NativeInterleavedDecodeStage) void {
         self.allocator.free(self.output);
-        self.allocator.destroy(self.prepared);
+        self.allocator.free(self.prepared);
         self.* = undefined;
     }
 
-    pub fn shape(self: *const NativeInterleavedBlockDecodeStage) NativeInterleavedBlockDecodeStageShape {
-        return .{
-            .compressed_bytes = self.prepared.block.len,
-            .decoded_bytes = self.expected_decoded_bytes,
-            .literal_bytes = self.prepared.section.regenerated_size,
-            .sequence_count = self.prepared.section.sequence_count,
-            .match_wildcopy = self.prepared.use_match_wildcopy,
-        };
+    pub fn shape(self: *const NativeInterleavedDecodeStage) NativeInterleavedDecodeStageShape {
+        return self.prepared_shape;
     }
 
-    pub fn decoded(self: *const NativeInterleavedBlockDecodeStage) []const u8 {
-        return self.output[0..self.expected_decoded_bytes];
+    pub fn decoded(self: *const NativeInterleavedDecodeStage) []const u8 {
+        return self.output[0 .. self.output.len - 64];
     }
 
-    pub noinline fn decode(self: *NativeInterleavedBlockDecodeStage) Error!NativeInterleavedBlockDecodeStageResult {
-        var state = try initSequenceDecodeState(
-            &self.prepared.spec,
-            self.prepared.section.sequence_count,
-            try ReverseBitReader.init(self.prepared.block[self.prepared.spec.bitstream_offset..]),
-            self.prepared.repeated_offsets,
-        );
-        var frame_state: SequenceFrameState = .{
-            .repeated_offsets = self.prepared.repeated_offsets,
-            .retain_sequence_tables = false,
-        };
-        const huffman_state = (try initHuffmanLiteralDecodeState(self.prepared.block, self.prepared.section)) orelse
-            return error.CorruptFrame;
-        var written: usize = 0;
-        if (self.prepared.use_match_wildcopy)
-            try decodeAllFseHuffmanSequences(
-                self.prepared.section,
-                &self.prepared.spec,
-                self.output,
-                &written,
-                0,
-                &frame_state,
-                .terminal,
-                &state,
-                true,
-                true,
-                huffman_state,
-            )
-        else
-            try decodeAllFseHuffmanSequences(
-                self.prepared.section,
-                &self.prepared.spec,
-                self.output,
-                &written,
-                0,
-                &frame_state,
-                .terminal,
-                &state,
-                true,
-                false,
-                huffman_state,
-            );
-        if (written != self.expected_decoded_bytes) return error.SizeMismatch;
-        const middle = written / 2;
+    pub noinline fn decode(self: *NativeInterleavedDecodeStage) Error!NativeInterleavedDecodeStageResult {
+        var checksum: u64 = 0;
+        for (self.prepared) |*block| {
+            const block_checksum = try decodePreparedNativeInterleavedBlock(block, self.output, self.expected_output);
+            checksum = std.math.rotl(u64, checksum ^ block_checksum, 17) +% block.output_offset;
+        }
         return .{
-            .decoded_bytes = written,
-            .checksum = @as(u64, self.output[0]) |
-                (@as(u64, self.output[middle]) << 8) |
-                (@as(u64, self.output[written - 1]) << 16) |
-                (@as(u64, @intCast(written)) << 24),
+            .block_count = self.prepared.len,
+            .decoded_bytes = self.prepared_shape.decoded_bytes,
+            .checksum = checksum,
         };
     }
 };
@@ -12794,77 +12759,204 @@ pub fn benchmarkNativeSequenceCopyProfile(frame: []const u8) Error!NativeSequenc
     return profile;
 }
 
-/// Prepare the first compressed block of a dictionary-free frame for repeated
-/// execution through the production interleaved all-FSE/Huffman kernel. This
-/// diagnostic is intentionally narrower than a frame decoder: it is used to
-/// compare kernel changes without timing frame routing or unrelated blocks.
-pub fn prepareNativeInterleavedBlockDecodeStage(
+fn decodePreparedNativeInterleavedBlock(
+    prepared: *const PreparedNativeInterleavedBlock,
+    output: []u8,
+    expected_output: []const u8,
+) Error!u64 {
+    var state = try initSequenceDecodeState(
+        &prepared.spec,
+        prepared.section.sequence_count,
+        try ReverseBitReader.init(prepared.block[prepared.spec.bitstream_offset..]),
+        prepared.repeated_offsets,
+    );
+    var frame_state: SequenceFrameState = .{
+        .repeated_offsets = prepared.repeated_offsets,
+        .retain_sequence_tables = false,
+    };
+    const huffman_state = (try initHuffmanLiteralDecodeState(prepared.block, prepared.section)) orelse
+        return error.CorruptFrame;
+    var written = prepared.output_offset;
+    if (prepared.use_match_wildcopy)
+        try decodeAllFseHuffmanSequences(
+            prepared.section,
+            &prepared.spec,
+            output,
+            &written,
+            0,
+            &frame_state,
+            .terminal,
+            &state,
+            true,
+            true,
+            huffman_state,
+        )
+    else
+        try decodeAllFseHuffmanSequences(
+            prepared.section,
+            &prepared.spec,
+            output,
+            &written,
+            0,
+            &frame_state,
+            .terminal,
+            &state,
+            true,
+            false,
+            huffman_state,
+        );
+    if (written != prepared.output_offset + prepared.decoded_bytes) return error.SizeMismatch;
+    const decoded = output[prepared.output_offset..written];
+    const checksum = @as(u64, decoded[0]) |
+        (@as(u64, decoded[decoded.len / 2]) << 8) |
+        (@as(u64, decoded[decoded.len - 1]) << 16) |
+        (@as(u64, @intCast(decoded.len)) << 24);
+    const restore_end = @min(written + 64, expected_output.len);
+    @memcpy(output[written..restore_end], expected_output[written..restore_end]);
+    if (restore_end - written < 64)
+        @memset(output[restore_end .. written + 64], 0xa5);
+    return checksum;
+}
+
+/// Prepare every medium all-FSE/four-stream-Huffman block that uses the
+/// production interleaved executor. The expected output seeds immutable frame
+/// history once; timed decodes overwrite only the selected block ranges.
+pub fn prepareNativeInterleavedDecodeStage(
     allocator: std.mem.Allocator,
     frame: []const u8,
     expected_output: []const u8,
-) Error!NativeInterleavedBlockDecodeStage {
+    options: NativeInterleavedDecodeStageOptions,
+) Error!NativeInterleavedDecodeStage {
+    if (options.min_sequence_count == 0 or options.max_sequence_count < options.min_sequence_count)
+        return error.InvalidBlockPlan;
     if (frame.len < 4 or std.mem.readInt(u32, frame[0..4], .little) != frame_magic_u32) return error.InvalidMagic;
     var offset: usize = 4;
     const header = try parseRawOrRleFrameHeader(frame, &offset);
-    if (frame.len - offset < 3) return error.TruncatedFrame;
-    const block_header = std.mem.readInt(u24, frame[offset..][0..3], .little);
-    offset += 3;
-    const block_type = (block_header >> 1) & 3;
-    const block_len: usize = @intCast(block_header >> 3);
-    try validateBlockSize(header, block_type, block_len);
-    if (block_type != 2) return error.InvalidBlockPlan;
-    if (frame.len - offset < block_len) return error.TruncatedFrame;
-    const block = frame[offset..][0..block_len];
-
-    var frame_state: SequenceFrameState = .{ .retain_sequence_tables = false };
-    const section = try parseLiteralsSection(block, &frame_state);
-    if (section.regenerated_size > header.block_size_max or section.sequence_count == 0)
-        return error.InvalidBlockPlan;
-    try validateSupportedLiteralSection(section);
-    if ((section.kind != .compressed and section.kind != .treeless) or
-        section.huffman_streams != .four)
-        return error.InvalidBlockPlan;
-
-    var sequence_offset = section.sequence_payload_offset;
-    const parsed_spec = try parseSequenceModeSpec(block, &sequence_offset, section.sequence_count);
-    const spec = try resolveSequenceModeSpec(parsed_spec, null);
-    try expectConsumedBlock(sequence_offset, block.len);
-    if (spec.ll_mode != .compressed or spec.of_mode != .compressed or spec.ml_mode != .compressed)
-        return error.InvalidBlockPlan;
-
-    const output = try allocator.alloc(u8, header.block_size_max + 16);
+    if (header.content_size) |size| if (try checkedU64ToUsize(size) != expected_output.len)
+        return error.SizeMismatch;
+    const output_len = std.math.add(usize, expected_output.len, 64) catch return error.IntegerOverflow;
+    const output = try allocator.alloc(u8, output_len);
     errdefer allocator.free(output);
-    @memset(output, 0xa5);
-    const prepared = try allocator.create(PreparedNativeInterleavedBlock);
-    errdefer allocator.destroy(prepared);
-    prepared.* = .{
-        .block = block,
-        .section = section,
-        .spec = spec,
-        .repeated_offsets = initial_repeated_offsets,
-        .use_match_wildcopy = sequence_decode_policy.preferHuffmanMatchWildcopy(block.len, section.sequence_count),
+    @memcpy(output[0..expected_output.len], expected_output);
+    @memset(output[expected_output.len..], 0xa5);
+
+    var prepared_blocks: std.ArrayList(PreparedNativeInterleavedBlock) = .empty;
+    defer prepared_blocks.deinit(allocator);
+    var shape: NativeInterleavedDecodeStageShape = .{
+        .block_count = 0,
+        .match_wildcopy_block_count = 0,
+        .compressed_bytes = 0,
+        .decoded_bytes = 0,
+        .literal_bytes = 0,
+        .sequence_count = 0,
     };
-    var stage: NativeInterleavedBlockDecodeStage = .{
+    var frame_state: SequenceFrameState = .{};
+    var produced: usize = 0;
+    while (true) {
+        if (frame.len - offset < 3) return error.TruncatedFrame;
+        const block_header = std.mem.readInt(u24, frame[offset..][0..3], .little);
+        offset += 3;
+        const last = block_header & 1 != 0;
+        const block_type = (block_header >> 1) & 3;
+        const block_len: usize = @intCast(block_header >> 3);
+        try validateBlockSize(header, block_type, block_len);
+        switch (block_type) {
+            0 => {
+                if (frame.len - offset < block_len) return error.TruncatedFrame;
+                produced = try checkedAdd(produced, block_len);
+                offset += block_len;
+            },
+            1 => {
+                if (frame.len - offset < 1) return error.TruncatedFrame;
+                produced = try checkedAdd(produced, block_len);
+                offset += 1;
+            },
+            2 => {
+                if (frame.len - offset < block_len) return error.TruncatedFrame;
+                const block = frame[offset..][0..block_len];
+                const section = try parseLiteralsSection(block, &frame_state);
+                if (section.regenerated_size > header.block_size_max) return error.CorruptFrame;
+                try validateSupportedLiteralSection(section);
+                if (section.sequence_count == 0) {
+                    try expectConsumedBlock(section.sequence_payload_offset, block.len);
+                    try validateHuffmanLiteralsConsumed(block, section);
+                    produced = try checkedAdd(produced, section.regenerated_size);
+                } else {
+                    const block_output_start = produced;
+                    var sequence_offset = section.sequence_payload_offset;
+                    const parsed_spec = try parseSequenceModeSpec(block, &sequence_offset, section.sequence_count);
+                    const spec = try resolveSequenceModeSpec(parsed_spec, frame_state.previous_tables);
+                    try expectConsumedBlock(sequence_offset, block.len);
+                    const sequence_block: PreparedNativeSequenceDecodeBlock = .{
+                        .spec = spec,
+                        .bitstream = block[spec.bitstream_offset..],
+                        .sequence_count = section.sequence_count,
+                        .repeated_offsets = frame_state.repeated_offsets,
+                        .path = .generic,
+                    };
+                    const decoded = try decodePreparedNativeSequenceBlockGeneric(&sequence_block);
+                    if (decoded.literal_bytes > section.regenerated_size) return error.CorruptFrame;
+                    const block_decoded_bytes = try checkedAdd(section.regenerated_size, decoded.match_bytes);
+                    produced = try checkedAdd(produced, block_decoded_bytes);
+                    try validateHuffmanLiteralsConsumed(block, section);
+
+                    const use_match_wildcopy = sequence_decode_policy.preferHuffmanMatchWildcopy(block.len, section.sequence_count);
+                    const selected_interleaved = spec.ll_mode == .compressed and
+                        spec.of_mode == .compressed and
+                        spec.ml_mode == .compressed and
+                        (section.kind == .compressed or section.kind == .treeless) and
+                        section.huffman_streams == .four and
+                        section.sequence_count >= options.min_sequence_count and
+                        section.sequence_count <= options.max_sequence_count and
+                        (!options.require_match_wildcopy or use_match_wildcopy);
+                    if (selected_interleaved) {
+                        try prepared_blocks.append(allocator, .{
+                            .block = block,
+                            .section = section,
+                            .spec = spec,
+                            .repeated_offsets = frame_state.repeated_offsets,
+                            .output_offset = block_output_start,
+                            .decoded_bytes = block_decoded_bytes,
+                            .use_match_wildcopy = use_match_wildcopy,
+                        });
+                        shape.block_count += 1;
+                        shape.match_wildcopy_block_count += @intFromBool(use_match_wildcopy);
+                        shape.compressed_bytes = try checkedAdd(shape.compressed_bytes, block.len);
+                        shape.decoded_bytes = try checkedAdd(shape.decoded_bytes, block_decoded_bytes);
+                        shape.literal_bytes = try checkedAdd(shape.literal_bytes, section.regenerated_size);
+                        shape.sequence_count = try checkedAdd(shape.sequence_count, section.sequence_count);
+                    }
+                    frame_state.previous_tables = spec.tables();
+                    frame_state.repeated_offsets = decoded.repeated_offsets;
+                }
+                offset += block_len;
+            },
+            else => return error.CorruptFrame,
+        }
+        if (last) break;
+    }
+    if (header.content_size) |size| if (try checkedUsizeToU64(produced) != size) return error.SizeMismatch;
+    if (produced != expected_output.len) return error.SizeMismatch;
+    if (header.has_checksum) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        offset += 4;
+    }
+    if (offset != frame.len) return error.TrailingData;
+    if (prepared_blocks.items.len == 0) return error.InvalidBlockPlan;
+
+    const prepared = try prepared_blocks.toOwnedSlice(allocator);
+    errdefer allocator.free(prepared);
+    var stage: NativeInterleavedDecodeStage = .{
         .allocator = allocator,
         .prepared = prepared,
         .output = output,
-        .expected_decoded_bytes = 0,
+        .expected_output = expected_output,
+        .prepared_shape = shape,
     };
-    var state = try initSequenceDecodeState(
-        &prepared.spec,
-        section.sequence_count,
-        try ReverseBitReader.init(block[spec.bitstream_offset..]),
-        prepared.repeated_offsets,
-    );
-    const huffman_state = (try initHuffmanLiteralDecodeState(block, section)) orelse return error.CorruptFrame;
-    var written: usize = 0;
-    if (prepared.use_match_wildcopy)
-        try decodeAllFseHuffmanSequences(section, &prepared.spec, output, &written, 0, &frame_state, .terminal, &state, true, true, huffman_state)
-    else
-        try decodeAllFseHuffmanSequences(section, &prepared.spec, output, &written, 0, &frame_state, .terminal, &state, true, false, huffman_state);
-    if (written == 0 or written > expected_output.len or !std.mem.eql(u8, output[0..written], expected_output[0..written]))
-        return error.SizeMismatch;
-    stage.expected_decoded_bytes = written;
+    const result = try stage.decode();
+    if (result.block_count != shape.block_count or
+        result.decoded_bytes != shape.decoded_bytes or
+        !std.mem.eql(u8, expected_output, stage.decoded())) return error.SizeMismatch;
     return stage;
 }
 
@@ -30653,17 +30745,23 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try appendStructuredZstdJsonPayload(std.testing.allocator, &payload, 128 * 1024);
     const expected = payload.items[0 .. 128 * 1024];
 
-    var interleaved_stage = try prepareNativeInterleavedBlockDecodeStage(
+    var interleaved_stage = try prepareNativeInterleavedDecodeStage(
         std.testing.allocator,
         &encoded,
         expected,
+        .{
+            .min_sequence_count = 1024,
+            .max_sequence_count = 4096,
+            .require_match_wildcopy = false,
+        },
     );
     defer interleaved_stage.deinit();
     const interleaved_stage_shape = interleaved_stage.shape();
+    try std.testing.expect(interleaved_stage_shape.block_count != 0);
     try std.testing.expectEqual(@as(usize, 1834), interleaved_stage_shape.sequence_count);
-    try std.testing.expectEqual(@as(usize, 2083), interleaved_stage_shape.literal_bytes);
     const interleaved_stage_result = try interleaved_stage.decode();
     try std.testing.expectEqual(interleaved_stage_shape.decoded_bytes, interleaved_stage_result.decoded_bytes);
+    try std.testing.expectEqual(interleaved_stage_shape.block_count, interleaved_stage_result.block_count);
     try std.testing.expectEqualSlices(u8, expected, interleaved_stage.decoded());
 
     const first_block = try inspectNativeFrameFirstBlock(&encoded);
