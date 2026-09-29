@@ -179,14 +179,19 @@ binaries; the parser alone remained positive at 1.0205x/1.0235x on SVG,
 1.0190x/1.0203x on the log, and 1.0050x/1.0022x on the shared library. Those
 temporary alignment changes were removed from production.
 
-Three adjacent follow-ups were measured and removed. Porting libzstd's generic
+Five adjacent follow-ups were measured and removed. Porting libzstd's generic
 X1/X2 cost selector produced only a 1.0009x reusable row-geometric mean and
 moved trace JSON, the executable, and the header slightly backward by geometric
 mean. Making the 64/32/16-byte match copier depend on logical match length
 reduced the six-row reusable geometric mean to 0.9940x, including 0/7 wins on
 the shared library and header. Finally, batching absent-symbol writes in the
 new parser reduced SVG and log to 0.9928x and 0.9951x medians over 15 matched-
-layout pairs. The original loops remain.
+layout pairs. Keeping the normalized-count width as incremental remaining/
+threshold state also regressed SVG and log to 0.9939x and 0.9936x medians.
+A libzstd-style `ctz` scan over consecutive absent-symbol repeat pairs was
+correct under both random differential oracles but measured only 1.0012x
+median / 1.0022x geometric with 9/15 SVG wins; it was removed as noise. The
+original loops remain.
 
 ## Current loaded-host snapshot
 

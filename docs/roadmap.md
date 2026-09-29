@@ -16322,10 +16322,13 @@ reuse, so production keeps the simpler independently owned plans.
 - Follow-up real-file profiling now records literal-section modes separately
   from sequence-table modes. The SVG contains 846 new-tree and 531 treeless
   compressed blocks; the log, JSON, shared library, executable, and header
-  contain only 44/6/53/0/31 treeless blocks respectively. Three measured
+  contain only 44/6/53/0/31 treeless blocks respectively. Five measured
   follow-ups were rejected: libzstd's generic X1/X2 cost selector was only
   1.0009x across reusable row geometric means with several slightly negative
   controls; length-aware 64/32/16-byte wildcopy fell to 0.9940x across rows;
   and batching absent-symbol writes reduced SVG/log medians to
-  0.9928x/0.9951x. These results keep the next target on dominant split
-  sequence execution rather than lookup reuse or narrower copy dispatch.
+  0.9928x/0.9951x. Incremental remaining/threshold width tracking reduced the
+  same rows to 0.9939x/0.9936x, while a differential-tested `ctz` repeat scan
+  was neutral on SVG at 1.0012x median / 1.0022x geometric with 9/15 wins.
+  These results keep the next target on dominant split sequence execution
+  rather than lookup reuse or narrower copy dispatch.

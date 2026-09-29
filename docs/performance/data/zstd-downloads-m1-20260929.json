@@ -113,7 +113,9 @@
   "rejected_post_reservoir_probes": {
     "libzstd_x2_cost_selector": {"pairs":15,"reusable_row_geomean":1.000857,"large_svg_median":1.002905,"robot_log_median":1.004164,"trace_json_geomean":0.998638,"shared_library_median":1.003255,"executable_geomean":0.998682,"large_header_median":0.996095},
     "length_aware_wildcopy": {"pairs":7,"reusable_row_geomean":0.994006,"shared_library_median":0.994340,"shared_library_wins":0,"large_header_median":0.970411,"large_header_wins":0},
-    "batched_absent_symbol_writes": {"pairs":15,"three_row_geomean":0.995504,"large_svg_median":0.992779,"robot_log_median":0.995083,"shared_library_median":0.999916}
+    "batched_absent_symbol_writes": {"pairs":15,"three_row_geomean":0.995504,"large_svg_median":0.992779,"robot_log_median":0.995083,"shared_library_median":0.999916},
+    "incremental_normalized_count_width": {"date":"2026-09-30","pairs":15,"large_svg_median":0.993927,"robot_log_median":0.993598},
+    "ctz_absent_symbol_repeat_scan": {"date":"2026-09-30","pairs":15,"baseline_sha256":"6ab3b86759986920bf212a609742a42be6e197f08988cb9d2b47acb289a05c68","candidate_sha256":"0b4cbf386a0db279f14e397d9cbc588c44ee6c474fc6f70f76786d0c5bca9ea5","large_svg_ratios":[1.011693,1.001211,1.011544,0.973610,1.017620,1.002657,1.020318,1.000699,0.988961,1.020403,0.999706,0.981443,0.979486,0.999501,1.025931],"large_svg_median":1.001211,"large_svg_geomean":1.002199,"large_svg_wins":9}
   },
   "large_frame_cache_bypass_vs_wildcopy": {
     "large_svg": {"pairs":[1.0101,1.0445,1.0267,1.0087,1.0102,0.9934,1.0249,1.0246,0.9892,1.0187,1.0139,1.0277,1.0347,1.0015,1.0126],"median":1.013874,"geomean":1.015992,"wins":13,"baseline_libzstd_median":0.6126,"candidate_libzstd_median":0.6192},
