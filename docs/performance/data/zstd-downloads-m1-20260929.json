@@ -70,12 +70,12 @@
     "small_control": {"case":"numbered_json","iterations":10,"sequence_hits":10,"huffman_hits":10}
   },
   "fse_table_profile": {
-    "large_svg": {"sequence_blocks":1377,"compressed_tables":4130,"no_low_tables":4130,"low_tables":0,"accuracy_log_histogram":[0,0,0,0,0,66,117,2573,1374,0],"no_low_accuracy_log_histogram":[0,0,0,0,0,66,117,2573,1374,0]},
-    "robot_log": {"sequence_blocks":884,"compressed_tables":2652,"no_low_tables":2489,"low_tables":163,"accuracy_log_histogram":[0,0,0,0,0,2,30,130,2378,112],"no_low_accuracy_log_histogram":[0,0,0,0,0,2,30,130,2323,4]},
-    "trace_json": {"sequence_blocks":247,"compressed_tables":741,"no_low_tables":149,"low_tables":592,"accuracy_log_histogram":[0,0,0,0,0,0,2,31,270,438],"no_low_accuracy_log_histogram":[0,0,0,0,0,0,2,31,61,55]},
-    "shared_library": {"sequence_blocks":762,"compressed_tables":2260,"no_low_tables":841,"low_tables":1419,"accuracy_log_histogram":[0,0,0,0,0,1,77,315,837,1030],"no_low_accuracy_log_histogram":[0,0,0,0,0,1,77,315,367,81]},
-    "executable": {"sequence_blocks":396,"compressed_tables":1185,"no_low_tables":316,"low_tables":869,"accuracy_log_histogram":[0,0,0,0,0,0,8,46,513,618],"no_low_accuracy_log_histogram":[0,0,0,0,0,0,8,46,234,28]},
-    "large_header": {"sequence_blocks":229,"compressed_tables":678,"no_low_tables":218,"low_tables":460,"accuracy_log_histogram":[0,0,0,0,0,0,2,1,307,368],"no_low_accuracy_log_histogram":[0,0,0,0,0,0,2,1,124,91]}
+    "large_svg": {"sequence_blocks":1377,"literal_blocks":{"raw":0,"rle":0,"compressed":846,"treeless":531},"compressed_tables":4130,"no_low_tables":4130,"low_tables":0,"accuracy_log_histogram":[0,0,0,0,0,66,117,2573,1374,0],"no_low_accuracy_log_histogram":[0,0,0,0,0,66,117,2573,1374,0]},
+    "robot_log": {"sequence_blocks":884,"literal_blocks":{"raw":0,"rle":0,"compressed":840,"treeless":44},"compressed_tables":2652,"no_low_tables":2489,"low_tables":163,"accuracy_log_histogram":[0,0,0,0,0,2,30,130,2378,112],"no_low_accuracy_log_histogram":[0,0,0,0,0,2,30,130,2323,4]},
+    "trace_json": {"sequence_blocks":247,"literal_blocks":{"raw":0,"rle":0,"compressed":241,"treeless":6},"compressed_tables":741,"no_low_tables":149,"low_tables":592,"accuracy_log_histogram":[0,0,0,0,0,0,2,31,270,438],"no_low_accuracy_log_histogram":[0,0,0,0,0,0,2,31,61,55]},
+    "shared_library": {"sequence_blocks":762,"literal_blocks":{"raw":1,"rle":0,"compressed":715,"treeless":53},"compressed_tables":2260,"no_low_tables":841,"low_tables":1419,"accuracy_log_histogram":[0,0,0,0,0,1,77,315,837,1030],"no_low_accuracy_log_histogram":[0,0,0,0,0,1,77,315,367,81]},
+    "executable": {"sequence_blocks":396,"literal_blocks":{"raw":4,"rle":0,"compressed":394,"treeless":0},"compressed_tables":1185,"no_low_tables":316,"low_tables":869,"accuracy_log_histogram":[0,0,0,0,0,0,8,46,513,618],"no_low_accuracy_log_histogram":[0,0,0,0,0,0,8,46,234,28]},
+    "large_header": {"sequence_blocks":229,"literal_blocks":{"raw":0,"rle":0,"compressed":198,"treeless":31},"compressed_tables":678,"no_low_tables":218,"low_tables":460,"accuracy_log_histogram":[0,0,0,0,0,0,2,1,307,368],"no_low_accuracy_log_histogram":[0,0,0,0,0,0,2,1,124,91]}
   },
   "rejected_fse_no_low_variants": {
     "state_128_large_svg": {"pairs":21,"median":0.995124,"geomean":0.989114,"wins":5},
@@ -109,6 +109,11 @@
       "robot_log": {"pairs":15,"median":1.018951,"geomean":1.020305,"wins":14},
       "shared_library": {"pairs":15,"median":1.005048,"geomean":1.002233,"wins":10}
     }
+  },
+  "rejected_post_reservoir_probes": {
+    "libzstd_x2_cost_selector": {"pairs":15,"reusable_row_geomean":1.000857,"large_svg_median":1.002905,"robot_log_median":1.004164,"trace_json_geomean":0.998638,"shared_library_median":1.003255,"executable_geomean":0.998682,"large_header_median":0.996095},
+    "length_aware_wildcopy": {"pairs":7,"reusable_row_geomean":0.994006,"shared_library_median":0.994340,"shared_library_wins":0,"large_header_median":0.970411,"large_header_wins":0},
+    "batched_absent_symbol_writes": {"pairs":15,"three_row_geomean":0.995504,"large_svg_median":0.992779,"robot_log_median":0.995083,"shared_library_median":0.999916}
   },
   "large_frame_cache_bypass_vs_wildcopy": {
     "large_svg": {"pairs":[1.0101,1.0445,1.0267,1.0087,1.0102,0.9934,1.0249,1.0246,0.9892,1.0187,1.0139,1.0277,1.0347,1.0015,1.0126],"median":1.013874,"geomean":1.015992,"wins":13,"baseline_libzstd_median":0.6126,"candidate_libzstd_median":0.6192},

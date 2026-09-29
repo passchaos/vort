@@ -7194,6 +7194,10 @@ pub const NativeSequenceCopyProfile = struct {
     vector32_eligible_matches: usize = 0,
     vector32_eligible_bytes: usize = 0,
     sequence_block_count: usize = 0,
+    raw_literal_blocks: usize = 0,
+    rle_literal_blocks: usize = 0,
+    compressed_literal_blocks: usize = 0,
+    treeless_literal_blocks: usize = 0,
     compressed_table_modes: usize = 0,
     no_low_probability_tables: usize = 0,
     low_probability_tables: usize = 0,
@@ -12585,6 +12589,12 @@ pub fn benchmarkNativeSequenceCopyProfile(frame: []const u8) Error!NativeSequenc
                 const section = try parseLiteralsSection(block, &frame_state);
                 if (section.regenerated_size > header.block_size_max) return error.CorruptFrame;
                 try validateSupportedLiteralSection(section);
+                switch (section.kind) {
+                    .raw => profile.raw_literal_blocks += 1,
+                    .rle => profile.rle_literal_blocks += 1,
+                    .compressed => profile.compressed_literal_blocks += 1,
+                    .treeless => profile.treeless_literal_blocks += 1,
+                }
                 profile.literal_bytes = try checkedAdd(profile.literal_bytes, section.regenerated_size);
                 if (section.sequence_count == 0) {
                     try expectConsumedBlock(section.sequence_payload_offset, block.len);

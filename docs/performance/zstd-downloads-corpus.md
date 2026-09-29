@@ -127,14 +127,17 @@ low-probability usage, and accuracy-log histograms. Its extra normalized-count
 pass is diagnostic-only; production decoding does not retain or update the new
 bookkeeping. A fresh profile of the six compressed files produced:
 
-| Case | Explicit FSE tables | No-low tables | No-low share | Accuracy-log distribution (5/6/7/8/9) |
-| --- | ---: | ---: | ---: | --- |
-| large SVG | 4,130 | 4,130 | 100.00% | 66 / 117 / 2,573 / 1,374 / 0 |
-| robot log | 2,652 | 2,489 | 93.85% | 2 / 30 / 130 / 2,378 / 112 |
-| trace JSON | 741 | 149 | 20.11% | 0 / 2 / 31 / 270 / 438 |
-| shared library | 2,260 | 841 | 37.21% | 1 / 77 / 315 / 837 / 1,030 |
-| executable | 1,185 | 316 | 26.67% | 0 / 8 / 46 / 513 / 618 |
-| large C header | 678 | 218 | 32.15% | 0 / 2 / 1 / 307 / 368 |
+| Case | Explicit FSE tables | No-low tables | No-low share | New-tree / treeless blocks | Accuracy-log distribution (5/6/7/8/9) |
+| --- | ---: | ---: | ---: | ---: | --- |
+| large SVG | 4,130 | 4,130 | 100.00% | 846 / 531 | 66 / 117 / 2,573 / 1,374 / 0 |
+| robot log | 2,652 | 2,489 | 93.85% | 840 / 44 | 2 / 30 / 130 / 2,378 / 112 |
+| trace JSON | 741 | 149 | 20.11% | 241 / 6 | 0 / 2 / 31 / 270 / 438 |
+| shared library | 2,260 | 841 | 37.21% | 715 / 53 | 1 / 77 / 315 / 837 / 1,030 |
+| executable | 1,185 | 316 | 26.67% | 394 / 0 | 0 / 8 / 46 / 513 / 618 |
+| large C header | 678 | 218 | 32.15% | 198 / 31 | 0 / 2 / 1 / 307 / 368 |
+
+The executable also has four raw-literal compressed blocks and the shared
+library has one; none of these files uses an RLE literal section.
 
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
@@ -175,6 +178,15 @@ the four-stream Huffman and split-sequence helpers to 256 bytes in both
 binaries; the parser alone remained positive at 1.0205x/1.0235x on SVG,
 1.0190x/1.0203x on the log, and 1.0050x/1.0022x on the shared library. Those
 temporary alignment changes were removed from production.
+
+Three adjacent follow-ups were measured and removed. Porting libzstd's generic
+X1/X2 cost selector produced only a 1.0009x reusable row-geometric mean and
+moved trace JSON, the executable, and the header slightly backward by geometric
+mean. Making the 64/32/16-byte match copier depend on logical match length
+reduced the six-row reusable geometric mean to 0.9940x, including 0/7 wins on
+the shared library and header. Finally, batching absent-symbol writes in the
+new parser reduced SVG and log to 0.9928x and 0.9951x medians over 15 matched-
+layout pairs. The original loops remain.
 
 ## Current loaded-host snapshot
 
