@@ -1,0 +1,875 @@
+{
+  "date": "2026-09-29",
+  "cpu_model": "Apple M1 Pro",
+  "os_version": "26.4.1",
+  "codec_threads": 1,
+  "cpu_affinity": "unavailable",
+  "host_load": "mobileassetd, dasd, Defender and GUI activity remained present; no concurrent agent builds during measurements",
+  "source_base": "30ebf67d plus preceding raw-copy changes and corrected reusable benchmark",
+  "warmup": "both contexts warmed and entire outputs validated before and after timing",
+  "measurement": "five interleaved codec samples, fastest sample for each; allocation outside context timing",
+  "pair_order": "baseline/candidate on odd rounds, candidate/baseline on even rounds",
+  "baseline_sha256": "9f5a889d6965e42a8c56aaa283340d2d180f359bf9898dd5fe6e57ac146f6ba8",
+  "candidate_sha256": "4ed8627d89be815ad44833cb71b740917446201eb8a2528ee05d38d36c123e02",
+  "campaigns": {
+    "numbered_json-once": {
+      "median": 0.999204375803299,
+      "geomean": 0.9996750445035767,
+      "wins": 7,
+      "absolute_median": 1.3180279581582837,
+      "absolute_minimum": 1.3021121052158475,
+      "pairs": [
+        {
+          "baseline_ns": 72454292,
+          "candidate_ns": 72196834,
+          "candidate_reference_ns": 95859000
+        },
+        {
+          "baseline_ns": 74194917,
+          "candidate_ns": 73189583,
+          "candidate_reference_ns": 95301042
+        },
+        {
+          "baseline_ns": 72410833,
+          "candidate_ns": 72854917,
+          "candidate_reference_ns": 95361375
+        },
+        {
+          "baseline_ns": 72371041,
+          "candidate_ns": 72428667,
+          "candidate_reference_ns": 95203958
+        },
+        {
+          "baseline_ns": 71712375,
+          "candidate_ns": 72471041,
+          "candidate_reference_ns": 95085167
+        },
+        {
+          "baseline_ns": 72125750,
+          "candidate_ns": 71973625,
+          "candidate_reference_ns": 94863250
+        },
+        {
+          "baseline_ns": 72099208,
+          "candidate_ns": 72508375,
+          "candidate_reference_ns": 95746000
+        },
+        {
+          "baseline_ns": 73818625,
+          "candidate_ns": 72644834,
+          "candidate_reference_ns": 96953416
+        },
+        {
+          "baseline_ns": 73102708,
+          "candidate_ns": 72275875,
+          "candidate_reference_ns": 96332375
+        },
+        {
+          "baseline_ns": 72878750,
+          "candidate_ns": 73753292,
+          "candidate_reference_ns": 96619750
+        },
+        {
+          "baseline_ns": 72497208,
+          "candidate_ns": 73197500,
+          "candidate_reference_ns": 95965791
+        },
+        {
+          "baseline_ns": 72075292,
+          "candidate_ns": 71844166,
+          "candidate_reference_ns": 95539583
+        },
+        {
+          "baseline_ns": 71826291,
+          "candidate_ns": 72169916,
+          "candidate_reference_ns": 95546500
+        },
+        {
+          "baseline_ns": 72021125,
+          "candidate_ns": 71939250,
+          "candidate_reference_ns": 94954000
+        },
+        {
+          "baseline_ns": 71530291,
+          "candidate_ns": 71999250,
+          "candidate_reference_ns": 94576333
+        }
+      ],
+      "metadata": {
+        "case": "numbered_json",
+        "input_bytes": "1290",
+        "input_sha256": "394cbb2d4c4709369e761604ad29c5b4a2757b77003fae36f4673ec5e979e11d",
+        "encoded_bytes": "183",
+        "iterations": "50000",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "reference_version": "1.5.7",
+        "optimize": "ReleaseFast",
+        "zig_version": "0.16.0",
+        "target_arch": "aarch64",
+        "target_os": "macos",
+        "target_cpu": "apple_m1"
+      }
+    },
+    "numbered_json-reuse": {
+      "median": 1.815065741127459,
+      "geomean": 1.8132103413960048,
+      "wins": 15,
+      "absolute_median": 1.8869564909816772,
+      "absolute_minimum": 1.8631836396437513,
+      "pairs": [
+        {
+          "baseline_ns": 85422250,
+          "candidate_ns": 47554375,
+          "candidate_reference_ns": 89381375
+        },
+        {
+          "baseline_ns": 85739625,
+          "candidate_ns": 47035333,
+          "candidate_reference_ns": 89197834
+        },
+        {
+          "baseline_ns": 85830375,
+          "candidate_ns": 47287750,
+          "candidate_reference_ns": 88947667
+        },
+        {
+          "baseline_ns": 85865791,
+          "candidate_ns": 47135167,
+          "candidate_reference_ns": 88691458
+        },
+        {
+          "baseline_ns": 85314417,
+          "candidate_ns": 47250375,
+          "candidate_reference_ns": 88915125
+        },
+        {
+          "baseline_ns": 85196333,
+          "candidate_ns": 47365917,
+          "candidate_reference_ns": 88812584
+        },
+        {
+          "baseline_ns": 86746542,
+          "candidate_ns": 47583542,
+          "candidate_reference_ns": 89877958
+        },
+        {
+          "baseline_ns": 87027167,
+          "candidate_ns": 48484916,
+          "candidate_reference_ns": 92740542
+        },
+        {
+          "baseline_ns": 86641458,
+          "candidate_ns": 47532458,
+          "candidate_reference_ns": 90542667
+        },
+        {
+          "baseline_ns": 86353458,
+          "candidate_ns": 48061875,
+          "candidate_reference_ns": 90690667
+        },
+        {
+          "baseline_ns": 86570125,
+          "candidate_ns": 46989000,
+          "candidate_reference_ns": 89445375
+        },
+        {
+          "baseline_ns": 85489333,
+          "candidate_ns": 47269209,
+          "candidate_reference_ns": 88903917
+        },
+        {
+          "baseline_ns": 85916542,
+          "candidate_ns": 47924042,
+          "candidate_reference_ns": 89291291
+        },
+        {
+          "baseline_ns": 86081334,
+          "candidate_ns": 46869250,
+          "candidate_reference_ns": 89349875
+        },
+        {
+          "baseline_ns": 85757458,
+          "candidate_ns": 47090625,
+          "candidate_reference_ns": 89035542
+        }
+      ],
+      "metadata": {
+        "case": "numbered_json",
+        "input_bytes": "1290",
+        "input_sha256": "394cbb2d4c4709369e761604ad29c5b4a2757b77003fae36f4673ec5e979e11d",
+        "encoded_bytes": "183",
+        "iterations": "50000",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "reference_version": "1.5.7",
+        "optimize": "ReleaseFast",
+        "zig_version": "0.16.0",
+        "target_arch": "aarch64",
+        "target_os": "macos",
+        "target_cpu": "apple_m1"
+      }
+    },
+    "large_json-reuse": {
+      "median": 1.0016732070993282,
+      "geomean": 0.9974581610430404,
+      "wins": 8,
+      "absolute_median": 1.2355694157149266,
+      "absolute_minimum": 1.213066632010764,
+      "pairs": [
+        {
+          "baseline_ns": 31633125,
+          "candidate_ns": 31310625,
+          "candidate_reference_ns": 38781083
+        },
+        {
+          "baseline_ns": 31219042,
+          "candidate_ns": 31020000,
+          "candidate_reference_ns": 38440500
+        },
+        {
+          "baseline_ns": 30793417,
+          "candidate_ns": 31369208,
+          "candidate_reference_ns": 38758834
+        },
+        {
+          "baseline_ns": 31000666,
+          "candidate_ns": 31254416,
+          "candidate_reference_ns": 38293875
+        },
+        {
+          "baseline_ns": 31068584,
+          "candidate_ns": 30844875,
+          "candidate_reference_ns": 38086125
+        },
+        {
+          "baseline_ns": 30485208,
+          "candidate_ns": 30639417,
+          "candidate_reference_ns": 38264208
+        },
+        {
+          "baseline_ns": 31617667,
+          "candidate_ns": 31553666,
+          "candidate_reference_ns": 40244625
+        },
+        {
+          "baseline_ns": 31431292,
+          "candidate_ns": 31312042,
+          "candidate_reference_ns": 39057500
+        },
+        {
+          "baseline_ns": 32476416,
+          "candidate_ns": 32422167,
+          "candidate_reference_ns": 39846417
+        },
+        {
+          "baseline_ns": 31304458,
+          "candidate_ns": 32186917,
+          "candidate_reference_ns": 39044875
+        },
+        {
+          "baseline_ns": 30760917,
+          "candidate_ns": 31071875,
+          "candidate_reference_ns": 38379958
+        },
+        {
+          "baseline_ns": 31393917,
+          "candidate_ns": 31477583,
+          "candidate_reference_ns": 38431375
+        },
+        {
+          "baseline_ns": 31419417,
+          "candidate_ns": 30938000,
+          "candidate_reference_ns": 38282875
+        },
+        {
+          "baseline_ns": 30785875,
+          "candidate_ns": 30727875,
+          "candidate_reference_ns": 38210667
+        },
+        {
+          "baseline_ns": 30640458,
+          "candidate_ns": 31092000,
+          "candidate_reference_ns": 38342666
+        }
+      ],
+      "metadata": {
+        "case": "large_json",
+        "input_bytes": "524307",
+        "input_sha256": "b0d873df5fbe94a60e8e10a51cde4b08b3370ae4f251357c16adbfc69fd27c95",
+        "encoded_bytes": "9905",
+        "iterations": "500",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "reference_version": "1.5.7",
+        "optimize": "ReleaseFast",
+        "zig_version": "0.16.0",
+        "target_arch": "aarch64",
+        "target_os": "macos",
+        "target_cpu": "apple_m1"
+      }
+    }
+  },
+  "rejected_dispatch_inside_generic_executor": {
+    "numbered_json-once": {
+      "pairs": [
+        {
+          "baseline_ns": 71164667,
+          "candidate_ns": 71288500
+        },
+        {
+          "baseline_ns": 70608666,
+          "candidate_ns": 71248750
+        },
+        {
+          "baseline_ns": 70201416,
+          "candidate_ns": 71460167
+        },
+        {
+          "baseline_ns": 71053208,
+          "candidate_ns": 70454667
+        },
+        {
+          "baseline_ns": 70071667,
+          "candidate_ns": 70503542
+        },
+        {
+          "baseline_ns": 70249875,
+          "candidate_ns": 70511709
+        },
+        {
+          "baseline_ns": 71088667,
+          "candidate_ns": 71111916
+        },
+        {
+          "baseline_ns": 70850500,
+          "candidate_ns": 71898625
+        },
+        {
+          "baseline_ns": 70316375,
+          "candidate_ns": 71178875
+        },
+        {
+          "baseline_ns": 69973750,
+          "candidate_ns": 70645834
+        },
+        {
+          "baseline_ns": 71111584,
+          "candidate_ns": 70569792
+        }
+      ],
+      "median": 0.9938744212312056,
+      "wins": 2
+    },
+    "numbered_json-reuse": {
+      "pairs": [
+        {
+          "baseline_ns": 83410458,
+          "candidate_ns": 49937625
+        },
+        {
+          "baseline_ns": 84202167,
+          "candidate_ns": 49795625
+        },
+        {
+          "baseline_ns": 84209417,
+          "candidate_ns": 50379791
+        },
+        {
+          "baseline_ns": 83973833,
+          "candidate_ns": 50750417
+        },
+        {
+          "baseline_ns": 85711375,
+          "candidate_ns": 49863292
+        },
+        {
+          "baseline_ns": 84951041,
+          "candidate_ns": 51987209
+        },
+        {
+          "baseline_ns": 86413375,
+          "candidate_ns": 50628917
+        },
+        {
+          "baseline_ns": 85688041,
+          "candidate_ns": 51888916
+        },
+        {
+          "baseline_ns": 84155542,
+          "candidate_ns": 50116416
+        },
+        {
+          "baseline_ns": 84667375,
+          "candidate_ns": 52082791
+        },
+        {
+          "baseline_ns": 85559667,
+          "candidate_ns": 50375958
+        }
+      ],
+      "median": 1.6714919877297625,
+      "wins": 11
+    },
+    "large_json-reuse": {
+      "pairs": [
+        {
+          "baseline_ns": 119342125,
+          "candidate_ns": 125556958
+        },
+        {
+          "baseline_ns": 122521000,
+          "candidate_ns": 121811792
+        },
+        {
+          "baseline_ns": 122745625,
+          "candidate_ns": 125066000
+        },
+        {
+          "baseline_ns": 120306459,
+          "candidate_ns": 123714084
+        },
+        {
+          "baseline_ns": 121929916,
+          "candidate_ns": 124408292
+        },
+        {
+          "baseline_ns": 123459875,
+          "candidate_ns": 125700542
+        },
+        {
+          "baseline_ns": 122988875,
+          "candidate_ns": 123092167
+        },
+        {
+          "baseline_ns": 121424959,
+          "candidate_ns": 126347834
+        },
+        {
+          "baseline_ns": 123176417,
+          "candidate_ns": 123930875
+        },
+        {
+          "baseline_ns": 123472167,
+          "candidate_ns": 124969291
+        },
+        {
+          "baseline_ns": 124655959,
+          "candidate_ns": 123961541
+        }
+      ],
+      "median": 0.9821745637341802,
+      "wins": 2
+    },
+    "huffman80k-reuse": {
+      "pairs": [
+        {
+          "baseline_ns": 71060250,
+          "candidate_ns": 69842250
+        },
+        {
+          "baseline_ns": 71865167,
+          "candidate_ns": 71147375
+        },
+        {
+          "baseline_ns": 70734375,
+          "candidate_ns": 71067875
+        },
+        {
+          "baseline_ns": 71589459,
+          "candidate_ns": 71184333
+        },
+        {
+          "baseline_ns": 71012708,
+          "candidate_ns": 71363792
+        },
+        {
+          "baseline_ns": 71666708,
+          "candidate_ns": 70950167
+        },
+        {
+          "baseline_ns": 71272709,
+          "candidate_ns": 70916292
+        },
+        {
+          "baseline_ns": 71930875,
+          "candidate_ns": 70952958
+        },
+        {
+          "baseline_ns": 70146917,
+          "candidate_ns": 69909750
+        },
+        {
+          "baseline_ns": 70182833,
+          "candidate_ns": 73131958
+        },
+        {
+          "baseline_ns": 70639333,
+          "candidate_ns": 69840292
+        }
+      ],
+      "median": 1.0056912242192393,
+      "wins": 8
+    },
+    "ascii64k-reuse": {
+      "pairs": [
+        {
+          "baseline_ns": 117210583,
+          "candidate_ns": 115746042
+        },
+        {
+          "baseline_ns": 117165416,
+          "candidate_ns": 114450791
+        },
+        {
+          "baseline_ns": 116326958,
+          "candidate_ns": 114718583
+        },
+        {
+          "baseline_ns": 115646250,
+          "candidate_ns": 114566167
+        },
+        {
+          "baseline_ns": 116773333,
+          "candidate_ns": 115066542
+        },
+        {
+          "baseline_ns": 115545500,
+          "candidate_ns": 117183667
+        },
+        {
+          "baseline_ns": 116886666,
+          "candidate_ns": 117234916
+        },
+        {
+          "baseline_ns": 117051500,
+          "candidate_ns": 116730750
+        },
+        {
+          "baseline_ns": 115555292,
+          "candidate_ns": 118296583
+        },
+        {
+          "baseline_ns": 114587042,
+          "candidate_ns": 114618416
+        },
+        {
+          "baseline_ns": 114485292,
+          "candidate_ns": 114571833
+        }
+      ],
+      "median": 1.0027477763999633,
+      "wins": 6
+    },
+    "raw256k-reuse": {
+      "pairs": [
+        {
+          "baseline_ns": 42755458,
+          "candidate_ns": 38072625
+        },
+        {
+          "baseline_ns": 37478000,
+          "candidate_ns": 37548583
+        },
+        {
+          "baseline_ns": 37679708,
+          "candidate_ns": 37622875
+        },
+        {
+          "baseline_ns": 37833667,
+          "candidate_ns": 37710625
+        },
+        {
+          "baseline_ns": 42057375,
+          "candidate_ns": 38950000
+        },
+        {
+          "baseline_ns": 37804291,
+          "candidate_ns": 38128625
+        },
+        {
+          "baseline_ns": 38954667,
+          "candidate_ns": 37787542
+        },
+        {
+          "baseline_ns": 37719791,
+          "candidate_ns": 37742917
+        },
+        {
+          "baseline_ns": 39973583,
+          "candidate_ns": 41200583
+        },
+        {
+          "baseline_ns": 38144167,
+          "candidate_ns": 37864500
+        },
+        {
+          "baseline_ns": 42125083,
+          "candidate_ns": 41015375
+        }
+      ],
+      "median": 1.003262793973847,
+      "wins": 7
+    }
+  },
+  "source_sha256": {
+    "src/zstd.zig": "eabdbf1205b7bcb246e58b51f6964558977e2cf0fffce2e292f54d3324a510c7",
+    "tools/zstd/reference_bench.zig": "845c0989f8b545d0de6632965a049d09e4dfcba0dc10ba57e59acd65a536311c",
+    "tools/zstd/libzstd_runtime.zig": "292d74b97167517742a2124e7a1e9e1d5589e9fccac2c8de97402a2d331f40d6"
+  },
+  "validation": {
+    "direct_zstd_tests": 670,
+    "targeted_release_safe": "passed with sequence-byte mutations and cache recovery",
+    "compatibility_cases": 276,
+    "decodecorpus_frames": 9900,
+    "decodecorpus_sequence_modes": 64,
+    "guarded_output": "passed",
+    "same_cache_after_error_recovery": "passed",
+    "check": "passed",
+    "reference_gate_one_shot_rows": 13,
+    "reference_gate_reusable_rows": 13,
+    "decode_profile_gate_rows": 5,
+    "benchmark_path_smoke": "passed: 4 rows, 7 invalid arguments, 2 API modes",
+    "strict_1_20_floor": "not met: raw256k in both API matrices"
+  },
+  "final_matrices": {
+    "one-shot": [
+      {
+        "case": "tiny",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "36291",
+        "reference_ns": "691166",
+        "vort_over_reference": "19.0451"
+      },
+      {
+        "case": "text",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "3483333",
+        "reference_ns": "11773750",
+        "vort_over_reference": "3.3800"
+      },
+      {
+        "case": "structured",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "3756500",
+        "reference_ns": "12131709",
+        "vort_over_reference": "3.2295"
+      },
+      {
+        "case": "repetitive",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "3564625",
+        "reference_ns": "10120500",
+        "vort_over_reference": "2.8391"
+      },
+      {
+        "case": "incompressible",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "99041",
+        "reference_ns": "712958",
+        "vort_over_reference": "7.1986"
+      },
+      {
+        "case": "rle64k",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "5550875",
+        "reference_ns": "88452250",
+        "vort_over_reference": "15.9348"
+      },
+      {
+        "case": "raw256k",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "20458291",
+        "reference_ns": "22882958",
+        "vort_over_reference": "1.1185"
+      },
+      {
+        "case": "numbered_json",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "7183375",
+        "reference_ns": "9447416",
+        "vort_over_reference": "1.3152"
+      },
+      {
+        "case": "huffman80k",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "137306625",
+        "reference_ns": "193464750",
+        "vort_over_reference": "1.4090"
+      },
+      {
+        "case": "ascii64k",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "200921750",
+        "reference_ns": "304367250",
+        "vort_over_reference": "1.5149"
+      },
+      {
+        "case": "large_text",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "61575417",
+        "reference_ns": "142964083",
+        "vort_over_reference": "2.3218"
+      },
+      {
+        "case": "large_json",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "312153416",
+        "reference_ns": "388590875",
+        "vort_over_reference": "1.2449"
+      },
+      {
+        "case": "binary_mixed",
+        "vort_api": "decodeFrameInto",
+        "reference_api": "ZSTD_decompress",
+        "iterations": "5000",
+        "vort_ns": "295584958",
+        "reference_ns": "374932291",
+        "vort_over_reference": "1.2684"
+      }
+    ],
+    "reusable": [
+      {
+        "case": "tiny",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "61708",
+        "reference_ns": "192042",
+        "vort_over_reference": "3.1121"
+      },
+      {
+        "case": "text",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "3685959",
+        "reference_ns": "11081584",
+        "vort_over_reference": "3.0064"
+      },
+      {
+        "case": "structured",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "3784750",
+        "reference_ns": "11352875",
+        "vort_over_reference": "2.9996"
+      },
+      {
+        "case": "repetitive",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "3522791",
+        "reference_ns": "9468541",
+        "vort_over_reference": "2.6878"
+      },
+      {
+        "case": "incompressible",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "90625",
+        "reference_ns": "165208",
+        "vort_over_reference": "1.8230"
+      },
+      {
+        "case": "rle64k",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "5684667",
+        "reference_ns": "86246000",
+        "vort_over_reference": "15.1717"
+      },
+      {
+        "case": "raw256k",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "18895708",
+        "reference_ns": "19058041",
+        "vort_over_reference": "1.0086"
+      },
+      {
+        "case": "numbered_json",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "4680666",
+        "reference_ns": "8900666",
+        "vort_over_reference": "1.9016"
+      },
+      {
+        "case": "huffman80k",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "119293833",
+        "reference_ns": "193751916",
+        "vort_over_reference": "1.6242"
+      },
+      {
+        "case": "ascii64k",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "198440875",
+        "reference_ns": "304951666",
+        "vort_over_reference": "1.5367"
+      },
+      {
+        "case": "large_text",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "54523834",
+        "reference_ns": "139922875",
+        "vort_over_reference": "2.5663"
+      },
+      {
+        "case": "large_json",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "308106542",
+        "reference_ns": "383510125",
+        "vort_over_reference": "1.2447"
+      },
+      {
+        "case": "binary_mixed",
+        "vort_api": "NativeFrameDecoder.decodeIntoSlice",
+        "reference_api": "ZSTD_decompressDCtx",
+        "iterations": "5000",
+        "vort_ns": "297623209",
+        "reference_ns": "367776459",
+        "vort_over_reference": "1.2357"
+      }
+    ]
+  }
+}

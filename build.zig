@@ -3164,6 +3164,24 @@ pub fn build(b: *std.Build) void {
     zstd_reference_bench_gate_step.dependOn(
         &zstd_reference_bench_gate.step,
     );
+    const run_zstd_reusable_reference_csv = b.addRunArtifact(zstd_reference_bench_exe);
+    run_zstd_reusable_reference_csv.addArgs(&.{
+        "--reusable", "--iterations",                                   "5000",
+        "--csv",      "zig-out/vort-zstd-reusable-reference-bench.csv",
+    });
+    const zstd_reusable_reference_gate = b.addSystemCommand(&.{
+        "python3",      "tools/zstd/reference_bench_gate.py",
+        "--api-mode",   "reusable",
+        "--csv",        "zig-out/vort-zstd-reusable-reference-bench.csv",
+        "--executable",
+    });
+    zstd_reusable_reference_gate.addArtifactArg(zstd_reference_bench_exe);
+    zstd_reusable_reference_gate.step.dependOn(&run_zstd_reusable_reference_csv.step);
+    const zstd_reusable_reference_gate_step = b.step(
+        "run-zstd-reusable-reference-bench-gate",
+        "Compare warmed Vort and libzstd decoder contexts with explicit API validation",
+    );
+    zstd_reusable_reference_gate_step.dependOn(&zstd_reusable_reference_gate.step);
     const zstd_reference_bench_path_smoke = b.addSystemCommand(&.{
         "python3", "tools/zstd/reference_bench_path_smoke.py",
     });

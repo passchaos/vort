@@ -12,6 +12,8 @@ const Case = struct {
 const Row = struct {
     case_name: []const u8,
     reference_version: []const u8,
+    vort_api: []const u8,
+    reference_api: []const u8,
     input_bytes: usize,
     input_sha256: [std.crypto.hash.sha2.Sha256.digest_length * 2]u8,
     encoded_bytes: usize,
@@ -42,6 +44,14 @@ const Row = struct {
     alloc_ns: u64,
     alloc_mib_s: f64,
     into_over_alloc: f64,
+    input_mod128: usize,
+    output_mod128: usize,
+    reference_output_mod128: usize,
+};
+
+const AddressLayout = struct {
+    input_offset: ?usize = null,
+    output_offset: ?usize = null,
 };
 
 const Options = struct {
@@ -54,6 +64,7 @@ const Options = struct {
     input_level: c_int = 1,
     reusable: bool = false,
     reference_library_path: ?[]const u8 = null,
+    layout: AddressLayout = .{},
 };
 
 const Sample = struct { elapsed_ns: u64, mix: u64 };
@@ -105,7 +116,7 @@ pub fn main(init: std.process.Init) !void {
             .name = name,
             .payload = payload,
             .level = options.input_level,
-        }, options.iterations, options.reusable, encoded_input);
+        }, options.iterations, options.reusable, encoded_input, options.layout);
         return try writeOutput(init, options.csv_path, &.{row}, provenance);
     }
     if (options.input_name != null or options.encoded_input_path != null or options.input_level != 1)
@@ -191,7 +202,7 @@ pub fn main(init: std.process.Init) !void {
         }
         try rows.append(
             init.gpa,
-            try measureCase(init, runtime, case, options.iterations, options.reusable, null),
+            try measureCase(init, runtime, case, options.iterations, options.reusable, null, options.layout),
         );
     }
 
@@ -249,9 +260,15 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.reusable = true;
         } else if (std.mem.eql(u8, arg, "--libzstd")) {
             options.reference_library_path = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--input-offset")) {
+            options.layout.input_offset = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10);
+        } else if (std.mem.eql(u8, arg, "--output-offset")) {
+            options.layout.output_offset = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10);
         } else return error.UnknownArgument;
     }
     if (options.iterations == 0) return error.InvalidBlockPlan;
+    if ((options.layout.input_offset orelse 0) >= 128 or
+        (options.layout.output_offset orelse 0) >= 128) return error.InvalidAddressOffset;
     return options;
 }
 
@@ -262,13 +279,24 @@ fn measureCase(
     iterations: usize,
     reusable: bool,
     encoded_input: ?[]const u8,
+    layout: AddressLayout,
 ) !Row {
     const generated = if (encoded_input == null)
         try runtime.encodeAlloc(init.gpa, case.payload, case.level)
     else
         null;
     defer if (generated) |encoded| init.gpa.free(encoded);
-    const encoded = encoded_input orelse generated.?;
+    const original_encoded = encoded_input orelse generated.?;
+    const shifted_input = if (layout.input_offset) |offset|
+        try init.gpa.alignedAlloc(u8, .fromByteUnits(128), original_encoded.len + offset)
+    else
+        null;
+    defer if (shifted_input) |allocation| init.gpa.free(allocation);
+    const encoded = if (shifted_input) |allocation| shifted: {
+        const bytes = allocation[layout.input_offset.?..];
+        @memcpy(bytes, original_encoded);
+        break :shifted bytes;
+    } else original_encoded;
     const summary = try vort.zstdSummarizeNativeFrameBlocks(encoded);
     const first_block = try vort.zstdInspectNativeFrameFirstBlock(encoded);
     const sequence_summary =
@@ -277,10 +305,25 @@ fn measureCase(
             first_block,
         );
     const copy_profile = try vort.zstd.benchmarkNativeSequenceCopyProfile(encoded);
-    const vort_output = try init.gpa.alloc(u8, case.payload.len);
-    defer init.gpa.free(vort_output);
-    const reference_output = try init.gpa.alloc(u8, case.payload.len);
-    defer init.gpa.free(reference_output);
+    const output_offset = layout.output_offset orelse 0;
+    const vort_storage = if (layout.output_offset != null)
+        try init.gpa.alignedAlloc(u8, .fromByteUnits(128), case.payload.len + output_offset)
+    else
+        try init.gpa.alloc(u8, case.payload.len);
+    defer if (layout.output_offset != null)
+        init.gpa.free(@as([]align(128) u8, @alignCast(vort_storage)))
+    else
+        init.gpa.free(vort_storage);
+    const reference_storage = if (layout.output_offset != null)
+        try init.gpa.alignedAlloc(u8, .fromByteUnits(128), case.payload.len + output_offset)
+    else
+        try init.gpa.alloc(u8, case.payload.len);
+    defer if (layout.output_offset != null)
+        init.gpa.free(@as([]align(128) u8, @alignCast(reference_storage)))
+    else
+        init.gpa.free(reference_storage);
+    const vort_output = vort_storage[output_offset..];
+    const reference_output = reference_storage[output_offset..];
 
     const written = try vort.zstdDecodeFrameInto(encoded, vort_output);
     if (written != case.payload.len) return error.SizeMismatch;
@@ -294,44 +337,39 @@ fn measureCase(
     defer init.gpa.free(alloc_output);
     if (!std.mem.eql(u8, case.payload, alloc_output)) return error.SizeMismatch;
 
-    var paired_reference_sample: ?Sample = null;
-    const vort_sample = if (reusable) blk: {
+    const paired = if (reusable) blk: {
         var decoder = vort.ZstdNativeFrameDecoder.init(init.gpa);
         defer decoder.deinit();
+        const reference_context = runtime.create_dctx() orelse return error.ReferenceUnavailable;
+        defer _ = runtime.free_dctx(reference_context);
+        @memset(vort_output, 0xa5);
+        @memset(reference_output, 0x5a);
         const warmed = try decoder.decodeIntoSlice(encoded, vort_output);
         if (warmed != case.payload.len) return error.SizeMismatch;
-        break :blk try measureReusable(
-            init.io,
-            &decoder,
-            encoded,
-            vort_output,
-            iterations,
-        );
-    } else blk: {
-        const paired = try measurePairedRepeated(
+        try runtime.decodeWithContext(reference_context, encoded, reference_output);
+        if (!std.mem.eql(u8, case.payload, vort_output) or
+            !std.mem.eql(u8, case.payload, reference_output)) return error.SizeMismatch;
+        break :blk try measurePairedRepeated(
+            true,
             init.io,
             runtime,
             encoded,
             vort_output,
             reference_output,
             iterations,
+            &decoder,
+            reference_context,
         );
-        paired_reference_sample = paired.reference;
-        break :blk paired.vort;
-    };
+    } else try measurePairedRepeated(false, init.io, runtime, encoded, vort_output, reference_output, iterations, null, null);
+    const vort_sample = paired.vort;
+    const reference_sample = paired.reference;
+    if (!std.mem.eql(u8, case.payload, vort_output) or
+        !std.mem.eql(u8, case.payload, reference_output)) return error.SizeMismatch;
     const alloc_sample = try measureAllocRepeated(
         init.io,
         init.gpa,
         encoded,
         case.payload.len,
-        iterations,
-    );
-    const reference_sample = paired_reference_sample orelse try measureRepeated(
-        init.io,
-        .reference,
-        runtime,
-        encoded,
-        reference_output,
         iterations,
     );
     const header_inspect = try measureInspect(
@@ -363,6 +401,8 @@ fn measureCase(
     return .{
         .case_name = case.name,
         .reference_version = runtime.version(),
+        .vort_api = if (reusable) "NativeFrameDecoder.decodeIntoSlice" else "decodeFrameInto",
+        .reference_api = if (reusable) "ZSTD_decompressDCtx" else "ZSTD_decompress",
         .input_bytes = case.payload.len,
         .input_sha256 = benchmark_provenance.sha256Hex(case.payload),
         .encoded_bytes = encoded.len,
@@ -394,6 +434,9 @@ fn measureCase(
         .alloc_mib_s = mibPerSecond(case.payload.len * iterations, alloc_sample.elapsed_ns),
         .into_over_alloc = @as(f64, @floatFromInt(alloc_sample.elapsed_ns)) /
             @as(f64, @floatFromInt(vort_sample.elapsed_ns)),
+        .input_mod128 = @intFromPtr(encoded.ptr) % 128,
+        .output_mod128 = @intFromPtr(vort_output.ptr) % 128,
+        .reference_output_mod128 = @intFromPtr(reference_output.ptr) % 128,
     };
 }
 
@@ -401,52 +444,16 @@ const Codec = enum { vort, reference };
 const InspectStage = enum { header, block, sequence };
 const PairedSample = struct { vort: Sample, reference: Sample };
 
-fn measureReusable(
-    io: std.Io,
-    decoder: *vort.ZstdNativeFrameDecoder,
-    encoded: []const u8,
-    output: []u8,
-    iterations: usize,
-) !Sample {
-    var best = Sample{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 };
-    for (0..5) |_| {
-        var mix: u64 = 0;
-        const start = std.Io.Clock.awake.now(io);
-        for (0..iterations) |_| {
-            mix +%= try decoder.decodeIntoSlice(encoded, output);
-            if (output.len != 0) mix +%= output[0];
-        }
-        const elapsed_ns = elapsedNs(io, start);
-        if (elapsed_ns < best.elapsed_ns) {
-            best = .{ .elapsed_ns = elapsed_ns, .mix = mix };
-        }
-    }
-    return best;
-}
-
-fn measureRepeated(
-    io: std.Io,
-    codec: Codec,
-    runtime: libzstd.Runtime,
-    encoded: []const u8,
-    output: []u8,
-    iterations: usize,
-) !Sample {
-    var best = Sample{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 };
-    for (0..5) |_| {
-        const sample = try measureRepeatedOnce(io, codec, runtime, encoded, output, iterations);
-        if (sample.elapsed_ns < best.elapsed_ns) best = sample;
-    }
-    return best;
-}
-
 fn measurePairedRepeated(
+    comptime reusable: bool,
     io: std.Io,
     runtime: libzstd.Runtime,
     encoded: []const u8,
     vort_output: []u8,
     reference_output: []u8,
     iterations: usize,
+    decoder: ?*vort.ZstdNativeFrameDecoder,
+    reference_context: ?*anyopaque,
 ) !PairedSample {
     var best = PairedSample{
         .vort = .{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 },
@@ -459,7 +466,7 @@ fn measurePairedRepeated(
             [_]Codec{ .reference, .vort };
         for (order) |codec| {
             const output = if (codec == .vort) vort_output else reference_output;
-            const sample = try measureRepeatedOnce(io, codec, runtime, encoded, output, iterations);
+            const sample = try measureRepeatedOnce(reusable, io, codec, runtime, encoded, output, iterations, decoder, reference_context);
             const current = if (codec == .vort) &best.vort else &best.reference;
             if (sample.elapsed_ns < current.elapsed_ns) current.* = sample;
         }
@@ -468,20 +475,29 @@ fn measurePairedRepeated(
 }
 
 fn measureRepeatedOnce(
+    comptime reusable: bool,
     io: std.Io,
     codec: Codec,
     runtime: libzstd.Runtime,
     encoded: []const u8,
     output: []u8,
     iterations: usize,
+    decoder: ?*vort.ZstdNativeFrameDecoder,
+    reference_context: ?*anyopaque,
 ) !Sample {
     var mix: u64 = 0;
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
         switch (codec) {
-            .vort => mix +%= try vort.zstdDecodeFrameInto(encoded, output),
+            .vort => mix +%= if (reusable)
+                try decoder.?.decodeIntoSlice(encoded, output)
+            else
+                try vort.zstdDecodeFrameInto(encoded, output),
             .reference => {
-                try runtime.decode(encoded, output);
+                if (reusable)
+                    try runtime.decodeWithContext(reference_context.?, encoded, output)
+                else
+                    try runtime.decode(encoded, output);
                 mix +%= output.len;
             },
         }
@@ -568,15 +584,14 @@ fn mibPerSecond(bytes: usize, ns: u64) f64 {
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row, provenance: benchmark_provenance.Info) !void {
     try writer.print(
-        "case,reference_version,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,block_count,raw_blocks,rle_blocks,compressed_blocks,first_block_type,literals_kind,regenerated_literals_size,sequence_count,total_sequence_count,total_literal_bytes,total_match_bytes,ll_mode,of_mode,ml_mode,header_inspect_ns,block_inspect_ns,sequence_inspect_ns,alloc_ns,alloc_mib_s,into_over_alloc,{s}\n",
+        "case,reference_version,vort_api,reference_api,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,block_count,raw_blocks,rle_blocks,compressed_blocks,first_block_type,literals_kind,regenerated_literals_size,sequence_count,total_sequence_count,total_literal_bytes,total_match_bytes,ll_mode,of_mode,ml_mode,header_inspect_ns,block_inspect_ns,sequence_inspect_ns,alloc_ns,alloc_mib_s,into_over_alloc,input_mod128,output_mod128,reference_output_mod128,{s}\n",
         .{benchmark_provenance.csv_columns},
     );
     for (rows) |row| {
+        try writer.print("{s},{s},{s},{s},", .{ row.case_name, row.reference_version, row.vort_api, row.reference_api });
         try writer.print(
-            "{s},{s},{d},{s},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{s},{s},{d},{d},{d},{d},{d},{s},{s},{s},{d},{d},{d},{d},{d:.2},{d:.4}",
+            "{d},{s},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{s},{s},{d},{d},{d},{d},{d},{s},{s},{s},{d},{d},{d},{d},{d:.2},{d:.4}",
             .{
-                row.case_name,
-                row.reference_version,
                 row.input_bytes,
                 &row.input_sha256,
                 row.encoded_bytes,
@@ -609,6 +624,7 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row, provenance: benchmark_pro
                 row.into_over_alloc,
             },
         );
+        try writer.print(",{d},{d},{d}", .{ row.input_mod128, row.output_mod128, row.reference_output_mod128 });
         try provenance.writeCsvFields(writer);
         try writer.writeByte('\n');
     }

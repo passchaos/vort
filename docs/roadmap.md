@@ -16225,3 +16225,33 @@ reuse, so production keeps the simpler independently owned plans.
   regressed documentation q5/q9 to 0.9831x/0.9807x and source q5/q9 to
   0.9779x/0.9819x median. The 15-bit peek and second-level dependency cost more
   than the cache reduction on M1 Pro, so the implementation was removed.
+
+- Apple M1 raw-frame copying now uses a dedicated `zstd/frame/raw_copy.zig`
+  module. Encoded frames of at least 256 KiB may use non-temporal NEON copies
+  for raw blocks of at least 64 KiB; smaller working sets retain the existing
+  cached kernel. Twenty-one complete-frame pairs improve `raw256k` by 1.0309x
+  median with 21/21 wins, and four additional size controls stay within 0.8%.
+  The oracle covers 70,656 alignment/tail/guard combinations; all 670 Zstd
+  tests and the 9,900-frame/64-mode upstream decodecorpus pass. The measured
+  1.0659x median versus libzstd still misses the 1.20x floor. Exact paired
+  observations, rejected copy shapes, and remaining comparison work are in
+  `docs/performance/zstd-raw-copy.md` and its JSON companion.
+
+- Reusable Zstd performance evidence now compares warmed Vort contexts with
+  `ZSTD_decompressDCtx`, identifies both APIs in every CSV row, and has a
+  dedicated `run-zstd-reusable-reference-bench-gate`. The corrected baseline
+  exposed a 1.0423x `numbered_json` gap. Reusable terminal blocks with 2--256
+  predefined-LL/compressed-OF/predefined-ML sequences now share the small
+  Huffman executor and borrow the cached offset table. Fifteen alternating
+  pairs improve the row by 1.8151x median, reaching 1.8870x DCtx with a 1.8632x
+  minimum; one-shot small JSON and large reusable JSON remain neutral. A
+  first placement inside the generic executor was rejected for a 1.8% large
+  JSON regression. See `docs/performance/zstd-reusable-decode.md`; the raw
+  bandwidth gap and wider corpus/platform leadership remain open.
+
+- The strict synthetic `raw256k >= 1.20x` condition is no longer a prerequisite
+  for real-file evaluation. Raw decoding is already dominated by caller-buffer
+  copy bandwidth, and the user accepted its smaller libzstd lead. The next
+  evidence stage uses representative files from `~/Downloads`, reports
+  one-shot and warmed reusable APIs separately, and retains input hashes and
+  benchmark provenance.

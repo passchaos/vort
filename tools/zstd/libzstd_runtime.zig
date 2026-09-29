@@ -14,6 +14,7 @@ const DecompressFn = *const fn (
     [*]const u8,
     usize,
 ) callconv(.c) usize;
+const DecompressDCtxFn = *const fn (?*anyopaque, [*]u8, usize, [*]const u8, usize) callconv(.c) usize;
 const IsErrorFn = *const fn (usize) callconv(.c) c_uint;
 const VersionStringFn = *const fn () callconv(.c) [*:0]const u8;
 const CreateCCtxFn = *const fn () callconv(.c) ?*anyopaque;
@@ -38,6 +39,7 @@ pub const Runtime = struct {
     compress_bound: CompressBoundFn,
     compress: CompressFn,
     decompress: DecompressFn,
+    decompress_dctx: DecompressDCtxFn,
     is_error: IsErrorFn,
     version_string: VersionStringFn,
     create_cctx: CreateCCtxFn,
@@ -92,6 +94,7 @@ pub const Runtime = struct {
             DecompressFn,
             "ZSTD_decompress",
         ) orelse return error.ReferenceUnavailable;
+        const decompress_dctx = library.lookup(DecompressDCtxFn, "ZSTD_decompressDCtx") orelse return error.ReferenceUnavailable;
         const is_error = library.lookup(
             IsErrorFn,
             "ZSTD_isError",
@@ -118,6 +121,7 @@ pub const Runtime = struct {
             .compress_bound = compress_bound,
             .compress = compress,
             .decompress = decompress,
+            .decompress_dctx = decompress_dctx,
             .is_error = is_error,
             .version_string = version_string,
             .create_cctx = create_cctx,
@@ -177,6 +181,14 @@ pub const Runtime = struct {
             encoded.ptr,
             encoded.len,
         );
+        if (self.is_error(written) != 0) return error.ReferenceDecodeFailed;
+        if (written != output.len) return error.SizeMismatch;
+    }
+
+    /// Decode with a caller-owned context. Context creation, warmup, and release
+    /// belong outside timed loops when measuring the reusable API.
+    pub fn decodeWithContext(self: Runtime, context: *anyopaque, encoded: []const u8, output: []u8) !void {
+        const written = self.decompress_dctx(context, output.ptr, output.len, encoded.ptr, encoded.len);
         if (self.is_error(written) != 0) return error.ReferenceDecodeFailed;
         if (written != output.len) return error.SizeMismatch;
     }

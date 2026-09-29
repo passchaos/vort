@@ -1,0 +1,1014 @@
+{
+  "date": "2026-09-29",
+  "cpu": "Apple M1 Pro",
+  "target_cpu": "apple_m1",
+  "os": "macOS 26.4.1",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "codec_threads": 1,
+  "reference_library": "/opt/homebrew/opt/zstd/lib/libzstd.dylib",
+  "order": "baseline,candidate on odd rounds; candidate,baseline on even rounds",
+  "timing": "five interleaved Vort/libzstd samples per executable; fastest sample per codec",
+  "host_load": "Defender, WindowServer, Ghostty, browser and system services remained active; no concurrent agent builds during timed campaigns",
+  "baseline_git": "30ebf67d",
+  "baseline_raw_blob": "a965268b",
+  "input_generation": "raw256k uses reference_bench.zig builtin; additional inputs use Python random.Random(input_bytes).randbytes(input_bytes)",
+  "command": "BINARY --case raw256k --iterations 20000 --libzstd LIBRARY --csv OUTPUT; size controls replace --case with --input FILE --name CASE and use each campaign iteration count",
+  "campaigns": [
+    {
+      "case": "raw256k",
+      "input_sha256": "2e45212ce01011167ab4f24cc2e9a045099c7a801f583f98d2bf3bf766cb4eab",
+      "input_bytes": "262144",
+      "encoded_bytes": "262159",
+      "iterations": "20000",
+      "reference_version": "1.5.7",
+      "baseline_executable_sha256": "c0e4742dc2f4863c39c3554d7ce79c9d1ed5719a2bdecca88cbdccaa8bacc0f5",
+      "candidate_executable_sha256": "4f628875a40160abca8ae2b964e1acc109a5bb574d2ebf3d5fda1c58bb4d2a29",
+      "median_speedup": 1.0309227586940504,
+      "geometric_speedup": 1.0971071688758356,
+      "wins": 21,
+      "candidate_reference_median": 1.0659013232303463,
+      "pairs": [
+        {
+          "baseline_vort_ns": 93207750,
+          "candidate_vort_ns": 88840583,
+          "candidate_reference_ns": 94842125
+        },
+        {
+          "baseline_vort_ns": 109766833,
+          "candidate_vort_ns": 89214709,
+          "candidate_reference_ns": 95062291
+        },
+        {
+          "baseline_vort_ns": 90330042,
+          "candidate_vort_ns": 88889541,
+          "candidate_reference_ns": 95443209
+        },
+        {
+          "baseline_vort_ns": 91544042,
+          "candidate_vort_ns": 89371209,
+          "candidate_reference_ns": 94966000
+        },
+        {
+          "baseline_vort_ns": 91161791,
+          "candidate_vort_ns": 89981250,
+          "candidate_reference_ns": 95528875
+        },
+        {
+          "baseline_vort_ns": 90890958,
+          "candidate_vort_ns": 89802625,
+          "candidate_reference_ns": 95242708
+        },
+        {
+          "baseline_vort_ns": 93221333,
+          "candidate_vort_ns": 88859375,
+          "candidate_reference_ns": 94811917
+        },
+        {
+          "baseline_vort_ns": 91195500,
+          "candidate_vort_ns": 89750875,
+          "candidate_reference_ns": 94654375
+        },
+        {
+          "baseline_vort_ns": 90374042,
+          "candidate_vort_ns": 89182208,
+          "candidate_reference_ns": 94638417
+        },
+        {
+          "baseline_vort_ns": 90451875,
+          "candidate_vort_ns": 89021208,
+          "candidate_reference_ns": 94986875
+        },
+        {
+          "baseline_vort_ns": 133120708,
+          "candidate_vort_ns": 88852750,
+          "candidate_reference_ns": 94614083
+        },
+        {
+          "baseline_vort_ns": 103751500,
+          "candidate_vort_ns": 88850959,
+          "candidate_reference_ns": 94489916
+        },
+        {
+          "baseline_vort_ns": 96959500,
+          "candidate_vort_ns": 88842458,
+          "candidate_reference_ns": 93829042
+        },
+        {
+          "baseline_vort_ns": 90445750,
+          "candidate_vort_ns": 88758875,
+          "candidate_reference_ns": 94676625
+        },
+        {
+          "baseline_vort_ns": 105062250,
+          "candidate_vort_ns": 88963291,
+          "candidate_reference_ns": 95037333
+        },
+        {
+          "baseline_vort_ns": 112660208,
+          "candidate_vort_ns": 88820791,
+          "candidate_reference_ns": 94869333
+        },
+        {
+          "baseline_vort_ns": 90934000,
+          "candidate_vort_ns": 88793250,
+          "candidate_reference_ns": 94586750
+        },
+        {
+          "baseline_vort_ns": 90489917,
+          "candidate_vort_ns": 88922084,
+          "candidate_reference_ns": 94782167
+        },
+        {
+          "baseline_vort_ns": 100039542,
+          "candidate_vort_ns": 88802542,
+          "candidate_reference_ns": 94875209
+        },
+        {
+          "baseline_vort_ns": 91546542,
+          "candidate_vort_ns": 88800583,
+          "candidate_reference_ns": 94813083
+        },
+        {
+          "baseline_vort_ns": 107253000,
+          "candidate_vort_ns": 81705584,
+          "candidate_reference_ns": 90359292
+        }
+      ]
+    },
+    {
+      "case": "raw256k identical-layout temporal control",
+      "input_sha256": "2e45212ce01011167ab4f24cc2e9a045099c7a801f583f98d2bf3bf766cb4eab",
+      "input_bytes": "262144",
+      "encoded_bytes": "262159",
+      "iterations": "20000",
+      "reference_version": "1.5.7",
+      "baseline_executable_sha256": "01a5ba1f1faa7adcdedd48721f2aac1ed186626d33ee1e6e949e0d1080317de6",
+      "candidate_executable_sha256": "bd6a5b596ff33d103e446fedbc338e549d97cad1d4c7253c7dda273f4208307e",
+      "median_speedup": 1.027448682402959,
+      "geometric_speedup": 1.035217984312254,
+      "wins": 20,
+      "candidate_reference_median": 1.065522058289537,
+      "pairs": [
+        {
+          "baseline_vort_ns": 95740375,
+          "candidate_vort_ns": 88951250,
+          "candidate_reference_ns": 94776000
+        },
+        {
+          "baseline_vort_ns": 97006166,
+          "candidate_vort_ns": 88964084,
+          "candidate_reference_ns": 95093916
+        },
+        {
+          "baseline_vort_ns": 91050750,
+          "candidate_vort_ns": 89160250,
+          "candidate_reference_ns": 95131709
+        },
+        {
+          "baseline_vort_ns": 94773584,
+          "candidate_vort_ns": 88949041,
+          "candidate_reference_ns": 94704916
+        },
+        {
+          "baseline_vort_ns": 92942000,
+          "candidate_vort_ns": 89543250,
+          "candidate_reference_ns": 95357917
+        },
+        {
+          "baseline_vort_ns": 90740708,
+          "candidate_vort_ns": 88871583,
+          "candidate_reference_ns": 95097000
+        },
+        {
+          "baseline_vort_ns": 90514250,
+          "candidate_vort_ns": 88993583,
+          "candidate_reference_ns": 94842209
+        },
+        {
+          "baseline_vort_ns": 90998541,
+          "candidate_vort_ns": 90494916,
+          "candidate_reference_ns": 95153833
+        },
+        {
+          "baseline_vort_ns": 91161792,
+          "candidate_vort_ns": 88856625,
+          "candidate_reference_ns": 94829542
+        },
+        {
+          "baseline_vort_ns": 90954250,
+          "candidate_vort_ns": 88990209,
+          "candidate_reference_ns": 94015375
+        },
+        {
+          "baseline_vort_ns": 95134000,
+          "candidate_vort_ns": 92592459,
+          "candidate_reference_ns": 97368584
+        },
+        {
+          "baseline_vort_ns": 90657500,
+          "candidate_vort_ns": 89147708,
+          "candidate_reference_ns": 95156083
+        },
+        {
+          "baseline_vort_ns": 91637917,
+          "candidate_vort_ns": 88954417,
+          "candidate_reference_ns": 94717666
+        },
+        {
+          "baseline_vort_ns": 92115250,
+          "candidate_vort_ns": 92752125,
+          "candidate_reference_ns": 97222542
+        },
+        {
+          "baseline_vort_ns": 94279709,
+          "candidate_vort_ns": 89008458,
+          "candidate_reference_ns": 95451500
+        },
+        {
+          "baseline_vort_ns": 90717458,
+          "candidate_vort_ns": 89172916,
+          "candidate_reference_ns": 95015709
+        },
+        {
+          "baseline_vort_ns": 94883292,
+          "candidate_vort_ns": 88931291,
+          "candidate_reference_ns": 94700459
+        },
+        {
+          "baseline_vort_ns": 94034291,
+          "candidate_vort_ns": 89141833,
+          "candidate_reference_ns": 95245750
+        },
+        {
+          "baseline_vort_ns": 92329083,
+          "candidate_vort_ns": 89005917,
+          "candidate_reference_ns": 95374708
+        },
+        {
+          "baseline_vort_ns": 92494208,
+          "candidate_vort_ns": 89089333,
+          "candidate_reference_ns": 94814584
+        },
+        {
+          "baseline_vort_ns": 90827458,
+          "candidate_vort_ns": 88979125,
+          "candidate_reference_ns": 95218458
+        }
+      ]
+    },
+    {
+      "case": "raw4k",
+      "input_sha256": "1855e20b7d6318a493c79ab25342c56d8838a74be24b673a51591cd268e240cb",
+      "input_bytes": "4096",
+      "encoded_bytes": "4106",
+      "iterations": "10000",
+      "reference_version": "1.5.7",
+      "baseline_executable_sha256": "c0e4742dc2f4863c39c3554d7ce79c9d1ed5719a2bdecca88cbdccaa8bacc0f5",
+      "candidate_executable_sha256": "4f628875a40160abca8ae2b964e1acc109a5bb574d2ebf3d5fda1c58bb4d2a29",
+      "median_speedup": 0.9943929392302268,
+      "geometric_speedup": 0.995872328499409,
+      "wins": 4,
+      "candidate_reference_median": 3.3797119495884864,
+      "pairs": [
+        {
+          "baseline_vort_ns": 574625,
+          "candidate_vort_ns": 555875,
+          "candidate_reference_ns": 1929042
+        },
+        {
+          "baseline_vort_ns": 552250,
+          "candidate_vort_ns": 564125,
+          "candidate_reference_ns": 1877000
+        },
+        {
+          "baseline_vort_ns": 552750,
+          "candidate_vort_ns": 579000,
+          "candidate_reference_ns": 1906333
+        },
+        {
+          "baseline_vort_ns": 557042,
+          "candidate_vort_ns": 575083,
+          "candidate_reference_ns": 1906375
+        },
+        {
+          "baseline_vort_ns": 554208,
+          "candidate_vort_ns": 557333,
+          "candidate_reference_ns": 1883625
+        },
+        {
+          "baseline_vort_ns": 569042,
+          "candidate_vort_ns": 570500,
+          "candidate_reference_ns": 1926834
+        },
+        {
+          "baseline_vort_ns": 553416,
+          "candidate_vort_ns": 557291,
+          "candidate_reference_ns": 1896292
+        },
+        {
+          "baseline_vort_ns": 583125,
+          "candidate_vort_ns": 558542,
+          "candidate_reference_ns": 1927333
+        },
+        {
+          "baseline_vort_ns": 559375,
+          "candidate_vort_ns": 580541,
+          "candidate_reference_ns": 1888083
+        },
+        {
+          "baseline_vort_ns": 556500,
+          "candidate_vort_ns": 554625,
+          "candidate_reference_ns": 1923083
+        },
+        {
+          "baseline_vort_ns": 607167,
+          "candidate_vort_ns": 572833,
+          "candidate_reference_ns": 2119583
+        },
+        {
+          "baseline_vort_ns": 567042,
+          "candidate_vort_ns": 574459,
+          "candidate_reference_ns": 1976959
+        },
+        {
+          "baseline_vort_ns": 538917,
+          "candidate_vort_ns": 556166,
+          "candidate_reference_ns": 1919542
+        },
+        {
+          "baseline_vort_ns": 580042,
+          "candidate_vort_ns": 580542,
+          "candidate_reference_ns": 1878834
+        },
+        {
+          "baseline_vort_ns": 562166,
+          "candidate_vort_ns": 563667,
+          "candidate_reference_ns": 1899208
+        }
+      ]
+    },
+    {
+      "case": "raw16k",
+      "input_sha256": "1c0052ac04180436353938ef8113225e15f76d0f759b8176ef9a59cf4eadf4d2",
+      "input_bytes": "16384",
+      "encoded_bytes": "16394",
+      "iterations": "10000",
+      "reference_version": "1.5.7",
+      "baseline_executable_sha256": "c0e4742dc2f4863c39c3554d7ce79c9d1ed5719a2bdecca88cbdccaa8bacc0f5",
+      "candidate_executable_sha256": "4f628875a40160abca8ae2b964e1acc109a5bb574d2ebf3d5fda1c58bb4d2a29",
+      "median_speedup": 1.0057021765494352,
+      "geometric_speedup": 0.9966461622807237,
+      "wins": 8,
+      "candidate_reference_median": 2.0267570701040163,
+      "pairs": [
+        {
+          "baseline_vort_ns": 2193459,
+          "candidate_vort_ns": 2240958,
+          "candidate_reference_ns": 3802542
+        },
+        {
+          "baseline_vort_ns": 2187708,
+          "candidate_vort_ns": 2240542,
+          "candidate_reference_ns": 3884542
+        },
+        {
+          "baseline_vort_ns": 2094208,
+          "candidate_vort_ns": 2071583,
+          "candidate_reference_ns": 4848542
+        },
+        {
+          "baseline_vort_ns": 2025542,
+          "candidate_vort_ns": 1928625,
+          "candidate_reference_ns": 4228000
+        },
+        {
+          "baseline_vort_ns": 2061208,
+          "candidate_vort_ns": 1928750,
+          "candidate_reference_ns": 5012542
+        },
+        {
+          "baseline_vort_ns": 1947875,
+          "candidate_vort_ns": 2192542,
+          "candidate_reference_ns": 4443750
+        },
+        {
+          "baseline_vort_ns": 2330666,
+          "candidate_vort_ns": 1983458,
+          "candidate_reference_ns": 3924000
+        },
+        {
+          "baseline_vort_ns": 1952584,
+          "candidate_vort_ns": 2268583,
+          "candidate_reference_ns": 4001583
+        },
+        {
+          "baseline_vort_ns": 1969542,
+          "candidate_vort_ns": 1958375,
+          "candidate_reference_ns": 4073000
+        },
+        {
+          "baseline_vort_ns": 2038625,
+          "candidate_vort_ns": 2237250,
+          "candidate_reference_ns": 3148000
+        },
+        {
+          "baseline_vort_ns": 1987917,
+          "candidate_vort_ns": 2155541,
+          "candidate_reference_ns": 5405708
+        },
+        {
+          "baseline_vort_ns": 2047416,
+          "candidate_vort_ns": 1978291,
+          "candidate_reference_ns": 3200167
+        },
+        {
+          "baseline_vort_ns": 1953000,
+          "candidate_vort_ns": 1981000,
+          "candidate_reference_ns": 4076292
+        },
+        {
+          "baseline_vort_ns": 2091166,
+          "candidate_vort_ns": 1979500,
+          "candidate_reference_ns": 4103792
+        },
+        {
+          "baseline_vort_ns": 2329750,
+          "candidate_vort_ns": 2174750,
+          "candidate_reference_ns": 3503667
+        }
+      ]
+    },
+    {
+      "case": "raw128k",
+      "input_sha256": "dac81cb4d9381f554f24b0eb9db32e08ee24ed3198b250a45c52a1118db919e7",
+      "input_bytes": "131072",
+      "encoded_bytes": "131084",
+      "iterations": "5000",
+      "reference_version": "1.5.7",
+      "baseline_executable_sha256": "c0e4742dc2f4863c39c3554d7ce79c9d1ed5719a2bdecca88cbdccaa8bacc0f5",
+      "candidate_executable_sha256": "4f628875a40160abca8ae2b964e1acc109a5bb574d2ebf3d5fda1c58bb4d2a29",
+      "median_speedup": 1.0074357160282996,
+      "geometric_speedup": 1.0117246147121108,
+      "wins": 11,
+      "candidate_reference_median": 1.3633379745429632,
+      "pairs": [
+        {
+          "baseline_vort_ns": 8125916,
+          "candidate_vort_ns": 8126125,
+          "candidate_reference_ns": 8906417
+        },
+        {
+          "baseline_vort_ns": 8146708,
+          "candidate_vort_ns": 8142375,
+          "candidate_reference_ns": 8903916
+        },
+        {
+          "baseline_vort_ns": 8694542,
+          "candidate_vort_ns": 8438875,
+          "candidate_reference_ns": 11966625
+        },
+        {
+          "baseline_vort_ns": 8516333,
+          "candidate_vort_ns": 8150125,
+          "candidate_reference_ns": 12002750
+        },
+        {
+          "baseline_vort_ns": 8233083,
+          "candidate_vort_ns": 8273250,
+          "candidate_reference_ns": 12034875
+        },
+        {
+          "baseline_vort_ns": 8292250,
+          "candidate_vort_ns": 8231083,
+          "candidate_reference_ns": 12173250
+        },
+        {
+          "baseline_vort_ns": 8328083,
+          "candidate_vort_ns": 8174625,
+          "candidate_reference_ns": 9228875
+        },
+        {
+          "baseline_vort_ns": 8228042,
+          "candidate_vort_ns": 8110458,
+          "candidate_reference_ns": 9915750
+        },
+        {
+          "baseline_vort_ns": 8212958,
+          "candidate_vort_ns": 8276083,
+          "candidate_reference_ns": 9214292
+        },
+        {
+          "baseline_vort_ns": 8251666,
+          "candidate_vort_ns": 8229458,
+          "candidate_reference_ns": 11933042
+        },
+        {
+          "baseline_vort_ns": 8492500,
+          "candidate_vort_ns": 8178042,
+          "candidate_reference_ns": 9145916
+        },
+        {
+          "baseline_vort_ns": 8258958,
+          "candidate_vort_ns": 8198000,
+          "candidate_reference_ns": 12045917
+        },
+        {
+          "baseline_vort_ns": 8402542,
+          "candidate_vort_ns": 8196500,
+          "candidate_reference_ns": 11951458
+        },
+        {
+          "baseline_vort_ns": 8216417,
+          "candidate_vort_ns": 8364917,
+          "candidate_reference_ns": 11404209
+        },
+        {
+          "baseline_vort_ns": 8302750,
+          "candidate_vort_ns": 8155292,
+          "candidate_reference_ns": 9274542
+        }
+      ]
+    },
+    {
+      "case": "raw1m",
+      "input_sha256": "cbce4e316b41e9c61c0a9119db8b06e8ba6f5fdfe8b4b901e47496b7beaf4c3f",
+      "input_bytes": "1048576",
+      "encoded_bytes": "1048610",
+      "iterations": "1000",
+      "reference_version": "1.5.7",
+      "baseline_executable_sha256": "c0e4742dc2f4863c39c3554d7ce79c9d1ed5719a2bdecca88cbdccaa8bacc0f5",
+      "candidate_executable_sha256": "4f628875a40160abca8ae2b964e1acc109a5bb574d2ebf3d5fda1c58bb4d2a29",
+      "median_speedup": 1.0008176252800056,
+      "geometric_speedup": 0.9991762723619355,
+      "wins": 8,
+      "candidate_reference_median": 0.9992933628997392,
+      "pairs": [
+        {
+          "baseline_vort_ns": 17492958,
+          "candidate_vort_ns": 17478667,
+          "candidate_reference_ns": 17526458
+        },
+        {
+          "baseline_vort_ns": 16886708,
+          "candidate_vort_ns": 16534125,
+          "candidate_reference_ns": 16290875
+        },
+        {
+          "baseline_vort_ns": 21640917,
+          "candidate_vort_ns": 18853333,
+          "candidate_reference_ns": 18871958
+        },
+        {
+          "baseline_vort_ns": 17755750,
+          "candidate_vort_ns": 17925750,
+          "candidate_reference_ns": 17913083
+        },
+        {
+          "baseline_vort_ns": 19467166,
+          "candidate_vort_ns": 17615708,
+          "candidate_reference_ns": 18144000
+        },
+        {
+          "baseline_vort_ns": 18636959,
+          "candidate_vort_ns": 17974167,
+          "candidate_reference_ns": 17997375
+        },
+        {
+          "baseline_vort_ns": 18114292,
+          "candidate_vort_ns": 18817208,
+          "candidate_reference_ns": 18978125
+        },
+        {
+          "baseline_vort_ns": 15594333,
+          "candidate_vort_ns": 19273250,
+          "candidate_reference_ns": 18350875
+        },
+        {
+          "baseline_vort_ns": 18926625,
+          "candidate_vort_ns": 18962000,
+          "candidate_reference_ns": 18419375
+        },
+        {
+          "baseline_vort_ns": 17570375,
+          "candidate_vort_ns": 18962167,
+          "candidate_reference_ns": 21551125
+        },
+        {
+          "baseline_vort_ns": 18113000,
+          "candidate_vort_ns": 18460500,
+          "candidate_reference_ns": 16340750
+        },
+        {
+          "baseline_vort_ns": 17751459,
+          "candidate_vort_ns": 17481083,
+          "candidate_reference_ns": 16988459
+        },
+        {
+          "baseline_vort_ns": 18678292,
+          "candidate_vort_ns": 19906083,
+          "candidate_reference_ns": 18372584
+        },
+        {
+          "baseline_vort_ns": 17834792,
+          "candidate_vort_ns": 17467667,
+          "candidate_reference_ns": 17649834
+        },
+        {
+          "baseline_vort_ns": 18690000,
+          "candidate_vort_ns": 17327333,
+          "candidate_reference_ns": 17303708
+        }
+      ]
+    }
+  ],
+  "rejected_summaries": {
+    "align64": {
+      "mode": "align64",
+      "median": 1.008925444171506,
+      "geomean": 1.0098186413008046,
+      "wins": 12,
+      "minimum": 0.857597536468068,
+      "maximum": 1.1547337404240616,
+      "absolute_median": 1.0282,
+      "absolute_minimum": 0.8941,
+      "absolute_maximum": 1.0678,
+      "ratios": [
+        1.030005185907402,
+        1.0289556030441134,
+        0.9608722243584576,
+        0.857597536468068,
+        0.9983579248325288,
+        0.9963703020839744,
+        1.072220780865438,
+        1.034627440926969,
+        0.9836021532930826,
+        1.1547337404240616,
+        0.9894658470403451,
+        1.024018808008186,
+        1.008925444171506,
+        0.9887651733289025,
+        0.9774310778365832,
+        1.007891132129119,
+        1.046816833748918,
+        0.9894224113414287,
+        1.0438458625429272,
+        1.0256909664472769,
+        1.0157414314681077
+      ],
+      "absolute": [
+        1.0401,
+        1.0364,
+        1.0226,
+        0.8941,
+        1.0678,
+        1.0373,
+        1.0481,
+        1.0267,
+        1.0144,
+        1.025,
+        1.0275,
+        1.0227,
+        1.0474,
+        1.0399,
+        1.0257,
+        1.0275,
+        1.0282,
+        1.0306,
+        1.0302,
+        1.0212,
+        1.0386
+      ]
+    },
+    "count": {
+      "mode": "count",
+      "median": 0.9952060393773035,
+      "geomean": 1.0026689814600849,
+      "wins": 6,
+      "minimum": 0.9676318876851208,
+      "maximum": 1.1098975467809924,
+      "absolute_median": 1.0344,
+      "absolute_minimum": 1.0145,
+      "absolute_maximum": 1.2212,
+      "ratios": [
+        1.0252289500214284,
+        0.9926325192331843,
+        0.9727663643476787,
+        0.998648382325094,
+        1.0165972527366502,
+        0.9800828202780217,
+        1.006812465443034,
+        1.1098975467809924,
+        1.0129558894191784,
+        0.9919858947655051,
+        1.0225050221451504,
+        0.977903319151134,
+        0.9772584404956598,
+        0.9952060393773035,
+        0.9676318876851208
+      ],
+      "absolute": [
+        1.0269,
+        1.0396,
+        1.0145,
+        1.0551,
+        1.0491,
+        1.0283,
+        1.029,
+        1.0564,
+        1.2212,
+        1.0783,
+        1.0504,
+        1.0265,
+        1.017,
+        1.0344,
+        1.0288
+      ]
+    },
+    "ptr-count": {
+      "mode": "ptr-count",
+      "median": 1.0179752887896498,
+      "geomean": 1.0068077882048294,
+      "wins": 8,
+      "minimum": 0.9457311785375928,
+      "maximum": 1.0763908641839077,
+      "absolute_median": 1.0374,
+      "absolute_minimum": 0.9559,
+      "absolute_maximum": 1.0589,
+      "ratios": [
+        1.0179752887896498,
+        0.9859602061593117,
+        1.0250860490901963,
+        0.9457311785375928,
+        0.964845900681919,
+        1.0763908641839077,
+        0.9634160764867863,
+        1.020458056333337,
+        1.047452831981273,
+        1.0247732447551008,
+        0.9857508925992335,
+        1.04087344348659,
+        1.0517701743696215,
+        0.9836753563493384,
+        0.9779954478500391
+      ],
+      "absolute": [
+        1.0369,
+        1.0078,
+        1.0355,
+        0.9559,
+        0.9904,
+        1.0139,
+        1.0405,
+        1.0391,
+        1.0589,
+        1.0542,
+        1.0374,
+        1.0467,
+        1.0472,
+        1.0398,
+        0.9866
+      ]
+    },
+    "ptr-align": {
+      "mode": "ptr-align",
+      "median": 1.0035181064367555,
+      "geomean": 1.0060029261013521,
+      "wins": 9,
+      "minimum": 0.9558239676494001,
+      "maximum": 1.0583558716264854,
+      "absolute_median": 1.041,
+      "absolute_minimum": 1.007,
+      "absolute_maximum": 1.0542,
+      "ratios": [
+        0.9558239676494001,
+        1.0583558716264854,
+        0.9994803445084803,
+        1.0134780317399343,
+        1.037410713103357,
+        1.0035181064367555,
+        0.9797092324979747,
+        1.0237891871465539,
+        1.0015146079238486,
+        1.0419436417180212,
+        0.9628664692572372,
+        0.9806734811053192,
+        1.0396817913897902,
+        1.0184980771376522,
+        0.9798375488484561
+      ],
+      "absolute": [
+        1.007,
+        1.0536,
+        1.0508,
+        1.0403,
+        1.0438,
+        1.0427,
+        1.0542,
+        1.041,
+        1.0272,
+        1.0448,
+        1.0343,
+        1.0114,
+        1.0345,
+        1.0429,
+        1.0212
+      ]
+    },
+    "size": {
+      "raw4k": {
+        "median": 0.9478484645391899,
+        "geomean": 0.93530271721781,
+        "wins": 0,
+        "minimum": 0.7140387480738455,
+        "ratios": [
+          0.9478484645391899,
+          0.7140387480738455,
+          0.9845008841876545,
+          0.940035999261409,
+          0.9727881524291132,
+          0.9438954433062522,
+          0.9503563331279301,
+          0.9723239347140563,
+          0.9452656086016576,
+          0.9802947271944809,
+          0.9498437114129477,
+          0.9411931734732844,
+          0.9258116726692297,
+          0.9632606399900061,
+          0.9339295799821269
+        ]
+      },
+      "raw16k": {
+        "median": 0.9329861054633978,
+        "geomean": 0.9740151784562577,
+        "wins": 6,
+        "minimum": 0.8794377819938943,
+        "ratios": [
+          0.9009957300482363,
+          1.1002789305079024,
+          0.8924008390541571,
+          0.9454066947770194,
+          0.8794377819938943,
+          1.0619548675027948,
+          0.9274737792129314,
+          1.0213624152028005,
+          1.2095945187443216,
+          0.8929000462498573,
+          0.9329861054633978,
+          1.0037640048383127,
+          0.9111487727608256,
+          0.8935098514995632,
+          1.1057346430866803
+        ]
+      },
+      "raw128k": {
+        "median": 0.9713384959903919,
+        "geomean": 1.0094394734676815,
+        "wins": 7,
+        "minimum": 0.8877753189122803,
+        "ratios": [
+          0.9389014227174364,
+          0.9031791237318993,
+          1.1280141017319147,
+          0.9713384959903919,
+          1.0879112991154911,
+          0.9251511317600032,
+          0.9277925060070423,
+          0.8877753189122803,
+          0.9314834854615601,
+          1.1196728615986087,
+          1.0869382314175462,
+          0.962416456327732,
+          1.1399178739770395,
+          1.099436857665775,
+          1.0931683863766302
+        ]
+      },
+      "raw1m": {
+        "median": 1.0177216161114038,
+        "geomean": 1.0202714634396308,
+        "wins": 8,
+        "minimum": 0.9267686995154848,
+        "ratios": [
+          1.208184354019321,
+          0.9267686995154848,
+          0.9425694956774991,
+          0.9972729229665317,
+          0.9688777406970054,
+          1.0177216161114038,
+          1.0779642847450268,
+          1.0212306032319582,
+          0.9421014210593199,
+          1.020968093596547,
+          0.977858483563397,
+          0.9941550428082648,
+          1.0373518987443526,
+          1.0506215404080341,
+          1.1605546338717865
+        ]
+      }
+    }
+  },
+  "vort_api": "vort.zstdDecodeFrameInto",
+  "reference_api": "ZSTD_decompress",
+  "warmup": "full output validation before timed samples",
+  "cpu_affinity": "unavailable",
+  "final_reference_gate": {
+    "iterations": 5000,
+    "rows": [
+      {
+        "case": "tiny",
+        "vort_over_reference": 17.6517,
+        "vort_ns": 38875,
+        "reference_ns": 686209
+      },
+      {
+        "case": "text",
+        "vort_over_reference": 3.1832,
+        "vort_ns": 3817959,
+        "reference_ns": 12153167
+      },
+      {
+        "case": "structured",
+        "vort_over_reference": 3.1267,
+        "vort_ns": 3914875,
+        "reference_ns": 12240792
+      },
+      {
+        "case": "repetitive",
+        "vort_over_reference": 2.86,
+        "vort_ns": 3517667,
+        "reference_ns": 10060541
+      },
+      {
+        "case": "incompressible",
+        "vort_over_reference": 7.1427,
+        "vort_ns": 99209,
+        "reference_ns": 708625
+      },
+      {
+        "case": "rle64k",
+        "vort_over_reference": 15.7335,
+        "vort_ns": 5558625,
+        "reference_ns": 87456792
+      },
+      {
+        "case": "raw256k",
+        "vort_over_reference": 1.0545,
+        "vort_ns": 18897750,
+        "reference_ns": 19927542
+      },
+      {
+        "case": "numbered_json",
+        "vort_over_reference": 1.3227,
+        "vort_ns": 7136250,
+        "reference_ns": 9439125
+      },
+      {
+        "case": "huffman80k",
+        "vort_over_reference": 1.4454,
+        "vort_ns": 135718708,
+        "reference_ns": 196164458
+      },
+      {
+        "case": "ascii64k",
+        "vort_over_reference": 1.5209,
+        "vort_ns": 203064959,
+        "reference_ns": 308847875
+      },
+      {
+        "case": "large_text",
+        "vort_over_reference": 2.4284,
+        "vort_ns": 58047625,
+        "reference_ns": 140962791
+      },
+      {
+        "case": "large_json",
+        "vort_over_reference": 1.2338,
+        "vort_ns": 308755833,
+        "reference_ns": 380946333
+      },
+      {
+        "case": "binary_mixed",
+        "vort_over_reference": 1.2532,
+        "vort_ns": 292030500,
+        "reference_ns": 365972542
+      }
+    ]
+  },
+  "validation": {
+    "direct_zstd_tests": 670,
+    "guarded_copy_combinations": 70656,
+    "compatibility_cases": 276,
+    "decodecorpus_frames": 9900,
+    "decodecorpus_sequence_modes": 64,
+    "reference_gate_rows": 13,
+    "decode_profile_gate_rows": 5,
+    "check": "passed",
+    "fallback_compile_targets": [
+      "aarch64-linux generic-neon",
+      "x86_64-linux"
+    ]
+  }
+}

@@ -7839,6 +7839,15 @@ fn decodeLiteralOnlyCompressedBlockIntoBufferWithSequenceWorkspace(
     );
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
     try validateSupportedLiteralSection(section);
+    if (section.sequence_count >= 2 and section.sequence_count <= 256 and
+        !continuation.retainsState() and dictionary_history.len == 0 and
+        (section.kind == .compressed or section.kind == .treeless) and
+        section.huffman_tree.?.max_bit_count > 0 and
+        section.huffman_tree.?.max_bit_count <= NarrowHuffmanLiteralLookup.bit_width and
+        section.sequence_payload_offset < block.len and block[section.sequence_payload_offset] == 0x20)
+    {
+        return decodeSmallHuffmanBlockWithSequenceWorkspace(block, &section, output, written, frame_output_start, frame_state.repeated_offsets, workspace);
+    }
     if (section.sequence_count != 0) return try decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         block,
         section,
@@ -30143,17 +30152,16 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     var reusable_output: [1290 + 64]u8 = @splat(0xa5);
     _ = try reusable_decoder.decodeIntoSlice(&encoded, &reusable_output);
     try std.testing.expectEqual(@as(usize, 0), reusable_decoder.reusableHuffmanTreeHitCount());
-    test_reusable_match_56_hits = 0;
-    test_reusable_match_6_7_hits = 0;
-    defer {
-        test_reusable_match_56_hits = 0;
-        test_reusable_match_6_7_hits = 0;
-    }
+    test_small_mixed_fse_match_56_hits = 0;
+    test_small_mixed_fse_match_6_7_hits = 0;
+    test_small_mixed_single_literal_hits = 0;
     try std.testing.expectEqual(payload.items.len, try reusable_decoder.decodeIntoSlice(&encoded, &reusable_output));
     try std.testing.expectEqualSlices(u8, &specialized_output, &reusable_output);
     try std.testing.expectEqual(@as(usize, 1), reusable_decoder.reusableHuffmanTreeHitCount());
-    try std.testing.expectEqual(@as(usize, 17), test_reusable_match_56_hits);
-    try std.testing.expectEqual(@as(usize, 18), test_reusable_match_6_7_hits);
+    try std.testing.expectEqual(@as(usize, 1), reusable_decoder.reusableSequenceTableHitCount());
+    try std.testing.expectEqual(@as(usize, 17), test_small_mixed_fse_match_56_hits);
+    try std.testing.expectEqual(@as(usize, 18), test_small_mixed_fse_match_6_7_hits);
+    try std.testing.expectEqual(@as(usize, 33), test_small_mixed_single_literal_hits);
 
     var missed_frame = encoded;
     missed_frame[first_block.payload_offset + generic_section.sequence_payload_offset] = 0;
@@ -30258,11 +30266,38 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
                 ));
                 saw_invalid_match = saw_invalid_match or err == error.InvalidMatch;
             }
+            // Reuse the same cache across changed FSE descriptions and
+            // malformed sequence payloads, then compare with the generic
+            // block decoder before the frame layer remaps size errors.
+            var mutated_cached_state: SequenceFrameState = .{};
+            var mutated_cached_written: usize = 0;
+            var mutated_cached_output: [1290 + 16]u8 = @splat(0xa5);
+            const cached_result = decodeLiteralOnlyCompressedBlockIntoBufferWithSequenceWorkspace(
+                mutated_block,
+                mutated_cached_output[0..1290],
+                &mutated_cached_written,
+                128 * 1024,
+                0,
+                &.{},
+                &mutated_cached_state,
+                .terminal,
+                reusable_decoder.sequence_workspace.?,
+                false,
+            );
+            if (generic_result) |_| {
+                try cached_result;
+                try std.testing.expectEqual(mutated_generic_written, mutated_cached_written);
+                try std.testing.expectEqualSlices(u8, mutated_generic_output[0..mutated_generic_written], mutated_cached_output[0..mutated_cached_written]);
+            } else |err| try std.testing.expectError(err, cached_result);
+            for (mutated_cached_output[1290..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
             mutation_cases += 1;
         }
     }
     try std.testing.expect(mutation_cases >= 100);
     try std.testing.expect(saw_invalid_match);
+    @memset(&reusable_output, 0xa5);
+    try std.testing.expectEqual(payload.items.len, try reusable_decoder.decodeIntoSlice(&encoded, &reusable_output));
+    try std.testing.expectEqualSlices(u8, &specialized_output, &reusable_output);
 }
 
 test "zstd dense sparse-literal blocks select grouped decode" {
@@ -40040,7 +40075,43 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
     );
     if (offset >= block.len) return error.TruncatedFrame;
 
-    var reader = try ReverseBitReader.init(block[offset..]);
+    return decodePredefinedOffsetFsePredefinedHuffmanPrepared(block, section, offset, &offset_fse, output, written, frame_output_start, repeated_offsets, prepared_lookup);
+}
+
+/// A terminal block can borrow its resolved offset table until execution ends;
+/// it does not need to copy the cached table or retain it as continuation state.
+noinline fn decodeSmallHuffmanBlockWithSequenceWorkspace(
+    block: []const u8,
+    section: *const LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    repeated_offsets: [3]usize,
+    workspace: *SequenceDecodeWorkspace,
+) linksection(small_sequence_decode_text_section) Error!void {
+    const description_start = section.sequence_payload_offset;
+    if (workspace.sequence.find(block, description_start, section.sequence_count)) |cached| {
+        return decodePredefinedOffsetFsePredefinedHuffmanPrepared(block, section, description_start + cached.description_len, &cached.spec.offset_fse, output, written, frame_output_start, repeated_offsets, null);
+    }
+    var spec: SequenceModeSpec = undefined;
+    var offset = description_start;
+    try parseSequenceModeSpecInto(&spec, block, &offset, section.sequence_count);
+    workspace.sequence.store(block, description_start, section.sequence_count, spec);
+    return decodePredefinedOffsetFsePredefinedHuffmanPrepared(block, section, spec.bitstream_offset, &spec.offset_fse, output, written, frame_output_start, repeated_offsets, null);
+}
+
+noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
+    block: []const u8,
+    section: *const LiteralOnlySection,
+    bitstream_offset: usize,
+    offset_fse: *const SequenceFseTable,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    repeated_offsets: [3]usize,
+    prepared_lookup: ?*const NarrowHuffmanLiteralLookup,
+) align(256) linksection(small_sequence_decode_text_section) Error!void {
+    var reader = try ReverseBitReader.init(block[bitstream_offset..]);
     var ll_state = try reader.readSmall(6);
     var of_state = try reader.readSmall(@intCast(offset_fse.accuracy_log));
     var ml_state = try reader.readSmall(6);

@@ -1017,8 +1017,10 @@ Even with that correction, `raw256k` remains strongly bimodal under sustained
 128-byte kernel is retained because its independent-load schedule improves
 the two noisy alternating campaigns by `1.0059x` median / `1.0124x` geometric
 (12/21 wins) and `1.0216x` / `1.0424x` (9/15 wins), but those results are not
-strong enough to declare the raw row complete. No Downloads corpus was run,
-because the requested all-row 1.20x precondition is not yet satisfied.
+strong enough to declare the raw row complete. No Downloads corpus was run in
+that campaign because the then-current entry condition required every row to
+reach 1.20x. The user later accepted the bandwidth-bound raw gap and removed
+that precondition for real-file benchmarking.
 
 Two later M1 raw-copy follow-ups were measured and removed. A canonical
 two-full-128-KiB-block detector plus fixed-boundary copier measured 0.9423x
@@ -1028,3 +1030,24 @@ kernel. Rewriting the same 128-byte loop around an end pointer removed one
 the extra mask/tail setup and changed register layout outweighed the saved
 instruction. The committed remaining-length loop therefore stays authoritative
 for `raw256k`.
+
+## Size-gated Apple M1 raw copies
+
+The following raw-frame optimization retains the cached vector loop for small
+frames and applies non-temporal copies to large blocks in large encoded frames.
+Twenty-one alternating pairs improve `raw256k` by 1.0309x median with 21/21
+wins; matched-layout opcode comparisons and size controls are recorded in
+[zstd-raw-copy.md](zstd-raw-copy.md). The final candidate remains below the
+campaign's strict 1.20x libzstd floor; this is now an accepted bandwidth-bound
+gap rather than a blocker for real-file evaluation.
+
+## Matched reusable API and shared small-block execution
+
+The corrected reusable benchmark compares Vort with `ZSTD_decompressDCtx`,
+with both contexts warmed outside timing and explicit API names in the CSV.
+That stronger reference exposed a 1.0423x small-JSON gap despite cached tables.
+The reusable block entry now shares the optimized small Huffman executor and
+borrows its cached offset table. Fifteen paired runs improve this row by 1.8151x
+median, reaching 1.8870x DCtx with a 1.8632x minimum; one-shot small JSON and
+large reusable JSON remain neutral. Full evidence and the rejected placement
+inside the generic executor are in [zstd-reusable-decode.md](zstd-reusable-decode.md).
