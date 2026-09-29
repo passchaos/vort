@@ -16345,9 +16345,11 @@ reuse, so production keeps the simpler independently owned plans.
 
 - The resulting SVG routing experiment rejected 512/768/896 split thresholds:
   seven matched-layout pairs produced 0.9642x/0.9629x/0.9556x medians and 0/7
-  wins at every threshold. A 1 kHz pure-Vort profile instead places 45.42% of
-  samples in the retained interleaved all-FSE/Huffman loop and 24.57% in the
-  existing split loop. Small interleaved-loop changes were also rejected:
+  wins at every threshold. A dedicated 512-byte-scratch executor for only the
+  512--1023-sequence, at-most-512-literal subset was neutral at 1.0017x median /
+  1.0021x geometric with 8/15 wins. A 1 kHz pure-Vort profile instead places
+  45.42% of samples in the retained interleaved all-FSE/Huffman loop and 24.57%
+  in the existing split loop. Small interleaved-loop changes were also rejected:
   fixed loop padding was neutral, a matched direct-offset shortcut and local
   sequence reader did not improve, borrowed Huffman-state variants exposed a
   large code-layout cliff, and two-symbol literal lookup fell to about 0.86x.

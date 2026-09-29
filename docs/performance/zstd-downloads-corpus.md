@@ -166,7 +166,10 @@ two FSE-table builders, and 2.26% to Huffman-tree construction. Lowering the
 split threshold was nevertheless counterproductive under matched 256-byte
 helper alignment: 512, 768, and 896 sequences measured 0.9642x, 0.9629x, and
 0.9556x medians over seven alternating pairs, all with 0/7 wins. Bulk literal
-staging does not amortize on these sparse-literal medium blocks.
+staging does not amortize on these sparse-literal medium blocks. A separate
+512-byte-scratch executor, limited to 512--1023-sequence blocks with at most
+512 literals, reached only 1.0017x median / 1.0021x geometric with 8/15 wins
+and was also removed.
 
 Several interleaved-loop changes were also rejected. Five fixed AArch64 NOPs
 that moved the loop head to a 64-byte boundary were neutral at 1.0027x median /
