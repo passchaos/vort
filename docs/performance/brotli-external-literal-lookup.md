@@ -735,3 +735,12 @@ and 0.6461x respectively. The committed `clustered_q8` route remains neutral
 at 1.0000x median over 15 control pairs. The reference gate, upstream
 differential, and real-corpus driver smoke pass; wide literal-rich decode still
 has a substantial parity gap.
+
+A closer libbrotli-style 8-bit root plus bounded secondary-table experiment
+was also implemented and removed. Unlike the earlier 8-bit-root-only trial, it
+decoded every long code through a second-level table and retained the existing
+10-bit implementation as an atomic capacity fallback. Even so, 15 alternating
+pairs regressed documentation q5/q9 to 0.9831x/0.9807x median and source q5/q9
+to 0.9779x/0.9819x, with only 0--2 wins per row. The smaller table working set
+did not repay the 15-bit peek, root-marker branch, and second-level index on
+Apple M1 Pro, so the complete trial was removed.

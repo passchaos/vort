@@ -16218,3 +16218,10 @@ reuse, so production keeps the simpler independently owned plans.
   0.9649x with 6/21 wins. Both were removed, leaving the committed 128-byte
   load-first loop as the measured best path while the 1.20x target remains
   open.
+- A complete libbrotli-style 8-bit literal root plus per-prefix secondary table
+  was tested for the 65--256-tree wide decoder. It eliminated canonical long
+  misses and reduced the per-tree working set, with atomic fallback to the
+  established 10-bit route on capacity failure, but 15 alternating pairs
+  regressed documentation q5/q9 to 0.9831x/0.9807x and source q5/q9 to
+  0.9779x/0.9819x median. The 15-bit peek and second-level dependency cost more
+  than the cache reduction on M1 Pro, so the implementation was removed.
