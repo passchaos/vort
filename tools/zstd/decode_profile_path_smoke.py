@@ -66,6 +66,9 @@ def main() -> int:
         assert sum(int(row[key]) for key in ("compressed_table_modes", "repeat_table_modes", "rle_table_modes", "predefined_table_modes")) == int(row["sequence_blocks"]) * 3, row
         assert int(row["no_low_probability_tables"]) + int(row["low_probability_tables"]) == int(row["compressed_table_modes"]), row
         assert sum(int(row[key]) for key in ("raw_literal_blocks", "rle_literal_blocks", "compressed_literal_blocks", "treeless_literal_blocks")) == int(row["compressed_blocks"]), row
+        assert sum(int(value) for value in row["split_path_blocks"].split(";")) == int(row["sequence_blocks"]), row
+        assert sum(int(value) for value in row["split_path_sequences"].split(";")) == int(row["total_sequences"]), row
+        assert sum(int(value) for value in row["split_path_match_bytes"].split(";")) == int(row["match_bytes"]), row
         assert "/source%20data.txt" in row["command"], row
 
         reusable = run(

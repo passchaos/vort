@@ -6,7 +6,8 @@ import hashlib
 from pathlib import Path
 
 PROVENANCE_COLUMNS = ["provenance_version", "optimize", "zig_version", "target_arch", "target_os", "target_abi", "target_cpu", "cpu_model", "cpu_affinity", "affinity_cpu_count", "benchmark_threads", "codec_thread_policy", "executable_sha256", "command"]
-COLUMNS = ["case", "api_mode", "input_bytes", "input_sha256", "encoded_bytes", "iterations", "vort_ns", "vort_mib_s", "checksum", "reusable_sequence_table_hits", "reusable_huffman_tree_hits", "block_count", "compressed_blocks", "literals_kind", "sequence_count", "ll_mode", "of_mode", "ml_mode", "sequence_blocks", "raw_literal_blocks", "rle_literal_blocks", "compressed_literal_blocks", "treeless_literal_blocks", "compressed_table_modes", "no_low_probability_tables", "low_probability_tables", "repeat_table_modes", "rle_table_modes", "predefined_table_modes", "fse_accuracy_log_histogram", "no_low_fse_accuracy_log_histogram", "total_sequences", "literal_bytes", "match_bytes", "zero_literal_sequences", "overlapping_matches", "overlapping_match_bytes", "non_overlapping_matches", "non_overlapping_match_bytes", "vector32_eligible_matches", "vector32_eligible_bytes", "match_length_histogram", "offset_histogram", "medium_length_histogram"] + PROVENANCE_COLUMNS
+SPLIT_PATHS = ["all_fse", "generic", "non_huffman_literals", "below_policy", "one_stream", "incomplete_lookup"]
+COLUMNS = ["case", "api_mode", "input_bytes", "input_sha256", "encoded_bytes", "iterations", "vort_ns", "vort_mib_s", "checksum", "reusable_sequence_table_hits", "reusable_huffman_tree_hits", "block_count", "compressed_blocks", "literals_kind", "sequence_count", "ll_mode", "of_mode", "ml_mode", "sequence_blocks", "raw_literal_blocks", "rle_literal_blocks", "compressed_literal_blocks", "treeless_literal_blocks", "compressed_table_modes", "no_low_probability_tables", "low_probability_tables", "repeat_table_modes", "rle_table_modes", "predefined_table_modes", "fse_accuracy_log_histogram", "no_low_fse_accuracy_log_histogram", "split_path_order", "split_path_blocks", "split_path_sequences", "split_path_literal_bytes", "split_path_match_bytes", "total_sequences", "literal_bytes", "match_bytes", "zero_literal_sequences", "overlapping_matches", "overlapping_match_bytes", "non_overlapping_matches", "non_overlapping_match_bytes", "vector32_eligible_matches", "vector32_eligible_bytes", "match_length_histogram", "offset_histogram", "medium_length_histogram"] + PROVENANCE_COLUMNS
 CASES = {"numbered_json", "huffman80k", "ascii64k", "large_json", "binary_mixed"}
 
 def main() -> int:
@@ -46,6 +47,16 @@ def main() -> int:
         assert sum(int(value) for value in row["fse_accuracy_log_histogram"].split(";")) == int(row["compressed_table_modes"]), row
         assert int(row["no_low_probability_tables"]) + int(row["low_probability_tables"]) == int(row["compressed_table_modes"]), row
         assert sum(int(value) for value in row["no_low_fse_accuracy_log_histogram"].split(";")) == int(row["no_low_probability_tables"]), row
+        assert row["split_path_order"].split(";") == SPLIT_PATHS, row
+        split_blocks = [int(value) for value in row["split_path_blocks"].split(";")]
+        split_sequences = [int(value) for value in row["split_path_sequences"].split(";")]
+        split_literal_bytes = [int(value) for value in row["split_path_literal_bytes"].split(";")]
+        split_match_bytes = [int(value) for value in row["split_path_match_bytes"].split(";")]
+        assert all(len(values) == len(SPLIT_PATHS) for values in (split_blocks, split_sequences, split_literal_bytes, split_match_bytes)), row
+        assert sum(split_blocks) == sequence_blocks, row
+        assert sum(split_sequences) == int(row["total_sequences"]), row
+        assert sum(split_literal_bytes) <= int(row["literal_bytes"]), row
+        assert sum(split_match_bytes) == int(row["match_bytes"]), row
         sequences = int(row["total_sequences"])
         overlapping = int(row["overlapping_matches"])
         non_overlapping = int(row["non_overlapping_matches"])

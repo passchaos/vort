@@ -139,6 +139,27 @@ bookkeeping. A fresh profile of the six compressed files produced:
 The executable also has four raw-literal compressed blocks and the shared
 library has one; none of these files uses an RLE literal section.
 
+The profile now classifies every sequence-bearing block into mutually
+exclusive split-decoder paths and weights them by decoded output, rather than
+using block counts alone. `Other` combines non-Huffman literals, one-stream
+Huffman sections, and incomplete lookup tables. No incomplete lookup table was
+observed in these six files.
+
+| Case | all-FSE split blocks / output | Generic split blocks / output | Below policy blocks / output | Other blocks / output |
+| --- | ---: | ---: | ---: | ---: |
+| large SVG | 461 / 33.62% | 0 / 0% | 916 / 66.38% | 0 / 0% |
+| robot log | 831 / 97.69% | 1 / 0.06% | 52 / 2.25% | 0 / 0% |
+| trace JSON | 236 / 96.79% | 0 / 0% | 11 / 3.21% | 0 / 0% |
+| shared library | 725 / 96.84% | 28 / 2.27% | 8 / 0.85% | 1 / 0.04% |
+| executable | 378 / 98.03% | 14 / 1.20% | 0 / 0% | 4 / 0.77% |
+| large C header | 219 / 96.03% | 7 / 3.07% | 1 / 0.03% | 2 / 0.88% |
+
+This rules out incomplete Huffman tables as the current broad gap. It also
+shows that the existing split path already covers at least 96% of decoded
+sequence-block output for every compressed input except the SVG. The SVG's
+512--1023-sequence blocks are the focused threshold experiment; widening split
+routing globally is not justified by the other five rows.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;

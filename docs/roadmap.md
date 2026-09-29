@@ -16332,3 +16332,13 @@ reuse, so production keeps the simpler independently owned plans.
   was neutral on SVG at 1.0012x median / 1.0022x geometric with 9/15 wins.
   These results keep the next target on dominant split sequence execution
   rather than lookup reuse or narrower copy dispatch.
+
+- Split-decoder profiling now classifies each sequence-bearing block into
+  all-FSE split, generic split, non-Huffman literals, below-policy, one-stream,
+  or incomplete-lookup paths, with block, sequence, literal-byte, and
+  match-byte weights. Across six compressed Downloads inputs, no block is
+  rejected for an incomplete lookup. Five inputs already send at least 96% of
+  sequence-block output through a split path; the SVG is the exception, with
+  916 of 1,377 blocks and 66.38% of output below the current threshold. This
+  narrows the next production experiment to its 512--1023-sequence blocks
+  instead of globally widening the split decoder.

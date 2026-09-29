@@ -8,6 +8,7 @@ const sequence_predefined = @import("zstd/sequence/predefined.zig");
 const sequence_bit_reader = @import("zstd/sequence/bit_reader.zig");
 const sequence_field_group = @import("zstd/sequence/field_group.zig");
 const sequence_decode_policy = @import("zstd/sequence/decode_policy.zig");
+const sequence_split_profile = @import("zstd/sequence/split_profile.zig");
 const single_predefined = @import("zstd/sequence/single_predefined.zig");
 const sequence_continuation = @import("zstd/sequence/continuation.zig");
 const sequence_match_copy = @import("zstd/sequence/match_copy.zig");
@@ -7176,6 +7177,8 @@ pub const NativeSequenceModeSummary = struct {
     match_length_mode: NativeSequenceTableMode,
 };
 
+pub const native_sequence_split_path_order = sequence_split_profile.path_order;
+
 pub const NativeSequenceCopyProfile = struct {
     pub const length_bucket_count = 8;
     pub const offset_bucket_count = 9;
@@ -7209,6 +7212,7 @@ pub const NativeSequenceCopyProfile = struct {
     medium_length_histogram: [medium_length_max - medium_length_min + 1]usize = @splat(0),
     fse_accuracy_log_histogram: [fse_accuracy_log_bucket_count]usize = @splat(0),
     no_low_fse_accuracy_log_histogram: [fse_accuracy_log_bucket_count]usize = @splat(0),
+    split_paths: sequence_split_profile.Profile = .{},
 };
 
 pub const NativeSequenceDecodeStageShape = struct {
@@ -12608,6 +12612,24 @@ pub fn benchmarkNativeSequenceCopyProfile(frame: []const u8) Error!NativeSequenc
                     const spec = try resolveSequenceModeSpec(parsed_spec, frame_state.previous_tables);
                     try expectConsumedBlock(sequence_offset, block.len);
                     if (table_profile_offset != parsed_spec.bitstream_offset) return error.CorruptFrame;
+                    const huffman_literals = section.kind == .compressed or section.kind == .treeless;
+                    const prefer_generic_split = sequence_decode_policy.preferGenericSplit(section.regenerated_size, section.sequence_count);
+                    const four_huffman_streams = section.huffman_streams == .four;
+                    var complete_huffman_lookup = false;
+                    if (huffman_literals and prefer_generic_split and four_huffman_streams) {
+                        const tree = section.huffman_tree orelse return error.CorruptFrame;
+                        var lookup: CompleteHuffmanLiteralLookup = undefined;
+                        complete_huffman_lookup = lookup.buildComplete(&tree);
+                    }
+                    const split_path = sequence_split_profile.classify(.{
+                        .huffman_literals = huffman_literals,
+                        .prefer_generic = prefer_generic_split,
+                        .four_streams = four_huffman_streams,
+                        .complete_lookup = complete_huffman_lookup,
+                        .all_fse = spec.ll_mode == .compressed and spec.of_mode == .compressed and spec.ml_mode == .compressed,
+                        .prefer_all_fse = sequence_decode_policy.preferSplit(section.regenerated_size, section.sequence_count),
+                    });
+                    profile.split_paths.recordBlock(split_path, section.regenerated_size);
                     var state = try initSequenceDecodeState(
                         &spec,
                         section.sequence_count,
@@ -12622,6 +12644,7 @@ pub fn benchmarkNativeSequenceCopyProfile(frame: []const u8) Error!NativeSequenc
                         produced = try checkedAdd(produced, sequence.literal_len);
                         if (sequence.match_offset == 0 or sequence.match_offset > produced) return error.InvalidMatch;
                         profile.sequence_count += 1;
+                        profile.split_paths.recordSequence(split_path, sequence.match_len);
                         profile.zero_literal_sequences += @intFromBool(sequence.literal_len == 0);
                         profile.match_bytes = try checkedAdd(profile.match_bytes, sequence.match_len);
                         profile.match_length_histogram[sequenceCopyLengthBucket(sequence.match_len)] += 1;

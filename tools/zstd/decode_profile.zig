@@ -120,7 +120,7 @@ fn runCases(
 ) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.print("case,api_mode,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum,reusable_sequence_table_hits,reusable_huffman_tree_hits,block_count,compressed_blocks,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,sequence_blocks,raw_literal_blocks,rle_literal_blocks,compressed_literal_blocks,treeless_literal_blocks,compressed_table_modes,no_low_probability_tables,low_probability_tables,repeat_table_modes,rle_table_modes,predefined_table_modes,fse_accuracy_log_histogram,no_low_fse_accuracy_log_histogram,total_sequences,literal_bytes,match_bytes,zero_literal_sequences,overlapping_matches,overlapping_match_bytes,non_overlapping_matches,non_overlapping_match_bytes,vector32_eligible_matches,vector32_eligible_bytes,match_length_histogram,offset_histogram,medium_length_histogram,{s}\n", .{benchmark_provenance.csv_columns});
+    try csv.writer.print("case,api_mode,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum,reusable_sequence_table_hits,reusable_huffman_tree_hits,block_count,compressed_blocks,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,sequence_blocks,raw_literal_blocks,rle_literal_blocks,compressed_literal_blocks,treeless_literal_blocks,compressed_table_modes,no_low_probability_tables,low_probability_tables,repeat_table_modes,rle_table_modes,predefined_table_modes,fse_accuracy_log_histogram,no_low_fse_accuracy_log_histogram,split_path_order,split_path_blocks,split_path_sequences,split_path_literal_bytes,split_path_match_bytes,total_sequences,literal_bytes,match_bytes,zero_literal_sequences,overlapping_matches,overlapping_match_bytes,non_overlapping_matches,non_overlapping_match_bytes,vector32_eligible_matches,vector32_eligible_bytes,match_length_histogram,offset_histogram,medium_length_histogram,{s}\n", .{benchmark_provenance.csv_columns});
     var selected: usize = 0;
     for (cases) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -202,6 +202,14 @@ fn runCases(
         try writeHistogram(&csv.writer, &copy_profile.fse_accuracy_log_histogram);
         try csv.writer.writeByte(',');
         try writeHistogram(&csv.writer, &copy_profile.no_low_fse_accuracy_log_histogram);
+        try csv.writer.print("," ++ vort.zstd.native_sequence_split_path_order ++ ",", .{});
+        try writeHistogram(&csv.writer, &copy_profile.split_paths.blocks);
+        try csv.writer.writeByte(',');
+        try writeHistogram(&csv.writer, &copy_profile.split_paths.sequences);
+        try csv.writer.writeByte(',');
+        try writeHistogram(&csv.writer, &copy_profile.split_paths.literal_bytes);
+        try csv.writer.writeByte(',');
+        try writeHistogram(&csv.writer, &copy_profile.split_paths.match_bytes);
         try csv.writer.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},", .{
             copy_profile.sequence_count,
             copy_profile.literal_bytes,

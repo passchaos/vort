@@ -77,6 +77,16 @@
     "executable": {"sequence_blocks":396,"literal_blocks":{"raw":4,"rle":0,"compressed":394,"treeless":0},"compressed_tables":1185,"no_low_tables":316,"low_tables":869,"accuracy_log_histogram":[0,0,0,0,0,0,8,46,513,618],"no_low_accuracy_log_histogram":[0,0,0,0,0,0,8,46,234,28]},
     "large_header": {"sequence_blocks":229,"literal_blocks":{"raw":0,"rle":0,"compressed":198,"treeless":31},"compressed_tables":678,"no_low_tables":218,"low_tables":460,"accuracy_log_histogram":[0,0,0,0,0,0,2,1,307,368],"no_low_accuracy_log_histogram":[0,0,0,0,0,0,2,1,124,91]}
   },
+  "split_path_profile": {
+    "date": "2026-09-30",
+    "path_order": ["all_fse","generic","non_huffman_literals","below_policy","one_stream","incomplete_lookup"],
+    "large_svg": {"blocks":[461,0,0,916,0,0],"sequences":[495841,0,0,791255,0,0],"literal_bytes":[377748,0,0,828956,0,0],"match_bytes":[60013676,0,0,118423444,0,0]},
+    "robot_log": {"blocks":[831,1,0,52,0,0],"sequences":[1509937,963,0,33382,0,0],"literal_bytes":[6687227,4721,0,91483,0,0],"match_bytes":[100890117,60815,0,2382459,0,0]},
+    "trace_json": {"blocks":[236,0,0,11,0,0],"sequences":[627668,0,0,8331,0,0],"literal_bytes":[645253,0,0,10759,0,0],"match_bytes":[29984613,0,0,1005049,0,0]},
+    "shared_library": {"blocks":[725,28,1,8,0,0],"sequences":[3172579,59435,1,5632,0,0],"literal_bytes":[30903012,820382,1,9845,0,0],"match_bytes":[47412508,1014626,32767,680707,0,0]},
+    "executable": {"blocks":[378,14,4,0,0,0],"sequences":[1546947,9864,2875,0,0,0],"literal_bytes":[13623492,285916,257021,0,0,0],"match_bytes":[23901364,172836,37891,0,0,0]},
+    "large_header": {"blocks":[219,7,0,1,2,0],"sequences":[623701,11061,0,199,7011,0],"literal_bytes":[242345,11494,0,525,477,0],"match_bytes":[28462423,906010,0,7333,261667,0]}
+  },
   "rejected_fse_no_low_variants": {
     "state_128_large_svg": {"pairs":21,"median":0.995124,"geomean":0.989114,"wins":5},
     "state_512_large_header": {"pairs":21,"median":0.989944,"geomean":0.990992,"wins":4},
