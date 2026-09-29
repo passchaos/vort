@@ -120,7 +120,7 @@ fn runCases(
 ) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.print("case,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum,block_count,compressed_blocks,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,total_sequences,literal_bytes,match_bytes,zero_literal_sequences,overlapping_matches,overlapping_match_bytes,non_overlapping_matches,non_overlapping_match_bytes,vector32_eligible_matches,vector32_eligible_bytes,match_length_histogram,offset_histogram,medium_length_histogram,{s}\n", .{benchmark_provenance.csv_columns});
+    try csv.writer.print("case,api_mode,input_bytes,input_sha256,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum,reusable_sequence_table_hits,reusable_huffman_tree_hits,block_count,compressed_blocks,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,total_sequences,literal_bytes,match_bytes,zero_literal_sequences,overlapping_matches,overlapping_match_bytes,non_overlapping_matches,non_overlapping_match_bytes,vector32_eligible_matches,vector32_eligible_bytes,match_length_histogram,offset_histogram,medium_length_histogram,{s}\n", .{benchmark_provenance.csv_columns});
     var selected: usize = 0;
     for (cases) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -141,6 +141,8 @@ fn runCases(
             const reused = try decoder.decodeIntoSlice(encoded, output);
             if (reused != case.payload.len or !std.mem.eql(u8, case.payload, output)) return error.SizeMismatch;
         }
+        const sequence_hits_before = decoder.reusableSequenceTableHitCount();
+        const huffman_hits_before = decoder.reusableHuffmanTreeHitCount();
         const block = try vort.zstdInspectNativeFrameFirstBlock(encoded);
         const shape = try vort.zstdInspectNativeFrameBlockSequenceModes(encoded, block);
         const summary = try vort.zstdSummarizeNativeFrameBlocks(encoded);
@@ -159,12 +161,30 @@ fn runCases(
             }
         }
         const elapsed_ns = elapsedNs(init.io, start);
+        const sequence_hits = decoder.reusableSequenceTableHitCount() - sequence_hits_before;
+        const huffman_hits = decoder.reusableHuffmanTreeHitCount() - huffman_hits_before;
         const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
-        try csv.writer.print("{s},{d},{s},{d},{d},{d},{d:.2},{d},{d},{d},{s},{d},{s},{s},{s}", .{
-            case.name,                           case.payload.len,               &input_sha256,                                                   encoded.len,
-            options.iterations,                  elapsed_ns,                     mibPerSecond(case.payload.len * options.iterations, elapsed_ns), mix,
-            summary.block_count,                 summary.compressed_block_count, @tagName(shape.literals_kind),                                   shape.sequence_count,
-            @tagName(shape.literal_length_mode), @tagName(shape.offset_mode),    @tagName(shape.match_length_mode),
+        try csv.writer.print("{s},{s},{d},{s},{d},{d},{d},{d:.2},{d}", .{
+            case.name,
+            if (options.reusable) "reusable" else "one-shot",
+            case.payload.len,
+            &input_sha256,
+            encoded.len,
+            options.iterations,
+            elapsed_ns,
+            mibPerSecond(case.payload.len * options.iterations, elapsed_ns),
+            mix,
+        });
+        try csv.writer.print(",{d},{d},{d},{d},{s},{d},{s},{s},{s}", .{
+            sequence_hits,
+            huffman_hits,
+            summary.block_count,
+            summary.compressed_block_count,
+            @tagName(shape.literals_kind),
+            shape.sequence_count,
+            @tagName(shape.literal_length_mode),
+            @tagName(shape.offset_mode),
+            @tagName(shape.match_length_mode),
         });
         try csv.writer.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},", .{
             copy_profile.sequence_count,

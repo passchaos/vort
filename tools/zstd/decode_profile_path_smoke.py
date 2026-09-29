@@ -56,11 +56,34 @@ def main() -> int:
         assert len(rows) == 1, rows
         row = rows[0]
         assert row["case"] == "external_source", row
+        assert row["api_mode"] == "one-shot", row
+        assert int(row["reusable_sequence_table_hits"]) == 0, row
+        assert int(row["reusable_huffman_tree_hits"]) == 0, row
         assert int(row["input_bytes"]) == source.stat().st_size, row
         assert row["input_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest(), row
         assert int(row["encoded_bytes"]) > 0, row
         assert int(row["literal_bytes"]) + int(row["match_bytes"]) == int(row["input_bytes"]), row
         assert "/source%20data.txt" in row["command"], row
+
+        reusable = run(
+            executable,
+            "--input",
+            str(source),
+            "--name",
+            "reusable_source",
+            "--level",
+            "3",
+            "--iterations",
+            "2",
+            "--reusable",
+        )
+        reusable_rows = list(csv.DictReader(io.StringIO(reusable.stdout)))
+        assert len(reusable_rows) == 1, reusable_rows
+        reusable_row = reusable_rows[0]
+        assert reusable_row["api_mode"] == "reusable", reusable_row
+        assert int(reusable_row["reusable_sequence_table_hits"]) >= 0, reusable_row
+        assert int(reusable_row["reusable_huffman_tree_hits"]) >= 0, reusable_row
+        assert reusable_row["input_sha256"] == row["input_sha256"], reusable_row
 
         prepared = run(
             executable,
@@ -77,6 +100,7 @@ def main() -> int:
         assert len(prepared_rows) == 1, prepared_rows
         prepared_row = prepared_rows[0]
         assert prepared_row["case"] == "prepared_source", prepared_row
+        assert prepared_row["api_mode"] == "one-shot", prepared_row
         assert int(prepared_row["input_bytes"]) == len(payload), prepared_row
         assert int(prepared_row["encoded_bytes"]) == frame.stat().st_size, prepared_row
         assert prepared_row["input_sha256"] == hashlib.sha256(payload).hexdigest(), prepared_row
@@ -94,7 +118,7 @@ def main() -> int:
             failed = run(executable, *invalid_args, check=False)
             assert failed.returncode != 0, (invalid_args, failed.stdout, failed.stderr)
 
-    print("zstd_decode_profile_path_smoke=ok rows=2 invalid=7")
+    print("zstd_decode_profile_path_smoke=ok rows=3 invalid=7 api_modes=2")
     return 0
 
 

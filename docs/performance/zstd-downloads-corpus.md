@@ -92,22 +92,54 @@ improve this workload by roughly 1.433x.
 A 32-byte minimum was also rejected: it lost 1.65% median on the SVG versus
 the retained 16-byte minimum and did not improve JSON.
 
+## Large-frame reusable cache bypass
+
+The decode profiler now identifies its API mode and reports sequence-table and
+Huffman-tree cache hits from only the timed interval. After one warmup decode,
+all six compressed Downloads files reported zero hits for both caches on the
+next complete decode. Their 229--1,377 compressed blocks cycle through more
+descriptions than the four-slot workspace can retain. By contrast, ten timed
+decodes of the small `numbered_json` case report ten sequence-table and ten
+Huffman-tree hits.
+
+Known-size frames above 512 KiB now bypass the small reusable caches. Unknown
+and smaller frames retain them, and the workspace decision is hoisted from the
+per-block loop to the first compressed block. Fifteen alternating SVG pairs
+improve by **1.0139x median / 1.0160x geometric**, with **13/15 wins**. The
+reusable Vort/libzstd median moves from 0.6126x to 0.6192x.
+
+| Case | Candidate/baseline median | Geometric mean | Wins |
+| --- | ---: | ---: | ---: |
+| robot log | 1.0070x | 1.0052x | 8/15 |
+| trace JSON | 1.0009x | 1.0019x | 5/7 |
+| shared library | 0.9997x | 1.0005x | 3/7 |
+| executable | 0.9998x | 0.9923x | 3/7 |
+| large C header | 1.0052x | 1.0062x | 6/7 |
+
+The sub-percent mixed controls remain inside the observed loaded-host jitter;
+none shows a consistent directional loss. A generated >512 KiB compressed
+frame verifies two correct decodes without allocating the cache workspace.
+
 ## Current loaded-host snapshot
 
-These rows use the retained 512 threshold and selective medium-block wildcopy.
-Ratios are Vort/libzstd; the full input hashes, exact byte counts, binary hashes,
-and A/B observations are in the [JSON record](data/zstd-downloads-m1-20260929.json).
+These rows additionally use the large-frame cache bypass. Ratios are
+Vort/libzstd; the full input hashes, exact byte counts, binary hashes, and A/B
+observations are in the [JSON record](data/zstd-downloads-m1-20260929.json).
 
 | Case | Input MiB | Encoded % | One-shot | Reusable | Vort reusable MiB/s | libzstd DCtx MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| large SVG | 171.3 | 1.39 | 0.6279x | 0.6113x | 5,973.5 | 9,771.5 |
-| robot log | 105.0 | 6.69 | 0.7419x | 0.7243x | 3,325.6 | 4,591.6 |
-| trace JSON | 30.2 | 6.10 | 0.7983x | 0.7918x | 2,750.7 | 3,473.8 |
-| shared library | 77.7 | 40.81 | 0.8213x | 0.8266x | 1,040.9 | 1,259.3 |
-| executable | 37.1 | 40.01 | 0.8127x | 0.8136x | 987.5 | 1,213.8 |
-| video | 163.8 | 99.99 | 0.9363x | 1.0269x | 41,522.4 | 40,435.9 |
-| ZIP archive | 153.7 | 99.91 | 0.9687x | 1.0107x | 34,823.0 | 34,454.7 |
-| large C header | 28.5 | 4.40 | 0.7607x | 0.7456x | 2,640.1 | 3,540.7 |
+| large SVG | 171.3 | 1.39 | 0.6258x | 0.6228x | 5,893.4 | 9,462.0 |
+| robot log | 105.0 | 6.69 | 0.7380x | 0.7326x | 3,269.4 | 4,462.8 |
+| trace JSON | 30.2 | 6.10 | 0.8055x | 0.7876x | 2,714.4 | 3,446.5 |
+| shared library | 77.7 | 40.81 | 0.8220x | 0.8180x | 1,040.1 | 1,271.4 |
+| executable | 37.1 | 40.01 | 0.8155x | 0.8100x | 971.5 | 1,199.4 |
+| video | 163.8 | 99.99 | 0.9656x | 1.0210x | 40,262.3 | 39,435.2 |
+| ZIP archive | 153.7 | 99.91 | 0.9987x | 0.9415x | 32,418.3 | 34,433.2 |
+| large C header | 28.5 | 4.40 | 0.7660x | 0.7488x | 2,627.8 | 3,509.6 |
+
+The ZIP reusable snapshot is an outlier under the recorded host load. Its raw
+fast path returns before the cache policy and is byte-for-byte unchanged, so
+the drop is not attributed to this change.
 
 This is meaningful progress, not leadership. Real compressed multi-block files
 remain 17--39% behind libzstd after both changes. The next profile should
@@ -117,8 +149,9 @@ wildcopy again.
 
 ## Validation
 
-- 670/670 direct Zstd tests pass in ReleaseFast.
+- 671/671 direct Zstd tests pass in ReleaseFast.
 - The one-shot and reusable 13-row reference gates pass against libzstd 1.5.7.
+- The decode-profile gate and three-row/two-API path smoke pass.
 - The 276-case compatibility matrix passes with zero unsupported cases.
 - All nine upstream decodecorpus campaigns pass: 9,900 frames, all 64 sequence
   mode combinations, and real reusable table hits.

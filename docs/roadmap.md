@@ -16280,3 +16280,14 @@ reuse, so production keeps the simpler independently owned plans.
   32-byte minimum were rejected because they regressed JSON/header controls or
   lost SVG throughput. The combined retained SVG gain from `4c98febd` is about
   1.433x, but it still reaches only 0.6122x of warmed libzstd.
+
+- Reusable decode profiling now records its API mode plus timed sequence-table
+  and Huffman-tree cache hits. All six large compressed Downloads files showed
+  zero hits after warmup, while the small `numbered_json` case retained one hit
+  per cache per decode. Known-size frames above 512 KiB therefore bypass the
+  four-slot cache and hoist workspace selection out of the block loop while
+  preserving lazy allocation for raw/RLE-only frames. Fifteen alternating SVG
+  pairs improve by 1.0139x median / 1.0160x geometric with 13/15 wins; five
+  real-file controls remain within loaded-host noise. The
+  generated large-frame oracle, 671 direct Zstd tests, reusable reference gate,
+  profile gate/path smoke, and 9,900-frame decodecorpus pass.

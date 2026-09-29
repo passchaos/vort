@@ -12,19 +12,20 @@
   "candidate_512_sha256": "82c2a7409004821503469fd6efc68e7fa0ebf8c99b8ab8ecaf12f7413e810818",
   "candidate_256_sha256": "0515b2b69f5c29f408d520920f4cc657d0c318f5cd4b368de8bcd25137563185",
   "candidate_medium_4k_wildcopy_sha256": "b8c76b9a292d78eccdccc130da97c9da2e5c2688312bd52a84fb01f20efca230",
+  "candidate_cache_bypass_sha256": "33a4c405de650f8c5bb21b77ef8b4de23df26379c7fb1552c3136f627106133f",
   "api_pairs": {
     "one_shot": ["decodeFrameInto", "ZSTD_decompress"],
     "reusable": ["NativeFrameDecoder.decodeIntoSlice", "ZSTD_decompressDCtx"]
   },
   "corpus": [
-    {"case":"large_svg","input_bytes":179643824,"input_sha256":"0a4ddf136805fad7c98de7691ef5149e0df15e8e864cca3b6784c869e2cdb893","encoded_bytes":2497662,"iterations":3,"baseline_one_shot_ratio":0.4311,"baseline_reusable_ratio":0.4231,"candidate_one_shot_ratio":0.5681,"candidate_reusable_ratio":0.5517,"final_one_shot_ratio":0.6279,"final_reusable_ratio":0.6113,"final_reusable_mib_s":5973.5,"final_libzstd_reusable_mib_s":9771.5},
-    {"case":"robot_log","input_bytes":110116822,"input_sha256":"6d56d533462950342288a78ab52b7891b26eb3ae14ff16b2537dbb19d63b657d","encoded_bytes":7365785,"iterations":5,"baseline_one_shot_ratio":0.7534,"baseline_reusable_ratio":0.7155,"candidate_one_shot_ratio":0.7391,"candidate_reusable_ratio":0.7257,"final_one_shot_ratio":0.7419,"final_reusable_ratio":0.7243,"final_reusable_mib_s":3325.6,"final_libzstd_reusable_mib_s":4591.6},
-    {"case":"trace_json","input_bytes":31645674,"input_sha256":"6a408c3af1a23e04540389535e22d4b1931f0be3af5ffab7fd8c9c2f0175f0a0","encoded_bytes":1931529,"iterations":16,"baseline_one_shot_ratio":0.7888,"baseline_reusable_ratio":0.7780,"candidate_one_shot_ratio":0.7926,"candidate_reusable_ratio":0.7979,"final_one_shot_ratio":0.7983,"final_reusable_ratio":0.7918,"final_reusable_mib_s":2750.7,"final_libzstd_reusable_mib_s":3473.8},
-    {"case":"shared_library","input_bytes":81430904,"input_sha256":"c9d517db1cd3138679123cb4992b656a005c3192bc99162caa3b9dfd79b907f8","encoded_bytes":33230254,"iterations":6,"baseline_one_shot_ratio":0.8248,"baseline_reusable_ratio":0.8206,"candidate_one_shot_ratio":0.8174,"candidate_reusable_ratio":0.8182,"final_one_shot_ratio":0.8213,"final_reusable_ratio":0.8266,"final_reusable_mib_s":1040.9,"final_libzstd_reusable_mib_s":1259.3},
-    {"case":"executable","input_bytes":38933880,"input_sha256":"2f3965f5b4d7fbb25dfc543e91f9680c9ee7b4eb07d8a3e6392fa276fc65c509","encoded_bytes":15579229,"iterations":13,"baseline_one_shot_ratio":0.8176,"baseline_reusable_ratio":0.8107,"candidate_one_shot_ratio":0.8126,"candidate_reusable_ratio":0.8089,"final_one_shot_ratio":0.8127,"final_reusable_ratio":0.8136,"final_reusable_mib_s":987.5,"final_libzstd_reusable_mib_s":1213.8},
-    {"case":"video","input_bytes":171743030,"input_sha256":"d3a410edede521ba79a5c3f04e5e99336fef9496868fc47f005c23c7c564d0d1","encoded_bytes":171727192,"iterations":3,"baseline_one_shot_ratio":0.9692,"baseline_reusable_ratio":0.9989,"candidate_one_shot_ratio":0.9950,"candidate_reusable_ratio":0.9835,"final_one_shot_ratio":0.9363,"final_reusable_ratio":1.0269,"final_reusable_mib_s":41522.4,"final_libzstd_reusable_mib_s":40435.9},
-    {"case":"zip_archive","input_bytes":161195461,"input_sha256":"ff99d6f6aade411a35cd5e790b94582855381b048b15c8feb448f8367e865aea","encoded_bytes":161053436,"iterations":3,"baseline_one_shot_ratio":0.9790,"baseline_reusable_ratio":0.9773,"candidate_one_shot_ratio":0.9847,"candidate_reusable_ratio":1.0012,"final_one_shot_ratio":0.9687,"final_reusable_ratio":1.0107,"final_reusable_mib_s":34823.0,"final_libzstd_reusable_mib_s":34454.7},
-    {"case":"large_header","input_bytes":29892274,"input_sha256":"b4e3c0ed60717d9f541a2930f8dd40fc1c0b6726de140ef8fe2337ec6fd0dd22","encoded_bytes":1313880,"iterations":17,"baseline_one_shot_ratio":0.7625,"baseline_reusable_ratio":0.7490,"candidate_one_shot_ratio":0.7578,"candidate_reusable_ratio":0.7325,"final_one_shot_ratio":0.7607,"final_reusable_ratio":0.7456,"final_reusable_mib_s":2640.1,"final_libzstd_reusable_mib_s":3540.7}
+    {"case":"large_svg","input_bytes":179643824,"input_sha256":"0a4ddf136805fad7c98de7691ef5149e0df15e8e864cca3b6784c869e2cdb893","encoded_bytes":2497662,"iterations":3,"baseline_one_shot_ratio":0.4311,"baseline_reusable_ratio":0.4231,"candidate_one_shot_ratio":0.5681,"candidate_reusable_ratio":0.5517,"final_one_shot_ratio":0.6258,"final_reusable_ratio":0.6228,"final_reusable_mib_s":5893.35,"final_libzstd_reusable_mib_s":9462.03},
+    {"case":"robot_log","input_bytes":110116822,"input_sha256":"6d56d533462950342288a78ab52b7891b26eb3ae14ff16b2537dbb19d63b657d","encoded_bytes":7365785,"iterations":5,"baseline_one_shot_ratio":0.7534,"baseline_reusable_ratio":0.7155,"candidate_one_shot_ratio":0.7391,"candidate_reusable_ratio":0.7257,"final_one_shot_ratio":0.7380,"final_reusable_ratio":0.7326,"final_reusable_mib_s":3269.44,"final_libzstd_reusable_mib_s":4462.83},
+    {"case":"trace_json","input_bytes":31645674,"input_sha256":"6a408c3af1a23e04540389535e22d4b1931f0be3af5ffab7fd8c9c2f0175f0a0","encoded_bytes":1931529,"iterations":16,"baseline_one_shot_ratio":0.7888,"baseline_reusable_ratio":0.7780,"candidate_one_shot_ratio":0.7926,"candidate_reusable_ratio":0.7979,"final_one_shot_ratio":0.8055,"final_reusable_ratio":0.7876,"final_reusable_mib_s":2714.36,"final_libzstd_reusable_mib_s":3446.54},
+    {"case":"shared_library","input_bytes":81430904,"input_sha256":"c9d517db1cd3138679123cb4992b656a005c3192bc99162caa3b9dfd79b907f8","encoded_bytes":33230254,"iterations":6,"baseline_one_shot_ratio":0.8248,"baseline_reusable_ratio":0.8206,"candidate_one_shot_ratio":0.8174,"candidate_reusable_ratio":0.8182,"final_one_shot_ratio":0.8220,"final_reusable_ratio":0.8180,"final_reusable_mib_s":1040.09,"final_libzstd_reusable_mib_s":1271.43},
+    {"case":"executable","input_bytes":38933880,"input_sha256":"2f3965f5b4d7fbb25dfc543e91f9680c9ee7b4eb07d8a3e6392fa276fc65c509","encoded_bytes":15579229,"iterations":13,"baseline_one_shot_ratio":0.8176,"baseline_reusable_ratio":0.8107,"candidate_one_shot_ratio":0.8126,"candidate_reusable_ratio":0.8089,"final_one_shot_ratio":0.8155,"final_reusable_ratio":0.8100,"final_reusable_mib_s":971.49,"final_libzstd_reusable_mib_s":1199.41},
+    {"case":"video","input_bytes":171743030,"input_sha256":"d3a410edede521ba79a5c3f04e5e99336fef9496868fc47f005c23c7c564d0d1","encoded_bytes":171727192,"iterations":3,"baseline_one_shot_ratio":0.9692,"baseline_reusable_ratio":0.9989,"candidate_one_shot_ratio":0.9950,"candidate_reusable_ratio":0.9835,"final_one_shot_ratio":0.9656,"final_reusable_ratio":1.0210,"final_reusable_mib_s":40262.27,"final_libzstd_reusable_mib_s":39435.19},
+    {"case":"zip_archive","input_bytes":161195461,"input_sha256":"ff99d6f6aade411a35cd5e790b94582855381b048b15c8feb448f8367e865aea","encoded_bytes":161053436,"iterations":3,"baseline_one_shot_ratio":0.9790,"baseline_reusable_ratio":0.9773,"candidate_one_shot_ratio":0.9847,"candidate_reusable_ratio":1.0012,"final_one_shot_ratio":0.9987,"final_reusable_ratio":0.9415,"final_reusable_mib_s":32418.29,"final_libzstd_reusable_mib_s":34433.20},
+    {"case":"large_header","input_bytes":29892274,"input_sha256":"b4e3c0ed60717d9f541a2930f8dd40fc1c0b6726de140ef8fe2337ec6fd0dd22","encoded_bytes":1313880,"iterations":17,"baseline_one_shot_ratio":0.7625,"baseline_reusable_ratio":0.7490,"candidate_one_shot_ratio":0.7578,"candidate_reusable_ratio":0.7325,"final_one_shot_ratio":0.7660,"final_reusable_ratio":0.7488,"final_reusable_mib_s":2627.82,"final_libzstd_reusable_mib_s":3509.60}
   ],
   "aligned_1024_vs_512": {
     "large_svg": {"pairs":[1.308884,1.303082,1.302223,1.307103,1.306247,1.336917,1.306541,1.288515,1.306238,1.306810,1.305711,1.306280,1.311133,1.343412,1.270270],"median":1.306280,"geomean":1.307190,"wins":15,"baseline_libzstd_median":0.4270,"candidate_libzstd_median":0.5573},
@@ -53,5 +54,26 @@
     "all_all_fse": {"large_svg_median":1.111723,"large_svg_geomean":1.110400,"trace_json_median":0.987251,"trace_json_geomean":0.990866},
     "medium_without_block_gate": {"large_svg_median":1.099069,"large_svg_geomean":1.096107,"large_header_median":0.992153,"large_header_geomean":0.989314},
     "minimum_32_vs_16": {"large_svg_median":0.983512,"large_svg_geomean":0.984558,"trace_json_median":0.998835,"trace_json_geomean":0.998798}
+  },
+  "reusable_cache_profile": {
+    "large_compressed_cases": {
+      "large_svg": {"compressed_blocks":1377,"sequence_hits":0,"huffman_hits":0},
+      "robot_log": {"compressed_blocks":884,"sequence_hits":0,"huffman_hits":0},
+      "trace_json": {"compressed_blocks":247,"sequence_hits":0,"huffman_hits":0},
+      "shared_library": {"compressed_blocks":769,"sequence_hits":0,"huffman_hits":0},
+      "executable": {"compressed_blocks":398,"sequence_hits":0,"huffman_hits":0},
+      "large_header": {"compressed_blocks":229,"sequence_hits":0,"huffman_hits":0}
+    },
+    "small_control": {"case":"numbered_json","iterations":10,"sequence_hits":10,"huffman_hits":10}
+  },
+  "large_frame_cache_bypass_vs_wildcopy": {
+    "large_svg": {"pairs":[1.0101,1.0445,1.0267,1.0087,1.0102,0.9934,1.0249,1.0246,0.9892,1.0187,1.0139,1.0277,1.0347,1.0015,1.0126],"median":1.013874,"geomean":1.015992,"wins":13,"baseline_libzstd_median":0.6126,"candidate_libzstd_median":0.6192},
+    "robot_log": {"pairs":[1.0164,1.0346,0.9658,0.9637,0.9847,1.0153,1.0749,1.0276,0.9994,1.0070,0.9919,0.9979,1.0071,0.9898,1.0078],"median":1.007030,"geomean":1.005244,"wins":8},
+    "controls": {
+      "trace_json": {"pairs":[0.9957,1.0009,1.0016,1.0004,1.0016,1.0141,0.9994],"median":1.000915,"geomean":1.001939,"wins":5},
+      "shared_library": {"pairs":[0.9997,1.0075,1.0232,0.9975,0.9712,0.9774,1.0281],"median":0.999661,"geomean":1.000475,"wins":3},
+      "executable": {"pairs":[0.9723,1.0010,0.9998,1.0002,0.9736,1.0027,0.9974],"median":0.999805,"geomean":0.992339,"wins":3},
+      "large_header": {"pairs":[1.0106,1.0052,1.0001,0.9976,1.0081,1.0207,1.0016],"median":1.005193,"geomean":1.006239,"wins":6}
+    }
   }
 }

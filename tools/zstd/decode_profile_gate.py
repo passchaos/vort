@@ -6,7 +6,7 @@ import hashlib
 from pathlib import Path
 
 PROVENANCE_COLUMNS = ["provenance_version", "optimize", "zig_version", "target_arch", "target_os", "target_abi", "target_cpu", "cpu_model", "cpu_affinity", "affinity_cpu_count", "benchmark_threads", "codec_thread_policy", "executable_sha256", "command"]
-COLUMNS = ["case", "input_bytes", "input_sha256", "encoded_bytes", "iterations", "vort_ns", "vort_mib_s", "checksum", "block_count", "compressed_blocks", "literals_kind", "sequence_count", "ll_mode", "of_mode", "ml_mode", "total_sequences", "literal_bytes", "match_bytes", "zero_literal_sequences", "overlapping_matches", "overlapping_match_bytes", "non_overlapping_matches", "non_overlapping_match_bytes", "vector32_eligible_matches", "vector32_eligible_bytes", "match_length_histogram", "offset_histogram", "medium_length_histogram"] + PROVENANCE_COLUMNS
+COLUMNS = ["case", "api_mode", "input_bytes", "input_sha256", "encoded_bytes", "iterations", "vort_ns", "vort_mib_s", "checksum", "reusable_sequence_table_hits", "reusable_huffman_tree_hits", "block_count", "compressed_blocks", "literals_kind", "sequence_count", "ll_mode", "of_mode", "ml_mode", "total_sequences", "literal_bytes", "match_bytes", "zero_literal_sequences", "overlapping_matches", "overlapping_match_bytes", "non_overlapping_matches", "non_overlapping_match_bytes", "vector32_eligible_matches", "vector32_eligible_bytes", "match_length_histogram", "offset_histogram", "medium_length_histogram"] + PROVENANCE_COLUMNS
 CASES = {"numbered_json", "huffman80k", "ascii64k", "large_json", "binary_mixed"}
 
 def main() -> int:
@@ -31,9 +31,12 @@ def main() -> int:
     if args.executable is not None:
         assert hashlib.sha256(args.executable.read_bytes()).hexdigest() == rows[0]["executable_sha256"], rows[0]
     for row in rows:
+        assert row["api_mode"] == "one-shot", row
         assert len(row["input_sha256"]) == 64 and set(row["input_sha256"]) <= set("0123456789abcdef"), row
         for key in ("input_bytes", "encoded_bytes", "iterations", "vort_ns", "checksum", "block_count", "compressed_blocks"):
             assert int(row[key]) > 0, row
+        assert int(row["reusable_sequence_table_hits"]) == 0, row
+        assert int(row["reusable_huffman_tree_hits"]) == 0, row
         assert float(row["vort_mib_s"]) > 0, row
         sequences = int(row["total_sequences"])
         overlapping = int(row["overlapping_matches"])

@@ -7,6 +7,7 @@ pub const split_literal_min = 32 * 1024;
 pub const generic_split_literal_min = 4 * 1024;
 pub const huffman_all_fse_sequence_min = 512;
 pub const huffman_match_wildcopy_block_max = 4 * 1024;
+pub const reusable_cache_content_size_max: u64 = 512 * 1024;
 pub const raw_all_fse_sequence_min = 32;
 pub const raw_all_fse_literal_min = split_literal_min;
 pub const raw_wide_match_literal_min = 4 * 1024;
@@ -54,6 +55,13 @@ pub inline fn preferHuffmanMatchWildcopy(compressed_block_bytes: usize, sequence
         compressed_block_bytes <= huffman_match_wildcopy_block_max;
 }
 
+/// Four cache slots cover the common <=512 KiB frame. Larger known-size
+/// frames otherwise cycle through many descriptions and evict every entry
+/// before the next decode of the same frame.
+pub inline fn preferReusableDecodeCache(content_size: ?u64) bool {
+    return content_size == null or content_size.? <= reusable_cache_content_size_max;
+}
+
 /// Raw literals need no temporary decode buffer, so the packed all-FSE
 /// executor amortizes at a much smaller block than the Huffman split paths.
 pub inline fn preferRawAllFse(literal_bytes: usize, sequence_count: usize) bool {
@@ -97,6 +105,9 @@ test "split Huffman executor covers sequence-dense and literal-dense blocks" {
     try std.testing.expect(preferHuffmanMatchWildcopy(huffman_match_wildcopy_block_max, split_sequence_min - 1));
     try std.testing.expect(!preferHuffmanMatchWildcopy(huffman_match_wildcopy_block_max, split_sequence_min));
     try std.testing.expect(!preferHuffmanMatchWildcopy(huffman_match_wildcopy_block_max + 1, huffman_all_fse_sequence_min));
+    try std.testing.expect(preferReusableDecodeCache(null));
+    try std.testing.expect(preferReusableDecodeCache(reusable_cache_content_size_max));
+    try std.testing.expect(!preferReusableDecodeCache(reusable_cache_content_size_max + 1));
     try std.testing.expect(preferRawAllFse(0, raw_all_fse_sequence_min));
     try std.testing.expect(preferRawAllFse(raw_all_fse_literal_min, 1));
     try std.testing.expect(!preferRawAllFse(raw_all_fse_literal_min - 1, raw_all_fse_sequence_min - 1));

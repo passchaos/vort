@@ -7653,6 +7653,8 @@ noinline fn decodeRawOrRleZstandardFrameIntoBufferWithSequenceWorkspace(
         break :blk output[0..frame_end];
     } else output;
     var frame_state: SequenceFrameState = .{};
+    const use_sequence_cache = sequence_decode_policy.preferReusableDecodeCache(header.content_size);
+    var sequence_workspace: ?*SequenceDecodeWorkspace = null;
 
     while (true) {
         if (frame.len - offset.* < 3) return error.TruncatedFrame;
@@ -7681,7 +7683,9 @@ noinline fn decodeRawOrRleZstandardFrameIntoBufferWithSequenceWorkspace(
             },
             2 => {
                 if (frame.len - offset.* < block_len) return error.TruncatedFrame;
-                if (decoder.sequenceWorkspace()) |workspace| {
+                if (use_sequence_cache and sequence_workspace == null)
+                    sequence_workspace = decoder.sequenceWorkspace();
+                if (sequence_workspace) |workspace| {
                     decodeLiteralOnlyCompressedBlockIntoBufferWithSequenceWorkspaceSelected(
                         frame[offset.*..][0..block_len],
                         frame_output,
@@ -35730,6 +35734,16 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     try std.testing.expectEqual(@as(usize, 0), raw_counting.allocations);
     try std.testing.expect(raw_decoder.sequence_workspace == null);
 
+    var checksummed_raw_frame: std.ArrayList(u8) = .empty;
+    defer checksummed_raw_frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &checksummed_raw_frame, payload.items.len, .{ .content_checksum = true });
+    try emitRawBlock(std.testing.allocator, &checksummed_raw_frame, payload.items, true);
+    try emitContentChecksum(std.testing.allocator, &checksummed_raw_frame, payload.items, .{ .content_checksum = true });
+    @memset(reusable_output, 0);
+    try std.testing.expectEqual(payload.items.len, try raw_decoder.decodeIntoSlice(checksummed_raw_frame.items, reusable_output));
+    try std.testing.expectEqualSlices(u8, payload.items, reusable_output);
+    try std.testing.expect(raw_decoder.sequence_workspace == null);
+
     var incremental = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = payload.items.len,
         .max_compressed_buffer_len = first_block.payload_len,
@@ -35781,6 +35795,28 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     try direct_incremental.finish();
     try std.testing.expectEqualSlices(u8, payload.items, incremental_output);
     try std.testing.expectEqual(@as(usize, 1), direct_incremental.streamedSequenceBlockCount());
+}
+
+test "zstd reusable decoder bypasses caches for large known frames" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    const minimum_len: usize = @intCast(sequence_decode_policy.reusable_cache_content_size_max + 1);
+    try appendStructuredZstdJsonPayload(std.testing.allocator, &payload, minimum_len);
+
+    const encoded = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 1);
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeNativeFrameBlocks(encoded);
+    try std.testing.expect(summary.compressed_block_count != 0);
+
+    const output = try std.testing.allocator.alloc(u8, payload.items.len);
+    defer std.testing.allocator.free(output);
+    var decoder = NativeFrameDecoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    inline for (0..2) |_| {
+        try std.testing.expectEqual(payload.items.len, try decoder.decodeIntoSlice(encoded, output));
+        try std.testing.expectEqualSlices(u8, payload.items, output);
+    }
+    try std.testing.expect(decoder.sequence_workspace == null);
 }
 
 test "zstd sequence emitter reuses compressed FSE tables across blocks" {
