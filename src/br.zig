@@ -2653,6 +2653,7 @@ const CommandPlanEncodeOptions = struct {
     write_stream_prefix: bool = true,
     final_meta_block: bool = true,
     optimize_literal_tree_wire: bool = false,
+    optimize_same_last_distance: bool = true,
 };
 const min_recent_distance_candidate_count: usize = 64;
 const planned_command_symbol_cache_capacity: usize = 128;
@@ -3269,10 +3270,160 @@ fn commandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
 fn commandEntryForLengthsAndDistance(insert_len: usize, copy_len: usize, use_last_distance: bool) ?CommandEncoding {
     const insert_code = lengthCodeForValue(insert_len, true) orelse return null;
     const copy_code = lengthCodeForValue(copy_len, false) orelse return null;
+    return commandEntryForCodes(insert_code, copy_code, use_last_distance);
+}
+
+fn commandEntryForCodes(insert_code: u5, copy_code: u5, use_last_distance: bool) ?CommandEncoding {
     const index = if (use_last_distance) &last_distance_command_symbol_index else &explicit_command_symbol_index;
     const symbol = index[insert_code][copy_code];
     if (symbol == std.math.maxInt(u16)) return null;
     return .{ .symbol = symbol, .command = command_lut.entries[symbol] };
+}
+
+const SameLastDistancePlan = struct {
+    enabled: bool = false,
+    use_implicit: [24][24]bool = @splat(@splat(false)),
+};
+
+const SameLastDistanceShape = struct { insert_code: u5, copy_code: u5 };
+
+fn sameLastDistanceShape(command: command_plan.Command, last_distance: usize) ?SameLastDistanceShape {
+    if (!command.has_copy or command.dictionary_output_len != 0 or command.distance != last_distance) return null;
+    const insert_code = lengthCodeForValue(command.insert_len, true) orelse return null;
+    const copy_code = lengthCodeForValue(command.copy_len, false) orelse return null;
+    if (commandEntryForCodes(insert_code, copy_code, true) == null) return null;
+    return .{ .insert_code = insert_code, .copy_code = copy_code };
+}
+
+fn preferImplicitLastDistance(implicit_command_bits: u4, explicit_command_bits: u4, distance_zero_bits: u4) bool {
+    return implicit_command_bits < @as(u8, explicit_command_bits) + distance_zero_bits;
+}
+
+fn estimatedPrefixBitLength(total: u32, frequency: u32) u4 {
+    if (frequency == 0 or total <= frequency) return 0;
+    const ratio = (total + frequency - 1) / frequency;
+    return @intCast(@min(@as(u32, 15), std.math.log2_int_ceil(u32, ratio)));
+}
+
+fn prefixTreePlanBitCost(
+    comptime capacity: usize,
+    allocator: std.mem.Allocator,
+    alphabet_size: usize,
+    frequencies: *const [capacity]u32,
+    alphabet: *const command_plan.PrefixAlphabetFor(capacity),
+    lengths: *const [capacity]u4,
+) Error!u64 {
+    var payload_bits: u64 = 0;
+    for (frequencies, lengths) |frequency, length|
+        payload_bits += @as(u64, frequency) * length;
+    const tree_bits: u64 = if (alphabet.len <= 4)
+        4 + @as(u64, alphabet.len) * alphabetBitsRuntime(alphabet_size) + @intFromBool(alphabet.len == 4)
+    else blk: {
+        var highest: usize = 0;
+        for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
+        break :blk try complex_prefix.bitCost(allocator, alphabet_size, lengths, highest + 1);
+    };
+    return tree_bits + payload_bits;
+}
+
+/// Recode only copies that reuse the newest distance. The existing stream is
+/// the exact baseline; observed frequencies cheaply select implicit-command
+/// vs explicit-command-plus-distance-zero per insert/copy shape, then complete
+/// command and distance tree costs decide whether the plan is retained.
+fn chooseSameLastDistancePlan(
+    allocator: std.mem.Allocator,
+    command_frequencies: *[704]u32,
+    sparse_command_alphabet: *const command_plan.PrefixAlphabet,
+    distance_frequencies: *[planned_distance_alphabet_size]u32,
+    shape_counts: *const [24][24]u32,
+    replaced_distance_frequencies: *const [planned_distance_alphabet_size]u32,
+    replaced_distance_extra_bits: u64,
+    distance_alphabet_size: usize,
+    final_command_alphabet: *command_plan.PrefixAlphabet,
+    final_command_lengths: *[704]u4,
+    final_distance_alphabet: *command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
+    final_distance_lengths: *[planned_distance_alphabet_size]u4,
+) Error!SameLastDistancePlan {
+    var candidate_count: u32 = 0;
+    for (shape_counts) |row| {
+        for (row) |count| candidate_count += count;
+    }
+    if (candidate_count == 0) return .{};
+
+    var baseline_command_frequencies: [704]u32 = @splat(0);
+    for (sparse_command_alphabet.symbols[0..sparse_command_alphabet.len]) |symbol|
+        baseline_command_frequencies[symbol] = command_frequencies[symbol];
+    var baseline_command_alphabet: command_plan.PrefixAlphabet = undefined;
+    try command_plan.alphabetFromFrequenciesInto(704, &baseline_command_alphabet, &baseline_command_frequencies);
+    const baseline_command_lengths = try baseline_command_alphabet.codeLengths(&baseline_command_frequencies);
+    var baseline_distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &baseline_distance_alphabet, distance_frequencies);
+    const baseline_distance_lengths = try baseline_distance_alphabet.codeLengths(distance_frequencies);
+    const baseline_bits = try prefixTreePlanBitCost(704, allocator, 704, &baseline_command_frequencies, &baseline_command_alphabet, &baseline_command_lengths) +
+        try prefixTreePlanBitCost(planned_distance_alphabet_size, allocator, distance_alphabet_size, distance_frequencies, &baseline_distance_alphabet, &baseline_distance_lengths) +
+        replaced_distance_extra_bits;
+
+    // Model both command forms as available while choosing per-shape costs.
+    var model_command_count: u32 = candidate_count;
+    for (baseline_command_frequencies) |count| model_command_count += count;
+    var distance_count: u32 = 0;
+    for (distance_frequencies) |count| distance_count += count;
+
+    var plan: SameLastDistancePlan = .{};
+    var candidate_command_frequencies = baseline_command_frequencies;
+    var candidate_distance_frequencies = distance_frequencies.*;
+    for (replaced_distance_frequencies, 0..) |count, symbol| {
+        if (count > candidate_distance_frequencies[symbol]) return error.InvalidBlockPlan;
+        candidate_distance_frequencies[symbol] -= count;
+    }
+    for (shape_counts, 0..) |row, insert_code| {
+        for (row, 0..) |count, copy_code| {
+            if (count == 0) continue;
+            const insert_len = insertLengthSpec(@intCast(insert_code)).base;
+            const copy_len = copyLengthSpec(@intCast(copy_code)).base;
+            const implicit = commandEntryForLengthsAndDistance(insert_len, copy_len, true) orelse return error.InvalidBlockPlan;
+            const explicit = commandEntryForLengthsAndDistance(insert_len, copy_len, false) orelse return error.InvalidBlockPlan;
+            const use_implicit = preferImplicitLastDistance(
+                estimatedPrefixBitLength(model_command_count, baseline_command_frequencies[implicit.symbol] + count),
+                estimatedPrefixBitLength(model_command_count, baseline_command_frequencies[explicit.symbol]),
+                estimatedPrefixBitLength(distance_count, candidate_count),
+            );
+            plan.use_implicit[insert_code][copy_code] = use_implicit;
+            if (use_implicit) {
+                if (count > candidate_command_frequencies[explicit.symbol]) return error.InvalidBlockPlan;
+                candidate_command_frequencies[explicit.symbol] -= count;
+                candidate_command_frequencies[implicit.symbol] += count;
+            } else candidate_distance_frequencies[0] += count;
+        }
+    }
+    if (allZeroFrequencies(planned_distance_alphabet_size, &candidate_distance_frequencies))
+        candidate_distance_frequencies[0] = 1;
+
+    var candidate_command_alphabet: command_plan.PrefixAlphabet = undefined;
+    try command_plan.alphabetFromFrequenciesInto(704, &candidate_command_alphabet, &candidate_command_frequencies);
+    const candidate_command_lengths = try candidate_command_alphabet.codeLengths(&candidate_command_frequencies);
+    var candidate_distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &candidate_distance_alphabet, &candidate_distance_frequencies);
+    const candidate_distance_lengths = try candidate_distance_alphabet.codeLengths(&candidate_distance_frequencies);
+    const candidate_bits = try prefixTreePlanBitCost(704, allocator, 704, &candidate_command_frequencies, &candidate_command_alphabet, &candidate_command_lengths) +
+        try prefixTreePlanBitCost(planned_distance_alphabet_size, allocator, distance_alphabet_size, &candidate_distance_frequencies, &candidate_distance_alphabet, &candidate_distance_lengths);
+    // Eight bits guarantee at least one output byte saved regardless of the
+    // surrounding bit offset and final byte alignment.
+    if (candidate_bits > baseline_bits or baseline_bits - candidate_bits < 8) {
+        final_command_alphabet.* = baseline_command_alphabet;
+        final_command_lengths.* = baseline_command_lengths;
+        final_distance_alphabet.* = baseline_distance_alphabet;
+        final_distance_lengths.* = baseline_distance_lengths;
+        return .{};
+    }
+    command_frequencies.* = candidate_command_frequencies;
+    distance_frequencies.* = candidate_distance_frequencies;
+    final_command_alphabet.* = candidate_command_alphabet;
+    final_command_lengths.* = candidate_command_lengths;
+    final_distance_alphabet.* = candidate_distance_alphabet;
+    final_distance_lengths.* = candidate_distance_lengths;
+    plan.enabled = true;
+    return plan;
 }
 
 fn lengthCodeForValue(value: usize, comptime insert: bool) ?u5 {
@@ -3626,6 +3777,14 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     var distance_frequencies: [planned_distance_alphabet_size]u32 = @splat(0);
     var distance_block_frequencies: [2][planned_distance_alphabet_size]u32 = undefined;
     if (options.distance_split != null) @memset(&distance_block_frequencies, @splat(0));
+    const optimize_same_last_distance = options.optimize_same_last_distance and !options.use_recent_distances and options.command_split == null and options.distance_split == null;
+    var same_last_shape_counts: [24][24]u32 = @splat(@splat(0));
+    var same_last_distance_frequencies: [planned_distance_alphabet_size]u32 = @splat(0);
+    var same_last_distance_extra_bits: u64 = 0;
+    var has_same_last_candidate = false;
+    var prepared_command_lengths: [704]u4 = undefined;
+    var prepared_distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
+    var prepared_distance_lengths: [planned_distance_alphabet_size]u4 = undefined;
     // Frequency collection already resolves every command symbol. Retain the
     // common small-plan result so payload emission does not repeat both length
     // classifications and the 24x24 command-table lookup. Large plans keep the
@@ -3641,6 +3800,11 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         const use_last_distance = recent_symbol == 0;
         const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
             commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
+        const same_last_shape = if (optimize_same_last_distance) sameLastDistanceShape(command, last_distances[3]) else null;
+        if (same_last_shape) |shape| {
+            has_same_last_candidate = true;
+            same_last_shape_counts[shape.insert_code][shape.copy_code] += 1;
+        }
         if (cache_command_symbols) command_symbols[command_index] = encoding.symbol;
         if (options.command_split) |split| {
             command_block_frequencies[split.blockIndex(command_index)][encoding.symbol] += 1;
@@ -3663,6 +3827,10 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         if (encoding.command.distance_code == -1) {
             const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), options.ndirect) orelse return error.InvalidBlockPlan;
             if (distance.symbol >= planned_distance_alphabet_size) return error.InvalidBlockPlan;
+            if (same_last_shape != null) {
+                same_last_distance_frequencies[distance.symbol] += 1;
+                same_last_distance_extra_bits += distance.extra_bits;
+            }
             if (options.distance_split) |split| {
                 distance_block_frequencies[@intFromBool(distance_index >= split)][distance.symbol] += 1;
                 distance_index += 1;
@@ -3676,6 +3844,23 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (options.literal_split == null and literal_alphabet.len == 0)
         try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, 0);
     if (options.literal_split) |split| if (split == 0 or literal_index <= split) return error.InvalidBlockPlan;
+    const same_last_distance_plan = if (has_same_last_candidate)
+        try chooseSameLastDistancePlan(
+            allocator,
+            &command_frequencies,
+            &command_alphabet,
+            &distance_frequencies,
+            &same_last_shape_counts,
+            &same_last_distance_frequencies,
+            same_last_distance_extra_bits,
+            16 + @as(usize, options.ndirect) + 48,
+            &command_alphabet,
+            &prepared_command_lengths,
+            &prepared_distance_alphabet,
+            &prepared_distance_lengths,
+        )
+    else
+        SameLastDistancePlan{};
     if (options.distance_split) |split| {
         if (split == 0 or distance_index <= split) return error.InvalidBlockPlan;
     } else if (allZeroFrequencies(planned_distance_alphabet_size, &distance_frequencies)) distance_frequencies[0] = 1;
@@ -3685,7 +3870,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     var literal_block_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
     var command_block_alphabets: [3]command_plan.PrefixAlphabet = undefined;
     var distance_block_alphabets: [2]command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
-    var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
+    var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = if (has_same_last_candidate) prepared_distance_alphabet else undefined;
     if (options.literal_split == null) try literal_alphabet.sortByFrequencies(&literal_frequencies);
     if (options.use_utf8_text_contexts) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
         if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
@@ -3696,11 +3881,13 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (options.command_split != null) {
         for (command_block_alphabets[0..options.command_split.?.typeCount()], command_block_frequencies[0..options.command_split.?.typeCount()]) |*alphabet, *frequencies|
             try command_plan.alphabetFromFrequenciesInto(704, alphabet, frequencies);
-    } else try command_alphabet.sortByFrequencies(&command_frequencies);
+    } else if (!has_same_last_candidate)
+        try command_alphabet.sortByFrequencies(&command_frequencies);
     if (options.distance_split != null) {
         for (&distance_block_alphabets, &distance_block_frequencies) |*alphabet, *frequencies|
             try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, alphabet, frequencies);
-    } else try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
+    } else if (!has_same_last_candidate)
+        try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
     stats.literal_symbol_count = if (options.literal_split != null)
         literal_block_alphabets[0].len + literal_block_alphabets[1].len
     else
@@ -3743,7 +3930,12 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         break :blk lengths;
     } else undefined;
     const command_lengths = if (options.command_split == null)
-        if (command_alphabet.len <= 4) @as([704]u4, @splat(0)) else try command_alphabet.codeLengths(&command_frequencies)
+        if (has_same_last_candidate)
+            prepared_command_lengths
+        else if (command_alphabet.len <= 4)
+            @as([704]u4, @splat(0))
+        else
+            try command_alphabet.codeLengths(&command_frequencies)
     else
         undefined;
     const command_block_lengths = if (options.command_split != null) blk: {
@@ -3753,7 +3945,12 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         break :blk lengths;
     } else undefined;
     const distance_lengths = if (options.distance_split == null)
-        if (distance_alphabet.len <= 4) @as([planned_distance_alphabet_size]u4, @splat(0)) else try distance_alphabet.codeLengths(&distance_frequencies)
+        if (has_same_last_candidate)
+            prepared_distance_lengths
+        else if (distance_alphabet.len <= 4)
+            @as([planned_distance_alphabet_size]u4, @splat(0))
+        else
+            try distance_alphabet.codeLengths(&distance_frequencies)
     else
         undefined;
     const distance_block_lengths = if (options.distance_split != null) blk: {
@@ -3832,12 +4029,21 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     literal_index = 0;
     distance_index = 0;
     for (commands, 0..) |command, command_index| {
-        const recent_symbol = if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
-        const use_last_distance = recent_symbol == 0;
-        const encoding = if (cache_command_symbols) blk: {
+        const optimized_shape = if (same_last_distance_plan.enabled) sameLastDistanceShape(command, last_distances[3]) else null;
+        const recent_symbol = if (optimized_shape != null)
+            @as(?u4, 0)
+        else if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0)
+            recentDistanceSymbol(command.distance, &last_distances)
+        else
+            null;
+        const use_last_distance = if (optimized_shape) |shape|
+            same_last_distance_plan.use_implicit[shape.insert_code][shape.copy_code]
+        else
+            recent_symbol == 0;
+        const encoding = if (cache_command_symbols and !same_last_distance_plan.enabled) blk: {
             const symbol = command_symbols[command_index];
             break :blk CommandEncoding{ .symbol = symbol, .command = command_lut.entries[symbol] };
-        } else commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
+        } else if (optimized_shape) |shape| commandEntryForCodes(shape.insert_code, shape.copy_code, use_last_distance) orelse unreachable else commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
             commandEntryForLengths(command.insert_len, command.copy_len) orelse unreachable;
         const active_command_alphabet = if (options.command_split) |split| &command_block_alphabets[split.blockIndex(command_index)] else &command_alphabet;
         const active_command_encoder = if (options.command_split) |split| &command_block_encoders[split.blockIndex(command_index)] else &command_encoder;
@@ -12325,6 +12531,73 @@ test "br command index exposes implicit last-distance forms when legal" {
     try std.testing.expectEqual(@as(i2, -1), explicit.command.distance_code);
     try std.testing.expect(implicit.symbol != explicit.symbol);
     try std.testing.expect(commandEntryForLengthsAndDistance(66, 3, true) == null);
+}
+
+test "br same-last distance cost choice is strict and stable" {
+    try std.testing.expect(preferImplicitLastDistance(2, 3, 1));
+    try std.testing.expect(!preferImplicitLastDistance(4, 2, 1));
+    try std.testing.expect(!preferImplicitLastDistance(3, 2, 1));
+}
+
+test "br same-last distance eligibility excludes non-copy and dictionary commands" {
+    const eligible = command_plan.Command{ .insert_start = 0, .insert_len = 0, .copy_len = 4, .distance = 4, .has_copy = true };
+    try std.testing.expect(sameLastDistanceShape(eligible, 4) != null);
+    try std.testing.expect(sameLastDistanceShape(eligible, 5) == null);
+    var literal_only = eligible;
+    literal_only.has_copy = false;
+    try std.testing.expect(sameLastDistanceShape(literal_only, 4) == null);
+    var dictionary = eligible;
+    dictionary.dictionary_output_len = 4;
+    try std.testing.expect(sameLastDistanceShape(dictionary, 4) == null);
+    var unsupported = eligible;
+    unsupported.insert_len = 66;
+    try std.testing.expect(sameLastDistanceShape(unsupported, 4) == null);
+}
+
+test "br same-last distance recoding is byte-monotonic and preserves the ring" {
+    const payload = "a" ** 500;
+    var commands: [100]command_plan.Command = undefined;
+    commands[0] = .{ .insert_start = 0, .insert_len = 100, .copy_len = 4, .distance = 100, .has_copy = true };
+    for (commands[1..], 1..) |*command, index| command.* = .{
+        .insert_start = 100 + index * 4,
+        .insert_len = 0,
+        .copy_len = 4,
+        .distance = 100,
+        .has_copy = true,
+    };
+    var baseline_stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, &commands, null, &baseline_stats, .{
+        .optimize_same_last_distance = false,
+    });
+    defer std.testing.allocator.free(baseline);
+    var optimized_stats: encoder_stats.PlannedEncodeStats = .{};
+    const optimized = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, &commands, null, &optimized_stats, .{});
+    defer std.testing.allocator.free(optimized);
+    try std.testing.expect(optimized.len < baseline.len);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, optimized);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br same-last distance recoding keeps an unprofitable wire unchanged" {
+    const payload = "abcd" ** 64;
+    var commands: [63]command_plan.Command = undefined;
+    commands[0] = .{ .insert_start = 0, .insert_len = 4, .copy_len = 4, .distance = 4, .has_copy = true };
+    for (commands[1..], 1..) |*command, index| command.* = .{
+        .insert_start = (index + 1) * 4,
+        .insert_len = 0,
+        .copy_len = 4,
+        .distance = 4,
+        .has_copy = true,
+    };
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, &commands, null, &stats, .{
+        .optimize_same_last_distance = false,
+    });
+    defer std.testing.allocator.free(baseline);
+    const optimized = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(optimized);
+    try std.testing.expectEqualSlices(u8, baseline, optimized);
 }
 
 test "br recent-distance candidate tracks the RFC distance ring" {
