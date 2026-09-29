@@ -16193,3 +16193,12 @@ reuse, so production keeps the simpler independently owned plans.
   route test, 13-row reference gate, upstream 7,056 one-shot plus 7,056
   progressive cases, 1,401 fragmentation runs, 64 high-tree truncation cases,
   and real-corpus driver smoke pass.
+- Packed 65--256-tree Brotli decoding now batches each insert across the
+  current literal-block run, hoisting its context mode and 64-entry context-map
+  base out of the per-byte loop. Against `db1eb637`, 15 alternating Apple M1
+  Pro pairs improve repository documentation/source q5/q9 streams by
+  1.0144x--1.0234x median with 12--14/15 wins; `clustered_q8` remains neutral
+  at 1.0000x median. Absolute candidate/libbrotli 1.2.0 medians remain
+  0.6378x--0.6573x, so the literal-rich wide path is still the largest Brotli
+  decode gap. The reference gate, upstream differential, and real-corpus
+  driver smoke pass.

@@ -711,3 +711,27 @@ Final higher-iteration q9 measurements reach 1903.04 MiB/s on Log and
 2250.20 MiB/s on JSON, or 0.8946x and 0.8819x libbrotli 1.1.0. The upstream,
 real-corpus, full test/check, and 13-row reference gates remain green. This is
 another measured step toward parity, not an industry-best claim.
+
+## Wide literal-block run batching
+
+The packed 65--256-tree executor now resolves a literal block switch only at a
+block boundary and decodes the complete block-local portion of an insert run
+with one cached context mode and one cached context-map base. Previously those
+values were reloaded and the switch condition was evaluated for every literal.
+The compact and single-tree executors are unchanged.
+
+Against committed baseline `db1eb637`, 15 alternating ReleaseFast pairs on
+fixed libbrotli 1.2.0 streams produced:
+
+| workload | median speedup | geometric mean | wins |
+| --- | ---: | ---: | ---: |
+| repository documentation q5 | 1.0148x | 1.0199x | 14/15 |
+| repository documentation q9 | 1.0234x | 1.0211x | 14/15 |
+| repository source q5 | 1.0173x | 1.0138x | 12/15 |
+| repository source q9 | 1.0144x | 1.0132x | 12/15 |
+
+Fifteen absolute candidate/reference runs reach 0.6573x, 0.6378x, 0.6426x,
+and 0.6461x respectively. The committed `clustered_q8` route remains neutral
+at 1.0000x median over 15 control pairs. The reference gate, upstream
+differential, and real-corpus driver smoke pass; wide literal-rich decode still
+has a substantial parity gap.
