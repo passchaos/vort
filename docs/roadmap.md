@@ -16394,3 +16394,35 @@ reuse, so production keeps the simpler independently owned plans.
   and removing the medium instance's fixed-71 branch 0.9786x. All were removed.
   This closes more local rewrites and points the next work toward a genuinely
   smaller sequence-state representation or separately compiled executor.
+
+- Added that separately compiled medium split executor for dictionary-free,
+  known-size, 512--1023-sequence all-FSE/four-stream-Huffman blocks with at
+  most 4 KiB of literals. Its 3.6 KiB machine-code body predecodes literals
+  once and keeps only grouped sequence fields, short literal copies, adaptive
+  match wildcopy, and a checked fallback; the established interleaved and
+  general split helpers remain isolated. Across all 824 SVG blocks the stage
+  improves 1.2484x median / 1.2451x geometric with 15/15 wins. Complete SVG
+  reusable decode improves 1.1240x / 1.1226x and one-shot improves 1.1173x /
+  1.1189x, both 15/15; normalized gains remain 1.1198x and 1.1210x. Five
+  15-pair real compressed-file controls are neutral or positive geometrically,
+  with robot log improving 1.0181x after normalization. The six-file reusable
+  geometric ratio rises from 0.7579x to 0.7755x libzstd. Final policy cleanup
+  preserves byte-identical medium-executor and reusable-dispatch disassembly
+  against the measured candidate.
+
+- Medium all-FSE/four-stream-Huffman blocks now have a separate 4 KiB-literal
+  split executor instead of adding more branches to the 4.8 KiB interleaved or
+  7.9 KiB general split helpers. It expands literals once, then keeps only the
+  grouped FSE loop, short literal copy, adaptive match wildcopy, and checked
+  fallback. The 824-block SVG stage improves 1.2484x median / 1.2451x geometric
+  with 15/15 wins; complete reusable and one-shot frames improve 1.1240x /
+  1.1226x and 1.1173x / 1.1189x, both 15/15. After simultaneous libzstd-control
+  normalization the geometric gains remain 1.1198x and 1.1210x. Reusable Vort
+  reaches 6,800.1 MiB/s and 0.7072x libzstd on the SVG. Fifteen-pair robot-log,
+  trace-JSON, shared-library, executable, and header controls are neutral or
+  positive geometrically after normalization; the six-file compressed-corpus
+  geometric ratio rises from 0.7579x to 0.7755x. The direct executor oracle,
+  all 675 Zstd tests, 276 compatibility cases, 9,900 decodecorpus frames, both
+  reference gates, and x86_64 Linux compile-only validation pass. The broad
+  `zig build check -j1` was stopped after six silent minutes, matching the
+  repository's known build-server stall rather than reporting a false pass.

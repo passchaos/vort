@@ -7,6 +7,7 @@ pub const split_literal_min = 32 * 1024;
 pub const generic_split_literal_min = 4 * 1024;
 pub const huffman_all_fse_sequence_min = 512;
 pub const huffman_match_wildcopy_block_max = 4 * 1024;
+pub const medium_split_literal_max = 4 * 1024;
 pub const reusable_cache_content_size_max: u64 = 512 * 1024;
 pub const raw_all_fse_sequence_min = 32;
 pub const raw_all_fse_literal_min = split_literal_min;
@@ -53,6 +54,19 @@ pub inline fn preferHuffmanMatchWildcopy(compressed_block_bytes: usize, sequence
     return sequence_count >= huffman_all_fse_sequence_min and
         sequence_count < split_sequence_min and
         compressed_block_bytes <= huffman_match_wildcopy_block_max;
+}
+
+/// Keep the real-file medium split executor bounded to a small stack buffer.
+/// Its compressed-size and sequence-density gate is shared with the retained
+/// interleaved wildcopy path so unrelated source-like blocks stay on their
+/// established executors.
+pub inline fn preferMediumSplitHuffman(
+    compressed_block_bytes: usize,
+    literal_bytes: usize,
+    sequence_count: usize,
+) bool {
+    return literal_bytes <= medium_split_literal_max and
+        preferHuffmanMatchWildcopy(compressed_block_bytes, sequence_count);
 }
 
 /// Four cache slots cover the common <=512 KiB frame. Larger known-size
@@ -105,6 +119,8 @@ test "split Huffman executor covers sequence-dense and literal-dense blocks" {
     try std.testing.expect(preferHuffmanMatchWildcopy(huffman_match_wildcopy_block_max, split_sequence_min - 1));
     try std.testing.expect(!preferHuffmanMatchWildcopy(huffman_match_wildcopy_block_max, split_sequence_min));
     try std.testing.expect(!preferHuffmanMatchWildcopy(huffman_match_wildcopy_block_max + 1, huffman_all_fse_sequence_min));
+    try std.testing.expect(preferMediumSplitHuffman(huffman_match_wildcopy_block_max, medium_split_literal_max, huffman_all_fse_sequence_min));
+    try std.testing.expect(!preferMediumSplitHuffman(huffman_match_wildcopy_block_max, medium_split_literal_max + 1, huffman_all_fse_sequence_min));
     try std.testing.expect(preferReusableDecodeCache(null));
     try std.testing.expect(preferReusableDecodeCache(reusable_cache_content_size_max));
     try std.testing.expect(!preferReusableDecodeCache(reusable_cache_content_size_max + 1));

@@ -248,6 +248,37 @@ from only the medium instance measured 0.9786x. All production experiments
 were removed; the retained profile points to a more compact representation of
 sequence state rather than more source-level branches or live local scalars.
 
+## Retained compact medium split executor
+
+The successful follow-up does not add another branch to the 4.8 KiB
+interleaved loop. Blocks already selected by the medium 512--1023-sequence,
+compressed-size-at-most-4-KiB policy now use a separate 3.6 KiB executor when
+their regenerated literals fit 4 KiB and caller-owned output padding is proven.
+It decodes the four Huffman streams once into a bounded stack buffer, then runs
+only the grouped all-FSE reader, short-literal copy, adaptive match wildcopy,
+and checked cold fallback. It deliberately omits the large split executor's
+synthetic-corpus pair and fixed-match dispatches. Other blocks, dictionary
+history, unknown-size output, incomplete Huffman tables, and malformed input
+retain the established paths.
+
+Against frozen independent binaries, the 824-block aggregate stage improves
+**1.2484x median / 1.2451x geometric**, with 15/15 wins and a 1.2159x minimum.
+The complete 171.3 MiB SVG improves **1.1240x / 1.1226x** for reusable decode
+and **1.1173x / 1.1189x** for one-shot decode, both with 15/15 wins. Normalizing
+against the simultaneously measured libzstd control leaves 1.1198x reusable
+and 1.1210x one-shot geometric gains. Reusable Vort throughput rises from
+6,085.1 to 6,800.1 MiB/s, moving its median libzstd ratio from 0.6297x to
+0.7072x; one-shot reaches 0.7127x.
+
+Fifteen-pair reusable controls show no negative geometric trend after libzstd
+normalization: robot log 1.0181x, trace JSON 1.0002x, shared library 1.0015x,
+executable 1.0028x, and large header 1.0001x. The compressed six-file reusable
+geometric mean therefore rises from 0.7579x to 0.7755x libzstd, while weighted
+throughput rises from roughly 2,320 to 2,413 MiB/s against 3,053 MiB/s for
+libzstd. The final policy cleanup retains byte-identical medium-executor and
+reusable-dispatch instructions relative to the measured candidate. This is a
+substantial real-file improvement, but not yet parity.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
@@ -304,22 +335,24 @@ original loops remain.
 
 ## Current loaded-host snapshot
 
-The six compressed rows below use medians from the normalized-count-reservoir
-campaign. Video and ZIP retain the preceding raw-path snapshot because they do
-not contain explicit FSE tables. Ratios are Vort/libzstd; the full input hashes,
-exact byte counts, binary hashes, and A/B observations are in the
+The compressed rows below use the latest retained-path medians. SVG one-shot
+and all six reusable rows include the compact medium-split candidate; the five
+non-SVG one-shot rows retain the normalized-count-reservoir campaign. Video and
+ZIP retain the preceding raw-path snapshot because they do not contain explicit
+FSE tables. Ratios are Vort/libzstd; the full input hashes, exact byte counts,
+binary hashes, and A/B observations are in the
 [JSON record](data/zstd-downloads-m1-20260929.json).
 
 | Case | Input MiB | Encoded % | One-shot | Reusable | Vort reusable MiB/s | libzstd DCtx MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| large SVG | 171.3 | 1.39 | 0.6373x | 0.6305x | 6,084.3 | 9,661.2 |
-| robot log | 105.0 | 6.69 | 0.7521x | 0.7400x | 3,353.7 | 4,547.6 |
-| trace JSON | 30.2 | 6.10 | 0.8078x | 0.8002x | 2,871.7 | 3,573.4 |
-| shared library | 77.7 | 40.81 | 0.8242x | 0.8199x | 1,025.3 | 1,251.4 |
-| executable | 37.1 | 40.01 | 0.8199x | 0.8156x | 988.1 | 1,210.8 |
+| large SVG | 171.3 | 1.39 | 0.7127x | 0.7072x | 6,800.1 | 9,617.0 |
+| robot log | 105.0 | 6.69 | 0.7521x | 0.7492x | 3,467.9 | 4,626.1 |
+| trace JSON | 30.2 | 6.10 | 0.8078x | 0.8025x | 2,915.3 | 3,638.3 |
+| shared library | 77.7 | 40.81 | 0.8242x | 0.8242x | 1,054.4 | 1,278.4 |
+| executable | 37.1 | 40.01 | 0.8199x | 0.8184x | 1,014.1 | 1,240.4 |
 | video | 163.8 | 99.99 | 0.9656x | 1.0210x | 40,262.3 | 39,435.2 |
 | ZIP archive | 153.7 | 99.91 | 0.9987x | 0.9415x | 32,418.3 | 34,433.2 |
-| large C header | 28.5 | 4.40 | 0.7655x | 0.7593x | 2,694.8 | 3,555.3 |
+| large C header | 28.5 | 4.40 | 0.7655x | 0.7585x | 2,766.6 | 3,639.7 |
 
 The ZIP reusable snapshot is an outlier under the recorded host load. Its raw
 fast path returns before the cache policy and is byte-for-byte unchanged, so
