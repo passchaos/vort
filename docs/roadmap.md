@@ -16255,3 +16255,16 @@ reuse, so production keeps the simpler independently owned plans.
   evidence stage uses representative files from `~/Downloads`, reports
   one-shot and warmed reusable APIs separately, and retains input hashes and
   benchmark provenance.
+
+- The first eight-file Downloads decode matrix exposed a real compressed-frame
+  gap that the synthetic suite did not show: Vort initially measured 0.42x on
+  a 171 MiB SVG and 0.72--0.82x on log, JSON, ELF, and executable inputs, while
+  video/ZIP raw-style frames remained near parity. Production sampling found
+  512--1023-sequence all-FSE Huffman blocks falling into `readModeSequence`.
+  Moving that threshold from 1,024 to 512 and aligning the noinline executor
+  improves the SVG by 1.3063x median / 1.3072x geometric with 15/15 wins in a
+  matched-layout A/B. Five real-file controls are positive or neutral; a 256
+  threshold is rejected at 0.9984x median. The current SVG still reaches only
+  0.5573x of warmed libzstd, so generic/incomplete-Huffman fallback, literal
+  decode, table rebuilds, and copy traffic remain the next measured targets.
+  See `docs/performance/zstd-downloads-corpus.md` and its JSON record.

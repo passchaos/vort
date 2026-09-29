@@ -9867,7 +9867,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         spec.of_mode == .compressed and
         spec.ml_mode == .compressed and
         (section.kind == .compressed or section.kind == .treeless) and
-        section.sequence_count >= 1024 and
+        sequence_decode_policy.preferHuffmanAllFse(section.sequence_count) and
         dictionary_history.len == 0)
     {
         return try decodeAllFseHuffmanSequences(
@@ -10106,7 +10106,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         spec.of_mode == .compressed and
         spec.ml_mode == .compressed and
         (section.kind == .compressed or section.kind == .treeless) and
-        section.sequence_count >= 1024)
+        sequence_decode_policy.preferHuffmanAllFse(section.sequence_count))
     {
         return try decodeAllFseHuffmanSequences(
             section,
@@ -10501,7 +10501,7 @@ noinline fn decodeAllFseHuffmanSequences(
     continuation: sequence_continuation.Context,
     state: *SequenceDecodeState,
     initial_huffman: HuffmanLiteralDecodeState,
-) Error!void {
+) align(256) Error!void {
     var huffman_state = initial_huffman;
     var literal_offset: usize = 0;
     while (state.remaining != 0) {
@@ -12625,7 +12625,7 @@ pub fn prepareNativeSequenceDecodeStage(
                     else if (spec.ll_mode == .compressed and
                         spec.of_mode == .compressed and
                         spec.ml_mode == .compressed and
-                        section.sequence_count >= 1024)
+                        sequence_decode_policy.preferHuffmanAllFse(section.sequence_count))
                         .bounded_all_fse
                     else
                         .generic;

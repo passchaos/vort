@@ -5,6 +5,7 @@ pub const wide_copy_sequence_min = 2048;
 pub const split_sequence_min = 1024;
 pub const split_literal_min = 32 * 1024;
 pub const generic_split_literal_min = 4 * 1024;
+pub const huffman_all_fse_sequence_min = 512;
 pub const raw_all_fse_sequence_min = 32;
 pub const raw_all_fse_literal_min = split_literal_min;
 pub const raw_wide_match_literal_min = 4 * 1024;
@@ -36,6 +37,12 @@ pub inline fn preferSplit(literal_bytes: usize, sequence_count: usize) bool {
 pub inline fn preferGenericSplit(literal_bytes: usize, sequence_count: usize) bool {
     return sequence_count >= split_sequence_min or
         literal_bytes >= generic_split_literal_min;
+}
+
+/// Huffman literal blocks that cannot use the split decoder still benefit from
+/// packed all-FSE sequence fields before the larger split threshold.
+pub inline fn preferHuffmanAllFse(sequence_count: usize) bool {
+    return sequence_count >= huffman_all_fse_sequence_min;
 }
 
 /// Raw literals need no temporary decode buffer, so the packed all-FSE
@@ -74,6 +81,8 @@ test "split Huffman executor covers sequence-dense and literal-dense blocks" {
     try std.testing.expect(!preferSplit(split_literal_min - 1, split_sequence_min - 1));
     try std.testing.expect(preferGenericSplit(generic_split_literal_min, 1));
     try std.testing.expect(!preferGenericSplit(generic_split_literal_min - 1, split_sequence_min - 1));
+    try std.testing.expect(!preferHuffmanAllFse(huffman_all_fse_sequence_min - 1));
+    try std.testing.expect(preferHuffmanAllFse(huffman_all_fse_sequence_min));
     try std.testing.expect(preferRawAllFse(0, raw_all_fse_sequence_min));
     try std.testing.expect(preferRawAllFse(raw_all_fse_literal_min, 1));
     try std.testing.expect(!preferRawAllFse(raw_all_fse_literal_min - 1, raw_all_fse_sequence_min - 1));

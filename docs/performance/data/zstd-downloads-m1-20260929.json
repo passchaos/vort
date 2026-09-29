@@ -1,0 +1,41 @@
+{
+  "date": "2026-09-29",
+  "cpu": "Apple M1 Pro",
+  "os": "macOS 26.4.1",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "codec_threads": 1,
+  "reference": "libzstd 1.5.7",
+  "host_load": "high GUI and system load; matrix rows are triage snapshots and paired alternating-order results support change claims",
+  "source_base": "4c98febd",
+  "baseline_aligned_sha256": "d1190a259b1af3050787e828307739116a1fce0270a018bc6f8e91cf190d101d",
+  "candidate_512_sha256": "82c2a7409004821503469fd6efc68e7fa0ebf8c99b8ab8ecaf12f7413e810818",
+  "candidate_256_sha256": "0515b2b69f5c29f408d520920f4cc657d0c318f5cd4b368de8bcd25137563185",
+  "api_pairs": {
+    "one_shot": ["decodeFrameInto", "ZSTD_decompress"],
+    "reusable": ["NativeFrameDecoder.decodeIntoSlice", "ZSTD_decompressDCtx"]
+  },
+  "corpus": [
+    {"case":"large_svg","input_bytes":179643824,"input_sha256":"0a4ddf136805fad7c98de7691ef5149e0df15e8e864cca3b6784c869e2cdb893","encoded_bytes":2497662,"iterations":3,"baseline_one_shot_ratio":0.4311,"baseline_reusable_ratio":0.4231,"candidate_one_shot_ratio":0.5681,"candidate_reusable_ratio":0.5517,"candidate_reusable_mib_s":5330.02,"libzstd_reusable_mib_s":9661.09},
+    {"case":"robot_log","input_bytes":110116822,"input_sha256":"6d56d533462950342288a78ab52b7891b26eb3ae14ff16b2537dbb19d63b657d","encoded_bytes":7365785,"iterations":5,"baseline_one_shot_ratio":0.7534,"baseline_reusable_ratio":0.7155,"candidate_one_shot_ratio":0.7391,"candidate_reusable_ratio":0.7257,"candidate_reusable_mib_s":3296.52,"libzstd_reusable_mib_s":4542.63},
+    {"case":"trace_json","input_bytes":31645674,"input_sha256":"6a408c3af1a23e04540389535e22d4b1931f0be3af5ffab7fd8c9c2f0175f0a0","encoded_bytes":1931529,"iterations":16,"baseline_one_shot_ratio":0.7888,"baseline_reusable_ratio":0.7780,"candidate_one_shot_ratio":0.7926,"candidate_reusable_ratio":0.7979,"candidate_reusable_mib_s":2829.46,"libzstd_reusable_mib_s":3546.20},
+    {"case":"shared_library","input_bytes":81430904,"input_sha256":"c9d517db1cd3138679123cb4992b656a005c3192bc99162caa3b9dfd79b907f8","encoded_bytes":33230254,"iterations":6,"baseline_one_shot_ratio":0.8248,"baseline_reusable_ratio":0.8206,"candidate_one_shot_ratio":0.8174,"candidate_reusable_ratio":0.8182,"candidate_reusable_mib_s":1030.90,"libzstd_reusable_mib_s":1259.91},
+    {"case":"executable","input_bytes":38933880,"input_sha256":"2f3965f5b4d7fbb25dfc543e91f9680c9ee7b4eb07d8a3e6392fa276fc65c509","encoded_bytes":15579229,"iterations":13,"baseline_one_shot_ratio":0.8176,"baseline_reusable_ratio":0.8107,"candidate_one_shot_ratio":0.8126,"candidate_reusable_ratio":0.8089,"candidate_reusable_mib_s":970.17,"libzstd_reusable_mib_s":1199.32},
+    {"case":"video","input_bytes":171743030,"input_sha256":"d3a410edede521ba79a5c3f04e5e99336fef9496868fc47f005c23c7c564d0d1","encoded_bytes":171727192,"iterations":3,"baseline_one_shot_ratio":0.9692,"baseline_reusable_ratio":0.9989,"candidate_one_shot_ratio":0.9950,"candidate_reusable_ratio":0.9835,"candidate_reusable_mib_s":38860.54,"libzstd_reusable_mib_s":39511.16},
+    {"case":"zip_archive","input_bytes":161195461,"input_sha256":"ff99d6f6aade411a35cd5e790b94582855381b048b15c8feb448f8367e865aea","encoded_bytes":161053436,"iterations":3,"baseline_one_shot_ratio":0.9790,"baseline_reusable_ratio":0.9773,"candidate_one_shot_ratio":0.9847,"candidate_reusable_ratio":1.0012,"candidate_reusable_mib_s":34432.77,"libzstd_reusable_mib_s":34389.87},
+    {"case":"large_header","input_bytes":29892274,"input_sha256":"b4e3c0ed60717d9f541a2930f8dd40fc1c0b6726de140ef8fe2337ec6fd0dd22","encoded_bytes":1313880,"iterations":17,"baseline_one_shot_ratio":0.7625,"baseline_reusable_ratio":0.7490,"candidate_one_shot_ratio":0.7578,"candidate_reusable_ratio":0.7325,"candidate_reusable_mib_s":2519.42,"libzstd_reusable_mib_s":3439.35}
+  ],
+  "aligned_1024_vs_512": {
+    "large_svg": {"pairs":[1.308884,1.303082,1.302223,1.307103,1.306247,1.336917,1.306541,1.288515,1.306238,1.306810,1.305711,1.306280,1.311133,1.343412,1.270270],"median":1.306280,"geomean":1.307190,"wins":15,"baseline_libzstd_median":0.4270,"candidate_libzstd_median":0.5573},
+    "controls": {
+      "robot_log": {"pairs":[1.078835,1.015421,1.029786,1.013534,1.023208,0.984958,1.008245],"median":1.015421,"geomean":1.021656,"wins":6},
+      "trace_json": {"pairs":[1.038351,1.036831,0.967200,1.011103,1.031391,1.014144,1.024984],"median":1.024984,"geomean":1.017454,"wins":6},
+      "shared_library": {"pairs":[1.008524,0.998223,1.013449,0.991750,1.008283,1.005268,1.006679],"median":1.006679,"geomean":1.004574,"wins":5},
+      "executable": {"pairs":[1.012666,0.997524,1.007656,0.994014,1.006597,0.998026,0.999218],"median":0.999218,"geomean":1.002224,"wins":3},
+      "large_header": {"pairs":[0.988107,1.032106,1.019885,1.001065,0.995128,0.945354,1.009945],"median":1.001065,"geomean":0.998459,"wins":4}
+    }
+  },
+  "rejected_512_vs_256": {
+    "large_svg": {"pairs":[1.000463,0.932492,0.994447,0.995411,1.018365,1.003040,1.020296,0.998415,1.011779,0.991814,0.989436],"median":0.998415,"geomean":0.995737,"wins":5}
+  }
+}
