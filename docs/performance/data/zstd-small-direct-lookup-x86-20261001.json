@@ -109,6 +109,14 @@
       "wins": 2,
       "libzstd_normalized_geometric_mean": 0.9945327551369995,
       "libzstd_normalized_wins": 4
+    },
+    "inline_weight_fse_32": {
+      "pairs": 11,
+      "speedup_median": 0.996718039931591,
+      "speedup_geometric_mean": 0.997701510073308,
+      "wins": 4,
+      "libzstd_normalized_geometric_mean": 0.9962029503787473,
+      "libzstd_normalized_wins": 1
     }
   },
   "full_matrix_control": {
