@@ -16603,3 +16603,15 @@ reuse, so production keeps the simpler independently owned plans.
   is in `docs/performance/zstd-small-direct-lookup-x86.md`; normalized-count
   parsing and canonical fill remain the final small-frame setup targets before
   returning to large compressed sequence paths.
+
+- The x86-64 compact split-Huffman pair path now copies its 71-byte match with
+  two 32-byte moves and an exact eight-byte tail at offsets 63--70. The
+  one-byte overlap stays inside the logical destination and removes the former
+  suffix load/merge. Against frozen `89ce6618`, 15 fixed-CPU `large_json`
+  pairs improve by 1.0096x median / 1.0105x geometric mean with 14/15 wins;
+  a nearby 1,835-sequence prepared stage improves 1.0032x geometrically with
+  10/15 wins. The final row remains only 0.7940x local libzstd 1.6.0-dev, so
+  the broader gap remains open. The 677-test suite, 276-case matrix,
+  9,900-frame/64-mode decodecorpus, 13-row reference gate, and generic
+  x86-64/AArch64 builds pass. Exact evidence is in
+  `docs/performance/zstd-large-json-overlap-tail-x86.md`.

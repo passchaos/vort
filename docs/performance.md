@@ -22,6 +22,9 @@ one-shot gain against the immediately preceding small-table implementation.
 [Zstd direct small-frame Huffman lookup](performance/zstd-small-direct-lookup-x86.md)
 records tree-free lookup construction, checked lookup-only tails, and the
 remaining measured gap to libzstd on the bounded one-shot target.
+[Zstd large-JSON overlap-tail copy](performance/zstd-large-json-overlap-tail-x86.md)
+records an exact 71-byte match kernel for the compact split-Huffman pair path
+and its complete-frame and prepared-stage measurements.
 [Zstd raw-literal all-FSE execution](performance/zstd-raw-fse-executor.md)
 records grouped bit reads, bounded match-copy specialization, and the resulting
 25-file mixed-corpus comparison.

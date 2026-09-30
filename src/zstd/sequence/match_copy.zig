@@ -65,6 +65,25 @@ pub inline fn appendNonOverlapping71(
     written.* += 71;
 }
 
+/// Copy exactly 71 bytes with an in-range overlapping tail store. All source
+/// loads happen before the first destination write, preserving the minimum
+/// non-overlap distance while avoiding a destination-suffix read.
+pub inline fn appendNonOverlapping71OverlapTail(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+) void {
+    const destination_start = written.*;
+    std.debug.assert(destination_start - repeat_start >= 71);
+    const first: @Vector(32, u8) = output[repeat_start..][0..32].*;
+    const second: @Vector(32, u8) = output[repeat_start + 32 ..][0..32].*;
+    const tail: @Vector(8, u8) = output[repeat_start + 63 ..][0..8].*;
+    output[destination_start..][0..32].* = first;
+    output[destination_start + 32 ..][0..32].* = second;
+    output[destination_start + 63 ..][0..8].* = tail;
+    written.* += 71;
+}
+
 /// Copy the other dense Zstd match-length cluster beside the 71-byte fast
 /// path. Fixed-size array moves keep these 68--70 byte non-overlapping matches
 /// out of the dynamic-length memmove path while preserving exact output bounds.
@@ -424,6 +443,20 @@ test "Zstd fixed 71-byte match copy preserves output tail" {
     appendNonOverlapping71(&tight_actual, &actual_written, 17);
     try std.testing.expectEqual(expected_written, actual_written);
     try std.testing.expectEqualSlices(u8, &tight_expected, &tight_actual);
+}
+
+test "Zstd fixed 71-byte overlapping-tail copy preserves output tail" {
+    for (71..75) |distance| {
+        var expected: [256]u8 = undefined;
+        for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + index / 11);
+        var actual = expected;
+        var expected_written: usize = 96;
+        var actual_written = expected_written;
+        append(&expected, &expected_written, expected_written - distance, 71);
+        appendNonOverlapping71OverlapTail(&actual, &actual_written, actual_written - distance);
+        try std.testing.expectEqual(expected_written, actual_written);
+        try std.testing.expectEqualSlices(u8, &expected, &actual);
+    }
 }
 
 test "Zstd fixed 68 through 70 byte match copies preserve output tail" {
