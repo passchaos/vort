@@ -76,6 +76,8 @@ Returning weight counts through caller-owned storage was noise-level at
 1.0010x normalized geometric with 5/11 wins, and inlining the mode-dispatch
 wrapper regressed to 0.9895x with 2/11 wins. Inlining only the 32-state weight
 decoder also regressed to 0.9977x with 4/11 wins. All four were removed.
+Outlining canonical lookup construction reduced the caller's stack further but
+regressed to 0.9868x with 0/11 wins, so it was removed as well.
 
 The small target is now effectively at parity but not yet consistently ahead.
 The next useful work should measure the remaining normalized-count and

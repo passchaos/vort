@@ -117,6 +117,14 @@
       "wins": 4,
       "libzstd_normalized_geometric_mean": 0.9962029503787473,
       "libzstd_normalized_wins": 1
+    },
+    "outlined_canonical_lookup_build": {
+      "pairs": 11,
+      "speedup_median": 0.9851443240081967,
+      "speedup_geometric_mean": 0.9868384181004083,
+      "wins": 0,
+      "libzstd_normalized_geometric_mean": 0.9891112316543557,
+      "libzstd_normalized_wins": 0
     }
   },
   "full_matrix_control": {
