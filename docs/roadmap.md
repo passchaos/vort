@@ -16439,4 +16439,6 @@ reuse, so production keeps the simpler independently owned plans.
   and 1.0869x. Five 15-pair real-file controls have normalized geometric means
   between 1.0002x and 1.0026x. SVG now reaches 0.7754x libzstd reusable and the
   six compressed-file geometric mean reaches 0.7881x. The 675-test suite and
-  9,900-frame decodecorpus pass on the final source.
+  9,900-frame decodecorpus pass on the final source. A new 9,534-sample profile
+  puts 63.19% in the compact executor and only 1.00% in the displaced large
+  split helper, making the compact loop itself the next optimization target.

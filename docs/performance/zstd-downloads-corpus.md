@@ -302,6 +302,14 @@ trace JSON, shared library, executable, and header measure 1.0024x, 1.0002x,
 1.0026x, 1.0012x, and 1.0012x geometrically. The compressed six-file reusable
 geometric mean is now 0.7881x libzstd.
 
+The post-extension 1 kHz profile contains 9,534 samples. The compact executor
+now owns 63.19% of all decode samples, while the former large small-copy split
+helper falls to 1.00%. Mapped/no-low FSE builders account for 4.62%/3.69%, the
+four-stream Huffman reservoir and surrounding decode for 4.08%/3.42%, Huffman
+tree construction for 2.56%, and normalized-count parsing for 2.52%. The next
+optimization target is therefore inside the compact executor itself rather than
+another routing change.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
