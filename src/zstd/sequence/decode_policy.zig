@@ -8,8 +8,10 @@ pub const generic_split_literal_min = 4 * 1024;
 pub const huffman_all_fse_sequence_min = 512;
 pub const huffman_match_wildcopy_block_max = 4 * 1024;
 pub const medium_split_literal_max = 4 * 1024;
+pub const compact_high_sequence_literal_max = 2 * 1024;
 pub const compact_split_sequence_min = 128;
-pub const compact_split_sequence_max = 1535;
+pub const compact_high_sequence_min = 1536;
+pub const compact_split_sequence_max = 4095;
 pub const reusable_cache_content_size_max: u64 = 512 * 1024;
 pub const raw_all_fse_sequence_min = 32;
 pub const raw_all_fse_literal_min = split_literal_min;
@@ -66,8 +68,13 @@ pub inline fn preferMediumSplitHuffman(
     literal_bytes: usize,
     sequence_count: usize,
 ) bool {
-    return literal_bytes <= medium_split_literal_max and
-        compressed_block_bytes <= huffman_match_wildcopy_block_max and
+    const selected_shape = if (sequence_count < compact_high_sequence_min)
+        literal_bytes <= medium_split_literal_max
+    else
+        literal_bytes != 0 and
+            literal_bytes <= compact_high_sequence_literal_max and
+            literal_bytes < sequence_count;
+    return selected_shape and compressed_block_bytes <= huffman_match_wildcopy_block_max and
         sequence_count >= compact_split_sequence_min and
         sequence_count <= compact_split_sequence_max;
 }
@@ -125,8 +132,11 @@ test "split Huffman executor covers sequence-dense and literal-dense blocks" {
     try std.testing.expect(!preferMediumSplitHuffman(huffman_match_wildcopy_block_max, medium_split_literal_max, compact_split_sequence_min - 1));
     try std.testing.expect(preferMediumSplitHuffman(huffman_match_wildcopy_block_max, medium_split_literal_max, compact_split_sequence_min));
     try std.testing.expect(!preferMediumSplitHuffman(huffman_match_wildcopy_block_max, medium_split_literal_max + 1, compact_split_sequence_min));
-    try std.testing.expect(preferMediumSplitHuffman(huffman_match_wildcopy_block_max, medium_split_literal_max, compact_split_sequence_max));
-    try std.testing.expect(!preferMediumSplitHuffman(huffman_match_wildcopy_block_max, medium_split_literal_max, compact_split_sequence_max + 1));
+    try std.testing.expect(!preferMediumSplitHuffman(huffman_match_wildcopy_block_max, compact_high_sequence_literal_max, compact_high_sequence_min));
+    try std.testing.expect(preferMediumSplitHuffman(huffman_match_wildcopy_block_max, compact_high_sequence_min - 1, compact_high_sequence_min));
+    try std.testing.expect(!preferMediumSplitHuffman(huffman_match_wildcopy_block_max, 0, compact_high_sequence_min));
+    try std.testing.expect(preferMediumSplitHuffman(huffman_match_wildcopy_block_max, compact_high_sequence_literal_max, compact_split_sequence_max));
+    try std.testing.expect(!preferMediumSplitHuffman(huffman_match_wildcopy_block_max, compact_high_sequence_literal_max, compact_split_sequence_max + 1));
     try std.testing.expect(preferReusableDecodeCache(null));
     try std.testing.expect(preferReusableDecodeCache(reusable_cache_content_size_max));
     try std.testing.expect(!preferReusableDecodeCache(reusable_cache_content_size_max + 1));
