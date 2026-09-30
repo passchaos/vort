@@ -16492,3 +16492,18 @@ reuse, so production keeps the simpler independently owned plans.
   were all rejected and removed. All 675 tests, both reference gates, 276
   compatibility cases, 9,900 decodecorpus frames, and x86_64 Linux compile-only
   validation pass on the retained route-only change.
+
+- Rejected extending the compact upper bound from 1,535 to 4,095 sequences.
+  A 2 KiB high-range literal gate improved the header stage/frame by
+  1.0281x/1.0200x and a 31-pair robot control by 1.0041x after normalization,
+  but it selected two generated `large_json` blocks and reduced matched-layout
+  one-shot/reusable controls to 0.9175x/0.9337x geometrically. A stricter 1 KiB
+  gate excluded `large_json` and robot; its 109 header blocks gained only
+  1.0056x at the stage and 1.0028x as a frame, while a 31-pair matched-layout
+  reusable `large_json` control remained 0.9970x. The original 1,535 upper
+  bound is retained. The same campaign rejected a persistent sequence-field
+  reservoir (0.8895x), local remaining-bit cursor (0.9833x), direct offset
+  specialization (0.9867x), libzstd-style 16+32 wildcopy (0.9735x), and an
+  explicit AArch64 loop alignment (1.0001x). Latest loaded-host snapshots put
+  robot at 0.7707x/0.7660x and the header at 0.7677x/0.7676x libzstd for
+  one-shot/reusable decoding; these generic-heavy files are the next target.

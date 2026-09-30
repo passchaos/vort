@@ -393,6 +393,17 @@ measured 0.9735x, both 0/7, and explicit AArch64 64-byte loop alignment was
 neutral at 1.0001x geometric with 10/21 wins. The retained route change adds no
 new sequence-loop branch or executor implementation.
 
+A follow-up extension from 1,535 through 4,095 sequences was also rejected.
+With a 2 KiB literal limit it improved the header stage by 1.0281x and its full
+frame by 1.0200x after normalization; a 31-pair robot control recovered to
+1.0041x. However, two generated `large_json` blocks just below 2 KiB moved to
+the compact executor and regressed matched-layout one-shot/reusable controls to
+0.9175x/0.9337x geometrically. Tightening the limit to 1 KiB excluded both
+`large_json` and robot, but the 109 selected header blocks improved only 1.0056x
+at the stage and 1.0028x as a complete frame. A 31-pair matched-layout reusable
+`large_json` control remained slightly negative at 0.9970x. This is not enough
+benefit to justify a second high-sequence policy, so the 1,535 upper bound stays.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
@@ -461,13 +472,13 @@ binary hashes, and A/B observations are in the
 | Case | Input MiB | Encoded % | One-shot | Reusable | Vort reusable MiB/s | libzstd DCtx MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | large SVG | 171.3 | 1.39 | 0.8601x | 0.8592x | 8,012.2 | 9,361.2 |
-| robot log | 105.0 | 6.69 | 0.7521x | 0.7514x | 3,394.1 | 4,527.0 |
+| robot log | 105.0 | 6.69 | 0.7707x | 0.7660x | 3,390.1 | 4,425.9 |
 | trace JSON | 30.2 | 6.10 | 0.8078x | 0.8059x | 2,868.0 | 3,559.6 |
 | shared library | 77.7 | 40.81 | 0.8242x | 0.8240x | 1,033.5 | 1,255.1 |
 | executable | 37.1 | 40.01 | 0.8199x | 0.8166x | 990.8 | 1,213.4 |
 | video | 163.8 | 99.99 | 0.9656x | 1.0210x | 40,262.3 | 39,435.2 |
 | ZIP archive | 153.7 | 99.91 | 0.9987x | 0.9415x | 32,418.3 | 34,433.2 |
-| large C header | 28.5 | 4.40 | 0.7655x | 0.7584x | 2,701.6 | 3,567.3 |
+| large C header | 28.5 | 4.40 | 0.7677x | 0.7676x | 2,724.7 | 3,549.8 |
 
 The ZIP reusable snapshot is an outlier under the recorded host load. Its raw
 fast path returns before the cache policy and is byte-for-byte unchanged, so
