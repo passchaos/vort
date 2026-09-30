@@ -99,13 +99,34 @@ pub noinline fn buildMapped(
     bases: []const usize,
     additional_bits: []const u8,
 ) linksection(mapped_build_text_section) Error!void {
+    return buildMappedBounded(256, 512, values, entries, bases, additional_bits);
+}
+
+pub noinline fn buildMappedSmall32(
+    values: []const u16,
+    entries: anytype,
+    bases: []const usize,
+    additional_bits: []const u8,
+) linksection(mapped_build_text_section) Error!void {
+    return buildMappedBounded(32, 32, values, entries, bases, additional_bits);
+}
+
+inline fn buildMappedBounded(
+    comptime max_symbol_count: usize,
+    comptime max_table_size: usize,
+    values: []const u16,
+    entries: anytype,
+    bases: []const usize,
+    additional_bits: []const u8,
+) Error!void {
     if (entries.len == 0 or !std.math.isPowerOfTwo(entries.len)) return error.CorruptFrame;
-    if (entries.len > 512 or values.len > 256 or values.len > bases.len or values.len > additional_bits.len)
+    if (entries.len > max_table_size or values.len > max_symbol_count or
+        values.len > bases.len or values.len > additional_bits.len)
         return error.CorruptFrame;
 
     var normalized_total: usize = 0;
     var low_probability_count: usize = 0;
-    var symbol_next: [256]u16 = undefined;
+    var symbol_next: [max_symbol_count]u16 = undefined;
     @memset(symbol_next[0..values.len], 0);
     for (values, 0..) |value, symbol| {
         if (value == 0) {
@@ -122,7 +143,7 @@ pub noinline fn buildMapped(
     const accuracy_log = std.math.log2_int(u16, table_size);
     const spread_step = (entries.len >> 1) + (entries.len >> 3) + 3;
     const normal_end = entries.len - low_probability_count;
-    var symbols: [512]u8 = undefined;
+    var symbols: [max_table_size]u8 = undefined;
 
     var low_index: usize = 0;
     for (values, 0..) |value, symbol| {
@@ -256,6 +277,11 @@ fn expectMappedMatches(comptime table_size: usize, values: []const u16) !void {
         try std.testing.expectEqual(bits[entry.symbol], actual.additional_bits);
         try std.testing.expectEqual(entry.baseline, actual.next_state);
         try std.testing.expectEqual(entry.bits, actual.state_bits);
+    }
+    if (table_size == 32) {
+        var small: [32]Mapped = undefined;
+        try buildMappedSmall32(values, &small, bases[0..values.len], bits[0..values.len]);
+        try std.testing.expectEqualSlices(Mapped, &mapped, &small);
     }
 }
 

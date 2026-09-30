@@ -16562,3 +16562,16 @@ reuse, so production keeps the simpler independently owned plans.
   correctness and corpus gates are recorded in
   `docs/performance/zstd-small-reusable-cache-x86.md`; one-shot table building
   and large compressed sequence paths remain open.
+
+- Small one-shot Zstd frames now parse their literal header/tree/streams
+  directly and size Huffman-weight and table-log-five offset-FSE scratch to the
+  format's actual 64/12 and 32/32 bounds. Against frozen `9b6bdf76`, 15
+  fixed-CPU `numbered_json` pairs improve by 1.0278x median / 1.0269x geometric
+  mean with 15/15 wins and a 1.0022x minimum. The final path reaches only
+  0.8069x/0.8057x of local libzstd 1.6.0-dev by median/geometric mean, so the
+  result closes a bounded table-construction cost without claiming one-shot
+  leadership. All 676 direct tests, the 276-case compatibility matrix,
+  9,900-frame/64-mode decodecorpus, 13-row reference gate, and generic
+  x86-64/AArch64 compile checks pass. Exact evidence is in
+  `docs/performance/zstd-small-oneshot-tables-x86.md`; broader Huffman table
+  construction and large compressed sequence paths remain open.

@@ -131,6 +131,13 @@ const small_sequence_decode_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const small_frame_decode_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_small_frame_decode",
+    .macho => "__TEXT,__vort_zstd_sfd",
+    .coff => ".text$vort_zstd_small_frame_decode",
+    else => ".text",
+};
+
 const split_literal_decode_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_split_literal_decode",
     .macho => "__TEXT,__vort_zstd_sld",
@@ -232,6 +239,7 @@ var test_small_mixed_fse_match_56_hits: usize = 0;
 var test_small_mixed_fse_match_6_7_hits: usize = 0;
 var test_small_mixed_field_group_hits: usize = 0;
 var test_small_mixed_cached_block_hits: usize = 0;
+var test_small_offset_fse_table_hits: usize = 0;
 var test_small_mixed_single_literal_hits: usize = 0;
 var test_small_mixed_reservoir_literal_hits: usize = 0;
 var test_huffman_weight_pair_group_hits: usize = 0;
@@ -8971,8 +8979,12 @@ inline fn recordDecodedHuffmanWeight(
 }
 
 inline fn decodeHuffmanWeightsFse(compressed: []const u8, weights: *[256]u4) Error!DecodedHuffmanWeights {
-    var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
-    var values: [256]u16 = undefined;
+    // Zstandard caps the Huffman-weight FSE table log at six. Keeping the
+    // generic 512-state sequence-table capacity here needlessly inflated the
+    // one-shot decoder's stack frame by 3.5 KiB.
+    var entries: [1 << 6]FseTableEntry = undefined;
+    // Huffman weights are limited to symbols 0...11 by the frame format.
+    var values: [12]u16 = undefined;
     const decoded = try huffman_weight_fse.parseNormalizedCounts(compressed, &values);
     try buildFseTable(values[0..decoded.value_count], entries[0..decoded.table_len]);
     if (decoded.bytes_consumed >= compressed.len) return error.TruncatedFrame;
@@ -9349,6 +9361,12 @@ const SequenceFseTable = struct {
     }
 };
 
+const SmallSequenceFseTable = struct {
+    entries: [32]SequenceSymbol = undefined,
+    len: usize = 0,
+    accuracy_log: u8 = 0,
+};
+
 comptime {
     std.debug.assert(@sizeOf(SequenceSymbol) == @sizeOf(u64));
     std.debug.assert(@offsetOf(SequenceSymbol, "base") == 0);
@@ -9594,7 +9612,7 @@ fn readFseSequenceTable(
 }
 
 fn readFseSequenceTableInto(
-    table: *SequenceFseTable,
+    table: anytype,
     block: []const u8,
     offset: *usize,
     bases: []const usize,
@@ -9629,6 +9647,27 @@ fn readFseSequenceTableInto(
         }
     }
     try sequence_fse_builder.buildMapped(normalized, table.entries[0..decoded.table_len], bases, bits);
+}
+
+noinline fn readOffsetFseTable32Into(
+    table: *SmallSequenceFseTable,
+    block: []const u8,
+    offset: *usize,
+) Error!void {
+    if (offset.* >= block.len) return error.TruncatedFrame;
+    var values: [sequence_table_symbol_count_max.offset]u16 = undefined;
+    const decoded = try sequence_normalized_counts.parseSmall32(block[offset.*..], &values);
+    offset.* = std.math.add(usize, offset.*, decoded.bytes_consumed) catch return error.IntegerOverflow;
+    if (offset.* > block.len or decoded.table_len != table.entries.len)
+        return error.CorruptFrame;
+    table.len = decoded.table_len;
+    table.accuracy_log = 5;
+    try sequence_fse_builder.buildMappedSmall32(
+        values[0..decoded.value_count],
+        &table.entries,
+        &of_base,
+        &of_bits,
+    );
 }
 
 const FseTableEntry = sequence_fse_builder.Entry;
@@ -9759,7 +9798,7 @@ fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {
     }
 
     var position: usize = 0;
-    var temp_states: [max_sequence_fse_table_size]u16 = undefined;
+    var temp_states: [128]u16 = undefined;
     for (values, 0..) |value, symbol| {
         if (value == 0 or value == 1) continue;
         const probability = value - 1;
@@ -30926,6 +30965,7 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     test_small_mixed_fse_match_6_7_hits = 0;
     test_small_mixed_field_group_hits = 0;
     test_small_mixed_cached_block_hits = 0;
+    test_small_offset_fse_table_hits = 0;
     test_small_mixed_single_literal_hits = 0;
     test_small_mixed_reservoir_literal_hits = 0;
     defer {
@@ -30934,6 +30974,7 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
         test_small_mixed_fse_match_6_7_hits = 0;
         test_small_mixed_field_group_hits = 0;
         test_small_mixed_cached_block_hits = 0;
+        test_small_offset_fse_table_hits = 0;
         test_small_mixed_single_literal_hits = 0;
         test_small_mixed_reservoir_literal_hits = 0;
     }
@@ -31013,12 +31054,14 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
         &specialized_written,
         0,
         specialized_state.repeated_offsets,
+        null,
         &specialized_lookup.table,
     );
     try std.testing.expectEqual(generic_section.regenerated_size, test_small_mixed_fse_fast_literal_hits);
     try std.testing.expectEqual(@as(usize, 17), test_small_mixed_fse_match_56_hits);
     try std.testing.expectEqual(@as(usize, 18), test_small_mixed_fse_match_6_7_hits);
     try std.testing.expect(test_small_mixed_field_group_hits > 30);
+    try std.testing.expectEqual(@as(usize, 1), test_small_offset_fse_table_hits);
     try std.testing.expectEqual(@as(usize, 33), test_small_mixed_single_literal_hits);
     try std.testing.expect(test_small_mixed_reservoir_literal_hits >= 48);
 
@@ -31095,6 +31138,7 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
         0,
         specialized_short_state.repeated_offsets,
         null,
+        null,
     ));
     try std.testing.expectEqual(generic_short_written, specialized_short_written);
     try std.testing.expectEqualSlices(u8, generic_short[0..generic_short_written], specialized_short[0..specialized_short_written]);
@@ -31136,6 +31180,7 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
                     0,
                     mutated_specialized_state.repeated_offsets,
                     null,
+                    null,
                 );
                 try std.testing.expectEqual(mutated_generic_written, mutated_specialized_written);
                 try std.testing.expectEqualSlices(
@@ -31152,6 +31197,7 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
                     &mutated_specialized_written,
                     0,
                     mutated_specialized_state.repeated_offsets,
+                    null,
                     null,
                 ));
                 saw_invalid_match = saw_invalid_match or err == error.InvalidMatch;
@@ -40973,7 +41019,7 @@ test "zstd native decoder accepts simple facade-generated predefined frame" {
 noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
     frame: []const u8,
     output: []u8,
-) linksection(small_sequence_decode_text_section) Error!?usize {
+) align(64) linksection(small_frame_decode_text_section) Error!?usize {
     if (frame.len > 4096 or frame.len < 9) return null;
     if (std.mem.readInt(u32, frame[0..4], .little) != frame_magic_u32) return null;
 
@@ -40991,14 +41037,47 @@ noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
     if (block_len > header.block_size_max) return null;
     const block = frame[offset..][0..block_len];
 
-    var previous_huffman_tree: ?StdZstdHuffmanTree = null;
+    var literal_offset: usize = 0;
+    const literal_header = parseLiteralsHeader(block, &literal_offset) catch return null;
+    if (literal_header.kind != .compressed or
+        block.len - literal_offset < literal_header.compressed_size)
+        return null;
+    const literal_payload_offset = literal_offset;
+    const literal_payload = block[literal_payload_offset..][0..literal_header.compressed_size];
     var prepared_narrow: PreparedNarrowHuffmanLookup = .{};
-    const section = parseLiteralsSectionWithPreviousTreeAndNarrowLookup(block, &previous_huffman_tree, &prepared_narrow) catch return null;
+    var tree_reader: std.Io.Reader = .fixed(literal_payload);
+    var tree_remaining: std.Io.Limit = .limited(literal_payload.len);
+    const huffman_tree = decodeFrameHuffmanTree(
+        literal_payload,
+        &tree_reader,
+        &tree_remaining,
+        &prepared_narrow,
+    ) catch return null;
+    const huffman_stream_offset = literal_payload_offset + tree_reader.seek;
+    const huffman_streams = parseHuffmanLiteralStreams(
+        block,
+        literal_header.size_format,
+        literal_payload_offset,
+        huffman_stream_offset,
+        literal_header.compressed_size,
+    ) catch return null;
+    literal_offset += literal_header.compressed_size;
+    const sequence_count = parseSequenceCount(block, &literal_offset) catch return null;
+    const section: LiteralOnlySection = .{
+        .kind = .compressed,
+        .size_format = literal_header.size_format,
+        .regenerated_size = literal_header.regenerated_size,
+        .literal_payload_offset = literal_payload_offset,
+        .huffman_stream_offset = huffman_stream_offset,
+        .huffman_streams = huffman_streams,
+        .compressed_size = literal_header.compressed_size,
+        .sequence_count = sequence_count,
+        .sequence_payload_offset = literal_offset,
+    };
     if (section.regenerated_size > header.block_size_max or
         section.sequence_count < 2 or section.sequence_count > 256 or
-        (section.kind != .compressed and section.kind != .treeless) or
         !prepared_narrow.complete or
-        section.huffman_tree.?.max_bit_count > NarrowHuffmanLiteralLookup.bit_width or
+        huffman_tree.max_bit_count > NarrowHuffmanLiteralLookup.bit_width or
         section.sequence_payload_offset >= block.len or
         block[section.sequence_payload_offset] != 0x20) return null;
 
@@ -41011,6 +41090,7 @@ noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
         &written,
         0,
         initial_repeated_offsets,
+        &huffman_tree,
         &prepared_narrow.table,
     );
     if (written != output_len) return error.SizeMismatch;
@@ -41073,11 +41153,47 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
     written: *usize,
     frame_output_start: usize,
     repeated_offsets: [3]usize,
+    prepared_tree: ?*const StdZstdHuffmanTree,
     prepared_lookup: ?*const NarrowHuffmanLiteralLookup,
 ) linksection(small_sequence_decode_text_section) Error!void {
     std.debug.assert(section.sequence_count >= 2 and section.sequence_count <= 256);
     std.debug.assert(section.kind == .compressed or section.kind == .treeless);
 
+    if (table_offset < block.len and (block[table_offset] & 0x0f) == 0)
+        return decodePredefinedOffsetFse32Huffman(block, section, table_offset, output, written, frame_output_start, repeated_offsets, prepared_tree, prepared_lookup);
+    return decodePredefinedOffsetFseGeneralHuffman(block, section, table_offset, output, written, frame_output_start, repeated_offsets, prepared_tree, prepared_lookup);
+}
+
+noinline fn decodePredefinedOffsetFse32Huffman(
+    block: []const u8,
+    section: *const LiteralOnlySection,
+    table_offset: usize,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    repeated_offsets: [3]usize,
+    prepared_tree: ?*const StdZstdHuffmanTree,
+    prepared_lookup: ?*const NarrowHuffmanLiteralLookup,
+) linksection(small_sequence_decode_text_section) Error!void {
+    if (builtin.is_test) test_small_offset_fse_table_hits += 1;
+    var offset = table_offset;
+    var offset_fse: SmallSequenceFseTable = undefined;
+    try readOffsetFseTable32Into(&offset_fse, block, &offset);
+    if (offset >= block.len) return error.TruncatedFrame;
+    return decodePredefinedOffsetFsePredefinedHuffmanPrepared(block, section, offset, &offset_fse, output, written, frame_output_start, repeated_offsets, prepared_tree, prepared_lookup, false);
+}
+
+noinline fn decodePredefinedOffsetFseGeneralHuffman(
+    block: []const u8,
+    section: *const LiteralOnlySection,
+    table_offset: usize,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    repeated_offsets: [3]usize,
+    prepared_tree: ?*const StdZstdHuffmanTree,
+    prepared_lookup: ?*const NarrowHuffmanLiteralLookup,
+) linksection(small_sequence_decode_text_section) Error!void {
     var offset = table_offset;
     var offset_fse: SequenceFseTable = undefined;
     try readFseSequenceTableInto(
@@ -41091,7 +41207,7 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
     );
     if (offset >= block.len) return error.TruncatedFrame;
 
-    return decodePredefinedOffsetFsePredefinedHuffmanPrepared(block, section, offset, &offset_fse, output, written, frame_output_start, repeated_offsets, null, prepared_lookup, false);
+    return decodePredefinedOffsetFsePredefinedHuffmanPrepared(block, section, offset, &offset_fse, output, written, frame_output_start, repeated_offsets, prepared_tree, prepared_lookup, false);
 }
 
 /// A terminal block can borrow its resolved offset table until execution ends;
@@ -41121,7 +41237,7 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
     block: []const u8,
     section: *const LiteralOnlySection,
     bitstream_offset: usize,
-    offset_fse: *const SequenceFseTable,
+    offset_fse: anytype,
     output: []u8,
     written: *usize,
     frame_output_start: usize,

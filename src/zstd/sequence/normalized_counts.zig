@@ -58,6 +58,23 @@ pub noinline fn parse(
     max_accuracy_log: u4,
     values: *[256]u16,
 ) linksection(text_section) Error!Result {
+    return parseInto(256, bytes, expected_symbol_count, max_accuracy_log, values);
+}
+
+pub noinline fn parseSmall32(
+    bytes: []const u8,
+    values: *[32]u16,
+) linksection(text_section) Error!Result {
+    return parseInto(32, bytes, 32, 5, values);
+}
+
+inline fn parseInto(
+    comptime capacity: usize,
+    bytes: []const u8,
+    expected_symbol_count: usize,
+    max_accuracy_log: u4,
+    values: *[capacity]u16,
+) Error!Result {
     var reader = ReservoirReader.init(bytes);
     const accuracy_log_biased = try reader.read(4);
     if (accuracy_log_biased > max_accuracy_log -| 5) return error.CorruptFrame;

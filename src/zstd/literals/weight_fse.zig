@@ -43,7 +43,7 @@ const ReservoirReader = struct {
 /// Decode the normalized-count header of an FSE-compressed Huffman weight
 /// stream. Zstd restricts this table to tableLog 5 or 6. Loading one reservoir
 /// up front avoids reassembling the same neighboring bytes for every count.
-pub inline fn parseNormalizedCounts(bytes: []const u8, values: *[256]u16) Error!ParseResult {
+pub inline fn parseNormalizedCounts(bytes: []const u8, values: []u16) Error!ParseResult {
     var reader = ReservoirReader.init(bytes);
     const accuracy_log_biased = try reader.read(4);
     if (accuracy_log_biased > 1) return error.CorruptFrame;

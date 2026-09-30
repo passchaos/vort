@@ -13,6 +13,9 @@ libzstd 1.6.0-dev checkout on Intel Comet Lake.
 [Zstd reusable small-frame caching](performance/zstd-small-reusable-cache-x86.md)
 records combined Huffman tree/lookup reuse, a fully cached terminal-block path,
 and paired one-shot/reusable comparisons with libzstd 1.6.0-dev.
+[Zstd small one-shot table construction](performance/zstd-small-oneshot-tables-x86.md)
+records bounded Huffman/offset-FSE scratch, direct small-frame parsing, and an
+independent paired comparison against the preceding reusable-cache commit.
 [Zstd raw-literal all-FSE execution](performance/zstd-raw-fse-executor.md)
 records grouped bit reads, bounded match-copy specialization, and the resulting
 25-file mixed-corpus comparison.
