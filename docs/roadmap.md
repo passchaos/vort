@@ -16459,3 +16459,20 @@ reuse, so production keeps the simpler independently owned plans.
   tests, both 13-row reference gates, 276 compatibility cases, 9,900
   decodecorpus frames, and x86_64 Linux ReleaseFast compile-only validation
   pass. The remaining work stays inside grouped-field extraction and match copy.
+
+- The compact split executor now also advances a local output cursor instead
+  of passing the caller-owned `written` pointer through every literal and match
+  copy. This removes an output-alias reload/store chain while a `defer` commits
+  the cursor on both success and error, preserving partial-progress behavior.
+  Frozen 256-byte-aligned stage binaries improve 1.0997x median / 1.1022x
+  geometric across 21 alternating pairs with 21/21 wins; independent medium
+  and large ranges improve 1.0985x/1.1003x geometrically with 15/15 wins each.
+  Complete SVG decode improves 1.0804x reusable and 1.0698x one-shot
+  geometrically, or 1.0755x/1.0727x after simultaneous libzstd normalization,
+  with every pair ahead. Five 15-pair real-file controls are all neutral to
+  positive at a 1.0017x normalized row-geometric mean. SVG reaches 0.8465x
+  libzstd reusable and 0.8431x one-shot; the six compressed-file geometric
+  means reach 0.7997x/0.8014x. A success-only cursor commit was rejected at
+  0.9917x geometric. The 675-test suite, both reference gates, 276 compatibility
+  cases, 9,900 decodecorpus frames, and x86_64 Linux compile-only validation
+  pass; grouped-field extraction and match copy remain the next hot-loop work.

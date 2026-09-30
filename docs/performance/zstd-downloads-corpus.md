@@ -338,6 +338,33 @@ Vort/libzstd throughput reaches 0.7855x reusable and 0.7867x one-shot. Five
 0.9982x, 0.9981x, and 1.0012x; their row geometric mean is 1.0002x. The six
 compressed-file geometric mean is now 0.7898x reusable and 0.7922x one-shot.
 
+## Compact output cursor alias barrier
+
+The compact executor previously passed the caller-owned `written` pointer
+through every literal and match helper. Because that pointer can alias the
+output slice, generated code repeatedly reloaded and stored the output position
+inside the copy loop. The executor now advances a local output cursor and
+commits it through `defer`, retaining the old partial-progress behavior on
+errors while keeping the external pointer out of the hot loop's alias set. The
+256-byte function alignment is unchanged.
+
+Against frozen `4d61add1`/`a27b8656` stage binaries, 21 alternating full-stage
+pairs improve **1.0997x median / 1.1022x geometric with 21/21 wins**. Separate
+15-pair medium and large ranges improve 1.0985x and 1.1003x geometrically, both
+with 15/15 wins. A smaller success-only commit variant was rejected at 0.9919x
+median / 0.9917x geometric with 4/15 wins; retaining `defer` is both faster and
+preserves error progress.
+
+Fifteen complete-SVG pairs improve reusable decode **1.0784x median / 1.0804x
+geometric** and one-shot decode **1.0726x / 1.0698x**, all 15 pairs ahead for
+both APIs. After simultaneous libzstd normalization, the geometric gains remain
+1.0755x and 1.0727x, again with 15/15 wins. Median Vort/libzstd throughput now
+reaches 0.8465x reusable and 0.8431x one-shot. Robot log, trace JSON, shared
+library, executable, and header controls are all neutral to positive after
+normalization at 1.0027x, 1.0025x, 1.0019x, 1.0007x, and 1.0007x; their
+row-geometric mean is 1.0017x. The six compressed-file geometric mean reaches
+0.7997x reusable and 0.8014x one-shot.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
@@ -395,8 +422,9 @@ original loops remain.
 ## Current loaded-host snapshot
 
 The compressed rows below use the latest retained-path medians. SVG one-shot
-and all six reusable rows include the compact split and local-FSE-state changes; the five
-non-SVG one-shot rows retain the normalized-count-reservoir campaign. Video and
+and all six reusable rows include the compact split, local-FSE-state, and local
+output-cursor changes; the five non-SVG one-shot rows retain the
+normalized-count-reservoir campaign. Video and
 ZIP retain the preceding raw-path snapshot because they do not contain explicit
 FSE tables. Ratios are Vort/libzstd; the full input hashes, exact byte counts,
 binary hashes, and A/B observations are in the
@@ -404,7 +432,7 @@ binary hashes, and A/B observations are in the
 
 | Case | Input MiB | Encoded % | One-shot | Reusable | Vort reusable MiB/s | libzstd DCtx MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| large SVG | 171.3 | 1.39 | 0.7867x | 0.7855x | 7,708.7 | 9,804.4 |
+| large SVG | 171.3 | 1.39 | 0.8431x | 0.8465x | 8,202.5 | 9,772.4 |
 | robot log | 105.0 | 6.69 | 0.7521x | 0.7514x | 3,394.1 | 4,527.0 |
 | trace JSON | 30.2 | 6.10 | 0.8078x | 0.8059x | 2,868.0 | 3,559.6 |
 | shared library | 77.7 | 40.81 | 0.8242x | 0.8240x | 1,033.5 | 1,255.1 |
@@ -418,7 +446,7 @@ fast path returns before the cache policy and is byte-for-byte unchanged, so
 the drop is not attributed to this change.
 
 This is meaningful progress, not leadership. Real compressed multi-block files
-remain about 18--25% behind libzstd after the retained changes. The next profile
+remain about 15--25% behind libzstd after the retained changes. The next profile
 should continue inside the compact grouped-field and match-copy loop rather than
 broadening routing or wildcopy again.
 
