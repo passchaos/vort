@@ -310,6 +310,34 @@ tree construction for 2.56%, and normalized-count parsing for 2.52%. The next
 optimization target is therefore inside the compact executor itself rather than
 another routing change.
 
+## Compact FSE state localization
+
+An eight-second 1 kHz sample of the frozen compact-stage baseline collected
+5,610 samples in `NativeInterleavedDecodeStage.decode`. The three FSE states
+were loaded from and written through `SequenceDecodeState` for every sequence,
+so calls and inlined copies that can alias caller memory kept a serial memory
+dependency in the hot loop. The compact executor now keeps LL/ML/OF state in
+three scalar locals and commits them once after successful block completion.
+This does not add a sequence-shape branch or change the bitstream order.
+
+Across all 824 selected SVG blocks, 21 alternating stage pairs improve
+**1.0152x median / 1.0160x geometric** with 19/21 wins. Separate 15-pair
+512--1023 and 1024--1535 sequence ranges improve 1.0093x/1.0125x and
+1.0180x/1.0159x median/geometric, with 12/15 and 14/15 wins. Packing all three
+states into one `u32` was explicitly rejected: it measured 0.9718x median /
+0.9683x geometric with 0/11 wins because extraction and register pressure cost
+more than the saved state traffic.
+
+Fifteen complete-SVG pairs improve reusable decode **1.0165x median / 1.0117x
+geometric** and one-shot decode **1.0048x / 1.0063x**. The host was heavily
+loaded, so simultaneous libzstd controls are the stronger result: normalized
+reusable improvement is **1.0107x / 1.0144x with 14/15 wins**, and normalized
+one-shot improvement is **1.0135x / 1.0111x with 14/15 wins**. Median
+Vort/libzstd throughput reaches 0.7855x reusable and 0.7867x one-shot. Five
+15-pair reusable controls have normalized geometric means of 1.0025x, 1.0009x,
+0.9982x, 0.9981x, and 1.0012x; their row geometric mean is 1.0002x. The six
+compressed-file geometric mean is now 0.7898x reusable and 0.7922x one-shot.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
@@ -367,7 +395,7 @@ original loops remain.
 ## Current loaded-host snapshot
 
 The compressed rows below use the latest retained-path medians. SVG one-shot
-and all six reusable rows include the compact medium-split candidate; the five
+and all six reusable rows include the compact split and local-FSE-state changes; the five
 non-SVG one-shot rows retain the normalized-count-reservoir campaign. Video and
 ZIP retain the preceding raw-path snapshot because they do not contain explicit
 FSE tables. Ratios are Vort/libzstd; the full input hashes, exact byte counts,
@@ -376,7 +404,7 @@ binary hashes, and A/B observations are in the
 
 | Case | Input MiB | Encoded % | One-shot | Reusable | Vort reusable MiB/s | libzstd DCtx MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| large SVG | 171.3 | 1.39 | 0.7747x | 0.7754x | 7,566.0 | 9,741.8 |
+| large SVG | 171.3 | 1.39 | 0.7867x | 0.7855x | 7,708.7 | 9,804.4 |
 | robot log | 105.0 | 6.69 | 0.7521x | 0.7514x | 3,394.1 | 4,527.0 |
 | trace JSON | 30.2 | 6.10 | 0.8078x | 0.8059x | 2,868.0 | 3,559.6 |
 | shared library | 77.7 | 40.81 | 0.8242x | 0.8240x | 1,033.5 | 1,255.1 |
@@ -390,14 +418,13 @@ fast path returns before the cache policy and is byte-for-byte unchanged, so
 the drop is not attributed to this change.
 
 This is meaningful progress, not leadership. Real compressed multi-block files
-remain 18--37% behind libzstd after the retained changes. The next profile should
-separate split-decoder rejection reasons, incomplete-Huffman literal decoding,
-FSE table rebuilds, and the remaining exact-copy traffic rather than broadening
-wildcopy again.
+remain about 18--25% behind libzstd after the retained changes. The next profile
+should continue inside the compact grouped-field and match-copy loop rather than
+broadening routing or wildcopy again.
 
 ## Validation
 
-- 672/672 direct Zstd tests pass in ReleaseFast.
+- 675/675 direct Zstd tests pass in ReleaseFast.
 - The one-shot and reusable 13-row reference gates pass against libzstd 1.5.7.
 - The decode-profile gate and three-row/two-API path smoke pass.
 - The 276-case compatibility matrix passes with zero unsupported cases.

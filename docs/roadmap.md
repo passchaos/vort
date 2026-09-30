@@ -16442,3 +16442,20 @@ reuse, so production keeps the simpler independently owned plans.
   9,900-frame decodecorpus pass on the final source. A new 9,534-sample profile
   puts 63.19% in the compact executor and only 1.00% in the displaced large
   split helper, making the compact loop itself the next optimization target.
+
+- The compact split executor now keeps its LL/ML/OF FSE states in three scalar
+  locals and commits them only after the block succeeds. This removes the
+  per-sequence state-pointer reload/store chain across literal and match copies
+  without changing routing or adding a shape branch. Against frozen
+  `f9403697`/`f9ec1c79` stage binaries, 21 alternating full-stage pairs improve
+  1.0152x median / 1.0160x geometric with 19/21 wins; independent medium and
+  large ranges improve 1.0125x and 1.0159x geometrically. Fifteen complete SVG
+  pairs improve 1.0144x reusable and 1.0111x one-shot geometrically after the
+  simultaneous libzstd control, both with 14/15 normalized wins. Five 15-pair
+  real-file controls are neutral at a 1.0002x normalized row-geometric mean.
+  SVG reaches 0.7855x libzstd reusable and 0.7867x one-shot, while the six-file
+  compressed-corpus geometric means reach 0.7898x/0.7922x. A packed-`u32`
+  variant was rejected at 0.9683x geometric with 0/11 wins. All 675 direct Zstd
+  tests, both 13-row reference gates, 276 compatibility cases, 9,900
+  decodecorpus frames, and x86_64 Linux ReleaseFast compile-only validation
+  pass. The remaining work stays inside grouped-field extraction and match copy.
