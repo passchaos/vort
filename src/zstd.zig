@@ -10348,7 +10348,6 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             frame_state,
             continuation,
             &state,
-            huffman_literals,
         );
     }
     if (spec.ll_mode == .compressed and
@@ -10601,7 +10600,6 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
             frame_state,
             continuation,
             &state,
-            huffman_literals,
         );
     }
     if (spec.ll_mode == .compressed and
@@ -12126,9 +12124,9 @@ noinline fn decodeFseFseRleSequences(
     frame_state: *SequenceFrameState,
     continuation: sequence_continuation.Context,
     state: *SequenceDecodeState,
-    maybe_huffman: ?HuffmanLiteralDecodeState,
 ) linksection(fse_fse_rle_decode_text_section) Error!void {
-    var huffman_literals = maybe_huffman;
+    std.debug.assert(section.kind == .raw);
+    const literals = block[section.literal_payload_offset..][0..section.regenerated_size];
     var literal_offset: usize = 0;
     const ml_symbol = spec.match_rle orelse return error.CorruptFrame;
     while (state.remaining != 0) {
@@ -12144,12 +12142,18 @@ noinline fn decodeFseFseRleSequences(
             state.of_state = try nextSequenceState(&state.reader, of_symbol);
         } else try state.reader.expectEnd();
 
-        if (huffman_literals) |*huffman_state| {
-            if (output.len - written.* < literal_len) return error.OutputTooSmall;
-            try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..literal_len]);
+        if (literal_offset > literals.len or literals.len - literal_offset < literal_len) return error.CorruptFrame;
+        if (output.len - written.* < literal_len) return error.OutputTooSmall;
+        if (literal_len == 16) {
+            const literal_chunk: @Vector(16, u8) = literals[literal_offset..][0..16].*;
+            output[written.*..][0..16].* = literal_chunk;
+            written.* += 16;
+            literal_offset += 16;
+        } else if (literal_len != 0) {
+            @memcpy(output[written.*..][0..literal_len], literals[literal_offset..][0..literal_len]);
             written.* += literal_len;
-        } else try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
-        literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
+            literal_offset += literal_len;
+        }
         const available_in_frame = written.* - frame_output_start;
         if (match_len == 48 and match_offset >= 48 and match_offset <= available_in_frame) {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
@@ -12160,11 +12164,9 @@ noinline fn decodeFseFseRleSequences(
     }
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     const last_literals = section.regenerated_size - literal_offset;
-    if (huffman_literals) |*huffman_state| {
-        if (output.len - written.* < last_literals) return error.OutputTooSmall;
-        try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..last_literals]);
-        written.* += last_literals;
-    } else try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
+    if (output.len - written.* < last_literals) return error.OutputTooSmall;
+    @memcpy(output[written.*..][0..last_literals], literals[literal_offset..]);
+    written.* += last_literals;
     if (continuation.retainsState()) {
         frame_state.previous_tables = spec.tables();
         frame_state.repeated_offsets = state.repeated_offsets;
@@ -12346,6 +12348,141 @@ test "zstd FSE RLE RLE raw sequence loop matches generic decode" {
         &actual,
         &invalid_written,
         0,
+        &invalid_frame_state,
+        .terminal,
+        &invalid_state,
+    ));
+}
+
+test "zstd FSE FSE RLE raw sequence loop matches generic decode" {
+    const sequence_count = 256;
+    const prefix_len = 64;
+    const literal_len = 16;
+    const match_len = 48;
+    const output_len = prefix_len + sequence_count * (literal_len + match_len);
+
+    var literals: [sequence_count * literal_len]u8 = undefined;
+    for (&literals, 0..) |*byte, index| byte.* = @truncate(index * 41 + 13);
+    const section: LiteralOnlySection = .{
+        .kind = .raw,
+        .size_format = 0,
+        .regenerated_size = literals.len,
+        .literal_payload_offset = 0,
+        .huffman_stream_offset = 0,
+        .huffman_streams = .none,
+        .sequence_count = sequence_count,
+        .sequence_payload_offset = literals.len,
+    };
+    var literal_table: SequenceFseTable = .{};
+    literal_table.len = 2;
+    literal_table.accuracy_log = 1;
+    literal_table.entries[0] = .{ .base = literal_len, .additional_bits = 0, .next_state = 0, .state_bits = 1 };
+    literal_table.entries[1] = literal_table.entries[0];
+    var offset_table: SequenceFseTable = .{};
+    offset_table.len = 2;
+    offset_table.accuracy_log = 1;
+    offset_table.entries[0] = .{ .base = 0, .additional_bits = 0, .next_state = 0, .state_bits = 1 };
+    offset_table.entries[1] = offset_table.entries[0];
+    const spec: SequenceModeSpec = .{
+        .ll_mode = .compressed,
+        .of_mode = .compressed,
+        .ml_mode = .rle,
+        .literal_rle = null,
+        .offset_rle = null,
+        .match_rle = try sequenceRleSymbol(.match, try sequenceCodeForValue(match_len, &ml_base, &ml_bits)),
+        .literal_fse = literal_table,
+        .offset_fse = offset_table,
+        .match_fse = .{},
+        .bitstream_offset = 0,
+    };
+
+    var fields: [sequence_count * 3]BitField = undefined;
+    var field_count: usize = 0;
+    fields[field_count] = .{ .value = 0, .bits = 1 };
+    field_count += 1;
+    fields[field_count] = .{ .value = 0, .bits = 1 };
+    field_count += 1;
+    for (0..sequence_count) |index| {
+        fields[field_count] = .{ .value = 1, .bits = 2 };
+        field_count += 1;
+        if (index + 1 < sequence_count) {
+            fields[field_count] = .{ .value = index & 1, .bits = 1 };
+            field_count += 1;
+            fields[field_count] = .{ .value = (index >> 1) & 1, .bits = 1 };
+            field_count += 1;
+        }
+    }
+    var sequence_bits: std.ArrayList(u8) = .empty;
+    defer sequence_bits.deinit(std.testing.allocator);
+    try emitReverseBitstreamFromReadOrder(std.testing.allocator, &sequence_bits, fields[0..field_count]);
+
+    var expected: [output_len]u8 = undefined;
+    for (expected[0..prefix_len], 0..) |*byte, index| byte.* = @truncate(index * 19 + 7);
+    var expected_written: usize = prefix_len;
+    var expected_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
+    var literal_offset: usize = 0;
+    while (expected_state.remaining != 0) {
+        const sequence = try readModeSequence(&expected_state);
+        try copyLiteralsFromSection(&literals, section, literal_offset, &expected, &expected_written, sequence.literal_len);
+        literal_offset += sequence.literal_len;
+        try copyMatchFromHistory(&expected, &expected_written, 0, &.{}, sequence.match_offset, sequence.match_len);
+    }
+    try std.testing.expectEqual(literals.len, literal_offset);
+    try std.testing.expectEqual(output_len, expected_written);
+
+    var actual: [output_len]u8 = undefined;
+    @memcpy(actual[0..prefix_len], expected[0..prefix_len]);
+    @memset(actual[prefix_len..], 0xa5);
+    var actual_written: usize = prefix_len;
+    var actual_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
+    var actual_frame_state: SequenceFrameState = .{ .repeated_offsets = .{ prefix_len, 4, 8 } };
+    try decodeFseFseRleSequences(
+        &literals,
+        section,
+        &spec,
+        &actual,
+        &actual_written,
+        0,
+        &.{},
+        &actual_frame_state,
+        .followed_by_block,
+        &actual_state,
+    );
+    try std.testing.expectEqual(expected_written, actual_written);
+    try std.testing.expectEqualSlices(u8, &expected, &actual);
+    try std.testing.expectEqual(expected_state.repeated_offsets, actual_state.repeated_offsets);
+    try std.testing.expectEqual(actual_state.repeated_offsets, actual_frame_state.repeated_offsets);
+    try std.testing.expectEqual(SymbolMode.compressed, actual_frame_state.previous_tables.?.ll_mode);
+    try std.testing.expectEqual(SymbolMode.compressed, actual_frame_state.previous_tables.?.of_mode);
+    try std.testing.expectEqual(SymbolMode.rle, actual_frame_state.previous_tables.?.ml_mode);
+
+    var short_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
+    var short_written: usize = prefix_len;
+    var short_frame_state: SequenceFrameState = .{ .repeated_offsets = .{ prefix_len, 4, 8 } };
+    try std.testing.expectError(error.OutputTooSmall, decodeFseFseRleSequences(
+        &literals,
+        section,
+        &spec,
+        actual[0 .. actual.len - 1],
+        &short_written,
+        0,
+        &.{},
+        &short_frame_state,
+        .terminal,
+        &short_state,
+    ));
+
+    var invalid_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len + literal_len + 1, 4, 8 });
+    var invalid_written: usize = prefix_len;
+    var invalid_frame_state: SequenceFrameState = .{ .repeated_offsets = .{ prefix_len + literal_len + 1, 4, 8 } };
+    try std.testing.expectError(error.InvalidMatch, decodeFseFseRleSequences(
+        &literals,
+        section,
+        &spec,
+        &actual,
+        &invalid_written,
+        0,
+        &.{},
         &invalid_frame_state,
         .terminal,
         &invalid_state,

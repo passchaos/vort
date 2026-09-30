@@ -16627,3 +16627,18 @@ reuse, so production keeps the simpler independently owned plans.
   decodecorpus, 13-row reference gate, and generic x86-64/AArch64 builds pass.
   Exact evidence is in `docs/performance/zstd-dense-fse-x86.md`; large compressed
   sequence execution remains below libzstd on this host.
+
+- The large raw-literal FSE/FSE/RLE sequence executor now borrows its literal
+  payload directly, removes an impossible Huffman-state branch, and uses an
+  exact 16-byte vector copy for the dominant `binary_mixed` literal length.
+  Its frozen x86-64 symbol shrinks by 896 bytes. Against frozen `f7e95936`, 15
+  alternating fixed-CPU pairs improve complete `binary_mixed` decode by
+  1.0968x median / 1.0954x geometric mean with 15/15 wins and a 1.0874x
+  minimum. A seven-pair complete 13-row matrix confirms 1.0985x geometric on
+  the target, keeps `large_json`/`huffman80k` neutral-positive, and has a
+  0.9941x row-median floor. Vort still reaches only 0.8946x median local
+  libzstd 1.6.0-dev throughput, so broader sequence-decode leadership remains
+  open. The direct generic oracle, all 678 Zstd tests, profile/reference gates,
+  276 compatibility cases, 9,900 decodecorpus frames with 64/64 modes,
+  generic x86-64/AArch64 builds, and full repository check pass. Exact evidence
+  is in `docs/performance/zstd-fse-fse-rle-raw-x86.md`.
