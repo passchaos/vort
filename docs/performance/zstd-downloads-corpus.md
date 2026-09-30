@@ -393,16 +393,24 @@ measured 0.9735x, both 0/7, and explicit AArch64 64-byte loop alignment was
 neutral at 1.0001x geometric with 10/21 wins. The retained route change adds no
 new sequence-loop branch or executor implementation.
 
-A follow-up extension from 1,535 through 4,095 sequences was also rejected.
-With a 2 KiB literal limit it improved the header stage by 1.0281x and its full
-frame by 1.0200x after normalization; a 31-pair robot control recovered to
-1.0041x. However, two generated `large_json` blocks just below 2 KiB moved to
-the compact executor and regressed matched-layout one-shot/reusable controls to
-0.9175x/0.9337x geometrically. Tightening the limit to 1 KiB excluded both
-`large_json` and robot, but the 109 selected header blocks improved only 1.0056x
-at the stage and 1.0028x as a complete frame. A 31-pair matched-layout reusable
-`large_json` control remained slightly negative at 0.9970x. This is not enough
-benefit to justify a second high-sequence policy, so the 1,535 upper bound stays.
+A literal-limit-only extension from 1,535 through 4,095 sequences was rejected.
+At 2 KiB it improved the header stage by 1.0281x, but selected two generated
+`large_json` blocks and regressed matched-layout one-shot/reusable controls to
+0.9175x/0.9337x geometrically. At 1 KiB the header frame gained only 1.0028x,
+while a 31-pair reusable `large_json` control remained 0.9970x.
+
+The retained high-range policy adds the semantic density invariant
+`literal_bytes < sequence_count` alongside the 2 KiB limit. It selects the
+header's high-sequence/low-literal blocks while rejecting `large_json`, whose
+roughly 2,082 literals exceed its roughly 1,824 sequences. Under a matched-
+layout 0-vs-2-KiB comparison, the header stage improves **1.0251x median /
+1.0249x geometric with 15/15 wins**, and its complete reusable frame improves
+**1.0169x / 1.0170x**, also 15/15. Robot and matched-layout one-shot/reusable
+`large_json` controls measure 1.0006x, 1.0001x, and 0.9998x geometrically after
+normalization. Seven-pair SVG/trace/executable controls and a 21-pair shared-
+library control stay within 0.14%. The header reaches 0.7831x libzstd one-shot
+and 0.7765x reusable; the six compressed-file geometric means reach 0.8104x
+and 0.8074x.
 
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
@@ -478,7 +486,7 @@ binary hashes, and A/B observations are in the
 | executable | 37.1 | 40.01 | 0.8199x | 0.8166x | 990.8 | 1,213.4 |
 | video | 163.8 | 99.99 | 0.9656x | 1.0210x | 40,262.3 | 39,435.2 |
 | ZIP archive | 153.7 | 99.91 | 0.9987x | 0.9415x | 32,418.3 | 34,433.2 |
-| large C header | 28.5 | 4.40 | 0.7677x | 0.7676x | 2,724.7 | 3,549.8 |
+| large C header | 28.5 | 4.40 | 0.7831x | 0.7765x | 2,775.9 | 3,575.0 |
 
 The ZIP reusable snapshot is an outlier under the recorded host load. Its raw
 fast path returns before the cache policy and is byte-for-byte unchanged, so
