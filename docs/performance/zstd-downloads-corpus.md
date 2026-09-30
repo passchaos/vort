@@ -412,6 +412,26 @@ library control stay within 0.14%. The header reaches 0.7831x libzstd one-shot
 and 0.7765x reusable; the six compressed-file geometric means reach 0.8104x
 and 0.8074x.
 
+## Dedicated dense split core
+
+The robot-log profile put roughly 78% of Vort samples in the dense split
+executor. The previous instance inherited a large multi-policy template even
+though production dense blocks need only grouped FSE fields, padded literal
+staging, adaptive match wildcopy, and a cold checked fallback. A dedicated
+dense core now keeps FSE and output cursors local and omits the small-copy pair,
+fixed-length, and non-grouped policy machinery. The old generic instantiation
+remains an independent test oracle; direct tests compare full output, reverse-
+reader position, all three FSE states, and repcodes.
+
+Fifteen alternating stage pairs improve robot/header by **1.0432x/1.0610x
+geometrically**, both 15/15. Complete reusable frames improve by 1.0269x and
+1.0515x after simultaneous libzstd normalization; one-shot improves by
+1.0268x and 1.0482x. All four target rows win 15/15 normalized pairs. Fifteen-
+pair reusable SVG/trace/shared-library/executable controls improve by 1.0051x,
+1.0447x, 1.0077x, and 1.0100x geometrically. Matched `large_json` controls are
+neutral at 0.9998x one-shot and 1.0034x reusable. The latest loaded-host
+six-file ratios reach 0.8318x one-shot and 0.8255x reusable.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
@@ -479,21 +499,21 @@ binary hashes, and A/B observations are in the
 
 | Case | Input MiB | Encoded % | One-shot | Reusable | Vort reusable MiB/s | libzstd DCtx MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| large SVG | 171.3 | 1.39 | 0.8601x | 0.8592x | 8,012.2 | 9,361.2 |
-| robot log | 105.0 | 6.69 | 0.7707x | 0.7660x | 3,390.1 | 4,425.9 |
-| trace JSON | 30.2 | 6.10 | 0.8078x | 0.8059x | 2,868.0 | 3,559.6 |
-| shared library | 77.7 | 40.81 | 0.8242x | 0.8240x | 1,033.5 | 1,255.1 |
-| executable | 37.1 | 40.01 | 0.8199x | 0.8166x | 990.8 | 1,213.4 |
+| large SVG | 171.3 | 1.39 | 0.8704x | 0.8765x | 8,668.3 | 9,890.0 |
+| robot log | 105.0 | 6.69 | 0.7990x | 0.7863x | 3,623.7 | 4,608.3 |
+| trace JSON | 30.2 | 6.10 | 0.8478x | 0.8272x | 3,014.7 | 3,644.3 |
+| shared library | 77.7 | 40.81 | 0.8334x | 0.8282x | 1,058.3 | 1,277.9 |
+| executable | 37.1 | 40.01 | 0.8263x | 0.8211x | 1,018.4 | 1,240.4 |
 | video | 163.8 | 99.99 | 0.9656x | 1.0210x | 40,262.3 | 39,435.2 |
 | ZIP archive | 153.7 | 99.91 | 0.9987x | 0.9415x | 32,418.3 | 34,433.2 |
-| large C header | 28.5 | 4.40 | 0.7831x | 0.7765x | 2,775.9 | 3,575.0 |
+| large C header | 28.5 | 4.40 | 0.8155x | 0.8160x | 2,968.0 | 3,637.1 |
 
 The ZIP reusable snapshot is an outlier under the recorded host load. Its raw
 fast path returns before the cache policy and is byte-for-byte unchanged, so
 the drop is not attributed to this change.
 
 This is meaningful progress, not leadership. Real compressed multi-block files
-remain about 14--25% behind libzstd after the retained changes. The next profile
+remain about 12--21% behind libzstd after the retained changes. The next profile
 should continue inside the compact grouped-field and match-copy loop rather than
 broadening routing or wildcopy again.
 

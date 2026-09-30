@@ -16507,3 +16507,18 @@ reuse, so production keeps the simpler independently owned plans.
   geometric means reach 0.8104x/0.8074x. All 675 tests, both reference gates,
   276 compatibility cases, 9,900 decodecorpus frames, and x86_64 Linux compile-
   only validation pass. Robot remains the primary generic-heavy target.
+
+- Replaced the production dense split instantiation of the multi-policy
+  sequence template with a dedicated grouped-FSE core. It retains padded
+  four-stream Huffman staging, short/bulk literal wildcopy, adaptive match
+  wildcopy, and a checked cold fallback, while dropping the small-copy pair,
+  fixed-length, and non-grouped branches. The generic dense instantiation stays
+  as a direct oracle covering exact output, reader position, LL/ML/OF state,
+  and repcodes. Frozen stage binaries improve robot/header by 1.0432x/1.0610x
+  geometrically with 15/15 wins. Complete reusable frames improve 1.0269x/
+  1.0515x after libzstd normalization; one-shot improves 1.0268x/1.0482x, all
+  15/15. SVG, trace, shared-library, and executable reusable controls improve
+  1.0051x/1.0447x/1.0077x/1.0100x; `large_json` remains neutral. Loaded-host
+  six-file ratios reach 0.8318x one-shot and 0.8255x reusable. All 675 tests,
+  both reference gates, 276 compatibility cases, 9,900 decodecorpus frames,
+  and x86_64 Linux compile-only validation pass.
