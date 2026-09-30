@@ -10765,11 +10765,16 @@ noinline fn tryDecodeMediumSplitHuffmanSequences(
     const spec = state.spec;
     var reader = state.reader;
     var remaining = state.remaining;
+    // Match and literal copies can alias caller memory, but not these scalar
+    // states. Keep them local so each sequence does not reload through `state`.
+    var ll_state = state.ll_state;
+    var ml_state = state.ml_state;
+    var of_state = state.of_state;
     var literal_offset: usize = 0;
     while (remaining != 0) {
-        const ll_word = spec.literal_fse.symbolWordUnchecked(state.ll_state);
-        const of_word = spec.offset_fse.symbolWordUnchecked(state.of_state);
-        const ml_word = spec.match_fse.symbolWordUnchecked(state.ml_state);
+        const ll_word = spec.literal_fse.symbolWordUnchecked(ll_state);
+        const of_word = spec.offset_fse.symbolWordUnchecked(of_state);
+        const ml_word = spec.match_fse.symbolWordUnchecked(ml_state);
         const literal_base_value = sequenceSymbolBase(ll_word);
         const offset_base_value = sequenceSymbolBase(of_word);
         const match_base_value = sequenceSymbolBase(ml_word);
@@ -10812,13 +10817,13 @@ noinline fn tryDecodeMediumSplitHuffmanSequences(
         );
         if (remaining != 0) {
             if (fields_are_grouped) {
-                state.ll_state = ll_next_state + field_group.?.read(ll_state_bits);
-                state.ml_state = ml_next_state + field_group.?.read(ml_state_bits);
-                state.of_state = of_next_state + field_group.?.read(of_state_bits);
+                ll_state = ll_next_state + field_group.?.read(ll_state_bits);
+                ml_state = ml_next_state + field_group.?.read(ml_state_bits);
+                of_state = of_next_state + field_group.?.read(of_state_bits);
             } else {
-                state.ll_state = ll_next_state + try reader.readSequenceField(ll_state_bits);
-                state.ml_state = ml_next_state + try reader.readSequenceField(ml_state_bits);
-                state.of_state = of_next_state + try reader.readSequenceField(of_state_bits);
+                ll_state = ll_next_state + try reader.readSequenceField(ll_state_bits);
+                ml_state = ml_next_state + try reader.readSequenceField(ml_state_bits);
+                of_state = of_next_state + try reader.readSequenceField(of_state_bits);
             }
         } else try reader.expectEnd();
 
@@ -10872,6 +10877,9 @@ noinline fn tryDecodeMediumSplitHuffmanSequences(
     written.* += last_literals;
     state.remaining = remaining;
     state.reader = reader;
+    state.ll_state = ll_state;
+    state.ml_state = ml_state;
+    state.of_state = of_state;
     if (continuation.retainsState()) {
         frame_state.previous_tables = spec.tables();
         frame_state.repeated_offsets = state.repeated_offsets;
