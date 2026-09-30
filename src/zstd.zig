@@ -10770,6 +10770,10 @@ noinline fn tryDecodeMediumSplitHuffmanSequences(
     var ll_state = state.ll_state;
     var ml_state = state.ml_state;
     var of_state = state.of_state;
+    // Keep the caller-owned pointer out of the copy loop's alias set. Commit
+    // through `defer` so error paths retain their existing partial progress.
+    var output_cursor = written.*;
+    defer written.* = output_cursor;
     var literal_offset: usize = 0;
     while (remaining != 0) {
         const ll_word = spec.literal_fse.symbolWordUnchecked(ll_state);
@@ -10833,20 +10837,20 @@ noinline fn tryDecodeMediumSplitHuffmanSequences(
             section.regenerated_size - literal_offset >= literal_len and
             match_len >= 16 and
             match_offset >= 16 and
-            match_offset <= written.* - frame_output_start + literal_len and
-            output.len - written.* >= literal_len + rounded_match_len)
+            match_offset <= output_cursor - frame_output_start + literal_len and
+            output.len - output_cursor >= literal_len + rounded_match_len)
         {
             literal_copy.appendUpTo15Wildcopy16(
                 output,
-                written,
+                &output_cursor,
                 &literals,
                 &literal_offset,
                 literal_len,
             );
             _ = sequence_match_copy.appendForwardWildcopy(
                 output,
-                written,
-                written.* - match_offset,
+                &output_cursor,
+                output_cursor - match_offset,
                 match_len,
             );
             continue;
@@ -10854,27 +10858,27 @@ noinline fn tryDecodeMediumSplitHuffmanSequences(
 
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len)
             return error.CorruptFrame;
-        if (output.len - written.* < literal_len) return error.OutputTooSmall;
+        if (output.len - output_cursor < literal_len) return error.OutputTooSmall;
         if (literal_len == 1) {
-            output[written.*] = literals[literal_offset];
-            written.* += 1;
+            output[output_cursor] = literals[literal_offset];
+            output_cursor += 1;
             literal_offset += 1;
         } else if (literal_len >= 2 and literal_len <= 15) {
-            literal_copy.append2To15(output, written, &literals, &literal_offset, literal_len);
+            literal_copy.append2To15(output, &output_cursor, &literals, &literal_offset, literal_len);
         } else if (literal_len != 0) {
-            @memcpy(output[written.*..][0..literal_len], literals[literal_offset..][0..literal_len]);
-            written.* += literal_len;
+            @memcpy(output[output_cursor..][0..literal_len], literals[literal_offset..][0..literal_len]);
+            output_cursor += literal_len;
             literal_offset += literal_len;
         }
-        if (match_offset == 0 or match_offset > written.* - frame_output_start) return error.InvalidMatch;
-        if (output.len - written.* < match_len) return error.OutputTooSmall;
-        try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+        if (match_offset == 0 or match_offset > output_cursor - frame_output_start) return error.InvalidMatch;
+        if (output.len - output_cursor < match_len) return error.OutputTooSmall;
+        try copyMatchFromHistory(output, &output_cursor, frame_output_start, &.{}, match_offset, match_len);
     }
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     const last_literals = section.regenerated_size - literal_offset;
-    if (output.len - written.* < last_literals) return error.OutputTooSmall;
-    @memcpy(output[written.*..][0..last_literals], literals[literal_offset..][0..last_literals]);
-    written.* += last_literals;
+    if (output.len - output_cursor < last_literals) return error.OutputTooSmall;
+    @memcpy(output[output_cursor..][0..last_literals], literals[literal_offset..][0..last_literals]);
+    output_cursor += last_literals;
     state.remaining = remaining;
     state.reader = reader;
     state.ll_state = ll_state;
@@ -31047,6 +31051,28 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expectEqual(expected.len, medium_written);
     try std.testing.expectEqualSlices(u8, expected, medium_output[0..medium_written]);
     for (medium_output[medium_written..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
+
+    @memset(medium_output, 0xa5);
+    var medium_short_written: usize = 0;
+    var medium_short_frame_state: SequenceFrameState = .{};
+    var medium_short_state = try initSequenceDecodeState(
+        &spec,
+        section.sequence_count,
+        try ReverseBitReader.init(block[spec.bitstream_offset..]),
+        medium_short_frame_state.repeated_offsets,
+    );
+    try std.testing.expectError(error.OutputTooSmall, tryDecodeMediumSplitHuffmanSequences(
+        section,
+        medium_output[0 .. expected.len - 1],
+        &medium_short_written,
+        0,
+        &medium_short_frame_state,
+        .terminal,
+        &medium_short_state,
+    ));
+    try std.testing.expect(medium_short_written != 0);
+    try std.testing.expect(medium_short_written <= expected.len - 1);
+    for (medium_output[expected.len - 1 ..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
 
     test_disable_split_huffman_decode = false;
     test_split_huffman_decode_hits = 0;
