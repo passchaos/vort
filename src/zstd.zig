@@ -9836,6 +9836,27 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     try expectConsumedBlock(offset, block.len);
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
+    if (comptime allow_wildcopy) {
+        if ((!builtin.is_test or !test_disable_split_huffman_decode) and
+            spec.ll_mode == .compressed and
+            spec.of_mode == .compressed and
+            spec.ml_mode == .compressed and
+            (section.kind == .compressed or section.kind == .treeless) and
+            sequence_decode_policy.preferMediumSplitHuffman(block.len, section.regenerated_size, section.sequence_count) and
+            dictionary_history.len == 0)
+        {
+            var compact_state = try initSequenceDecodeState(&spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+            if (try tryDecodeMediumSplitHuffmanSequences(
+                section,
+                output,
+                written,
+                frame_output_start,
+                frame_state,
+                continuation,
+                &compact_state,
+            )) return;
+        }
+    }
     if ((!builtin.is_test or !test_disable_split_huffman_decode) and
         spec.ll_mode == .compressed and
         spec.of_mode == .compressed and
@@ -9904,26 +9925,6 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             continuation,
             &state,
         )) return;
-    }
-    if (comptime allow_wildcopy) {
-        if ((!builtin.is_test or !test_disable_split_huffman_decode) and
-            spec.ll_mode == .compressed and
-            spec.of_mode == .compressed and
-            spec.ml_mode == .compressed and
-            (section.kind == .compressed or section.kind == .treeless) and
-            sequence_decode_policy.preferMediumSplitHuffman(block.len, section.regenerated_size, section.sequence_count) and
-            dictionary_history.len == 0)
-        {
-            if (try tryDecodeMediumSplitHuffmanSequences(
-                section,
-                output,
-                written,
-                frame_output_start,
-                frame_state,
-                continuation,
-                &state,
-            )) return;
-        }
     }
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
@@ -10088,6 +10089,27 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
     try expectConsumedBlock(offset, block.len);
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
+    if (comptime allow_wildcopy) {
+        if ((!builtin.is_test or !test_disable_split_huffman_decode) and
+            spec.ll_mode == .compressed and
+            spec.of_mode == .compressed and
+            spec.ml_mode == .compressed and
+            (section.kind == .compressed or section.kind == .treeless) and
+            sequence_decode_policy.preferMediumSplitHuffman(block.len, section.regenerated_size, section.sequence_count) and
+            dictionary_history.len == 0)
+        {
+            var compact_state = try initSequenceDecodeState(&spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+            if (try tryDecodeMediumSplitHuffmanSequences(
+                section,
+                output,
+                written,
+                frame_output_start,
+                frame_state,
+                continuation,
+                &compact_state,
+            )) return;
+        }
+    }
     if ((!builtin.is_test or !test_disable_split_huffman_decode) and
         spec.ll_mode == .compressed and
         spec.of_mode == .compressed and
@@ -10156,26 +10178,6 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
             continuation,
             &state,
         )) return;
-    }
-    if (comptime allow_wildcopy) {
-        if ((!builtin.is_test or !test_disable_split_huffman_decode) and
-            spec.ll_mode == .compressed and
-            spec.of_mode == .compressed and
-            spec.ml_mode == .compressed and
-            (section.kind == .compressed or section.kind == .treeless) and
-            sequence_decode_policy.preferMediumSplitHuffman(block.len, section.regenerated_size, section.sequence_count) and
-            dictionary_history.len == 0)
-        {
-            if (try tryDecodeMediumSplitHuffmanSequences(
-                section,
-                output,
-                written,
-                frame_output_start,
-                frame_state,
-                continuation,
-                &state,
-            )) return;
-        }
     }
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
@@ -12960,8 +12962,11 @@ fn decodePreparedNativeInterleavedBlock(
         .retain_sequence_tables = false,
     };
     var written = prepared.output_offset;
-    const used_medium_split = prepared.use_match_wildcopy and
-        prepared.section.regenerated_size <= sequence_decode_policy.medium_split_literal_max and
+    var used_split = if (sequence_decode_policy.preferMediumSplitHuffman(
+        prepared.block.len,
+        prepared.section.regenerated_size,
+        prepared.section.sequence_count,
+    ))
         try tryDecodeMediumSplitHuffmanSequences(
             prepared.section,
             output,
@@ -12970,8 +12975,30 @@ fn decodePreparedNativeInterleavedBlock(
             &frame_state,
             .terminal,
             &state,
+        )
+    else
+        false;
+    if (!used_split and sequence_decode_policy.preferSplit(prepared.section.regenerated_size, prepared.section.sequence_count)) {
+        used_split = if (sequence_decode_policy.preferSmallCopies(prepared.section.regenerated_size, prepared.section.sequence_count))
+            try tryDecodeAllFseSplitHuffmanSequences(prepared.section, output, &written, 0, &frame_state, .terminal, &state, true)
+        else if (prepared.section.regenerated_size <= split_huffman_literal_capacity)
+            try tryDecodeAllFseSplitDenseHuffmanSequences(prepared.section, output, &written, 0, &frame_state, .terminal, &state, true)
+        else
+            try tryDecodeAllFseSplitWideHuffmanSequences(prepared.section, output, &written, 0, &frame_state, .terminal, &state, true);
+    } else if (!used_split and prepared.use_match_wildcopy and
+        prepared.section.regenerated_size <= sequence_decode_policy.medium_split_literal_max)
+    {
+        used_split = try tryDecodeMediumSplitHuffmanSequences(
+            prepared.section,
+            output,
+            &written,
+            0,
+            &frame_state,
+            .terminal,
+            &state,
         );
-    if (!used_medium_split) {
+    }
+    if (!used_split) {
         const huffman_state = (try initHuffmanLiteralDecodeState(prepared.block, prepared.section)) orelse
             return error.CorruptFrame;
         if (prepared.use_match_wildcopy)

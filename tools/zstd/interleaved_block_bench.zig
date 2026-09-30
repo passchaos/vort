@@ -11,6 +11,9 @@ const Options = struct {
     input_level: c_int = 1,
     iterations: usize = 1000,
     rounds: usize = 7,
+    min_sequence_count: usize = 512,
+    max_sequence_count: usize = 1023,
+    require_match_wildcopy: bool = true,
     csv_path: ?[]const u8 = null,
     reference_library_path: ?[]const u8 = null,
 };
@@ -54,7 +57,11 @@ pub fn main(init: std.process.Init) !void {
     const written = try vort.zstdDecodeFrameInto(encoded, decoded);
     if (written != input.len or !std.mem.eql(u8, input, decoded)) return error.SizeMismatch;
 
-    var stage = try vort.zstd.prepareNativeInterleavedDecodeStage(init.gpa, encoded, input, .{});
+    var stage = try vort.zstd.prepareNativeInterleavedDecodeStage(init.gpa, encoded, input, .{
+        .min_sequence_count = options.min_sequence_count,
+        .max_sequence_count = options.max_sequence_count,
+        .require_match_wildcopy = options.require_match_wildcopy,
+    });
     defer stage.deinit();
     const shape = stage.shape();
     const warmed = try stage.decode();
@@ -66,12 +73,12 @@ pub fn main(init: std.process.Init) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     try csv.writer.print(
-        "case,input_bytes,input_sha256,encoded_bytes,reference_version,level,iterations,rounds,selected_blocks,selected_compressed_bytes,selected_decoded_bytes,literal_bytes,sequence_count,best_ns,ns_per_iteration,ns_per_output_byte,checksum,{s}\n",
+        "case,input_bytes,input_sha256,encoded_bytes,reference_version,level,iterations,rounds,min_sequences,max_sequences,require_match_wildcopy,selected_blocks,selected_compressed_bytes,selected_decoded_bytes,literal_bytes,sequence_count,best_ns,ns_per_iteration,ns_per_output_byte,checksum,{s}\n",
         .{benchmark_provenance.csv_columns},
     );
     const input_sha256 = benchmark_provenance.sha256Hex(input);
     try csv.writer.print(
-        "{s},{d},{s},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.3},{d:.6},{d}",
+        "{s},{d},{s},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.3},{d:.6},{d}",
         .{
             name,
             input.len,
@@ -81,6 +88,9 @@ pub fn main(init: std.process.Init) !void {
             options.input_level,
             options.iterations,
             options.rounds,
+            options.min_sequence_count,
+            options.max_sequence_count,
+            @intFromBool(options.require_match_wildcopy),
             shape.block_count,
             shape.compressed_bytes,
             shape.decoded_bytes,
@@ -139,6 +149,12 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
         else if (std.mem.eql(u8, arg, "--rounds"))
             options.rounds = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
+        else if (std.mem.eql(u8, arg, "--min-sequences"))
+            options.min_sequence_count = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
+        else if (std.mem.eql(u8, arg, "--max-sequences"))
+            options.max_sequence_count = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
+        else if (std.mem.eql(u8, arg, "--allow-non-wildcopy"))
+            options.require_match_wildcopy = false
         else if (std.mem.eql(u8, arg, "--csv"))
             options.csv_path = args.next() orelse return error.MissingCorpusPath
         else if (std.mem.eql(u8, arg, "--libzstd"))
@@ -147,6 +163,8 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             return error.UnknownArgument;
     }
     if (options.input_path == null) return error.MissingCorpusPath;
+    if (options.min_sequence_count == 0 or options.max_sequence_count < options.min_sequence_count)
+        return error.InvalidBlockPlan;
     if (options.iterations == 0 or options.rounds == 0) return error.InvalidBlockPlan;
     return options;
 }
