@@ -16429,3 +16429,14 @@ reuse, so production keeps the simpler independently owned plans.
   post-change 10,702-sample profile moves the leading leaves to the compact
   medium executor at 35.42% and the established large split executor at 27.44%;
   their common sequence/copy core is now the next optimization target.
+
+- Extended the compact split route through 1,535 sequences after the
+  production-selected stage showed that 457/461 SVG large blocks fall in this
+  range, while the 1,834-sequence synthetic `large_json` fixture remains on its
+  tuned path. The large-block stage screen improves 1.2562x. Fifteen complete
+  SVG pairs improve reusable decode by 1.0866x median / 1.0860x geometric and
+  one-shot by 1.0872x / 1.0868x, both 15/15; normalized gains remain 1.0914x
+  and 1.0869x. Five 15-pair real-file controls have normalized geometric means
+  between 1.0002x and 1.0026x. SVG now reaches 0.7754x libzstd reusable and the
+  six compressed-file geometric mean reaches 0.7881x. The 675-test suite and
+  9,900-frame decodecorpus pass on the final source.

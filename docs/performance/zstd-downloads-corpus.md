@@ -289,6 +289,19 @@ decoding 1.84%. The next broad improvement should share a smaller sequence/copy
 core between the two split executors while retaining their different literal
 scratch and block-selection policies.
 
+That shared-core experiment extends the compact route through 1,535 sequences.
+It takes 457 of the SVG's 461 larger split blocks while leaving the four larger
+blocks and the 1,834-sequence synthetic `large_json` fixture on their established
+specialized path. A large-block stage screen improves by 1.2562x. Fifteen
+complete-frame pairs improve reusable decode by **1.0866x median / 1.0860x
+geometric** and one-shot by **1.0872x / 1.0868x**, both with 15/15 wins.
+After the simultaneous libzstd control, the geometric gains are 1.0914x and
+1.0869x. The new SVG ratios are 0.7754x reusable and 0.7747x one-shot.
+Fifteen-pair reusable controls remain neutral after normalization: robot log,
+trace JSON, shared library, executable, and header measure 1.0024x, 1.0002x,
+1.0026x, 1.0012x, and 1.0012x geometrically. The compressed six-file reusable
+geometric mean is now 0.7881x libzstd.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
@@ -355,14 +368,14 @@ binary hashes, and A/B observations are in the
 
 | Case | Input MiB | Encoded % | One-shot | Reusable | Vort reusable MiB/s | libzstd DCtx MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| large SVG | 171.3 | 1.39 | 0.7127x | 0.7072x | 6,800.1 | 9,617.0 |
-| robot log | 105.0 | 6.69 | 0.7521x | 0.7492x | 3,467.9 | 4,626.1 |
-| trace JSON | 30.2 | 6.10 | 0.8078x | 0.8025x | 2,915.3 | 3,638.3 |
-| shared library | 77.7 | 40.81 | 0.8242x | 0.8242x | 1,054.4 | 1,278.4 |
-| executable | 37.1 | 40.01 | 0.8199x | 0.8184x | 1,014.1 | 1,240.4 |
+| large SVG | 171.3 | 1.39 | 0.7747x | 0.7754x | 7,566.0 | 9,741.8 |
+| robot log | 105.0 | 6.69 | 0.7521x | 0.7514x | 3,394.1 | 4,527.0 |
+| trace JSON | 30.2 | 6.10 | 0.8078x | 0.8059x | 2,868.0 | 3,559.6 |
+| shared library | 77.7 | 40.81 | 0.8242x | 0.8240x | 1,033.5 | 1,255.1 |
+| executable | 37.1 | 40.01 | 0.8199x | 0.8166x | 990.8 | 1,213.4 |
 | video | 163.8 | 99.99 | 0.9656x | 1.0210x | 40,262.3 | 39,435.2 |
 | ZIP archive | 153.7 | 99.91 | 0.9987x | 0.9415x | 32,418.3 | 34,433.2 |
-| large C header | 28.5 | 4.40 | 0.7655x | 0.7585x | 2,766.6 | 3,639.7 |
+| large C header | 28.5 | 4.40 | 0.7655x | 0.7584x | 2,701.6 | 3,567.3 |
 
 The ZIP reusable snapshot is an outlier under the recorded host load. Its raw
 fast path returns before the cache policy and is byte-for-byte unchanged, so
