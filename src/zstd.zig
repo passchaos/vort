@@ -20,6 +20,7 @@ const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
 const huffman_reservoir = @import("zstd/literals/huffman_reservoir.zig");
 const huffman_x2_abi = @import("zstd/literals/huffman_x2_abi.zig");
+const huffman_x2_policy = @import("zstd/literals/huffman_x2_policy.zig");
 const huffman_x2_test = if (builtin.is_test) @import("zstd/literals/huffman_x2.zig") else struct {};
 const huffman_weight_fse = @import("zstd/literals/weight_fse.zig");
 const huffman_tree_cache = @import("zstd/literals/tree_cache.zig");
@@ -8053,17 +8054,24 @@ noinline fn decodeLargeFourStreamHuffman(
     dest: []u8,
 ) align(64) linksection(huffman_only_decode_text_section) Error!bool {
     const huffman_tree = section.huffman_tree orelse return false;
+    const streams = switch (section.huffman_streams) {
+        .four => |four| four,
+        else => return false,
+    };
+    const stream_bytes = streams[0].len + streams[1].len + streams[2].len + streams[3].len;
     const use_wide_x2 = huffman_tree.max_bit_count == 7 and
         section.regenerated_size >= 64 * 1024 and
         section.compressed_size * 1000 <= section.regenerated_size * 900;
+    const use_sparse_x2 = huffman_x2_policy.preferSparseHighSequence(
+        section.regenerated_size,
+        section.sequence_count,
+        stream_bytes,
+    );
     if ((!builtin.is_test or !test_disable_x2_huffman_decode) and
-        section.regenerated_size >= split_x2_huffman_literal_min and
-        (section.compressed_size * 1000 <= section.regenerated_size * 660 or use_wide_x2))
+        ((section.regenerated_size >= split_x2_huffman_literal_min and
+            (section.compressed_size * 1000 <= section.regenerated_size * 660 or use_wide_x2)) or
+            use_sparse_x2))
     {
-        const streams = switch (section.huffman_streams) {
-            .four => |four| four,
-            else => return false,
-        };
         const request: huffman_x2_abi.Request = .{
             .tree = &huffman_tree,
             .stream_ptrs = .{ streams[0].ptr, streams[1].ptr, streams[2].ptr, streams[3].ptr },
@@ -8093,7 +8101,6 @@ noinline fn decodeLargeFourStreamHuffman(
     var lookup: CompleteHuffmanLiteralLookup = undefined;
     if (!lookup.buildComplete(&huffman_tree)) return false;
     const segment_len = (section.regenerated_size + 3) / 4;
-    const streams = section.huffman_streams.four;
     var readers = [4]ReverseBitReader{
         try ReverseBitReader.init(streams[0]),
         try ReverseBitReader.init(streams[1]),

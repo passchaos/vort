@@ -6847,7 +6847,7 @@ noinline fn processWideExternalLiteralLookupMetaBlock(
     if (auxiliary_tail_lookups)
         return processWideExternalLiteralLookupCompressedPayload(
             true,
-            capacity == max_literal_context_trees,
+            wideAuxiliaryUsesFixedNineBitPeek(capacity),
             &fast_reader,
             output,
             written,
@@ -6858,6 +6858,16 @@ noinline fn processWideExternalLiteralLookupMetaBlock(
             literal_lookups[0..header.literal_tree_count],
         );
     return processWideExternalLiteralLookupCompressedPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count]);
+}
+
+fn wideAuxiliaryUsesFixedNineBitPeek(comptime capacity: usize) bool {
+    comptime std.debug.assert(capacity == external_literal_lookup_middle_tree_limit or capacity == max_literal_context_trees);
+    return true;
+}
+
+test "br both wide literal tiers use fixed nine-bit auxiliary peeks" {
+    try std.testing.expect(wideAuxiliaryUsesFixedNineBitPeek(external_literal_lookup_middle_tree_limit));
+    try std.testing.expect(wideAuxiliaryUsesFixedNineBitPeek(max_literal_context_trees));
 }
 
 fn prepareLargeLiteralTailLookups(header: *LargeWindowCompressedHeader) bool {

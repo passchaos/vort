@@ -16522,3 +16522,19 @@ reuse, so production keeps the simpler independently owned plans.
   six-file ratios reach 0.8318x one-shot and 0.8255x reusable. All 675 tests,
   both reference gates, 276 compatibility cases, 9,900 decodecorpus frames,
   and x86_64 Linux compile-only validation pass.
+
+- Extended the existing 11-bit Huffman X2 decoder only to the measured
+  1,536--2,047-sequence band when regenerated literals are at least 4 KiB,
+  average at least four bytes per sequence, and the four compressed streams
+  occupy at most 55% of them. Fifteen alternating robot-log pairs improve
+  reusable decode by 1.0360x median / 1.0362x geometric and one-shot by
+  1.0373x / 1.0370x, both 15/15; libzstd-normalized geometric gains remain
+  1.0366x/1.0377x. Five 15-pair reusable controls remain within 0.16% of
+  neutral geometrically after normalization except SVG at +0.28%. Robot-log
+  median Vort/libzstd throughput rises from 0.7827x to 0.8128x reusable and
+  0.7956x to 0.8261x one-shot. The final source passes 495 direct Zstd tests
+  plus the isolated selector test, both 13-row reference gates, 276
+  compatibility cases, all 9,900 decodecorpus frames with complete 64-mode
+  coverage, and x86-64 Linux ReleaseFast compile-only validation. This closes
+  another bounded Huffman table-amortization gap; compressed real files still
+  trail libzstd by roughly 12--19%, so broader leadership remains open.

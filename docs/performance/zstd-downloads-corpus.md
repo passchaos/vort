@@ -441,6 +441,33 @@ existing 256-state verification scan was also neutral on the robot log:
 **0.9977x median / 1.0002x geometric, 10/21 wins**. All three production-path
 experiments were removed.
 
+## Bounded high-sequence Huffman X2 extension
+
+The existing two-symbol Huffman decoder paid for its 2,048-entry table only
+when a literal section regenerated at least 12 KiB, or when the separate
+seven-bit wide-table policy applied. That left a measured robot-log band on
+the scalar table even though it has enough literals to amortize X2: 1,536--
+2,047 sequences, at least four regenerated literal bytes per sequence, and
+four compressed streams occupying at most 55% of the regenerated size. The
+new selector routes only that bounded shape through the existing 11-bit X2
+decoder. Its sequence and ratio boundaries are unit-tested; the scalar and
+wide-X2 policies are otherwise unchanged.
+
+Against independent `944023f7` baseline and final candidate executables,
+fifteen alternating robot-log pairs improve reusable decode by **1.0360x
+median / 1.0362x geometric** and one-shot decode by **1.0373x / 1.0370x**,
+with 15/15 raw wins in both modes. After simultaneous libzstd controls, the
+geometric gains remain **1.0366x reusable** and **1.0377x one-shot**, again
+15/15. Median Vort/libzstd throughput rises from 0.7827x to 0.8128x reusable
+and from 0.7956x to 0.8261x one-shot.
+
+Fifteen-pair reusable controls remain within 0.16% of neutral geometrically
+after libzstd normalization for trace JSON, the shared library, executable,
+and large header; the SVG improves 0.28%. The final source passes 495 direct
+Zstd tests plus the isolated selector test, both 13-row reference gates, the
+276-case compatibility matrix, all 9,900 decodecorpus frames with complete
+64-mode coverage, and x86-64 Linux ReleaseFast compile-only validation.
+
 ## Sequence-table normalized-count reservoir
 
 Production sampling attributed about 11% of the SVG decode samples to sequence
@@ -500,7 +527,7 @@ binary hashes, and A/B observations are in the
 | Case | Input MiB | Encoded % | One-shot | Reusable | Vort reusable MiB/s | libzstd DCtx MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | large SVG | 171.3 | 1.39 | 0.8704x | 0.8765x | 8,668.3 | 9,890.0 |
-| robot log | 105.0 | 6.69 | 0.7990x | 0.7863x | 3,623.7 | 4,608.3 |
+| robot log | 105.0 | 6.69 | 0.8261x | 0.8128x | 3,651.3 | 4,489.5 |
 | trace JSON | 30.2 | 6.10 | 0.8478x | 0.8272x | 3,014.7 | 3,644.3 |
 | shared library | 77.7 | 40.81 | 0.8334x | 0.8282x | 1,058.3 | 1,277.9 |
 | executable | 37.1 | 40.01 | 0.8263x | 0.8211x | 1,018.4 | 1,240.4 |
@@ -513,21 +540,21 @@ fast path returns before the cache policy and is byte-for-byte unchanged, so
 the drop is not attributed to this change.
 
 This is meaningful progress, not leadership. Real compressed multi-block files
-remain about 12--21% behind libzstd after the retained changes. The next profile
+remain about 12--19% behind libzstd after the retained changes. The next profile
 should continue inside the compact grouped-field and match-copy loop rather than
 broadening routing or wildcopy again.
 
 ## Validation
 
-- 675/675 direct Zstd tests pass in ReleaseFast.
+- 495/495 direct `src/zstd.zig` tests pass in ReleaseFast.
 - The one-shot and reusable 13-row reference gates pass against libzstd 1.5.7.
 - The decode-profile gate and three-row/two-API path smoke pass.
 - The 276-case compatibility matrix passes with zero unsupported cases.
 - All nine upstream decodecorpus campaigns pass: 9,900 frames, all 64 sequence
   mode combinations, and real reusable table hits.
 
-The broad `zig build check -Doptimize=ReleaseFast -j1` was stopped after more
-than 25 minutes while its monolithic all-codec tools were still consuming CPU
+The broad root-level ReleaseFast test build was stopped after more than 40
+minutes while its monolithic all-codec module was still consuming CPU
 in LLVM code generation. This is not reported as a pass. The direct Zstd suite,
 x86-64 cross-compilation, and codec-specific gates above are the authoritative
 validation for this change.
