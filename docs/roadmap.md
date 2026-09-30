@@ -16476,3 +16476,19 @@ reuse, so production keeps the simpler independently owned plans.
   0.9917x geometric. The 675-test suite, both reference gates, 276 compatibility
   cases, 9,900 decodecorpus frames, and x86_64 Linux compile-only validation
   pass; grouped-field extraction and match copy remain the next hot-loop work.
+
+- Re-evaluated the compact split threshold after its local-state and output-
+  cursor optimizations. Starting at 128 rather than 512 sequences selects 88
+  additional SVG blocks with 19,238 sequences and 10.4 MiB of output. Their
+  frozen stage improves 1.4176x median / 1.4212x geometric with 15/15 wins.
+  Complete SVG improves 1.1000x reusable and 1.1058x one-shot geometrically,
+  or 1.0960x/1.0978x after simultaneous libzstd normalization, with every pair
+  ahead. Five real compressed-file controls have a 1.0049x normalized row-
+  geometric mean after extending the noisy header control to 31 pairs. SVG now
+  reaches 0.8592x libzstd reusable and 0.8601x one-shot; six-file compressed-
+  corpus geometric means reach 0.8017x/0.8041x. Persistent sequence-field
+  reservoir, local remaining-bit cursor, direct offset specialization,
+  libzstd-style 16+32 wildcopy, and AArch64 64-byte loop alignment experiments
+  were all rejected and removed. All 675 tests, both reference gates, 276
+  compatibility cases, 9,900 decodecorpus frames, and x86_64 Linux compile-only
+  validation pass on the retained route-only change.

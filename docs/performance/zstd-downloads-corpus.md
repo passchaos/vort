@@ -365,6 +365,34 @@ normalization at 1.0027x, 1.0025x, 1.0019x, 1.0007x, and 1.0007x; their
 row-geometric mean is 1.0017x. The six compressed-file geometric mean reaches
 0.7997x reusable and 0.8014x one-shot.
 
+## Sparse compact split extension
+
+After the local FSE/output cursors made the compact executor materially faster,
+the original 512-sequence amortization threshold was no longer representative.
+The compact route now starts at 128 sequences while the older interleaved
+wildcopy policy keeps its independent 512-sequence threshold. On the SVG this
+adds 88 blocks, 19,238 sequences, and 10.4 MiB of decoded output in the
+128--511 range. Fifteen alternating stage pairs improve those blocks **1.4176x
+median / 1.4212x geometric with 15/15 wins**.
+
+Complete reusable SVG decode improves **1.0971x median / 1.1000x geometric**
+and one-shot improves **1.1075x / 1.1058x**, with every pair ahead. After the
+simultaneous libzstd controls, geometric gains remain 1.0960x and 1.0978x,
+again 15/15. Median Vort/libzstd throughput reaches 0.8592x reusable and
+0.8601x one-shot. Five reusable controls are neutral or positive as a group:
+robot log, trace JSON, shared library, executable, and a longer 31-pair header
+check measure 1.0082x, 0.9982x, 0.9998x, 1.0052x, and 1.0133x normalized
+geometric throughput. Their row-geometric mean is 1.0049x. The six compressed-
+file geometric mean reaches 0.8017x reusable and 0.8041x one-shot.
+
+Five adjacent experiments were rejected and removed. A persistent cross-
+sequence field reservoir measured 0.8895x geometric with 0/7 wins, and keeping
+only `remaining_bits` local measured 0.9833x with 1/15 wins. Direct offset
+specialization measured 0.9867x, libzstd's first-16-then-32 wildcopy shape
+measured 0.9735x, both 0/7, and explicit AArch64 64-byte loop alignment was
+neutral at 1.0001x geometric with 10/21 wins. The retained route change adds no
+new sequence-loop branch or executor implementation.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;
@@ -432,7 +460,7 @@ binary hashes, and A/B observations are in the
 
 | Case | Input MiB | Encoded % | One-shot | Reusable | Vort reusable MiB/s | libzstd DCtx MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| large SVG | 171.3 | 1.39 | 0.8431x | 0.8465x | 8,202.5 | 9,772.4 |
+| large SVG | 171.3 | 1.39 | 0.8601x | 0.8592x | 8,012.2 | 9,361.2 |
 | robot log | 105.0 | 6.69 | 0.7521x | 0.7514x | 3,394.1 | 4,527.0 |
 | trace JSON | 30.2 | 6.10 | 0.8078x | 0.8059x | 2,868.0 | 3,559.6 |
 | shared library | 77.7 | 40.81 | 0.8242x | 0.8240x | 1,033.5 | 1,255.1 |
@@ -446,7 +474,7 @@ fast path returns before the cache policy and is byte-for-byte unchanged, so
 the drop is not attributed to this change.
 
 This is meaningful progress, not leadership. Real compressed multi-block files
-remain about 15--25% behind libzstd after the retained changes. The next profile
+remain about 14--25% behind libzstd after the retained changes. The next profile
 should continue inside the compact grouped-field and match-copy loop rather than
 broadening routing or wildcopy again.
 
