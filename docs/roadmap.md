@@ -16615,3 +16615,15 @@ reuse, so production keeps the simpler independently owned plans.
   9,900-frame/64-mode decodecorpus, 13-row reference gate, and generic
   x86-64/AArch64 builds pass. Exact evidence is in
   `docs/performance/zstd-large-json-overlap-tail-x86.md`.
+
+- The dense 256-state no-low-probability FSE table builder now uses its sparse-
+  gap, four-entry packed fill on x86-64 as well as AArch64. Against frozen
+  `4c7c3db0`, 15 fixed-CPU `large_json` pairs improve by 1.0175x median /
+  1.0183x geometric mean with 15/15 wins and a 1.0051x minimum. A seven-pair
+  matrix also improves `binary_mixed` by 1.0178x geometrically with 7/7 wins;
+  large Huffman/text controls remain near neutral. Thresholds 160 and 224 and
+  an eight-entry write batch were independently slower and removed. All 677
+  direct tests, the 276-case compatibility matrix, 9,900-frame/64-mode
+  decodecorpus, 13-row reference gate, and generic x86-64/AArch64 builds pass.
+  Exact evidence is in `docs/performance/zstd-dense-fse-x86.md`; large compressed
+  sequence execution remains below libzstd on this host.

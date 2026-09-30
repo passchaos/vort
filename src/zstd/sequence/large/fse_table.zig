@@ -205,7 +205,7 @@ pub noinline fn buildNoLowProbabilityAssumeValid(
             }
         }
 
-        if (comptime builtin.cpu.arch == .aarch64) {
+        if (comptime builtin.cpu.arch == .aarch64 or builtin.cpu.arch == .x86_64) {
             if (probability >= 192) {
                 const base: u32 = @intCast(bases[symbol]);
                 var ordinal: usize = 0;
