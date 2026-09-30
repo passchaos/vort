@@ -16642,3 +16642,20 @@ reuse, so production keeps the simpler independently owned plans.
   276 compatibility cases, 9,900 decodecorpus frames with 64/64 modes,
   generic x86-64/AArch64 builds, and full repository check pass. Exact evidence
   is in `docs/performance/zstd-fse-fse-rle-raw-x86.md`.
+
+- The following three raw-literal FSE/RLE/RLE blocks now execute their dominant
+  16-byte-literal/48-byte-match shape two sequences at a time. A separate
+  656-byte core validates both LL entries, six extra/transition fields, rep0,
+  literal/output bounds, and history from one 64-bit reverse group before
+  committing progress; any mismatch retains the original single-sequence
+  decoder. Against frozen `df5d2b84`, 15 alternating fixed-CPU pairs improve
+  complete `binary_mixed` decode by 1.4299x median / 1.4290x geometric with
+  15/15 wins and a 1.4117x minimum. Vort reaches 1.2831x median / 1.2829x
+  geometric local libzstd 1.6.0-dev throughput, wins all 15 pairs, and has a
+  1.2745x floor, establishing a bounded shape-specific lead. A seven-pair
+  13-row matrix has a 0.9941x row-median floor; separate 15-pair `large_json`,
+  `large_text`, and `huffman80k` controls remain near neutral. Exact partial-
+  progress oracles, all 678 Zstd tests, profile/reference gates, 276
+  compatibility cases, 9,900 corpus frames with 64/64 modes, generic
+  x86-64/AArch64 builds, and the full repository check pass. Exact evidence is
+  in `docs/performance/zstd-fse-rle-rle-pair-x86.md`.
