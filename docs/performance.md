@@ -19,6 +19,9 @@ independent paired comparison against the preceding reusable-cache commit.
 [Zstd borrowed small-frame metadata](performance/zstd-small-borrowed-section-x86.md)
 records removal of the redundant owned-tree section clear and its isolated
 one-shot gain against the immediately preceding small-table implementation.
+[Zstd direct small-frame Huffman lookup](performance/zstd-small-direct-lookup-x86.md)
+records tree-free lookup construction, checked lookup-only tails, and the
+remaining measured gap to libzstd on the bounded one-shot target.
 [Zstd raw-literal all-FSE execution](performance/zstd-raw-fse-executor.md)
 records grouped bit reads, bounded match-copy specialization, and the resulting
 25-file mixed-corpus comparison.

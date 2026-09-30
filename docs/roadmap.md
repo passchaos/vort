@@ -16588,3 +16588,18 @@ reuse, so production keeps the simpler independently owned plans.
   is in `docs/performance/zstd-small-borrowed-section-x86.md`; direct narrow
   lookup construction and checked lookup-only stream tails are the next small-
   frame opportunities.
+
+- The same one-shot path now constructs a complete seven-bit Huffman lookup
+  directly from direct or FSE-compressed weights, without materializing an
+  owned tree, and decodes stream tails only after checking the selected code
+  width against remaining bits. The common table-log-five weight stream also
+  receives a bounded 32-state decoder. Against frozen `6e287126`, 15 fixed-CPU
+  `numbered_json` pairs improve by 1.0805x median / 1.0797x geometric mean with
+  15/15 wins and a 1.0654x minimum. Vort reaches 0.9911x median of local
+  libzstd 1.6.0-dev, with one observed lead but no stable parity claim. Random
+  parser acceptance, exact lookup tables, full literal-payload bit mutation,
+  676 direct tests, the 276-case matrix, 9,900-frame/64-mode decodecorpus,
+  13-row reference gate, and generic x86-64/AArch64 builds pass. Exact evidence
+  is in `docs/performance/zstd-small-direct-lookup-x86.md`; normalized-count
+  parsing and canonical fill remain the final small-frame setup targets before
+  returning to large compressed sequence paths.

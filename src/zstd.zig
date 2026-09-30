@@ -240,6 +240,7 @@ var test_small_mixed_fse_match_6_7_hits: usize = 0;
 var test_small_mixed_field_group_hits: usize = 0;
 var test_small_mixed_cached_block_hits: usize = 0;
 var test_small_offset_fse_table_hits: usize = 0;
+var test_disable_small_predefined_offset_fse = false;
 var test_small_mixed_single_literal_hits: usize = 0;
 var test_small_mixed_reservoir_literal_hits: usize = 0;
 var test_huffman_weight_pair_group_hits: usize = 0;
@@ -427,6 +428,10 @@ const NarrowHuffmanLiteralLookup = huffman_lookup.Table(7);
 const PreparedNarrowHuffmanLookup = struct {
     table: NarrowHuffmanLiteralLookup = undefined,
     complete: bool = false,
+};
+const DecodedNarrowHuffmanLookup = struct {
+    bytes_consumed: usize,
+    max_bit_count: u4,
 };
 const CachedHuffmanTree = struct {
     tree: StdZstdHuffmanTree,
@@ -2841,7 +2846,8 @@ pub const decodedNativeFrameSizeLimitedWithDictionarySet = decodedRawOrRleFrameS
 /// embedded/streaming callers preflight capacity and stay allocation-free while
 /// still receiving exact checksum, size, and unsupported-feature errors.
 pub fn decodeRawOrRleFrameInto(frame: []const u8, output: []u8) Error!usize {
-    if (frame.len <= 4096 and output.len <= 4096)
+    if ((!builtin.is_test or !test_disable_small_predefined_offset_fse) and
+        frame.len <= 4096 and output.len <= 4096)
         if (try tryDecodeSmallPredefinedOffsetFseFrame(frame, output)) |written| return written;
     return try decodeRawOrRleFrameIntoWithDictionaryInternal(frame, output, null);
 }
@@ -8671,6 +8677,7 @@ const BorrowedHuffmanSection = struct {
     compressed_size: usize,
     sequence_count: usize,
     sequence_payload_offset: usize,
+    huffman_width: u4,
 };
 
 const HuffmanLiteralStreams = union(enum) {
@@ -8938,6 +8945,58 @@ fn decodeFrameHuffmanTree(
     };
 }
 
+/// Parse a frame Huffman description directly into the complete lookup used by
+/// the bounded small-frame path. The general decoder still builds and retains
+/// the canonical tree for treeless continuation and wider tables.
+noinline fn decodeFrameNarrowHuffmanLookup(
+    payload: []const u8,
+    lookup: *NarrowHuffmanLiteralLookup,
+) Error!DecodedNarrowHuffmanLookup {
+    if (payload.len == 0) return error.TruncatedFrame;
+    const header = payload[0];
+    var weights: [256]u4 = undefined;
+    var symbol_count: usize = undefined;
+    var weight_power_sum: u32 = 0;
+    var counts: [16]u16 = @splat(0);
+    var bytes_consumed: usize = 1;
+    if (header < 128) {
+        const compressed_size: usize = header;
+        if (payload.len - 1 < compressed_size) return error.TruncatedFrame;
+        const compressed = payload[1..][0..compressed_size];
+        const decoded = if (compressed.len != 0 and (compressed[0] & 0x0f) == 0)
+            try decodeHuffmanWeightsFseSmall32(compressed, &weights)
+        else
+            try decodeHuffmanWeightsFseNarrow64(compressed, &weights);
+        symbol_count = decoded.symbol_count;
+        weight_power_sum = decoded.power_sum;
+        counts = decoded.counts;
+        bytes_consumed += compressed_size;
+    } else {
+        const encoded_symbol_count: usize = header - 127;
+        const byte_count = (encoded_symbol_count + 1) / 2;
+        if (payload.len - 1 < byte_count) return error.TruncatedFrame;
+        for (payload[1..][0..byte_count], 0..) |byte, index| {
+            weights[index * 2] = @intCast(byte >> 4);
+            weights[index * 2 + 1] = @intCast(byte & 0x0f);
+        }
+        symbol_count = encoded_symbol_count + 1;
+        for (weights[0 .. symbol_count - 1]) |weight| {
+            if (weight > 11) return error.CorruptFrame;
+            weight_power_sum += (@as(u16, 1) << weight) >> 1;
+            counts[weight] += 1;
+        }
+        bytes_consumed += byte_count;
+    }
+    const max_bit_count = try buildNarrowHuffmanLookupFromWeightStats(
+        &weights,
+        symbol_count,
+        weight_power_sum,
+        &counts,
+        lookup,
+    );
+    return .{ .bytes_consumed = bytes_consumed, .max_bit_count = max_bit_count };
+}
+
 noinline fn decodeLinearZstdHuffmanTree(
     reader: *std.Io.Reader,
     remaining: *std.Io.Limit,
@@ -8992,13 +9051,30 @@ inline fn recordDecodedHuffmanWeight(
 }
 
 inline fn decodeHuffmanWeightsFse(compressed: []const u8, weights: *[256]u4) Error!DecodedHuffmanWeights {
+    return decodeHuffmanWeightsFseBounded(1 << 6, compressed, weights);
+}
+
+noinline fn decodeHuffmanWeightsFseSmall32(compressed: []const u8, weights: *[256]u4) Error!DecodedHuffmanWeights {
+    return decodeHuffmanWeightsFseBounded(1 << 5, compressed, weights);
+}
+
+noinline fn decodeHuffmanWeightsFseNarrow64(compressed: []const u8, weights: *[256]u4) Error!DecodedHuffmanWeights {
+    return decodeHuffmanWeightsFseBounded(1 << 6, compressed, weights);
+}
+
+inline fn decodeHuffmanWeightsFseBounded(
+    comptime table_capacity: usize,
+    compressed: []const u8,
+    weights: *[256]u4,
+) Error!DecodedHuffmanWeights {
     // Zstandard caps the Huffman-weight FSE table log at six. Keeping the
     // generic 512-state sequence-table capacity here needlessly inflated the
     // one-shot decoder's stack frame by 3.5 KiB.
-    var entries: [1 << 6]FseTableEntry = undefined;
+    var entries: [table_capacity]FseTableEntry = undefined;
     // Huffman weights are limited to symbols 0...11 by the frame format.
     var values: [12]u16 = undefined;
     const decoded = try huffman_weight_fse.parseNormalizedCounts(compressed, &values);
+    if (decoded.table_len > entries.len) return error.CorruptFrame;
     try buildFseTable(values[0..decoded.value_count], entries[0..decoded.table_len]);
     if (decoded.bytes_consumed >= compressed.len) return error.TruncatedFrame;
     var reverse = try ReverseBitReader.init(compressed[decoded.bytes_consumed..]);
@@ -9160,6 +9236,67 @@ inline fn buildHuffmanTreeFromWeightStats(
     return tree;
 }
 
+fn buildNarrowHuffmanLookupFromWeightStats(
+    weights: *[256]u4,
+    symbol_count: usize,
+    weight_power_sum: u32,
+    counts: *[16]u16,
+    lookup: *NarrowHuffmanLiteralLookup,
+) Error!u4 {
+    if (symbol_count < 2 or symbol_count > weights.len) return error.CorruptFrame;
+    if (weight_power_sum >= 1 << 11) return error.CorruptFrame;
+    const max_bit_count: u4 = @intCast(if (weight_power_sum == 0) 1 else std.math.log2_int(u32, weight_power_sum) + 1);
+    if (max_bit_count > NarrowHuffmanLiteralLookup.bit_width) return error.CorruptFrame;
+    const remaining_power = (@as(u32, 1) << max_bit_count) - weight_power_sum;
+    if (remaining_power == 0) return error.CorruptFrame;
+    const implied_weight: u4 = @intCast(std.math.log2_int(u32, remaining_power) + 1);
+    weights[symbol_count - 1] = implied_weight;
+    counts[implied_weight] += 1;
+    const first_invalid_weight: usize = @as(usize, max_bit_count) + 2;
+    for (counts[first_invalid_weight..]) |count|
+        if (count != 0) return error.CorruptFrame;
+
+    var starts: [16]u16 = @splat(0);
+    var active_count: usize = 0;
+    for (1..counts.len) |weight| {
+        starts[weight] = @intCast(active_count);
+        active_count += counts[weight];
+    }
+    if (active_count == 0 or active_count > 256) return error.CorruptFrame;
+
+    var ordered_symbols: [256]u8 = undefined;
+    var next = starts;
+    for (weights[0..symbol_count], 0..) |weight, symbol| {
+        if (weight == 0) continue;
+        const slot = next[weight];
+        ordered_symbols[slot] = @intCast(symbol);
+        next[weight] += 1;
+    }
+    var prefix: u16 = 0;
+    var previous_weight: u4 = 0;
+    var entry_count: usize = 0;
+    for (1..counts.len) |weight_usize| {
+        const count = counts[weight_usize];
+        if (count == 0) continue;
+        const weight: u4 = @intCast(weight_usize);
+        if (previous_weight != 0)
+            prefix = ((prefix - 1) >> @intCast(weight - previous_weight)) + 1;
+        const start = starts[weight];
+        for (ordered_symbols[start..][0..count]) |symbol| {
+            const bit_count: u4 = max_bit_count + 1 - weight;
+            const table_start = @as(usize, prefix) <<
+                @intCast(NarrowHuffmanLiteralLookup.bit_width - bit_count);
+            if (table_start != entry_count) return error.CorruptFrame;
+            if (!lookup.fillCanonical(prefix, bit_count, symbol)) return error.CorruptFrame;
+            entry_count += @as(usize, 1) << @intCast(NarrowHuffmanLiteralLookup.bit_width - bit_count);
+            prefix += 1;
+        }
+        previous_weight = weight;
+    }
+    if (entry_count != NarrowHuffmanLiteralLookup.len) return error.CorruptFrame;
+    return max_bit_count;
+}
+
 fn expectLinearHuffmanTreeMatchesStd(encoded: []const u8) !void {
     var expected_reader: std.Io.Reader = .fixed(encoded);
     var expected_remaining: std.Io.Limit = .limited(encoded.len);
@@ -9170,6 +9307,22 @@ fn expectLinearHuffmanTreeMatchesStd(encoded: []const u8) !void {
     try std.testing.expectEqual(expected_reader.seek, actual_reader.seek);
     try std.testing.expectEqual(expected_remaining, actual_remaining);
     try expectHuffmanTreesEqual(expected, actual);
+    var expected_lookup: NarrowHuffmanLiteralLookup = undefined;
+    var actual_lookup: NarrowHuffmanLiteralLookup = undefined;
+    const narrow_result = decodeFrameNarrowHuffmanLookup(encoded, &actual_lookup);
+    if (expected.max_bit_count <= NarrowHuffmanLiteralLookup.bit_width) {
+        try std.testing.expect(expected_lookup.buildComplete(&expected));
+        const narrow = try narrow_result;
+        try std.testing.expectEqual(expected_reader.seek, narrow.bytes_consumed);
+        try std.testing.expectEqual(expected.max_bit_count, narrow.max_bit_count);
+        try std.testing.expectEqualSlices(
+            huffman_lookup.Entry,
+            &expected_lookup.entries,
+            &actual_lookup.entries,
+        );
+    } else {
+        try std.testing.expectError(error.CorruptFrame, narrow_result);
+    }
 }
 
 fn expectHuffmanTreesEqual(expected: StdZstdHuffmanTree, actual: StdZstdHuffmanTree) !void {
@@ -9199,6 +9352,12 @@ test "zstd linear Huffman tree builder matches standard direct and FSE trees" {
     var weights: [256]u4 = undefined;
     const compressed_size: usize = fse[0];
     const decoded = try decodeHuffmanWeightsFse(fse[1..][0..compressed_size], &weights);
+    var small_weights: [256]u4 = undefined;
+    const small_decoded = try decodeHuffmanWeightsFseSmall32(fse[1..][0..compressed_size], &small_weights);
+    try std.testing.expectEqual(decoded.symbol_count, small_decoded.symbol_count);
+    try std.testing.expectEqual(decoded.power_sum, small_decoded.power_sum);
+    try std.testing.expectEqualSlices(u16, &decoded.counts, &small_decoded.counts);
+    try std.testing.expectEqualSlices(u4, weights[0 .. decoded.symbol_count - 1], small_weights[0 .. small_decoded.symbol_count - 1]);
     var expected_power_sum: u32 = 0;
     var expected_counts: [16]u16 = @splat(0);
     for (weights[0 .. decoded.symbol_count - 1]) |weight| {
@@ -9224,14 +9383,45 @@ test "zstd linear Huffman tree parser matches standard acceptance" {
         var actual_reader: std.Io.Reader = .fixed(encoded[0..len]);
         var actual_remaining: std.Io.Limit = .limited(len);
         const actual_result = decodeLinearZstdHuffmanTree(&actual_reader, &actual_remaining, null);
+        var narrow_lookup: NarrowHuffmanLiteralLookup = undefined;
+        const narrow_result = decodeFrameNarrowHuffmanLookup(encoded[0..len], &narrow_lookup);
         if (expected_result) |expected_tree| {
             const actual_tree = try actual_result;
             try std.testing.expectEqual(expected_reader.seek, actual_reader.seek);
             try std.testing.expectEqual(expected_remaining, actual_remaining);
             try expectHuffmanTreesEqual(expected_tree, actual_tree);
+            if (expected_tree.max_bit_count <= NarrowHuffmanLiteralLookup.bit_width) {
+                var expected_lookup: NarrowHuffmanLiteralLookup = undefined;
+                if (expected_lookup.buildComplete(&expected_tree)) {
+                    const narrow = try narrow_result;
+                    try std.testing.expectEqual(expected_reader.seek, narrow.bytes_consumed);
+                    try std.testing.expectEqual(expected_tree.max_bit_count, narrow.max_bit_count);
+                    try std.testing.expectEqualSlices(
+                        huffman_lookup.Entry,
+                        &expected_lookup.entries,
+                        &narrow_lookup.entries,
+                    );
+                } else {
+                    try std.testing.expectError(error.CorruptFrame, narrow_result);
+                }
+            } else {
+                try std.testing.expectError(error.CorruptFrame, narrow_result);
+            }
         } else |expected_error| switch (expected_error) {
-            error.EndOfStream => try std.testing.expectError(error.TruncatedFrame, actual_result),
-            else => try std.testing.expectError(error.CorruptFrame, actual_result),
+            error.EndOfStream => {
+                try std.testing.expectError(error.TruncatedFrame, actual_result);
+                if (narrow_result) |_| {
+                    std.debug.print("narrow accepted truncated seed={d} len={d} bytes={x}\n", .{ seed, len, encoded[0..len] });
+                    return error.TestUnexpectedResult;
+                } else |_| {}
+            },
+            else => {
+                try std.testing.expectError(error.CorruptFrame, actual_result);
+                if (narrow_result) |_| {
+                    std.debug.print("narrow accepted corrupt seed={d} len={d} bytes={x}\n", .{ seed, len, encoded[0..len] });
+                    return error.TestUnexpectedResult;
+                } else |_| {}
+            },
         }
     }
 }
@@ -30973,6 +31163,7 @@ test "zstd native decoder accepts FSE compressed sequence tables" {
 }
 
 test "zstd small predefined offset-FSE Huffman path matches generic decode" {
+    test_disable_small_predefined_offset_fse = false;
     test_small_mixed_fse_fast_literal_hits = 0;
     test_small_mixed_fse_match_56_hits = 0;
     test_small_mixed_fse_match_6_7_hits = 0;
@@ -30982,6 +31173,7 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     test_small_mixed_single_literal_hits = 0;
     test_small_mixed_reservoir_literal_hits = 0;
     defer {
+        test_disable_small_predefined_offset_fse = false;
         test_small_mixed_fse_fast_literal_hits = 0;
         test_small_mixed_fse_match_56_hits = 0;
         test_small_mixed_fse_match_6_7_hits = 0;
@@ -31090,6 +31282,61 @@ test "zstd small predefined offset-FSE Huffman path matches generic decode" {
     var public_output: [1290 + 64]u8 = @splat(0xa5);
     try std.testing.expectEqual(payload.items.len, try decodeFrameInto(&encoded, &public_output));
     try std.testing.expectEqualSlices(u8, &specialized_output, &public_output);
+
+    var generic_public_output: [1290 + 64]u8 = @splat(0xa5);
+    test_disable_small_predefined_offset_fse = true;
+    try std.testing.expectEqual(payload.items.len, try decodeFrameInto(&encoded, &generic_public_output));
+    test_disable_small_predefined_offset_fse = false;
+    try std.testing.expectEqualSlices(u8, &public_output, &generic_public_output);
+
+    var complete_two_symbol_lookup: NarrowHuffmanLiteralLookup = undefined;
+    try std.testing.expect(complete_two_symbol_lookup.fillCanonical(0, 1, 'a'));
+    try std.testing.expect(complete_two_symbol_lookup.fillCanonical(1, 1, 'b'));
+    const zero_stream = [_]u8{0b10};
+    const one_stream = [_]u8{0b11};
+    const transition_streams = [4][]const u8{ &zero_stream, &one_stream, &zero_stream, &one_stream };
+    var transition_cursor: HuffmanLiteralCursor = .{
+        .streams = .{ .four = transition_streams },
+        .reader = try ReverseBitReader.init(transition_streams[0]),
+    };
+    try std.testing.expectEqual(@as(u8, 'a'), try readCompleteNarrowHuffmanSymbol(&transition_cursor, 1, &complete_two_symbol_lookup));
+    try std.testing.expectEqual(@as(u8, 'b'), try readCompleteNarrowHuffmanSymbol(&transition_cursor, 1, &complete_two_symbol_lookup));
+    try std.testing.expectEqual(@as(u8, 'a'), try readCompleteNarrowHuffmanSymbol(&transition_cursor, 1, &complete_two_symbol_lookup));
+    try std.testing.expectEqual(@as(u8, 'b'), try readCompleteNarrowHuffmanSymbol(&transition_cursor, 1, &complete_two_symbol_lookup));
+    try transition_cursor.expectEnd();
+
+    var complete_four_symbol_lookup: NarrowHuffmanLiteralLookup = undefined;
+    for (0..4) |symbol|
+        try std.testing.expect(complete_four_symbol_lookup.fillCanonical(@intCast(symbol), 2, @intCast(symbol)));
+    var short_cursor: HuffmanLiteralCursor = .{
+        .streams = .one,
+        .reader = try ReverseBitReader.init(&zero_stream),
+    };
+    try std.testing.expectError(error.CorruptFrame, readCompleteNarrowHuffmanSymbol(&short_cursor, 2, &complete_four_symbol_lookup));
+
+    var literal_mutation_cases: usize = 0;
+    const literal_frame_offset = first_block.payload_offset + generic_section.literal_payload_offset;
+    for (0..generic_section.compressed_size) |byte_offset| {
+        for (0..8) |bit_index| {
+            var mutated = encoded;
+            mutated[literal_frame_offset + byte_offset] ^= @as(u8, 1) << @as(u3, @intCast(bit_index));
+            var fast_output: [1290 + 64]u8 = @splat(0xa5);
+            var reference_output: [1290 + 64]u8 = @splat(0xa5);
+            const fast_result = decodeFrameInto(&mutated, &fast_output);
+            test_disable_small_predefined_offset_fse = true;
+            const reference_result = decodeFrameInto(&mutated, &reference_output);
+            test_disable_small_predefined_offset_fse = false;
+            if (fast_result) |fast_len| {
+                const reference_len = try reference_result;
+                try std.testing.expectEqual(reference_len, fast_len);
+                try std.testing.expectEqualSlices(u8, reference_output[0..reference_len], fast_output[0..fast_len]);
+            } else |fast_error| {
+                try std.testing.expectError(fast_error, reference_result);
+            }
+            literal_mutation_cases += 1;
+        }
+    }
+    try std.testing.expect(literal_mutation_cases >= 64);
 
     var reusable_decoder = NativeFrameDecoder.init(std.testing.allocator);
     defer reusable_decoder.deinit();
@@ -41057,16 +41304,12 @@ noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
         return null;
     const literal_payload_offset = literal_offset;
     const literal_payload = block[literal_payload_offset..][0..literal_header.compressed_size];
-    var prepared_narrow: PreparedNarrowHuffmanLookup = .{};
-    var tree_reader: std.Io.Reader = .fixed(literal_payload);
-    var tree_remaining: std.Io.Limit = .limited(literal_payload.len);
-    const huffman_tree = decodeFrameHuffmanTree(
+    var narrow_lookup: NarrowHuffmanLiteralLookup = undefined;
+    const decoded_huffman = decodeFrameNarrowHuffmanLookup(
         literal_payload,
-        &tree_reader,
-        &tree_remaining,
-        &prepared_narrow,
+        &narrow_lookup,
     ) catch return null;
-    const huffman_stream_offset = literal_payload_offset + tree_reader.seek;
+    const huffman_stream_offset = literal_payload_offset + decoded_huffman.bytes_consumed;
     const huffman_streams = parseHuffmanLiteralStreams(
         block,
         literal_header.size_format,
@@ -41084,11 +41327,10 @@ noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
         .compressed_size = literal_header.compressed_size,
         .sequence_count = sequence_count,
         .sequence_payload_offset = literal_offset,
+        .huffman_width = decoded_huffman.max_bit_count,
     };
     if (section.regenerated_size > header.block_size_max or
         section.sequence_count < 2 or section.sequence_count > 256 or
-        !prepared_narrow.complete or
-        huffman_tree.max_bit_count > NarrowHuffmanLiteralLookup.bit_width or
         section.sequence_payload_offset >= block.len or
         block[section.sequence_payload_offset] != 0x20) return null;
 
@@ -41101,8 +41343,8 @@ noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
         &written,
         0,
         initial_repeated_offsets,
-        &huffman_tree,
-        &prepared_narrow.table,
+        null,
+        &narrow_lookup,
     );
     if (written != output_len) return error.SizeMismatch;
     return written;
@@ -41154,6 +41396,68 @@ fn copySmallMixedHuffmanLiterals(
         readHuffmanLiteralSymbolFromCursorCold,
         expectHuffmanLiteralCursorEnd,
     );
+}
+
+inline fn readCompleteNarrowHuffmanSymbol(
+    cursor: *HuffmanLiteralCursor,
+    width: u4,
+    lookup: *const NarrowHuffmanLiteralLookup,
+) Error!u8 {
+    while (true) {
+        const available: u4 = @intCast(@min(@as(usize, width), cursor.reader.available()));
+        if (available != 0) {
+            const prefix = cursor.reader.peekBulkHuffman(available) <<
+                @intCast(NarrowHuffmanLiteralLookup.bit_width - available);
+            const entry = lookup.lookupAssumeComplete(prefix);
+            if (entry.bit_count <= available) {
+                cursor.reader.skipBulkHuffman(entry.bit_count);
+                return entry.symbol;
+            }
+        }
+        if (cursor.reader.available() != 0 or
+            cursor.streams != .four or cursor.stream_index == 3)
+            return error.CorruptFrame;
+        cursor.stream_index += 1;
+        cursor.reader = try ReverseBitReader.init(cursor.streams.four[cursor.stream_index]);
+    }
+}
+
+fn copySmallMixedHuffmanLiteralsComplete(
+    cursor: *HuffmanLiteralCursor,
+    width: u4,
+    lookup: *const NarrowHuffmanLiteralLookup,
+    decoded: *usize,
+    regenerated_size: usize,
+    dest: []u8,
+) Error!void {
+    if (decoded.* > regenerated_size or regenerated_size - decoded.* < dest.len)
+        return error.CorruptFrame;
+    var output_index: usize = 0;
+    if (cursor.streams == .one) {
+        if (huffman_reservoir.Reservoir.init(cursor.reader)) |initial_reservoir| {
+            var active = initial_reservoir;
+            while (dest.len - output_index >= 8 and active.canDecodeEight(width)) {
+                var symbols: [8]u8 = undefined;
+                inline for (0..8) |symbol_index| {
+                    const prefix = active.peek(NarrowHuffmanLiteralLookup.bit_width);
+                    const entry = lookup.lookupAssumeComplete(prefix);
+                    symbols[symbol_index] = entry.symbol;
+                    active.consume(entry.bit_count);
+                }
+                dest[output_index..][0..8].* = symbols;
+                active.reload();
+                output_index += 8;
+                decoded.* += 8;
+                if (builtin.is_test) test_small_mixed_reservoir_literal_hits += 8;
+            }
+            cursor.reader.remaining_bits = active.remainingBits();
+        }
+    }
+    for (dest[output_index..]) |*out| {
+        out.* = try readCompleteNarrowHuffmanSymbol(cursor, width, lookup);
+        decoded.* += 1;
+    }
+    if (decoded.* == regenerated_size) try cursor.expectEnd();
 }
 
 noinline fn decodePredefinedOffsetFsePredefinedHuffman(
@@ -41256,6 +41560,7 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
     prepared_lookup: ?*const NarrowHuffmanLiteralLookup,
     comptime localize_output_cursor: bool,
 ) align(256) linksection(small_sequence_decode_text_section) Error!void {
+    const has_owned_tree = comptime @hasField(@TypeOf(section.*), "huffman_tree");
     if (frame_output_start > written.*) return error.CorruptFrame;
     var reader = try ReverseBitReader.init(block[bitstream_offset..]);
     var ll_state = try reader.readSmall(6);
@@ -41263,13 +41568,13 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
     var ml_state = try reader.readSmall(6);
     var repcodes = repeated_offsets;
     var local_huffman_lookup: NarrowHuffmanLiteralLookup = undefined;
-    const huffman_tree = prepared_tree orelse tree: {
-        if (comptime @hasField(@TypeOf(section.*), "huffman_tree"))
-            break :tree if (section.huffman_tree) |*tree| tree else return error.CorruptFrame;
-        return error.CorruptFrame;
-    };
+    const huffman_tree: ?*const StdZstdHuffmanTree = if (comptime has_owned_tree)
+        prepared_tree orelse if (section.huffman_tree) |*tree| tree else return error.CorruptFrame
+    else
+        null;
     const huffman_lookup_table = prepared_lookup orelse lookup: {
-        if (!local_huffman_lookup.buildComplete(huffman_tree)) return error.CorruptFrame;
+        if (comptime !has_owned_tree) return error.CorruptFrame;
+        if (!local_huffman_lookup.buildComplete(huffman_tree.?)) return error.CorruptFrame;
         break :lookup &local_huffman_lookup;
     };
     var local_output_cursor = written.*;
@@ -41280,7 +41585,10 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
     var huffman_cursor = try initHuffmanLiteralCursor(block, section.*);
     var huffman_decoded: usize = 0;
     var remaining = section.sequence_count;
-    const huffman_width = huffman_tree.max_bit_count;
+    const huffman_width = if (comptime has_owned_tree)
+        huffman_tree.?.max_bit_count
+    else
+        section.huffman_width;
     if (huffman_width == 0 or huffman_width > NarrowHuffmanLiteralLookup.bit_width)
         return error.CorruptFrame;
     while (remaining != 0) {
@@ -41330,12 +41638,11 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
         if (output.len - output_cursor.* < literal_len) return error.OutputTooSmall;
         if (literal_len == 1 and
             huffman_decoded < section.regenerated_size and
-            huffman_tree.max_bit_count != 0 and
-            huffman_cursor.reader.available() >= huffman_tree.max_bit_count)
+            huffman_width != 0 and
+            huffman_cursor.reader.available() >= huffman_width)
         {
-            const width = huffman_tree.max_bit_count;
-            const prefix = huffman_cursor.reader.peekBulkHuffman(width);
-            const entry = huffman_lookup_table.lookupAssumeComplete(prefix << @intCast(NarrowHuffmanLiteralLookup.bit_width - width));
+            const prefix = huffman_cursor.reader.peekBulkHuffman(huffman_width);
+            const entry = huffman_lookup_table.lookupAssumeComplete(prefix << @intCast(NarrowHuffmanLiteralLookup.bit_width - huffman_width));
             huffman_cursor.reader.skipBulkHuffman(entry.bit_count);
             output[output_cursor.*] = entry.symbol;
             huffman_decoded += 1;
@@ -41347,27 +41654,47 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
                 .four, .none => false,
             };
             if (use_reservoir) {
-                try copySmallMixedHuffmanLiterals(
-                    &huffman_cursor,
-                    huffman_tree,
-                    huffman_lookup_table,
-                    &huffman_decoded,
-                    section.regenerated_size,
-                    output[output_cursor.*..][0..literal_len],
-                );
+                if (comptime has_owned_tree)
+                    try copySmallMixedHuffmanLiterals(
+                        &huffman_cursor,
+                        huffman_tree.?,
+                        huffman_lookup_table,
+                        &huffman_decoded,
+                        section.regenerated_size,
+                        output[output_cursor.*..][0..literal_len],
+                    )
+                else
+                    try copySmallMixedHuffmanLiteralsComplete(
+                        &huffman_cursor,
+                        huffman_width,
+                        huffman_lookup_table,
+                        &huffman_decoded,
+                        section.regenerated_size,
+                        output[output_cursor.*..][0..literal_len],
+                    );
             } else {
-                try huffman_lookup.copyBorrowed(
-                    Error,
-                    &huffman_cursor,
-                    huffman_tree,
-                    huffman_lookup_table,
-                    &huffman_decoded,
-                    section.regenerated_size,
-                    huffman_decoded,
-                    output[output_cursor.*..][0..literal_len],
-                    readHuffmanLiteralSymbolFromCursorCold,
-                    expectHuffmanLiteralCursorEnd,
-                );
+                if (comptime has_owned_tree)
+                    try huffman_lookup.copyBorrowed(
+                        Error,
+                        &huffman_cursor,
+                        huffman_tree.?,
+                        huffman_lookup_table,
+                        &huffman_decoded,
+                        section.regenerated_size,
+                        huffman_decoded,
+                        output[output_cursor.*..][0..literal_len],
+                        readHuffmanLiteralSymbolFromCursorCold,
+                        expectHuffmanLiteralCursorEnd,
+                    )
+                else
+                    try copySmallMixedHuffmanLiteralsComplete(
+                        &huffman_cursor,
+                        huffman_width,
+                        huffman_lookup_table,
+                        &huffman_decoded,
+                        section.regenerated_size,
+                        output[output_cursor.*..][0..literal_len],
+                    );
             }
         }
         if (comptime builtin.is_test) test_small_mixed_fse_fast_literal_hits += literal_len;
@@ -41387,18 +41714,28 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
     if (section.regenerated_size < huffman_decoded) return error.CorruptFrame;
     const last_literals = section.regenerated_size - huffman_decoded;
     if (output.len - output_cursor.* < last_literals) return error.OutputTooSmall;
-    try huffman_lookup.copyBorrowed(
-        Error,
-        &huffman_cursor,
-        huffman_tree,
-        huffman_lookup_table,
-        &huffman_decoded,
-        section.regenerated_size,
-        huffman_decoded,
-        output[output_cursor.*..][0..last_literals],
-        readHuffmanLiteralSymbolFromCursorCold,
-        expectHuffmanLiteralCursorEnd,
-    );
+    if (comptime has_owned_tree)
+        try huffman_lookup.copyBorrowed(
+            Error,
+            &huffman_cursor,
+            huffman_tree.?,
+            huffman_lookup_table,
+            &huffman_decoded,
+            section.regenerated_size,
+            huffman_decoded,
+            output[output_cursor.*..][0..last_literals],
+            readHuffmanLiteralSymbolFromCursorCold,
+            expectHuffmanLiteralCursorEnd,
+        )
+    else
+        try copySmallMixedHuffmanLiteralsComplete(
+            &huffman_cursor,
+            huffman_width,
+            huffman_lookup_table,
+            &huffman_decoded,
+            section.regenerated_size,
+            output[output_cursor.*..][0..last_literals],
+        );
     if (comptime builtin.is_test) test_small_mixed_fse_fast_literal_hits += last_literals;
     output_cursor.* += last_literals;
 }

@@ -1,0 +1,148 @@
+{
+  "date": "2026-10-01",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "reference_version": "1.6.0",
+  "reference_git": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+  "reference_library": "/tmp/vort-zstd-upstream-build/lib/libzstd.so",
+  "reference_library_sha256": "b734e265f838f7a18c378fe2b34c505e6fc5025fd84ceac159faa27b794b78b0",
+  "order": "baseline,candidate on odd rounds; candidate,baseline on even rounds",
+  "timing": "five interleaved Vort/libzstd samples per executable; fastest sample per codec",
+  "baseline_git": "6e287126",
+  "baseline_executable_sha256": "9ab2d1480a83f37f26dddcf60f58eeaa4705c13682ce5245445cc80f5084fb7d",
+  "candidate_executable_sha256": "5ea9015d3053fd851f07cc49d263091c3d726a39c0cc53e8ab158d67e705e379",
+  "command": "taskset -c 2 BINARY --case numbered_json --iterations 100000 --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so",
+  "case": "numbered_json",
+  "input_sha256": "394cbb2d4c4709369e761604ad29c5b4a2757b77003fae36f4673ec5e979e11d",
+  "input_bytes": 1290,
+  "encoded_bytes": 183,
+  "sequence_count": 39,
+  "iterations": 100000,
+  "baseline_stack_frame_bytes": 1736,
+  "candidate_stack_frame_bytes": 680,
+  "summary": {
+    "speedup_median": 1.0805358861834689,
+    "speedup_geometric_mean": 1.0797343270231534,
+    "speedup_min": 1.0653638354836414,
+    "speedup_max": 1.1008996251072778,
+    "wins": 15,
+    "pairs": 15,
+    "libzstd_normalized_median": 1.081043434737466,
+    "libzstd_normalized_geometric_mean": 1.0846911432951365,
+    "libzstd_normalized_min": 1.0689015556228172,
+    "libzstd_normalized_max": 1.1637407910250206,
+    "libzstd_normalized_wins": 15,
+    "candidate_over_libzstd_median": 0.9911291713046125,
+    "candidate_over_libzstd_geometric_mean": 0.9955394613770198,
+    "candidate_over_libzstd_min": 0.9843960369325397,
+    "candidate_over_libzstd_max": 1.0726255348182572,
+    "candidate_over_libzstd_wins": 1
+  },
+  "observations": [
+    { "pair": 1, "order": "baseline,candidate", "baseline_vort_ns": 163129534, "baseline_reference_ns": 146946116, "candidate_vort_ns": 148178390, "candidate_reference_ns": 146559570 },
+    { "pair": 2, "order": "candidate,baseline", "baseline_vort_ns": 159367960, "baseline_reference_ns": 145980632, "candidate_vort_ns": 149051109, "candidate_reference_ns": 146725321 },
+    { "pair": 3, "order": "baseline,candidate", "baseline_vort_ns": 159426855, "baseline_reference_ns": 147027635, "candidate_vort_ns": 146881655, "candidate_reference_ns": 145578693 },
+    { "pair": 4, "order": "candidate,baseline", "baseline_vort_ns": 159613178, "baseline_reference_ns": 146784138, "candidate_vort_ns": 146228463, "candidate_reference_ns": 145373565 },
+    { "pair": 5, "order": "baseline,candidate", "baseline_vort_ns": 159452475, "baseline_reference_ns": 146564733, "candidate_vort_ns": 148772214, "candidate_reference_ns": 146512991 },
+    { "pair": 6, "order": "candidate,baseline", "baseline_vort_ns": 158828715, "baseline_reference_ns": 146685015, "candidate_vort_ns": 147907709, "candidate_reference_ns": 146824349 },
+    { "pair": 7, "order": "baseline,candidate", "baseline_vort_ns": 158704829, "baseline_reference_ns": 146932161, "candidate_vort_ns": 148967727, "candidate_reference_ns": 147420074 },
+    { "pair": 8, "order": "candidate,baseline", "baseline_vort_ns": 160745427, "baseline_reference_ns": 147712174, "candidate_vort_ns": 149532973, "candidate_reference_ns": 148066444 },
+    { "pair": 9, "order": "baseline,candidate", "baseline_vort_ns": 161409712, "baseline_reference_ns": 146546490, "candidate_vort_ns": 148941890, "candidate_reference_ns": 147249128 },
+    { "pair": 10, "order": "candidate,baseline", "baseline_vort_ns": 161735652, "baseline_reference_ns": 148054032, "candidate_vort_ns": 149680963, "candidate_reference_ns": 148174736 },
+    { "pair": 11, "order": "baseline,candidate", "baseline_vort_ns": 161442309, "baseline_reference_ns": 149294162, "candidate_vort_ns": 147689129, "candidate_reference_ns": 146594016 },
+    { "pair": 12, "order": "candidate,baseline", "baseline_vort_ns": 159991505, "baseline_reference_ns": 146913821, "candidate_vort_ns": 147786747, "candidate_reference_ns": 146766533 },
+    { "pair": 13, "order": "baseline,candidate", "baseline_vort_ns": 160145977, "baseline_reference_ns": 146872093, "candidate_vort_ns": 149892493, "candidate_reference_ns": 148711367 },
+    { "pair": 14, "order": "candidate,baseline", "baseline_vort_ns": 160128162, "baseline_reference_ns": 146710094, "candidate_vort_ns": 149529138, "candidate_reference_ns": 148203765 },
+    { "pair": 15, "order": "baseline,candidate", "baseline_vort_ns": 160103180, "baseline_reference_ns": 147567878, "candidate_vort_ns": 147638004, "candidate_reference_ns": 158360293 }
+  ],
+  "component_screens": {
+    "skip_complete_lookup_initialization": {
+      "pairs": 11,
+      "speedup_median": 1.0049858993631082,
+      "speedup_geometric_mean": 1.0062363847578706,
+      "wins": 10,
+      "libzstd_normalized_geometric_mean": 1.0061138860345034,
+      "libzstd_normalized_wins": 9
+    },
+    "direct_lookup_after_initialization": {
+      "pairs": 11,
+      "speedup_median": 1.0767713360131594,
+      "speedup_geometric_mean": 1.0805434132414973,
+      "speedup_min": 1.0672714791162146,
+      "wins": 11,
+      "libzstd_normalized_geometric_mean": 1.0787886826895665,
+      "libzstd_normalized_wins": 11
+    },
+    "weight_fse_32_state": {
+      "pairs": 11,
+      "speedup_median": 1.0076896226944105,
+      "speedup_geometric_mean": 1.008208291012913,
+      "wins": 9,
+      "libzstd_normalized_geometric_mean": 1.0077666388687938,
+      "libzstd_normalized_wins": 11
+    }
+  },
+  "rejected_screens": {
+    "ordered_symbol_scratch_128": {
+      "pairs": 11,
+      "speedup_median": 0.9945930271343635,
+      "speedup_geometric_mean": 0.9943607929990236,
+      "wins": 0
+    },
+    "caller_owned_weight_counts": {
+      "pairs": 11,
+      "speedup_median": 1.0010379301461825,
+      "speedup_geometric_mean": 1.0042906773052485,
+      "wins": 6,
+      "libzstd_normalized_geometric_mean": 1.0009906744260744,
+      "libzstd_normalized_wins": 5
+    },
+    "inline_mode_dispatch": {
+      "pairs": 11,
+      "speedup_median": 0.9916748708403172,
+      "speedup_geometric_mean": 0.9894761349241749,
+      "wins": 2,
+      "libzstd_normalized_geometric_mean": 0.9945327551369995,
+      "libzstd_normalized_wins": 4
+    }
+  },
+  "full_matrix_control": {
+    "pairs": 7,
+    "iterations": 500,
+    "command": "taskset -c 2 BINARY --iterations 500 --csv RESULT --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so",
+    "rows": {
+      "tiny": { "speedup_geometric_mean": 0.9907427588020234, "libzstd_normalized_geometric_mean": 0.9879933025082902 },
+      "text": { "speedup_geometric_mean": 1.0101318640096635, "libzstd_normalized_geometric_mean": 1.0156538418936794 },
+      "structured": { "speedup_geometric_mean": 1.0143213301200897, "libzstd_normalized_geometric_mean": 1.015945657604402 },
+      "repetitive": { "speedup_geometric_mean": 1.0191730579109763, "libzstd_normalized_geometric_mean": 1.0159337576387275 },
+      "incompressible": { "speedup_geometric_mean": 1.1038352352754202, "libzstd_normalized_geometric_mean": 1.0338608018416386 },
+      "rle64k": { "speedup_geometric_mean": 1.003110267853394, "libzstd_normalized_geometric_mean": 1.0056651750919288 },
+      "raw256k": { "speedup_geometric_mean": 1.0003688962444428, "libzstd_normalized_geometric_mean": 1.0019564887924313 },
+      "numbered_json": { "speedup_geometric_mean": 1.072545461300671, "libzstd_normalized_geometric_mean": 1.0758320442638074 },
+      "huffman80k": { "speedup_geometric_mean": 0.9979012337999359, "libzstd_normalized_geometric_mean": 0.996714910597622 },
+      "ascii64k": { "speedup_geometric_mean": 1.0086484073547477, "libzstd_normalized_geometric_mean": 1.00259413526253 },
+      "large_text": { "speedup_geometric_mean": 0.9986813741460008, "libzstd_normalized_geometric_mean": 1.004201066605572 },
+      "large_json": { "speedup_geometric_mean": 0.9989710516387101, "libzstd_normalized_geometric_mean": 0.9954801136502063 },
+      "binary_mixed": { "speedup_geometric_mean": 0.9962456036417513, "libzstd_normalized_geometric_mean": 0.9967604172017609 }
+    }
+  },
+  "validation": {
+    "direct_zstd_tests": 676,
+    "random_huffman_descriptions": 512,
+    "literal_payload_bit_mutations": 720,
+    "reference_gate_rows": 13,
+    "reference_gate_target_ratio": 0.9952,
+    "compatibility_cases": 276,
+    "compatibility_unsupported": 0,
+    "decodecorpus_campaigns": 9,
+    "decodecorpus_frames": 9900,
+    "decodecorpus_sequence_modes": 64,
+    "x86_64_linux_releasefast_compile": true,
+    "aarch64_linux_releasefast_compile": true
+  }
+}
