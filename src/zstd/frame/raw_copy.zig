@@ -4,6 +4,8 @@ const builtin = @import("builtin");
 const block_size_max: usize = 128 * 1024;
 const vector_copy_min_len: usize = 4 * 1024;
 const non_temporal_min_len: usize = 64 * 1024;
+const has_enhanced_rep_movsb = builtin.cpu.arch == .x86_64 and
+    std.Target.x86.featureSetHas(builtin.cpu.features, .ermsb);
 const has_non_temporal_copy = builtin.cpu.arch == .aarch64 and
     std.Target.aarch64.featureSetHas(builtin.cpu.features, .neon) and
     std.mem.eql(u8, builtin.cpu.model.name, "apple_m1");
@@ -23,6 +25,23 @@ pub inline fn copy(destination: []u8, source: []const u8, large_frame: bool) voi
 
 noinline fn copyCached(destination: []u8, source: []const u8) align(256) void {
     std.debug.assert(destination.len == source.len);
+    // Full raw blocks are large enough for ERMSB startup to amortize, and the
+    // instruction avoids compiler-rt's source-alignment prologue. Keep smaller
+    // blocks on the established path until they have independent evidence.
+    if (source.len == block_size_max and comptime has_enhanced_rep_movsb) {
+        var destination_ptr = destination.ptr;
+        var source_ptr = source.ptr;
+        var len = source.len;
+        asm volatile ("rep movsb"
+            : [destination] "={di}" (destination_ptr),
+              [source] "={si}" (source_ptr),
+              [len] "={cx}" (len),
+            : [destination_input] "0" (destination_ptr),
+              [source_input] "1" (source_ptr),
+              [len_input] "2" (len),
+            : .{ .memory = true });
+        return;
+    }
     if (comptime builtin.cpu.arch == .aarch64) {
         if (source.len >= vector_copy_min_len) {
             const Vector = @Vector(32, u8);

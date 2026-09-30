@@ -7,6 +7,9 @@ can be tied to reproducible evidence.
 Recent decoder evidence: [Zstd sequence field grouping](performance/zstd-sequence-fields.md)
 records a bounded all-FSE reader optimization, generic-reference safety checks,
 and paired comparison with libzstd 1.5.7 on Apple M1 Pro.
+[Zstd x86-64 full raw-block copying](performance/zstd-raw-copy-x86.md)
+records the ERMSB-gated 128 KiB path and paired comparison with the local
+libzstd 1.6.0-dev checkout on Intel Comet Lake.
 [Zstd raw-literal all-FSE execution](performance/zstd-raw-fse-executor.md)
 records grouped bit reads, bounded match-copy specialization, and the resulting
 25-file mixed-corpus comparison.

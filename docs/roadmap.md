@@ -16538,3 +16538,15 @@ reuse, so production keeps the simpler independently owned plans.
   coverage, and x86-64 Linux ReleaseFast compile-only validation. This closes
   another bounded Huffman table-amortization gap; compressed real files still
   trail libzstd by roughly 12--19%, so broader leadership remains open.
+
+- Added an x86-64 ERMSB path for complete 128 KiB Zstd raw blocks. The narrow
+  size gate leaves shorter copies, non-ERMSB x86 targets, and the established
+  Apple M1 policy unchanged. Against frozen `21683c9c` and the local
+  `~/Work/zstd` 1.6.0-dev checkout, 15 fixed-CPU alternating pairs improve
+  `raw256k` by 1.3469x median / 1.3455x geometric mean with 15/15 wins. The
+  final Vort path is 1.0355x/1.0357x versus libzstd and wins every pair, closing
+  this bounded x86 raw-block gap. All 676 direct Zstd tests, 276 compatibility
+  cases, the 9,900-frame/64-mode decodecorpus, and generic x86-64/AArch64
+  compile checks pass. Exact observations are in
+  `docs/performance/zstd-raw-copy-x86.md` and its JSON companion; compressed
+  sequence-heavy rows remain the next priority.

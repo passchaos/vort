@@ -1,5 +1,8 @@
 # Apple M1 Zstd raw-block copy policy
 
+For the independently selected x86-64 ERMSB full-block path, see
+[x86-64 Zstd full raw-block copy policy](zstd-raw-copy-x86.md).
+
 The 2026-09-29 change improves the native raw-frame decoder on Apple M1 Pro,
 using Zig 0.16.0 ReleaseFast and Homebrew libzstd 1.5.7. It does not establish
 industry-leading decoding: the final 21-run `raw256k` comparison is only
