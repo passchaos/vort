@@ -8422,7 +8422,7 @@ fn validateHuffmanLiteralsConsumed(block: []const u8, section: LiteralOnlySectio
     try cursor.expectEnd();
 }
 
-fn huffmanLiteralStreamReader(block: []const u8, section: LiteralOnlySection) Error!ReverseBitReader {
+fn huffmanLiteralStreamReader(block: []const u8, section: anytype) Error!ReverseBitReader {
     const stream_end = std.math.add(usize, section.literal_payload_offset, section.compressed_size) catch return error.IntegerOverflow;
     if (section.huffman_stream_offset > stream_end or stream_end > block.len) return error.CorruptFrame;
     return try ReverseBitReader.init(block[section.huffman_stream_offset..stream_end]);
@@ -8516,7 +8516,7 @@ const HuffmanLiteralCursor = struct {
     }
 };
 
-fn initHuffmanLiteralCursor(block: []const u8, section: LiteralOnlySection) Error!HuffmanLiteralCursor {
+fn initHuffmanLiteralCursor(block: []const u8, section: anytype) Error!HuffmanLiteralCursor {
     switch (section.huffman_streams) {
         .one => return .{
             .streams = .one,
@@ -8658,6 +8658,19 @@ const LiteralOnlySection = struct {
     sequence_count: usize,
     sequence_payload_offset: usize,
     huffman_tree: ?StdZstdHuffmanTree = null,
+};
+
+/// Metadata needed by the small Huffman/sequence executor after its tree and
+/// lookup have already been prepared. Keeping the owned tree out of this view
+/// avoids zeroing another full `StdZstdHuffmanTree` in the one-shot fast path.
+const BorrowedHuffmanSection = struct {
+    regenerated_size: usize,
+    literal_payload_offset: usize,
+    huffman_stream_offset: usize,
+    huffman_streams: HuffmanLiteralStreams,
+    compressed_size: usize,
+    sequence_count: usize,
+    sequence_payload_offset: usize,
 };
 
 const HuffmanLiteralStreams = union(enum) {
@@ -41063,9 +41076,7 @@ noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
     ) catch return null;
     literal_offset += literal_header.compressed_size;
     const sequence_count = parseSequenceCount(block, &literal_offset) catch return null;
-    const section: LiteralOnlySection = .{
-        .kind = .compressed,
-        .size_format = literal_header.size_format,
+    const section: BorrowedHuffmanSection = .{
         .regenerated_size = literal_header.regenerated_size,
         .literal_payload_offset = literal_payload_offset,
         .huffman_stream_offset = huffman_stream_offset,
@@ -41147,7 +41158,7 @@ fn copySmallMixedHuffmanLiterals(
 
 noinline fn decodePredefinedOffsetFsePredefinedHuffman(
     block: []const u8,
-    section: *const LiteralOnlySection,
+    section: anytype,
     table_offset: usize,
     output: []u8,
     written: *usize,
@@ -41157,7 +41168,6 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
     prepared_lookup: ?*const NarrowHuffmanLiteralLookup,
 ) linksection(small_sequence_decode_text_section) Error!void {
     std.debug.assert(section.sequence_count >= 2 and section.sequence_count <= 256);
-    std.debug.assert(section.kind == .compressed or section.kind == .treeless);
 
     if (table_offset < block.len and (block[table_offset] & 0x0f) == 0)
         return decodePredefinedOffsetFse32Huffman(block, section, table_offset, output, written, frame_output_start, repeated_offsets, prepared_tree, prepared_lookup);
@@ -41166,7 +41176,7 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffman(
 
 noinline fn decodePredefinedOffsetFse32Huffman(
     block: []const u8,
-    section: *const LiteralOnlySection,
+    section: anytype,
     table_offset: usize,
     output: []u8,
     written: *usize,
@@ -41185,7 +41195,7 @@ noinline fn decodePredefinedOffsetFse32Huffman(
 
 noinline fn decodePredefinedOffsetFseGeneralHuffman(
     block: []const u8,
-    section: *const LiteralOnlySection,
+    section: anytype,
     table_offset: usize,
     output: []u8,
     written: *usize,
@@ -41235,7 +41245,7 @@ noinline fn decodeSmallHuffmanBlockWithSequenceWorkspace(
 
 noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
     block: []const u8,
-    section: *const LiteralOnlySection,
+    section: anytype,
     bitstream_offset: usize,
     offset_fse: anytype,
     output: []u8,
@@ -41253,7 +41263,11 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
     var ml_state = try reader.readSmall(6);
     var repcodes = repeated_offsets;
     var local_huffman_lookup: NarrowHuffmanLiteralLookup = undefined;
-    const huffman_tree = prepared_tree orelse if (section.huffman_tree) |*tree| tree else return error.CorruptFrame;
+    const huffman_tree = prepared_tree orelse tree: {
+        if (comptime @hasField(@TypeOf(section.*), "huffman_tree"))
+            break :tree if (section.huffman_tree) |*tree| tree else return error.CorruptFrame;
+        return error.CorruptFrame;
+    };
     const huffman_lookup_table = prepared_lookup orelse lookup: {
         if (!local_huffman_lookup.buildComplete(huffman_tree)) return error.CorruptFrame;
         break :lookup &local_huffman_lookup;

@@ -16575,3 +16575,16 @@ reuse, so production keeps the simpler independently owned plans.
   x86-64/AArch64 compile checks pass. Exact evidence is in
   `docs/performance/zstd-small-oneshot-tables-x86.md`; broader Huffman table
   construction and large compressed sequence paths remain open.
+
+- The small one-shot path now passes compact borrowed literal metadata instead
+  of constructing a generic section with an unused owned Huffman tree. Frozen
+  x86-64 disassembly shows its stack frame shrinking from `0xad8` to `0x6c8`
+  bytes and removes a `0x404`-byte clear. Against frozen `e9cad21b`, 15
+  fixed-CPU `numbered_json` pairs improve by 1.1419x median / 1.1410x geometric
+  mean with 15/15 wins and a 1.1317x minimum; Vort reaches 0.9203x/0.9215x of
+  local libzstd 1.6.0-dev by median/geometric mean. All 676 direct tests, the
+  276-case compatibility matrix, 9,900-frame/64-mode decodecorpus, 13-row
+  reference gate, and generic x86-64/AArch64 compile checks pass. Exact evidence
+  is in `docs/performance/zstd-small-borrowed-section-x86.md`; direct narrow
+  lookup construction and checked lookup-only stream tails are the next small-
+  frame opportunities.

@@ -16,6 +16,9 @@ and paired one-shot/reusable comparisons with libzstd 1.6.0-dev.
 [Zstd small one-shot table construction](performance/zstd-small-oneshot-tables-x86.md)
 records bounded Huffman/offset-FSE scratch, direct small-frame parsing, and an
 independent paired comparison against the preceding reusable-cache commit.
+[Zstd borrowed small-frame metadata](performance/zstd-small-borrowed-section-x86.md)
+records removal of the redundant owned-tree section clear and its isolated
+one-shot gain against the immediately preceding small-table implementation.
 [Zstd raw-literal all-FSE execution](performance/zstd-raw-fse-executor.md)
 records grouped bit reads, bounded match-copy specialization, and the resulting
 25-file mixed-corpus comparison.
