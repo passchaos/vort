@@ -16550,3 +16550,15 @@ reuse, so production keeps the simpler independently owned plans.
   compile checks pass. Exact observations are in
   `docs/performance/zstd-raw-copy-x86.md` and its JSON companion; compressed
   sequence-heavy rows remain the next priority.
+
+- Reusable small Zstd frames now cache each parsed Huffman tree together with
+  its complete seven-bit lookup and borrow that lookup, the tree, and the
+  cached FSE offset table through a validated terminal-block path. A local
+  output cursor is compiled only into the reusable executor. Against frozen
+  `fc59ccaf` and local libzstd 1.6.0-dev, 15 fixed-CPU `numbered_json` pairs
+  improve by 1.1829x median / 1.1853x geometric mean with 15/15 wins; Vort
+  reaches 1.0064x/1.0109x of libzstd by median/geometric mean. Nine one-shot
+  controls improve 1.0197x/1.0198x but remain 0.7830x of libzstd. The full
+  correctness and corpus gates are recorded in
+  `docs/performance/zstd-small-reusable-cache-x86.md`; one-shot table building
+  and large compressed sequence paths remain open.

@@ -8,7 +8,7 @@ pub fn Cache(comptime Tree: type) type {
         const Self = @This();
 
         pub const Hit = struct {
-            tree: *const Tree,
+            tree: *Tree,
             description_len: usize,
         };
 

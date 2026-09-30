@@ -10,6 +10,9 @@ and paired comparison with libzstd 1.5.7 on Apple M1 Pro.
 [Zstd x86-64 full raw-block copying](performance/zstd-raw-copy-x86.md)
 records the ERMSB-gated 128 KiB path and paired comparison with the local
 libzstd 1.6.0-dev checkout on Intel Comet Lake.
+[Zstd reusable small-frame caching](performance/zstd-small-reusable-cache-x86.md)
+records combined Huffman tree/lookup reuse, a fully cached terminal-block path,
+and paired one-shot/reusable comparisons with libzstd 1.6.0-dev.
 [Zstd raw-literal all-FSE execution](performance/zstd-raw-fse-executor.md)
 records grouped bit reads, bounded match-copy specialization, and the resulting
 25-file mixed-corpus comparison.
