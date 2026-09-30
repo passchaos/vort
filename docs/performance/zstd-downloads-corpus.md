@@ -279,6 +279,16 @@ libzstd. The final policy cleanup retains byte-identical medium-executor and
 reusable-dispatch instructions relative to the measured candidate. This is a
 substantial real-file improvement, but not yet parity.
 
+A post-change 1 kHz profile over 10,702 samples confirms that the old
+interleaved executor is no longer a leading leaf. The new compact medium split
+executor accounts for 35.42% and the established large split executor for
+27.44%. Mapped/no-low FSE construction contributes 4.23%/3.28%, four-stream
+Huffman reservoir and surrounding decode contribute 3.36%/3.01%, Huffman-tree
+construction 2.44%, normalized-count parsing 2.42%, and generic sequence
+decoding 1.84%. The next broad improvement should share a smaller sequence/copy
+core between the two split executors while retaining their different literal
+scratch and block-selection policies.
+
 The distribution suggested extending the specialized no-low builder beyond
 256 states, but the real-file A/B results rejected that direction. A 128-state
 route measured 0.9951x median / 0.9891x geometric on the SVG with 5/21 wins;

@@ -16425,4 +16425,7 @@ reuse, so production keeps the simpler independently owned plans.
   all 675 Zstd tests, 276 compatibility cases, 9,900 decodecorpus frames, both
   reference gates, and x86_64 Linux compile-only validation pass. The broad
   `zig build check -j1` was stopped after six silent minutes, matching the
-  repository's known build-server stall rather than reporting a false pass.
+  repository's known build-server stall rather than reporting a false pass. A
+  post-change 10,702-sample profile moves the leading leaves to the compact
+  medium executor at 35.42% and the established large split executor at 27.44%;
+  their common sequence/copy core is now the next optimization target.
