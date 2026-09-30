@@ -78,6 +78,10 @@ wrapper regressed to 0.9895x with 2/11 wins. Inlining only the 32-state weight
 decoder also regressed to 0.9977x with 4/11 wins. All four were removed.
 Outlining canonical lookup construction reduced the caller's stack further but
 regressed to 0.9868x with 0/11 wins, so it was removed as well.
+Inlining the 32-state offset-table loader measured 0.9951x with 2/11 wins and
+was removed.
+Combining the contiguous-range check with the lookup fill measured a neutral
+0.9995x median with 5/11 wins (0.9988x normalized geometric) and was removed.
 
 The small target is now effectively at parity but not yet consistently ahead.
 The next useful work should measure the remaining normalized-count and

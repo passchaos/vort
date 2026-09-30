@@ -125,6 +125,22 @@
       "wins": 0,
       "libzstd_normalized_geometric_mean": 0.9891112316543557,
       "libzstd_normalized_wins": 0
+    },
+    "inline_offset_fse_32_loader": {
+      "pairs": 11,
+      "speedup_median": 0.9922235294447,
+      "speedup_geometric_mean": 0.9950832397519253,
+      "wins": 2,
+      "libzstd_normalized_geometric_mean": 0.9959817554062486,
+      "libzstd_normalized_wins": 2
+    },
+    "combined_contiguous_lookup_fill": {
+      "pairs": 11,
+      "speedup_median": 0.9995039518900974,
+      "speedup_geometric_mean": 1.0051012871650034,
+      "wins": 5,
+      "libzstd_normalized_geometric_mean": 0.9987515275630806,
+      "libzstd_normalized_wins": 4
     }
   },
   "full_matrix_control": {
