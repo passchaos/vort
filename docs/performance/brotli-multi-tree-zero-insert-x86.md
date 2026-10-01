@@ -166,11 +166,43 @@ The retained 16-byte short-copy move and dynamic large-copy memcpy are the
 measured best x86 paths. Further work should not add another copy-size branch
 without a different execution model or hardware-specific evidence.
 
+## Cached context-three distance tree
+
+The distance audit found 155 implicit-distance commands and 16,663 explicit
+distance symbols. Context three accounts for 15,997 explicit distances
+(96.0%); contexts zero through two account for only 78, 183, and 405. The
+stream switches distance block type only 17 times. Regular symbols are spread
+across the alphabet, with symbols 42/44/41/40/38 occurring
+2,211/1,542/1,283/1,093/1,050 times, while short symbol one occurs 1,835
+times. Extra-bit widths 14/13/15/12/11 account for
+3,004/2,376/2,068/1,812/1,525 regular distances.
+
+The retained executor now caches only the context-three tree index for the
+active distance block and refreshes that byte on a block switch. Other
+contexts still load the parsed context map, every selected index retains its
+tree-count check, and the existing external lookup/canonical fallback remains
+authoritative. This avoids the four-pointer cache previously rejected while
+removing the dominant context-map load. The ReleaseFast multi-tree executor
+shrinks from `0x11a6` to `0x119e` bytes.
+
+Against frozen `a74d1d1b...`, 21 fixed-CPU-2 pairs with 1,000 requested
+iterations improve `clustered_q8` by 1.0039x median / 1.0050x geometric mean,
+with 17/21 wins and a 0.9949x--1.0161x range. Simultaneous libbrotli
+normalization is 1.0076x median / 1.0140x geometric mean. Candidate throughput
+reaches 0.8570x median / 0.8620x geometric local libbrotli 1.2.0-dev, so the
+remaining parity gap is still substantial.
+
+A seven-pair full matrix keeps the target positive at 1.0033x median / 1.0080x
+geometric with 7/7 wins. Short rows remain noisy. Longer controls recover
+`structured` to 1.0069x median and `text_q3` to 1.0027x median / 1.0030x
+geometric; repository source q1 is neutral at 1.0014x median / 0.9984x
+geometric and remains above libbrotli at a 1.0038x median ratio.
+
 ## Correctness evidence
 
 The focused lookup test checks zero-insert copy-extra decoding and exact
 command-block countdown. The complete direct Brotli ReleaseFast suite passes
-all 540 tests. The local libbrotli reference gate passes all 13 rows. The
+all 541 tests. The local libbrotli reference gate passes all 13 rows. The
 upstream multi-block differential passes 98 core cases, 7,056 one-shot cases,
 7,056 progressive cases, 1,401 fragmentation cases, 64 high-tree truncation
 cases, and seven Large Window decode cases, with zero unsupported summaries.

@@ -112,6 +112,56 @@
     "dictionary_copy_count": 4255,
     "dictionary_output_length_4_through_8_count": 3378
   },
+  "distance_context_three_cache": {
+    "baseline_executable_sha256": "a74d1d1b08778a09257d4d25e62006cd96164dee6ee12a64dddab186f28c421e",
+    "candidate_executable_sha256": "2b2950f330cd520a0c8d59caeb857991652f5d22b5ee8abeea5a782093ccceb5",
+    "implicit_distance_count": 155,
+    "explicit_distance_count": 16663,
+    "distance_block_switch_count": 17,
+    "context_histogram": [78, 183, 405, 15997],
+    "top_symbols": {
+      "1": 1835,
+      "36": 845,
+      "38": 1050,
+      "40": 1093,
+      "41": 1283,
+      "42": 2211,
+      "44": 1542
+    },
+    "top_extra_bit_widths": {
+      "11": 1525,
+      "12": 1812,
+      "13": 2376,
+      "14": 3004,
+      "15": 2068
+    },
+    "executor_symbol_bytes_before": 4518,
+    "executor_symbol_bytes_after": 4510,
+    "target": {
+      "pairs": 21,
+      "requested_iterations": 1000,
+      "speedup_median": 1.0039294984430303,
+      "speedup_geometric_mean": 1.0049600023213756,
+      "speedup_min": 0.9949327278537615,
+      "speedup_max": 1.0161343177415392,
+      "wins": 17,
+      "libbrotli_normalized_median": 1.0076403662323157,
+      "libbrotli_normalized_geometric_mean": 1.014008594115683,
+      "candidate_over_libbrotli_median": 0.856998065421036,
+      "candidate_over_libbrotli_geometric_mean": 0.8619777510013028
+    },
+    "full_matrix": {
+      "pairs": 7,
+      "clustered_q8_speedup_median": 1.003288084688619,
+      "clustered_q8_speedup_geometric_mean": 1.008034713220232,
+      "clustered_q8_wins": 7
+    },
+    "long_controls": {
+      "structured": { "pairs": 21, "speedup_median": 1.0068868896663188, "wins": 14 },
+      "text_q3": { "pairs": 21, "speedup_median": 1.002677294839657, "speedup_geometric_mean": 1.003031212844324, "wins": 13 },
+      "source_q1": { "pairs": 15, "speedup_median": 1.0013947639292455, "speedup_geometric_mean": 0.9984323323045344, "wins": 9, "candidate_over_libbrotli_median": 1.0037519127398282 }
+    }
+  },
   "rejected": {
     "compact_tail_literal_block_batching": {
       "pairs": 15,
@@ -242,7 +292,7 @@
   },
   "validation": {
     "focused_command_progress_test": true,
-    "direct_brotli_tests": 540,
+    "direct_brotli_tests": 541,
     "reference_gate_rows": 13,
     "upstream_core_cases": 98,
     "upstream_one_shot_cases": 7056,

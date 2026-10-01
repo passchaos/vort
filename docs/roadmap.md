@@ -16719,3 +16719,16 @@ reuse, so production keeps the simpler independently owned plans.
   nonzero-length check was also negative at 0.9964x. All code was removed;
   the retained fixed-16 short move and dynamic system memcpy remain the
   measured best x86 copy kernels.
+
+- The multi-tree Brotli executor now caches the active distance block's
+  context-three tree index and refreshes that byte on each block switch. A
+  non-timing audit found context three on 15,997/16,663 explicit distances
+  (96.0%) with only 17 switches; the other contexts keep their parsed-map path
+  and every tree index remains checked. Against frozen `a74d1d1b`, 21
+  fixed-CPU-2 long pairs improve `clustered_q8` by 1.0039x median / 1.0050x
+  geometric throughput with 17/21 wins and a 0.9949x minimum. Seven full-
+  matrix pairs win 7/7 on target; long `structured` and `text_q3` controls are
+  positive, while source q1 stays neutral and remains above libbrotli.
+  Candidate/libbrotli 1.2.0-dev reaches only 0.8570x median, so broader Brotli
+  leadership remains open. All 541 direct tests, the 13-row reference gate,
+  upstream and real-corpus differentials, and the full repository check pass.
