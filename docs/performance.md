@@ -31,6 +31,9 @@ records cache-dense command/distance root planes, exact short dictionary
 copies, rejected follow-ups, and paired Apple M1 Pro measurements.
 [Brotli large single-tree executor](performance/brotli-single-tree-executor.md)
 records the structure-gated q1 fast path and real source/document comparisons.
+[Zstd wide-Huffman WASM portability](performance/zstd-wasm-portability.md)
+records the target-selected aligned wrapper, standalone wasm32 gate, identical
+native machine-code section, and fixed-CPU A/B evidence.
 
 ## Current local benchmark entrypoints
 

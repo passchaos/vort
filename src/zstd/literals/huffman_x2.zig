@@ -169,7 +169,7 @@ fn decodeWide(tree: anytype, streams: [4][]const u8, lookup: *const Table(14), d
     var positions = [4]usize{ 0, segment_len, segment_len * 2, segment_len * 3 };
     const ends = [4]usize{ segment_len, segment_len * 2, segment_len * 3, dest.len };
     if (readers[0].available() > 56 and readers[1].available() > 56 and readers[2].available() > 56 and readers[3].available() > 56)
-        decodeWideReservoir(&readers, &positions, ends, lookup, dest);
+        WideReservoirDecoder.run(&readers, &positions, ends, lookup, dest);
 
     for (0..4) |stream_index| {
         var cursor = readers[stream_index];
@@ -187,7 +187,17 @@ fn decodeWide(tree: anytype, streams: [4][]const u8, lookup: *const Table(14), d
     }
 }
 
-noinline fn decodeWideReservoir(readers: *[4]bit_reader.Reader, positions: *[4]usize, ends: [4]usize, lookup: *const Table(14), dest: []u8) align(64) linksection(wide_text_section) void {
+const WideReservoirDecoder = if (builtin.cpu.arch.isWasm()) struct {
+    noinline fn run(readers: *[4]bit_reader.Reader, positions: *[4]usize, ends: [4]usize, lookup: *const Table(14), dest: []u8) linksection(wide_text_section) void {
+        decodeWideReservoirImpl(readers, positions, ends, lookup, dest);
+    }
+} else struct {
+    noinline fn run(readers: *[4]bit_reader.Reader, positions: *[4]usize, ends: [4]usize, lookup: *const Table(14), dest: []u8) align(64) linksection(wide_text_section) void {
+        decodeWideReservoirImpl(readers, positions, ends, lookup, dest);
+    }
+};
+
+inline fn decodeWideReservoirImpl(readers: *[4]bit_reader.Reader, positions: *[4]usize, ends: [4]usize, lookup: *const Table(14), dest: []u8) void {
     var output_positions = positions.*;
     var reservoirs = [4]reservoir.Reservoir{
         reservoir.Reservoir.init(readers[0]) orelse unreachable,

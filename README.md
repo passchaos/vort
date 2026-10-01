@@ -93,12 +93,17 @@ Hosted CI runs on `main` pushes and pull requests through
 target now includes `run-native-codec-probes-dashboard`, so the library-level
 LZ4/Zstd frame and dictionary probes run together in CI and retain JSON/Markdown
 artifacts rather than only existing as manual commands.
+The standalone `check-wasm` gate compiles the complete library and its
+out-of-line Brotli/Zstd optimized objects for baseline `wasm32-wasi`. Native
+wide-Huffman decoding retains its 64-byte function alignment; WebAssembly uses
+the same inlined decode body through a target-safe unaligned wrapper.
 
 ## Commands
 
 ```sh
 zig build test
 zig build check
+zig build check-wasm
 zig build -Doptimize=ReleaseFast ci-smoke
 zig build run -- --help
 zig build -Doptimize=ReleaseFast run-zstd-dictionary-trainer-compare -j1

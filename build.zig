@@ -46,6 +46,33 @@ pub fn build(b: *std.Build) void {
             .optimize = .ReleaseFast,
         }),
     });
+    const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
+    const wasm_br_record_optimal_obj = b.addObject(.{
+        .name = "vort-br-record-optimal-wasm-check",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/br/encoder/record_optimal_object.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+        }),
+    });
+    const wasm_zstd_huffman_x2_obj = b.addObject(.{
+        .name = "vort-zstd-huffman-x2-wasm-check",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/zstd_huffman_x2_object.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+        }),
+    });
+    const wasm_mod = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    wasm_mod.addObject(wasm_br_record_optimal_obj);
+    wasm_mod.addObject(wasm_zstd_huffman_x2_obj);
+    const wasm_lib = b.addLibrary(.{ .name = "vort-wasm-check", .root_module = wasm_mod });
+    const wasm_check_step = b.step("check-wasm", "Compile the complete Vort library for wasm32-wasi");
+    wasm_check_step.dependOn(&wasm_lib.step);
     const br_record_classifier_tests = b.addTest(.{
         .name = "vort-br-record-classifier-tests",
         .root_module = b.createModule(.{
@@ -93,6 +120,14 @@ pub fn build(b: *std.Build) void {
         .root_module = tests_mod,
     });
     const run_tests = b.addRunArtifact(tests);
+    const zstd_huffman_x2_tests = b.addTest(.{
+        .name = "vort-zstd-huffman-x2-tests",
+        .root_module = tests_mod,
+        .filters = &.{"wide X2"},
+    });
+    const run_zstd_huffman_x2_tests = b.addRunArtifact(zstd_huffman_x2_tests);
+    const zstd_huffman_x2_test_step = b.step("test-zstd-huffman-x2", "Run focused wide Huffman X2 correctness tests");
+    zstd_huffman_x2_test_step.dependOn(&run_zstd_huffman_x2_tests.step);
 
     const test_step = b.step("test", "Run vort unit tests");
     test_step.dependOn(&run_tests.step);
@@ -4383,6 +4418,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&fuzz_corpus_exe.step);
     check_step.dependOn(&fuzz_target_exe.step);
+    check_step.dependOn(wasm_check_step);
     check_step.dependOn(&libfuzzer_smoke_exe.step);
     check_step.dependOn(&afl_smoke_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);
