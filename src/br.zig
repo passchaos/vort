@@ -7658,8 +7658,14 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     const literal_lookup_ptr = literal_lookups.ptr;
+    var literal_block_remaining = header.literal_block.remaining;
+    var active_literal_context_map: [*]const u8 = @ptrCast(&header.literal_context_map[@as(usize, header.literal_block.current_type) * 64]);
+    var active_literal_context_mode = header.literal_context_modes[header.literal_block.current_type];
     var output_cursor = written.*;
-    defer written.* = output_cursor;
+    defer {
+        written.* = output_cursor;
+        header.literal_block.remaining = literal_block_remaining;
+    }
     while (output_cursor < meta_block_end) {
         const command_symbol = if (comptime auxiliary_tail_lookups)
             if (comptime fixed_nine_bit_peek)
@@ -7678,22 +7684,27 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
             var second_previous: u8 = if (output_cursor < 2) 0 else output[output_cursor - 2];
             var i: usize = 0;
             while (i < lengths.insert_len) {
-                try ensureLiteralBlockAny(header, reader);
+                if (header.literal_block.block_type_count > 1 and literal_block_remaining == 0) {
+                    header.literal_block.remaining = 0;
+                    try switchBlockAny(max_literal_block_types, &header.literal_block, reader);
+                    literal_block_remaining = header.literal_block.remaining;
+                    const literal_type = header.literal_block.current_type;
+                    active_literal_context_map = @ptrCast(&header.literal_context_map[@as(usize, literal_type) * 64]);
+                    active_literal_context_mode = header.literal_context_modes[literal_type];
+                }
                 const remaining_insert = lengths.insert_len - i;
                 const run_len = if (header.literal_block.block_type_count > 1)
-                    @min(remaining_insert, header.literal_block.remaining)
+                    @min(remaining_insert, literal_block_remaining)
                 else
                     remaining_insert;
                 std.debug.assert(run_len != 0);
-                const map_start = @as(usize, header.literal_block.current_type) * 64;
-                const context_mode = header.literal_context_modes[header.literal_block.current_type];
                 const run_end = i + run_len;
                 while (i < run_end) : (i += 1) {
                     const context = if (utf8_context_only)
                         literal_context.valueUtf8Clustered(previous, second_previous)
                     else
-                        literal_context.valueClustered(context_mode, previous, second_previous);
-                    const tree_index = header.literal_context_map[map_start + context];
+                        literal_context.valueClustered(active_literal_context_mode, previous, second_previous);
+                    const tree_index = active_literal_context_map[context];
                     const lookup = &literal_lookup_ptr[tree_index];
                     const literal = (try lookup.decodeValueFast9(reader)) orelse blk: {
                         const tree = try literalPrefixForDecode(header, tree_index);
@@ -7709,7 +7720,7 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
                     previous = @intCast(literal);
                 }
                 if (header.literal_block.block_type_count > 1)
-                    header.literal_block.remaining -= run_len;
+                    literal_block_remaining -= run_len;
             }
         }
         if (output_cursor == meta_block_end) return;

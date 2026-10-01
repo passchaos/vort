@@ -90,9 +90,32 @@ the upstream and real-corpus differentials, and the full repository check.
 Exact hashes and pair summaries are in
 [brotli-wide-root-x86-20261001.json](data/brotli-wide-root-x86-20261001.json).
 
+## Literal-state cache follow-up
+
+A non-timing pass over the retained source-q9 route counted 20,486 decoded
+literals but only 204 nine-bit root misses (1.0%). It also found 10,965 short
+insert runs and only ten literal block switches. The next cost was therefore
+not Huffman fallback coverage: every command reloaded the active context-map
+base, context mode, and block countdown even though that state almost never
+changed.
+
+The isolated 9-bit executor now keeps the active map pointer, mode, and block
+remaining count locally across commands. It synchronizes the countdown before
+a validated block switch and commits it through the same error-safe defer path
+as the output cursor. The 10-bit and low-tree executors are unchanged.
+
+Against frozen `0ae320e3...`, 15 source-q9 pairs improve by another 1.0127x
+median / 1.0116x geometric mean with 15/15 wins and a 1.00035x minimum.
+libbrotli-normalized geometric improvement is 1.0137x. Final candidate
+throughput reaches 0.6910x median / 0.6918x geometric local libbrotli, so a
+large literal-loop gap remains despite the two retained steps.
+
+All 541 direct tests, the reference gate, upstream differential, real-corpus
+matrix, and full repository check pass again.
+
 ## Next direction
 
-The 65--128 tier is faster, but source q9 still reaches only about 0.68x
+The 65--128 tier is faster, but source q9 still reaches only about 0.69x
 libbrotli. The next useful work is inside the context-dependent literal loop or
 bit-reader refill, not another root-width threshold. The 129--256 tier should
 stay at ten bits unless a separately isolated policy improves its slowest row.

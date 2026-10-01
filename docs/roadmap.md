@@ -16772,3 +16772,13 @@ reuse, so production keeps the simpler independently owned plans.
   source-q9 throughput reaches 0.6814x local libbrotli, so the wide literal
   loop remains a major open gap. All 541 direct tests, reference/upstream/real-
   corpus gates, and the full check pass.
+
+- The isolated 9-bit middle-tier executor now retains its active literal
+  context-map pointer, mode, and block countdown across commands. A non-timing
+  source-q9 pass found 20,486 literals, only 204 root misses, 10,965 short
+  insert runs, and just ten literal block switches, making repeated header
+  state traffic the next bounded target. Against frozen `0ae320e3`, 15
+  fixed-CPU-2 pairs improve by another 1.0127x median / 1.0116x geometric
+  throughput with 15/15 wins and a 1.00035x minimum. Final throughput reaches
+  0.6910x median local libbrotli. All 541 tests, reference/upstream/real-corpus
+  gates, and the full repository check pass.
