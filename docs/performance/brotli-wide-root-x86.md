@@ -252,7 +252,13 @@ root address has materially better register allocation and code layout.
 The 65--128 tier is faster, but source q9 still reaches only about 0.74x
 libbrotli. Root width, refill size, pointer tables, and root-slot offset maps
 are now bounded out; the context-three audit also rules out retaining another
-hot pointer. The next useful work is a genuinely smaller regular-distance
-transition or executor representation that reduces live state, not another
-active-block cache. The 129--256 tier should stay at ten bits unless a
-separately isolated policy improves its slowest row.
+hot pointer. A subsequent investigation rejected embedded regular-distance
+roots, combined suffix consumption, RFC-factor roots, packed metadata, and
+a local recent-distance array. Exact evidence is in
+[decoder-distance-cursor-x86.md](decoder-distance-cursor-x86.md).
+
+The next target is the slower 129--256 tier's command and distance transitions.
+Keep its ten-bit literal policy and evaluate the middle tier's fused command
+roots and external distance roots in an isolated executor. Re-freeze the
+baseline with the newly alternating Brotli reference sampler and require
+roadmap q5/q9 gains with source controls before retaining the extra storage.

@@ -31917,6 +31917,30 @@ test "zstd split Huffman all-FSE path matches generic decode" {
     try std.testing.expect(medium_short_written <= expected.len - 1);
     for (medium_output[expected.len - 1 ..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
 
+    @memset(fast_output, 0xa5);
+    var compact_short_written: usize = 0;
+    var compact_short_frame_state: SequenceFrameState = .{};
+    var compact_short_state = try initSequenceDecodeState(
+        &spec,
+        section.sequence_count,
+        try ReverseBitReader.init(block[spec.bitstream_offset..]),
+        compact_short_frame_state.repeated_offsets,
+    );
+    try std.testing.expectError(error.OutputTooSmall, tryDecodeAllFseSplitHuffmanSequences(
+        section,
+        fast_output[0 .. expected.len - 1],
+        &compact_short_written,
+        0,
+        &compact_short_frame_state,
+        .terminal,
+        &compact_short_state,
+        true,
+    ));
+    try std.testing.expect(compact_short_written != 0);
+    try std.testing.expect(compact_short_written <= expected.len - 1);
+    for (fast_output[expected.len - 1 ..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
+    @memset(fast_output, 0xa5);
+
     test_disable_split_huffman_decode = false;
     test_split_huffman_decode_hits = 0;
     test_split_huffman_single_literal_hits = 0;

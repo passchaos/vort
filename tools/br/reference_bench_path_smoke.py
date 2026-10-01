@@ -60,6 +60,8 @@ def main() -> int:
         assert int(row["encoded_bytes"]) == frame.stat().st_size, row
         assert float(row["vort_mib_s"]) > 0.0, row
         assert float(row["reference_mib_s"]) > 0.0, row
+        expected_mix = source.stat().st_size + source.read_bytes()[0]
+        assert int(row["checksum"]) == expected_mix * 2, row
 
         prepared = run(
             executable,
@@ -81,6 +83,15 @@ def main() -> int:
         assert prepared_row["input_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest(), prepared_row
         assert "/source%20data.zst" not in prepared_row["command"], prepared_row
         assert "/source%20data.br" in prepared_row["command"], prepared_row
+        assert int(prepared_row["checksum"]) == expected_mix * 2, prepared_row
+
+        single_codec = run(
+            executable, "--input", str(source), "--encoded-input", str(frame),
+            "--iterations", "3", "--vort-only",
+        )
+        single_row = next(csv.DictReader(io.StringIO(single_codec.stdout)))
+        assert int(single_row["iterations"]) == 3, single_row
+        assert int(single_row["checksum"]) == expected_mix * 3, single_row
 
         for invalid_args in (
             ("--input", str(empty)),
@@ -92,7 +103,7 @@ def main() -> int:
             failed = run(executable, *invalid_args, check=False)
             assert failed.returncode != 0, (invalid_args, failed.stdout, failed.stderr)
 
-    print("br_reference_bench_path_smoke=ok rows=2 invalid=5")
+    print("br_reference_bench_path_smoke=ok rows=3 invalid=5")
     return 0
 
 

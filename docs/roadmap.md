@@ -16865,3 +16865,18 @@ reuse, so production keeps the simpler independently owned plans.
   0.8073x across seven pairs. Both had 0 wins and preserved the stage checksum.
   The existing prefixed paths are required performance, so future size work
   must preserve their semantics and reduce shared live state instead.
+
+- A follow-up rejected Zstd compact-split output-cursor layouts and five
+  Brotli distance/state representations after complete-frame screens. The
+  32-bit distance-root candidate's 1.0070x median did not justify doubling
+  the root plane to 128 KiB; its reference-normalized geometric result was
+  0.9926x. The memory-neutral RFC-factor root lost all five pairs at 0.9701x
+  median. Production decode kernels remain unchanged. Retained work adds
+  every truncated ordinary-distance suffix across all 64 RFC parameter
+  combinations to the scalar/staged reader oracle, retains the Zstd compact
+  split short-output progress/suffix guard, and alternates Vort and libbrotli
+  within each benchmark round while preserving CSV fields and throughput
+  floors. Exact times, commands, hashes, and other rejected variants
+  are in `docs/performance/decoder-distance-cursor-x86.md` and its JSON data.
+  The next performance target is the 129--256-literal-tree tier's command and
+  distance transitions, with a fresh alternating-sampler baseline.

@@ -146,8 +146,11 @@ pub fn main(init: std.process.Init) !void {
             continue;
         }
         const summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
-        const vort_sample = try measure(init.io, .vort, runtime, encoded, vort_output, iterations);
-        const reference_sample = try measure(init.io, .reference, runtime, encoded, reference_output, iterations);
+        const paired = try measurePaired(init.io, runtime, encoded, vort_output, reference_output, iterations);
+        const vort_sample = paired.vort;
+        const reference_sample = paired.reference;
+        if (!std.mem.eql(u8, case.payload, vort_output) or
+            !std.mem.eql(u8, case.payload, reference_output)) return error.SizeMismatch;
         const size_sample = if (case.size_requires_alloc)
             try measureSizeAlloc(init.io, init.gpa, encoded, iterations)
         else
@@ -296,26 +299,52 @@ fn measureSizeAlloc(io: std.Io, allocator: std.mem.Allocator, encoded: []const u
 
 const Codec = enum { vort, reference };
 
+const PairedSample = struct { vort: Sample, reference: Sample };
+
+fn measurePaired(io: std.Io, runtime: libbrotli.Runtime, encoded: []const u8, vort_output: []u8, reference_output: []u8, iterations: usize) !PairedSample {
+    const initial = Sample{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 };
+    var best = PairedSample{ .vort = initial, .reference = initial };
+    // Alternate each warmed pair to limit frequency and scheduler drift between
+    // implementations; keep the established best-of-five estimator for each.
+    for (0..5) |round| {
+        const order = if (round & 1 == 0)
+            [_]Codec{ .vort, .reference }
+        else
+            [_]Codec{ .reference, .vort };
+        for (order) |codec| {
+            const output = if (codec == .vort) vort_output else reference_output;
+            const sample = try measureOnce(io, codec, runtime, encoded, output, iterations);
+            const current = if (codec == .vort) &best.vort else &best.reference;
+            if (sample.elapsed_ns < current.elapsed_ns) current.* = sample;
+        }
+    }
+    return best;
+}
+
 fn measure(io: std.Io, codec: Codec, runtime: libbrotli.Runtime, encoded: []const u8, output: []u8, iterations: usize) !Sample {
     var best = Sample{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 };
     for (0..5) |_| {
-        var mix: u64 = 0;
-        const start = std.Io.Clock.awake.now(io);
-        for (0..iterations) |_| {
-            switch (codec) {
-                .vort => mix +%= try vort.brDecodeStreamInto(encoded, output),
-                .reference => {
-                    try runtime.decode(encoded, output);
-                    mix +%= output.len;
-                },
-            }
-            if (output.len != 0) mix +%= output[0];
-        }
-        const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
-        const elapsed: u64 = if (ns <= 0) 0 else @intCast(ns);
-        if (elapsed < best.elapsed_ns) best = .{ .elapsed_ns = elapsed, .mix = mix };
+        const sample = try measureOnce(io, codec, runtime, encoded, output, iterations);
+        if (sample.elapsed_ns < best.elapsed_ns) best = sample;
     }
     return best;
+}
+
+fn measureOnce(io: std.Io, codec: Codec, runtime: libbrotli.Runtime, encoded: []const u8, output: []u8, iterations: usize) !Sample {
+    var mix: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        switch (codec) {
+            .vort => mix +%= try vort.brDecodeStreamInto(encoded, output),
+            .reference => {
+                try runtime.decode(encoded, output);
+                mix +%= output.len;
+            },
+        }
+        if (output.len != 0) mix +%= output[0];
+    }
+    const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
+    return .{ .elapsed_ns = if (ns <= 0) 0 else @intCast(ns), .mix = mix };
 }
 
 fn mibPerSecond(bytes: usize, ns: u64) f64 {

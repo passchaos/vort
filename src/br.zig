@@ -22401,6 +22401,47 @@ test "br prepared distance lookup matches RFC resolver" {
     }
 }
 
+test "br prepared distance readers match RFC values and every truncated suffix" {
+    var header: MinimalCompressedHeader = undefined;
+    for (0..4) |npostfix| {
+        header.npostfix = @intCast(npostfix);
+        for (0..16) |ndirect_high| {
+            header.ndirect = @intCast(ndirect_high << @intCast(npostfix));
+            const regular_start = 16 + @as(usize, header.ndirect);
+            const alphabet_size = regular_start + (@as(usize, 48) << header.npostfix);
+            prepareDistanceLookup(&header, alphabet_size);
+            for (16..alphabet_size) |symbol_value| {
+                const symbol: u16 = @intCast(symbol_value);
+                const extra_bits: u5 = if (symbol_value < regular_start) 0 else @intCast(1 + ((symbol_value - regular_start) >> @intCast(npostfix + 1)));
+                const max_extra = (@as(u32, 1) << extra_bits) - 1;
+                for ([_]u32{ 0, max_extra }) |extra| {
+                    var input: [4]u8 = undefined;
+                    std.mem.writeInt(u32, &input, extra, .little);
+                    var scalar = bitstream.BitReader.initBitLength(&input, extra_bits);
+                    var staged = fast_bit_reader.Reader.initFrom(scalar);
+                    const expected = if (symbol_value < regular_start) symbol_value - 15 else try resolveRegularDistance(header.npostfix, header.ndirect, symbol, extra);
+                    try std.testing.expectEqual(expected, try readPreparedDistance(&header, &scalar, symbol));
+                    try std.testing.expectEqual(expected, try readPreparedDistanceStaged(&header, &staged, symbol));
+                    try std.testing.expectEqual(@as(usize, extra_bits), scalar.bitPosition());
+                    try std.testing.expectEqual(scalar.bitPosition(), staged.bitPosition());
+                    for (0..extra_bits) |available_bits| {
+                        var short_scalar = bitstream.BitReader.initBitLength(&input, available_bits);
+                        var short_staged = fast_bit_reader.Reader.initFrom(short_scalar);
+                        try std.testing.expectError(error.TruncatedFrame, readPreparedDistance(&header, &short_scalar, symbol));
+                        try std.testing.expectError(error.TruncatedFrame, readPreparedDistanceStaged(&header, &short_staged, symbol));
+                        try std.testing.expectEqual(@as(usize, 0), short_scalar.bitPosition());
+                        try std.testing.expectEqual(short_scalar.bitPosition(), short_staged.bitPosition());
+                    }
+                }
+            }
+        }
+    }
+    var empty_scalar = bitstream.BitReader.init(&.{});
+    var empty_staged = fast_bit_reader.Reader.initFrom(empty_scalar);
+    try std.testing.expectError(error.InvalidHuffmanCode, readPreparedDistance(&header, &empty_scalar, max_distance_alphabet_size));
+    try std.testing.expectError(error.InvalidHuffmanCode, readPreparedDistanceStaged(&header, &empty_staged, max_distance_alphabet_size));
+}
+
 test "br regular distance resolver remains bounded at RFC maxima" {
     const max_symbol: u16 = max_distance_alphabet_size - 1;
     const xcode = @as(usize, max_symbol) - 120 - 16;

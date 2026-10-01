@@ -92,3 +92,9 @@ semantics without pointerized calls or duplicated error exits.
 
 Exact binary hashes, commands, and summary ratios are recorded in
 [zstd-large-json-followups-x86-20261001.json](data/zstd-large-json-followups-x86-20261001.json).
+
+A later output-cursor experiment improved the target but regressed controls
+when its incidental code placement changed. The resumed fixed-NOP padding,
+a page-aligned variant, and a bounded-wildcopy-only local cursor were all
+removed. The complete-row evidence and retained validation work are recorded
+in [decoder-distance-cursor-x86.md](decoder-distance-cursor-x86.md).
