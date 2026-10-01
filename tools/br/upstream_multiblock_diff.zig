@@ -1170,7 +1170,9 @@ fn decodeMetadataProgressChunkMatrix(allocator: std.mem.Allocator, encoded: []co
 }
 
 fn decodeMetadataProgressChunks(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, expected_metadata: []const u8, lgwin: u32, input_chunk_len: usize, output_chunk_len: usize) !void {
-    const history = try allocator.alloc(u8, @min(expected.len, (@as(usize, 1) << @intCast(lgwin)) - 16));
+    if (lgwin < 10 or lgwin > 24) return error.ReferenceEncodeFailed;
+    const window_bits = try regularWindowBits(encoded);
+    const history = try allocator.alloc(u8, @min(expected.len, (@as(usize, 1) << window_bits) - 16));
     defer allocator.free(history);
     const metadata = try allocator.alloc(u8, expected_metadata.len);
     defer allocator.free(metadata);
@@ -1282,9 +1284,11 @@ fn decodeLargeWindowProgressive(allocator: std.mem.Allocator, encoded: []const u
 }
 
 fn decodeProgressChunksWithHeaderScratch(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, lgwin: u32, input_chunk_len: usize, output_chunk_len: usize, header_scratch: []u8) !void {
+    if (lgwin < 10 or lgwin > 24) return error.ReferenceEncodeFailed;
+    const window_bits = try regularWindowBits(encoded);
     // Keep exactly the useful portion of the advertised window so larger-window
     // cases exercise caller-owned history without overallocating short streams.
-    const history = try allocator.alloc(u8, @min(expected.len, (@as(usize, 1) << @intCast(lgwin)) - 16));
+    const history = try allocator.alloc(u8, @min(expected.len, (@as(usize, 1) << window_bits) - 16));
     defer allocator.free(history);
     var decoder = vort.BrotliIncrementalCopyStreamDecoder.initWithOptions(history, .{
         .max_output_len = expected.len,
@@ -1314,4 +1318,18 @@ fn decodeProgressChunksWithHeaderScratch(allocator: std.mem.Allocator, encoded: 
     const one_shot_written = try vort.brDecodeStreamInto(encoded, output);
     if (one_shot_written != expected.len or !std.mem.eql(u8, output, expected))
         return error.SizeMismatch;
+}
+
+fn regularWindowBits(encoded: []const u8) !u5 {
+    if (encoded.len == 0) return error.TruncatedFrame;
+    const first = encoded[0] & 1;
+    if (first == 0) return 16;
+    const low3 = (encoded[0] >> 1) & 0x7;
+    if (low3 != 0) return @as(u5, @intCast(low3)) + 17;
+    const tail = (encoded[0] >> 4) & 0x7;
+    return switch (tail) {
+        0 => 17,
+        1 => error.CorruptFrame,
+        else => @as(u5, @intCast(tail)) + 8,
+    };
 }
