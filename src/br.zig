@@ -6794,8 +6794,9 @@ fn processLargeCompressedMetaBlock(
         return processExternalLiteralLookupCompressedPayload(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, &header, &literal_lookups);
     }
     if (meta_block_len >= external_literal_lookup_meta_block_min) {
-        if (header.literal_tree_count <= external_literal_lookup_middle_tree_limit)
-            return processWideExternalLiteralLookupMetaBlock(external_literal_lookup_middle_tree_limit, reader, output, written, meta_block_end, last_distances, window_bits, &header);
+        if (header.literal_tree_count <= external_literal_lookup_middle_tree_limit) {
+            return processWideExternalLiteralLookup9MetaBlock(external_literal_lookup_middle_tree_limit, reader, output, written, meta_block_end, last_distances, window_bits, &header);
+        }
         return processWideExternalLiteralLookupMetaBlock(max_literal_context_trees, reader, output, written, meta_block_end, last_distances, window_bits, &header);
     }
     return processDecodedCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, &header);
@@ -6872,7 +6873,9 @@ const external_literal_lookup_tree_limit: usize = inline_literal_tree_count;
 const external_literal_lookup_middle_tree_limit: usize = 128;
 const external_literal_lookup_meta_block_min: usize = 64 * 1024;
 const multi_tree_zero_insert_command_limit: usize = 4;
+const wide_literal_lookup9_text_section = ".vort_br_wide_lookup9";
 const ExternalLiteralLookup = huffman.PackedLookup(10);
+const WideExternalLiteralLookup9 = huffman.PackedLookup(9);
 const ExternalCommandLookup = huffman.PackedLookup(10);
 const ExternalDistanceLookup = huffman.PackedLookup(9);
 const TailLiteralLookup = huffman.PackedLookup(8);
@@ -7093,6 +7096,32 @@ fn prepareWideExternalLiteralLookups(
     }
 }
 
+fn prepareWideExternalLiteralLookups9(
+    comptime capacity: usize,
+    header: *const MinimalCompressedHeader,
+    lookups: *[capacity]WideExternalLiteralLookup9,
+) Error!void {
+    if (header.literal_tree_count <= inline_literal_tree_count or header.literal_tree_count > lookups.len)
+        return error.UnsupportedBrotliFeature;
+    for (0..header.literal_tree_count) |index| {
+        if (index < inline_literal_tree_count) {
+            const tree = &header.literal_trees[index];
+            lookups[index] = if (tree.single_symbol) |symbol|
+                try WideExternalLiteralLookup9.initSingle(symbol)
+            else
+                try WideExternalLiteralLookup9.init(&tree.table);
+            continue;
+        }
+        const packed_tree = &header.packed_literal_trees[index - inline_literal_tree_count];
+        if (packed_tree.single_symbol_plus_one != 0) {
+            lookups[index] = try WideExternalLiteralLookup9.initSingle(packed_tree.single_symbol_plus_one - 1);
+            continue;
+        }
+        const tree = try packed_tree.expand();
+        lookups[index] = try WideExternalLiteralLookup9.init(&tree.table);
+    }
+}
+
 noinline fn processWideExternalLiteralLookupMetaBlock(
     comptime capacity: usize,
     reader: *bitstream.BitReader,
@@ -7126,6 +7155,38 @@ noinline fn processWideExternalLiteralLookupMetaBlock(
             literal_lookups[0..header.literal_tree_count],
         );
     return processWideExternalLiteralLookupCompressedPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count]);
+}
+
+noinline fn processWideExternalLiteralLookup9MetaBlock(
+    comptime capacity: usize,
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+) linksection(wide_literal_lookup9_text_section) Error!void {
+    var literal_lookups: [capacity]WideExternalLiteralLookup9 = undefined;
+    try prepareWideExternalLiteralLookups9(capacity, header, &literal_lookups);
+    if (builtin.is_test) test_external_literal_lookup_hits += 1;
+    const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(header);
+    var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
+    defer fast_reader.syncTo(reader);
+    if (auxiliary_tail_lookups)
+        return processWideExternalLiteralLookup9CompressedPayload(
+            true,
+            wideAuxiliaryUsesFixedNineBitPeek(capacity),
+            &fast_reader,
+            output,
+            written,
+            meta_block_end,
+            last_distances,
+            window_bits,
+            header,
+            literal_lookups[0..header.literal_tree_count],
+        );
+    return processWideExternalLiteralLookup9CompressedPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count]);
 }
 
 fn wideAuxiliaryUsesFixedNineBitPeek(comptime capacity: usize) bool {
@@ -7538,6 +7599,103 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
                     const tree_index = header.literal_context_map[map_start + context];
                     const lookup = &literal_lookup_ptr[tree_index];
                     const literal = (try lookup.decodeValueFast10(reader)) orelse blk: {
+                        const tree = try literalPrefixForDecode(header, tree_index);
+                        break :blk if (tree_index < inline_literal_tree_count)
+                            try lookup.decodeValueLong(&tree.table, reader)
+                        else
+                            try tree.decode(reader);
+                    };
+                    if (literal > 0xff) return error.InvalidHuffmanCode;
+                    output[output_cursor] = @intCast(literal);
+                    output_cursor += 1;
+                    second_previous = previous;
+                    previous = @intCast(literal);
+                }
+                if (header.literal_block.block_type_count > 1)
+                    header.literal_block.remaining -= run_len;
+            }
+        }
+        if (output_cursor == meta_block_end) return;
+        var decoded_distance: DecodedBrotliDistance = undefined;
+        if (comptime auxiliary_tail_lookups)
+            if (comptime fixed_nine_bit_peek)
+                try readMinimalDistanceTailLookupIntoFixed9(header, reader, lengths, last_distances, &decoded_distance)
+            else
+                try readMinimalDistanceTailLookupInto(header, reader, lengths, last_distances, &decoded_distance)
+        else
+            decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
+        if (distance == 0) return error.InvalidMatch;
+        const max_distance = maxBackwardDistanceForWindow(window_bits, output_cursor);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (word.len > meta_block_end - output_cursor) return error.CorruptFrame;
+            @memcpy(output[output_cursor..][0..word.len], word);
+            output_cursor += word.len;
+            continue;
+        }
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
+        if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
+        match_copy.append(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
+    }
+}
+
+/// Isolated 9-bit counterpart. Keeping this complete executor in a dedicated
+/// section prevents its smaller root policy from perturbing the established
+/// 10-bit executor's ordinary-text layout.
+noinline fn processWideExternalLiteralLookup9CompressedPayload(
+    comptime auxiliary_tail_lookups: bool,
+    comptime fixed_nine_bit_peek: bool,
+    reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const WideExternalLiteralLookup9,
+) align(64) linksection(wide_literal_lookup9_text_section) Error!void {
+    var transformed_dictionary_word: [64]u8 = undefined;
+    const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
+    const literal_lookup_ptr = literal_lookups.ptr;
+    var output_cursor = written.*;
+    defer written.* = output_cursor;
+    while (output_cursor < meta_block_end) {
+        const command_symbol = if (comptime auxiliary_tail_lookups)
+            if (comptime fixed_nine_bit_peek)
+                try readCommandSymbolTailLookupFixed9(header, reader)
+            else
+                try readCommandSymbolTailLookup(header, reader)
+        else
+            try readCommandSymbolAny(header, reader);
+        const lengths = if (comptime auxiliary_tail_lookups and fixed_nine_bit_peek)
+            try readInsertCopyLengthsStaged(command_symbol, reader)
+        else
+            try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;
+        if (lengths.insert_len != 0) {
+            var previous: u8 = if (output_cursor == 0) 0 else output[output_cursor - 1];
+            var second_previous: u8 = if (output_cursor < 2) 0 else output[output_cursor - 2];
+            var i: usize = 0;
+            while (i < lengths.insert_len) {
+                try ensureLiteralBlockAny(header, reader);
+                const remaining_insert = lengths.insert_len - i;
+                const run_len = if (header.literal_block.block_type_count > 1)
+                    @min(remaining_insert, header.literal_block.remaining)
+                else
+                    remaining_insert;
+                std.debug.assert(run_len != 0);
+                const map_start = @as(usize, header.literal_block.current_type) * 64;
+                const context_mode = header.literal_context_modes[header.literal_block.current_type];
+                const run_end = i + run_len;
+                while (i < run_end) : (i += 1) {
+                    const context = if (utf8_context_only)
+                        literal_context.valueUtf8Clustered(previous, second_previous)
+                    else
+                        literal_context.valueClustered(context_mode, previous, second_previous);
+                    const tree_index = header.literal_context_map[map_start + context];
+                    const lookup = &literal_lookup_ptr[tree_index];
+                    const literal = (try lookup.decodeValueFast9(reader)) orelse blk: {
                         const tree = try literalPrefixForDecode(header, tree_index);
                         break :blk if (tree_index < inline_literal_tree_count)
                             try lookup.decodeValueLong(&tree.table, reader)
@@ -21104,6 +21262,9 @@ test "br wide external literal lookups cover packed fast and canonical paths" {
 
     var lookups: [external_literal_lookup_middle_tree_limit]ExternalLiteralLookup = undefined;
     try prepareWideExternalLiteralLookups(external_literal_lookup_middle_tree_limit, &header, &lookups);
+    var lookups9: [external_literal_lookup_middle_tree_limit]WideExternalLiteralLookup9 = undefined;
+    try prepareWideExternalLiteralLookups9(external_literal_lookup_middle_tree_limit, &header, &lookups9);
+    try std.testing.expectEqual(@sizeOf(ExternalLiteralLookup) / 2, @sizeOf(WideExternalLiteralLookup9));
 
     const dense_encoder = try huffman.HuffmanTable(256).Encoder.init(&dense_lengths);
     var dense_writer: bitstream.BitWriter = .{};
@@ -21117,6 +21278,12 @@ test "br wide external literal lookups cover packed fast and canonical paths" {
         try lookups[inline_literal_tree_count].decodeValueFast(&dense_reader),
     );
     try std.testing.expectEqual(@as(usize, 8), dense_reader.bitPosition());
+    var dense_reader9 = bitstream.BitReader.init(dense_encoded);
+    try std.testing.expectEqual(
+        @as(?u16, 173),
+        try lookups9[inline_literal_tree_count].decodeValueFast9(&dense_reader9),
+    );
+    try std.testing.expectEqual(@as(usize, 8), dense_reader9.bitPosition());
 
     var empty_reader = bitstream.BitReader.init(&.{});
     try std.testing.expectEqual(
@@ -21124,6 +21291,11 @@ test "br wide external literal lookups cover packed fast and canonical paths" {
         try lookups[inline_literal_tree_count + 1].decodeValueFast(&empty_reader),
     );
     try std.testing.expectEqual(@as(usize, 0), empty_reader.bitPosition());
+    var empty_reader9 = bitstream.BitReader.init(&.{});
+    try std.testing.expectEqual(
+        @as(?u16, 211),
+        try lookups9[inline_literal_tree_count + 1].decodeValueFast9(&empty_reader9),
+    );
 
     const long_encoder = try huffman.HuffmanTable(256).Encoder.init(&long_lengths);
     var long_writer: bitstream.BitWriter = .{};
@@ -21142,6 +21314,13 @@ test "br wide external literal lookups cover packed fast and canonical paths" {
     try std.testing.expectEqual(@as(u16, 11), try expanded.decode(&long_reader));
     try std.testing.expectEqual(@as(usize, 11), long_reader.bitPosition());
     try std.testing.expectEqual(@as(u16, long_tree_index), header.active_packed_literal_tree_index);
+    var long_reader9 = bitstream.BitReader.init(long_encoded);
+    try std.testing.expectEqual(
+        @as(?u16, null),
+        try lookups9[long_tree_index].decodeValueFast9(&long_reader9),
+    );
+    try std.testing.expectEqual(@as(u16, 11), try expanded.decode(&long_reader9));
+    try std.testing.expectEqual(@as(usize, 11), long_reader9.bitPosition());
 }
 
 test "br minimal compressed stream switches literal block tree" {

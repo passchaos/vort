@@ -72,10 +72,59 @@
       "roadmap_q9": { "speedup_median": 0.998168589611175, "speedup_geometric_mean": 1.0065046480511912, "wins": 3, "outlier_max": 1.0310580496957993 }
     }
   },
+  "retained_isolated_middle_tier": {
+    "candidate_executable_sha256": "0ae320e3cc176c71507e1acfa79833edcf7407fcbec3db068942a6e6235db485",
+    "policy": "65 <= literal_tree_count <= 128 uses 9-bit roots; 129..256 retains 10-bit roots",
+    "section": ".vort_br_wide_lookup9",
+    "section_bytes": 8827,
+    "source_input": {
+      "bytes": 1720475,
+      "sha256": "8c5b5218918c22c72bd2b34a47bc918fb54af2b8e5aa5ee518a81edb71fdea93",
+      "q9_encoded_bytes": 140681,
+      "q9_literal_trees": 104,
+      "q5_encoded_bytes": 146896,
+      "q5_literal_trees": 130
+    },
+    "roadmap_input": {
+      "bytes": 1244517,
+      "sha256": "83ba543621442c88ffd4cfce40c879a07f9442bf8ff7286d3ff22c2293639470",
+      "q5_encoded_bytes": 348167,
+      "q9_encoded_bytes": 333386,
+      "literal_trees": 143
+    },
+    "target_source_q9": {
+      "pairs": 15,
+      "speedup_median": 1.023135149116434,
+      "speedup_geometric_mean": 1.0222498956680248,
+      "speedup_min": 1.0093396744571552,
+      "speedup_max": 1.032156068816889,
+      "wins": 15,
+      "libbrotli_normalized_median": 1.0215479382684165,
+      "libbrotli_normalized_geometric_mean": 1.022633997553731,
+      "candidate_over_libbrotli_median": 0.681363006990408,
+      "candidate_over_libbrotli_geometric_mean": 0.6802406137581659
+    },
+    "controls": {
+      "source_q5": { "pairs": 7, "speedup_median": 1.0033295460385485, "speedup_geometric_mean": 1.0042744223693076, "wins": 5 },
+      "roadmap_q5": { "pairs": 7, "speedup_median": 1.004969895332008, "speedup_geometric_mean": 1.0037600057577614, "wins": 5 },
+      "roadmap_q9": { "pairs": 7, "speedup_median": 1.001424450750963, "speedup_geometric_mean": 1.0011273063304587, "wins": 4 },
+      "clustered_q8": { "pairs": 15, "speedup_median": 0.9997426016178914, "speedup_geometric_mean": 0.9985244932613829, "wins": 7 }
+    }
+  },
   "rejected_instantiation_order_binary_sha256": "d1100b34da919748bf53cd76c60900ba59cdbafa1f9def4444fcb15d515f22f8",
   "validation": {
     "focused_wide_lookup_test": true,
     "complete_output_verified_each_invocation": true,
-    "production_changes_retained": false
+    "direct_brotli_tests": 541,
+    "reference_gate_rows": 13,
+    "upstream_generated_cases": 7056,
+    "upstream_progressive_cases": 7056,
+    "upstream_fragmentation_cases": 1401,
+    "upstream_high_tree_truncation_cases": 64,
+    "real_corpus_files": 4,
+    "real_corpus_one_shot_cases": 16,
+    "real_corpus_progressive_cases": 16,
+    "full_build_check": true,
+    "production_changes_retained": true
   }
 }

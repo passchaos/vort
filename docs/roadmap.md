@@ -16760,3 +16760,15 @@ reuse, so production keeps the simpler independently owned plans.
   Zig 0.16 function sections cannot depend on a generic comptime parameter.
   All variants were removed rather than worsening the slowest row. Exact data
   is in `docs/performance/brotli-wide-root-x86.md` and its JSON companion.
+
+- The retained Brotli wide-root policy now gives only the 65--128 literal-tree
+  middle tier a 9-bit root and places its explicit setup/payload executors in
+  the isolated `.vort_br_wide_lookup9` section; 129--256-tree streams keep the
+  original 10-bit full tier, with no header metadata or runtime width branch.
+  Fifteen fixed-CPU-2 source-q9 pairs improve by 1.0231x median / 1.0222x
+  geometric throughput with 15/15 wins and a 1.0093x minimum. Source q5 and
+  roadmap q5/q9 10-bit controls are neutral-positive at 1.0033x/1.0050x/
+  1.0014x medians; `clustered_q8` is neutral at 0.9997x median. Candidate
+  source-q9 throughput reaches 0.6814x local libbrotli, so the wide literal
+  loop remains a major open gap. All 541 direct tests, reference/upstream/real-
+  corpus gates, and the full check pass.

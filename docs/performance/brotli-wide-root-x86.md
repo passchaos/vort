@@ -52,24 +52,47 @@ decision to O(1), but roadmap q5 still measured 0.9919x median / 0.9940x
 geometric with only 1/7 wins. Roadmap q9 was neutral by geometric mean only
 because of a 1.0311x host outlier; its median remained 0.9982x.
 
-The remaining cost is generated-code layout: retaining separately compiled
+The remaining cost in that prototype was generated-code layout: retaining separately compiled
 9- and 10-bit wide executors duplicates roughly 14 KiB of payload code and
 moves the established 10-bit instances. Reversing source-level instantiation
 order did not change LLVM's emitted order. A conditional link section cannot
 refer to a generic comptime parameter in Zig 0.16, and copying the complete
-executor solely to force a section would add maintenance risk without evidence
-that the final layout wins.
+executor solely to force a section required separate evidence.
 
-All candidates verified complete output on every timed invocation and the
-focused packed fast-hit, single-symbol, long-code fallback, and cursor test
-passed. No production code was retained. Exact hashes and pair summaries are
-in
+## Retained isolated middle tier
+
+The final implementation limits 9-bit roots to the existing 65--128-tree
+middle tier and places its explicit setup and payload executors in the separate
+`.vort_br_wide_lookup9` ELF section. Streams with 129--256 trees retain the
+original 10-bit full tier. This removes runtime policy metadata, preserves the
+header layout, and keeps roughly 8.6 KiB of 9-bit code out of ordinary `.text`.
+The 9-bit lookup remains half the size of the 10-bit table.
+
+Against frozen `2b2950f3...`, 15 source-q9 pairs improve by 1.0231x median /
+1.0222x geometric mean with 15/15 wins and a 1.0093x minimum. The candidate
+reaches 0.6814x median local libbrotli throughput. Seven-pair controls are
+neutral-positive:
+
+| control | median | geometric mean | wins |
+| --- | ---: | ---: | ---: |
+| source q5 (130 trees, 10-bit) | 1.0033x | 1.0043x | 5/7 |
+| roadmap q5 (143 trees, 10-bit) | 1.0050x | 1.0038x | 5/7 |
+| roadmap q9 (143 trees, 10-bit) | 1.0014x | 1.0011x | 4/7 |
+| `clustered_q8` | 0.9997x | 0.9985x | 7/15 |
+
+The clustered geometric result contains two approximately 0.989 scheduling
+samples; its median and win count are neutral, and the route is not selected.
+Every timed invocation verified complete Vort and libbrotli output. The focused
+9/10-bit fast-hit, single-symbol, long-code fallback, table-size, and cursor
+oracle passes, together with all 541 direct tests, the 13-row reference gate,
+the upstream and real-corpus differentials, and the full repository check.
+
+Exact hashes and pair summaries are in
 [brotli-wide-root-x86-20261001.json](data/brotli-wide-root-x86-20261001.json).
 
 ## Next direction
 
-A future 9-bit policy must avoid emitting a second payload executor in the
-ordinary text section. Credible options are a deliberately isolated generated
-executor with byte-identical 10-bit layout, or a shared root representation
-whose width choice does not add a per-literal branch. Merely changing the root
-width or rescanning tree metadata is now ruled out.
+The 65--128 tier is faster, but source q9 still reaches only about 0.68x
+libbrotli. The next useful work is inside the context-dependent literal loop or
+bit-reader refill, not another root-width threshold. The 129--256 tier should
+stay at ten bits unless a separately isolated policy improves its slowest row.
