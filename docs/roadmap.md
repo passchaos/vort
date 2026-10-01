@@ -16732,3 +16732,11 @@ reuse, so production keeps the simpler independently owned plans.
   Candidate/libbrotli 1.2.0-dev reaches only 0.8570x median, so broader Brotli
   leadership remains open. All 541 direct tests, the 13-row reference gate,
   upstream and real-corpus differentials, and the full repository check pass.
+
+- Direct recent-distance shortcuts after the context-three cache were rejected.
+  Symbols zero through three occur 1,960 times, including 1,835 symbol-one
+  hits, but direct ring indexing expanded the hot executor by 124 bytes and
+  measured 0.9985x median with 5/15 wins. Restricting the shortcut to symbol
+  one still added 108 bytes and measured 0.9994x median with 6/15 wins; a
+  single 1.53x host outlier made its geometric mean misleading. Both variants
+  were removed, retaining the compact noinline short-distance resolver.

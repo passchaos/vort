@@ -198,6 +198,14 @@ geometric with 7/7 wins. Short rows remain noisy. Longer controls recover
 geometric; repository source q1 is neutral at 1.0014x median / 0.9984x
 geometric and remains above libbrotli at a 1.0038x median ratio.
 
+Two recent-distance follow-ups were rejected. Short symbols zero through three
+occur 1,960 times, including 1,835 symbol-one hits, but directly indexing the
+recent-distance ring for all four symbols measured only 0.9985x median with
+5/15 wins. Specializing symbol one alone measured 0.9994x median with 6/15
+wins; one 1.53x host outlier made its geometric mean unusable. Both variants
+expanded the hot executor by more than 100 bytes and were removed. The compact
+noinline short-distance resolver remains the measured best layout.
+
 ## Correctness evidence
 
 The focused lookup test checks zero-insert copy-extra decoding and exact
