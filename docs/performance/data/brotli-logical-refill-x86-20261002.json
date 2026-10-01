@@ -1,0 +1,1008 @@
+{
+  "date": "2026-10-02",
+  "baseline_git": "95c57c537fc4a6e00b92c6568e2851b96ed03024",
+  "baseline_executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+  "candidate_executable_sha256": "90a032f5f0442a09d271d6aed9501a5b386068072802aca937ea6c8757c9e3f3",
+  "candidate_reader_source_sha256": "e39d8d46787eaaa146596317ec41e65cbd62abe03ad8aad2b8b89cb263f1c788",
+  "host": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "os": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "cpu_affinity": "2",
+    "codec_threads": 1
+  },
+  "reference": {
+    "path": "/tmp/vort-brotli-upstream-build",
+    "git": "558fc647cdaf391228d614ca85f711e02e4e583b",
+    "version": "1.2.0-dev",
+    "libraries": {
+      "/tmp/vort-brotli-upstream-build/libbrotlidec.so.1.2.0": "e3e18631aaa421912afddbef2246eb3e6abe4e15a10f983d31ac2dcbe3d20eb3",
+      "/tmp/vort-brotli-upstream-build/libbrotlicommon.so.1.2.0": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739",
+      "/tmp/vort-brotli-upstream-build/libbrotlienc.so.1.2.0": "cc82e22aba04d134b95425d936c1d834edc64a1379c008c896d7fe68cd258899"
+    },
+    "build": {
+      "cmake_build_type": "Release",
+      "c_compiler": "/usr/bin/cc",
+      "c_flags_release": "-O3 -DNDEBUG",
+      "compiler_version": "cc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0"
+    }
+  },
+  "input_snapshot_commit": "488c5415",
+  "environment": {
+    "LD_LIBRARY_PATH": "/tmp/vort-brotli-upstream-build"
+  },
+  "method": {
+    "full": "Best of five alternating Vort/libbrotli rounds; baseline/candidate process order reverses each pair. Equal input hashes, sizes, iteration counts and output checksums required.",
+    "controls": "Full-frame public API, decoder-only best of five with reversed process order and equal sizes, iterations and output checksums.",
+    "limitations": [
+      "One x86 host, warm calls; no broad industry-leadership claim.",
+      "Compilation jobs restricted to CPUs 4-7, benchmark CPU 2; package frequency and unrelated scheduling can vary.",
+      "No hardware counter measurements."
+    ]
+  },
+  "diagnostic": {
+    "source": "const std = @import(\"std\");\nconst vort = @import(\"vort\");\nconst lib = @import(\"br_runtime\");\npub fn main(init: std.process.Init) !void {\n    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);\n    defer args.deinit();\n    _ = args.next();\n    const path = args.next().?;\n    const quality = try std.fmt.parseInt(c_int, args.next().?, 10);\n    const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(16 * 1024 * 1024));\n    defer init.gpa.free(payload);\n    var runtime = try lib.Runtime.open();\n    defer runtime.deinit();\n    const encoded = try runtime.encodeAlloc(init.gpa, payload, quality);\n    defer init.gpa.free(encoded);\n    const out = try init.gpa.alloc(u8, payload.len);\n    defer init.gpa.free(out);\n    _ = try vort.brDecodeStreamInto(encoded, out);\n    if (!std.mem.eql(u8, payload, out)) return error.SizeMismatch;\n    var best: u64 = std.math.maxInt(u64);\n    var mix: usize = 0;\n    const iterations = 200;\n    for (0..5) |_| {\n        const start = std.Io.Clock.awake.now(init.io);\n        for (0..iterations) |_| mix +%= try vort.brDecodeStreamInto(encoded, out);\n        const ns: u64 = @intCast(start.durationTo(std.Io.Clock.awake.now(init.io)).nanoseconds);\n        best = @min(best, ns);\n    }\n    const header = try vort.br.benchmarkCompressedHeaders(init.io, init.gpa, encoded, iterations);\n    const profile = try vort.br.profileCompressedHeaders(init.io, init.gpa, encoded, 20);\n    var buffer: [2048]u8 = undefined;\n    var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);\n    try stdout.interface.print(\"input={d} encoded={d} quality={d} iterations={d} full_ns={d} header_ns={d} header_share={d:.6} headers={d} header_bits={d} literal_trees={d} command_trees={d} distance_trees={d} checksum={d}\\n\", .{payload.len, encoded.len, quality, iterations, best, header.elapsed_ns, @as(f64, @floatFromInt(header.elapsed_ns))/@as(f64, @floatFromInt(best)), profile.compressed_meta_block_count/20, profile.input_bits/20, profile.literal_context_trees/20, profile.command_trees/20, profile.distance_context_trees/20, mix +% header.checksum});\n    try stdout.interface.flush();\n}\n",
+    "source_sha256": "7180e7da40245309ac48285e1ddd7572a3bc7c9c58c046f73e59c08f6da60c05",
+    "executable_sha256": "8714a983e9dfe89cc977eb89b8b0652b4dcad3cb8030374eb014e826d82f1f27",
+    "command": "taskset -c 2 env LD_LIBRARY_PATH=/tmp/vort-brotli-upstream-build /tmp/vort-refill-20261002/profile /tmp/vort-decoder-20261001/roadmap.md 9",
+    "output": "input=1251399 encoded=335220 quality=9 iterations=200 full_ns=600159810 header_ns=35805627 header_share=0.059660 headers=1 header_bits=24664 literal_trees=143 command_trees=3 distance_trees=27 checksum=1256433000",
+    "scope": "Approximate header-only versus complete decode timing, not a paired optimization result. Lookup preparation is not separately timed.",
+    "build_command": [
+      "zig",
+      "build-exe",
+      "-OReleaseFast",
+      "--dep",
+      "vort",
+      "--dep",
+      "br_runtime",
+      "-Mroot=/tmp/vort-refill-20261002/profile.zig",
+      ".zig-cache/o/1ce4443d2778e0b187892cf1213a7bdd/vort-br-record-optimal-releasefast.o",
+      ".zig-cache/o/e0524a2f7b8b32d20d43fa4cb6974cf3/vort-zstd-huffman-x2-releasefast.o",
+      "-OReleaseFast",
+      "-Mvort=src/root.zig",
+      "-OReleaseFast",
+      "-Mbr_runtime=tools/br/libbrotli_runtime.zig",
+      "-lc",
+      "-femit-bin=/tmp/vort-refill-20261002/profile"
+    ]
+  },
+  "code_bytes": {
+    "wide9_payload_baseline": 5589,
+    "wide9_payload_candidate": 5390,
+    "wide10_payload_baseline": 5589,
+    "wide10_payload_candidate": 5390
+  },
+  "memory": "Reader fields and scratch sizes unchanged",
+  "final": {
+    "roadmap_q9": {
+      "summary": {
+        "pairs": 15,
+        "median": 1.0201076115223766,
+        "geomean": 1.0185130649916814,
+        "min": 0.9982996280627834,
+        "wins": 14,
+        "normalized_geomean": 1.0249162920319759,
+        "candidate_reference_median": 0.7169
+      },
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 335220,
+      "iterations": 100,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": "/tmp/vort-refill-20261002/baseline --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q9 --quality 9 --iterations 100 --csv /tmp/vort-refill-20261002/final-roadmap-q9-1-base.csv",
+        "candidate": "/tmp/vort-refill-20261002/logical-only --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q9 --quality 9 --iterations 100 --csv /tmp/vort-refill-20261002/final-roadmap-q9-1-candidate.csv"
+      },
+      "columns": [
+        "base_vort_ns",
+        "base_reference_ns",
+        "candidate_vort_ns",
+        "candidate_reference_ns",
+        "base_over_reference",
+        "candidate_over_reference"
+      ],
+      "samples": [
+        [
+          312544628,
+          215117162,
+          298171003,
+          214405114,
+          0.6883,
+          0.7191
+        ],
+        [
+          297635227,
+          210342363,
+          294834779,
+          209708573,
+          0.7067,
+          0.7113
+        ],
+        [
+          298250773,
+          209969042,
+          292001810,
+          211410801,
+          0.704,
+          0.724
+        ],
+        [
+          291361056,
+          205017743,
+          291857322,
+          209895854,
+          0.7037,
+          0.7192
+        ],
+        [
+          292012431,
+          205722949,
+          290911948,
+          209311230,
+          0.7045,
+          0.7195
+        ],
+        [
+          303655283,
+          212552663,
+          299425662,
+          213819839,
+          0.7,
+          0.7141
+        ],
+        [
+          296553032,
+          208604820,
+          291479264,
+          210377805,
+          0.7034,
+          0.7218
+        ],
+        [
+          299318489,
+          208894875,
+          293007600,
+          210945766,
+          0.6979,
+          0.7199
+        ],
+        [
+          297627954,
+          209052763,
+          293869566,
+          210668114,
+          0.7024,
+          0.7169
+        ],
+        [
+          309655656,
+          213330233,
+          309081109,
+          218893676,
+          0.6889,
+          0.7082
+        ],
+        [
+          302717103,
+          211362602,
+          295665909,
+          211306579,
+          0.6982,
+          0.7147
+        ],
+        [
+          301801786,
+          212012410,
+          295852891,
+          210689266,
+          0.7025,
+          0.7121
+        ],
+        [
+          301727494,
+          211297913,
+          292148100,
+          208934416,
+          0.7003,
+          0.7152
+        ],
+        [
+          300829514,
+          210027950,
+          293835251,
+          209941224,
+          0.6982,
+          0.7145
+        ],
+        [
+          301899116,
+          210605460,
+          293284197,
+          213389051,
+          0.6976,
+          0.7276
+        ]
+      ]
+    },
+    "source_q9": {
+      "summary": {
+        "median": 1.0195365255466684,
+        "geomean": 1.0204213088539253,
+        "min": 1.0145461656215649,
+        "wins": 15,
+        "pairs": 15
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 141001,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/final-source-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/logical-only",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/final-source-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          312436807,
+          306943099
+        ],
+        [
+          312277116,
+          307799809
+        ],
+        [
+          313473588,
+          307346930
+        ],
+        [
+          313020521,
+          307316015
+        ],
+        [
+          312860498,
+          306865414
+        ],
+        [
+          312542246,
+          307236939
+        ],
+        [
+          313161430,
+          306380591
+        ],
+        [
+          313669593,
+          307013685
+        ],
+        [
+          313306649,
+          306962216
+        ],
+        [
+          313537925,
+          307419678
+        ],
+        [
+          312997738,
+          307391159
+        ],
+        [
+          318348783,
+          306770682
+        ],
+        [
+          318332084,
+          312823579
+        ],
+        [
+          314482014,
+          307025096
+        ],
+        [
+          312873286,
+          307791382
+        ]
+      ]
+    },
+    "roadmap_q5": {
+      "summary": {
+        "median": 1.0166112747305946,
+        "geomean": 1.0161190804369291,
+        "min": 1.0115749150347042,
+        "wins": 7,
+        "pairs": 7
+      },
+      "input_bytes": 1251399,
+      "encoded_bytes": 350069,
+      "iterations": 200,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q5",
+          "--quality",
+          "5",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/final-roadmap-q5-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/logical-only",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q5",
+          "--quality",
+          "5",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/final-roadmap-q5-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          627850113,
+          615877067
+        ],
+        [
+          626143546,
+          615912455
+        ],
+        [
+          626882478,
+          615493448
+        ],
+        [
+          624531742,
+          617147739
+        ],
+        [
+          627629057,
+          615587642
+        ],
+        [
+          621644047,
+          614530904
+        ],
+        [
+          622694505,
+          613364907
+        ]
+      ]
+    },
+    "source_q5": {
+      "summary": {
+        "median": 1.01987916649194,
+        "geomean": 1.0188509417584628,
+        "min": 1.0149323969080326,
+        "wins": 7,
+        "pairs": 7
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 147580,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q5",
+          "--quality",
+          "5",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/final-source-q5-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/logical-only",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q5",
+          "--quality",
+          "5",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/final-source-q5-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          336552402,
+          329632622
+        ],
+        [
+          336159146,
+          328972828
+        ],
+        [
+          335578530,
+          329037538
+        ],
+        [
+          335746284,
+          329054104
+        ],
+        [
+          335045231,
+          329937291
+        ],
+        [
+          335469809,
+          330534142
+        ],
+        [
+          335912498,
+          329807701
+        ]
+      ]
+    },
+    "clustered_q8": {
+      "summary": {
+        "median": 1.0185747213355534,
+        "geomean": 1.020992303249825,
+        "min": 1.0139817695301454,
+        "wins": 7,
+        "pairs": 7
+      },
+      "input_bytes": 1048576,
+      "encoded_bytes": 52622,
+      "iterations": 200,
+      "checksum": "209738400",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/baseline",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/logical-clustered-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/logical-only",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/logical-clustered-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          116799015,
+          115036118
+        ],
+        [
+          117159955,
+          115281303
+        ],
+        [
+          118337572,
+          115637017
+        ],
+        [
+          116900130,
+          115288197
+        ],
+        [
+          118074221,
+          115374181
+        ],
+        [
+          120687426,
+          116473011
+        ],
+        [
+          117671904,
+          115526040
+        ]
+      ]
+    }
+  },
+  "screens": {
+    "roadmap-q9": {
+      "summary": {
+        "median": 1.0137917567379702,
+        "geomean": 1.0142685043028377,
+        "min": 1.0084735699327247,
+        "wins": 7,
+        "pairs": 7
+      },
+      "input_bytes": 1251399,
+      "encoded_bytes": 335220,
+      "iterations": 200,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/roadmap-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/candidate",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/roadmap-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          582490937,
+          575197625
+        ],
+        [
+          581203026,
+          571360094
+        ],
+        [
+          582871064,
+          571174976
+        ],
+        [
+          579370693,
+          574502605
+        ],
+        [
+          580251961,
+          573047304
+        ],
+        [
+          581439385,
+          573015886
+        ],
+        [
+          582094549,
+          574175658
+        ]
+      ],
+      "candidate_executable_sha256": "12a717d12c740c6d9f0e2a4d351ae5688faab0d8e117544546e010f839617466"
+    },
+    "logical-roadmap-q9": {
+      "summary": {
+        "median": 1.0170259465938074,
+        "geomean": 1.0172290652585323,
+        "min": 1.009953119264225,
+        "wins": 7,
+        "pairs": 7
+      },
+      "input_bytes": 1251399,
+      "encoded_bytes": 335220,
+      "iterations": 200,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/logical-roadmap-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/logical-only",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/logical-roadmap-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          581819724,
+          570834882
+        ],
+        [
+          575905024,
+          566263846
+        ],
+        [
+          575769373,
+          570095148
+        ],
+        [
+          577793095,
+          567251185
+        ],
+        [
+          577109100,
+          568915584
+        ],
+        [
+          583051591,
+          568456354
+        ],
+        [
+          580016589,
+          571001384
+        ]
+      ]
+    },
+    "logical-source-q9": {
+      "summary": {
+        "median": 1.0183997367242446,
+        "geomean": 1.0175793600545702,
+        "min": 1.0116937862757984,
+        "wins": 7,
+        "pairs": 7
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 141001,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/logical-source-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-refill-20261002/logical-only",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-refill-20261002/logical-source-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          311301075,
+          305323404
+        ],
+        [
+          311367829,
+          305424245
+        ],
+        [
+          310760824,
+          305146214
+        ],
+        [
+          311063488,
+          305278088
+        ],
+        [
+          311196022,
+          306013310
+        ],
+        [
+          309348548,
+          305772905
+        ],
+        [
+          310264995,
+          304761424
+        ]
+      ]
+    }
+  },
+  "build_and_runtime": {
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "2",
+    "affinity_cpu_count": "1",
+    "benchmark_threads": "1",
+    "codec_thread_policy": "single"
+  },
+  "reference_gate_rows": [
+    {
+      "case": "tiny",
+      "input_sha256": "46c0941f01bc4aba512b213ac665132ebc108b566ed6203a145d9016df7d1cc6",
+      "input_bytes": "12",
+      "encoded_bytes": "16",
+      "iterations": "500",
+      "vort_ns": "4313",
+      "reference_ns": "123568",
+      "vort_over_reference": "28.6501",
+      "checksum": "116000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "text",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "110",
+      "iterations": "500",
+      "vort_ns": "2903244",
+      "reference_ns": "11406728",
+      "vort_over_reference": "3.9290",
+      "checksum": "31810000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "structured",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "124",
+      "iterations": "500",
+      "vort_ns": "3104468",
+      "reference_ns": "9474923",
+      "vort_over_reference": "3.0520",
+      "checksum": "25723000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "repetitive",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "114",
+      "iterations": "500",
+      "vort_ns": "3559222",
+      "reference_ns": "11983604",
+      "vort_over_reference": "3.3669",
+      "checksum": "32865000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "random4k",
+      "input_sha256": "f0725c29c1404f3f9b18c30c193079ef0c9d47537916ef6cf6503588bc3de0c1",
+      "input_bytes": "4096",
+      "encoded_bytes": "4100",
+      "iterations": "500",
+      "vort_ns": "28496",
+      "reference_ns": "133989",
+      "vort_over_reference": "4.7020",
+      "checksum": "4163000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "text_q3",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "43",
+      "iterations": "500",
+      "vort_ns": "2509360",
+      "reference_ns": "10939964",
+      "vort_over_reference": "4.3597",
+      "checksum": "31810000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "structured_q3",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "58",
+      "iterations": "500",
+      "vort_ns": "2684223",
+      "reference_ns": "8980926",
+      "vort_over_reference": "3.3458",
+      "checksum": "25723000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "repetitive_q3",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "38",
+      "iterations": "500",
+      "vort_ns": "2574028",
+      "reference_ns": "11202155",
+      "vort_over_reference": "4.3520",
+      "checksum": "32865000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "structured_q4",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "57",
+      "iterations": "500",
+      "vort_ns": "1906865",
+      "reference_ns": "8960212",
+      "vort_over_reference": "4.6989",
+      "checksum": "25723000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "text_q11",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "46",
+      "iterations": "500",
+      "vort_ns": "3226018",
+      "reference_ns": "11096581",
+      "vort_over_reference": "3.4397",
+      "checksum": "31810000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "structured_q11",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "59",
+      "iterations": "500",
+      "vort_ns": "2059889",
+      "reference_ns": "9094754",
+      "vort_over_reference": "4.4152",
+      "checksum": "25723000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "repetitive_q11",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "38",
+      "iterations": "500",
+      "vort_ns": "2971898",
+      "reference_ns": "11276401",
+      "vort_over_reference": "3.7943",
+      "checksum": "32865000",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    },
+    {
+      "case": "clustered_q8",
+      "input_sha256": "d9644e1c8c6e6b29bb8f00a10cf36accb5d592afd7458e94bbd278fe0c32558f",
+      "input_bytes": "1048576",
+      "encoded_bytes": "52622",
+      "iterations": "50",
+      "vort_ns": "29074093",
+      "reference_ns": "24933707",
+      "vort_over_reference": "0.8576",
+      "checksum": "104869200",
+      "command": "/tmp/vort-refill-20261002/logical-only --iterations 500 --csv /tmp/vort-refill-20261002/final-reference.csv"
+    }
+  ]
+}

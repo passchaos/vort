@@ -16898,3 +16898,20 @@ reuse, so production keeps the simpler independently owned plans.
   seven Large Window cases, the 16/16 real-corpus matrix, 13 reference rows,
   AArch64 cross compilation/linking, full check, and CLI help pass. Evidence is
   in `docs/performance/brotli-full-wide-auxiliary-x86.md` and its JSON companion.
+
+- Brotli word refills now prove physical load bounds from the valid logical
+  input range, removing duplicate byte-length checks and the redundant physical-
+  end early return. The 56/48/32-bit reservoir increments and 7/6/4-byte cursor
+  advances are preserved; incomplete logical words use the existing bounded
+  fallback. Reader state and scratch sizes do not increase, while the principal
+  9-bit and 10-bit wide payload instances each shrink by 199 bytes. Against
+  frozen `95c57c53`, final roadmap q9 improves 1.0201x median / 1.0185x geometric
+  across 15 pairs (14 wins); source q9 improves 1.0195x / 1.0204x with 15/15 wins.
+  Roadmap q5, source q5, and clustered q8 controls improve 1.0166x/1.0199x/
+  1.0186x medians with 7/7 wins each. Candidate/libbrotli is still only 0.7169x
+  at the roadmap-q9 median. A new scalar oracle covers every logical endpoint
+  of a 24-byte input, offsets 0--7, and 0--32-bit field sequences, including
+  truncation errors and synchronized cursors. All 545 direct tests, upstream
+  and real-corpus differentials, and reference gates pass; exact measurements
+  and the approximately 6% header-parse diagnostic are in
+  `docs/performance/brotli-logical-refill-x86.md` and its JSON companion.

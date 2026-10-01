@@ -131,3 +131,8 @@ leadership across corpora, qualities, streaming APIs, or architectures.
 All sample times, hashes, exact commands, reference builds, invariant checks,
 and the rejected-layout control are recorded in
 [brotli-full-wide-auxiliary-x86-20261002.json](data/brotli-full-wide-auxiliary-x86-20261002.json).
+
+A subsequent shared-reader improvement removes duplicate refill bounds checks
+without increasing state memory. Its separate baseline, measurements, and
+logical-tail regression coverage are in
+[brotli-logical-refill-x86.md](brotli-logical-refill-x86.md).

@@ -112,21 +112,22 @@ pub const Reader = struct {
 
     inline fn fill(self: *Reader, requested_bits: usize) void {
         std.debug.assert(requested_bits <= 32);
-        if (self.bit_count >= requested_bits or self.next_byte >= self.input.len) return;
+        if (self.bit_count >= requested_bits) return;
 
-        const remaining = self.input.len - self.next_byte;
-        const valid_unstaged_bits = self.bit_len - @min(self.next_byte * 8, self.bit_len);
-        if (requested_bits <= 8 and self.bit_count <= 8 and remaining >= 8 and valid_unstaged_bits >= 56) {
+        // Logical bits are bounded by input.len, so a complete valid word
+        // also proves its physical load is inside the caller buffer.
+        const valid_unstaged_bits = self.bit_len -| (self.next_byte * 8);
+        if (requested_bits <= 8 and self.bit_count <= 8 and valid_unstaged_bits >= 64) {
             const word = std.mem.readInt(u64, self.input[self.next_byte..][0..8], .little);
             self.bit_buffer |= word << @intCast(self.bit_count);
             self.bit_count += 56;
             self.next_byte += 7;
-        } else if (requested_bits <= 16 and self.bit_count <= 16 and remaining >= 8 and valid_unstaged_bits >= 48) {
+        } else if (requested_bits <= 16 and self.bit_count <= 16 and valid_unstaged_bits >= 64) {
             const word = std.mem.readInt(u64, self.input[self.next_byte..][0..8], .little);
             self.bit_buffer |= word << @intCast(self.bit_count);
             self.bit_count += 48;
             self.next_byte += 6;
-        } else if (self.bit_count <= 32 and remaining >= 4 and valid_unstaged_bits >= 32) {
+        } else if (self.bit_count <= 32 and valid_unstaged_bits >= 32) {
             const word = std.mem.readInt(u32, self.input[self.next_byte..][0..4], .little);
             self.bit_buffer |= @as(u64, word) << @intCast(self.bit_count);
             self.bit_count += 32;
@@ -233,6 +234,36 @@ test "Brotli fast bit reader specialized fixed-width peeks match generic reads" 
                 generic.advanceBitsStagedAssumeAvailable(consumed);
                 specialized.advanceBitsStagedAssumeAvailable(consumed);
                 try std.testing.expectEqual(generic.bitPosition(), specialized.bitPosition());
+            }
+        }
+    }
+}
+
+test "Brotli fast bit reader full-word refills honor every logical tail" {
+    var input: [24]u8 = undefined;
+    for (&input, 0..) |*byte, index| byte.* = @truncate(index * 73 + 0xa5);
+    // Keep real, nonzero bytes beyond each logical endpoint. A bulk load may
+    // only treat bits within bit_len as staged, even when physical bytes exist.
+    for (0..input.len * 8 + 1) |bit_len| {
+        for (0..8) |start| {
+            if (start > bit_len) continue;
+            for (0..33) |first_width| {
+                var scalar = bitstream.BitReader.initBitLength(&input, bit_len);
+                try scalar.skipBits(@intCast(start));
+                var fast = Reader.initFrom(scalar);
+                for ([_]usize{ first_width, (first_width + 17) % 33, (first_width + 21) % 33 }) |width| {
+                    const count: u6 = @intCast(width);
+                    const expected = scalar.readBits(u32, count);
+                    const actual = fast.readBits(u32, count);
+                    if (expected) |value| {
+                        try std.testing.expectEqual(value, try actual);
+                    } else |err| try std.testing.expectError(err, actual);
+                    try std.testing.expectEqual(scalar.bitPosition(), fast.bitPosition());
+                    var synced = bitstream.BitReader.initBitLength(&input, bit_len);
+                    fast.syncTo(&synced);
+                    try std.testing.expectEqual(scalar.byte_index, synced.byte_index);
+                    try std.testing.expectEqual(scalar.bit_index, synced.bit_index);
+                }
             }
         }
     }
