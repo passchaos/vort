@@ -91,6 +91,27 @@
     "repetitive_q11": { "pairs": 21, "iterations": 10000, "speedup_median": 0.9970076591735562, "speedup_geometric_mean": 0.9962819539149579, "wins": 7 },
     "source_q1": { "pairs": 15, "iterations": 100, "speedup_median": 0.9983765239443217, "speedup_geometric_mean": 0.998720690392741, "wins": 4, "candidate_over_libbrotli_median": 1.006551291927797, "candidate_over_libbrotli_geometric_mean": 1.008356249406502 }
   },
+  "copy_shape_audit": {
+    "lz77_copies": 12563,
+    "overlapping_lz77_copies": 24,
+    "short_exact_lengths": {
+      "5": 3098,
+      "6": 1974,
+      "7": 1594,
+      "8": 1142
+    },
+    "large_exact_lengths": {
+      "193": 92,
+      "292": 258,
+      "732": 260,
+      "979": 540
+    },
+    "four_dominant_large_copy_count": 1150,
+    "four_dominant_large_copy_bytes": 812072,
+    "dictionary_transform_zero_count": 3749,
+    "dictionary_copy_count": 4255,
+    "dictionary_output_length_4_through_8_count": 3378
+  },
   "rejected": {
     "compact_tail_literal_block_batching": {
       "pairs": 15,
@@ -175,6 +196,48 @@
       "wins": 0,
       "executor_symbol_bytes_before": 4518,
       "executor_symbol_bytes_after": 4318
+    },
+    "eight_and_sixteen_byte_lz77_copy_tiers": {
+      "candidate_executable_sha256": "15beeaeb035ba17b822c3466de0416648d7b2bd43e9b10710e96b58043156008",
+      "pairs": 15,
+      "speedup_median": 0.9835505306440416,
+      "speedup_geometric_mean": 0.9882848853674354,
+      "wins": 2
+    },
+    "assume_nonzero_lz77_copy_length": {
+      "candidate_executable_sha256": "42cdefc29ea1c1ef1ac1650e240abca7788abf7521d9e4bb4191c660c0aded63",
+      "pairs": 15,
+      "speedup_median": 0.995228348371531,
+      "speedup_geometric_mean": 0.996352866994589,
+      "wins": 1
+    },
+    "packed_eight_byte_dictionary_copy": {
+      "candidate_executable_sha256": "28c8f5f8bef8fa25975f33b5a4b8d4188c927f72ccc045182483a7a0c0ed206c",
+      "pairs": 15,
+      "speedup_median": 0.9871500665587054,
+      "speedup_geometric_mean": 0.9870397625566949,
+      "wins": 2
+    },
+    "exact_short_dictionary_copies": {
+      "candidate_executable_sha256": "a30b32aa69a6a2a2fa1d2a1ca257e6232afff13ddd9205d310976870152af8e4",
+      "pairs": 15,
+      "speedup_median": 0.9773426830365615,
+      "speedup_geometric_mean": 0.9747084227168797,
+      "wins": 0
+    },
+    "large_non_overlapping_copy_128_loop": {
+      "candidate_executable_sha256": "2d117478f07596256ce3a944fa367a734fc3097db785199cc3afb5d96d5f19bb",
+      "pairs": 15,
+      "speedup_median": 0.9423414742918784,
+      "speedup_geometric_mean": 0.9420530772655626,
+      "wins": 0
+    },
+    "constant_979_byte_copy": {
+      "candidate_executable_sha256": "871718ab5bb0492cb762375a4ce6017dcd99a21e3dd4387527b23cfa4b15df4c",
+      "pairs": 15,
+      "speedup_median": 0.9883794326279463,
+      "speedup_geometric_mean": 0.984536142409913,
+      "wins": 0
     }
   },
   "validation": {

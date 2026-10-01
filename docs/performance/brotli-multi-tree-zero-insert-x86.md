@@ -126,6 +126,46 @@ setup-only shrinking, and outlining the dictionary path for this stream. A
 credible next step needs to reduce actual distance/copy work without expanding
 returned state or adding a hot call boundary.
 
+## Distance and copy shape audit
+
+A second non-timing parse examined every copy before changing the copy
+kernels. Only 24 of 12,563 LZ77 copies overlap. Among short copies, lengths
+5/6/7/8 occur 3,098/1,974/1,594/1,142 times, respectively. The 1,299 copies
+above 64 bytes are even more concentrated:
+
+| length | count | decoded bytes |
+| ---: | ---: | ---: |
+| 193 | 92 | 17,756 |
+| 292 | 258 | 75,336 |
+| 732 | 260 | 190,320 |
+| 979 | 540 | 528,660 |
+
+Those four exact lengths account for 1,150 copies and 812,072 output bytes.
+The static dictionary is similarly concentrated: transform zero accounts for
+3,749 of 4,255 commands, while output lengths 4--8 account for 3,378 commands.
+
+Six fixed-copy follow-ups were nevertheless slower and were removed:
+
+- An 8/16-byte LZ77 copy tier measured 0.9836x median / 0.9883x geometric
+  mean with 2/15 wins. The extra length branch costs more than reducing the
+  speculative store from 16 to eight bytes.
+- Removing the redundant-looking nonzero-length test measured 0.9952x median /
+  0.9964x geometric mean with 1/15 wins; the resulting global layout change
+  outweighed the deleted comparison.
+- Packing 4--8-byte dictionary output into one bounded eight-byte store
+  measured 0.9872x / 0.9870x with 2/15 wins. Exact 4/5/6/8-byte stores were
+  worse at 0.9773x / 0.9747x with 0/15 wins.
+- A load-first 128-byte vector loop for non-overlapping copies of at least 128
+  bytes measured 0.9423x / 0.9421x with 0/15 wins. The system memcpy/ERMSB path
+  is substantially faster on this host.
+- A constant-size `memcpy` only for the 540 length-979 copies measured 0.9884x
+  / 0.9845x with 0/15 wins. Giving LLVM the exact length expanded the hot
+  executor without beating the dynamic memcpy path.
+
+The retained 16-byte short-copy move and dynamic large-copy memcpy are the
+measured best x86 paths. Further work should not add another copy-size branch
+without a different execution model or hardware-specific evidence.
+
 ## Correctness evidence
 
 The focused lookup test checks zero-insert copy-extra decoding and exact

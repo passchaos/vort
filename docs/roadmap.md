@@ -16707,3 +16707,15 @@ reuse, so production keeps the simpler independently owned plans.
   7.01%, both with 0/15 wins. All variants were removed; the next useful
   `clustered_q8` work must reduce actual distance/copy execution without
   expanding returned state or adding hot call boundaries.
+
+- A complete non-timing copy-shape audit found only 24 overlapping LZ77 copies
+  in `clustered_q8`. Lengths 5--8 account for 7,808 short copies, while exact
+  lengths 193/292/732/979 account for 1,150 large copies and 812,072 decoded
+  bytes. Transform zero supplies 3,749/4,255 dictionary commands and 3,378
+  dictionary outputs are only 4--8 bytes. Despite this concentration, an
+  8/16-byte short tier, packed or exact small dictionary stores, a 128-byte
+  vector loop, and a constant 979-byte memcpy all regressed complete decode to
+  0.9883x, 0.9870x/0.9747x, 0.9421x, and 0.9845x geometrically. Removing the
+  nonzero-length check was also negative at 0.9964x. All code was removed;
+  the retained fixed-16 short move and dynamic system memcpy remain the
+  measured best x86 copy kernels.
