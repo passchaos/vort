@@ -309,6 +309,16 @@
       "speedup_max_outlier": 1.5294663632939494,
       "executor_symbol_bytes_before": 4510,
       "executor_symbol_bytes_after": 4618
+    },
+    "cached_context_three_lookup_pointer": {
+      "baseline_executable_sha256": "2b2950f330cd520a0c8d59caeb857991652f5d22b5ee8abeea5a782093ccceb5",
+      "candidate_executable_sha256": "545d14105e0727446cdcf6aabf50fb937235cb790ed37a9f4288e2343098a2f9",
+      "pairs": 15,
+      "speedup_median": 0.9862787387561326,
+      "speedup_geometric_mean": 0.9888542212843824,
+      "wins": 2,
+      "executor_symbol_bytes_before": 4510,
+      "executor_symbol_bytes_after": 4570
     }
   },
   "validation": {

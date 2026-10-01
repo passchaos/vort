@@ -16740,3 +16740,10 @@ reuse, so production keeps the simpler independently owned plans.
   one still added 108 bytes and measured 0.9994x median with 6/15 wins; a
   single 1.53x host outlier made its geometric mean misleading. Both variants
   were removed, retaining the compact noinline short-distance resolver.
+
+- Extending the retained context-three cache from one tree index to one index
+  plus its external lookup pointer was rejected. The extra live pointer grew
+  the executor from `0x119e` to `0x11da` bytes and measured 0.9863x median /
+  0.9889x geometric throughput with 2/15 wins. This reproduces the register-
+  pressure failure of the earlier four-pointer cache; production retains only
+  the byte-sized tree index.

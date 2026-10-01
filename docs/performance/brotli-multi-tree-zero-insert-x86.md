@@ -206,6 +206,12 @@ wins; one 1.53x host outlier made its geometric mean unusable. Both variants
 expanded the hot executor by more than 100 bytes and were removed. The compact
 noinline short-distance resolver remains the measured best layout.
 
+Caching the context-three external lookup pointer in addition to its one-byte
+tree index was also rejected. It grew the executor from `0x119e` to `0x11da`
+and measured 0.9863x median / 0.9889x geometric mean with 2/15 wins. Even one
+extra long-lived pointer recreates the register-pressure cost seen in the
+earlier four-pointer cache; the retained implementation caches only the index.
+
 ## Correctness evidence
 
 The focused lookup test checks zero-insert copy-extra decoding and exact
