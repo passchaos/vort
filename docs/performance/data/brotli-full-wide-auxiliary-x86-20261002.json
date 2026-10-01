@@ -1,0 +1,853 @@
+{
+  "date": "2026-10-02",
+  "host": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "os": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "cpu_affinity": "2",
+    "codec_threads": 1
+  },
+  "reference": {
+    "path": "/tmp/vort-brotli-upstream-build",
+    "git": "558fc647cdaf391228d614ca85f711e02e4e583b",
+    "version": "1.2.0-dev",
+    "libraries": {
+      "/tmp/vort-brotli-upstream-build/libbrotlidec.so.1.2.0": "e3e18631aaa421912afddbef2246eb3e6abe4e15a10f983d31ac2dcbe3d20eb3",
+      "/tmp/vort-brotli-upstream-build/libbrotlicommon.so.1.2.0": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739",
+      "/tmp/vort-brotli-upstream-build/libbrotlienc.so.1.2.0": "cc82e22aba04d134b95425d936c1d834edc64a1379c008c896d7fe68cd258899"
+    },
+    "build": {
+      "cmake_build_type": "Release",
+      "c_compiler": "/usr/bin/cc",
+      "c_flags_release": "-O3 -DNDEBUG",
+      "compiler_version": "cc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0"
+    }
+  },
+  "baseline_git": "d8a9e6c622979a0d05003e1cb61b2ee19f6328b5",
+  "baseline_executable_sha256": "fc9a2be0e78fe66c53a0b12a2ed4f53443a4257b7cc04538986fa4a50e5d5291",
+  "candidate_executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+  "candidate_br_source_sha256": "64682e26cc5b594e29a01ec5dfca56947fac4acfb5c492d2315e3c59863c1d22",
+  "input_snapshot_commit": "488c5415",
+  "environment": {
+    "LD_LIBRARY_PATH": "/tmp/vort-brotli-upstream-build"
+  },
+  "method": {
+    "target": "15 q9 and 7 q5 baseline/candidate process pairs; order reverses each pair; each executable alternates Vort/libbrotli across five warmed rounds and retains each minimum elapsed time.",
+    "controls": "Decoder-only whole-frame public API timings: five rounds per invocation, reversed process order; 7 source pairs per quality and 15 clustered pairs.",
+    "scope": "Same frozen inputs and reference libraries; all pairs require equal input/encoded sizes, iteration counts and checksums; full comparisons also require equal recorded input SHA-256.",
+    "limitations": [
+      "One x86 host, warmed one-shot API. No broad format/architecture leadership claim.",
+      "Hardware perf counters are unavailable (perf_event_paranoid=4).",
+      "Compilations use CPUs 4-7; package frequency and unrelated scheduling can still vary."
+    ]
+  },
+  "storage": {
+    "command_root_bytes": 131072,
+    "distance_root_bytes": 65536,
+    "unchanged_literal_root_bytes": 524288,
+    "setup_stack_reservation_x86_bytes": 212096,
+    "isolated_section_bytes": 8213
+  },
+  "full_comparisons": {
+    "roadmap_q9": {
+      "summary": {
+        "pairs": 15,
+        "median": 1.121806345862849,
+        "geomean": 1.134815892768636,
+        "min": 1.0997780874495655,
+        "wins": 15,
+        "normalized_geomean": 1.1286202860730643,
+        "candidate_reference_median": 0.6975
+      },
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 335220,
+      "iterations": 100,
+      "checksum": "250286800",
+      "literal_trees": 143,
+      "command_types": 3,
+      "distance_trees": 27,
+      "command_examples": {
+        "base": "/tmp/vort-wide10-20261001/baseline --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q9 --quality 9 --iterations 100 --csv /tmp/vort-wide10-20261001/final-roadmap-q9-1-base.csv",
+        "candidate": "/tmp/vort-wide10-20261001/guard --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q9 --quality 9 --iterations 100 --csv /tmp/vort-wide10-20261001/final-roadmap-q9-1-candidate.csv"
+      },
+      "sample_columns": [
+        "base_vort_ns",
+        "base_reference_ns",
+        "candidate_vort_ns",
+        "candidate_reference_ns",
+        "base_over_reference",
+        "candidate_over_reference"
+      ],
+      "samples": [
+        [
+          351339155,
+          219532072,
+          319463680,
+          222824916,
+          0.6248,
+          0.6975
+        ],
+        [
+          409598024,
+          250100417,
+          315256305,
+          217569154,
+          0.6106,
+          0.6901
+        ],
+        [
+          365707942,
+          223079113,
+          316166110,
+          222828773,
+          0.61,
+          0.7048
+        ],
+        [
+          376633713,
+          227553018,
+          332178687,
+          228082402,
+          0.6042,
+          0.6866
+        ],
+        [
+          352314106,
+          217580772,
+          313654518,
+          217845288,
+          0.6176,
+          0.6945
+        ],
+        [
+          345222068,
+          213247564,
+          308649299,
+          215458224,
+          0.6177,
+          0.6981
+        ],
+        [
+          359006164,
+          225226917,
+          311658335,
+          215934937,
+          0.6274,
+          0.6929
+        ],
+        [
+          352811305,
+          216857812,
+          315266719,
+          219411683,
+          0.6147,
+          0.696
+        ],
+        [
+          354463927,
+          220030066,
+          313340081,
+          218550084,
+          0.6207,
+          0.6975
+        ],
+        [
+          348059971,
+          214792288,
+          313448839,
+          219123951,
+          0.6171,
+          0.6991
+        ],
+        [
+          344861188,
+          213960740,
+          307975427,
+          214700404,
+          0.6204,
+          0.6971
+        ],
+        [
+          337554404,
+          210259202,
+          306748452,
+          216614779,
+          0.6229,
+          0.7062
+        ],
+        [
+          336508666,
+          210069388,
+          301977692,
+          211596672,
+          0.6243,
+          0.7007
+        ],
+        [
+          332379595,
+          206854232,
+          296289637,
+          209585432,
+          0.6223,
+          0.7074
+        ],
+        [
+          332973854,
+          207957917,
+          293336657,
+          206506014,
+          0.6245,
+          0.704
+        ]
+      ]
+    },
+    "roadmap_q5": {
+      "summary": {
+        "pairs": 7,
+        "median": 1.1262870312921869,
+        "geomean": 1.1285037234193216,
+        "min": 1.117409046418248,
+        "wins": 7,
+        "normalized_geomean": 1.124993352366518,
+        "candidate_reference_median": 0.7171
+      },
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 350069,
+      "iterations": 100,
+      "checksum": "250286800",
+      "literal_trees": 143,
+      "command_types": 3,
+      "distance_trees": 22,
+      "command_examples": {
+        "base": "/tmp/vort-wide10-20261001/baseline --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q5 --quality 5 --iterations 100 --csv /tmp/vort-wide10-20261001/final-roadmap-q5-1-base.csv",
+        "candidate": "/tmp/vort-wide10-20261001/guard --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q5 --quality 5 --iterations 100 --csv /tmp/vort-wide10-20261001/final-roadmap-q5-1-candidate.csv"
+      },
+      "sample_columns": [
+        "base_vort_ns",
+        "base_reference_ns",
+        "candidate_vort_ns",
+        "candidate_reference_ns",
+        "base_over_reference",
+        "candidate_over_reference"
+      ],
+      "samples": [
+        [
+          348351486,
+          222619221,
+          306793348,
+          220988533,
+          0.6391,
+          0.7203
+        ],
+        [
+          347906265,
+          221133334,
+          308896627,
+          221520611,
+          0.6356,
+          0.7171
+        ],
+        [
+          347622855,
+          221411502,
+          308984426,
+          221218796,
+          0.6369,
+          0.716
+        ],
+        [
+          345286530,
+          220431365,
+          309006385,
+          221399614,
+          0.6384,
+          0.7165
+        ],
+        [
+          348076465,
+          221700670,
+          306069570,
+          221268061,
+          0.6369,
+          0.7229
+        ],
+        [
+          347636350,
+          222808041,
+          308871370,
+          220719039,
+          0.6409,
+          0.7146
+        ],
+        [
+          348448143,
+          222568156,
+          307626639,
+          220686310,
+          0.6387,
+          0.7174
+        ]
+      ]
+    }
+  },
+  "controls": {
+    "source_q9": {
+      "summary": {
+        "median": 0.9953317635006383,
+        "geomean": 0.9961169669003935,
+        "min": 0.992210208662977,
+        "wins": 1,
+        "pairs": 7
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 141001,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-wide10-20261001/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-wide10-20261001/final-source-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-wide10-20261001/guard",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-wide10-20261001/final-source-q9-1-candidate.csv"
+        ]
+      },
+      "sample_columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          310124511,
+          311349765
+        ],
+        [
+          310311579,
+          311766981
+        ],
+        [
+          309688862,
+          311764512
+        ],
+        [
+          311734579,
+          311491693
+        ],
+        [
+          310271221,
+          311773369
+        ],
+        [
+          311394280,
+          311413381
+        ],
+        [
+          309231932,
+          311659696
+        ]
+      ],
+      "input_sha256": "b75cf6294797c217c0e4a17054a65c5e2d6a355529eccd65c7fd94c24f26fff0"
+    },
+    "source_q5": {
+      "summary": {
+        "median": 0.9999695527656716,
+        "geomean": 1.001808326817193,
+        "min": 0.9930582311567543,
+        "wins": 3,
+        "pairs": 7
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 147580,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-wide10-20261001/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q5",
+          "--quality",
+          "5",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-wide10-20261001/final-source-q5-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-wide10-20261001/guard",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q5",
+          "--quality",
+          "5",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-wide10-20261001/final-source-q5-1-candidate.csv"
+        ]
+      },
+      "sample_columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          332768471,
+          334328282
+        ],
+        [
+          340539918,
+          340909443
+        ],
+        [
+          339746558,
+          333025628
+        ],
+        [
+          331974068,
+          331984176
+        ],
+        [
+          331994055,
+          334314791
+        ],
+        [
+          334219829,
+          332880103
+        ],
+        [
+          333459736,
+          332990827
+        ]
+      ],
+      "input_sha256": "b75cf6294797c217c0e4a17054a65c5e2d6a355529eccd65c7fd94c24f26fff0"
+    },
+    "clustered_q8": {
+      "summary": {
+        "median": 1.0011522457029947,
+        "geomean": 1.0006648642073361,
+        "min": 0.9902700592539148,
+        "wins": 10,
+        "pairs": 15
+      },
+      "input_bytes": 1048576,
+      "encoded_bytes": 52622,
+      "iterations": 200,
+      "checksum": "209738400",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-wide10-20261001/baseline",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-wide10-20261001/guard-clustered-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-wide10-20261001/guard",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-wide10-20261001/guard-clustered-1-candidate.csv"
+        ]
+      },
+      "sample_columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          119137745,
+          120308338
+        ],
+        [
+          120322091,
+          120178245
+        ],
+        [
+          120362066,
+          120573965
+        ],
+        [
+          119725436,
+          119157690
+        ],
+        [
+          120111259,
+          119638095
+        ],
+        [
+          120089310,
+          119347608
+        ],
+        [
+          120052914,
+          119805934
+        ],
+        [
+          119761360,
+          119618294
+        ],
+        [
+          120150058,
+          120084868
+        ],
+        [
+          120375191,
+          120975137
+        ],
+        [
+          120224763,
+          120131405
+        ],
+        [
+          120236031,
+          120097649
+        ],
+        [
+          120267732,
+          118840272
+        ],
+        [
+          118592405,
+          119271442
+        ],
+        [
+          118898287,
+          119085188
+        ]
+      ],
+      "input_sha256": "d9644e1c8c6e6b29bb8f00a10cf36accb5d592afd7458e94bbd278fe0c32558f"
+    }
+  },
+  "rejected_layout": {
+    "candidate_executable_sha256": "a89333316ad147a2c4455a01473347d2f087f1461c4b9064ebaed4dfad3907b7",
+    "clustered_q8": {
+      "summary": {
+        "median": 0.9928408823543652,
+        "geomean": 0.9924444301438221,
+        "min": 0.9849817867677418,
+        "wins": 1,
+        "pairs": 11
+      },
+      "input_bytes": 1048576,
+      "encoded_bytes": 52622,
+      "iterations": 200,
+      "checksum": "209738400",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-wide10-20261001/baseline",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-wide10-20261001/control-clustered_q8-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-wide10-20261001/clean",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-wide10-20261001/control-clustered_q8-1-candidate.csv"
+        ]
+      },
+      "sample_columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          119072953,
+          120888482
+        ],
+        [
+          119732639,
+          120180017
+        ],
+        [
+          119258576,
+          120416783
+        ],
+        [
+          120469094,
+          120415692
+        ],
+        [
+          119579652,
+          120317579
+        ],
+        [
+          120029286,
+          120668511
+        ],
+        [
+          119377848,
+          120186419
+        ],
+        [
+          119551111,
+          120413163
+        ],
+        [
+          119247653,
+          120529660
+        ],
+        [
+          119473403,
+          120886605
+        ],
+        [
+          119896019,
+          120797699
+        ]
+      ],
+      "input_sha256": "d9644e1c8c6e6b29bb8f00a10cf36accb5d592afd7458e94bbd278fe0c32558f"
+    }
+  },
+  "final_reference_matrix": [
+    {
+      "case": "tiny",
+      "input_sha256": "46c0941f01bc4aba512b213ac665132ebc108b566ed6203a145d9016df7d1cc6",
+      "input_bytes": "12",
+      "encoded_bytes": "16",
+      "iterations": "500",
+      "vort_ns": "4332",
+      "reference_ns": "123572",
+      "vort_over_reference": "28.5254",
+      "checksum": "116000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "text",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "110",
+      "iterations": "500",
+      "vort_ns": "2938447",
+      "reference_ns": "11346240",
+      "vort_over_reference": "3.8613",
+      "checksum": "31810000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "structured",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "124",
+      "iterations": "500",
+      "vort_ns": "3131604",
+      "reference_ns": "9364694",
+      "vort_over_reference": "2.9904",
+      "checksum": "25723000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "repetitive",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "114",
+      "iterations": "500",
+      "vort_ns": "3579516",
+      "reference_ns": "11970010",
+      "vort_over_reference": "3.3440",
+      "checksum": "32865000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "random4k",
+      "input_sha256": "f0725c29c1404f3f9b18c30c193079ef0c9d47537916ef6cf6503588bc3de0c1",
+      "input_bytes": "4096",
+      "encoded_bytes": "4100",
+      "iterations": "500",
+      "vort_ns": "26590",
+      "reference_ns": "132599",
+      "vort_over_reference": "4.9868",
+      "checksum": "4163000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "text_q3",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "43",
+      "iterations": "500",
+      "vort_ns": "2523871",
+      "reference_ns": "10880454",
+      "vort_over_reference": "4.3110",
+      "checksum": "31810000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "structured_q3",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "58",
+      "iterations": "500",
+      "vort_ns": "2676541",
+      "reference_ns": "8933533",
+      "vort_over_reference": "3.3377",
+      "checksum": "25723000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "repetitive_q3",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "38",
+      "iterations": "500",
+      "vort_ns": "2615628",
+      "reference_ns": "11197249",
+      "vort_over_reference": "4.2809",
+      "checksum": "32865000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "structured_q4",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "57",
+      "iterations": "500",
+      "vort_ns": "1921383",
+      "reference_ns": "8906984",
+      "vort_over_reference": "4.6357",
+      "checksum": "25723000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "text_q11",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "46",
+      "iterations": "500",
+      "vort_ns": "3234017",
+      "reference_ns": "11062586",
+      "vort_over_reference": "3.4207",
+      "checksum": "31810000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "structured_q11",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "59",
+      "iterations": "500",
+      "vort_ns": "2088029",
+      "reference_ns": "9071285",
+      "vort_over_reference": "4.3444",
+      "checksum": "25723000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "repetitive_q11",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "38",
+      "iterations": "500",
+      "vort_ns": "2982150",
+      "reference_ns": "11238056",
+      "vort_over_reference": "3.7684",
+      "checksum": "32865000",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    },
+    {
+      "case": "clustered_q8",
+      "input_sha256": "d9644e1c8c6e6b29bb8f00a10cf36accb5d592afd7458e94bbd278fe0c32558f",
+      "input_bytes": "1048576",
+      "encoded_bytes": "52622",
+      "iterations": "50",
+      "vort_ns": "29303920",
+      "reference_ns": "24869295",
+      "vort_over_reference": "0.8487",
+      "checksum": "104869200",
+      "executable_sha256": "cb594fddb5b00e1b8d93bd077ab9aa7ad697187e5b4f51263d44b4e9118c673b",
+      "command": "/tmp/vort-wide10-20261001/guard --iterations 500 --csv /tmp/vort-wide10-20261001/final-reference.csv"
+    }
+  ],
+  "build_and_runtime": {
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "2",
+    "affinity_cpu_count": "1",
+    "benchmark_threads": "1",
+    "codec_thread_policy": "single"
+  }
+}

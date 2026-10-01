@@ -257,8 +257,14 @@ roots, combined suffix consumption, RFC-factor roots, packed metadata, and
 a local recent-distance array. Exact evidence is in
 [decoder-distance-cursor-x86.md](decoder-distance-cursor-x86.md).
 
-The next target is the slower 129--256 tier's command and distance transitions.
-Keep its ten-bit literal policy and evaluate the middle tier's fused command
-roots and external distance roots in an isolated executor. Re-freeze the
-baseline with the newly alternating Brotli reference sampler and require
-roadmap q5/q9 gains with source controls before retaining the extra storage.
+The 129--256 tier now retains ten-bit literal roots while using the middle
+tier's fused command roots, external distance roots, and block-state caches.
+The final roadmap-q9 comparison improves by 1.1218x median across 15/15 winning
+pairs, while reaching 0.6975x local libbrotli. Full evidence, memory costs,
+controls, and validation are in
+[brotli-full-wide-auxiliary-x86.md](brotli-full-wide-auxiliary-x86.md).
+
+The remaining full-tier gap is about 30% on that workload. Re-profile the
+updated bit-reading, short-copy, and table-preparation costs before changing
+the root representation again; retain both the 9-bit middle-tier and the
+10-bit full-tier controls.

@@ -16880,3 +16880,21 @@ reuse, so production keeps the simpler independently owned plans.
   are in `docs/performance/decoder-distance-cursor-x86.md` and its JSON data.
   The next performance target is the 129--256-literal-tree tier's command and
   distance transitions, with a fresh alternating-sampler baseline.
+
+- The Brotli 129--256-literal-tree decoder now keeps its ten-bit literal
+  policy while using fused ten-bit command roots, contiguous nine-bit distance
+  roots, and block-local context state. The explicit full-tier threshold keeps
+  the generic wide helper's earlier auxiliary executor available. New root
+  storage is bounded at 192 KiB; the x86 setup reserves 212,096 stack bytes
+  including temporaries/spills, and its isolated text section is 8,213 bytes.
+  Against frozen `d8a9e6c6`, final CPU-2 roadmap q9 pairs improve by 1.1218x
+  median / 1.1348x geometric with 15/15 wins and a 1.0998x minimum; q5 improves
+  by 1.1263x / 1.1285x with 7/7 wins. Final libbrotli 1.2.0-dev ratios are
+  0.6975x/0.7171x, so the leadership goal remains open. Clustered q8 and source
+  q5 controls are neutral at 1.0012x/1.0000x medians; source q9 retains a small
+  0.9953x median regression that must remain tracked. All 544 direct tests,
+  targeted Debug state/boundary oracles, 7,056 upstream generated and matching
+  progressive cases, 1,401 fragmentation schedules, 64 high-tree truncations,
+  seven Large Window cases, the 16/16 real-corpus matrix, 13 reference rows,
+  AArch64 cross compilation/linking, full check, and CLI help pass. Evidence is
+  in `docs/performance/brotli-full-wide-auxiliary-x86.md` and its JSON companion.
