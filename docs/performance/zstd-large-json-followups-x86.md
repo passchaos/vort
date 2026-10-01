@@ -33,8 +33,9 @@ width-seven blocks already use the eight-symbol reservoir path.
 ## Rejected executor and copy variants
 
 All ratios below are candidate over the frozen `cc519d45` implementation.
-Every candidate preserved the prepared-stage checksum and passed the locked
-large-JSON specialized-versus-generic oracle before timing.
+Every candidate preserved the prepared-stage checksum and passed either the
+locked large-JSON specialized-versus-generic oracle or the complete-frame
+byte-for-byte output check before timing.
 
 - A separate noinline consecutive-pair executor expanded to 2.7 KiB and
   measured 0.7736x median / 0.7728x geometric across 15 stage pairs, 0/15 wins.
@@ -47,6 +48,18 @@ large-JSON specialized-versus-generic oracle before timing.
 - Keeping LL/ML/OF FSE states in local scalars expanded the two relevant
   instances by roughly 0.8--1.1 KiB and measured 0.9640x median / 0.9620x
   geometric with 0/7 wins.
+- Compiling the compact split executor without its three prefixed pair,
+  short-rep0, and direct-offset paths, while retaining the established
+  long-match wildcopy policy, shrank the production instance from 9,833 to
+  6,116 bytes and the complete split section from 18,678 to 11,329 bytes. Five
+  prepared-stage pairs nevertheless measured only 0.8234x median / 0.8223x
+  geometric throughput with 0/5 wins.
+- Also disabling the compact long-match wildcopy policy reduced the production
+  instance further to 5,201 bytes and the section to 10,433 bytes, but seven
+  prepared-stage pairs fell to 0.8078x median / 0.8073x geometric, 0/7. Both
+  candidates preserved the prepared-stage checksum and were removed. The
+  prefixed paths are a net performance requirement, not removable i-cache
+  ballast.
 - An exact 64-byte forward loop for the separate `large_text` row's four
   distance-82, approximately 128 KiB overlapping matches measured only
   0.5681x / 0.5689x with 0/15 wins. The retained logarithmic seed-and-double
@@ -71,10 +84,11 @@ large-JSON specialized-versus-generic oracle before timing.
   stream; the selector and temporary cold fallback were both removed.
 
 These results rule out another round of local branch growth, wider copy loops,
-larger Huffman batches, and table-fill tuning. The next credible `large_json`
-direction is a genuinely smaller independently compiled executor/state
-representation that preserves the current two-sequence, direct-offset, and
-short-rep0 semantics without pointerized calls or duplicated error exits.
+larger Huffman batches, table-fill tuning, or shrinking the executor by
+removing its prefixed paths. The next credible `large_json` direction is a
+genuinely smaller independently compiled executor/state representation that
+preserves the current two-sequence, direct-offset, short-rep0, and long-copy
+semantics without pointerized calls or duplicated error exits.
 
 Exact binary hashes, commands, and summary ratios are recorded in
 [zstd-large-json-followups-x86-20261001.json](data/zstd-large-json-followups-x86-20261001.json).

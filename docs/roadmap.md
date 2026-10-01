@@ -16855,3 +16855,13 @@ reuse, so production keeps the simpler independently owned plans.
   regressed five complete-frame pairs to 0.9343x median / 0.9347x geometric
   raw throughput with 0/5 wins (0.9384x normalized geometric). The candidate
   was removed; further work needs less live state rather than another pointer.
+
+- Two smaller Zstd `large_json` compact-split executors were rejected. Removing
+  the prefixed pair/short-rep0/direct-offset paths while retaining long-match
+  wildcopy shrank the production instance from 9,833 to 6,116 bytes and its
+  section from 18,678 to 11,329 bytes, but five prepared-stage pairs regressed
+  to 0.8234x median / 0.8223x geometric throughput. Removing long-match
+  wildcopy as well reached 5,201/10,433 bytes but measured only 0.8078x /
+  0.8073x across seven pairs. Both had 0 wins and preserved the stage checksum.
+  The existing prefixed paths are required performance, so future size work
+  must preserve their semantics and reduce shared live state instead.
