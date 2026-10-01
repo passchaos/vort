@@ -79,7 +79,7 @@ pairs measured only 0.9815x median / 0.9799x geometric mean with 0/15 wins.
 
 ## Rejected follow-ups
 
-Seven follow-ups were measured against the frozen retained binary after this
+Nine follow-ups were measured against the frozen retained binary after this
 change. None met the complete-frame retention threshold, and all production
 code was removed:
 
@@ -111,11 +111,20 @@ code was removed:
   block types measured 0.9937x median / 0.9898x geometric mean with 4/15 wins.
   Its extra live state costs more than the avoided indexing on this
   low-literal workload.
+- Carrying the command LUT's two-bit distance context through
+  `InsertCopyLengths` removed the per-distance copy-length comparison and
+  shortened the multi-tree executor by 22 bytes. The larger returned state was
+  much more expensive: 15/15 target pairs lost, at 0.9756x median / 0.9747x
+  geometric mean.
+- Outlining static-dictionary transform and copy handling shortened the same
+  executor from `0x11a6` to `0x10de` bytes, but its 4,255 dictionary commands
+  made the call boundary hot. All 15 target pairs lost, at 0.9296x median /
+  0.9299x geometric mean.
 
-These results rule out more local state, broader 32-bit command entries, and
-setup-only shrinking for this stream. A credible next step needs to reduce the
-distance/copy execution core or use a smaller independently compiled
-shape-specific loop.
+These results rule out more local state, broader 32-bit command entries,
+setup-only shrinking, and outlining the dictionary path for this stream. A
+credible next step needs to reduce actual distance/copy work without expanding
+returned state or adding a hot call boundary.
 
 ## Correctness evidence
 

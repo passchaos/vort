@@ -157,6 +157,24 @@
       "speedup_median": 0.993660143269984,
       "speedup_geometric_mean": 0.9897877595553307,
       "wins": 4
+    },
+    "carry_distance_context_from_command_lut": {
+      "candidate_executable_sha256": "f659f20a363d702f1c6923a5c490b44876dbb94e64110d59298ad744569d63fc",
+      "pairs": 15,
+      "speedup_median": 0.9756398537976625,
+      "speedup_geometric_mean": 0.9746603306134569,
+      "wins": 0,
+      "executor_symbol_bytes_before": 4518,
+      "executor_symbol_bytes_after": 4496
+    },
+    "outlined_dictionary_branch": {
+      "candidate_executable_sha256": "d6ccde2e1c1785b9fe70b4f088d02fd752959aaa0850de03480912b1bf420acc",
+      "pairs": 15,
+      "speedup_median": 0.9296178306153985,
+      "speedup_geometric_mean": 0.929886236262676,
+      "wins": 0,
+      "executor_symbol_bytes_before": 4518,
+      "executor_symbol_bytes_after": 4318
     }
   },
   "validation": {
