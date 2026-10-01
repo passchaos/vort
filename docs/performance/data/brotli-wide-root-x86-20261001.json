@@ -179,6 +179,46 @@
     "large_executor_bytes_before": 4553,
     "large_executor_bytes_after": 4864
   },
+  "insert_length_shape": {
+    "input_bytes": 1722705,
+    "input_sha256": "401a02609010eaea65800f69cf7ff78c0f1363976c0d1eee9ea12372bba74898",
+    "encoded_bytes": 140932,
+    "command_count": 50530,
+    "zero_insert_count": 39571,
+    "nonzero_insert_count": 10959,
+    "insert_length_one_count": 7166,
+    "insert_length_two_count": 1634,
+    "insert_length_three_count": 825
+  },
+  "rejected_duplicated_single_literal_transition": {
+    "baseline_executable_sha256": "9e10eead48c257ba853624a77ff016b3abb9dea2d386f04f5f86da57c4ba592c",
+    "candidate_executable_sha256": "269e8c40f8e9e9e6873591a07a213b20a58f82d94f7e2e47521c7960e91dc633",
+    "pairs": 15,
+    "speedup_median": 0.9921669530337265,
+    "speedup_geometric_mean": 0.9913703609685433,
+    "wins": 1,
+    "small_executor_bytes_before": 2793,
+    "small_executor_bytes_after": 4470,
+    "large_executor_bytes_before": 4553,
+    "large_executor_bytes_after": 6139
+  },
+  "retained_single_literal_run": {
+    "baseline_executable_sha256": "9e10eead48c257ba853624a77ff016b3abb9dea2d386f04f5f86da57c4ba592c",
+    "candidate_executable_sha256": "62d1663ab6c7a7df8470dfa6251a2e8e9011427370cff4c9402cc58563b9049a",
+    "input_bytes": 1722483,
+    "input_sha256": "ec0e65406bbc0281ba51bd27bd379a55136fb4a298d851665544ec3c241b4d8d",
+    "encoded_bytes": 140867,
+    "pairs": 15,
+    "speedup_median": 1.0070814843211309,
+    "speedup_geometric_mean": 1.0082917589492684,
+    "speedup_min": 1.0026489817042692,
+    "speedup_max": 1.0147981372132433,
+    "wins": 15,
+    "libbrotli_normalized_median": 1.0086158560438814,
+    "libbrotli_normalized_geometric_mean": 1.0098211933574688,
+    "candidate_over_libbrotli_median": 0.6971267190056271,
+    "candidate_over_libbrotli_geometric_mean": 0.6973892952679224
+  },
   "rejected_instantiation_order_binary_sha256": "d1100b34da919748bf53cd76c60900ba59cdbafa1f9def4444fcb15d515f22f8",
   "validation": {
     "focused_wide_lookup_test": true,

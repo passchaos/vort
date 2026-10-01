@@ -137,10 +137,27 @@ bytes and measured 0.9698x median / 0.9662x geometric mean with 0/15 wins.
 The retained byte context map plus indexed lookup has the better cache and
 register footprint.
 
+## Single-literal run follow-up
+
+The command audit counted 50,530 commands: 39,571 insert no literals and
+10,959 have a non-zero insert. Of those non-zero runs, 7,166 (65.4%) insert
+exactly one literal; lengths two and three occur only 1,634 and 825 times.
+
+Duplicating the complete literal transition for `insert_len == 1` was rejected.
+It expanded the two 9-bit payload instances by roughly 1.6 KiB and measured
+0.9922x median / 0.9914x geometric mean with 1/15 wins. The retained variant
+keeps one literal body and only chooses `run_len = 1` before the existing loop,
+avoiding the remaining/min calculation without code duplication.
+
+Against frozen `9e10eead...`, 15 source-q9 pairs improve by 1.0071x median /
+1.0083x geometric mean with 15/15 wins and a 1.00265x minimum. Final candidate
+throughput reaches 0.6971x median / 0.6974x geometric local libbrotli. All 541
+tests, reference/upstream/real-corpus gates, and the full repository check pass.
+
 ## Next direction
 
 The 65--128 tier is faster, but source q9 still reaches only about 0.69x
 libbrotli. Root width and refill size are now bounded out. The next useful work
-is a shorter context-to-tree-to-root dependency or fewer per-command literal
-loop transitions. The 129--256 tier should stay at ten bits unless a separately
-isolated policy improves its slowest row.
+is a shorter context-to-tree-to-root dependency or a smaller shared literal
+transition, not duplicated fast paths. The 129--256 tier should stay at ten
+bits unless a separately isolated policy improves its slowest row.

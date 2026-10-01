@@ -16798,3 +16798,13 @@ reuse, so production keeps the simpler independently owned plans.
   instances by 606/311 bytes and regressed 15/15 source-q9 pairs to 0.9698x
   median / 0.9662x geometric throughput. The retained byte context map plus
   indexed root lookup has the better cache/register tradeoff.
+
+- The retained 9-bit executor now handles its dominant single-literal insert
+  through the shared literal body with `run_len = 1`. A shape audit counted
+  50,530 commands, 39,571 zero inserts, and 7,166 single-literal runs among
+  10,959 non-zero inserts. Duplicating the whole single-literal transition grew
+  the executors by about 1.6 KiB and regressed to 0.9914x geometric; the shared
+  run-length shortcut instead improves 15/15 source-q9 pairs by 1.0071x median /
+  1.0083x geometric throughput with a 1.00265x minimum. Final throughput is
+  0.6971x median local libbrotli. All 541 tests, compatibility/reference gates,
+  and the full check pass.

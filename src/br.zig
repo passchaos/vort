@@ -7693,7 +7693,9 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
                     active_literal_context_mode = header.literal_context_modes[literal_type];
                 }
                 const remaining_insert = lengths.insert_len - i;
-                const run_len = if (header.literal_block.block_type_count > 1)
+                const run_len = if (lengths.insert_len == 1)
+                    1
+                else if (header.literal_block.block_type_count > 1)
                     @min(remaining_insert, literal_block_remaining)
                 else
                     remaining_insert;
