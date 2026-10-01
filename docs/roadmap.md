@@ -16693,3 +16693,15 @@ reuse, so production keeps the simpler independently owned plans.
   The full repository check also passes. Exact evidence and the rejected
   literal-block batching precursor are in
   `docs/performance/brotli-multi-tree-zero-insert-x86.md` and its JSON record.
+
+- Seven follow-ups to the retained multi-tree Brotli command root were measured
+  against its frozen binary and removed. Restricting the route to multiple
+  command types was neutral at 1.0000x median / 0.9986x geometric and did not
+  recover a stable single-tree control cost. Removing countdown or block-type
+  guards was likewise neutral. Direct lookup construction cut the setup helper
+  from `0xb19` to `0x459` bytes but regressed the complete frame to 0.9894x
+  geometric. Direct dictionary output, broader zero-extra insert fusion, and
+  cached literal context state measured 0.9954x, 0.9883x, and 0.9898x
+  geometrically. All variants were removed; the next useful `clustered_q8`
+  work must reduce distance/copy execution or use a genuinely smaller
+  shape-specific loop rather than adding local state or tuning setup.

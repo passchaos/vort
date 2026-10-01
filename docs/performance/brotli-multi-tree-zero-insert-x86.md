@@ -77,6 +77,46 @@ lead intact.
 A compact-tail literal-block run-batching precursor was rejected: 15 target
 pairs measured only 0.9815x median / 0.9799x geometric mean with 0/15 wins.
 
+## Rejected follow-ups
+
+Seven follow-ups were measured against the frozen retained binary after this
+change. None met the complete-frame retention threshold, and all production
+code was removed:
+
+- Restricting the route to two or more command block types was neutral on the
+  unchanged three-type target at 1.0000x median / 0.9986x geometric mean over
+  15 pairs. Three 21-pair long single-type controls ranged from 0.9998x to
+  1.0029x geometrically, and a seven-pair full matrix reached only 0.9993x
+  across row medians. The narrower gate therefore did not recover a stable
+  control cost.
+- Using that stronger route invariant to remove the command-countdown guard
+  reached only 0.9983x median with 5/15 wins. Removing the per-command
+  block-type comparison reached 1.0006x median / 0.9986x geometric mean with
+  8/15 wins. Neither branch change justified a separate executor shape.
+- Constructing literal, command, and distance lookups directly in their final
+  arrays reduced the multi-tree setup helper from `0xb19` to `0x459` bytes and
+  its stack frame from `0x17ca0` to `0x14078`, but complete target decode fell
+  to 0.9901x median / 0.9894x geometric mean with 2/15 wins. Lookup setup is not
+  the limiting stage, and the smaller generated function did not improve the
+  complete frame.
+- Materializing non-identity dictionary transforms directly in caller output
+  avoided a scratch copy for most of the 4,255 dictionary commands, but the
+  larger hot executor measured 0.9946x median / 0.9954x geometric mean with
+  2/15 wins.
+- Expanding the 32-bit root from zero-insert commands to every command whose
+  insert length has no extra bits measured 0.9868x median / 0.9883x geometric
+  mean with 1/15 wins. Non-zero inserts remain faster through the compact
+  metadata path.
+- Caching the active literal context-map base and mode across the four literal
+  block types measured 0.9937x median / 0.9898x geometric mean with 4/15 wins.
+  Its extra live state costs more than the avoided indexing on this
+  low-literal workload.
+
+These results rule out more local state, broader 32-bit command entries, and
+setup-only shrinking for this stream. A credible next step needs to reduce the
+distance/copy execution core or use a smaller independently compiled
+shape-specific loop.
+
 ## Correctness evidence
 
 The focused lookup test checks zero-insert copy-extra decoding and exact
