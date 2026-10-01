@@ -154,6 +154,12 @@ Against frozen `9e10eead...`, 15 source-q9 pairs improve by 1.0071x median /
 throughput reaches 0.6971x median / 0.6974x geometric local libbrotli. All 541
 tests, reference/upstream/real-corpus gates, and the full repository check pass.
 
+Extending the shortcut to block-local runs of two and three literals was
+rejected. Although those lengths occur 1,634 and 825 times, the additional
+remaining-count and block-boundary condition measured 0.9949x median / 0.9944x
+geometric mean with 2/15 wins. Production remains restricted to the exact
+single-literal invariant.
+
 ## Next direction
 
 The 65--128 tier is faster, but source q9 still reaches only about 0.69x

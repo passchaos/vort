@@ -219,6 +219,18 @@
     "candidate_over_libbrotli_median": 0.6971267190056271,
     "candidate_over_libbrotli_geometric_mean": 0.6973892952679224
   },
+  "rejected_block_local_two_and_three_literal_runs": {
+    "baseline_executable_sha256": "62d1663ab6c7a7df8470dfa6251a2e8e9011427370cff4c9402cc58563b9049a",
+    "candidate_executable_sha256": "7875401d9e2a6d912a11c0f782252d9a22bb3c4f43d63136be17e8fbb5bf3022",
+    "pairs": 15,
+    "speedup_median": 0.9949319768956482,
+    "speedup_geometric_mean": 0.9943632309251437,
+    "speedup_min": 0.9841892786606908,
+    "speedup_max": 1.0041943798865811,
+    "wins": 2,
+    "libbrotli_normalized_median": 0.997031792375752,
+    "libbrotli_normalized_geometric_mean": 0.9956864268034424
+  },
   "rejected_instantiation_order_binary_sha256": "d1100b34da919748bf53cd76c60900ba59cdbafa1f9def4444fcb15d515f22f8",
   "validation": {
     "focused_wide_lookup_test": true,

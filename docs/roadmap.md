@@ -16808,3 +16808,9 @@ reuse, so production keeps the simpler independently owned plans.
   1.0083x geometric throughput with a 1.00265x minimum. Final throughput is
   0.6971x median local libbrotli. All 541 tests, compatibility/reference gates,
   and the full check pass.
+
+- Extending the retained single-literal shortcut to block-local runs of two
+  and three literals was rejected. Those lengths occur 1,634/825 times, but
+  the extra remaining-count and boundary condition measured 0.9949x median /
+  0.9944x geometric throughput with 2/15 wins. Production keeps only the exact
+  `insert_len == 1` invariant.
