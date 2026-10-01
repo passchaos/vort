@@ -113,9 +113,26 @@ large literal-loop gap remains despite the two retained steps.
 All 541 direct tests, the reference gate, upstream differential, real-corpus
 matrix, and full repository check pass again.
 
+## Reader-refill follow-up
+
+The same non-timing pass shows that root coverage is no longer the immediate
+problem: 20,486 literals produce only 204 root misses (1.0%). The executor
+processes 10,965 insert runs and only ten literal block switches. Context and
+tree use are broad rather than dominated by one lookup, so the next bounded
+probe targeted the bit reader.
+
+A 9-bit-only peek variant loaded seven bytes whenever fewer than nine bits were
+staged and the current reservoir held at most eight. Command, distance, 10-bit,
+and all other reader paths retained the established 7/6/4-byte policy. The two
+9-bit payload instances shrank by 177 and 441 bytes, but 15 source-q9 pairs
+regressed to 0.9763x median / 0.9770x geometric mean with 0/15 wins. This
+reproduces the historical 10-bit seven-byte-refill result: fewer refills do not
+repay the altered dependency and branch structure. The candidate was removed.
+
 ## Next direction
 
 The 65--128 tier is faster, but source q9 still reaches only about 0.69x
-libbrotli. The next useful work is inside the context-dependent literal loop or
-bit-reader refill, not another root-width threshold. The 129--256 tier should
-stay at ten bits unless a separately isolated policy improves its slowest row.
+libbrotli. Root width and refill size are now bounded out. The next useful work
+is a shorter context-to-tree-to-root dependency or fewer per-command literal
+loop transitions. The 129--256 tier should stay at ten bits unless a separately
+isolated policy improves its slowest row.

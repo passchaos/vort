@@ -133,6 +133,35 @@
     "candidate_over_libbrotli_median": 0.6910394798873254,
     "candidate_over_libbrotli_geometric_mean": 0.6918324150935796
   },
+  "literal_loop_shape": {
+    "input_bytes": 1722625,
+    "input_sha256": "eebe60803f3d9cbd01a79c6b9ea98cf648d7919b877e30c132581d8b9c7e3a8d",
+    "encoded_bytes": 141083,
+    "literal_count": 20486,
+    "root_miss_count": 204,
+    "root_miss_fraction": 0.009957,
+    "insert_run_count": 10965,
+    "literal_block_switch_count": 10
+  },
+  "rejected_nine_bit_seven_byte_refill": {
+    "baseline_executable_sha256": "9e10eead48c257ba853624a77ff016b3abb9dea2d386f04f5f86da57c4ba592c",
+    "candidate_executable_sha256": "e89b18b542e2646cb2ecf508064e3592c0c3fddbcc1a6f0878e0f32e2f6b8efc",
+    "input_bytes": 1722420,
+    "input_sha256": "a31fc9c1c6d2ec35bf86dab1e5247970764212af1a3db809ed0dbd472357a214",
+    "encoded_bytes": 140863,
+    "pairs": 15,
+    "speedup_median": 0.9762849485033649,
+    "speedup_geometric_mean": 0.9769539479835525,
+    "speedup_min": 0.9605524280687623,
+    "speedup_max": 0.9868973839343345,
+    "wins": 0,
+    "libbrotli_normalized_median": 0.9799711448684726,
+    "libbrotli_normalized_geometric_mean": 0.9808190131049996,
+    "small_executor_bytes_before": 2793,
+    "small_executor_bytes_after": 2616,
+    "large_executor_bytes_before": 4553,
+    "large_executor_bytes_after": 4112
+  },
   "rejected_instantiation_order_binary_sha256": "d1100b34da919748bf53cd76c60900ba59cdbafa1f9def4444fcb15d515f22f8",
   "validation": {
     "focused_wide_lookup_test": true,

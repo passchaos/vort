@@ -16782,3 +16782,12 @@ reuse, so production keeps the simpler independently owned plans.
   throughput with 15/15 wins and a 1.00035x minimum. Final throughput reaches
   0.6910x median local libbrotli. All 541 tests, reference/upstream/real-corpus
   gates, and the full repository check pass.
+
+- A non-timing pass over the retained 9-bit wide executor found only 204 root
+  misses among 20,486 literals (1.0%), plus 10,965 insert runs and ten literal
+  block switches. A 9-bit-only seven-byte refill shrank the two payload
+  instances by 177/441 bytes but regressed 15/15 source-q9 pairs to 0.9763x
+  median / 0.9770x geometric throughput. The variant was removed, confirming
+  that the established six-byte refill remains faster even with a nine-bit
+  root; further work should shorten context/tree dependencies or loop
+  transitions rather than change root coverage or refill width.
