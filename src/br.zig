@@ -7173,10 +7173,18 @@ noinline fn processWideExternalLiteralLookup9MetaBlock(
     const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(header);
     var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
     defer fast_reader.syncTo(reader);
-    if (auxiliary_tail_lookups)
+    if (auxiliary_tail_lookups and header.command_block.block_type_count <= inline_command_tree_count) {
+        var command_lookups: [inline_command_tree_count]single_command_lookup.Lookup = undefined;
+        for (header.insert_copy_trees[0..header.command_block.block_type_count], 0..) |*tree, index| {
+            command_lookups[index] = if (tree.single_symbol) |symbol|
+                try single_command_lookup.Lookup.initSingle(symbol)
+            else
+                try single_command_lookup.Lookup.init(&tree.table);
+        }
         return processWideExternalLiteralLookup9CompressedPayload(
             true,
             wideAuxiliaryUsesFixedNineBitPeek(capacity),
+            true,
             &fast_reader,
             output,
             written,
@@ -7185,8 +7193,12 @@ noinline fn processWideExternalLiteralLookup9MetaBlock(
             window_bits,
             header,
             literal_lookups[0..header.literal_tree_count],
+            &command_lookups,
         );
-    return processWideExternalLiteralLookup9CompressedPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count]);
+    }
+    if (auxiliary_tail_lookups)
+        return processWideExternalLiteralLookup9CompressedPayload(true, wideAuxiliaryUsesFixedNineBitPeek(capacity), false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count], null);
+    return processWideExternalLiteralLookup9CompressedPayload(false, false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count], null);
 }
 
 fn wideAuxiliaryUsesFixedNineBitPeek(comptime capacity: usize) bool {
@@ -7646,6 +7658,7 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
 noinline fn processWideExternalLiteralLookup9CompressedPayload(
     comptime auxiliary_tail_lookups: bool,
     comptime fixed_nine_bit_peek: bool,
+    comptime command_lookup10: bool,
     reader: anytype,
     output: []u8,
     written: *usize,
@@ -7654,6 +7667,7 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
     window_bits: u5,
     header: *MinimalCompressedHeader,
     literal_lookups: []const WideExternalLiteralLookup9,
+    command_lookups: ?*const [inline_command_tree_count]single_command_lookup.Lookup,
 ) align(64) linksection(wide_literal_lookup9_text_section) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
@@ -7661,23 +7675,43 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
     var literal_block_remaining = header.literal_block.remaining;
     var active_literal_context_map: [*]const u8 = @ptrCast(&header.literal_context_map[@as(usize, header.literal_block.current_type) * 64]);
     var active_literal_context_mode = header.literal_context_modes[header.literal_block.current_type];
+    var active_command_lookup: *const single_command_lookup.Lookup = undefined;
+    var active_command_tree: *const PrefixCode(704) = undefined;
+    if (comptime command_lookup10) {
+        const command_type = header.command_block.current_type;
+        if (command_type >= header.command_block.block_type_count) return error.CorruptFrame;
+        active_command_lookup = &command_lookups.?[command_type];
+        active_command_tree = &header.insert_copy_trees[command_type];
+    }
     var output_cursor = written.*;
     defer {
         written.* = output_cursor;
         header.literal_block.remaining = literal_block_remaining;
     }
     while (output_cursor < meta_block_end) {
-        const command_symbol = if (comptime auxiliary_tail_lookups)
-            if (comptime fixed_nine_bit_peek)
-                try readCommandSymbolTailLookupFixed9(header, reader)
+        if (comptime command_lookup10) {
+            if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0) {
+                try switchBlockAny(max_command_block_types, &header.command_block, reader);
+                const command_type = header.command_block.current_type;
+                active_command_lookup = &command_lookups.?[command_type];
+                active_command_tree = &header.insert_copy_trees[command_type];
+            }
+        }
+        const lengths = if (comptime command_lookup10)
+            try readInsertCopyLengthsMultiTreeZeroInsertCurrent(header, reader, active_command_lookup, active_command_tree)
+        else blk: {
+            const command_symbol = if (comptime auxiliary_tail_lookups)
+                if (comptime fixed_nine_bit_peek)
+                    try readCommandSymbolTailLookupFixed9(header, reader)
+                else
+                    try readCommandSymbolTailLookup(header, reader)
             else
-                try readCommandSymbolTailLookup(header, reader)
-        else
-            try readCommandSymbolAny(header, reader);
-        const lengths = if (comptime auxiliary_tail_lookups and fixed_nine_bit_peek)
-            try readInsertCopyLengthsStaged(command_symbol, reader)
-        else
-            try readInsertCopyLengths(command_symbol, reader);
+                try readCommandSymbolAny(header, reader);
+            break :blk if (comptime auxiliary_tail_lookups and fixed_nine_bit_peek)
+                try readInsertCopyLengthsStaged(command_symbol, reader)
+            else
+                try readInsertCopyLengths(command_symbol, reader);
+        };
         if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;
         if (lengths.insert_len != 0) {
             var previous: u8 = if (output_cursor == 0) 0 else output[output_cursor - 1];

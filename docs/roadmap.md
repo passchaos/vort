@@ -16814,3 +16814,13 @@ reuse, so production keeps the simpler independently owned plans.
   the extra remaining-count and boundary condition measured 0.9949x median /
   0.9944x geometric throughput with 2/15 wins. Production keeps only the exact
   `insert_len == 1` invariant.
+
+- The isolated 9-bit middle-tier wrapper now prepares the existing 32-bit,
+  10-bit zero-insert command roots for up to 32 command trees and caches the
+  active command root/tree across block switches. The source workloads have
+  ten command types and 39,571/50,530 zero-insert commands (78.3%). Against
+  frozen `62d1663a`, source q9 improves by 1.0202x median / 1.0200x geometric
+  throughput with 15/15 wins and a 1.00064x minimum; q5 improves 1.0223x /
+  1.0234x with 7/7 wins. Final q9/q5 throughput reaches 0.7099x/0.7090x median
+  local libbrotli. All 541 tests, reference/upstream/real-corpus gates, and the
+  full check pass.

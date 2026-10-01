@@ -160,9 +160,33 @@ remaining-count and block-boundary condition measured 0.9949x median / 0.9944x
 geometric mean with 2/15 wins. Production remains restricted to the exact
 single-literal invariant.
 
+## Wide zero-insert command roots
+
+The retained source streams have ten command block types. Of 50,530 commands,
+39,571 (78.3%) insert no literals, but the wide executor still decoded a 9-bit
+command symbol and then loaded compact metadata separately. The middle-tier
+wrapper now prepares the existing 32-bit, 10-bit command roots for up to the
+complete 32-tree inline command tier whenever the established auxiliary
+distance lookups are available.
+
+Zero-insert root hits carry copy base, copy extra-bit width, and implicit-
+distance state directly. Non-zero inserts, long Huffman codes, block switches,
+malformed input checks, and the canonical fallback keep their existing paths.
+The active command root/tree pointers are refreshed only at a command block
+switch. Streams that cannot use the external roots retain the prior executor
+instance.
+
+Against frozen `62d1663a...`, 15 source-q9 pairs improve by 1.0202x median /
+1.0200x geometric mean with 15/15 wins and a 1.00064x minimum. Seven source-q5
+pairs improve by 1.0223x median / 1.0234x geometric, also 7/7. Final candidate
+throughput reaches 0.7099x/0.7090x median local libbrotli at q9/q5.
+
+All 541 direct tests, reference/upstream/real-corpus gates, and the full
+repository check pass.
+
 ## Next direction
 
-The 65--128 tier is faster, but source q9 still reaches only about 0.69x
+The 65--128 tier is faster, but source q9 still reaches only about 0.71x
 libbrotli. Root width and refill size are now bounded out. The next useful work
 is a shorter context-to-tree-to-root dependency or a smaller shared literal
 transition, not duplicated fast paths. The 129--256 tier should stay at ten
