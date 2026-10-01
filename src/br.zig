@@ -7181,6 +7181,13 @@ noinline fn processWideExternalLiteralLookup9MetaBlock(
             else
                 try single_command_lookup.Lookup.init(&tree.table);
         }
+        var distance_lookups: [inline_distance_tree_count]ExternalDistanceLookup = undefined;
+        for (header.distance_trees[0..header.distance_tree_count], 0..) |*tree, index| {
+            distance_lookups[index] = if (tree.single_symbol) |symbol|
+                try ExternalDistanceLookup.initSingle(symbol)
+            else
+                try ExternalDistanceLookup.init(&tree.table);
+        }
         return processWideExternalLiteralLookup9CompressedPayload(
             true,
             wideAuxiliaryUsesFixedNineBitPeek(capacity),
@@ -7194,11 +7201,12 @@ noinline fn processWideExternalLiteralLookup9MetaBlock(
             header,
             literal_lookups[0..header.literal_tree_count],
             &command_lookups,
+            &distance_lookups,
         );
     }
     if (auxiliary_tail_lookups)
-        return processWideExternalLiteralLookup9CompressedPayload(true, wideAuxiliaryUsesFixedNineBitPeek(capacity), false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count], null);
-    return processWideExternalLiteralLookup9CompressedPayload(false, false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count], null);
+        return processWideExternalLiteralLookup9CompressedPayload(true, wideAuxiliaryUsesFixedNineBitPeek(capacity), false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count], null, null);
+    return processWideExternalLiteralLookup9CompressedPayload(false, false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count], null, null);
 }
 
 fn wideAuxiliaryUsesFixedNineBitPeek(comptime capacity: usize) bool {
@@ -7668,6 +7676,7 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
     header: *MinimalCompressedHeader,
     literal_lookups: []const WideExternalLiteralLookup9,
     command_lookups: ?*const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: ?*const [inline_distance_tree_count]ExternalDistanceLookup,
 ) align(64) linksection(wide_literal_lookup9_text_section) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
@@ -7677,11 +7686,17 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
     var active_literal_context_mode = header.literal_context_modes[header.literal_block.current_type];
     var active_command_lookup: *const single_command_lookup.Lookup = undefined;
     var active_command_tree: *const PrefixCode(704) = undefined;
+    var active_distance_context_map: [*]const u8 = undefined;
+    var active_distance_context_three_tree: u8 = undefined;
     if (comptime command_lookup10) {
         const command_type = header.command_block.current_type;
         if (command_type >= header.command_block.block_type_count) return error.CorruptFrame;
         active_command_lookup = &command_lookups.?[command_type];
         active_command_tree = &header.insert_copy_trees[command_type];
+        const distance_type = header.distance_block.current_type;
+        if (distance_type >= header.distance_block.block_type_count) return error.CorruptFrame;
+        active_distance_context_map = @ptrCast(&header.distance_context_map[@as(usize, distance_type) * 4]);
+        active_distance_context_three_tree = active_distance_context_map[3];
     }
     var output_cursor = written.*;
     defer {
@@ -7760,8 +7775,21 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
             }
         }
         if (output_cursor == meta_block_end) return;
+        if (comptime command_lookup10) {
+            if (!lengths.distance_symbol_zero and
+                header.distance_block.block_type_count > 1 and
+                header.distance_block.remaining == 0)
+            {
+                try switchBlockAny(max_distance_block_types, &header.distance_block, reader);
+                const distance_type = header.distance_block.current_type;
+                active_distance_context_map = @ptrCast(&header.distance_context_map[@as(usize, distance_type) * 4]);
+                active_distance_context_three_tree = active_distance_context_map[3];
+            }
+        }
         var decoded_distance: DecodedBrotliDistance = undefined;
-        if (comptime auxiliary_tail_lookups)
+        if (comptime command_lookup10)
+            try readMinimalDistanceExternalLookupIntoFixed9Current(true, header, reader, lengths, last_distances, &decoded_distance, distance_lookups.?, active_distance_context_map, active_distance_context_three_tree)
+        else if (comptime auxiliary_tail_lookups)
             if (comptime fixed_nine_bit_peek)
                 try readMinimalDistanceTailLookupIntoFixed9(header, reader, lengths, last_distances, &decoded_distance)
             else

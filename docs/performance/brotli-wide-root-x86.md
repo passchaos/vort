@@ -184,10 +184,57 @@ throughput reaches 0.7099x/0.7090x median local libbrotli at q9/q5.
 All 541 direct tests, reference/upstream/real-corpus gates, and the full
 repository check pass.
 
+## Rejected literal root-slot offsets
+
+A smaller follow-up to the rejected 512-byte context-to-pointer table expanded
+the active 64-byte context map into 64 `u16` root-slot offsets. The 128-byte
+table encoded `tree_index << 9`, so a fast hit could combine the stored offset
+with the reader's nine-bit prefix and index the continuous lookup plane
+directly. Canonical tree indices were recovered only on the 1% miss path.
+
+The generated hot loop removed the scaled root-address chain and the isolated
+section grew by only 80 bytes, from 15,952 to 16,032 bytes. The extra map load,
+block-switch rebuild, and register pressure still erased the instruction win:
+15 source-q9 pairs measured 0.9991x median / 0.9995x geometric raw throughput
+with 7/15 wins. Local-libbrotli-normalized results were 0.9999x median / 0.9966x
+geometric, also 7/15. The candidate was removed.
+
+## Wide external distance roots
+
+The retained command-root wrapper now also prepares the existing external
+nine-bit distance roots for the complete 64-tree inline distance tier. The
+command-root payload caches the active four-entry distance context-map slice
+and its dominant context-three tree, refreshing them only on a non-implicit
+distance block switch. Implicit last-distance commands, long-code fallback,
+remaining-count accounting, ring updates, and malformed-input checks retain
+their canonical behavior. Other wide executor instances keep the prior
+in-header tail lookup.
+
+This adds a bounded 64 KiB root plane and grows the isolated section from
+15,952 to 17,493 bytes. The measured source frames use 37 distance trees at q9
+and 38 at q5. Against frozen `ead94ef5...`, 15 source-q9 pairs improve by
+1.0315x median / 1.0317x geometric raw throughput with 15/15 wins and a
+1.0256x minimum. Libbrotli-normalized median/geometric improvement is
+1.0290x/1.0311x. Seven q5 pairs improve by 1.0274x / 1.0276x, also 7/7 with a
+1.0237x minimum. Final candidate throughput reaches 0.7351x/0.7246x median
+local libbrotli at q9/q5.
+
+The progressive differential initially exposed a harness assumption rather
+than a decoder mismatch: system libbrotli 1.0.9 may advertise WBITS=16 after a
+q10 request for lgwin=10. The harness used the requested value and allocated
+only 1,008 history bytes, then correctly rejected a 7,680-byte match from the
+actual WBITS=16 frame. Progressive history is now sized from the frame's RFC
+window code. The candidate then passes all 541 direct tests, the 13-row local
+libbrotli 1.2.0 reference gate, 7,056 generated and progressive upstream
+cases, 1,401 fragmentation cases, 64 high-tree truncations, seven Large Window
+cases, and the four-file 16/16 real-corpus matrix.
+
 ## Next direction
 
-The 65--128 tier is faster, but source q9 still reaches only about 0.71x
-libbrotli. Root width and refill size are now bounded out. The next useful work
-is a shorter context-to-tree-to-root dependency or a smaller shared literal
-transition, not duplicated fast paths. The 129--256 tier should stay at ten
-bits unless a separately isolated policy improves its slowest row.
+The 65--128 tier is faster, but source q9 still reaches only about 0.74x
+libbrotli. Root width, refill size, pointer tables, and root-slot offset maps
+are now bounded out. The next useful work is a fresh instruction/counter audit
+of context computation, command/distance transitions, and root construction
+cost rather than another speculative active-block table. The 129--256 tier
+should stay at ten bits unless a separately isolated policy improves its
+slowest row.

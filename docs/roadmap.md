@@ -16824,3 +16824,24 @@ reuse, so production keeps the simpler independently owned plans.
   1.0234x with 7/7 wins. Final q9/q5 throughput reaches 0.7099x/0.7090x median
   local libbrotli. All 541 tests, reference/upstream/real-corpus gates, and the
   full check pass.
+
+- A 128-byte current-block table of `u16` literal root-slot offsets was
+  rejected. It removed the scaled root-address chain without the earlier
+  pointer table's 512-byte footprint, and grew the isolated section by only 80
+  bytes, but 15 source-q9 pairs measured 0.9991x median / 0.9995x geometric
+  raw throughput with 7/15 wins. Local-libbrotli-normalized throughput was
+  0.9999x / 0.9966x, also 7/15. Production keeps the compact byte context map.
+
+- The retained 9-bit command-root instance now also owns a 64-tree external
+  distance-root plane and caches the active four-entry distance context map
+  plus context-three tree across distance block switches. The fixed plane adds
+  64 KiB of bounded stack storage and grows the isolated section by 1,541
+  bytes. Source q9 (37 distance trees) improves 1.0315x median / 1.0317x
+  geometric raw throughput with 15/15 wins and a 1.0256x minimum; q5 (38
+  trees) improves 1.0274x / 1.0276x with 7/7 wins. Final q9/q5 throughput is
+  0.7351x/0.7246x median local libbrotli. The upstream differential harness now
+  sizes caller-owned progressive history from the frame's advertised window,
+  because libbrotli may raise a requested lgwin. All 541 tests, 13 reference
+  rows, 7,056 generated/progressive cases, 1,401 fragmentation cases, 64
+  high-tree truncations, seven Large Window cases, and the 16/16 real-corpus
+  matrix pass.
