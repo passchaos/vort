@@ -16674,3 +16674,22 @@ reuse, so production keeps the simpler independently owned plans.
   `docs/performance/zstd-large-json-followups-x86.md`; the next credible step is
   a genuinely smaller split executor/state representation rather than another
   local branch or copy variant.
+
+- Flat 16--64-literal-tree Brotli meta-blocks with at most four command trees
+  now reuse the single-tree executor's 32-bit zero-insert command root for each
+  command block type. The root embeds copy bases, copy extra-bit widths, and
+  implicit-distance state; command-tree switches refresh the cached root while
+  the established canonical fallbacks preserve malformed/truncated behavior.
+  Against frozen `52fb2bf9`, 15 alternating fixed-CPU-2 `clustered_q8` pairs
+  improve by 1.0152x median / 1.0210x geometric throughput with 14/15 wins;
+  libbrotli-normalized gains are 1.0197x / 1.0150x. Candidate throughput is
+  still only 0.8450x median local libbrotli 1.2.0-dev, so broad leadership is
+  not claimed. A seven-pair 13-row matrix has a 1.0031x row-median geometric
+  mean; longer controls expose a bounded 0.7% geometric cost on `structured`,
+  neutral `repetitive_q11`, and neutral-positive `structured_q11`. All 540
+  direct Brotli tests, the 13-row reference gate, 7,056 one-shot and 7,056
+  progressive upstream cases, 1,401 fragmentation cases, 64 high-tree
+  truncations, seven Large Window cases, and the real-corpus differential pass.
+  The full repository check also passes. Exact evidence and the rejected
+  literal-block batching precursor are in
+  `docs/performance/brotli-multi-tree-zero-insert-x86.md` and its JSON record.

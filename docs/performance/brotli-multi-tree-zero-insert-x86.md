@@ -1,0 +1,99 @@
+# Brotli multi-tree zero-insert command lookup on x86-64
+
+Date: 2026-10-01
+
+## Motivation
+
+The 1 MiB `clustered_q8` reference stream is Vort's lowest current Brotli
+decode row on this x86-64 host. Its 16,818 commands include 11,086 zero-insert
+commands (65.9%), while only the narrower zero-extra-bit subset could use the
+existing 16-bit fused command root. The stream has 52 literal context trees,
+three command block types, 17 distance trees, and 16,741 literal bytes. Its
+copy distribution is also command-heavy: 14,713 copies are at most 16 bytes,
+806 are 17--64 bytes, and 1,299 are longer.
+
+The retained path extends the large flat-literal executor only when a standard
+meta-block has at most four command trees and at most 64 distance trees. It
+builds one existing 32-bit single-command lookup per command tree and reuses
+the existing external distance lookup representation. A zero-insert root hit
+contains the copy base, copy extra-bit width, and implicit-distance flag, so
+the payload loop reads the copy extra bits directly. Non-zero-insert entries,
+long Huffman codes, command block switches, and unsupported table shapes keep
+the established compact/canonical fallbacks. Command-block progress is
+decremented exactly once on every path.
+
+## Frozen paired result
+
+The baseline is clean revision `52fb2bf9`. Separate ReleaseFast binaries were
+frozen before measurement and run on CPU 2 in alternating process order. Both
+used the local `/home/passchaos/Work/brotli` checkout at
+`558fc647cdaf391228d614ca85f711e02e4e583b` (`v1.2.0-169-g558fc64`) through
+`LD_LIBRARY_PATH=/tmp/vort-brotli-upstream-build`.
+
+The exact command shape was:
+
+```sh
+taskset -c 2 env LD_LIBRARY_PATH=/tmp/vort-brotli-upstream-build \
+  BINARY --case clustered_q8 --iterations 500 --csv OUTPUT
+```
+
+Across 15 independent pairs:
+
+| metric | result |
+| --- | ---: |
+| direct median speedup | 1.0152x |
+| direct geometric-mean speedup | 1.0210x |
+| direct wins | 14 / 15 |
+| direct range | 0.9809x--1.0808x |
+| libbrotli-normalized median speedup | 1.0197x |
+| libbrotli-normalized geometric-mean speedup | 1.0150x |
+| candidate/libbrotli median | 0.8450x |
+| candidate/libbrotli geometric mean | 0.8455x |
+
+This is a repeatable improvement for the measured multi-command-tree shape,
+not overall Brotli leadership. The target remains about 15.5% below local
+libbrotli by the median throughput ratio.
+
+## Controls
+
+A seven-pair complete 13-row matrix had a 1.0031x geometric mean across row
+medians. `clustered_q8` improved by 1.0201x median / 1.0272x geometric mean
+with 7/7 wins and a 1.0010x minimum. The shortest rows were noisy, so longer
+10,000-iteration controls were run separately:
+
+| control | pairs | median | geometric mean | wins |
+| --- | ---: | ---: | ---: | ---: |
+| `structured` | 21 | 0.9915x | 0.9930x | 5 / 21 |
+| `structured_q11` | 21 | 1.0031x | 1.0024x | 11 / 21 |
+| `repetitive_q11` | 21 | 0.9970x | 0.9963x | 7 / 21 |
+
+Fifteen repository-source q1 pairs were neutral at 0.9984x median / 0.9987x
+geometric mean; every candidate run still exceeded libbrotli, with a 1.0066x
+median candidate/reference ratio. The retained specialization therefore
+accepts a measured sub-1% cost on the small `structured` control in exchange
+for the stable `clustered_q8` gain, while leaving the existing single-tree q1
+lead intact.
+
+A compact-tail literal-block run-batching precursor was rejected: 15 target
+pairs measured only 0.9815x median / 0.9799x geometric mean with 0/15 wins.
+
+## Correctness evidence
+
+The focused lookup test checks zero-insert copy-extra decoding and exact
+command-block countdown. The complete direct Brotli ReleaseFast suite passes
+all 540 tests. The local libbrotli reference gate passes all 13 rows. The
+upstream multi-block differential passes 98 core cases, 7,056 one-shot cases,
+7,056 progressive cases, 1,401 fragmentation cases, 64 high-tree truncation
+cases, and seven Large Window decode cases, with zero unsupported summaries.
+The real-corpus differential passes four files across four categories in 16
+one-shot and 16 progressive configurations. `zig build check -j1` also passes.
+
+The formerly source-self-referential allocating-summary regression fixture was
+also made deterministic. It now creates a 32 KiB match at the exact legal
+17-bit distance limit (131,056 bytes), followed by literal context, so source
+layout changes cannot silently remove the history-exhaustion condition being
+tested.
+
+Exact binary/library hashes, commands, target observations, matrix summaries,
+and control summaries are recorded in
+[brotli-multi-tree-zero-insert-x86-20261001.json](data/brotli-multi-tree-zero-insert-x86-20261001.json).

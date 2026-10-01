@@ -6871,6 +6871,7 @@ const clustered_literal_tree_threshold: u16 = 16;
 const external_literal_lookup_tree_limit: usize = inline_literal_tree_count;
 const external_literal_lookup_middle_tree_limit: usize = 128;
 const external_literal_lookup_meta_block_min: usize = 64 * 1024;
+const multi_tree_zero_insert_command_limit: usize = 4;
 const ExternalLiteralLookup = huffman.PackedLookup(10);
 const ExternalCommandLookup = huffman.PackedLookup(10);
 const ExternalDistanceLookup = huffman.PackedLookup(9);
@@ -6907,6 +6908,57 @@ fn prepareFlatLiteralTailLookups(
     return true;
 }
 
+noinline fn tryProcessMultiTreeZeroInsertMetaBlock(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: *const [inline_literal_tree_count]TailLiteralLookup,
+) Error!bool {
+    const command_type_count = header.command_block.block_type_count;
+    if (command_type_count == 0 or
+        command_type_count > multi_tree_zero_insert_command_limit or
+        header.distance_tree_count > inline_distance_tree_count) return false;
+
+    var command_lookups: [multi_tree_zero_insert_command_limit]single_command_lookup.Lookup = undefined;
+    for (header.insert_copy_trees[0..command_type_count], 0..) |*tree, index| {
+        command_lookups[index] = if (tree.single_symbol) |symbol|
+            try single_command_lookup.Lookup.initSingle(symbol)
+        else
+            try single_command_lookup.Lookup.init(&tree.table);
+    }
+    var distance_lookups: [inline_distance_tree_count]ExternalDistanceLookup = undefined;
+    for (header.distance_trees[0..header.distance_tree_count], 0..) |*tree, index| {
+        distance_lookups[index] = if (tree.single_symbol) |symbol|
+            try ExternalDistanceLookup.initSingle(symbol)
+        else
+            try ExternalDistanceLookup.init(&tree.table);
+    }
+
+    var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
+    defer fast_reader.syncTo(reader);
+    try processTailLookupCompressedPayload(
+        true,
+        true,
+        true,
+        &fast_reader,
+        output,
+        written,
+        meta_block_end,
+        last_distances,
+        window_bits,
+        header,
+        literal_lookups,
+        null,
+        &command_lookups,
+        &distance_lookups,
+    );
+    return true;
+}
+
 noinline fn processFlatLiteralTailLookupMetaBlock(
     reader: *bitstream.BitReader,
     output: []u8,
@@ -6918,16 +6970,26 @@ noinline fn processFlatLiteralTailLookupMetaBlock(
 ) Error!bool {
     var literal_lookups: [inline_literal_tree_count]TailLiteralLookup = undefined;
     if (!try prepareFlatLiteralTailLookups(header, &literal_lookups)) return false;
+    if (try tryProcessMultiTreeZeroInsertMetaBlock(
+        reader,
+        output,
+        written,
+        meta_block_end,
+        last_distances,
+        window_bits,
+        header,
+        &literal_lookups,
+    )) return true;
     var command_lookups: [inline_command_tree_count]ExternalCommandLookup = undefined;
     var distance_lookups: [inline_distance_tree_count]ExternalDistanceLookup = undefined;
     var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
     defer fast_reader.syncTo(reader);
     if (try prepareExternalAuxiliaryLookups(header, &command_lookups, &distance_lookups)) {
-        try processTailLookupCompressedPayload(true, true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
+        try processTailLookupCompressedPayload(true, true, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, null, &distance_lookups);
     } else if (prepareAuxiliaryTailLookups(header))
-        try processTailLookupCompressedPayload(true, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, null, null)
+        try processTailLookupCompressedPayload(true, false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, null, null, null)
     else
-        try processTailLookupCompressedPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, null, null);
+        try processTailLookupCompressedPayload(false, false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, null, null, null);
     return true;
 }
 
@@ -7182,6 +7244,7 @@ noinline fn processDecodedCompressedPayload(
 noinline fn processTailLookupCompressedPayload(
     comptime auxiliary_tail_lookups: bool,
     comptime command_lookup10: bool,
+    comptime zero_insert_command_lookup: bool,
     reader: anytype,
     output: []u8,
     written: *usize,
@@ -7191,21 +7254,26 @@ noinline fn processTailLookupCompressedPayload(
     header: *MinimalCompressedHeader,
     literal_lookups: *const [inline_literal_tree_count]TailLiteralLookup,
     command_lookups: ?*const [inline_command_tree_count]ExternalCommandLookup,
+    zero_insert_command_lookups: ?*const [multi_tree_zero_insert_command_limit]single_command_lookup.Lookup,
     distance_lookups: ?*const [inline_distance_tree_count]ExternalDistanceLookup,
 ) Error!void {
     comptime std.debug.assert(!command_lookup10 or auxiliary_tail_lookups);
+    comptime std.debug.assert(!zero_insert_command_lookup or command_lookup10);
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     const literal_lookup_ptr: [*]const TailLiteralLookup = @ptrCast(literal_lookups);
     var output_cursor = written.*;
     defer written.* = output_cursor;
-    var active_command_lookup: *const ExternalCommandLookup = undefined;
+    var active_command_lookup: if (zero_insert_command_lookup) *const single_command_lookup.Lookup else *const ExternalCommandLookup = undefined;
     var active_command_tree: *const PrefixCode(704) = undefined;
     var active_distance_context_map: [*]const u8 = undefined;
     if (comptime command_lookup10) {
         const command_type = header.command_block.current_type;
         if (command_type >= header.command_block.block_type_count) return error.CorruptFrame;
-        active_command_lookup = &command_lookups.?[command_type];
+        active_command_lookup = if (comptime zero_insert_command_lookup)
+            &zero_insert_command_lookups.?[command_type]
+        else
+            &command_lookups.?[command_type];
         active_command_tree = &header.insert_copy_trees[command_type];
         const distance_type = header.distance_block.current_type;
         if (distance_type >= header.distance_block.block_type_count) return error.CorruptFrame;
@@ -7216,12 +7284,18 @@ noinline fn processTailLookupCompressedPayload(
             if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0) {
                 try switchBlockAny(max_command_block_types, &header.command_block, reader);
                 const command_type = header.command_block.current_type;
-                active_command_lookup = &command_lookups.?[command_type];
+                active_command_lookup = if (comptime zero_insert_command_lookup)
+                    &zero_insert_command_lookups.?[command_type]
+                else
+                    &command_lookups.?[command_type];
                 active_command_tree = &header.insert_copy_trees[command_type];
             }
         }
         const lengths = if (comptime command_lookup10)
-            try readInsertCopyLengthsExternalLookup10Current(header, reader, active_command_lookup, active_command_tree)
+            if (comptime zero_insert_command_lookup)
+                try readInsertCopyLengthsMultiTreeZeroInsertCurrent(header, reader, active_command_lookup, active_command_tree)
+            else
+                try readInsertCopyLengthsExternalLookup10Current(header, reader, active_command_lookup, active_command_tree)
         else blk: {
             const command_symbol = if (comptime auxiliary_tail_lookups)
                 try readCommandSymbolTailLookupFixed9(header, reader)
@@ -10674,6 +10748,35 @@ inline fn readInsertCopyLengthsSingleExternalLookup10(
     return readInsertCopyLengthsStagedCompact(root_entry.value, reader);
 }
 
+inline fn readInsertCopyLengthsMultiTreeZeroInsertCurrent(
+    header: *MinimalCompressedHeader,
+    reader: anytype,
+    lookup: *const single_command_lookup.Lookup,
+    tree: *const PrefixCode(704),
+) Error!InsertCopyLengths {
+    const root_entry = (try lookup.decodeFast(reader)) orelse {
+        const symbol = if (tree.single_symbol) |single|
+            single
+        else
+            try tree.table.decodeValueLongAfterLookup(reader, 10);
+        if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
+        return readInsertCopyLengthsStagedCompact(symbol, reader);
+    };
+    if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
+    if (root_entry.zero_insert) {
+        const copy_extra = if (root_entry.copy_extra_bits == 0)
+            0
+        else
+            try reader.readBits24StagedFirst(root_entry.copy_extra_bits);
+        return .{
+            .insert_len = 0,
+            .copy_len = @as(usize, root_entry.value) + copy_extra,
+            .distance_symbol_zero = root_entry.distance_symbol_zero,
+        };
+    }
+    return readInsertCopyLengthsStagedCompact(root_entry.value, reader);
+}
+
 inline fn readCommandSymbolTailLookupWithOptions(comptime fixed_nine_bit_peek: bool, header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
     if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0)
         try switchBlockAny(max_command_block_types, &header.command_block, reader);
@@ -13574,21 +13677,18 @@ test "br ratio UTF8 context split round trips beyond summary history" {
 }
 
 test "br allocating summary follows ratio matches beyond fixed history" {
-    const source = @embedFile("br.zig");
-    const source_prefix_len = 48 * 1024;
-    const random_len = 80 * 1024;
+    const far_match_distance = (@as(usize, 1) << 17) - 16;
     const repeated_len = 32 * 1024;
     const tail = "tail literal context after far copy abcdefghijklmnopqrstuvwxyz";
-    const payload_len = source_prefix_len + random_len + repeated_len + tail.len;
+    const payload_len = far_match_distance + repeated_len + tail.len;
     const payload = try std.testing.allocator.alloc(u8, payload_len);
     defer std.testing.allocator.free(payload);
-    @memcpy(payload[0..source_prefix_len], source[0..source_prefix_len]);
     var state: u32 = 0x1234_5678;
-    for (payload[source_prefix_len .. source_prefix_len + random_len]) |*byte| {
+    for (payload[0..far_match_distance]) |*byte| {
         state = state *% 1_664_525 +% 1_013_904_223;
         byte.* = @truncate(state >> 24);
     }
-    @memcpy(payload[source_prefix_len + random_len ..][0..repeated_len], source[0..repeated_len]);
+    @memcpy(payload[far_match_distance..][0..repeated_len], payload[0..repeated_len]);
     @memcpy(payload[payload_len - tail.len ..], tail);
 
     const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
@@ -21835,6 +21935,26 @@ test "br insert-copy length decoder covers basic and extra-bit ranges" {
     try std.testing.expectEqual(@as(usize, 0), explicit_distance.insert_len);
     try std.testing.expectEqual(@as(usize, 2), explicit_distance.copy_len);
     try std.testing.expect(!explicit_distance.distance_symbol_zero);
+}
+
+test "br multi-tree zero-insert lookup preserves command progress" {
+    const symbol: u16 = 64;
+    const tree = PrefixCode(704){ .single_symbol = symbol };
+    const lookup = try single_command_lookup.Lookup.initSingle(symbol);
+    var header: MinimalCompressedHeader = undefined;
+    header.command_block = .{};
+    header.command_block.remaining = 1;
+    var reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{0b0000_0001}));
+    const lengths = try readInsertCopyLengthsMultiTreeZeroInsertCurrent(
+        &header,
+        &reader,
+        &lookup,
+        &tree,
+    );
+    try std.testing.expectEqual(@as(usize, 0), lengths.insert_len);
+    try std.testing.expectEqual(@as(usize, 11), lengths.copy_len);
+    try std.testing.expect(lengths.distance_symbol_zero);
+    try std.testing.expectEqual(@as(usize, 0), header.command_block.remaining);
 }
 
 test "br insert-copy length decoder handles high range extra bits" {
