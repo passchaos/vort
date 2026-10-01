@@ -89,3 +89,8 @@ Brotli or Zstd leadership across inputs, APIs, cold runs, or architectures.
 Exact sample times, commands, input/binary hashes, reference builds, code sizes,
 and the diagnostic probe source/output are recorded in
 [brotli-logical-refill-x86-20261002.json](data/brotli-logical-refill-x86-20261002.json).
+
+The subsequent full-tier lookup work replaces duplicated ten-bit literal
+roots with nine-bit roots and compact sibling entries. Its separate memory,
+throughput, error-cursor, and control results are in
+[brotli-paired-literal-x86.md](brotli-paired-literal-x86.md).

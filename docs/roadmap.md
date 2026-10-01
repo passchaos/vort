@@ -16915,3 +16915,21 @@ reuse, so production keeps the simpler independently owned plans.
   and real-corpus differentials, and reference gates pass; exact measurements
   and the approximately 6% header-parse diagnostic are in
   `docs/performance/brotli-logical-refill-x86.md` and its JSON companion.
+
+- The Brotli full literal tier now uses nine-bit roots and compact ten-bit
+  sibling entries with explicit child-presence flags. This preserves literal
+  zero and the previous ten-bit lookup's missing-child/truncation cursor
+  semantics while retaining the canonical eleven- through fifteen-bit fallback.
+  Literal table capacity falls from 512 to 320 KiB; literal/command/distance
+  tables together fall from 704 to 512 KiB. Final CPU-2 q9/q5 pairs against
+  `cc49b739` improve by 1.0214x/1.0287x medians (13/15 and 7/7 wins), reaching
+  0.7381x/0.7499x local libbrotli 1.2.0-dev. Clustered q8 is neutral at 1.0002x;
+  source q9/q5 retain small 0.9973x/0.9965x median regressions and stay tracked.
+  The symbol/long-fallback oracles, all 547 direct tests, upstream/generated/
+  progressive/fragmentation/real-corpus differentials, reference gates,
+  AArch64 linking, full check, and CLI smoke pass. A preceding command-shape
+  audit found about 79%--81% eligible zero-insert commands, but single-command
+  and eight-command bounded readers regressed and were removed. Exact evidence
+  and archived candidate patches are in `docs/performance/brotli-paired-literal-x86.md`
+  and its JSON companion. Next work should measure remaining long-code fallback
+  frequency and copy costs before widening secondary tables or fast loops.

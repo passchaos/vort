@@ -1,0 +1,1209 @@
+{
+  "date": "2026-10-02",
+  "baseline_git": "cc49b739c205362ac8ee0726024f3ab7d95d5c3a",
+  "baseline_executable_sha256": "90a032f5f0442a09d271d6aed9501a5b386068072802aca937ea6c8757c9e3f3",
+  "candidate_executable_sha256": "07451fcb171c3613b3bda3b4fa27e5ab0e71741517995c10e71f892aeabc7e1a",
+  "candidate_source_sha256": {
+    "src/br.zig": "369aea5ce32a371ff5869efb0b49cd4a2cebbd2c3fbb314f857e4eb54210abc5",
+    "src/br/paired_literal_lookup.zig": "dbe1c69df5440d617dc76336b0564c871c755749c3bd71f34099912c28b4eb10"
+  },
+  "host": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "os": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "cpu_affinity": "2",
+    "codec_threads": 1
+  },
+  "reference": {
+    "path": "/tmp/vort-brotli-upstream-build",
+    "git": "558fc647cdaf391228d614ca85f711e02e4e583b",
+    "version": "1.2.0-dev",
+    "libraries": {
+      "/tmp/vort-brotli-upstream-build/libbrotlidec.so.1.2.0": "e3e18631aaa421912afddbef2246eb3e6abe4e15a10f983d31ac2dcbe3d20eb3",
+      "/tmp/vort-brotli-upstream-build/libbrotlicommon.so.1.2.0": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739",
+      "/tmp/vort-brotli-upstream-build/libbrotlienc.so.1.2.0": "cc82e22aba04d134b95425d936c1d834edc64a1379c008c896d7fe68cd258899"
+    },
+    "build": {
+      "cmake_build_type": "Release",
+      "c_compiler": "/usr/bin/cc",
+      "c_flags_release": "-O3 -DNDEBUG",
+      "compiler_version": "cc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0"
+    }
+  },
+  "environment": {
+    "LD_LIBRARY_PATH": "/tmp/vort-brotli-upstream-build"
+  },
+  "input_snapshot_commit": "488c5415",
+  "method": {
+    "full": "Baseline/candidate order reverses per pair; each invocation alternates Vort/libbrotli over five warmed rounds, retaining each best time.",
+    "controls": "Decoder-only full-frame calls, best of five per invocation and reversed process order.",
+    "checks": "Equal input and encoded sizes, iterations and checksums in all pairs; equal recorded input SHA-256 in full comparisons.",
+    "limits": "One x86 host, warm calls; compilation jobs pinned to CPUs 4-7 while timing uses CPU 2. No hardware counters or broad leadership claim."
+  },
+  "storage": {
+    "previous_literal_bytes": 524288,
+    "root_bytes": 262144,
+    "sibling_bytes": 65536,
+    "unchanged_auxiliary_bytes": 196608,
+    "previous_fixed_tables_bytes": 720896,
+    "candidate_fixed_tables_bytes": 524288,
+    "previous_setup_stack_reservations": [
+      535864,
+      212096
+    ],
+    "candidate_setup_stack_reservation": 541472,
+    "stack_scope": "Setup frames only; excludes common caller/payload frames, register saves and alignment."
+  },
+  "audit": {
+    "roadmap_q9": "input=1251399 encoded=335220 quality=9 commands=109100 zero_insert=88384 one_insert=10935 zero_root=88273 bounded_zero=88246 dictionary=836 empty_dictionary=0 short_nonoverlap=94967 overlapping=20 copy_log2_bins={ 0, 811, 32886, 59627, 13580, 1941, 243, 12 }",
+    "roadmap_q5": "input=1251399 encoded=350069 quality=5 commands=118278 zero_insert=93272 one_insert=14362 zero_root=93062 bounded_zero=93036 dictionary=934 empty_dictionary=0 short_nonoverlap=106434 overlapping=20 copy_log2_bins={ 0, 516, 45614, 59524, 10521, 1851, 240, 12 }",
+    "executable_sha256": "edb1b30da9edcac958a3cb92268adc82764a7831ab8bc8cb8376b1519782a929",
+    "source_sha256": "53948a879a4816d37e123498c96ddf955e669e66e0d1a524188adcb425fd6232",
+    "timed": false,
+    "driver_source": "const std = @import(\"std\");\nconst vort = @import(\"vort\");\nconst lib = @import(\"br_runtime\");\npub fn main(init: std.process.Init) !void {\n    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);\n    defer args.deinit();\n    _ = args.next();\n    const path = args.next().?;\n    const quality = try std.fmt.parseInt(c_int, args.next().?, 10);\n    const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(16 * 1024 * 1024));\n    defer init.gpa.free(payload);\n    var runtime = try lib.Runtime.open();\n    defer runtime.deinit();\n    const encoded = try runtime.encodeAlloc(init.gpa, payload, quality);\n    defer init.gpa.free(encoded);\n    const output = try init.gpa.alloc(u8, payload.len);\n    defer init.gpa.free(output);\n    vort.br.command_audit = .{};\n    const written = try vort.brDecodeStreamInto(encoded, output);\n    if (written != payload.len or !std.mem.eql(u8, payload, output)) return error.SizeMismatch;\n    var buf: [2048]u8 = undefined;\n    var stdout = std.Io.File.stdout().writerStreaming(init.io, &buf);\n    const a = vort.br.command_audit;\n    try stdout.interface.print(\"input={d} encoded={d} quality={d} commands={d} zero_insert={d} one_insert={d} zero_root={d} bounded_zero={d} dictionary={d} empty_dictionary={d} short_nonoverlap={d} overlapping={d} copy_log2_bins={any}\\n\", .{payload.len, encoded.len, quality, a.commands, a.zero_insert, a.one_insert, a.zero_root, a.bounded_zero, a.dictionary, a.empty_dictionary, a.short_nonoverlap, a.overlapping, a.copy_lengths});\n    try stdout.interface.flush();\n}\n",
+    "instrumentation_patch": "--- a/src/br.zig\n+++ b/src/br.zig\n@@ -47,6 +47,20 @@\n var test_context_independent_literal_lookup_hits: usize = 0;\n var test_single_tree_external_lookup_hits: usize = 0;\n var test_wide_auxiliary_lookup10_hits: usize = 0;\n+\n+pub const CommandAudit = struct {\n+    commands: usize = 0,\n+    zero_insert: usize = 0,\n+    one_insert: usize = 0,\n+    zero_root: usize = 0,\n+    bounded_zero: usize = 0,\n+    dictionary: usize = 0,\n+    empty_dictionary: usize = 0,\n+    short_nonoverlap: usize = 0,\n+    overlapping: usize = 0,\n+    copy_lengths: [8]usize = @splat(0),\n+};\n+pub var command_audit: CommandAudit = .{};\n \n const large_window_text_section = switch (builtin.object_format) {\n     .elf => \".vort_br_large_window\",\n@@ -7698,7 +7712,17 @@\n             active_command_lookup = &command_lookups[command_type];\n             active_command_tree = &header.insert_copy_trees[command_type];\n         }\n+        const audit_root = active_command_lookup.slots[reader.peekBits10Padded()];\n+        const audit_root_zero = audit_root.valid and audit_root.zero_insert;\n+        command_audit.zero_root += @intFromBool(audit_root_zero);\n+        command_audit.bounded_zero += @intFromBool(audit_root_zero and\n+            reader.bit_len -| (reader.next_byte * 8) >= 192 and\n+            (audit_root.distance_symbol_zero or header.distance_block.block_type_count == 1 or header.distance_block.remaining != 0));\n         const lengths = try readInsertCopyLengthsMultiTreeZeroInsertCurrent(header, reader, active_command_lookup, active_command_tree);\n+        command_audit.commands += 1;\n+        command_audit.zero_insert += @intFromBool(lengths.insert_len == 0);\n+        command_audit.one_insert += @intFromBool(lengths.insert_len == 1);\n+        command_audit.copy_lengths[@min(@as(usize, 7), std.math.log2_int(usize, lengths.copy_len))] += 1;\n         if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;\n         if (lengths.insert_len != 0) {\n             var previous: u8 = if (output_cursor == 0) 0 else output[output_cursor - 1];\n@@ -7763,11 +7787,15 @@\n         const max_distance = maxBackwardDistanceForWindow(window_bits, output_cursor);\n         if (distance > max_distance) {\n             const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);\n+            command_audit.dictionary += 1;\n+            command_audit.empty_dictionary += @intFromBool(word.len == 0);\n             if (word.len > meta_block_end - output_cursor) return error.CorruptFrame;\n             @memcpy(output[output_cursor..][0..word.len], word);\n             output_cursor += word.len;\n             continue;\n         }\n+        command_audit.short_nonoverlap += @intFromBool(lengths.copy_len <= 16 and distance >= 16 and meta_block_end - output_cursor >= 16);\n+        command_audit.overlapping += @intFromBool(lengths.copy_len > distance);\n         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);\n         if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;\n         match_copy.append(output, &output_cursor, distance, lengths.copy_len, meta_block_end);\n"
+  },
+  "full": {
+    "roadmap_q9": {
+      "summary": {
+        "pairs": 15,
+        "median": 1.0213816685634816,
+        "geomean": 1.019128186933648,
+        "min": 0.9914896611091212,
+        "wins": 13,
+        "normalized_geomean": 1.0246988614644301,
+        "candidate_reference_median": 0.7381
+      },
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 335220,
+      "iterations": 100,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": "/tmp/vort-command-20261002/baseline --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q9 --quality 9 --iterations 100 --csv /tmp/vort-command-20261002/isolated-final-roadmap-q9-1-base.csv",
+        "candidate": "/tmp/vort-command-20261002/paired-isolated --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q9 --quality 9 --iterations 100 --csv /tmp/vort-command-20261002/isolated-final-roadmap-q9-1-candidate.csv"
+      },
+      "columns": [
+        "base_vort_ns",
+        "base_reference_ns",
+        "candidate_vort_ns",
+        "candidate_reference_ns",
+        "base_over_reference",
+        "candidate_over_reference"
+      ],
+      "samples": [
+        [
+          283436769,
+          207051267,
+          285048424,
+          209616837,
+          0.7305,
+          0.7354
+        ],
+        [
+          289937548,
+          210973276,
+          283867977,
+          208813463,
+          0.7277,
+          0.7356
+        ],
+        [
+          289919626,
+          208095810,
+          280670630,
+          207452991,
+          0.7178,
+          0.7391
+        ],
+        [
+          284398675,
+          203802660,
+          282059229,
+          207767934,
+          0.7166,
+          0.7366
+        ],
+        [
+          283184083,
+          202253177,
+          275837622,
+          204063556,
+          0.7142,
+          0.7398
+        ],
+        [
+          283665486,
+          205343530,
+          275465806,
+          204594172,
+          0.7239,
+          0.7427
+        ],
+        [
+          283982410,
+          202617224,
+          275142246,
+          203120324,
+          0.7135,
+          0.7382
+        ],
+        [
+          283132496,
+          203625766,
+          278506351,
+          205647805,
+          0.7192,
+          0.7384
+        ],
+        [
+          281546917,
+          203925540,
+          277600185,
+          206058959,
+          0.7243,
+          0.7423
+        ],
+        [
+          283128976,
+          201734776,
+          275873628,
+          202158406,
+          0.7125,
+          0.7328
+        ],
+        [
+          283957614,
+          206444829,
+          276073652,
+          203439785,
+          0.727,
+          0.7369
+        ],
+        [
+          284916801,
+          202966678,
+          287362352,
+          211341656,
+          0.7124,
+          0.7355
+        ],
+        [
+          284786766,
+          204210577,
+          277578983,
+          204883287,
+          0.7171,
+          0.7381
+        ],
+        [
+          283120196,
+          203824826,
+          277661990,
+          203356688,
+          0.7199,
+          0.7324
+        ],
+        [
+          282670843,
+          203346053,
+          277200992,
+          204752731,
+          0.7194,
+          0.7386
+        ]
+      ]
+    },
+    "roadmap_q5": {
+      "summary": {
+        "pairs": 7,
+        "median": 1.0287006020059175,
+        "geomean": 1.0298946003315508,
+        "min": 1.0241289858610503,
+        "wins": 7,
+        "normalized_geomean": 1.025810420369935,
+        "candidate_reference_median": 0.7499
+      },
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 350069,
+      "iterations": 100,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": "/tmp/vort-command-20261002/baseline --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q5 --quality 5 --iterations 100 --csv /tmp/vort-command-20261002/isolated-final-roadmap-q5-1-base.csv",
+        "candidate": "/tmp/vort-command-20261002/paired-isolated --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q5 --quality 5 --iterations 100 --csv /tmp/vort-command-20261002/isolated-final-roadmap-q5-1-candidate.csv"
+      },
+      "columns": [
+        "base_vort_ns",
+        "base_reference_ns",
+        "candidate_vort_ns",
+        "candidate_reference_ns",
+        "base_over_reference",
+        "candidate_over_reference"
+      ],
+      "samples": [
+        [
+          298682992,
+          216824525,
+          288214143,
+          217622225,
+          0.7259,
+          0.7551
+        ],
+        [
+          297519368,
+          217667148,
+          287245177,
+          215176797,
+          0.7316,
+          0.7491
+        ],
+        [
+          296498075,
+          215982728,
+          288670367,
+          216924338,
+          0.7284,
+          0.7515
+        ],
+        [
+          298293058,
+          218999983,
+          289546069,
+          215295494,
+          0.7342,
+          0.7436
+        ],
+        [
+          297395322,
+          218318563,
+          290388541,
+          217651829,
+          0.7341,
+          0.7495
+        ],
+        [
+          296361332,
+          217947965,
+          288548334,
+          216376275,
+          0.7354,
+          0.7499
+        ],
+        [
+          297343328,
+          216687125,
+          289047491,
+          217288131,
+          0.7287,
+          0.7517
+        ]
+      ]
+    }
+  },
+  "controls": {
+    "source-q9": {
+      "summary": {
+        "median": 0.9973037083370152,
+        "geomean": 0.9967580176505957,
+        "min": 0.9919472797848428,
+        "wins": 0,
+        "pairs": 7
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 141001,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/isolated-final-source-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/paired-isolated",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/isolated-final-source-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          299315188,
+          299364311
+        ],
+        [
+          299078862,
+          301506812
+        ],
+        [
+          299304931,
+          300396125
+        ],
+        [
+          299144693,
+          299953455
+        ],
+        [
+          299556067,
+          299785570
+        ],
+        [
+          298517534,
+          300671559
+        ],
+        [
+          298614668,
+          298670387
+        ]
+      ]
+    },
+    "source-q5": {
+      "summary": {
+        "median": 0.99653038820188,
+        "geomean": 0.9953336110373535,
+        "min": 0.9879806023319604,
+        "wins": 1,
+        "pairs": 7
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 147580,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q5",
+          "--quality",
+          "5",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/isolated-final-source-q5-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/paired-isolated",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q5",
+          "--quality",
+          "5",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/isolated-final-source-q5-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          317937091,
+          319044050
+        ],
+        [
+          320791551,
+          319821997
+        ],
+        [
+          320419873,
+          320837431
+        ],
+        [
+          320352630,
+          321109124
+        ],
+        [
+          320627352,
+          322308280
+        ],
+        [
+          318762549,
+          322388339
+        ],
+        [
+          320371970,
+          324269494
+        ]
+      ]
+    },
+    "clustered": {
+      "summary": {
+        "median": 1.000207857664113,
+        "geomean": 1.0004846398513396,
+        "min": 0.9896165124376206,
+        "wins": 8,
+        "pairs": 15
+      },
+      "input_bytes": 1048576,
+      "encoded_bytes": 52622,
+      "iterations": 200,
+      "checksum": "209738400",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/baseline",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/isolated-clustered-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/paired-isolated",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/isolated-clustered-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          113977094,
+          113479978
+        ],
+        [
+          116748712,
+          117534127
+        ],
+        [
+          113709607,
+          113928330
+        ],
+        [
+          113374143,
+          113308881
+        ],
+        [
+          112410792,
+          113590255
+        ],
+        [
+          113868162,
+          113611948
+        ],
+        [
+          113712294,
+          112657249
+        ],
+        [
+          112865891,
+          113037105
+        ],
+        [
+          113153014,
+          113528137
+        ],
+        [
+          113413842,
+          112727287
+        ],
+        [
+          113529497,
+          112419102
+        ],
+        [
+          112686920,
+          112543433
+        ],
+        [
+          112162910,
+          112406059
+        ],
+        [
+          112241544,
+          112306730
+        ],
+        [
+          112374274,
+          112350921
+        ]
+      ]
+    }
+  },
+  "rejected_or_intermediate": {
+    "ordinary_text_constructors": {
+      "summary": {
+        "median": 0.9914843245439882,
+        "geomean": 0.9919299507778279,
+        "min": 0.9860094845715646,
+        "wins": 1,
+        "pairs": 15
+      },
+      "input_bytes": 1048576,
+      "encoded_bytes": 52622,
+      "iterations": 200,
+      "checksum": "209738400",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/baseline",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/final-clustered-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/paired-final",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/final-clustered-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          112677756,
+          114181501
+        ],
+        [
+          112665036,
+          113278517
+        ],
+        [
+          112851570,
+          114452824
+        ],
+        [
+          112441962,
+          114004496
+        ],
+        [
+          112208448,
+          113787731
+        ],
+        [
+          113447741,
+          114516315
+        ],
+        [
+          114386552,
+          113684034
+        ],
+        [
+          113024028,
+          114355761
+        ],
+        [
+          113332350,
+          113894619
+        ],
+        [
+          113179984,
+          113284440
+        ],
+        [
+          112457962,
+          113297518
+        ],
+        [
+          112686814,
+          113563105
+        ],
+        [
+          112507321,
+          113693770
+        ],
+        [
+          113172888,
+          114144909
+        ],
+        [
+          112885000,
+          113559969
+        ]
+      ],
+      "candidate_executable_sha256": "e8a188c2dd70e937ac76576a71a18df3463f5a7bd3bc5a5b2ca744904ba2996f"
+    },
+    "bounded-roadmap-q9": {
+      "summary": {
+        "median": 0.9945096195820569,
+        "geomean": 0.9955782225456623,
+        "min": 0.990896841149871,
+        "wins": 1,
+        "pairs": 7
+      },
+      "input_bytes": 1251399,
+      "encoded_bytes": 335220,
+      "iterations": 200,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/bounded-roadmap-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/bounded",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/bounded-roadmap-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          580393305,
+          584195008
+        ],
+        [
+          580011408,
+          584696851
+        ],
+        [
+          581638010,
+          584750499
+        ],
+        [
+          581038031,
+          586375904
+        ],
+        [
+          580716605,
+          583922562
+        ],
+        [
+          587673644,
+          582864824
+        ],
+        [
+          579408699,
+          582124135
+        ]
+      ],
+      "candidate_executable_sha256": "da4186cd992f9a4dbb6480255d41d290e90dd52037e055b01551e629e1e1d38f"
+    },
+    "batch-roadmap-q9": {
+      "summary": {
+        "median": 0.9818341331715263,
+        "geomean": 0.9824294315607237,
+        "min": 0.978782330121458,
+        "wins": 0,
+        "pairs": 7
+      },
+      "input_bytes": 1251399,
+      "encoded_bytes": 335220,
+      "iterations": 200,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/batch-roadmap-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/batch",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/batch-roadmap-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          582295517,
+          589189683
+        ],
+        [
+          581020050,
+          588547433
+        ],
+        [
+          581382906,
+          593307564
+        ],
+        [
+          581408414,
+          591980494
+        ],
+        [
+          582267317,
+          594827940
+        ],
+        [
+          578837525,
+          591385344
+        ],
+        [
+          581298333,
+          592053498
+        ]
+      ],
+      "candidate_executable_sha256": "67bae3653f24dbe1e0a7ed9f28a220aa4beb05798e8f01608aa7f32f9ddb7220"
+    },
+    "paired-roadmap-q9": {
+      "summary": {
+        "median": 1.0306727190499485,
+        "geomean": 1.0308787158322454,
+        "min": 1.0292368594183405,
+        "wins": 7,
+        "pairs": 7
+      },
+      "input_bytes": 1251399,
+      "encoded_bytes": 335220,
+      "iterations": 200,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/paired-roadmap-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/paired-safe",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/paired-roadmap-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          581375600,
+          562778862
+        ],
+        [
+          580581557,
+          563093078
+        ],
+        [
+          581658133,
+          564348044
+        ],
+        [
+          580826755,
+          564043093
+        ],
+        [
+          579250756,
+          562796358
+        ],
+        [
+          579934127,
+          562907803
+        ],
+        [
+          582395501,
+          564259537
+        ]
+      ],
+      "candidate_executable_sha256": "f3b8948b2c45dbb485c0bfdf2c778abe67b661f26f883e085578e208ea920306"
+    },
+    "compact-roadmap-q9": {
+      "summary": {
+        "median": 1.024247073322547,
+        "geomean": 1.0234931812185746,
+        "min": 1.0155294781895723,
+        "wins": 7,
+        "pairs": 7
+      },
+      "input_bytes": 1251399,
+      "encoded_bytes": 335220,
+      "iterations": 200,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/compact-roadmap-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-command-20261002/paired-compact",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-command-20261002/compact-roadmap-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          575642179,
+          566839458
+        ],
+        [
+          580333249,
+          566594979
+        ],
+        [
+          581862799,
+          568440713
+        ],
+        [
+          582706653,
+          566912397
+        ],
+        [
+          580501021,
+          566663092
+        ],
+        [
+          580776287,
+          567459862
+        ],
+        [
+          580348906,
+          565995513
+        ]
+      ],
+      "candidate_executable_sha256": "9bcbb984ac15512118fc059c6221b83eb7758d67c5f59e17a22b7d085ab95aab"
+    }
+  },
+  "build_and_runtime": {
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "2",
+    "affinity_cpu_count": "1",
+    "benchmark_threads": "1",
+    "codec_thread_policy": "single"
+  },
+  "reference_gate_rows": [
+    {
+      "case": "tiny",
+      "input_sha256": "46c0941f01bc4aba512b213ac665132ebc108b566ed6203a145d9016df7d1cc6",
+      "input_bytes": "12",
+      "encoded_bytes": "16",
+      "iterations": "500",
+      "vort_ns": "4233",
+      "reference_ns": "121113",
+      "vort_over_reference": "28.6116",
+      "checksum": "116000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "text",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "110",
+      "iterations": "500",
+      "vort_ns": "2840317",
+      "reference_ns": "11204736",
+      "vort_over_reference": "3.9449",
+      "checksum": "31810000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "structured",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "124",
+      "iterations": "500",
+      "vort_ns": "2986004",
+      "reference_ns": "9107987",
+      "vort_over_reference": "3.0502",
+      "checksum": "25723000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "repetitive",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "114",
+      "iterations": "500",
+      "vort_ns": "3478904",
+      "reference_ns": "11728253",
+      "vort_over_reference": "3.3712",
+      "checksum": "32865000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "random4k",
+      "input_sha256": "f0725c29c1404f3f9b18c30c193079ef0c9d47537916ef6cf6503588bc3de0c1",
+      "input_bytes": "4096",
+      "encoded_bytes": "4100",
+      "iterations": "500",
+      "vort_ns": "27577",
+      "reference_ns": "131331",
+      "vort_over_reference": "4.7623",
+      "checksum": "4163000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "text_q3",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "43",
+      "iterations": "500",
+      "vort_ns": "2465978",
+      "reference_ns": "10638619",
+      "vort_over_reference": "4.3142",
+      "checksum": "31810000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "structured_q3",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "58",
+      "iterations": "500",
+      "vort_ns": "2614977",
+      "reference_ns": "8772710",
+      "vort_over_reference": "3.3548",
+      "checksum": "25723000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "repetitive_q3",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "38",
+      "iterations": "500",
+      "vort_ns": "2601614",
+      "reference_ns": "11070382",
+      "vort_over_reference": "4.2552",
+      "checksum": "32865000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "structured_q4",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "57",
+      "iterations": "500",
+      "vort_ns": "1871160",
+      "reference_ns": "8760910",
+      "vort_over_reference": "4.6821",
+      "checksum": "25723000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "text_q11",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "46",
+      "iterations": "500",
+      "vort_ns": "3129052",
+      "reference_ns": "10707279",
+      "vort_over_reference": "3.4219",
+      "checksum": "31810000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "structured_q11",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "59",
+      "iterations": "500",
+      "vort_ns": "2037609",
+      "reference_ns": "8694693",
+      "vort_over_reference": "4.2671",
+      "checksum": "25723000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "repetitive_q11",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "38",
+      "iterations": "500",
+      "vort_ns": "2879081",
+      "reference_ns": "10886561",
+      "vort_over_reference": "3.7813",
+      "checksum": "32865000",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    },
+    {
+      "case": "clustered_q8",
+      "input_sha256": "d9644e1c8c6e6b29bb8f00a10cf36accb5d592afd7458e94bbd278fe0c32558f",
+      "input_bytes": "1048576",
+      "encoded_bytes": "52622",
+      "iterations": "50",
+      "vort_ns": "28258258",
+      "reference_ns": "23887363",
+      "vort_over_reference": "0.8453",
+      "checksum": "104869200",
+      "command": "/tmp/vort-command-20261002/paired-isolated --iterations 500 --csv /tmp/vort-command-20261002/isolated-final-reference.csv"
+    }
+  ],
+  "archived_experiments": {
+    "bounded_single": {
+      "br_patch": "--- a/src/br.zig\n+++ b/src/br.zig\n@@ -42,11 +42,13 @@\n const incremental_stored_tests = @import(\"br/incremental/stored/tests.zig\");\n const incremental_planned_encoder_tests = @import(\"br/incremental/planned_encoder_tests.zig\");\n const fast_bit_reader = @import(\"br/fast_bit_reader.zig\");\n+const command_bit_reader = @import(\"br/command_bit_reader.zig\");\n \n var test_external_literal_lookup_hits: usize = 0;\n var test_context_independent_literal_lookup_hits: usize = 0;\n var test_single_tree_external_lookup_hits: usize = 0;\n var test_wide_auxiliary_lookup10_hits: usize = 0;\n+var test_bounded_zero_command_hits: usize = 0;\n \n const large_window_text_section = switch (builtin.object_format) {\n     .elf => \".vort_br_large_window\",\n@@ -563,6 +565,7 @@\n     _ = incremental_stored_tests;\n     _ = incremental_planned_encoder_tests;\n     _ = fast_bit_reader;\n+    _ = command_bit_reader;\n     _ = pattern;\n     _ = command_plan;\n     _ = literal_context;\n@@ -7656,6 +7659,52 @@\n     );\n }\n \n+inline fn tryWideZeroInsertCommand(\n+    reader: *fast_bit_reader.Reader,\n+    output: []u8,\n+    written: *usize,\n+    meta_block_end: usize,\n+    last_distances: *[4]usize,\n+    window_bits: u5,\n+    header: *MinimalCompressedHeader,\n+    command_lookup: *const single_command_lookup.Lookup,\n+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,\n+    distance_context_map: [*]const u8,\n+    context_three_tree: u8,\n+) Error!bool {\n+    const entry = command_lookup.slots[reader.peekBits10Padded()];\n+    if (!entry.valid or !entry.zero_insert) return false;\n+    if (!entry.distance_symbol_zero and header.distance_block.block_type_count > 1 and header.distance_block.remaining == 0) return false;\n+    if (!command_bit_reader.CommandReader.canEnter(reader)) return false;\n+    if (builtin.is_test) test_bounded_zero_command_hits += 1;\n+    var bounded = command_bit_reader.CommandReader.initAssumeAvailable(reader);\n+    bounded.advanceBitsStagedAssumeAvailable(entry.huffman_bits);\n+    if (header.command_block.remaining != 0) header.command_block.remaining -= 1;\n+    const extra = if (entry.copy_extra_bits == 0) 0 else try bounded.readBits24StagedFirst(entry.copy_extra_bits);\n+    const lengths: InsertCopyLengths = .{\n+        .insert_len = 0,\n+        .copy_len = @as(usize, entry.value) + extra,\n+        .distance_symbol_zero = entry.distance_symbol_zero,\n+    };\n+    var decoded_distance: DecodedBrotliDistance = undefined;\n+    try readMinimalDistanceExternalLookupIntoFixed9Current(true, header, &bounded, lengths, last_distances, &decoded_distance, distance_lookups, distance_context_map, context_three_tree);\n+    const distance = decoded_distance.distance;\n+    if (distance == 0) return error.InvalidMatch;\n+    const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);\n+    if (distance > max_distance) {\n+        var scratch: [64]u8 = undefined;\n+        const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &scratch);\n+        if (word.len > meta_block_end - written.*) return error.CorruptFrame;\n+        @memcpy(output[written.*..][0..word.len], word);\n+        written.* += word.len;\n+        return true;\n+    }\n+    if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);\n+    if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;\n+    match_copy.append(output, written, distance, lengths.copy_len, meta_block_end);\n+    return true;\n+}\n+\n noinline fn processWideExternalLiteralLookup10AuxiliaryPayload(\n     reader: anytype,\n     output: []u8,\n@@ -7698,6 +7747,7 @@\n             active_command_lookup = &command_lookups[command_type];\n             active_command_tree = &header.insert_copy_trees[command_type];\n         }\n+        if (try tryWideZeroInsertCommand(reader, output, &output_cursor, meta_block_end, last_distances, window_bits, header, active_command_lookup, distance_lookups, active_distance_context_map, active_distance_context_three_tree)) continue;\n         const lengths = try readInsertCopyLengthsMultiTreeZeroInsertCurrent(header, reader, active_command_lookup, active_command_tree);\n         if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;\n         if (lengths.insert_len != 0) {\n@@ -21207,6 +21257,8 @@\n \n test \"br full wide auxiliary executor matches prior transitions and boundaries\" {\n     const allocator = std.testing.allocator;\n+    test_bounded_zero_command_hits = 0;\n+    defer test_bounded_zero_command_hits = 0;\n     const header = try allocator.create(MinimalCompressedHeader);\n     defer allocator.destroy(header);\n     const old_header = try allocator.create(MinimalCompressedHeader);\n@@ -21222,6 +21274,10 @@\n     for (fixtures) |fixture| {\n         const encoded = try IncrementalTestSupport.encodeCompressedCopyFixture(allocator, fixture);\n         defer allocator.free(encoded);\n+        const padded = try allocator.alloc(u8, encoded.len + 32);\n+        defer allocator.free(padded);\n+        @memcpy(padded[0..encoded.len], encoded);\n+        @memset(padded[encoded.len..], 0x5a);\n         var reader = bitstream.BitReader.init(encoded);\n         const window_bits = try readWindowBitsValue(&reader);\n         const block = (try readStreamMetaBlockHeader(&reader)).compressed;\n@@ -21243,9 +21299,19 @@\n         try std.testing.expect(prepareAuxiliaryTailLookups(header));\n         const payload_start = reader.bitPosition();\n         const truncation_cases = encoded.len * 8 - payload_start + 1;\n-        for (0..truncation_cases + block.decoded_len) |case_index| {\n+        const ordinary_cases = truncation_cases + block.decoded_len;\n+        for (0..ordinary_cases + block.decoded_len + 1) |case_index| {\n             var source = reader;\n-            const output_end = if (case_index < truncation_cases) block.decoded_len else case_index - truncation_cases;\n+            const output_end = if (case_index >= ordinary_cases)\n+                case_index - ordinary_cases\n+            else if (case_index < truncation_cases)\n+                block.decoded_len\n+            else\n+                case_index - truncation_cases;\n+            if (case_index >= ordinary_cases) {\n+                source.input = padded;\n+                source.bit_len = padded.len * 8;\n+            }\n             if (case_index < truncation_cases) source.bit_len = payload_start + case_index;\n             old_header.* = header.*;\n             new_header.* = header.*;\n@@ -21277,6 +21343,7 @@\n             }\n         }\n     }\n+    try std.testing.expect(test_bounded_zero_command_hits != 0);\n }\n \n test \"br full wide auxiliary roots route public tier boundaries\" {\n",
+      "new_module_path": "src/br/command_bit_reader.zig",
+      "new_module_source": "const std = @import(\"std\");\nconst builtin = @import(\"builtin\");\nconst core = @import(\"../core.zig\");\nconst Reader = @import(\"fast_bit_reader.zig\").Reader;\n\n/// View for one zero-insert command with no command/distance block switch.\n/// Its root consumes <=10 Huffman bits and <=24 copy-length bits; the distance\n/// consumes <=15 Huffman bits and <=24 extra bits, at most 73 in total.\n/// Starting with 24 complete unstaged bytes covers that budget and every\n/// 8-byte refill lookahead. The caller must discard the view after one command.\npub const CommandReader = struct {\n    base: *Reader,\n    budget_end: if (check_budget) usize else void,\n\n    const check_budget = builtin.mode == .Debug or builtin.mode == .ReleaseSafe;\n    pub const input_bytes = 24;\n    pub const max_consumed_bits = 73;\n\n    pub inline fn canEnter(reader: *const Reader) bool {\n        return reader.bit_len -| (reader.next_byte * 8) >= input_bytes * 8;\n    }\n\n    pub inline fn initAssumeAvailable(reader: *Reader) CommandReader {\n        std.debug.assert(canEnter(reader));\n        return .{ .base = reader, .budget_end = if (check_budget) reader.bitPosition() + max_consumed_bits else {} };\n    }\n\n    pub inline fn peekBits9Padded(self: *CommandReader) u9 {\n        self.fill(9);\n        return @truncate(self.base.bit_buffer);\n    }\n\n    pub inline fn peekBits10Padded(self: *CommandReader) u10 {\n        self.fill(10);\n        return @truncate(self.base.bit_buffer);\n    }\n\n    pub inline fn peekBitsPadded(self: *CommandReader, comptime T: type, count: u6) T {\n        std.debug.assert(count <= @bitSizeOf(T));\n        self.fill(count);\n        return @intCast(self.base.bit_buffer & ((@as(u64, 1) << count) - 1));\n    }\n\n    pub inline fn hasStagedBits(self: CommandReader, count: u6) bool {\n        std.debug.assert(self.base.hasStagedBits(count));\n        return true;\n    }\n\n    pub inline fn advanceBitsStagedAssumeAvailable(self: *CommandReader, count: u6) void {\n        self.base.advanceBitsStagedAssumeAvailable(count);\n        if (check_budget) std.debug.assert(self.base.bitPosition() <= self.budget_end);\n    }\n\n    pub inline fn readBits(self: *CommandReader, comptime T: type, count: u6) core.Error!T {\n        if (count > @bitSizeOf(T)) return error.CorruptFrame;\n        const value = self.peekBitsPadded(T, count);\n        self.advanceBitsStagedAssumeAvailable(count);\n        return value;\n    }\n\n    pub inline fn readBits24StagedFirst(self: *CommandReader, count: u5) core.Error!u32 {\n        std.debug.assert(count <= 24);\n        return self.readBits(u32, count);\n    }\n\n    inline fn fill(self: *CommandReader, requested: usize) void {\n        std.debug.assert(requested <= 32);\n        const reader = self.base;\n        if (reader.bit_count >= requested) return;\n        if (requested <= 8) {\n            std.debug.assert(reader.bit_len -| (reader.next_byte * 8) >= 64);\n            const word = std.mem.readInt(u64, reader.input[reader.next_byte..][0..8], .little);\n            reader.bit_buffer |= word << @intCast(reader.bit_count);\n            reader.bit_count += 56;\n            reader.next_byte += 7;\n        } else if (requested <= 16) {\n            std.debug.assert(reader.bit_len -| (reader.next_byte * 8) >= 64);\n            const word = std.mem.readInt(u64, reader.input[reader.next_byte..][0..8], .little);\n            reader.bit_buffer |= word << @intCast(reader.bit_count);\n            reader.bit_count += 48;\n            reader.next_byte += 6;\n        } else {\n            std.debug.assert(reader.bit_len -| (reader.next_byte * 8) >= 32);\n            const word = std.mem.readInt(u32, reader.input[reader.next_byte..][0..4], .little);\n            reader.bit_buffer |= @as(u64, word) << @intCast(reader.bit_count);\n            reader.bit_count += 32;\n            reader.next_byte += 4;\n        }\n    }\n};\n\ntest \"bounded command reader covers alignment reservoir and maximum bit budget\" {\n    const bitstream = @import(\"../bitstream.zig\");\n    var input: [48]u8 = undefined;\n    for (&input, 0..) |*byte, index| byte.* = @truncate(index * 73 + 0xa5);\n    var accepted: usize = 0;\n    var declined: usize = 0;\n    const fields = [_][4]u6{ .{ 10, 24, 15, 24 }, .{ 0, 0, 9, 24 }, .{ 10, 0, 15, 0 }, .{ 0, 0, 0, 0 } };\n    for (191..257) |bit_len| {\n        for (0..8) |start| {\n            for ([_]u6{ 0, 7, 10, 32 }) |warmup| {\n                for (0..33) |consumed| {\n                    var scalar = bitstream.BitReader.initBitLength(&input, bit_len);\n                    try scalar.skipBits(@intCast(start));\n                    var prepared = Reader.initFrom(scalar);\n                    if (warmup != 0) _ = prepared.peekBitsPadded(u32, warmup);\n                    if (!prepared.hasStagedBits(@intCast(consumed))) continue;\n                    try scalar.skipBits(@intCast(consumed));\n                    prepared.advanceBitsStagedAssumeAvailable(@intCast(consumed));\n                    if (!CommandReader.canEnter(&prepared)) {\n                        declined += 1;\n                        continue;\n                    }\n                    accepted += 1;\n                    for (fields) |widths| {\n                        var expected = scalar;\n                        var actual = prepared;\n                        var bounded = CommandReader.initAssumeAvailable(&actual);\n                        for (widths) |width| {\n                            const value = bounded.peekBitsPadded(u32, width);\n                            try std.testing.expect(bounded.hasStagedBits(width));\n                            bounded.advanceBitsStagedAssumeAvailable(width);\n                            try std.testing.expectEqual(try expected.readBits(u32, width), value);\n                            try std.testing.expectEqual(expected.bitPosition(), actual.bitPosition());\n                        }\n                        // The normal reader resumes exactly after the bounded view.\n                        try std.testing.expectEqual(try expected.readBits(u32, 32), try actual.readBits(u32, 32));\n                        try std.testing.expectEqual(expected.bitPosition(), actual.bitPosition());\n                    }\n                }\n            }\n        }\n    }\n    try std.testing.expect(accepted != 0 and declined != 0);\n}\n"
+    },
+    "bounded_batch": {
+      "br_patch": "--- a/src/br.zig\n+++ b/src/br.zig\n@@ -42,11 +42,13 @@\n const incremental_stored_tests = @import(\"br/incremental/stored/tests.zig\");\n const incremental_planned_encoder_tests = @import(\"br/incremental/planned_encoder_tests.zig\");\n const fast_bit_reader = @import(\"br/fast_bit_reader.zig\");\n+const command_bit_reader = @import(\"br/command_bit_reader.zig\");\n \n var test_external_literal_lookup_hits: usize = 0;\n var test_context_independent_literal_lookup_hits: usize = 0;\n var test_single_tree_external_lookup_hits: usize = 0;\n var test_wide_auxiliary_lookup10_hits: usize = 0;\n+var test_bounded_zero_command_hits: usize = 0;\n \n const large_window_text_section = switch (builtin.object_format) {\n     .elf => \".vort_br_large_window\",\n@@ -563,6 +565,7 @@\n     _ = incremental_stored_tests;\n     _ = incremental_planned_encoder_tests;\n     _ = fast_bit_reader;\n+    _ = command_bit_reader;\n     _ = pattern;\n     _ = command_plan;\n     _ = literal_context;\n@@ -7656,6 +7659,58 @@\n     );\n }\n \n+noinline fn processWideZeroInsertCommands(\n+    reader: *fast_bit_reader.Reader,\n+    output: []u8,\n+    written: *usize,\n+    meta_block_end: usize,\n+    last_distances: *[4]usize,\n+    window_bits: u5,\n+    header: *MinimalCompressedHeader,\n+    command_lookup: *const single_command_lookup.Lookup,\n+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,\n+    distance_context_map: [*]const u8,\n+    context_three_tree: u8,\n+    first_copy_len: usize,\n+    first_implicit: bool,\n+) linksection(wide_literal_lookup10_auxiliary_text_section) Error!void {\n+    const max_commands = command_bit_reader.CommandReader.max_commands;\n+    std.debug.assert(header.command_block.remaining >= max_commands - 1);\n+    std.debug.assert(header.distance_block.remaining >= max_commands);\n+    var bounded = command_bit_reader.CommandReader.initAssumeAvailable(reader);\n+    var cursor = written.*;\n+    defer written.* = cursor;\n+    var lengths: InsertCopyLengths = .{ .insert_len = 0, .copy_len = first_copy_len, .distance_symbol_zero = first_implicit };\n+    var remaining: usize = max_commands;\n+    while (true) {\n+        if (builtin.is_test) test_bounded_zero_command_hits += 1;\n+        var decoded_distance: DecodedBrotliDistance = undefined;\n+        try readMinimalDistanceExternalLookupIntoFixed9Current(true, header, &bounded, lengths, last_distances, &decoded_distance, distance_lookups, distance_context_map, context_three_tree);\n+        const distance = decoded_distance.distance;\n+        if (distance == 0) return error.InvalidMatch;\n+        const max_distance = maxBackwardDistanceForWindow(window_bits, cursor);\n+        if (distance > max_distance) {\n+            var scratch: [64]u8 = undefined;\n+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &scratch);\n+            if (word.len > meta_block_end - cursor) return error.CorruptFrame;\n+            @memcpy(output[cursor..][0..word.len], word);\n+            cursor += word.len;\n+        } else {\n+            if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);\n+            if (lengths.copy_len > meta_block_end - cursor) return error.CorruptFrame;\n+            match_copy.append(output, &cursor, distance, lengths.copy_len, meta_block_end);\n+        }\n+        remaining -= 1;\n+        if (remaining == 0 or cursor == meta_block_end) return;\n+        const entry = command_lookup.slots[bounded.peekBits10Padded()];\n+        if (!entry.valid or !entry.zero_insert) return;\n+        bounded.advanceBitsStagedAssumeAvailable(entry.huffman_bits);\n+        header.command_block.remaining -= 1;\n+        const extra = if (entry.copy_extra_bits == 0) 0 else try bounded.readBits24StagedFirst(entry.copy_extra_bits);\n+        lengths = .{ .insert_len = 0, .copy_len = @as(usize, entry.value) + extra, .distance_symbol_zero = entry.distance_symbol_zero };\n+    }\n+}\n+\n noinline fn processWideExternalLiteralLookup10AuxiliaryPayload(\n     reader: anytype,\n     output: []u8,\n@@ -7699,6 +7754,14 @@\n             active_command_tree = &header.insert_copy_trees[command_type];\n         }\n         const lengths = try readInsertCopyLengthsMultiTreeZeroInsertCurrent(header, reader, active_command_lookup, active_command_tree);\n+        if (lengths.insert_len == 0 and\n+            header.command_block.remaining >= command_bit_reader.CommandReader.max_commands - 1 and\n+            header.distance_block.remaining >= command_bit_reader.CommandReader.max_commands and\n+            command_bit_reader.CommandReader.canEnter(reader))\n+        {\n+            try processWideZeroInsertCommands(reader, output, &output_cursor, meta_block_end, last_distances, window_bits, header, active_command_lookup, distance_lookups, active_distance_context_map, active_distance_context_three_tree, lengths.copy_len, lengths.distance_symbol_zero);\n+            continue;\n+        }\n         if (lengths.insert_len > meta_block_end - output_cursor) return error.CorruptFrame;\n         if (lengths.insert_len != 0) {\n             var previous: u8 = if (output_cursor == 0) 0 else output[output_cursor - 1];\n@@ -21207,6 +21270,8 @@\n \n test \"br full wide auxiliary executor matches prior transitions and boundaries\" {\n     const allocator = std.testing.allocator;\n+    test_bounded_zero_command_hits = 0;\n+    defer test_bounded_zero_command_hits = 0;\n     const header = try allocator.create(MinimalCompressedHeader);\n     defer allocator.destroy(header);\n     const old_header = try allocator.create(MinimalCompressedHeader);\n@@ -21222,6 +21287,10 @@\n     for (fixtures) |fixture| {\n         const encoded = try IncrementalTestSupport.encodeCompressedCopyFixture(allocator, fixture);\n         defer allocator.free(encoded);\n+        const padded = try allocator.alloc(u8, encoded.len + 128);\n+        defer allocator.free(padded);\n+        @memcpy(padded[0..encoded.len], encoded);\n+        @memset(padded[encoded.len..], 0x5a);\n         var reader = bitstream.BitReader.init(encoded);\n         const window_bits = try readWindowBitsValue(&reader);\n         const block = (try readStreamMetaBlockHeader(&reader)).compressed;\n@@ -21243,9 +21312,19 @@\n         try std.testing.expect(prepareAuxiliaryTailLookups(header));\n         const payload_start = reader.bitPosition();\n         const truncation_cases = encoded.len * 8 - payload_start + 1;\n-        for (0..truncation_cases + block.decoded_len) |case_index| {\n+        const ordinary_cases = truncation_cases + block.decoded_len;\n+        for (0..ordinary_cases + block.decoded_len + 1) |case_index| {\n             var source = reader;\n-            const output_end = if (case_index < truncation_cases) block.decoded_len else case_index - truncation_cases;\n+            const output_end = if (case_index >= ordinary_cases)\n+                case_index - ordinary_cases\n+            else if (case_index < truncation_cases)\n+                block.decoded_len\n+            else\n+                case_index - truncation_cases;\n+            if (case_index >= ordinary_cases) {\n+                source.input = padded;\n+                source.bit_len = padded.len * 8;\n+            }\n             if (case_index < truncation_cases) source.bit_len = payload_start + case_index;\n             old_header.* = header.*;\n             new_header.* = header.*;\n@@ -21277,6 +21356,7 @@\n             }\n         }\n     }\n+    try std.testing.expect(test_bounded_zero_command_hits != 0);\n }\n \n test \"br full wide auxiliary roots route public tier boundaries\" {\n",
+      "new_module_path": "src/br/command_bit_reader.zig",
+      "new_module_source": "const std = @import(\"std\");\nconst builtin = @import(\"builtin\");\nconst core = @import(\"../core.zig\");\nconst Reader = @import(\"fast_bit_reader.zig\").Reader;\n\n/// View for at most eight zero-insert commands with no block switch.\n/// Each root consumes <=10 Huffman bits and <=24 copy-length bits; its distance\n/// consumes <=15 Huffman bits and <=24 extra bits: at most 73 per command.\n/// Starting with 96 complete unstaged bytes covers eight such budgets and every\n/// 8-byte refill lookahead. The caller must discard the view after the run.\npub const CommandReader = struct {\n    base: *Reader,\n    budget_end: if (check_budget) usize else void,\n\n    const check_budget = builtin.mode == .Debug or builtin.mode == .ReleaseSafe;\n    pub const max_commands = 8;\n    pub const input_bytes = 96;\n    pub const max_consumed_bits = 73 * max_commands;\n\n    pub inline fn canEnter(reader: *const Reader) bool {\n        return reader.bit_len -| (reader.next_byte * 8) >= input_bytes * 8;\n    }\n\n    pub inline fn initAssumeAvailable(reader: *Reader) CommandReader {\n        std.debug.assert(canEnter(reader));\n        return .{ .base = reader, .budget_end = if (check_budget) reader.bitPosition() + max_consumed_bits else {} };\n    }\n\n    pub inline fn peekBits9Padded(self: *CommandReader) u9 {\n        self.fill(9);\n        return @truncate(self.base.bit_buffer);\n    }\n\n    pub inline fn peekBits10Padded(self: *CommandReader) u10 {\n        self.fill(10);\n        return @truncate(self.base.bit_buffer);\n    }\n\n    pub inline fn peekBitsPadded(self: *CommandReader, comptime T: type, count: u6) T {\n        std.debug.assert(count <= @bitSizeOf(T));\n        self.fill(count);\n        return @intCast(self.base.bit_buffer & ((@as(u64, 1) << count) - 1));\n    }\n\n    pub inline fn hasStagedBits(self: CommandReader, count: u6) bool {\n        std.debug.assert(self.base.hasStagedBits(count));\n        return true;\n    }\n\n    pub inline fn advanceBitsStagedAssumeAvailable(self: *CommandReader, count: u6) void {\n        self.base.advanceBitsStagedAssumeAvailable(count);\n        if (check_budget) std.debug.assert(self.base.bitPosition() <= self.budget_end);\n    }\n\n    pub inline fn readBits(self: *CommandReader, comptime T: type, count: u6) core.Error!T {\n        if (count > @bitSizeOf(T)) return error.CorruptFrame;\n        const value = self.peekBitsPadded(T, count);\n        self.advanceBitsStagedAssumeAvailable(count);\n        return value;\n    }\n\n    pub inline fn readBits24StagedFirst(self: *CommandReader, count: u5) core.Error!u32 {\n        std.debug.assert(count <= 24);\n        return self.readBits(u32, count);\n    }\n\n    inline fn fill(self: *CommandReader, requested: usize) void {\n        std.debug.assert(requested <= 32);\n        const reader = self.base;\n        if (reader.bit_count >= requested) return;\n        if (requested <= 8) {\n            std.debug.assert(reader.bit_len -| (reader.next_byte * 8) >= 64);\n            const word = std.mem.readInt(u64, reader.input[reader.next_byte..][0..8], .little);\n            reader.bit_buffer |= word << @intCast(reader.bit_count);\n            reader.bit_count += 56;\n            reader.next_byte += 7;\n        } else if (requested <= 16) {\n            std.debug.assert(reader.bit_len -| (reader.next_byte * 8) >= 64);\n            const word = std.mem.readInt(u64, reader.input[reader.next_byte..][0..8], .little);\n            reader.bit_buffer |= word << @intCast(reader.bit_count);\n            reader.bit_count += 48;\n            reader.next_byte += 6;\n        } else {\n            std.debug.assert(reader.bit_len -| (reader.next_byte * 8) >= 32);\n            const word = std.mem.readInt(u32, reader.input[reader.next_byte..][0..4], .little);\n            reader.bit_buffer |= @as(u64, word) << @intCast(reader.bit_count);\n            reader.bit_count += 32;\n            reader.next_byte += 4;\n        }\n    }\n};\n\ntest \"bounded command reader covers alignment reservoir and maximum bit budget\" {\n    const bitstream = @import(\"../bitstream.zig\");\n    var input: [128]u8 = undefined;\n    for (&input, 0..) |*byte, index| byte.* = @truncate(index * 73 + 0xa5);\n    var accepted: usize = 0;\n    var declined: usize = 0;\n    const fields = [_][4]u6{ .{ 10, 24, 15, 24 }, .{ 0, 0, 9, 24 }, .{ 10, 0, 15, 0 }, .{ 0, 0, 0, 0 } };\n    for (767..833) |bit_len| {\n        for (0..8) |start| {\n            for ([_]u6{ 0, 7, 10, 32 }) |warmup| {\n                for (0..33) |consumed| {\n                    var scalar = bitstream.BitReader.initBitLength(&input, bit_len);\n                    try scalar.skipBits(@intCast(start));\n                    var prepared = Reader.initFrom(scalar);\n                    if (warmup != 0) _ = prepared.peekBitsPadded(u32, warmup);\n                    if (!prepared.hasStagedBits(@intCast(consumed))) continue;\n                    try scalar.skipBits(@intCast(consumed));\n                    prepared.advanceBitsStagedAssumeAvailable(@intCast(consumed));\n                    if (!CommandReader.canEnter(&prepared)) {\n                        declined += 1;\n                        continue;\n                    }\n                    accepted += 1;\n                    for (fields) |widths| {\n                        var expected = scalar;\n                        var actual = prepared;\n                        var bounded = CommandReader.initAssumeAvailable(&actual);\n                        for (0..CommandReader.max_commands) |_| {\n                            for (widths) |width| {\n                                const value = bounded.peekBitsPadded(u32, width);\n                                try std.testing.expect(bounded.hasStagedBits(width));\n                                bounded.advanceBitsStagedAssumeAvailable(width);\n                                try std.testing.expectEqual(try expected.readBits(u32, width), value);\n                                try std.testing.expectEqual(expected.bitPosition(), actual.bitPosition());\n                            }\n                        }\n                        // The normal reader resumes exactly after the bounded view.\n                        try std.testing.expectEqual(try expected.readBits(u32, 32), try actual.readBits(u32, 32));\n                        try std.testing.expectEqual(expected.bitPosition(), actual.bitPosition());\n                    }\n                }\n            }\n        }\n    }\n    try std.testing.expect(accepted != 0 and declined != 0);\n}\n"
+    }
+  }
+}
