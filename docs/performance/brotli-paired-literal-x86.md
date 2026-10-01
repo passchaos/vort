@@ -129,3 +129,8 @@ corpora, qualities, streaming APIs, or architectures.
 All sample times, commands, hashes, reference builds, the non-timing audit,
 and source patches for the rejected command readers are in
 [brotli-paired-literal-x86-20261002.json](data/brotli-paired-literal-x86-20261002.json).
+
+A subsequent audit measured the remaining long-literal fallback at roughly
+1% of frame time and prioritized ordered short-copy execution instead. Its
+separate baseline and measurements are in
+[brotli-short-copy-x86.md](brotli-short-copy-x86.md).

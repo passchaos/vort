@@ -16,18 +16,22 @@ pub fn append(output: []u8, written: *usize, distance: usize, len: usize, writab
     std.debug.assert(writable_end <= output.len);
     std.debug.assert(len <= writable_end - destination);
     written.* += len;
-    if (len <= distance) {
-        if (len != 0 and
-            len <= short_copy_width and
-            distance >= short_copy_width and
-            writable_end - destination >= short_copy_width)
-        {
-            @memcpy(
-                output[destination..][0..short_copy_width],
-                output[source..][0..short_copy_width],
-            );
+    if (len != 0 and len <= 32 and distance >= short_copy_width) {
+        const available = writable_end - destination;
+        if (available >= 32) {
+            // Keep these moves ordered: at distances 16--31, the first move
+            // initializes the bytes that the second move may read.
+            @memcpy(output[destination..][0..16], output[source..][0..16]);
+            if (len > 16)
+                @memcpy(output[destination + 16 ..][0..16], output[source + 16 ..][0..16]);
             return;
         }
+        if (len <= 16 and available >= 16) {
+            @memcpy(output[destination..][0..16], output[source..][0..16]);
+            return;
+        }
+    }
+    if (len <= distance) {
         @memcpy(output[destination..][0..len], output[source..][0..len]);
         return;
     }
@@ -68,4 +72,26 @@ test "Brotli match copy bounds speculative short copy to the meta-block" {
     try std.testing.expectEqualSlices(u8, "abc", output[16..written]);
     try std.testing.expectEqualSlices(u8, "defghijklmnop", output[written..32]);
     try std.testing.expectEqualSlices(u8, &(@as([16]u8, @splat(0xcc))), output[32..]);
+}
+
+test "Brotli match copy matches scalar replay across short widths and boundaries" {
+    const start = 128;
+    for (1..65) |distance| {
+        for (0..65) |len| {
+            for ([_]usize{ 0, 1, 15, 16, 31, 32 }) |slack| {
+                var actual: [256]u8 = @splat(0xc7);
+                for (actual[0..start], 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+                const before = actual;
+                var expected = actual;
+                for (0..len) |index| expected[start + index] = expected[start + index - distance];
+                const end = start + len + slack;
+                var written: usize = start;
+                append(&actual, &written, distance, len, end);
+                try std.testing.expectEqual(start + len, written);
+                try std.testing.expectEqualSlices(u8, expected[0..written], actual[0..written]);
+                try std.testing.expectEqualSlices(u8, before[end..], actual[end..]);
+                if (len == 0) try std.testing.expectEqualSlices(u8, &before, &actual);
+            }
+        }
+    }
 }

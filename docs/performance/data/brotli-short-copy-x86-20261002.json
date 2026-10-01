@@ -1,0 +1,1557 @@
+{
+  "date": "2026-10-02",
+  "baseline_git": "70c25c1fe412d93f9f5bafa529c4bcf009a8cfbb",
+  "baseline_executable_sha256": "07451fcb171c3613b3bda3b4fa27e5ab0e71741517995c10e71f892aeabc7e1a",
+  "candidate_executable_sha256": "e70fa7b432552dc8816ca3fedbca153bf11dc08c19568cdefc362789cd8aacff",
+  "candidate_copy_source_sha256": "5bd5a0fffa2161ac6f3adf3b7f03a32a8d5e7b68ff845dcdd14754965d44f40a",
+  "host": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "os": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "cpu_affinity": "2",
+    "codec_threads": 1
+  },
+  "reference": {
+    "path": "/tmp/vort-brotli-upstream-build",
+    "git": "558fc647cdaf391228d614ca85f711e02e4e583b",
+    "version": "1.2.0-dev",
+    "libraries": {
+      "/tmp/vort-brotli-upstream-build/libbrotlidec.so.1.2.0": "e3e18631aaa421912afddbef2246eb3e6abe4e15a10f983d31ac2dcbe3d20eb3",
+      "/tmp/vort-brotli-upstream-build/libbrotlicommon.so.1.2.0": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739",
+      "/tmp/vort-brotli-upstream-build/libbrotlienc.so.1.2.0": "cc82e22aba04d134b95425d936c1d834edc64a1379c008c896d7fe68cd258899"
+    },
+    "build": {
+      "cmake_build_type": "Release",
+      "c_compiler": "/usr/bin/cc",
+      "c_flags_release": "-O3 -DNDEBUG",
+      "compiler_version": "cc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0"
+    }
+  },
+  "environment": {
+    "LD_LIBRARY_PATH": "/tmp/vort-brotli-upstream-build"
+  },
+  "input_snapshot_commit": "488c5415",
+  "method": {
+    "full": "Five alternating Vort/libbrotli rounds per invocation, best elapsed time for each; baseline/candidate process order reverses per pair.",
+    "controls": "Decoder-only whole-frame public API calls, best of five with reversed process order.",
+    "invariants": "Equal sizes, iterations and output checksums in all pairs, plus equal recorded input SHA-256 in full comparisons.",
+    "limits": "One x86 host; warm calls; compilation on CPUs 4-7 and timing on CPU 2; frequency/scheduling can vary. No hardware counter claims."
+  },
+  "audit": {
+    "q9": "input=1251399 encoded=335220 quality=9 literals=47239 short=46779 paired=271 missing_root=172 missing_child=17 long_bits={ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 165, 24, 0, 0, 0 }",
+    "q5": "input=1251399 encoded=350069 quality=5 literals=53639 short=53150 paired=242 missing_root=232 missing_child=15 long_bits={ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 246, 1, 0, 0, 0 }",
+    "timed_q9": "input=1251399 encoded=335220 quality=9 literals=4723900 short=4677900 paired=27100 missing_root=17200 missing_child=1700 long_bits={ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16500, 2400, 0, 0, 0 } iterations=100 expansions=2400 inline_fallbacks=10900 fallback_ns=2820855",
+    "timed_q5": "input=1251399 encoded=350069 quality=5 literals=5363900 short=5315000 paired=24200 missing_root=23200 missing_child=1500 long_bits={ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24600, 100, 0, 0, 0 } iterations=100 expansions=1300 inline_fallbacks=11000 fallback_ns=2470710",
+    "timing_scope": "Timer overhead included; 100 decoded frames, valid output checked. Diagnostic attribution, not optimization timing.",
+    "driver_source": "const std = @import(\"std\");\nconst vort = @import(\"vort\");\nconst lib = @import(\"br_runtime\");\npub fn main(init: std.process.Init) !void {\n    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);\n    defer args.deinit();\n    _ = args.next();\n    const path = args.next().?;\n    const quality = try std.fmt.parseInt(c_int, args.next().?, 10);\n    const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(16 * 1024 * 1024));\n    defer init.gpa.free(payload);\n    var runtime = try lib.Runtime.open();\n    defer runtime.deinit();\n    const encoded = try runtime.encodeAlloc(init.gpa, payload, quality);\n    defer init.gpa.free(encoded);\n    const output = try init.gpa.alloc(u8, payload.len);\n    defer init.gpa.free(output);\n    vort.br.paired_literal_lookup.audit = .{};\n    const n = try vort.brDecodeStreamInto(encoded, output);\n    if (n != payload.len or !std.mem.eql(u8, payload, output)) return error.SizeMismatch;\n    const a = vort.br.paired_literal_lookup.audit;\n    var buf: [2048]u8 = undefined;\n    var stdout = std.Io.File.stdout().writerStreaming(init.io, &buf);\n    try stdout.interface.print(\"input={d} encoded={d} quality={d} literals={d} short={d} paired={d} missing_root={d} missing_child={d} long_bits={any}\\n\", .{payload.len,encoded.len,quality,a.literals,a.short,a.paired,a.missing_root,a.missing_child,a.long_bits});\n    try stdout.interface.flush();\n}\n",
+    "timed_driver_source": "const std = @import(\"std\");\nconst vort = @import(\"vort\");\nconst lib = @import(\"br_runtime\");\npub fn main(init: std.process.Init) !void {\n    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);\n    defer args.deinit();\n    _ = args.next();\n    const path = args.next().?;\n    const quality = try std.fmt.parseInt(c_int, args.next().?, 10);\n    const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(16 * 1024 * 1024));\n    defer init.gpa.free(payload);\n    var runtime = try lib.Runtime.open();\n    defer runtime.deinit();\n    const encoded = try runtime.encodeAlloc(init.gpa, payload, quality);\n    defer init.gpa.free(encoded);\n    const output = try init.gpa.alloc(u8, payload.len);\n    defer init.gpa.free(output);\n    vort.br.paired_literal_lookup.audit = .{};\n    vort.br.paired_literal_lookup.audit_io = init.io;\n    for (0..100) |_| {\n        const n = try vort.brDecodeStreamInto(encoded, output);\n        if (n != payload.len or !std.mem.eql(u8, payload, output)) return error.SizeMismatch;\n    }\n    const a = vort.br.paired_literal_lookup.audit;\n    var buf: [2048]u8 = undefined;\n    var stdout = std.Io.File.stdout().writerStreaming(init.io, &buf);\n    try stdout.interface.print(\"input={d} encoded={d} quality={d} literals={d} short={d} paired={d} missing_root={d} missing_child={d} long_bits={any} iterations=100 expansions={d} inline_fallbacks={d} fallback_ns={d}\\n\", .{payload.len,encoded.len,quality,a.literals,a.short,a.paired,a.missing_root,a.missing_child,a.long_bits,a.expansions,a.inline_fallbacks,a.fallback_ns});\n    try stdout.interface.flush();\n}\n",
+    "executable_sha256": "e4375dc7689e574c207158bda03d587555c2f57bd105af384f903517f8fc7cd8",
+    "timed_executable_sha256": "9c01e87d13f05f8a6cef033ab07714d80a48b4c8d8721592f748610a09db3bd4"
+  },
+  "full": {
+    "roadmap_q9": {
+      "summary": {
+        "pairs": 15,
+        "median": 1.0181022388995025,
+        "geomean": 1.0173938003124716,
+        "min": 1.0050455202212898,
+        "wins": 15,
+        "normalized_geomean": 1.0180884977915965,
+        "candidate_reference_median": 0.7456
+      },
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 335220,
+      "iterations": 100,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": "/tmp/vort-long-20261002/baseline --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q9 --quality 9 --iterations 100 --csv /tmp/vort-long-20261002/final-roadmap-q9-1-base.csv",
+        "candidate": "/tmp/vort-long-20261002/final --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q9 --quality 9 --iterations 100 --csv /tmp/vort-long-20261002/final-roadmap-q9-1-candidate.csv"
+      },
+      "columns": [
+        "base_vort_ns",
+        "base_reference_ns",
+        "candidate_vort_ns",
+        "candidate_reference_ns",
+        "base_over_reference",
+        "candidate_over_reference"
+      ],
+      "samples": [
+        [
+          287590439,
+          209582429,
+          282820133,
+          213691291,
+          0.7288,
+          0.7556
+        ],
+        [
+          286863771,
+          210088498,
+          281677620,
+          210525306,
+          0.7324,
+          0.7474
+        ],
+        [
+          288773493,
+          211351607,
+          280939528,
+          209459364,
+          0.7319,
+          0.7456
+        ],
+        [
+          288032746,
+          210365008,
+          283800752,
+          211726344,
+          0.7304,
+          0.746
+        ],
+        [
+          290135181,
+          211821742,
+          285205300,
+          211081796,
+          0.7301,
+          0.7401
+        ],
+        [
+          288000769,
+          210338709,
+          281933362,
+          210046845,
+          0.7303,
+          0.745
+        ],
+        [
+          287440805,
+          210438194,
+          281644861,
+          211454800,
+          0.7321,
+          0.7508
+        ],
+        [
+          287795439,
+          211808676,
+          286350651,
+          212825865,
+          0.736,
+          0.7432
+        ],
+        [
+          286831350,
+          211721830,
+          281623681,
+          209800205,
+          0.7381,
+          0.745
+        ],
+        [
+          286950057,
+          211208404,
+          282805299,
+          210640929,
+          0.736,
+          0.7448
+        ],
+        [
+          287643477,
+          211014128,
+          282877527,
+          211118825,
+          0.7336,
+          0.7463
+        ],
+        [
+          287304129,
+          211279220,
+          282080901,
+          209178778,
+          0.7354,
+          0.7416
+        ],
+        [
+          286373795,
+          211068399,
+          280990062,
+          209507455,
+          0.737,
+          0.7456
+        ],
+        [
+          287291927,
+          208885401,
+          282183769,
+          210707349,
+          0.7271,
+          0.7467
+        ],
+        [
+          284681721,
+          209297507,
+          281086545,
+          210703940,
+          0.7352,
+          0.7496
+        ]
+      ]
+    },
+    "roadmap_q5": {
+      "summary": {
+        "pairs": 7,
+        "median": 1.0137653602383643,
+        "geomean": 1.0156156524992606,
+        "min": 1.0055662576884152,
+        "wins": 7,
+        "normalized_geomean": 1.0153351912370205,
+        "candidate_reference_median": 0.7584
+      },
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 350069,
+      "iterations": 100,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": "/tmp/vort-long-20261002/baseline --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q5 --quality 5 --iterations 100 --csv /tmp/vort-long-20261002/final-roadmap-q5-1-base.csv",
+        "candidate": "/tmp/vort-long-20261002/final --input /tmp/vort-decoder-20261001/roadmap.md --name roadmap_q5 --quality 5 --iterations 100 --csv /tmp/vort-long-20261002/final-roadmap-q5-1-candidate.csv"
+      },
+      "columns": [
+        "base_vort_ns",
+        "base_reference_ns",
+        "candidate_vort_ns",
+        "candidate_reference_ns",
+        "base_over_reference",
+        "candidate_over_reference"
+      ],
+      "samples": [
+        [
+          299355542,
+          222603672,
+          293468073,
+          224601585,
+          0.7436,
+          0.7653
+        ],
+        [
+          297577013,
+          223200785,
+          293536379,
+          222622358,
+          0.7501,
+          0.7584
+        ],
+        [
+          298188706,
+          222513895,
+          294198823,
+          223042014,
+          0.7462,
+          0.7581
+        ],
+        [
+          296757611,
+          221659916,
+          289285757,
+          218672540,
+          0.7469,
+          0.7559
+        ],
+        [
+          287640600,
+          217538672,
+          286048381,
+          219234121,
+          0.7563,
+          0.7664
+        ],
+        [
+          287088734,
+          215348151,
+          283555276,
+          216059714,
+          0.7501,
+          0.762
+        ],
+        [
+          290283014,
+          217563091,
+          285097887,
+          215825659,
+          0.7495,
+          0.757
+        ]
+      ]
+    }
+  },
+  "controls": {
+    "source-q9": {
+      "summary": {
+        "median": 1.0033001653925775,
+        "geomean": 1.0042147052213,
+        "min": 0.9972803500482038,
+        "wins": 6,
+        "pairs": 7
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 141001,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/final-source-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/final",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/final-source-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          301885170,
+          298734712
+        ],
+        [
+          301909360,
+          299832491
+        ],
+        [
+          299825535,
+          299335139
+        ],
+        [
+          298289620,
+          297344213
+        ],
+        [
+          299279472,
+          297291559
+        ],
+        [
+          298399349,
+          297417821
+        ],
+        [
+          298161033,
+          298974138
+        ]
+      ]
+    },
+    "source-q5": {
+      "summary": {
+        "median": 1.0044886401717954,
+        "geomean": 1.0056426329920871,
+        "min": 0.9976501095189667,
+        "wins": 6,
+        "pairs": 7
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 147580,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q5",
+          "--quality",
+          "5",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/final-source-q5-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/final",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q5",
+          "--quality",
+          "5",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/final-source-q5-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          320020300,
+          317582134
+        ],
+        [
+          319538448,
+          320291097
+        ],
+        [
+          321368143,
+          319932083
+        ],
+        [
+          319166517,
+          318416149
+        ],
+        [
+          321729160,
+          317732435
+        ],
+        [
+          321592463,
+          317939830
+        ],
+        [
+          319759850,
+          318694804
+        ]
+      ]
+    },
+    "clustered": {
+      "summary": {
+        "median": 1.0005571378417313,
+        "geomean": 1.001844573881724,
+        "min": 0.9910378595770205,
+        "wins": 8,
+        "pairs": 15
+      },
+      "input_bytes": 1048576,
+      "encoded_bytes": 52622,
+      "iterations": 200,
+      "checksum": "209738400",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/final-clustered-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/final",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/final-clustered-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          112473687,
+          112829562
+        ],
+        [
+          112984545,
+          112845210
+        ],
+        [
+          112536876,
+          112474124
+        ],
+        [
+          114006559,
+          113943077
+        ],
+        [
+          112344505,
+          112641999
+        ],
+        [
+          113080202,
+          112372837
+        ],
+        [
+          112605332,
+          112749228
+        ],
+        [
+          113502507,
+          112523061
+        ],
+        [
+          112515204,
+          113532700
+        ],
+        [
+          113180829,
+          112533566
+        ],
+        [
+          116412773,
+          112572192
+        ],
+        [
+          112610274,
+          113237986
+        ],
+        [
+          112351627,
+          112630795
+        ],
+        [
+          113414202,
+          113081654
+        ],
+        [
+          112744945,
+          113621322
+        ]
+      ]
+    }
+  },
+  "screens": {
+    "copy32-roadmap-q9": {
+      "summary": {
+        "median": 0.9994002699238946,
+        "geomean": 0.9997469694172055,
+        "min": 0.9963846833110892,
+        "wins": 3,
+        "pairs": 7
+      },
+      "input_bytes": 1251399,
+      "encoded_bytes": 335220,
+      "iterations": 200,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/copy32-roadmap-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/copy32",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/copy32-roadmap-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          555926390,
+          556552670
+        ],
+        [
+          551986397,
+          551262047
+        ],
+        [
+          554554256,
+          553088539
+        ],
+        [
+          553502450,
+          552932080
+        ],
+        [
+          553013744,
+          553345602
+        ],
+        [
+          552661190,
+          554666485
+        ],
+        [
+          554369378,
+          555154046
+        ]
+      ]
+    },
+    "copy32-source-q9": {
+      "summary": {
+        "median": 0.9837403801555764,
+        "geomean": 0.9844179517194876,
+        "min": 0.9795306341420462,
+        "wins": 0,
+        "pairs": 7
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 141001,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/copy32-source-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/copy32",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/copy32-source-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          301434006,
+          305448086
+        ],
+        [
+          298735042,
+          304977743
+        ],
+        [
+          299047283,
+          305065650
+        ],
+        [
+          299663847,
+          305194709
+        ],
+        [
+          299016150,
+          303958398
+        ],
+        [
+          301516713,
+          304548968
+        ],
+        [
+          301262538,
+          304719309
+        ]
+      ]
+    },
+    "copy32-clustered": {
+      "summary": {
+        "median": 0.9866396281157154,
+        "geomean": 0.9869007733842741,
+        "min": 0.9761422940711076,
+        "wins": 0,
+        "pairs": 7
+      },
+      "input_bytes": 1048576,
+      "encoded_bytes": 52622,
+      "iterations": 200,
+      "checksum": "209738400",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/copy32-clustered-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/copy32",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/copy32-clustered-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          114123102,
+          114863194
+        ],
+        [
+          113141227,
+          114673305
+        ],
+        [
+          112122441,
+          114862804
+        ],
+        [
+          114037346,
+          114766989
+        ],
+        [
+          113463908,
+          114565267
+        ],
+        [
+          112794716,
+          114833314
+        ],
+        [
+          112817598,
+          114441232
+        ]
+      ]
+    },
+    "staged-roadmap-q9": {
+      "summary": {
+        "median": 1.016690593298408,
+        "geomean": 1.016195423540089,
+        "min": 1.0121482537333555,
+        "wins": 7,
+        "pairs": 7
+      },
+      "input_bytes": 1251399,
+      "encoded_bytes": 335220,
+      "iterations": 200,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/staged-roadmap-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/copy-staged",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/staged-roadmap-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          559560946,
+          550374863
+        ],
+        [
+          554987172,
+          548325969
+        ],
+        [
+          555069979,
+          545036296
+        ],
+        [
+          553211672,
+          542697196
+        ],
+        [
+          553295904,
+          545264947
+        ],
+        [
+          553835264,
+          544416332
+        ],
+        [
+          554382898,
+          546333113
+        ]
+      ]
+    },
+    "staged-source-q9": {
+      "summary": {
+        "median": 1.0036636315959462,
+        "geomean": 1.0030289981402198,
+        "min": 0.9971893440781326,
+        "wins": 5,
+        "pairs": 7
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 141001,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/staged-source-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/copy-staged",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/staged-source-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          301404460,
+          299824346
+        ],
+        [
+          301220432,
+          298758107
+        ],
+        [
+          300837333,
+          299739199
+        ],
+        [
+          300686808,
+          298334144
+        ],
+        [
+          299408450,
+          299089271
+        ],
+        [
+          300092670,
+          300710728
+        ],
+        [
+          298613346,
+          299455011
+        ]
+      ]
+    },
+    "staged-clustered": {
+      "summary": {
+        "median": 1.000817536247004,
+        "geomean": 1.0006933933193445,
+        "min": 0.9911234894188486,
+        "wins": 4,
+        "pairs": 7
+      },
+      "input_bytes": 1048576,
+      "encoded_bytes": 52622,
+      "iterations": 200,
+      "checksum": "209738400",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/staged-clustered-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/copy-staged",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/staged-clustered-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          112599031,
+          112845447
+        ],
+        [
+          113313230,
+          113220668
+        ],
+        [
+          113073645,
+          113148030
+        ],
+        [
+          114038486,
+          113109913
+        ],
+        [
+          113010517,
+          112590981
+        ],
+        [
+          113874005,
+          113430823
+        ],
+        [
+          112814205,
+          113824570
+        ]
+      ]
+    },
+    "byte-increment-q9": {
+      "summary": {
+        "median": 0.9618677192203331,
+        "geomean": 0.961546337707222,
+        "min": 0.9564656943601568,
+        "wins": 0,
+        "pairs": 7
+      },
+      "input_bytes": 1251399,
+      "encoded_bytes": 335220,
+      "iterations": 200,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/copy-staged",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/byte-increment-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/byte-copy",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/byte-increment-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          545455166,
+          568047558
+        ],
+        [
+          545812954,
+          567451161
+        ],
+        [
+          545687910,
+          566924523
+        ],
+        [
+          546983004,
+          569774985
+        ],
+        [
+          547523536,
+          568392028
+        ],
+        [
+          545094967,
+          569905403
+        ],
+        [
+          547184558,
+          566168591
+        ]
+      ]
+    },
+    "combined-roadmap-q9": {
+      "summary": {
+        "median": 0.972452166399197,
+        "geomean": 0.9728755650445298,
+        "min": 0.9696297616311944,
+        "wins": 0,
+        "pairs": 7
+      },
+      "input_bytes": 1251399,
+      "encoded_bytes": 335220,
+      "iterations": 200,
+      "checksum": "250286800",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/combined-roadmap-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/byte-copy",
+          "--input",
+          "/tmp/vort-decoder-20261001/roadmap.md",
+          "--name",
+          "roadmap_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/combined-roadmap-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          555114620,
+          572501631
+        ],
+        [
+          553606111,
+          567733489
+        ],
+        [
+          555902132,
+          571463341
+        ],
+        [
+          552784085,
+          568723684
+        ],
+        [
+          552068715,
+          567707836
+        ],
+        [
+          553232545,
+          569418056
+        ],
+        [
+          553758782,
+          567010069
+        ]
+      ]
+    },
+    "combined-source-q9": {
+      "summary": {
+        "median": 1.0105934325931738,
+        "geomean": 1.009910934482585,
+        "min": 1.0044055877906313,
+        "wins": 7,
+        "pairs": 7
+      },
+      "input_bytes": 1726567,
+      "encoded_bytes": 141001,
+      "iterations": 200,
+      "checksum": "345333200",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/combined-source-q9-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/byte-copy",
+          "--input",
+          "/tmp/vort-decoder-20261001/source.zig",
+          "--name",
+          "source_q9",
+          "--quality",
+          "9",
+          "--iterations",
+          "200",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/combined-source-q9-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          301994425,
+          298310590
+        ],
+        [
+          300183501,
+          298866817
+        ],
+        [
+          301521749,
+          298361081
+        ],
+        [
+          299338150,
+          297272464
+        ],
+        [
+          301166417,
+          297513269
+        ],
+        [
+          299361536,
+          297169692
+        ],
+        [
+          301849163,
+          297251035
+        ]
+      ]
+    },
+    "combined-clustered": {
+      "summary": {
+        "median": 0.9961556922395675,
+        "geomean": 0.9959689114727632,
+        "min": 0.9856213557625971,
+        "wins": 1,
+        "pairs": 7
+      },
+      "input_bytes": 1048576,
+      "encoded_bytes": 52622,
+      "iterations": 200,
+      "checksum": "209738400",
+      "command_examples": {
+        "base": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/baseline",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/combined-clustered-1-base.csv"
+        ],
+        "candidate": [
+          "taskset",
+          "-c",
+          "2",
+          "/tmp/vort-long-20261002/byte-copy",
+          "--case",
+          "clustered_q8",
+          "--iterations",
+          "2000",
+          "--vort-only",
+          "--csv",
+          "/tmp/vort-long-20261002/combined-clustered-1-candidate.csv"
+        ]
+      },
+      "columns": [
+        "base_vort_ns",
+        "candidate_vort_ns"
+      ],
+      "samples": [
+        [
+          113672370,
+          113183313
+        ],
+        [
+          112645303,
+          113336984
+        ],
+        [
+          112997954,
+          114646414
+        ],
+        [
+          117651576,
+          118108934
+        ],
+        [
+          117572185,
+          117935953
+        ],
+        [
+          115984672,
+          116119395
+        ],
+        [
+          115747186,
+          116193871
+        ]
+      ]
+    }
+  },
+  "build_and_runtime": {
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "2",
+    "affinity_cpu_count": "1",
+    "benchmark_threads": "1",
+    "codec_thread_policy": "single"
+  },
+  "screen_binaries": {
+    "copy32": "7d7d55ce619dd5e32d841bc13a1b6b20b6578a44e15faa2460793380fc78e6c9",
+    "copy-staged": "963af9d2a87cf81348e13b2bc05bb0f2a126a0845bad7a40731a03f22ada904b",
+    "byte-copy": "42d13881d40b5f9f86b6f9a3c0a41e3cc02acce8c26579224907e000ab698ce9"
+  },
+  "byte_increment_baseline": "copy-staged; all other screens compare against the frozen baseline",
+  "reference_gate_rows": [
+    {
+      "case": "tiny",
+      "input_sha256": "46c0941f01bc4aba512b213ac665132ebc108b566ed6203a145d9016df7d1cc6",
+      "input_bytes": "12",
+      "encoded_bytes": "16",
+      "iterations": "500",
+      "vort_ns": "4144",
+      "reference_ns": "118473",
+      "vort_over_reference": "28.5890",
+      "checksum": "116000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "text",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "110",
+      "iterations": "500",
+      "vort_ns": "2779043",
+      "reference_ns": "11171738",
+      "vort_over_reference": "4.0200",
+      "checksum": "31810000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "structured",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "124",
+      "iterations": "500",
+      "vort_ns": "2969568",
+      "reference_ns": "8997581",
+      "vort_over_reference": "3.0299",
+      "checksum": "25723000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "repetitive",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "114",
+      "iterations": "500",
+      "vort_ns": "3466774",
+      "reference_ns": "11784008",
+      "vort_over_reference": "3.3991",
+      "checksum": "32865000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "random4k",
+      "input_sha256": "f0725c29c1404f3f9b18c30c193079ef0c9d47537916ef6cf6503588bc3de0c1",
+      "input_bytes": "4096",
+      "encoded_bytes": "4100",
+      "iterations": "500",
+      "vort_ns": "26081",
+      "reference_ns": "127395",
+      "vort_over_reference": "4.8846",
+      "checksum": "4163000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "text_q3",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "43",
+      "iterations": "500",
+      "vort_ns": "2414183",
+      "reference_ns": "10576656",
+      "vort_over_reference": "4.3810",
+      "checksum": "31810000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "structured_q3",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "58",
+      "iterations": "500",
+      "vort_ns": "2558794",
+      "reference_ns": "8762217",
+      "vort_over_reference": "3.4244",
+      "checksum": "25723000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "repetitive_q3",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "38",
+      "iterations": "500",
+      "vort_ns": "2462718",
+      "reference_ns": "10840172",
+      "vort_over_reference": "4.4017",
+      "checksum": "32865000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "structured_q4",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "57",
+      "iterations": "500",
+      "vort_ns": "1827991",
+      "reference_ns": "8609396",
+      "vort_over_reference": "4.7098",
+      "checksum": "25723000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "text_q11",
+      "input_sha256": "be02a9c1ea918719ea8d373adbd3ba60bc83292a075a32a139d36fb880303e7c",
+      "input_bytes": "31744",
+      "encoded_bytes": "46",
+      "iterations": "500",
+      "vort_ns": "3089767",
+      "reference_ns": "10649704",
+      "vort_over_reference": "3.4468",
+      "checksum": "31810000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "structured_q11",
+      "input_sha256": "c022d6a18ae64d179ce702daa79527c73ecc5b84a6484cfb1f16d9bb1003cc61",
+      "input_bytes": "25600",
+      "encoded_bytes": "59",
+      "iterations": "500",
+      "vort_ns": "1986164",
+      "reference_ns": "8708308",
+      "vort_over_reference": "4.3845",
+      "checksum": "25723000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "repetitive_q11",
+      "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d",
+      "input_bytes": "32768",
+      "encoded_bytes": "38",
+      "iterations": "500",
+      "vort_ns": "2844142",
+      "reference_ns": "10822641",
+      "vort_over_reference": "3.8052",
+      "checksum": "32865000",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    },
+    {
+      "case": "clustered_q8",
+      "input_sha256": "d9644e1c8c6e6b29bb8f00a10cf36accb5d592afd7458e94bbd278fe0c32558f",
+      "input_bytes": "1048576",
+      "encoded_bytes": "52622",
+      "iterations": "50",
+      "vort_ns": "28360630",
+      "reference_ns": "24307877",
+      "vort_over_reference": "0.8571",
+      "checksum": "104869200",
+      "command": "/tmp/vort-long-20261002/final --iterations 500 --csv /tmp/vort-long-20261002/final-reference.csv"
+    }
+  ],
+  "archived_patches": {
+    "single_copy32": "--- a/src/br/match_copy.zig\n+++ b/src/br/match_copy.zig\n@@ -26,6 +26,10 @@\n                 output[destination..][0..short_copy_width],\n                 output[source..][0..short_copy_width],\n             );\n+            return;\n+        }\n+        if (len > short_copy_width and len <= 32 and distance >= 32 and writable_end - destination >= 32) {\n+            @memcpy(output[destination..][0..32], output[source..][0..32]);\n             return;\n         }\n         @memcpy(output[destination..][0..len], output[source..][0..len]);\n@@ -69,3 +73,25 @@\n     try std.testing.expectEqualSlices(u8, \"defghijklmnop\", output[written..32]);\n     try std.testing.expectEqualSlices(u8, &(@as([16]u8, @splat(0xcc))), output[32..]);\n }\n+\n+test \"Brotli match copy matches scalar replay across short widths and boundaries\" {\n+    const start = 128;\n+    for (1..65) |distance| {\n+        for (0..65) |len| {\n+            for ([_]usize{ 0, 1, 15, 16, 31, 32 }) |slack| {\n+                var actual: [256]u8 = @splat(0xc7);\n+                for (actual[0..start], 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);\n+                const before = actual;\n+                var expected = actual;\n+                for (0..len) |index| expected[start + index] = expected[start + index - distance];\n+                const end = start + len + slack;\n+                var written: usize = start;\n+                append(&actual, &written, distance, len, end);\n+                try std.testing.expectEqual(start + len, written);\n+                try std.testing.expectEqualSlices(u8, expected[0..written], actual[0..written]);\n+                try std.testing.expectEqualSlices(u8, before[end..], actual[end..]);\n+                if (len == 0) try std.testing.expectEqualSlices(u8, &before, &actual);\n+            }\n+        }\n+    }\n+}\n",
+    "byte_return_br": "--- a/src/br.zig\n+++ b/src/br.zig\n@@ -7900,16 +7900,17 @@\n                     const lookup = &literal_lookups.roots[tree_index];\n                     const literal = (try literal_lookups.decodeFast(tree_index, reader)) orelse blk: {\n                         const tree = try literalPrefixForDecode(header, tree_index);\n-                        break :blk if (tree_index < inline_literal_tree_count)\n+                        const value = if (tree_index < inline_literal_tree_count)\n                             try lookup.decodeValueLong(&tree.table, reader)\n                         else\n                             try tree.decode(reader);\n+                        if (value > 0xff) return error.InvalidHuffmanCode;\n+                        break :blk @as(u8, @intCast(value));\n                     };\n-                    if (literal > 0xff) return error.InvalidHuffmanCode;\n-                    output[output_cursor] = @intCast(literal);\n+                    output[output_cursor] = literal;\n                     output_cursor += 1;\n                     second_previous = previous;\n-                    previous = @intCast(literal);\n+                    previous = literal;\n                 }\n                 if (header.literal_block.block_type_count > 1)\n                     literal_block_remaining -= run_len;\n",
+    "byte_return_lookup": "--- a/src/br/paired_literal_lookup.zig\n+++ b/src/br/paired_literal_lookup.zig\n@@ -57,7 +57,7 @@\n         }\n     }\n \n-    pub inline fn decodeFast(self: *const Lookups, tree_index: usize, reader: anytype) core.Error!?u16 {\n+    pub inline fn decodeFast(self: *const Lookups, tree_index: usize, reader: anytype) core.Error!?u8 {\n         const entry = self.roots[tree_index].slots[reader.peekBits9Padded()];\n         if (entry == 0) {\n             @branchHint(.unlikely);\n@@ -75,7 +75,8 @@\n         const bits: u4 = @truncate(entry);\n         if (!reader.hasStagedBits(bits)) return error.TruncatedFrame;\n         reader.advanceBitsStagedAssumeAvailable(bits);\n-        return (entry >> 4) - 1;\n+        // Both preparation paths validate the byte-sized literal alphabet.\n+        return @intCast((entry >> 4) - 1);\n     }\n };\n \n@@ -137,7 +138,7 @@\n     }\n     try lookups.prepareSingle(0, 255);\n     var empty = FastReader.initFrom(bitstream.BitReader.init(&.{}));\n-    try std.testing.expectEqual(@as(?u16, 255), try lookups.decodeFast(0, &empty));\n+    try std.testing.expectEqual(@as(?u8, 255), try lookups.decodeFast(0, &empty));\n     try std.testing.expectEqual(@as(usize, 0), empty.bitPosition());\n     try std.testing.expectError(error.InvalidHuffmanCode, lookups.prepareSingle(0, 256));\n     var invalid_table = try Table.init(&([_]u4{ 1, 1 } ++ [_]u4{0} ** 254));\n",
+    "audit_br": "--- a/src/br.zig\n+++ b/src/br.zig\n@@ -42,7 +42,7 @@\n const incremental_stored_tests = @import(\"br/incremental/stored/tests.zig\");\n const incremental_planned_encoder_tests = @import(\"br/incremental/planned_encoder_tests.zig\");\n const fast_bit_reader = @import(\"br/fast_bit_reader.zig\");\n-const paired_literal_lookup = @import(\"br/paired_literal_lookup.zig\");\n+pub const paired_literal_lookup = @import(\"br/paired_literal_lookup.zig\");\n \n var test_external_literal_lookup_hits: usize = 0;\n var test_context_independent_literal_lookup_hits: usize = 0;\n@@ -7899,11 +7899,18 @@\n                     const tree_index = active_literal_context_map[context];\n                     const lookup = &literal_lookups.roots[tree_index];\n                     const literal = (try literal_lookups.decodeFast(tree_index, reader)) orelse blk: {\n+                        const audit_start = std.Io.Clock.awake.now(paired_literal_lookup.audit_io);\n+                        paired_literal_lookup.audit.expansions += @intFromBool(tree_index >= inline_literal_tree_count and header.active_packed_literal_tree_index != tree_index);\n+                        paired_literal_lookup.audit.inline_fallbacks += @intFromBool(tree_index < inline_literal_tree_count);\n                         const tree = try literalPrefixForDecode(header, tree_index);\n-                        break :blk if (tree_index < inline_literal_tree_count)\n+                        const before = reader.bitPosition();\n+                        const result = if (tree_index < inline_literal_tree_count)\n                             try lookup.decodeValueLong(&tree.table, reader)\n                         else\n                             try tree.decode(reader);\n+                        paired_literal_lookup.audit.fallback_ns += @intCast(audit_start.durationTo(std.Io.Clock.awake.now(paired_literal_lookup.audit_io)).nanoseconds);\n+                        paired_literal_lookup.audit.long_bits[@min(@as(usize, 15), reader.bitPosition() - before)] += 1;\n+                        break :blk result;\n                     };\n                     if (literal > 0xff) return error.InvalidHuffmanCode;\n                     output[output_cursor] = @intCast(literal);\n",
+    "audit_lookup": "--- a/src/br/paired_literal_lookup.zig\n+++ b/src/br/paired_literal_lookup.zig\n@@ -12,6 +12,15 @@\n     .coff => \".text$vort_br_paired_literal\",\n     else => \".text\",\n };\n+\n+pub const Audit = struct {\n+    literals: usize = 0, short: usize = 0, paired: usize = 0,\n+    missing_root: usize = 0, missing_child: usize = 0,\n+    long_bits: [16]usize = @splat(0),\n+    expansions: usize = 0, inline_fallbacks: usize = 0, fallback_ns: u64 = 0,\n+};\n+pub var audit: Audit = .{};\n+pub var audit_io: std.Io = undefined;\n \n /// Short literal roots remain a power-of-two plane. Complete ten-bit sibling\n /// pairs use two symbol bytes in a cold plane. Two presence bits in the root\n@@ -58,20 +67,24 @@\n     }\n \n     pub inline fn decodeFast(self: *const Lookups, tree_index: usize, reader: anytype) core.Error!?u16 {\n+        audit.literals += 1;\n         const entry = self.roots[tree_index].slots[reader.peekBits9Padded()];\n         if (entry == 0) {\n             @branchHint(.unlikely);\n+            audit.missing_root += 1;\n             return null;\n         }\n         if (entry & pair_flag != 0) {\n             const prefix = reader.peekBits10Padded();\n             const branch: u4 = @intCast(prefix >> 9);\n-            if (entry & (@as(u16, 1) << (11 + branch)) == 0) return null;\n+            if (entry & (@as(u16, 1) << (11 + branch)) == 0) { audit.missing_child += 1; return null; }\n+            audit.paired += 1;\n             if (!reader.hasStagedBits(10)) return error.TruncatedFrame;\n             reader.advanceBitsStagedAssumeAvailable(10);\n             const pair = self.pairs[tree_index][(entry >> 4) & 127];\n             return @as(u8, @truncate(pair >> (branch * 8)));\n         }\n+        audit.short += 1;\n         const bits: u4 = @truncate(entry);\n         if (!reader.hasStagedBits(bits)) return error.TruncatedFrame;\n         reader.advanceBitsStagedAssumeAvailable(bits);\n"
+  }
+}

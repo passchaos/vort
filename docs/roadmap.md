@@ -16933,3 +16933,18 @@ reuse, so production keeps the simpler independently owned plans.
   and archived candidate patches are in `docs/performance/brotli-paired-literal-x86.md`
   and its JSON companion. Next work should measure remaining long-code fallback
   frequency and copy costs before widening secondary tables or fast loops.
+
+- The remaining Brotli long-literal fallback audit finds only 189/247 events
+  per frozen roadmap q9/q5 frame, about 0.40%/0.46% of literals. Including
+  diagnostic clocks, those fallbacks take roughly 28/25 microseconds per frame,
+  about 1% of decode time, so wider secondary tables are deferred. The match
+  copier instead extends its fixed path through 32 bytes using ordered 16-byte
+  moves, including safe forward overlap at distances 16--31; exact tails and
+  zero-length no-ops remain bounded. Against `70c25c1f`, final q9/q5 medians
+  improve 1.0181x/1.0138x with 15/15 and 7/7 wins, reaching 0.7456x/0.7584x
+  local libbrotli. Source q9/q5 controls improve slightly and clustered q8 is
+  neutral. A single 32-byte non-overlapping move and a byte-typed literal return
+  both regressed and were removed. All 548 tests, scalar-copy boundary oracles,
+  upstream/real-corpus/progressive differentials, reference gates, AArch64
+  linking, full check, and CLI smoke pass. Evidence and rejected patches are in
+  `docs/performance/brotli-short-copy-x86.md` and its JSON companion.
