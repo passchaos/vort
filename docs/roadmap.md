@@ -16747,3 +16747,16 @@ reuse, so production keeps the simpler independently owned plans.
   0.9889x geometric throughput with 2/15 wins. This reproduces the register-
   pressure failure of the earlier four-pointer cache; production retains only
   the byte-sized tree index.
+
+- The current x86-64 65--256-literal-tree gap was re-measured on repository
+  source and roadmap q5/q9 streams at only 0.6613x/0.6652x and
+  0.6399x/0.6175x libbrotli 1.2.0-dev. A global 9-bit wide root improved source
+  by 1.0317x/1.0248x geometrically but regressed roadmap to 0.9870x/0.9881x.
+  A format-derived policy (`ten_bit_symbols <= 2 * tree_count`) selected the
+  intended rows, and O(1) header-histogram accounting removed the metadata
+  rescan, but duplicating 9- and 10-bit payload executors still moved the
+  established 10-bit layout: roadmap q5 remained 0.9940x geometric with 1/7
+  wins. Reversing instantiation order did not change LLVM emission order, and
+  Zig 0.16 function sections cannot depend on a generic comptime parameter.
+  All variants were removed rather than worsening the slowest row. Exact data
+  is in `docs/performance/brotli-wide-root-x86.md` and its JSON companion.

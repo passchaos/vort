@@ -1,0 +1,81 @@
+{
+  "date": "2026-10-01",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "reference_api_version": 1002000,
+  "reference_git": "558fc647cdaf391228d614ca85f711e02e4e583b",
+  "reference_describe": "v1.2.0-169-g558fc64",
+  "baseline_git": "1f93a4bb",
+  "baseline_executable_sha256": "2b2950f330cd520a0c8d59caeb857991652f5d22b5ee8abeea5a782093ccceb5",
+  "order": "baseline,candidate on odd rounds; candidate,baseline on even rounds",
+  "command": "taskset -c 2 env LD_LIBRARY_PATH=/tmp/vort-brotli-upstream-build BINARY --input INPUT --name NAME --quality QUALITY --iterations 100 --csv OUTPUT",
+  "inputs": {
+    "source": {
+      "path": "src/br.zig",
+      "bytes": 1712465,
+      "sha256": "d5433f1a50ec4f71cc9b69679fb172a6b07e55d7fcc91b02a2790683b842bbe8",
+      "q5_encoded_bytes": 146805,
+      "q5_literal_trees": 130,
+      "q5_baseline_over_libbrotli": 0.6613,
+      "q9_encoded_bytes": 140386,
+      "q9_literal_trees": 104,
+      "q9_baseline_over_libbrotli": 0.6652,
+      "ten_bit_symbols": 157
+    },
+    "roadmap": {
+      "path": "docs/roadmap.md",
+      "bytes": 1243611,
+      "sha256": "2f70c6a8698be160f6904d99383eeddd5da246a405a1e1fcab42241c6b55db95",
+      "q5_encoded_bytes": 347882,
+      "q5_literal_trees": 143,
+      "q5_baseline_over_libbrotli": 0.6399,
+      "q5_ten_bit_symbols": 211,
+      "q9_encoded_bytes": 333113,
+      "q9_literal_trees": 143,
+      "q9_baseline_over_libbrotli": 0.6175,
+      "q9_ten_bit_symbols": 237
+    }
+  },
+  "global_nine_bit_root": {
+    "candidate_executable_sha256": "6aeedd964fe6b144ef17adff7776ad0d7aa0f8ada7d9d1e353a83628eebc537c",
+    "pairs_per_row": 7,
+    "rows": {
+      "source_q5": { "speedup_median": 1.0315773528106775, "speedup_geometric_mean": 1.031675947363979, "wins": 7 },
+      "source_q9": { "speedup_median": 1.0244742629281167, "speedup_geometric_mean": 1.0248162237317742, "wins": 7 },
+      "roadmap_q5": { "speedup_median": 0.9893143488999431, "speedup_geometric_mean": 0.9869710535092336, "wins": 0 },
+      "roadmap_q9": { "speedup_median": 0.9899101386880111, "speedup_geometric_mean": 0.9881179552650208, "wins": 0 }
+    }
+  },
+  "adaptive_post_parse_scan": {
+    "candidate_executable_sha256": "261be331d1b7d02b74c24856c3c19b0b06202f7994c63a477578fb58d0b0d331",
+    "pairs_per_row": 7,
+    "policy": "ten_bit_symbols <= 2 * literal_tree_count",
+    "rows": {
+      "source_q5": { "speedup_median": 1.0193869805147697, "speedup_geometric_mean": 1.018531606153351, "wins": 7 },
+      "source_q9": { "speedup_median": 1.0155819863957471, "speedup_geometric_mean": 1.0133793002385494, "wins": 7 },
+      "roadmap_q5": { "speedup_median": 0.9927384420399924, "speedup_geometric_mean": 0.9911719965313316, "wins": 0 },
+      "roadmap_q9": { "speedup_median": 0.995490033622476, "speedup_geometric_mean": 0.996665803521074, "wins": 2 }
+    }
+  },
+  "adaptive_header_histogram": {
+    "candidate_executable_sha256": "f7c122204df04fe104b6a8b4d70fde3856745c6d783cc360a0dae8a8728b9bfc",
+    "pairs_per_control_row": 7,
+    "policy": "ten_bit_symbols <= 2 * literal_tree_count",
+    "count_source": "HuffmanTable.count_by_bits[10]",
+    "rows": {
+      "roadmap_q5": { "speedup_median": 0.9918509827806464, "speedup_geometric_mean": 0.9940441027171455, "wins": 1 },
+      "roadmap_q9": { "speedup_median": 0.998168589611175, "speedup_geometric_mean": 1.0065046480511912, "wins": 3, "outlier_max": 1.0310580496957993 }
+    }
+  },
+  "rejected_instantiation_order_binary_sha256": "d1100b34da919748bf53cd76c60900ba59cdbafa1f9def4444fcb15d515f22f8",
+  "validation": {
+    "focused_wide_lookup_test": true,
+    "complete_output_verified_each_invocation": true,
+    "production_changes_retained": false
+  }
+}
