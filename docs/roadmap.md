@@ -16791,3 +16791,10 @@ reuse, so production keeps the simpler independently owned plans.
   that the established six-byte refill remains faster even with a nine-bit
   root; further work should shorten context/tree dependencies or loop
   transitions rather than change root coverage or refill width.
+
+- A 64-entry current-block context-to-lookup pointer table for the 9-bit wide
+  executor was rejected. It removed the tree-index load and scaled lookup-base
+  address on root hits, but its 512-byte table expanded the two payload
+  instances by 606/311 bytes and regressed 15/15 source-q9 pairs to 0.9698x
+  median / 0.9662x geometric throughput. The retained byte context map plus
+  indexed root lookup has the better cache/register tradeoff.

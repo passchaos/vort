@@ -129,6 +129,14 @@ regressed to 0.9763x median / 0.9770x geometric mean with 0/15 wins. This
 reproduces the historical 10-bit seven-byte-refill result: fewer refills do not
 repay the altered dependency and branch structure. The candidate was removed.
 
+A current-block table of 64 direct context-to-lookup pointers was also
+rejected. It removed the tree-index load and scaled root address on fast hits,
+while the canonical tree index was read only on the 1% miss path. Building and
+retaining the 512-byte pointer table expanded the two executors by 606/311
+bytes and measured 0.9698x median / 0.9662x geometric mean with 0/15 wins.
+The retained byte context map plus indexed lookup has the better cache and
+register footprint.
+
 ## Next direction
 
 The 65--128 tier is faster, but source q9 still reaches only about 0.69x
