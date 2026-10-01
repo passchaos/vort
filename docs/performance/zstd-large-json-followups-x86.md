@@ -1,0 +1,80 @@
+# Rejected x86-64 Zstd large-JSON follow-ups
+
+This 2026-10-01 investigation re-profiled the synthetic 512 KiB `large_json`
+row after the FSE/RLE/RLE pair work. Vort reaches only 0.8045x median / 0.8064x
+geometric local libzstd 1.6.0-dev throughput, so this remains a real decode
+gap rather than a control-only workload.
+
+The frame contains four full all-FSE/four-stream-Huffman blocks plus one tiny
+tail block. The four selected blocks contain 7,298 sequences, 8,329 literals,
+and 515,959 match bytes. A frozen prepared interleaved stage takes about
+77.5 microseconds per frame while complete decode is roughly 84 microseconds;
+about 92% of current time is therefore inside literal expansion plus the
+sequence/copy executor, not frame parsing or FSE/Huffman table setup.
+
+## Measured sequence structure
+
+The existing compact pair path sees 663 two-sequence pairs in the locked
+128 KiB oracle. The successor after a pair is another pair 563 times, a direct
+offset sequence 78 times, and a 2--4-byte rep0 sequence 12 times. Four sequences
+cannot share the current 56-bit field group: a direct four-sequence attempt
+had zero hits. Match-length pairs are even more concentrated:
+
+- `68/68`: 4 pairs;
+- `69/69`: 27 pairs;
+- `70/70`: 336 pairs;
+- `71/71`: 291 pairs;
+- mixed 68--71 lengths: 5 pairs.
+
+The Huffman blocks have maximum widths `10/7/7/7`. The first block regenerates
+2,083 literals from a 977-byte compressed literal section; the remaining
+width-seven blocks already use the eight-symbol reservoir path.
+
+## Rejected executor and copy variants
+
+All ratios below are candidate over the frozen `cc519d45` implementation.
+Every candidate preserved the prepared-stage checksum and passed the locked
+large-JSON specialized-versus-generic oracle before timing.
+
+- A separate noinline consecutive-pair executor expanded to 2.7 KiB and
+  measured 0.7736x median / 0.7728x geometric across 15 stage pairs, 0/15 wins.
+- Turning the existing inline pair block into an internal run loop measured
+  0.9552x / 0.9535x, 0/15. Its loop-carried dependency cost exceeded the saved
+  outer dispatch.
+- Fusing the 99.2% same-length 68--71 pair branch measured 0.9918x median with
+  4/15 wins. One 1.80x host outlier made its geometric result misleadingly
+  positive; the median and ordinary observations were negative.
+- Keeping LL/ML/OF FSE states in local scalars expanded the two relevant
+  instances by roughly 0.8--1.1 KiB and measured 0.9640x median / 0.9620x
+  geometric with 0/7 wins.
+- An exact 64-byte forward loop for the separate `large_text` row's four
+  distance-82, approximately 128 KiB overlapping matches measured only
+  0.5681x / 0.5689x with 0/15 wins. The retained logarithmic seed-and-double
+  copier is decisively better.
+
+## Rejected Huffman and lookup variants
+
+- A standalone six-symbol width-ten reservoir loop improved the prepared stage
+  by 1.0075x median / 1.0091x geometric, 10/11, but grew the helper by about
+  1.5 KiB.
+- Folding the sixth symbol into the existing five-symbol loop reduced the
+  growth to 178 bytes and kept a 1.0069x / 1.0085x stage gain with 14/15 wins.
+  Fifteen complete-frame pairs, however, measured only 1.0006x median / 1.0030x
+  geometric; simultaneous libzstd normalization was 0.9988x geometric. It was
+  removed.
+- Filling the complete 11-bit lookup 16 entries at a time instead of eight
+  measured only 1.0029x stage geometric and shifted the following Huffman text
+  section by 256 bytes. It was removed without a full-frame campaign.
+- Extending X2 to the 2--4 KiB, 1,536--2,047-sequence low-literal band measured
+  0.9943x stage median / 0.9984x geometric with 1/7 wins. It also exposed an
+  X2 `CorruptFrame` versus canonical `TruncatedFrame` mismatch on a mutated
+  stream; the selector and temporary cold fallback were both removed.
+
+These results rule out another round of local branch growth, wider copy loops,
+larger Huffman batches, and table-fill tuning. The next credible `large_json`
+direction is a genuinely smaller independently compiled executor/state
+representation that preserves the current two-sequence, direct-offset, and
+short-rep0 semantics without pointerized calls or duplicated error exits.
+
+Exact binary hashes, commands, and summary ratios are recorded in
+[zstd-large-json-followups-x86-20261001.json](data/zstd-large-json-followups-x86-20261001.json).

@@ -1,0 +1,119 @@
+{
+  "date": "2026-10-01",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "baseline_git": "cc519d45",
+  "baseline_reference_executable_sha256": "e5079f29b9c3d8b7d89f8e36efbab35ea59d41ddd69826b6ba6e0dfcc53b08a2",
+  "baseline_stage_executable_sha256": "9497f2cc91ec93fa13b379bea239e18e30a439d60a68aa6ed29ca3fd6d9133a9",
+  "reference_git": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+  "reference_library": "/tmp/vort-zstd-upstream-build/lib/libzstd.so",
+  "reference_library_sha256": "b734e265f838f7a18c378fe2b34c505e6fc5025fd84ceac159faa27b794b78b0",
+  "input": "/tmp/vort-large-json-512k.txt",
+  "input_bytes": 524307,
+  "input_sha256": "b0d873df5fbe94a60e8e10a51cde4b08b3370ae4f251357c16adbfc69fd27c95",
+  "encoded_bytes": 9905,
+  "stage_command": "taskset -c 2 BINARY --input /tmp/vort-large-json-512k.txt --name large_json --level 1 --iterations 1000 --rounds 7 --min-sequences 1024 --max-sequences 4096 --allow-non-wildcopy --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so",
+  "frame_command": "taskset -c 2 BINARY --case large_json --iterations 3000 --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so",
+  "baseline": {
+    "candidate_over_libzstd_median": 0.80451710035993,
+    "candidate_over_libzstd_geometric_mean": 0.806435429600224,
+    "prepared_stage_ns_per_frame": 77504.554,
+    "selected_blocks": 4,
+    "selected_decoded_bytes": 524288,
+    "selected_literal_bytes": 8329,
+    "selected_sequences": 7298
+  },
+  "pair_structure": {
+    "pairs": 663,
+    "next_pair": 563,
+    "next_direct_offset": 78,
+    "next_short_rep0": 12,
+    "quad_group_hits": 0,
+    "match_length_pairs": {
+      "68_68": 4,
+      "69_69": 27,
+      "69_70": 1,
+      "70_68": 1,
+      "70_69": 3,
+      "70_70": 336,
+      "71_71": 291
+    }
+  },
+  "rejected": {
+    "noinline_pair_run": {
+      "stage_executable_sha256": "0e29259124d6bf26bcc8ad01289002d037b18dfff980f7367e91546f06747ddd",
+      "pairs": 15,
+      "median": 0.7736455561449694,
+      "geometric_mean": 0.7727812762623177,
+      "wins": 0
+    },
+    "inline_pair_run": {
+      "stage_executable_sha256": "99333f2a1546615e46fe514fb5ff8c68bf240cf88879d198ae17feb99b739252",
+      "pairs": 15,
+      "median": 0.9551777197234302,
+      "geometric_mean": 0.9535167712811636,
+      "wins": 0
+    },
+    "same_match_length_pair": {
+      "stage_executable_sha256": "cc27769e15e39341f5b2eeb763472720b4fa36948e72b64b7fbc026645c98169",
+      "pairs": 15,
+      "median": 0.9917947614947137,
+      "geometric_mean": 1.033383352425765,
+      "wins": 4,
+      "outlier_max": 1.801354248819639
+    },
+    "local_fse_states": {
+      "stage_executable_sha256": "b3b7e4a9cbe68e2f322487e37f1d0ae5883d25e027e726fca59440c1c49cd91a",
+      "pairs": 7,
+      "median": 0.9640369513753446,
+      "geometric_mean": 0.9619650050880292,
+      "wins": 0
+    },
+    "standalone_six_symbol_width10": {
+      "stage_executable_sha256": "d0157b7583778d605a4ad161a43a73320244bc4c5ebd2eb654d0b34b52474f65",
+      "pairs": 11,
+      "median": 1.0075156710193376,
+      "geometric_mean": 1.009149380455084,
+      "wins": 10
+    },
+    "merged_six_symbol_width10": {
+      "stage_executable_sha256": "3e4d20bb5a73a3d3eb9920481f15c9dba8743918e451ecd1bb2683a7315ea4a3",
+      "frame_executable_sha256": "0e77856bd56e11c377352904165f480fa55375b77b10209400ff4a868f7e8d2d",
+      "stage_pairs": 15,
+      "stage_median": 1.0069197067158704,
+      "stage_geometric_mean": 1.0085187975003982,
+      "stage_wins": 14,
+      "frame_pairs": 15,
+      "frame_median": 1.000554351567516,
+      "frame_geometric_mean": 1.0030354604650988,
+      "frame_wins": 11,
+      "libzstd_normalized_geometric_mean": 0.9988232175001869
+    },
+    "lookup_fill_16": {
+      "stage_executable_sha256": "32f3d5c80c6e458613b2d884c50972636f1b48429e354c0ffb100fbc98e6a30e",
+      "pairs": 15,
+      "median": 1.0028680396901375,
+      "geometric_mean": 1.0028420438561192,
+      "wins": 11
+    },
+    "dense_low_literal_x2": {
+      "stage_executable_sha256": "5d990f7c3001bdf6dead4b553402e591e88b01426ef673fed6edcd4d85f18ba1",
+      "pairs": 7,
+      "median": 0.9942934944069556,
+      "geometric_mean": 0.9983553332851502,
+      "wins": 1,
+      "error_mismatch": "X2 CorruptFrame versus canonical TruncatedFrame"
+    },
+    "large_text_exact64": {
+      "frame_executable_sha256": "c79788549d0073749b0cd58cecf5ce8133be232db21d90a179f99352050e3262",
+      "pairs": 15,
+      "median": 0.568064360576211,
+      "geometric_mean": 0.5689188931715249,
+      "wins": 0
+    }
+  }
+}

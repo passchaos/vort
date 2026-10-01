@@ -16659,3 +16659,18 @@ reuse, so production keeps the simpler independently owned plans.
   compatibility cases, 9,900 corpus frames with 64/64 modes, generic
   x86-64/AArch64 builds, and the full repository check pass. Exact evidence is
   in `docs/performance/zstd-fse-rle-rle-pair-x86.md`.
+
+- Re-profiled the remaining x86-64 `large_json` gap against local libzstd
+  1.6.0-dev. Vort remains at 0.8045x median reference throughput; four prepared
+  split blocks account for about 92% of complete-frame time. Frozen stage and
+  frame A/B rejected an external pair run (0.7728x geometric), inline pair run
+  (0.9535x), same-length pair fusion (0.9918x median), local FSE states
+  (0.9620x geometric), low-literal X2 (0.9943x median), wider lookup fills
+  (1.0028x geometric), and width-ten six-symbol batching: the latter reached
+  1.0085x on the isolated stage but only 1.0030x on the complete frame and
+  0.9988x after libzstd normalization. A long distance-82 exact-64 copy for
+  `large_text` was decisively worse at 0.5689x. All production candidates were
+  removed. Exact shapes, hashes, safety findings, and commands are in
+  `docs/performance/zstd-large-json-followups-x86.md`; the next credible step is
+  a genuinely smaller split executor/state representation rather than another
+  local branch or copy variant.
