@@ -229,12 +229,30 @@ libbrotli 1.2.0 reference gate, 7,056 generated and progressive upstream
 cases, 1,401 fragmentation cases, 64 high-tree truncations, seven Large Window
 cases, and the four-file 16/16 real-corpus matrix.
 
+## Rejected context-three distance pointer
+
+A non-timing pass over the retained source-q9 frame counted 50,574 commands,
+39,619 zero-insert commands, and 50,573 distance transitions. Only 2,460
+transitions use the implicit last distance. Of 48,113 explicit distance
+symbols, 47,701 (99.14%) use RFC distance context three, 47,893 (99.54%) hit
+the external nine-bit root, and 39,210 (81.49%) are regular symbols at least
+16. All 37 prepared distance trees are used; reducing root coverage would not
+fit this stream.
+
+Despite that dominance, caching a direct pointer to the context-three distance
+root was decisively slower. The pointer and its block-switch refresh grew the
+command-root payload and isolated section by 103 bytes. Five source-q9 pairs
+measured 0.9343x median / 0.9347x geometric raw throughput with 0/5 wins;
+local-libbrotli-normalized median/geometric throughput was 0.9382x/0.9384x.
+The candidate was removed. The retained cached byte tree index plus scaled
+root address has materially better register allocation and code layout.
+
 ## Next direction
 
 The 65--128 tier is faster, but source q9 still reaches only about 0.74x
 libbrotli. Root width, refill size, pointer tables, and root-slot offset maps
-are now bounded out. The next useful work is a fresh instruction/counter audit
-of context computation, command/distance transitions, and root construction
-cost rather than another speculative active-block table. The 129--256 tier
-should stay at ten bits unless a separately isolated policy improves its
-slowest row.
+are now bounded out; the context-three audit also rules out retaining another
+hot pointer. The next useful work is a genuinely smaller regular-distance
+transition or executor representation that reduces live state, not another
+active-block cache. The 129--256 tier should stay at ten bits unless a
+separately isolated policy improves its slowest row.

@@ -16845,3 +16845,13 @@ reuse, so production keeps the simpler independently owned plans.
   rows, 7,056 generated/progressive cases, 1,401 fragmentation cases, 64
   high-tree truncations, seven Large Window cases, and the 16/16 real-corpus
   matrix pass.
+
+- A source-q9 runtime audit of the retained wide distance plane counted 50,574
+  commands and 50,573 distance transitions. Only 2,460 use the implicit last
+  distance; 47,701/48,113 explicit distances (99.14%) use context three,
+  47,893/48,113 (99.54%) hit the nine-bit root, 39,210 (81.49%) are regular
+  symbols, and all 37 distance trees are used. Caching a direct context-three
+  root pointer nevertheless grew the isolated payload by 103 bytes and
+  regressed five complete-frame pairs to 0.9343x median / 0.9347x geometric
+  raw throughput with 0/5 wins (0.9384x normalized geometric). The candidate
+  was removed; further work needs less live state rather than another pointer.

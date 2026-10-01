@@ -299,6 +299,23 @@
     "distance_root_plane_bytes": 65536,
     "baseline_section_bytes": 15952,
     "candidate_section_bytes": 17493,
+    "source_q9_runtime_audit": {
+      "commands": 50574,
+      "zero_insert_commands": 39619,
+      "inserted_literals": 20459,
+      "command_block_switches": 10,
+      "literal_block_switches": 9,
+      "distance_block_switches": 37,
+      "distance_transitions": 50573,
+      "implicit_distances": 2460,
+      "explicit_distances": 48113,
+      "context_three_distances": 47701,
+      "distance_root_hits": 47893,
+      "distance_root_misses": 220,
+      "short_distance_symbols": 8903,
+      "regular_distance_symbols": 39210,
+      "used_distance_trees": 37
+    },
     "source_q9": {
       "encoded_bytes": 141001,
       "literal_trees": 104,
@@ -329,6 +346,27 @@
       "candidate_over_libbrotli_median": 0.7245536093153182,
       "candidate_over_libbrotli_geometric_mean": 0.723869359810623
     }
+  },
+  "rejected_wide_distance_context_three_lookup_pointer": {
+    "baseline_executable_sha256": "3f01fdf7b0206df26528713af110d6b497b068f82651d6bd4264d1c3ef24df83",
+    "candidate_executable_sha256": "dd19ed793fa8991d083cb3f9e427707026934c659255501e27acf663c0f6b987",
+    "input_bytes": 1727564,
+    "input_sha256": "9271735ccf653d198f1e14a9604e980be81474947575af9e67e83f053d03931b",
+    "encoded_bytes": 141224,
+    "literal_trees": 104,
+    "distance_trees": 42,
+    "pairs": 5,
+    "baseline_section_bytes": 17493,
+    "candidate_section_bytes": 17596,
+    "speedup_median": 0.9342726792410998,
+    "speedup_geometric_mean": 0.9346816484567645,
+    "speedup_min": 0.9313677014576884,
+    "speedup_max": 0.9380490942511102,
+    "wins": 0,
+    "libbrotli_normalized_median": 0.9382260802097165,
+    "libbrotli_normalized_geometric_mean": 0.9384276817149505,
+    "candidate_over_libbrotli_median": 0.6840449206978784,
+    "candidate_over_libbrotli_geometric_mean": 0.6836799190082895
   },
   "rejected_instantiation_order_binary_sha256": "d1100b34da919748bf53cd76c60900ba59cdbafa1f9def4444fcb15d515f22f8",
   "validation": {
