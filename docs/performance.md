@@ -63,6 +63,9 @@ measurements.
 [Brotli contiguous auxiliary lookups](performance/brotli-contiguous-auxiliary-lookups.md)
 records cache-dense command/distance root planes, exact short dictionary
 copies, rejected follow-ups, and paired Apple M1 Pro measurements.
+[Brotli command-root distance context](performance/brotli-command-distance-context-x86.md)
+records the rejected attempt to carry distance context in spare command-root
+bits, including positive source results and the decisive clustered regression.
 [Brotli large single-tree executor](performance/brotli-single-tree-executor.md)
 records the structure-gated q1 fast path and real source/document comparisons.
 [Zstd wide-Huffman WASM portability](performance/zstd-wasm-portability.md)
