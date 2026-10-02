@@ -1,0 +1,134 @@
+{
+  "date": "2026-10-02",
+  "baseline_git": "9b32f783",
+  "input_snapshot_commit": "488c5415",
+  "host": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "environment": {
+    "os": "linux",
+    "arch": "x86_64",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_affinity": "2",
+    "codec_threads": 1,
+    "reference": "libbrotli 1.2.0-dev 558fc647",
+    "reference_library_path": "/tmp/vort-brotli-upstream-build",
+    "hardware_sampling": "unavailable: perf_event_paranoid=4"
+  },
+  "audit": {
+    "roadmap_q9": {
+      "commands": 109100,
+      "zero_insert": 88384,
+      "implicit_distances": 990,
+      "explicit_distances": 108109,
+      "distance_contexts": [101, 461, 390, 107157],
+      "short_symbols": [9, 576, 157, 96, 228, 138, 507, 51, 109, 22, 193, 211, 210, 419, 149, 150],
+      "regular_extra_bits": [0, 6, 167, 365, 892, 1926, 2528, 4012, 5409, 6234, 6673, 7051, 8152, 9228, 10274, 12184, 12472, 11828, 5335, 148, 0, 0, 0, 0, 0],
+      "copy_length_log2": [0, 811, 32886, 59627, 13580, 1941, 243, 12, 0],
+      "command_switches": 13,
+      "distance_switches": 30
+    },
+    "roadmap_q5": {
+      "commands": 118278,
+      "zero_insert": 93272,
+      "implicit_distances": 1135,
+      "explicit_distances": 117142,
+      "distance_contexts": [114, 120, 180, 116728],
+      "short_symbols": [9, 669, 222, 130, 72, 55, 304, 34, 34, 6, 91, 108, 111, 264, 57, 60],
+      "regular_extra_bits": [0, 6, 185, 470, 1190, 2582, 3481, 5567, 7586, 9024, 9835, 10738, 11905, 12358, 11899, 11153, 8812, 6118, 1958, 49, 0, 0, 0, 0, 0],
+      "copy_length_log2": [0, 516, 45614, 59524, 10521, 1851, 240, 12, 0],
+      "command_switches": 3,
+      "distance_switches": 23
+    }
+  },
+  "implementation": {
+    "change": "mark the fused command root zero-insert arm likely",
+    "baseline_full_payload_bytes": 5991,
+    "candidate_full_payload_bytes": 5792,
+    "baseline_auxiliary_payload_bytes": 5535,
+    "candidate_auxiliary_payload_bytes": 5350,
+    "baseline_executable_bytes": 6081352,
+    "candidate_executable_bytes": 6079200,
+    "baseline_executable_sha256": "809aaceab828b7e37b4da82eb9fb7f6e95ae3d3b296f497997d2fa6740df2028",
+    "measured_candidate_executable_sha256": "d83e1d241807156ba051b4eaf66ac877fee3c2cac5f6bbc6b558d2e822d92ee1",
+    "validated_candidate_executable_sha256": "e98346feeac1a4ad58ad0a7c1bb2f2a0ae7e556546395f27b4f85ebe05fb68dc"
+  },
+  "targets": {
+    "roadmap_q9": {
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 335220,
+      "iterations": 100,
+      "summary": {"pairs": 15, "wins": 15, "median": 1.0154909793, "geomean": 1.0152320307, "minimum": 1.0112378823, "normalized_geomean": 1.0136270814, "candidate_reference_median": 0.7627},
+      "columns": ["baseline_ns", "baseline_reference_ns", "candidate_ns", "candidate_reference_ns"],
+      "samples": [
+        [278255642, 209606933, 274080636, 211222832],
+        [275906900, 208605451, 272486672, 208286091],
+        [278347999, 211196871, 273813933, 208370815],
+        [277083617, 210217101, 273999996, 207959548],
+        [278075754, 209123671, 274202181, 208113532],
+        [278791356, 208536959, 274538486, 209087294],
+        [278816475, 210515387, 274238707, 208372905],
+        [278099428, 208070079, 273100346, 208875651],
+        [277444232, 207593385, 274145788, 210595386],
+        [277713679, 208521737, 273822503, 209577876],
+        [276440131, 209057389, 273368053, 208492959],
+        [277528857, 208424965, 272953553, 209812548],
+        [277843424, 209583755, 273377730, 209002525],
+        [277373827, 207263229, 271602608, 206233225],
+        [277420797, 209729398, 272919426, 207099004]
+      ]
+    },
+    "roadmap_q5": {
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 350069,
+      "iterations": 100,
+      "summary": {"pairs": 7, "wins": 7, "median": 1.0215772549, "geomean": 1.0219781747, "minimum": 1.0029650822, "normalized_geomean": 1.0256666742, "candidate_reference_median": 0.7799},
+      "columns": ["baseline_ns", "baseline_reference_ns", "candidate_ns", "candidate_reference_ns"],
+      "samples": [
+        [290558021, 220193664, 283359453, 220329044],
+        [290921223, 222231783, 286124643, 221730449],
+        [282468668, 216499026, 276502503, 218539372],
+        [284389713, 218189680, 283548967, 226098271],
+        [290757005, 220639826, 279477300, 217520754],
+        [284281995, 217823207, 277180840, 216162565],
+        [284304530, 217295154, 278313684, 218115434]
+      ]
+    }
+  },
+  "controls": {
+    "source_q9": {"pairs": 7, "wins": 7, "median": 1.0061722045, "geomean": 1.0095502951, "minimum": 1.0032799184},
+    "source_q5": {"pairs": 7, "wins": 7, "median": 1.0093134763, "geomean": 1.0087765220, "minimum": 1.0040741324},
+    "clustered_q8": {"pairs": 7, "wins": 6, "median": 1.0038963310, "geomean": 1.0031059588, "minimum": 0.9978887387}
+  },
+  "rejected": {
+    "localized_command_countdown": {
+      "full_payload_bytes": 6097,
+      "roadmap_q9": {"pairs": 7, "wins": 0, "median": 0.984305, "geomean": 0.983494},
+      "roadmap_q5": {"pairs": 7, "wins": 0, "median": 0.979169, "geomean": 0.979574}
+    },
+    "unlikely_short_distance": {
+      "full_payload_bytes": 5816,
+      "roadmap_q9": {"pairs": 7, "wins": 1, "median": 0.993484, "geomean": 0.994033},
+      "roadmap_q5": {"pairs": 7, "wins": 0, "median": 0.986984, "geomean": 0.987890}
+    }
+  },
+  "validation": {
+    "command_branch_test": "pass with zero- and non-zero-insert arms",
+    "full_wide_transition_and_truncation_oracle": "pass",
+    "build_test": "pass",
+    "reference_gate_rows": 13,
+    "reference_path_valid": 3,
+    "reference_path_rejected": 5,
+    "upstream_one_shot": 7056,
+    "upstream_progressive": 7056,
+    "fragmentation_schedules": 1401,
+    "high_tree_truncations": 64,
+    "large_window_cases": 7,
+    "real_corpus": "16/16",
+    "aarch64_compile": "pass",
+    "build_check": "pass",
+    "cli_help": "pass"
+  }
+}

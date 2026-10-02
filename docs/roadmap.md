@@ -16965,3 +16965,21 @@ reuse, so production keeps the simpler independently owned plans.
   the 16/16 real-corpus matrix, AArch64 compilation, full check, and CLI smoke
   pass. Exact evidence is in
   `docs/performance/brotli-full-tier-copy64-x86.md` and its JSON companion.
+
+- The shared fused-command decoder now marks its measured zero-insert arm as
+  likely. A non-timing audit of the full 129--256-tree roadmap streams found
+  88,384/109,100 q9 commands (81.01%) and 93,272/118,278 q5 commands (78.86%)
+  on that arm. The hint lets LLVM keep it contiguous and shrinks the full-tier
+  payload from `0x1767` to `0x16a0` bytes; the existing 9-bit auxiliary payload
+  also shrinks from `0x159f` to `0x14e6`. Against frozen `9b32f783`, 15 q9
+  pairs improve `1.0155x` median / `1.0152x` geometric with 15/15 wins and a
+  `1.0112x` floor; seven q5 pairs improve `1.0216x` / `1.0220x`, also 7/7.
+  Reference-normalized gains are `1.0136x`/`1.0257x`, and final median ratios
+  reach `0.7627x`/`0.7799x` local libbrotli 1.2.0-dev. Source q9/q5 and
+  clustered q8 controls remain positive. Localizing the command countdown and
+  marking the 1.9%--3.0% short-distance path unlikely both regressed every
+  target pair and were removed. All targeted and full tests, the 13-row
+  reference gate, 7,056 generated plus 7,056 progressive cases, 1,401
+  fragmentation schedules, 64 high-tree truncations, seven Large Window cases,
+  the 16/16 real-corpus matrix, AArch64 compilation, full check, and CLI smoke
+  pass. Evidence is in `docs/performance/brotli-zero-insert-branch-x86.md`.

@@ -43,6 +43,9 @@ paired comparison against the preceding decoder.
 [Brotli full-tier ordered match copy](performance/brotli-full-tier-copy64-x86.md)
 records the x86-64-only 33--64-byte extension for the 129--256-literal-tree
 executor, the rejected global route, and paired whole-frame measurements.
+[Brotli zero-insert branch layout](performance/brotli-zero-insert-branch-x86.md)
+records the measured command distribution, hot-branch layout reduction, two
+rejected state/distance layouts, and paired full/middle-tier measurements.
 [Brotli identity dictionary borrowing](performance/brotli-static-dictionary-borrow.md)
 records the zero-copy identity transform, full transform equivalence coverage,
 and paired dictionary-heavy decode measurements.

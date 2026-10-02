@@ -11339,6 +11339,7 @@ inline fn readInsertCopyLengthsMultiTreeZeroInsertCurrent(
     };
     if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
     if (root_entry.zero_insert) {
+        @branchHint(.likely);
         const copy_extra = if (root_entry.copy_extra_bits == 0)
             0
         else
@@ -22760,6 +22761,22 @@ test "br multi-tree zero-insert lookup preserves command progress" {
     try std.testing.expectEqual(@as(usize, 0), lengths.insert_len);
     try std.testing.expectEqual(@as(usize, 11), lengths.copy_len);
     try std.testing.expect(lengths.distance_symbol_zero);
+    try std.testing.expectEqual(@as(usize, 0), header.command_block.remaining);
+
+    const nonzero = commandEntryForLengths(1, 2).?;
+    const nonzero_tree = PrefixCode(704){ .single_symbol = nonzero.symbol };
+    const nonzero_lookup = try single_command_lookup.Lookup.initSingle(nonzero.symbol);
+    header.command_block.remaining = 1;
+    var nonzero_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+    const nonzero_lengths = try readInsertCopyLengthsMultiTreeZeroInsertCurrent(
+        &header,
+        &nonzero_reader,
+        &nonzero_lookup,
+        &nonzero_tree,
+    );
+    try std.testing.expectEqual(@as(usize, 1), nonzero_lengths.insert_len);
+    try std.testing.expectEqual(@as(usize, 2), nonzero_lengths.copy_len);
+    try std.testing.expect(!nonzero_lengths.distance_symbol_zero);
     try std.testing.expectEqual(@as(usize, 0), header.command_block.remaining);
 }
 
