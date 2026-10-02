@@ -17034,3 +17034,19 @@ reuse, so production keeps the simpler independently owned plans.
   row-median geometric mean. All 1,685 tests, reference/upstream/real-corpus
   gates, AArch64 compilation, full check, and CLI smoke pass. Evidence is in
   `docs/performance/brotli-middle-tier-nonzero-copy-x86.md` and its JSON record.
+
+- The x86-64 Zstd compact split-Huffman pair path now validates positive rep0
+  and its upper history bound with one subtract-and-range comparison when the
+  caller has already established bounded wildcopy output. The non-wildcopy
+  oracle keeps its original helper and per-sequence checks. Against frozen
+  `ed503bf6`, 15 `large_json` frame pairs improve by `1.0120x` median /
+  `1.0131x` geometric throughput with 15/15 wins and a `1.0063x` minimum; the
+  prepared four-block stage improves by `1.0178x` / `1.0176x`, also 15/15.
+  Long `binary_mixed`, `huffman80k`, and `large_text` controls are
+  neutral-positive geometrically. Candidate throughput remains only `0.8139x`
+  median / `0.8155x` geometric local libzstd 1.6.0-dev, so broad Zstd decode
+  leadership remains open. All 679 direct ReleaseFast Zstd tests, 276
+  compatibility cases, 9,900 upstream decodecorpus frames across 64/64
+  sequence modes, cross-target compilation, full tests, build check, and CLI
+  smoke pass. Evidence is in
+  `docs/performance/zstd-pair-rep0-range-x86.md` and its JSON companion.

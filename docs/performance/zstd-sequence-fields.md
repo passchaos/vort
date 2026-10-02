@@ -1007,6 +1007,24 @@ geometric throughput with 21/21 wins and a `1.0121x` minimum. Fifteen
 `1.2266x` geometric, range `1.2121x`--`1.2382x`; every run now clears the
 strict 1.20x floor, so `large_json` is closed.
 
+## X86-64 paired rep0 range validation
+
+The compact split-Huffman pair path now folds its positive-rep0 check into the
+existing bounded-history comparison. After the first literal,
+`available_history` is nonzero, so `match_offset -% 1 >= available_history`
+rejects exactly offset zero or an offset beyond history. The non-wildcopy
+oracle retains the prior explicit helper and per-sequence bounds.
+
+Against frozen commit `ed503bf6`, 15 alternating pairs of 3,000 complete
+`large_json` decodes improve by 1.0120x median / 1.0131x geometric throughput,
+win all 15 pairs, and have a 1.0063x minimum. The four-block prepared stage
+improves by 1.0178x / 1.0176x with 15/15 wins. Longer `binary_mixed`,
+`huffman80k`, and `large_text` controls are neutral-positive geometrically.
+Candidate throughput remains only 0.8139x median / 0.8155x geometric local
+libzstd 1.6.0-dev, so the broader decode-performance goal remains open. Full
+evidence and validation are in
+[zstd-pair-rep0-range-x86.md](zstd-pair-rep0-range-x86.md).
+
 The reference benchmark now alternates the five Vort and libzstd samples
 instead of measuring all Vort samples, then allocation, then all reference
 samples. It still reports each codec's best sample and uses the same payload,

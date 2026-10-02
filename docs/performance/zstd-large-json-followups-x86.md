@@ -48,6 +48,12 @@ byte-for-byte output check before timing.
 - Keeping LL/ML/OF FSE states in local scalars expanded the two relevant
   instances by roughly 0.8--1.1 KiB and measured 0.9640x median / 0.9620x
   geometric with 0/7 wins.
+- A 2026-10-02 follow-up preloaded the current LL and OF FSE entries across the
+  pair body. Although the target executor shrank from 8,822 to 8,632 bytes,
+  the longer live ranges reduced complete-frame throughput to 0.9848x median /
+  0.9866x geometric with 1/7 wins. The candidate was removed; the succeeding
+  rep0-range fusion is documented separately in
+  [zstd-pair-rep0-range-x86.md](zstd-pair-rep0-range-x86.md).
 - Compiling the compact split executor without its three prefixed pair,
   short-rep0, and direct-offset paths, while retaining the established
   long-match wildcopy policy, shrank the production instance from 9,833 to

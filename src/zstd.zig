@@ -11597,13 +11597,17 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 remaining -= 2;
                 if (remaining == 0) try wide_reader.expectEnd();
 
-                const match_offset = try large_offset.positiveLiteralRep0(&state.repeated_offsets);
+                const match_offset = if (comptime allow_wildcopy)
+                    state.repeated_offsets[0]
+                else
+                    try large_offset.positiveLiteralRep0(&state.repeated_offsets);
                 const pair_match_lengths = [2]usize{ first_match_len, second_match_len };
                 if (comptime allow_wildcopy) {
                     if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < 2) return error.CorruptFrame;
                     const pair_output_len = 2 + first_match_len + second_match_len;
                     if (output.len - written.* < pair_output_len) return error.OutputTooSmall;
-                    if (match_offset > written.* - frame_output_start + 1) return error.InvalidMatch;
+                    const available_history = written.* - frame_output_start + 1;
+                    if (match_offset -% 1 >= available_history) return error.InvalidMatch;
                 }
                 inline for (pair_match_lengths) |match_len| {
                     if (!allow_wildcopy and literal_offset >= section.regenerated_size) return error.CorruptFrame;
