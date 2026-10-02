@@ -46,6 +46,10 @@ executor, the rejected global route, and paired whole-frame measurements.
 [Brotli zero-insert branch layout](performance/brotli-zero-insert-branch-x86.md)
 records the measured command distribution, hot-branch layout reduction, two
 rejected state/distance layouts, and paired full/middle-tier measurements.
+[Brotli full-tier nonzero copy entry](performance/brotli-full-tier-nonzero-copy-x86.md)
+records removal of a redundant copy-length check from the 129--256-tree
+executor, command/copy-shape evidence, rejected layout alternatives, and paired
+whole-frame measurements.
 [Brotli identity dictionary borrowing](performance/brotli-static-dictionary-borrow.md)
 records the zero-copy identity transform, full transform equivalence coverage,
 and paired dictionary-heavy decode measurements.

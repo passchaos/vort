@@ -50,15 +50,23 @@ pub fn append(output: []u8, written: *usize, distance: usize, len: usize, writab
 /// ordered 16-byte moves; narrower decoders retain `append`'s smaller branch
 /// footprint.
 pub fn appendWide(output: []u8, written: *usize, distance: usize, len: usize, writable_end: usize) void {
+    if (len == 0) return;
+    appendWideNonZero(output, written, distance, len, writable_end);
+}
+
+/// Full-tier copy entry point for decoded Brotli commands, whose copy length
+/// is guaranteed non-zero by the command alphabet.
+pub fn appendWideNonZero(output: []u8, written: *usize, distance: usize, len: usize, writable_end: usize) void {
     if (comptime builtin.cpu.arch != .x86_64)
         return append(output, written, distance, len, writable_end);
 
+    std.debug.assert(len != 0);
     const destination = written.*;
     const source = destination - distance;
     std.debug.assert(writable_end <= output.len);
     std.debug.assert(len <= writable_end - destination);
     written.* += len;
-    if (len != 0 and distance >= short_copy_width) {
+    if (distance >= short_copy_width) {
         const available = writable_end - destination;
         if (len <= 32 and available >= 32) {
             @memcpy(output[destination..][0..16], output[source..][0..16]);
@@ -156,7 +164,10 @@ test "Brotli wide match copy matches scalar replay across fixed tiers" {
                 for (0..len) |index| expected[start + index] = expected[start + index - distance];
                 const end = start + len + slack;
                 var written: usize = start;
-                appendWide(&actual, &written, distance, len, end);
+                if (len == 0)
+                    appendWide(&actual, &written, distance, len, end)
+                else
+                    appendWideNonZero(&actual, &written, distance, len, end);
                 try std.testing.expectEqual(start + len, written);
                 try std.testing.expectEqualSlices(u8, expected[0..written], actual[0..written]);
                 try std.testing.expectEqualSlices(u8, before[end..], actual[end..]);

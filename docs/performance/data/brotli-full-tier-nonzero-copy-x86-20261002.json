@@ -1,0 +1,167 @@
+{
+  "date": "2026-10-02",
+  "baseline_git": "40018f0a",
+  "input_snapshot_commit": "488c5415",
+  "host": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "environment": {
+    "os": "linux",
+    "arch": "x86_64",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_affinity": "2",
+    "codec_threads": 1,
+    "reference": "libbrotli 1.2.0-dev 558fc647",
+    "reference_library_path": "/tmp/vort-brotli-upstream-build"
+  },
+  "audit": {
+    "roadmap_q9": {
+      "commands": 109100,
+      "zero_insert_commands": 88384,
+      "single_literal_insert_commands": 10935,
+      "implicit_distance_commands": 990,
+      "copy_length_log2_histogram": [0, 811, 32886, 59627, 13580, 1941, 243, 12, 0],
+      "lz77_copies": 108263,
+      "static_dictionary_copies": 836
+    },
+    "roadmap_q5": {
+      "commands": 118278,
+      "zero_insert_commands": 93272,
+      "single_literal_insert_commands": 14362,
+      "implicit_distance_commands": 1135,
+      "copy_length_log2_histogram": [0, 516, 45614, 59524, 10521, 1851, 240, 12, 0],
+      "lz77_copies": 117343,
+      "static_dictionary_copies": 934
+    }
+  },
+  "implementation": {
+    "change": "route the full literal-tree executor through a nonzero-only ordered match-copy entry",
+    "scope": "x86_64 129--256 literal-tree executor",
+    "baseline_payload_bytes": 5792,
+    "candidate_payload_bytes": 5776,
+    "baseline_executable_bytes": 6104264,
+    "candidate_executable_bytes": 6104264,
+    "baseline_executable_sha256": "a9bf7a273371c9346c67961814dbd1436ade46e3d566ea3e510b0db6065e5764",
+    "candidate_executable_sha256": "615e569cd24c4201c0f381c7c319c5a4d31acfab427b396490b4a12ae92c6d4e"
+  },
+  "targets": {
+    "roadmap_q9": {
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 335220,
+      "iterations": 500,
+      "summary": {
+        "pairs": 15,
+        "wins": 14,
+        "median": 1.0048598895,
+        "geomean": 1.005936345,
+        "minimum": 0.9999472858,
+        "maximum": 1.0207981794
+      },
+      "columns": ["baseline_ns", "candidate_ns"],
+      "samples": [
+        [1369890274, 1364199141],
+        [1390087830, 1361765585],
+        [1367763360, 1360767604],
+        [1380532823, 1366986722],
+        [1371427873, 1358550153],
+        [1361192612, 1361264370],
+        [1368067311, 1366103421],
+        [1368569467, 1366807954],
+        [1369522570, 1360551904],
+        [1365587320, 1362723811],
+        [1369275285, 1362870881],
+        [1366202612, 1363666220],
+        [1373482979, 1357683209],
+        [1372245537, 1365608829],
+        [1375412829, 1368137344]
+      ]
+    },
+    "roadmap_q5": {
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 350069,
+      "iterations": 500,
+      "summary": {
+        "pairs": 7,
+        "wins": 6,
+        "median": 1.0048928282,
+        "geomean": 1.0037230411,
+        "minimum": 0.9978530553,
+        "maximum": 1.0061126961
+      },
+      "columns": ["baseline_ns", "candidate_ns"],
+      "samples": [
+        [1421239449, 1414319427],
+        [1423541833, 1414893022],
+        [1418288387, 1410342881],
+        [1423892903, 1417839754],
+        [1422626748, 1419814199],
+        [1413615420, 1416656904],
+        [1424531458, 1416958800]
+      ]
+    }
+  },
+  "same_process_reference_controls": {
+    "iterations": 100,
+    "roadmap_q9": {
+      "pairs": 15,
+      "wins": 12,
+      "raw_median": 1.0034177185,
+      "raw_geomean": 1.0030140047,
+      "normalized_geomean": 1.0006773845,
+      "candidate_reference_median": 0.7616115997
+    },
+    "roadmap_q5": {
+      "pairs": 7,
+      "wins": 7,
+      "raw_median": 1.0028267482,
+      "raw_geomean": 1.0034586633,
+      "normalized_geomean": 0.9999340441,
+      "candidate_reference_median": 0.7806644252
+    }
+  },
+  "controls": {
+    "source_q9": {"pairs": 7, "wins": 3, "median": 0.9991550558, "geomean": 1.0025619105, "minimum": 0.9975932864},
+    "source_q5": {"pairs": 7, "wins": 4, "median": 1.0010499343, "geomean": 1.0018142359, "minimum": 0.9993249006},
+    "clustered_q8": {"pairs": 7, "wins": 6, "median": 1.0008968879, "geomean": 1.0022828297, "minimum": 0.9994301445}
+  },
+  "rejected": {
+    "short_copy_branch_reorder": {
+      "roadmap_q9": {"pairs": 7, "wins": 4, "median": 1.000979, "geomean": 1.000407},
+      "roadmap_q5": {"pairs": 7, "wins": 2, "median": 0.997577, "geomean": 0.996670}
+    },
+    "meta_block_window_preclassification": {
+      "reason": "generated loop used two conditional moves instead of the baseline one",
+      "baseline_executable_bytes": 6104264,
+      "candidate_executable_bytes": 6104568
+    },
+    "single_literal_command_fusion": {
+      "hot_payload_bytes": 5925,
+      "roadmap_q9": {"pairs": 7, "wins": 0, "median": 0.987839, "geomean": 0.988332},
+      "roadmap_q5": {"pairs": 7, "wins": 0, "median": 0.975058, "geomean": 0.975650}
+    },
+    "terminal_insert_unlikely": {
+      "hot_payload_bytes": 5903,
+      "roadmap_q9": {"pairs": 7, "wins": 1, "median": 0.994058, "geomean": 0.993621},
+      "roadmap_q5": {"pairs": 7, "wins": 2, "median": 0.992844, "geomean": 0.993602}
+    }
+  },
+  "validation": {
+    "match_copy_tests": 5,
+    "full_wide_transition_and_truncation_oracle": "pass",
+    "full_test_count": 1685,
+    "reference_gate_rows": 13,
+    "reference_path_valid": 3,
+    "reference_path_rejected": 5,
+    "upstream_one_shot": 7056,
+    "upstream_progressive": 7056,
+    "fragmentation_schedules": 1401,
+    "high_tree_truncations": 64,
+    "large_window_cases": 7,
+    "real_corpus": "16/16",
+    "aarch64_compile": "pass",
+    "build_check": "pass",
+    "cli_help": "pass"
+  }
+}

@@ -17000,3 +17000,20 @@ reuse, so production keeps the simpler independently owned plans.
   cases, 64 high-tree truncations, the 16/16 real-corpus matrix, the 13-row CSV
   gate, and the full project test suite pass. These persistent counters replace
   ad-hoc command audits as the evidence source for the next decoder optimization.
+
+- The x86-64 full literal-tree executor now calls a nonzero-only ordered-copy
+  entry point. Brotli command copy lengths are always positive, and the caller
+  validates remaining output before the copy, so the generic zero-length guard
+  was redundant on every LZ77 command. The public summary data showed that
+  roadmap q9/q5 decode 108,263/117,343 LZ77 copies per frame; removing the guard
+  shrinks the isolated hot payload from `0x16a0` to `0x1690` bytes without
+  changing total executable size. Against frozen `40018f0a`, 15 long q9 pairs
+  improve `1.0049x` median / `1.0059x` geometric with 14/15 wins; seven long q5
+  pairs improve `1.0049x` / `1.0037x` with 6/7 wins. Source q9/q5 and clustered
+  q8 controls remain neutral-positive geometrically. Candidate throughput is
+  still only `0.7616x`/`0.7807x` local libbrotli 1.2.0-dev, so broad leadership
+  remains open. Three larger control-flow/metadata candidates were rejected.
+  All 1,685 tests, the reference and path gates, upstream/generated/progressive/
+  fragmentation/Large Window differentials, the 16/16 real-corpus matrix,
+  AArch64 compilation, full check, and CLI smoke pass. Exact evidence is in
+  `docs/performance/brotli-full-tier-nonzero-copy-x86.md` and its JSON companion.
