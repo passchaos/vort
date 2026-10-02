@@ -83,6 +83,13 @@ byte-for-byte output check before timing.
   candidates preserved the prepared-stage checksum and were removed. The
   prefixed paths are a net performance requirement, not removable i-cache
   ballast.
+- Restricting the two-sequence fast path up front to its measured 68--71-byte,
+  non-overlapping match set removed the per-match range/overlap tests and cold
+  fallback from the accepted pair body. The target instance shrank by 28 bytes,
+  but seven fixed-CPU-2 complete-frame pairs regressed to 0.9295x median /
+  0.9297x geometric raw throughput, with 0/7 wins; simultaneous libzstd
+  normalization was 0.9259x / 0.9283x. The existing late per-match dispatch is
+  therefore materially better despite its larger static body.
 - An exact 64-byte forward loop for the separate `large_text` row's four
   distance-82, approximately 128 KiB overlapping matches measured only
   0.5681x / 0.5689x with 0/15 wins. The retained logarithmic seed-and-double

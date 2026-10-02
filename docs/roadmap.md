@@ -17078,3 +17078,20 @@ reuse, so production keeps the simpler independently owned plans.
   compilation, full tests, build check, and CLI smoke pass. Evidence is in
   `docs/performance/brotli-middle-nonoverlap-branch-x86.md` and its JSON
   companion.
+
+- Two command-to-distance context propagation designs were evaluated and
+  removed. Reusing two spare bits in the 32-bit Brotli command root improved
+  source q9/q5 by 1.0061x/1.0082x geometrically, but regressed the deterministic
+  clustered q8 control to 0.9907x with 0/15 wins; limiting context writes to the
+  target paths still measured only 0.9929x. A caller-owned `u2` alternative
+  enlarged the full-tier executor further. Exact fixed-CPU samples are in
+  `docs/performance/brotli-command-distance-context-x86.md`; production keeps
+  computing the four-way context from copy length.
+
+- A Zstd compact split-Huffman follow-up restricted the two-sequence prefix to
+  its observed 68--71-byte, non-overlapping match set before committing state,
+  then removed duplicate per-match range tests and cold fallbacks. Although the
+  target instance shrank by 28 bytes, seven fixed-CPU-2 `large_json` pairs
+  regressed to 0.9295x median / 0.9297x geometric throughput with 0/7 wins and
+  to 0.9283x after libzstd normalization. The candidate was removed; the
+  existing late dispatch remains required.

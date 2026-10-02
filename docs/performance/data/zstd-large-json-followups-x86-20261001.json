@@ -142,6 +142,38 @@
       "median": 0.568064360576211,
       "geometric_mean": 0.5689188931715249,
       "wins": 0
+    },
+    "pair_bounded_match_range": {
+      "date": "2026-10-02",
+      "baseline_git": "807f6e96",
+      "baseline_frame_executable_sha256": "b4baa992855a2060e7461e8388a95251a4c89730d28d123fc8e59a03e28d20ec",
+      "candidate_frame_executable_sha256": "d235689b59865c272e51ff7ede8d89edc06b514b457ddc2f3189415f915d184b",
+      "baseline_file_bytes": 6499776,
+      "candidate_file_bytes": 6500624,
+      "baseline_split_section_bytes": 18642,
+      "candidate_split_section_bytes": 18614,
+      "baseline_executor_bytes": 9820,
+      "candidate_executor_bytes": 9792,
+      "iterations": 3000,
+      "pairs": 7,
+      "median": 0.929538,
+      "geometric_mean": 0.929728,
+      "wins": 0,
+      "libzstd_normalized_median": 0.925899,
+      "libzstd_normalized_geometric_mean": 0.928278,
+      "candidate_over_libzstd_median": 0.7610,
+      "command": "taskset -c 2 BINARY --case large_json --iterations 3000 --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so --csv OUT",
+      "observations": [
+        { "pair": 1, "baseline_vort_ns": 254420203, "baseline_reference_ns": 208684705, "candidate_vort_ns": 273969663, "candidate_reference_ns": 209206637 },
+        { "pair": 2, "baseline_vort_ns": 255123255, "baseline_reference_ns": 208291638, "candidate_vort_ns": 274462521, "candidate_reference_ns": 209423986 },
+        { "pair": 3, "baseline_vort_ns": 254812670, "baseline_reference_ns": 209753040, "candidate_vort_ns": 273679503, "candidate_reference_ns": 208607451 },
+        { "pair": 4, "baseline_vort_ns": 254618856, "baseline_reference_ns": 208736597, "candidate_vort_ns": 274788417, "candidate_reference_ns": 208478247 },
+        { "pair": 5, "baseline_vort_ns": 256203588, "baseline_reference_ns": 208666174, "candidate_vort_ns": 274900410, "candidate_reference_ns": 209199663 },
+        { "pair": 6, "baseline_vort_ns": 255502572, "baseline_reference_ns": 210032479, "candidate_vort_ns": 274444862, "candidate_reference_ns": 208338314 },
+        { "pair": 7, "baseline_vort_ns": 253793776, "baseline_reference_ns": 207722309, "candidate_vort_ns": 273102713, "candidate_reference_ns": 206393155 }
+      ],
+      "validation": "680/680 direct ReleaseSafe Zstd tests passed before timing",
+      "removed": true
     }
   }
 }
