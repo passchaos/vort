@@ -76,6 +76,16 @@ only 1.0011x with 9/15 wins. Its apparent 1.0113x frame geometry came from one
 1.1510x scheduler outlier, and simultaneous libzstd normalization was only
 1.0001x geometrically. Neither result meets the complete-frame stability gate.
 
+A pair-scoped output cursor was then tested separately from the previously
+rejected whole-executor cursor. It kept the cursor local only across the two
+fully preflighted sequences and wrote it back before returning to the outer
+loop. Despite removing visible `*written` traffic in source, it regressed the
+prepared stage to 0.9858x and the complete frame to 0.9809x geometric
+throughput, both with 0/7 wins. Adding `noalias` to the private executor's
+`written` parameter produced byte-identical frame and stage executables, which
+confirms that LLVM already had the needed alias information. Both changes were
+removed.
+
 Exact executable hashes, commands, observations, controls, and validation
 counts are retained in
 [zstd-pair-70-wild-tail-x86-20261002.json](data/zstd-pair-70-wild-tail-x86-20261002.json).
