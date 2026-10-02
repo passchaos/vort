@@ -1,0 +1,101 @@
+{
+  "date": "2026-10-02",
+  "baseline_git": "69629c66",
+  "input_snapshot_commit": "488c5415",
+  "host": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "environment": {
+    "os": "linux",
+    "arch": "x86_64",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_affinity": "2",
+    "codec_threads": 1,
+    "reference": "libbrotli 1.2.0-dev 558fc647",
+    "reference_library_path": "/tmp/vort-brotli-upstream-build"
+  },
+  "implementation": {
+    "route": "129--256-literal-tree executor on x86_64 only",
+    "fixed_copy_range": "1--64 bytes at distance >= 16 with sufficient meta-block output",
+    "fallback": "existing append policy for narrower decoders, non-x86 targets, short suffixes, and other shapes",
+    "baseline_payload_bytes": 5939,
+    "candidate_payload_bytes": 5991,
+    "baseline_executable_bytes": 6081176,
+    "candidate_executable_bytes": 6081352,
+    "baseline_executable_sha256": "e70fa7b432552dc8816ca3fedbca153bf11dc08c19568cdefc362789cd8aacff",
+    "measured_candidate_executable_sha256": "3cf208d57233add0f7d0ed2b9e253aa30c63dc312d44036946ff5984d0310989",
+    "validated_candidate_executable_sha256": "809aaceab828b7e37b4da82eb9fb7f6e95ae3d3b296f497997d2fa6740df2028"
+  },
+  "rejected_global_route": {
+    "reason": "The shared 64-byte helper regressed source q9 despite improving the target q5 row.",
+    "roadmap_q9_median": 1.002634,
+    "roadmap_q5_median": 1.011626,
+    "source_q9_median": 0.994653,
+    "source_q9_wins": "0/7"
+  },
+  "targets": {
+    "roadmap_q9": {
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 335220,
+      "iterations": 100,
+      "summary": {"pairs": 15, "wins": 9, "median": 1.0032650522, "geomean": 1.0029114275, "minimum": 0.9795948636, "normalized_geomean": 1.0053817852, "candidate_reference_median": 0.7498},
+      "columns": ["baseline_ns", "baseline_reference_ns", "candidate_ns", "candidate_reference_ns"],
+      "samples": [
+        [275332817, 205379389, 271563731, 203730698],
+        [271929829, 202779407, 273337633, 203325000],
+        [273139248, 203693118, 269874940, 202738955],
+        [278433340, 207830919, 272159162, 205054291],
+        [272667120, 203174865, 277604001, 207585084],
+        [271981052, 202873003, 277646466, 208052350],
+        [275172919, 205149230, 274277389, 206074964],
+        [274308175, 204279273, 269783261, 203477704],
+        [275656335, 203960429, 277892752, 208368114],
+        [275964955, 207331439, 278081100, 208470517],
+        [279081772, 208768075, 283010992, 209508259],
+        [272127784, 202841302, 270661374, 203887483],
+        [274137901, 205091105, 270439751, 204303625],
+        [281032403, 208143985, 273328620, 204509682],
+        [280440076, 208711481, 279946897, 208520625]
+      ]
+    },
+    "roadmap_q5": {
+      "input_bytes": 1251399,
+      "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+      "encoded_bytes": 350069,
+      "iterations": 100,
+      "summary": {"pairs": 7, "wins": 6, "median": 1.0085440325, "geomean": 1.0074619399, "minimum": 0.9959138547, "normalized_geomean": 1.0011631259, "candidate_reference_median": 0.7627},
+      "columns": ["baseline_ns", "baseline_reference_ns", "candidate_ns", "candidate_reference_ns"],
+      "samples": [
+        [293743823, 224604733, 291255328, 222148292],
+        [293678415, 222158490, 291540584, 222055644],
+        [295889677, 225247167, 292493868, 224289363],
+        [293448767, 225214868, 294652761, 222218091],
+        [294075152, 223761743, 290835303, 223227782],
+        [293914383, 223319201, 290640444, 221737098],
+        [294906173, 222094895, 292996221, 220923841]
+      ]
+    }
+  },
+  "controls": {
+    "source_q9": {"pairs": 7, "wins": 4, "median": 1.0021655675, "geomean": 1.0028800620, "minimum": 0.9951333240},
+    "source_q5": {"pairs": 7, "wins": 5, "median": 1.0012086495, "geomean": 1.0048807842, "minimum": 0.9945759663},
+    "clustered_q8": {"pairs": 7, "wins": 4, "median": 1.0006970356, "geomean": 1.0021910734, "minimum": 0.9952236370}
+  },
+  "validation": {
+    "match_copy_tests": 5,
+    "build_test": "pass",
+    "reference_gate_rows": 13,
+    "reference_path_valid": 3,
+    "reference_path_rejected": 5,
+    "upstream_one_shot": 7056,
+    "upstream_progressive": 7056,
+    "fragmentation_schedules": 1401,
+    "high_tree_truncations": 64,
+    "large_window_cases": 7,
+    "real_corpus": "16/16",
+    "aarch64_compile": "pass",
+    "build_check": "pass",
+    "cli_help": "pass"
+  }
+}

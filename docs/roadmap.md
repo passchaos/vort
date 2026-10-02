@@ -16948,3 +16948,20 @@ reuse, so production keeps the simpler independently owned plans.
   upstream/real-corpus/progressive differentials, reference gates, AArch64
   linking, full check, and CLI smoke pass. Evidence and rejected patches are in
   `docs/performance/brotli-short-copy-x86.md` and its JSON companion.
+
+- The x86-64 129--256-literal-tree executor now extends ordered match copies
+  through 64 bytes while every narrower decoder and every non-x86 target keeps
+  the established 32-byte policy. Four ordered 16-byte moves preserve forward
+  overlap for distances 16--63 and never write beyond the current meta-block.
+  A global version was rejected after source q9 fell to `0.9947x` median; the
+  retained full-tier-only route keeps all three controls neutral-positive.
+  Against frozen `69629c66`, 15 roadmap-q9 pairs improve `1.0033x` median /
+  `1.0029x` geometric raw throughput and `1.0054x` after libbrotli
+  normalization; seven q5 pairs improve `1.0085x` / `1.0075x`, with 6/7 wins.
+  Candidate q9/q5 throughput remains only `0.7498x`/`0.7627x` local libbrotli
+  1.2.0-dev, so broad leadership remains open. All tests, the 13-row reference
+  gate, 7,056 generated plus 7,056 progressive upstream cases, 1,401
+  fragmentation schedules, 64 high-tree truncations, seven Large Window cases,
+  the 16/16 real-corpus matrix, AArch64 compilation, full check, and CLI smoke
+  pass. Exact evidence is in
+  `docs/performance/brotli-full-tier-copy64-x86.md` and its JSON companion.

@@ -8145,7 +8145,7 @@ noinline fn processPairedWideLiteralPayload(
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
-        match_copy.append(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
+        match_copy.appendWide(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
     }
 }
 

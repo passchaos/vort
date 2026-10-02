@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const short_copy_width = 16;
 
@@ -24,6 +25,53 @@ pub fn append(output: []u8, written: *usize, distance: usize, len: usize, writab
             @memcpy(output[destination..][0..16], output[source..][0..16]);
             if (len > 16)
                 @memcpy(output[destination + 16 ..][0..16], output[source + 16 ..][0..16]);
+            return;
+        }
+        if (len <= 16 and available >= 16) {
+            @memcpy(output[destination..][0..16], output[source..][0..16]);
+            return;
+        }
+    }
+    if (len <= distance) {
+        @memcpy(output[destination..][0..len], output[source..][0..len]);
+        return;
+    }
+    @memcpy(output[destination..][0..distance], output[source..][0..distance]);
+    var copied = distance;
+    while (copied < len) {
+        const n = @min(copied, len - copied);
+        @memcpy(output[destination + copied ..][0..n], output[destination..][0..n]);
+        copied += n;
+    }
+}
+
+/// Match-copy policy for the full literal-tree decoder. That executor's
+/// measured workloads benefit from keeping the next copy tier in fixed,
+/// ordered 16-byte moves; narrower decoders retain `append`'s smaller branch
+/// footprint.
+pub fn appendWide(output: []u8, written: *usize, distance: usize, len: usize, writable_end: usize) void {
+    if (comptime builtin.cpu.arch != .x86_64)
+        return append(output, written, distance, len, writable_end);
+
+    const destination = written.*;
+    const source = destination - distance;
+    std.debug.assert(writable_end <= output.len);
+    std.debug.assert(len <= writable_end - destination);
+    written.* += len;
+    if (len != 0 and distance >= short_copy_width) {
+        const available = writable_end - destination;
+        if (len <= 32 and available >= 32) {
+            @memcpy(output[destination..][0..16], output[source..][0..16]);
+            if (len > 16)
+                @memcpy(output[destination + 16 ..][0..16], output[source + 16 ..][0..16]);
+            return;
+        }
+        if (len <= 64 and available >= 64) {
+            @memcpy(output[destination..][0..16], output[source..][0..16]);
+            @memcpy(output[destination + 16 ..][0..16], output[source + 16 ..][0..16]);
+            @memcpy(output[destination + 32 ..][0..16], output[source + 32 ..][0..16]);
+            if (len > 48)
+                @memcpy(output[destination + 48 ..][0..16], output[source + 48 ..][0..16]);
             return;
         }
         if (len <= 16 and available >= 16) {
@@ -87,6 +135,28 @@ test "Brotli match copy matches scalar replay across short widths and boundaries
                 const end = start + len + slack;
                 var written: usize = start;
                 append(&actual, &written, distance, len, end);
+                try std.testing.expectEqual(start + len, written);
+                try std.testing.expectEqualSlices(u8, expected[0..written], actual[0..written]);
+                try std.testing.expectEqualSlices(u8, before[end..], actual[end..]);
+                if (len == 0) try std.testing.expectEqualSlices(u8, &before, &actual);
+            }
+        }
+    }
+}
+
+test "Brotli wide match copy matches scalar replay across fixed tiers" {
+    const start = 128;
+    for (1..65) |distance| {
+        for (0..65) |len| {
+            for ([_]usize{ 0, 1, 15, 16, 31, 32, 47, 48, 63, 64 }) |slack| {
+                var actual: [320]u8 = @splat(0xc7);
+                for (actual[0..start], 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+                const before = actual;
+                var expected = actual;
+                for (0..len) |index| expected[start + index] = expected[start + index - distance];
+                const end = start + len + slack;
+                var written: usize = start;
+                appendWide(&actual, &written, distance, len, end);
                 try std.testing.expectEqual(start + len, written);
                 try std.testing.expectEqualSlices(u8, expected[0..written], actual[0..written]);
                 try std.testing.expectEqualSlices(u8, before[end..], actual[end..]);
