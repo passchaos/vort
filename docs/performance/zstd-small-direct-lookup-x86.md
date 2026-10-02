@@ -87,3 +87,11 @@ The small target is now effectively at parity but not yet consistently ahead.
 The next useful work should measure the remaining normalized-count and
 canonical-fill cost, then return to the materially larger `large_json` and
 `binary_mixed` gaps.
+
+The subsequent complete-entry representation removes the redundant validity
+field from this already proven-complete lookup and is documented in
+[zstd-small-complete-entry-x86.md](zstd-small-complete-entry-x86.md).
+
+The subsequent complete-entry representation removes the redundant validity
+field from this already proven-complete lookup and is documented in
+[zstd-small-complete-entry-x86.md](zstd-small-complete-entry-x86.md).

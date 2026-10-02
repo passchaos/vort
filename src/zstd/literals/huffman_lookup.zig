@@ -172,6 +172,24 @@ pub fn CompleteTable(comptime max_bits: u4) type {
             return self.entries[bits];
         }
 
+        pub inline fn lookup(self: *const @This(), bits: usize) ?CompleteEntry {
+            if (bits >= len) return null;
+            return self.entries[bits];
+        }
+
+        pub inline fn fillCanonical(self: *@This(), prefix: u16, bit_count: u4, symbol: u8) bool {
+            if (bit_count == 0 or bit_count > max_bits) return false;
+            const suffix_bits = max_bits - bit_count;
+            const start = @as(usize, prefix) << suffix_bits;
+            const count = @as(usize, 1) << suffix_bits;
+            if (start > len or count > len - start) return false;
+            fillCompleteRange(self.entries[start..][0..count], .{
+                .symbol = symbol,
+                .bit_count = bit_count,
+            });
+            return true;
+        }
+
         inline fn fillCompleteRange(dest: []CompleteEntry, entry: CompleteEntry) void {
             switch (dest.len) {
                 1 => dest[0] = entry,
@@ -443,4 +461,18 @@ test "complete Huffman lookup matches reference fill for randomized canonical tr
                 try std.testing.expectEqual(entry, actual.entries[prefix << 4]);
         }
     }
+}
+
+test "complete Huffman lookup supports checked incremental fills" {
+    var table: CompleteTable(7) = undefined;
+    try std.testing.expect(table.fillCanonical(0, 1, 'a'));
+    try std.testing.expect(table.fillCanonical(1, 1, 'b'));
+    try std.testing.expectEqual(@as(u8, 'a'), table.lookup(0).?.symbol);
+    try std.testing.expectEqual(@as(u8, 'a'), table.lookup(63).?.symbol);
+    try std.testing.expectEqual(@as(u8, 'b'), table.lookup(64).?.symbol);
+    try std.testing.expectEqual(@as(u8, 'b'), table.lookup(127).?.symbol);
+    try std.testing.expect(table.lookup(128) == null);
+    try std.testing.expect(!table.fillCanonical(0, 0, 'x'));
+    try std.testing.expect(!table.fillCanonical(0, 8, 'x'));
+    try std.testing.expect(!table.fillCanonical(2, 1, 'x'));
 }

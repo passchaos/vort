@@ -90,6 +90,12 @@ byte-for-byte output check before timing.
   0.9297x geometric raw throughput, with 0/7 wins; simultaneous libzstd
   normalization was 0.9259x / 0.9283x. The existing late per-match dispatch is
   therefore materially better despite its larger static body.
+- Issuing an x86 read prefetch for the validated pair match source added only
+  16 bytes to the target executor, but seven complete-frame pairs measured
+  0.9943x median / 0.9944x geometric throughput with 1/7 wins. Preloading both
+  pair literals and advancing their cursor once reduced the executor by four
+  bytes, but measured 0.9921x / 0.9914x with 0/7 wins. Both were removed; the
+  pair's current load timing and literal cursor remain preferable.
 - An exact 64-byte forward loop for the separate `large_text` row's four
   distance-82, approximately 128 KiB overlapping matches measured only
   0.5681x / 0.5689x with 0/15 wins. The retained logarithmic seed-and-double

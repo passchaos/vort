@@ -481,7 +481,7 @@ const StdZstdLiteralsSection = std.compress.zstd.Decompress.LiteralsSection;
 const StdZstdHuffmanTree = StdZstdLiteralsSection.HuffmanTree;
 const HuffmanLiteralLookup = huffman_lookup.Table(11);
 const CompleteHuffmanLiteralLookup = huffman_lookup.CompleteTable(11);
-const NarrowHuffmanLiteralLookup = huffman_lookup.Table(7);
+const NarrowHuffmanLiteralLookup = huffman_lookup.CompleteTable(7);
 const PreparedNarrowHuffmanLookup = struct {
     table: NarrowHuffmanLiteralLookup = undefined,
     complete: bool = false,
@@ -9373,7 +9373,7 @@ fn expectLinearHuffmanTreeMatchesStd(encoded: []const u8) !void {
         try std.testing.expectEqual(expected_reader.seek, narrow.bytes_consumed);
         try std.testing.expectEqual(expected.max_bit_count, narrow.max_bit_count);
         try std.testing.expectEqualSlices(
-            huffman_lookup.Entry,
+            NarrowHuffmanLiteralLookup.CompleteEntry,
             &expected_lookup.entries,
             &actual_lookup.entries,
         );
@@ -9454,7 +9454,7 @@ test "zstd linear Huffman tree parser matches standard acceptance" {
                     try std.testing.expectEqual(expected_reader.seek, narrow.bytes_consumed);
                     try std.testing.expectEqual(expected_tree.max_bit_count, narrow.max_bit_count);
                     try std.testing.expectEqualSlices(
-                        huffman_lookup.Entry,
+                        NarrowHuffmanLiteralLookup.CompleteEntry,
                         &expected_lookup.entries,
                         &narrow_lookup.entries,
                     );

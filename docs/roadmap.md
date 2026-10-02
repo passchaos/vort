@@ -17095,3 +17095,17 @@ reuse, so production keeps the simpler independently owned plans.
   regressed to 0.9295x median / 0.9297x geometric throughput with 0/7 wins and
   to 0.9283x after libzstd normalization. The candidate was removed; the
   existing late dispatch remains required.
+
+- The small Zstd decoder now represents its proven-complete seven-bit Huffman
+  lookup with the existing untagged two-byte entry used by complete tables.
+  This removes the redundant validity bit while preserving the 256-byte table,
+  exact direct/FSE construction checks, and bounded tail lookup. Fifteen clean
+  fixed-CPU-2 pairs improve `numbered_json` by 1.0048x one-shot and 1.0204x
+  reusable at the median; the corresponding median ratios against libzstd
+  1.6.0-dev are 1.0028x and 1.0252x. Seven-pair 13-row one-shot/reusable
+  matrices improve 1.0010x/1.0038x after reference normalization, and long
+  large-frame controls remain within 0.56%. Three alternate builder changes
+  and two compact-pair follow-ups were measured and removed. Full tests,
+  compatibility/decodecorpus/reference/profile gates, and AArch64 library
+  compilation pass; exact evidence is in
+  `docs/performance/zstd-small-complete-entry-x86.md`.
