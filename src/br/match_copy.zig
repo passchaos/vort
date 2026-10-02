@@ -45,6 +45,43 @@ pub fn append(output: []u8, written: *usize, distance: usize, len: usize, writab
     }
 }
 
+/// Match-copy entry point for decoded Brotli commands, whose copy length is
+/// guaranteed non-zero by the command alphabet. This intentionally duplicates
+/// the compact policy above so callers that need zero-length behavior retain
+/// their established generated code.
+pub fn appendNonZero(output: []u8, written: *usize, distance: usize, len: usize, writable_end: usize) void {
+    std.debug.assert(len != 0);
+    const destination = written.*;
+    const source = destination - distance;
+    std.debug.assert(writable_end <= output.len);
+    std.debug.assert(len <= writable_end - destination);
+    written.* += len;
+    if (len <= 32 and distance >= short_copy_width) {
+        const available = writable_end - destination;
+        if (available >= 32) {
+            @memcpy(output[destination..][0..16], output[source..][0..16]);
+            if (len > 16)
+                @memcpy(output[destination + 16 ..][0..16], output[source + 16 ..][0..16]);
+            return;
+        }
+        if (len <= 16 and available >= 16) {
+            @memcpy(output[destination..][0..16], output[source..][0..16]);
+            return;
+        }
+    }
+    if (len <= distance) {
+        @memcpy(output[destination..][0..len], output[source..][0..len]);
+        return;
+    }
+    @memcpy(output[destination..][0..distance], output[source..][0..distance]);
+    var copied = distance;
+    while (copied < len) {
+        const n = @min(copied, len - copied);
+        @memcpy(output[destination + copied ..][0..n], output[destination..][0..n]);
+        copied += n;
+    }
+}
+
 /// Match-copy policy for the full literal-tree decoder. That executor's
 /// measured workloads benefit from keeping the next copy tier in fixed,
 /// ordered 16-byte moves; narrower decoders retain `append`'s smaller branch
@@ -147,6 +184,15 @@ test "Brotli match copy matches scalar replay across short widths and boundaries
                 try std.testing.expectEqualSlices(u8, expected[0..written], actual[0..written]);
                 try std.testing.expectEqualSlices(u8, before[end..], actual[end..]);
                 if (len == 0) try std.testing.expectEqualSlices(u8, &before, &actual);
+
+                if (len != 0) {
+                    var nonzero = before;
+                    var nonzero_written: usize = start;
+                    appendNonZero(&nonzero, &nonzero_written, distance, len, end);
+                    try std.testing.expectEqual(written, nonzero_written);
+                    try std.testing.expectEqualSlices(u8, actual[0..written], nonzero[0..nonzero_written]);
+                    try std.testing.expectEqualSlices(u8, before[end..], nonzero[end..]);
+                }
             }
         }
     }

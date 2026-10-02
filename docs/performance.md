@@ -50,6 +50,9 @@ rejected state/distance layouts, and paired full/middle-tier measurements.
 records removal of a redundant copy-length check from the 129--256-tree
 executor, command/copy-shape evidence, rejected layout alternatives, and paired
 whole-frame measurements.
+[Brotli middle-tier nonzero copy entry](performance/brotli-middle-tier-nonzero-copy-x86.md)
+extends the same proven command invariant to the isolated 65--128-tree
+executor, with byte-identical non-target text sections and source-file A/B data.
 [Brotli identity dictionary borrowing](performance/brotli-static-dictionary-borrow.md)
 records the zero-copy identity transform, full transform equivalence coverage,
 and paired dictionary-heavy decode measurements.

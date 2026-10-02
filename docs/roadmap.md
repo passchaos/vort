@@ -17017,3 +17017,20 @@ reuse, so production keeps the simpler independently owned plans.
   fragmentation/Large Window differentials, the 16/16 real-corpus matrix,
   AArch64 compilation, full check, and CLI smoke pass. Exact evidence is in
   `docs/performance/brotli-full-tier-nonzero-copy-x86.md` and its JSON companion.
+
+- The 65--128 literal-tree Brotli executor now uses an isolated nonzero-copy
+  entry point while the original generic `append` implementation remains
+  byte-for-byte available to every other caller. This removes the same
+  redundant command-length guard from 48,751/52,136 LZ77 copies in the frozen
+  source q9/q5 frames and shrinks the selected 9-bit executor by 18 bytes.
+  ELF `.text`, Large Window, full-tier, and 10-bit auxiliary sections are
+  byte-identical to baseline; the complete text/data/bss footprint is also
+  unchanged. Against `b1bd6f5a`, 500-iteration runs improve source q9 by
+  `1.0059x` median / `1.0054x` geometric with 13/15 wins and source q5 by
+  `1.0053x` / `1.0053x` with 7/7 wins. Same-process libbrotli-normalized
+  geometry is `1.0082x`/`1.0033x`; candidate throughput remains only
+  `0.7567x`/`0.7493x` local libbrotli 1.2.0-dev. Long full-tier controls are
+  neutral geometrically, and the 13-row control matrix has a `0.9996x`
+  row-median geometric mean. All 1,685 tests, reference/upstream/real-corpus
+  gates, AArch64 compilation, full check, and CLI smoke pass. Evidence is in
+  `docs/performance/brotli-middle-tier-nonzero-copy-x86.md` and its JSON record.
