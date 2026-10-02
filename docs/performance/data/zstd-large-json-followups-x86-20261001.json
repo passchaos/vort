@@ -204,6 +204,31 @@
       "libzstd_normalized_median": 0.990222,
       "libzstd_normalized_geometric_mean": 0.986826,
       "removed": true
+    },
+    "pair_nonterminal_only": {
+      "date": "2026-10-03",
+      "candidate_frame_executable_sha256": "8c79fdedd7edf27bfe26f5a9bb74ddb855b8caaa7599558622b55240c84b3ee5",
+      "baseline_executor_bytes": 9820,
+      "candidate_executor_bytes": 9760,
+      "pairs": 7,
+      "median": 0.994726,
+      "geometric_mean": 0.994477,
+      "wins": 0,
+      "libzstd_normalized_geometric_mean": 1.000338,
+      "removed": true
+    },
+    "combined_pair_shape_masks": {
+      "date": "2026-10-03",
+      "candidate_frame_executable_sha256": "4e929661440c8a485ebbadd3f19fd614a04b1f397f62b9eb707814b13b9e945d",
+      "baseline_executor_bytes": 9820,
+      "candidate_executor_bytes": 9652,
+      "pairs": 7,
+      "median": 0.970445,
+      "geometric_mean": 0.971282,
+      "wins": 0,
+      "libzstd_normalized_median": 0.964686,
+      "libzstd_normalized_geometric_mean": 0.967963,
+      "removed": true
     }
   }
 }

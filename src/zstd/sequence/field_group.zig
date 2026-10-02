@@ -43,6 +43,30 @@ pub const Group = struct {
     }
 };
 
+/// A destructive variant for a short, self-contained group whose caller does
+/// not need to retain the original word. Keeping the next field at the high
+/// end removes the running consumed-position dependency from each extraction.
+pub const ShiftingGroup = struct {
+    bits: u64,
+
+    pub inline fn initProven(reader: *const bit_reader.Reader) ShiftingGroup {
+        std.debug.assert(reader.remaining_bits >= 64);
+        std.debug.assert(reader.remaining_bits <= reader.bytes.len * 8);
+        const end_byte = (reader.remaining_bits + 7) >> 3;
+        const padding: u3 = @intCast(end_byte * 8 - reader.remaining_bits);
+        const bits = std.mem.readInt(u64, reader.bytes[end_byte - 8 ..][0..8], .little);
+        return .{ .bits = bits << padding };
+    }
+
+    pub inline fn read(self: *ShiftingGroup, width: u8) usize {
+        std.debug.assert(width <= 32);
+        if (width == 0) return 0;
+        const value = self.bits >> @intCast(64 - width);
+        self.bits <<= @intCast(width);
+        return @intCast(value);
+    }
+};
+
 test "sequence field group rejects short input and wide groups without progress" {
     const bytes = [_]u8{0xa5} ** 16;
     for (0..bytes.len + 1) |len| {
@@ -124,4 +148,26 @@ test "proven sequence field groups preserve reader progress" {
     try std.testing.expectEqual(ordinary.read(32), proven.read(32));
     try std.testing.expectEqual(ordinary.read(24), proven.read(24));
     try std.testing.expectEqual(remaining, reader.remaining_bits);
+}
+
+test "shifting sequence field groups match immutable groups" {
+    var random = std.Random.DefaultPrng.init(0x9e37_79b9);
+    var storage: [40]u8 = undefined;
+    for (0..8) |alignment| {
+        const bytes = storage[alignment..];
+        for (0..256) |_| {
+            random.random().bytes(bytes);
+            bytes[bytes.len - 1] |= 1;
+            var reader = try bit_reader.Reader.init(bytes);
+            try reader.skip(random.random().intRangeAtMost(u8, 0, 80));
+            var immutable = Group.initProven(&reader);
+            var shifting = ShiftingGroup.initProven(&reader);
+            var remaining: u8 = 56;
+            for (0..6) |_| {
+                const width = random.random().intRangeAtMost(u8, 0, @min(16, remaining));
+                try std.testing.expectEqual(immutable.read(width), shifting.read(width));
+                remaining -= width;
+            }
+        }
+    }
 }

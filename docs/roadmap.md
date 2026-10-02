@@ -17109,3 +17109,16 @@ reuse, so production keeps the simpler independently owned plans.
   compatibility/decodecorpus/reference/profile gates, and AArch64 library
   compilation pass; exact evidence is in
   `docs/performance/zstd-small-complete-entry-x86.md`.
+
+- The x86-64 compact split-Huffman pair path now uses a destructive local
+  64-bit field group. Each read shifts away the consumed high bits instead of
+  extending a separate consumed-position dependency; the general reader and
+  non-x86 targets are unchanged. Twenty-one fixed-CPU-2 `large_json` one-shot
+  pairs improve 1.0353x median / 1.0314x geometric with 19/21 wins;
+  libzstd-normalized geometry improves 1.0321x. Fifteen reusable pairs improve
+  1.0385x / 1.0380x with 15/15 wins. Candidate throughput reaches 0.8469x
+  one-shot and 0.8277x reusable relative to libzstd 1.6.0-dev, so the main gap
+  remains open. Long controls are neutral within 0.24% directly. Exact reader
+  oracles, all 682 direct tests, compatibility/decodecorpus/reference gates,
+  AArch64 compilation, and full checks pass. Evidence is in
+  `docs/performance/zstd-pair-shifting-fields-x86.md`.

@@ -28,6 +28,9 @@ seven-bit table and a bounded one-shot/reusable lead over libzstd.
 [Zstd large-JSON overlap-tail copy](performance/zstd-large-json-overlap-tail-x86.md)
 records an exact 71-byte match kernel for the compact split-Huffman pair path
 and its complete-frame and prepared-stage measurements.
+[Zstd pair shifting field group](performance/zstd-pair-shifting-fields-x86.md)
+records the x86-64 pair-only destructive bit reservoir and its complete-frame,
+reusable, prepared-stage, and long-control measurements.
 [Zstd x86-64 dense FSE construction](performance/zstd-dense-fse-x86.md)
 records the dense-gap mapped-table builder on x86-64, including threshold and
 write-width rejection experiments.

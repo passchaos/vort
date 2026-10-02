@@ -11561,7 +11561,10 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 if (first_ll_word & literal_one_no_extra_mask != 1 or
                     first_of_word & additional_bits_mask != 0) break :pair;
                 const first_ml_word = spec.match_fse.symbolWordUnchecked(state.ml_state);
-                var fields = sequence_field_group.Group.initProven(&wide_reader);
+                var fields = if (comptime builtin.cpu.arch == .x86_64)
+                    sequence_field_group.ShiftingGroup.initProven(&wide_reader)
+                else
+                    sequence_field_group.Group.initProven(&wide_reader);
                 const first_ml_additional_bits: u8 = @truncate(first_ml_word >> 48);
                 const first_ll_state_bits: u8 = @truncate(first_ll_word >> 56);
                 const first_ml_state_bits: u8 = @truncate(first_ml_word >> 56);

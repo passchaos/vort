@@ -96,6 +96,11 @@ byte-for-byte output check before timing.
   pair literals and advancing their cursor once reduced the executor by four
   bytes, but measured 0.9921x / 0.9914x with 0/7 wins. Both were removed; the
   pair's current load timing and literal cursor remain preferable.
+- Sending the final two sequences through the ordinary loop removed the pair
+  path's terminal-state branch but measured 0.9947x median / 0.9945x geometric
+  throughput with 0/7 wins. Combining each LL/OF shape pair into one masked
+  predicate shrank the target instance by 168 bytes but regressed it to
+  0.9704x / 0.9713x, also with 0/7 wins. Both were removed.
 - An exact 64-byte forward loop for the separate `large_text` row's four
   distance-82, approximately 128 KiB overlapping matches measured only
   0.5681x / 0.5689x with 0/15 wins. The retained logarithmic seed-and-double
