@@ -17065,3 +17065,16 @@ reuse, so production keeps the simpler independently owned plans.
   decodecorpus frames across 64/64 modes, cross-target compilation, full tests,
   build check, and CLI smoke pass. Evidence is in
   `docs/performance/zstd-pair-70-wild-tail-x86.md` and its JSON companion.
+
+- The Brotli 65--128 literal-tree decoder now marks its post-short-copy
+  non-overlap branch likely. The frozen source q9/q5 frames contain only
+  62/115 overlapping LZ77 copies among 48,751/52,136 copies, so the hint moves
+  the rare seed-and-double path away without changing copy semantics or error
+  ordering. Fifteen decoder-only pairs improve q9 by `1.0042x` median /
+  `1.0038x` geometric and q5 by `1.0013x` / `1.0022x`; same-process
+  libbrotli-normalized geometry is `1.0035x`/`1.0025x`. Candidate throughput
+  remains only `0.7579x`/`0.7505x` local libbrotli 1.2.0-dev. All 549 direct
+  ReleaseFast Brotli tests, reference/upstream/real-corpus gates, AArch64
+  compilation, full tests, build check, and CLI smoke pass. Evidence is in
+  `docs/performance/brotli-middle-nonoverlap-branch-x86.md` and its JSON
+  companion.

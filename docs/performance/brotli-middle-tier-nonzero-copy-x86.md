@@ -67,6 +67,17 @@ sub-percent row movement is scheduling noise rather than changed code.
   change to full-tier still measured `0.9935x`/`0.9948x`; both were removed.
 - Always invoking the staged reader for the almost-unused zero-width distance
   field measured `0.9983x`/`0.9994x` on roadmap q9/q5 and was removed.
+- Two exact 32-byte vectors for non-overlapping 33--64-byte matches regressed
+  source q9/q5 to `0.9544x`/`0.9541x` geometrically. Combining the zero and
+  out-of-window distance tests also regressed the middle tier to
+  `0.9954x`/`0.9918x`; the equivalent full-tier experiment was neutral at
+  `1.0012x`/`0.9992x`. All three variants were removed.
+
+The retained successor instead marks the post-short-copy non-overlap branch
+likely. It changes no copy operation or error ordering and improves source q9
+and q5 by `1.0038x`/`1.0022x` geometrically over 15 decoder-only pairs. Full
+evidence is in
+[brotli-middle-nonoverlap-branch-x86.md](brotli-middle-nonoverlap-branch-x86.md).
 
 ## Validation
 

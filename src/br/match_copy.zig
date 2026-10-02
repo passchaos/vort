@@ -70,6 +70,7 @@ pub fn appendNonZero(output: []u8, written: *usize, distance: usize, len: usize,
         }
     }
     if (len <= distance) {
+        @branchHint(.likely);
         @memcpy(output[destination..][0..len], output[source..][0..len]);
         return;
     }
