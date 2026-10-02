@@ -263,6 +263,50 @@
         "numbered_json": 0.993445
       },
       "removed": true
+    },
+    "joint_zero_transition_branches": {
+      "date": "2026-10-03",
+      "baseline_git": "f6123f84",
+      "candidate_frame_executable_sha256": "8901eba1d1e5dfec7cfc48435b430bc377bd0c0f5628f0d7115747d69ece95da",
+      "first_group_zero_of_663": 378,
+      "second_group_zero_of_663": 408,
+      "both_groups_zero_of_663": 190,
+      "pairs": 7,
+      "median": 0.972286,
+      "geometric_mean": 0.969939,
+      "wins": 0,
+      "libzstd_normalized_geometric_mean": 0.975867,
+      "removed": true
+    },
+    "parallel_three_transition_read": {
+      "date": "2026-10-03",
+      "baseline_git": "f6123f84",
+      "candidate_frame_executable_sha256": "6cd53f7000e12736580f4d1ea2904826dcecc570bd5543e3346a2034c8153e3c",
+      "pairs": 7,
+      "median": 0.993134,
+      "geometric_mean": 0.992785,
+      "wins": 0,
+      "libzstd_normalized_geometric_mean": 0.989583,
+      "removed": true
+    },
+    "positive_match_extra_only": {
+      "date": "2026-10-03",
+      "baseline_git": "f6123f84",
+      "candidate_frame_executable_sha256": "baadab6e3bc8eb5daf22ecd2203dfe6dc1834e1123f40ecd355c23f417731f42",
+      "pairs": 7,
+      "median": 0.999712,
+      "geometric_mean": 0.999566,
+      "wins": 3,
+      "libzstd_normalized_geometric_mean": 0.994993,
+      "removed": true
+    },
+    "shifted_offset_control_word": {
+      "date": "2026-10-03",
+      "baseline_git": "f6123f84",
+      "candidate_frame_executable_sha256": "7a92a1e93a0fb41fee961690bdb5741184cf543ecee8b9e2d35e68eff5dba39f",
+      "target_disassembly_identical": true,
+      "timed": false,
+      "removed": true
     }
   }
 }

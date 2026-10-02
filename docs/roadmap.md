@@ -17136,3 +17136,14 @@ reuse, so production keeps the simpler independently owned plans.
   geometrically. Correctness, compatibility, corpus, cross-target, and full
   build/test validation are recorded in
   `docs/performance/zstd-pair-branchless-transitions-x86.md`.
+
+- The compact split-Huffman pair entry now keeps its remaining-sequence and
+  64-bit-suffix checks as separate unlikely failure branches. This replaces
+  LLVM's former `setcc`/`setcc`/`or` dependency chain with direct guards and
+  shrinks the production x86-64 instance by 167 bytes. Twenty-one fixed-CPU-2
+  `large_json` one-shot pairs improve 1.0181x median / 1.0187x geometric with
+  21/21 wins; fifteen reusable pairs improve 1.0183x / 1.0164x with 15/15
+  wins. Candidate throughput reaches 0.9010x one-shot and 0.8772x reusable
+  relative to local libzstd 1.6.0-dev, leaving the broader leadership target
+  open. Full correctness, compatibility, corpus, cross-target, and performance
+  evidence is in `docs/performance/zstd-pair-entry-guards-x86.md`.

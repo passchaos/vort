@@ -11555,7 +11555,14 @@ inline fn decodeAllFseSplitHuffmanSequences(
             const additional_bits_mask = @as(u64, 0xff) << 48;
             const literal_one_no_extra_mask = additional_bits_mask | std.math.maxInt(u32);
             pair: {
-                if (remaining < 2 or wide_reader.remaining_bits < 64) break :pair;
+                if (remaining < 2) {
+                    @branchHint(.unlikely);
+                    break :pair;
+                }
+                if (wide_reader.remaining_bits < 64) {
+                    @branchHint(.unlikely);
+                    break :pair;
+                }
                 const first_ll_word = spec.literal_fse.symbolWordUnchecked(state.ll_state);
                 const first_of_word = spec.offset_fse.symbolWordUnchecked(state.of_state);
                 if (first_ll_word & literal_one_no_extra_mask != 1 or

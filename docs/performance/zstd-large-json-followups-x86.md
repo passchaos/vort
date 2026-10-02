@@ -108,6 +108,14 @@ byte-for-byte output check before timing.
   form and moved three one-shot long controls negative. Both were removed; the
   retained transition-only result is documented separately in
   [zstd-pair-branchless-transitions-x86.md](zstd-pair-branchless-transitions-x86.md).
+- Branching once around each complete zero-width transition triplet measured
+  only 0.9723x median / 0.9699x geometric despite 57%/62% hit rates. Extracting
+  each triplet in parallel and shifting the reservoir once measured 0.9931x /
+  0.9928x. Requiring the target's observed nonzero match-extra widths measured
+  0.9997x / 0.9996x, while a shifted OF control-word spelling generated
+  identical target assembly. All four were removed. The succeeding independent
+  pair-entry guards are documented in
+  [zstd-pair-entry-guards-x86.md](zstd-pair-entry-guards-x86.md).
 - An exact 64-byte forward loop for the separate `large_text` row's four
   distance-82, approximately 128 KiB overlapping matches measured only
   0.5681x / 0.5689x with 0/15 wins. The retained logarithmic seed-and-double
