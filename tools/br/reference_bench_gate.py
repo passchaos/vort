@@ -23,6 +23,8 @@ COLUMNS = [
     "literal_utf8_bytes", "literal_signed_bytes",
     "max_literal_context_trees", "max_command_block_types",
     "max_distance_context_trees",
+    "command_count", "zero_insert_commands", "single_literal_insert_commands",
+    "implicit_distance_commands", "copy_length_log2_histogram",
 ] + PROVENANCE_COLUMNS
 CASES = {
     "tiny", "text", "structured", "repetitive", "random4k",
@@ -108,7 +110,29 @@ def main() -> int:
         raise AssertionError(f"clustered non-overlapping LZ77 coverage regression: {clustered}")
     if int(clustered["short_non_overlapping_lz77_copies"]) <= 10000 or int(clustered["short_non_overlapping_lz77_bytes"]) <= 70000:
         raise AssertionError(f"clustered short LZ77 coverage regression: {clustered}")
+    if (int(clustered["command_count"]) <= 16000 or
+            int(clustered["zero_insert_commands"]) <= 10000 or
+            int(clustered["single_literal_insert_commands"]) <= 2000 or
+            int(clustered["implicit_distance_commands"]) <= 100):
+        raise AssertionError(f"clustered command-shape coverage regression: {clustered}")
     for row in rows:
+        command_count = int(row["command_count"])
+        zero_insert_commands = int(row["zero_insert_commands"])
+        single_literal_insert_commands = int(row["single_literal_insert_commands"])
+        implicit_distance_commands = int(row["implicit_distance_commands"])
+        copy_length_histogram = [
+            int(value) for value in row["copy_length_log2_histogram"].split(";")
+        ]
+        if len(copy_length_histogram) != 9 or any(value < 0 for value in copy_length_histogram):
+            raise AssertionError(f"bad copy-length histogram: {row}")
+        if sum(copy_length_histogram) != command_count:
+            raise AssertionError(f"bad command histogram total: {row}")
+        if zero_insert_commands + single_literal_insert_commands > command_count:
+            raise AssertionError(f"bad insert command subsets: {row}")
+        if implicit_distance_commands > command_count:
+            raise AssertionError(f"bad implicit-distance subset: {row}")
+        if int(row["lz77_copies"]) + int(row["static_dictionary_copies"]) > command_count:
+            raise AssertionError(f"bad command copy accounting: {row}")
         if int(row["non_overlapping_lz77_copies"]) > int(row["lz77_copies"]) or int(row["non_overlapping_lz77_bytes"]) > int(row["lz77_bytes"]):
             raise AssertionError(f"bad non-overlapping LZ77 subset: {row}")
         if int(row["short_non_overlapping_lz77_copies"]) > int(row["non_overlapping_lz77_copies"]) or int(row["short_non_overlapping_lz77_bytes"]) > int(row["non_overlapping_lz77_bytes"]):

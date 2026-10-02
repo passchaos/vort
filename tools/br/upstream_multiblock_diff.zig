@@ -277,10 +277,11 @@ pub fn main(init: std.process.Init) !void {
                         return err;
                     };
                     if (summary.decoded_bytes != case.expected.len) return error.SizeMismatch;
+                    try validateCommandShape(summary);
                     if (std.mem.eql(u8, case.name, "large-source-clustered") and quality == 8) {
                         var counting = std.testing.FailingAllocator.init(init.gpa, .{});
                         const allocated_summary = try vort.brSummarizeStreamAlloc(counting.allocator(), encoded);
-                        if (allocated_summary.decoded_bytes != case.expected.len or counting.allocations != 1 or counting.deallocations != 1)
+                        if (!std.meta.eql(summary, allocated_summary) or counting.allocations != 1 or counting.deallocations != 1)
                             return error.ReferenceDecodeFailed;
                         var failing = std.testing.FailingAllocator.init(init.gpa, .{ .fail_index = 0 });
                         if (vort.brSummarizeStreamAlloc(failing.allocator(), encoded)) |_|
@@ -390,6 +391,7 @@ pub fn main(init: std.process.Init) !void {
         const summary = try vort.brSummarizeStreamAllocWithOptions(init.gpa, encoded, large_window_options);
         if (summary.window_bits != lgwin_usize or !summary.large_window or summary.decoded_bytes != large_window_payload.len)
             return error.SizeMismatch;
+        try validateCommandShape(summary);
         const decoded = try vort.brDecodeStreamAllocWithOptions(init.gpa, encoded, large_window_options);
         defer init.gpa.free(decoded);
         if (!std.mem.eql(u8, decoded, large_window_payload)) return error.SizeMismatch;
@@ -399,6 +401,8 @@ pub fn main(init: std.process.Init) !void {
         const chunks = [_][]const u8{ encoded[0..split_a], encoded[split_a..split_b], encoded[split_b..] };
         const joined = try init.gpa.alloc(u8, encoded.len);
         defer init.gpa.free(joined);
+        const chunked_summary = try vort.brSummarizeStreamChunksWithOptions(&chunks, joined, large_window_options);
+        if (!std.meta.eql(summary, chunked_summary)) return error.ReferenceDecodeFailed;
         const chunked = try vort.brDecodeStreamChunksAllocExactSizeWithOptions(
             init.gpa,
             &chunks,
@@ -444,6 +448,7 @@ pub fn main(init: std.process.Init) !void {
         far_summary.window_bits != 25 or
         far_summary.decoded_bytes != far_expected.len or
         far_summary.max_lz77_distance != far_prefix_len) return error.ReferenceDecodeFailed;
+    try validateCommandShape(far_summary);
     const far_decoded = vort.brDecodeStreamAllocWithOptions(init.gpa, far_encoded, large_window_options) catch |err| {
         std.debug.print("large-window far fixture Vort decode: {s} encoded={d}\n", .{ @errorName(err), far_encoded.len });
         return err;
@@ -1156,6 +1161,28 @@ fn validateClusterCoverage(case: Case, summary: vort.BrotliStreamSummary) !void 
         );
         return error.ReferenceEncodeFailed;
     }
+}
+
+fn validateCommandShape(summary: vort.BrotliStreamSummary) !void {
+    var histogram_total: usize = 0;
+    for (summary.copy_length_log2_histogram) |count|
+        histogram_total = std.math.add(usize, histogram_total, count) catch return error.ReferenceDecodeFailed;
+    const short_insert_commands = std.math.add(
+        usize,
+        summary.zero_insert_command_count,
+        summary.single_literal_insert_command_count,
+    ) catch return error.ReferenceDecodeFailed;
+    const applied_copy_count = std.math.add(
+        usize,
+        summary.lz77_copy_count,
+        summary.static_dictionary_copy_count,
+    ) catch return error.ReferenceDecodeFailed;
+    if (histogram_total != summary.command_count or
+        short_insert_commands > summary.command_count or
+        summary.implicit_distance_command_count > summary.command_count or
+        applied_copy_count > summary.command_count or
+        summary.compressed_meta_block_count > summary.command_count)
+        return error.ReferenceDecodeFailed;
 }
 
 fn decodeByteProgressiveWithMetadata(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, expected_metadata: []const u8, lgwin: u32) !void {

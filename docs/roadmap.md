@@ -16983,3 +16983,20 @@ reuse, so production keeps the simpler independently owned plans.
   fragmentation schedules, 64 high-tree truncations, seven Large Window cases,
   the 16/16 real-corpus matrix, AArch64 compilation, full check, and CLI smoke
   pass. Evidence is in `docs/performance/brotli-zero-insert-branch-x86.md`.
+
+- Public Brotli stream summaries now retain decoded command shape alongside
+  the existing literal/LZ77/dictionary counters: total commands, zero-insert
+  commands, single-literal inserts, implicit last-distance commands, and a
+  nine-bucket `floor(log2(copy_length))` histogram whose final bucket includes
+  lengths of at least 256. Standard and opt-in Large Window traversal share
+  overflow-checked per-meta-block accounting without enlarging one-shot decode
+  state. The reference benchmark exports and gates every field; its clustered
+  q8 fixture currently records 16,818 commands, including 11,085 zero-insert,
+  2,650 single-literal, and 155 implicit-distance commands. Unit tests pin an
+  exact RLE shape and stored-stream zeros, caller-history tests compare complete
+  summaries, and the upstream differential now checks histogram/subset
+  invariants plus contiguous-vs-chunked Large Window equality. The complete
+  upstream generated/progressive/fragmentation matrix, seven Large Window
+  cases, 64 high-tree truncations, the 16/16 real-corpus matrix, the 13-row CSV
+  gate, and the full project test suite pass. These persistent counters replace
+  ad-hoc command audits as the evidence source for the next decoder optimization.

@@ -3570,6 +3570,11 @@ test "root brotli stream summary exposes capability flags" {
     try std.testing.expect(!stored_summary.uses_static_dictionary);
     try std.testing.expectEqual(@as(usize, 0), stored_summary.static_dictionary_copy_count);
     try std.testing.expectEqual(@as(usize, 0), stored_summary.static_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.command_count);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.zero_insert_command_count);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.single_literal_insert_command_count);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.implicit_distance_command_count);
+    try std.testing.expectEqual([_]usize{ 0, 0, 0, 0, 0, 0, 0, 0, 0 }, stored_summary.copy_length_log2_histogram);
     try std.testing.expectEqual(@as(usize, 0), stored_summary.lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 0), stored_summary.lz77_copy_bytes);
     try std.testing.expectEqual([_]usize{ 0, 0, 0, 0 }, stored_summary.literal_context_mode_bytes);
@@ -3602,6 +3607,13 @@ test "root brotli stream summary exposes compressed tree coverage" {
     defer std.testing.allocator.free(encoded);
     const summary = try brSummarizeStream(encoded);
     try std.testing.expectEqual(@as(usize, 1), summary.max_literal_context_trees);
+    try std.testing.expectEqual(@as(usize, 1), summary.command_count);
+    try std.testing.expectEqual(@as(usize, 0), summary.zero_insert_command_count);
+    try std.testing.expectEqual(@as(usize, 1), summary.single_literal_insert_command_count);
+    try std.testing.expectEqual(@as(usize, 0), summary.implicit_distance_command_count);
+    try std.testing.expectEqual([_]usize{ 0, 0, 0, 0, 0, 0, 1, 0, 0 }, summary.copy_length_log2_histogram);
+    try std.testing.expectEqual(@as(usize, 1), summary.lz77_copy_count);
+    try std.testing.expectEqual(@as(usize, 127), summary.lz77_copy_bytes);
 }
 
 test "root brotli stream summary diagnostics report failure phases" {

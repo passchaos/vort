@@ -1165,6 +1165,15 @@ pub const StreamSummary = struct {
     uses_static_dictionary: bool = false,
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    /// Commands decoded from compressed meta-block payloads. This includes a
+    /// final command whose insert reaches the end before its copy is applied.
+    command_count: usize = 0,
+    zero_insert_command_count: usize = 0,
+    single_literal_insert_command_count: usize = 0,
+    implicit_distance_command_count: usize = 0,
+    /// Copy-length command shape indexed by floor(log2(copy length)); the last
+    /// bucket includes every copy length greater than or equal to 256.
+    copy_length_log2_histogram: [9]usize = @splat(0),
     lz77_copy_count: usize = 0,
     lz77_copy_bytes: usize = 0,
     max_lz77_distance: usize = 0,
@@ -1208,6 +1217,11 @@ pub const StreamProbeResult = struct {
 const StreamSummaryMetaBlockStats = struct {
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    command_count: usize = 0,
+    zero_insert_command_count: usize = 0,
+    single_literal_insert_command_count: usize = 0,
+    implicit_distance_command_count: usize = 0,
+    copy_length_log2_histogram: [9]usize = @splat(0),
     lz77_copy_count: usize = 0,
     lz77_copy_bytes: usize = 0,
     max_lz77_distance: usize = 0,
@@ -5553,6 +5567,12 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
         summary.static_dictionary_copy_count = std.math.add(usize, summary.static_dictionary_copy_count, stats.static_dictionary_copy_count) catch return error.IntegerOverflow;
         summary.static_dictionary_bytes = std.math.add(usize, summary.static_dictionary_bytes, stats.static_dictionary_bytes) catch return error.IntegerOverflow;
     }
+    summary.command_count = std.math.add(usize, summary.command_count, stats.command_count) catch return error.IntegerOverflow;
+    summary.zero_insert_command_count = std.math.add(usize, summary.zero_insert_command_count, stats.zero_insert_command_count) catch return error.IntegerOverflow;
+    summary.single_literal_insert_command_count = std.math.add(usize, summary.single_literal_insert_command_count, stats.single_literal_insert_command_count) catch return error.IntegerOverflow;
+    summary.implicit_distance_command_count = std.math.add(usize, summary.implicit_distance_command_count, stats.implicit_distance_command_count) catch return error.IntegerOverflow;
+    for (&summary.copy_length_log2_histogram, stats.copy_length_log2_histogram) |*total, count|
+        total.* = std.math.add(usize, total.*, count) catch return error.IntegerOverflow;
     summary.lz77_copy_count = std.math.add(usize, summary.lz77_copy_count, stats.lz77_copy_count) catch return error.IntegerOverflow;
     summary.lz77_copy_bytes = std.math.add(usize, summary.lz77_copy_bytes, stats.lz77_copy_bytes) catch return error.IntegerOverflow;
     summary.max_lz77_distance = @max(summary.max_lz77_distance, stats.max_lz77_distance);
@@ -5569,9 +5589,21 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
     summary.max_distance_context_trees = @max(summary.max_distance_context_trees, stats.max_distance_context_trees);
 }
 
-test "br stream summary aggregates LZ77 copy shapes" {
-    var summary = StreamSummary{ .window_bits = 16, .input_bytes = 17 };
+test "br stream summary aggregates command and LZ77 copy shapes" {
+    var summary = StreamSummary{
+        .window_bits = 16,
+        .input_bytes = 17,
+        .command_count = 1,
+        .zero_insert_command_count = 1,
+        .implicit_distance_command_count = 1,
+        .copy_length_log2_histogram = .{ 0, 1, 0, 0, 0, 0, 0, 0, 0 },
+    };
     try applySummaryMetaBlockStats(&summary, .{
+        .command_count = 9,
+        .zero_insert_command_count = 6,
+        .single_literal_insert_command_count = 2,
+        .implicit_distance_command_count = 4,
+        .copy_length_log2_histogram = .{ 0, 2, 3, 1, 0, 1, 1, 0, 1 },
         .lz77_copy_count = 7,
         .lz77_copy_bytes = 91,
         .max_lz77_distance = 4097,
@@ -5581,6 +5613,11 @@ test "br stream summary aggregates LZ77 copy shapes" {
         .short_non_overlapping_lz77_copy_bytes = 27,
         .literal_context_mode_bytes = .{ 4, 3, 2, 1 },
     });
+    try std.testing.expectEqual(@as(usize, 10), summary.command_count);
+    try std.testing.expectEqual(@as(usize, 7), summary.zero_insert_command_count);
+    try std.testing.expectEqual(@as(usize, 2), summary.single_literal_insert_command_count);
+    try std.testing.expectEqual(@as(usize, 5), summary.implicit_distance_command_count);
+    try std.testing.expectEqual([_]usize{ 0, 3, 3, 1, 0, 1, 1, 0, 1 }, summary.copy_length_log2_histogram);
     try std.testing.expectEqual(@as(usize, 7), summary.lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 91), summary.lz77_copy_bytes);
     try std.testing.expectEqual(@as(usize, 4097), summary.max_lz77_distance);
@@ -5589,6 +5626,23 @@ test "br stream summary aggregates LZ77 copy shapes" {
     try std.testing.expectEqual(@as(usize, 3), summary.short_non_overlapping_lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 27), summary.short_non_overlapping_lz77_copy_bytes);
     try std.testing.expectEqual([_]usize{ 4, 3, 2, 1 }, summary.literal_context_mode_bytes);
+}
+
+fn recordSummaryCommand(stats: ?*StreamSummaryMetaBlockStats, lengths: InsertCopyLengths) SummaryError!void {
+    const s = stats orelse return;
+    if (lengths.copy_len == 0) return error.CorruptFrame;
+    s.command_count = std.math.add(usize, s.command_count, 1) catch return error.IntegerOverflow;
+    if (lengths.insert_len == 0)
+        s.zero_insert_command_count = std.math.add(usize, s.zero_insert_command_count, 1) catch return error.IntegerOverflow;
+    if (lengths.insert_len == 1)
+        s.single_literal_insert_command_count = std.math.add(usize, s.single_literal_insert_command_count, 1) catch return error.IntegerOverflow;
+    if (lengths.distance_symbol_zero)
+        s.implicit_distance_command_count = std.math.add(usize, s.implicit_distance_command_count, 1) catch return error.IntegerOverflow;
+    const copy_length_bucket = @min(
+        s.copy_length_log2_histogram.len - 1,
+        @as(usize, std.math.log2_int(usize, lengths.copy_len)),
+    );
+    s.copy_length_log2_histogram[copy_length_bucket] = std.math.add(usize, s.copy_length_log2_histogram[copy_length_bucket], 1) catch return error.IntegerOverflow;
 }
 
 pub const StoredStreamEncoder = struct {
@@ -8331,6 +8385,7 @@ noinline fn skipDecodedCompressedPayload(
         else
             try readCommandSymbol(header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
+        try recordSummaryCommand(stats, lengths);
         if (lengths.insert_len > meta_block_end - written) return error.CorruptFrame;
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
@@ -8409,6 +8464,7 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
         else
             try readLargeCommandSymbol(header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
+        try recordSummaryCommand(stats, lengths);
         if (lengths.insert_len > meta_block_end - written) return error.CorruptFrame;
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
