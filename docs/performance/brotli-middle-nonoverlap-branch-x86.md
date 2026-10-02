@@ -53,6 +53,16 @@ short rows remain scheduler-sensitive; their target executors are unchanged.
   check regressed the middle tier to 0.9954x/0.9918x on source q9/q5. Applying
   the same change only to the full tier was inconclusive at 1.0012x roadmap q9
   and 0.9992x roadmap q5. Both variants were removed.
+- Marking the outer nonzero-insert body unlikely improved long source q9/q5
+  runs by only 1.0018x/1.0027x geometrically, while `clustered_q8` regressed
+  to 0.9689x with 0/7 wins and to 0.9737x across the complete 15-pair matrix.
+  Moving the insert bound check inside that branch was split: source q5 reached
+  1.0029x, but source q9 fell to 0.9993x. Both candidates were removed.
+- The analogous full-tier non-overlap hint was neutral at 1.0000x/1.0023x
+  geometrically over 15 roadmap q9/q5 pairs; same-process libbrotli
+  normalization was 0.9999x/1.0003x. Moving the full-tier insert bound check
+  reached only 1.0001x/1.0006x over seven pairs. Neither met the retention
+  threshold.
 
 Exact executable hashes, timings, controls, and validation results are in
 [brotli-middle-nonoverlap-branch-x86-20261002.json](data/brotli-middle-nonoverlap-branch-x86-20261002.json).

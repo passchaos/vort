@@ -65,6 +65,12 @@ improvement, not evidence of general Brotli decode parity or leadership.
   both with 0/7 wins.
 - Marking the once-per-meta-block terminal insert branch unlikely grew the hot
   payload by 111 bytes and regressed q9/q5 to `0.9941x`/`0.9928x` medians.
+- Marking the final non-overlap arm of `appendWideNonZero` likely was neutral:
+  15 decoder-only pairs measured `1.0000x`/`1.0023x` geometrically on roadmap
+  q9/q5, while same-process libbrotli normalization measured
+  `0.9999x`/`1.0003x`. Moving the insert-length bounds check inside the
+  zero-insert branch was also neutral at `1.0001x`/`1.0006x` across seven
+  pairs. Both candidates were removed.
 
 ## Validation
 
