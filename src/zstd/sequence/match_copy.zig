@@ -84,6 +84,26 @@ pub inline fn appendNonOverlapping71OverlapTail(
     written.* += 71;
 }
 
+/// Copy a 70-byte match at the head of a two-sequence pair. The caller proves
+/// that at least two following output bytes will be replaced by the second
+/// sequence, so the final eight-byte move may write through byte 72. Loading
+/// the tail after the first 64 bytes also supports the minimum distance 70.
+pub inline fn appendNonOverlapping70PairHead(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+) void {
+    const destination_start = written.*;
+    std.debug.assert(destination_start - repeat_start >= 70);
+    std.debug.assert(output.len - destination_start >= 72);
+    const first: @Vector(32, u8) = output[repeat_start..][0..32].*;
+    const second: @Vector(32, u8) = output[repeat_start + 32 ..][0..32].*;
+    output[destination_start..][0..32].* = first;
+    output[destination_start + 32 ..][0..32].* = second;
+    output[destination_start + 64 ..][0..8].* = output[repeat_start + 64 ..][0..8].*;
+    written.* += 70;
+}
+
 /// Copy the other dense Zstd match-length cluster beside the 71-byte fast
 /// path. Fixed-size array moves keep these 68--70 byte non-overlapping matches
 /// out of the dynamic-length memmove path while preserving exact output bounds.
@@ -456,6 +476,37 @@ test "Zstd fixed 71-byte overlapping-tail copy preserves output tail" {
         appendNonOverlapping71OverlapTail(&actual, &actual_written, actual_written - distance);
         try std.testing.expectEqual(expected_written, actual_written);
         try std.testing.expectEqualSlices(u8, &expected, &actual);
+    }
+}
+
+test "Zstd 70-byte pair-head copy preserves the following sequence" {
+    for (80..96) |destination_start| {
+        for (70..75) |distance| {
+            for ([_]usize{ 3, 4, 16, 68, 69, 70, 71 }) |second_match_len| {
+                var expected: [256]u8 = undefined;
+                for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 37 + index / 11);
+                var actual = expected;
+                var expected_written = destination_start;
+                var actual_written = expected_written;
+
+                expected[expected_written] = 0x5a;
+                actual[actual_written] = 0x5a;
+                expected_written += 1;
+                actual_written += 1;
+                append(&expected, &expected_written, expected_written - distance, 70);
+                appendNonOverlapping70PairHead(&actual, &actual_written, actual_written - distance);
+
+                expected[expected_written] = 0xa5;
+                actual[actual_written] = 0xa5;
+                expected_written += 1;
+                actual_written += 1;
+                append(&expected, &expected_written, expected_written - distance, second_match_len);
+                append(&actual, &actual_written, actual_written - distance, second_match_len);
+
+                try std.testing.expectEqual(expected_written, actual_written);
+                try std.testing.expectEqualSlices(u8, &expected, &actual);
+            }
+        }
     }
 }
 

@@ -54,6 +54,13 @@ byte-for-byte output check before timing.
   0.9866x geometric with 1/7 wins. The candidate was removed; the succeeding
   rep0-range fusion is documented separately in
   [zstd-pair-rep0-range-x86.md](zstd-pair-rep0-range-x86.md).
+- Reordering the existing 70-byte copy branch ahead of the 71-byte branch lost
+  all seven prepared-stage and complete-frame pairs, at 0.9758x and 0.9889x
+  geometric throughput. Replacing both exact 70-byte tails with one overlapping
+  eight-byte tail was also neutral-negative at 0.9966x stage / 0.9996x frame.
+  Both candidates were removed. The retained first-match-only wild tail is
+  documented in
+  [zstd-pair-70-wild-tail-x86.md](zstd-pair-70-wild-tail-x86.md).
 - Compiling the compact split executor without its three prefixed pair,
   short-rep0, and direct-offset paths, while retaining the established
   long-match wildcopy policy, shrank the production instance from 9,833 to

@@ -1025,6 +1025,24 @@ libzstd 1.6.0-dev, so the broader decode-performance goal remains open. Full
 evidence and validation are in
 [zstd-pair-rep0-range-x86.md](zstd-pair-rep0-range-x86.md).
 
+## X86-64 pair-head 70-byte wild tail
+
+The first 70-byte match in a proven two-sequence pair now uses two 32-byte
+moves followed by one eight-byte move. The two speculative tail bytes are
+inside the already checked pair extent and are immediately replaced by the
+second literal and match; the logical cursor still advances exactly 70 bytes.
+This x86-64-only route leaves the second match exact and keeps every other
+caller on the established 68--70-byte helper.
+
+Against `6a1e3d9e`, 15 alternating 3,000-decode `large_json` pairs improve by
+1.0063x median / 1.0068x geometric throughput with 15/15 wins and a 1.0008x
+minimum. The four-block prepared stage is 1.0016x geometrically, and a fixed
+128 KiB one-block frame is 1.0024x. Longer `binary_mixed`, `huffman80k`, and
+`large_text` controls are within 0.24% of neutral geometrically. Candidate
+throughput remains only 0.8170x median / 0.8176x geometric local libzstd
+1.6.0-dev. Full evidence is in
+[zstd-pair-70-wild-tail-x86.md](zstd-pair-70-wild-tail-x86.md).
+
 The reference benchmark now alternates the five Vort and libzstd samples
 instead of measuring all Vort samples, then allocation, then all reference
 samples. It still reports each codec's best sample and uses the same payload,

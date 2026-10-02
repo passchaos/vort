@@ -11609,7 +11609,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
                     const available_history = written.* - frame_output_start + 1;
                     if (match_offset -% 1 >= available_history) return error.InvalidMatch;
                 }
-                inline for (pair_match_lengths) |match_len| {
+                inline for (pair_match_lengths, 0..) |match_len, pair_index| {
                     if (!allow_wildcopy and literal_offset >= section.regenerated_size) return error.CorruptFrame;
                     if (!allow_wildcopy and output.len - written.* < 1) return error.OutputTooSmall;
                     output[written.*] = literals[literal_offset];
@@ -11622,7 +11622,10 @@ inline fn decodeAllFseSplitHuffmanSequences(
                         sequence_match_copy.appendNonOverlapping71OverlapTail(output, written, written.* - match_offset);
                     } else if (match_len == 70 and match_offset >= 70) {
                         if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
-                        sequence_match_copy.appendNonOverlapping68To70(output, written, written.* - match_offset, 70);
+                        if (comptime builtin.cpu.arch == .x86_64 and allow_wildcopy and pair_index == 0)
+                            sequence_match_copy.appendNonOverlapping70PairHead(output, written, written.* - match_offset)
+                        else
+                            sequence_match_copy.appendNonOverlapping68To70(output, written, written.* - match_offset, 70);
                     } else if (match_len >= 68 and match_len <= 69 and match_offset >= match_len) {
                         if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
                         sequence_match_copy.appendNonOverlapping68To70(

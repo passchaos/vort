@@ -17050,3 +17050,18 @@ reuse, so production keeps the simpler independently owned plans.
   sequence modes, cross-target compilation, full tests, build check, and CLI
   smoke pass. Evidence is in
   `docs/performance/zstd-pair-rep0-range-x86.md` and its JSON companion.
+
+- The same x86-64 Zstd pair path now uses a dedicated 70-byte copy for its
+  first match: two 32-byte vectors plus one eight-byte tail replace the prior
+  4+2-byte exact tail. Its two speculative bytes stay inside the preflighted
+  pair extent and are immediately overwritten by the second literal and match;
+  the second match remains exact, and non-x86 targets are unchanged. Against
+  `6a1e3d9e`, 15 complete `large_json` pairs improve by `1.0063x` median /
+  `1.0068x` geometric throughput with 15/15 wins and a `1.0008x` minimum.
+  The prepared stage and fixed 128 KiB frame improve `1.0016x` and `1.0024x`
+  geometrically. Three long controls stay within 0.24% of neutral or improve;
+  candidate throughput is still only `0.8170x` median local libzstd 1.6.0-dev.
+  All 680 direct ReleaseFast Zstd tests, 276 compatibility cases, 9,900
+  decodecorpus frames across 64/64 modes, cross-target compilation, full tests,
+  build check, and CLI smoke pass. Evidence is in
+  `docs/performance/zstd-pair-70-wild-tail-x86.md` and its JSON companion.
