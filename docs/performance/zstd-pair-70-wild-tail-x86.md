@@ -67,6 +67,15 @@ eight-byte tail at destination offset 62, used for both pair matches, measured
 0.9966x stage and 0.9996x frame geometry, with only 1/7 and 2/7 wins. The
 retained helper changes neither branch order nor the second match.
 
+Two successor experiments were also removed. Applying a 72-byte pair-head
+write to the 71-byte branch improved the prepared stage by 1.0082x with 7/7
+wins, but complete-frame geometry fell to 0.9973x with only 2/7 wins. Extending
+the retained 70-byte helper to a pair's second match whenever another sequence
+remained measured 1.0030x stage geometry, while the complete-frame median was
+only 1.0011x with 9/15 wins. Its apparent 1.0113x frame geometry came from one
+1.1510x scheduler outlier, and simultaneous libzstd normalization was only
+1.0001x geometrically. Neither result meets the complete-frame stability gate.
+
 Exact executable hashes, commands, observations, controls, and validation
 counts are retained in
 [zstd-pair-70-wild-tail-x86-20261002.json](data/zstd-pair-70-wild-tail-x86-20261002.json).

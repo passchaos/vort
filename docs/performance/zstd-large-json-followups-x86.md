@@ -61,6 +61,11 @@ byte-for-byte output check before timing.
   Both candidates were removed. The retained first-match-only wild tail is
   documented in
   [zstd-pair-70-wild-tail-x86.md](zstd-pair-70-wild-tail-x86.md).
+- Extending that wild-tail rule to the 71-byte pair head improved the prepared
+  stage but regressed complete frames to 0.9973x geometric throughput. Applying
+  it to a pair's second 70-byte match when another sequence remained was only
+  1.0011x at the frame median; one 1.1510x scheduler outlier hid an otherwise
+  neutral 1.0001x libzstd-normalized geometric result. Both were removed.
 - Compiling the compact split executor without its three prefixed pair,
   short-rep0, and direct-offset paths, while retaining the established
   long-match wildcopy policy, shrank the production instance from 9,833 to
