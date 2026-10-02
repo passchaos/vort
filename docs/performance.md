@@ -31,6 +31,9 @@ and its complete-frame and prepared-stage measurements.
 [Zstd pair shifting field group](performance/zstd-pair-shifting-fields-x86.md)
 records the x86-64 pair-only destructive bit reservoir and its complete-frame,
 reusable, prepared-stage, and long-control measurements.
+[Zstd pair branchless FSE transitions](performance/zstd-pair-branchless-transitions-x86.md)
+records zero-width-aware masked transition extraction, paired complete-frame
+results, non-target controls, and compatibility validation.
 [Zstd x86-64 dense FSE construction](performance/zstd-dense-fse-x86.md)
 records the dense-gap mapped-table builder on x86-64, including threshold and
 write-width rejection experiments.

@@ -41,6 +41,10 @@ pub const Group = struct {
         self.consumed = consumed;
         return @intCast(value & ((@as(u64, 1) << @intCast(width)) - 1));
     }
+
+    pub inline fn readBranchless(self: *Group, width: u8) usize {
+        return self.read(width);
+    }
 };
 
 /// A destructive variant for a short, self-contained group whose caller does
@@ -62,6 +66,14 @@ pub const ShiftingGroup = struct {
         std.debug.assert(width <= 32);
         if (width == 0) return 0;
         const value = self.bits >> @intCast(64 - width);
+        self.bits <<= @intCast(width);
+        return @intCast(value);
+    }
+
+    pub inline fn readBranchless(self: *ShiftingGroup, width: u8) usize {
+        std.debug.assert(width <= 32);
+        const high_shift: u6 = @truncate(0 -% width);
+        const value = (self.bits >> high_shift) & ((@as(u64, 1) << @intCast(width)) - 1);
         self.bits <<= @intCast(width);
         return @intCast(value);
     }
@@ -162,10 +174,13 @@ test "shifting sequence field groups match immutable groups" {
             try reader.skip(random.random().intRangeAtMost(u8, 0, 80));
             var immutable = Group.initProven(&reader);
             var shifting = ShiftingGroup.initProven(&reader);
+            var branchless = ShiftingGroup.initProven(&reader);
             var remaining: u8 = 56;
             for (0..6) |_| {
                 const width = random.random().intRangeAtMost(u8, 0, @min(16, remaining));
-                try std.testing.expectEqual(immutable.read(width), shifting.read(width));
+                const expected = immutable.read(width);
+                try std.testing.expectEqual(expected, shifting.read(width));
+                try std.testing.expectEqual(expected, branchless.readBranchless(width));
                 remaining -= width;
             }
         }

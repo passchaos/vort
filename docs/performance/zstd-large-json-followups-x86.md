@@ -101,6 +101,13 @@ byte-for-byte output check before timing.
   throughput with 0/7 wins. Combining each LL/OF shape pair into one masked
   predicate shrank the target instance by 168 bytes but regressed it to
   0.9704x / 0.9713x, also with 0/7 wins. Both were removed.
+- Marking zero-width transition branches likely measured only 0.9829x median /
+  0.9824x geometric target throughput with 0/7 wins. Applying branchless
+  masked extraction to match-extra fields as well as transitions improved the
+  target by 1.0291x geometrically, but was weaker than the transition-only
+  form and moved three one-shot long controls negative. Both were removed; the
+  retained transition-only result is documented separately in
+  [zstd-pair-branchless-transitions-x86.md](zstd-pair-branchless-transitions-x86.md).
 - An exact 64-byte forward loop for the separate `large_text` row's four
   distance-82, approximately 128 KiB overlapping matches measured only
   0.5681x / 0.5689x with 0/15 wins. The retained logarithmic seed-and-double

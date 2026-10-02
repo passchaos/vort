@@ -229,6 +229,40 @@
       "libzstd_normalized_median": 0.964686,
       "libzstd_normalized_geometric_mean": 0.967963,
       "removed": true
+    },
+    "likely_zero_transition_branches": {
+      "date": "2026-10-03",
+      "baseline_git": "72de95e7",
+      "candidate_frame_executable_sha256": "faee9a026ed96bf6538e15e50da14afa8404407736d096c9bcd082ec9dacb5c7",
+      "baseline_executor_bytes": 9903,
+      "candidate_executor_bytes": 9808,
+      "pairs": 7,
+      "median": 0.982914,
+      "geometric_mean": 0.982444,
+      "wins": 0,
+      "libzstd_normalized_median": 0.980524,
+      "libzstd_normalized_geometric_mean": 0.978424,
+      "removed": true
+    },
+    "branchless_all_pair_fields": {
+      "date": "2026-10-03",
+      "baseline_git": "72de95e7",
+      "candidate_frame_executable_sha256": "48d8e0b988a54aa4b37bf76d19856d334d3b6e2b2b940b58ab97ffdb5b8f3eea",
+      "baseline_executor_bytes": 9903,
+      "candidate_executor_bytes": 9927,
+      "pairs": 21,
+      "median": 1.030024,
+      "geometric_mean": 1.029093,
+      "wins": 21,
+      "libzstd_normalized_median": 1.027316,
+      "libzstd_normalized_geometric_mean": 1.028351,
+      "one_shot_control_geometric_means": {
+        "huffman80k": 1.021877,
+        "large_text": 0.996248,
+        "binary_mixed": 0.998664,
+        "numbered_json": 0.993445
+      },
+      "removed": true
     }
   }
 }

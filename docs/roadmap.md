@@ -17122,3 +17122,17 @@ reuse, so production keeps the simpler independently owned plans.
   oracles, all 682 direct tests, compatibility/decodecorpus/reference gates,
   AArch64 compilation, and full checks pass. Evidence is in
   `docs/performance/zstd-pair-shifting-fields-x86.md`.
+
+- The x86-64 compact pair path now extracts its usually-zero LL/ML/OF FSE
+  transition fields without a conditional result dependency. A modulo shift
+  plus exact-width mask preserves zero-width no-op behavior and generates
+  `shrx`/`bzhi`/`shlx` on the measured BMI2 target; match-extra reads and the
+  non-x86 implementation retain their previous behavior. Twenty-one
+  fixed-CPU-2 `large_json` one-shot pairs improve 1.0440x median / 1.0446x
+  geometric with 21/21 wins, and fifteen reusable pairs improve 1.0435x /
+  1.0441x with 15/15 wins. Candidate throughput reaches 0.8835x one-shot and
+  0.8643x reusable relative to local libzstd 1.6.0-dev, so the overall gap is
+  smaller but still open. Long non-target controls remain within 0.24%
+  geometrically. Correctness, compatibility, corpus, cross-target, and full
+  build/test validation are recorded in
+  `docs/performance/zstd-pair-branchless-transitions-x86.md`.

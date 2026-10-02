@@ -11570,9 +11570,9 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 const first_ml_state_bits: u8 = @truncate(first_ml_word >> 56);
                 const first_of_state_bits: u8 = @truncate(first_of_word >> 56);
                 const first_match_len = sequenceSymbolBase(first_ml_word) + fields.read(first_ml_additional_bits);
-                const second_ll_state = sequenceSymbolNextState(first_ll_word) + fields.read(first_ll_state_bits);
-                const second_ml_state = sequenceSymbolNextState(first_ml_word) + fields.read(first_ml_state_bits);
-                const second_of_state = sequenceSymbolNextState(first_of_word) + fields.read(first_of_state_bits);
+                const second_ll_state = sequenceSymbolNextState(first_ll_word) + fields.readBranchless(first_ll_state_bits);
+                const second_ml_state = sequenceSymbolNextState(first_ml_word) + fields.readBranchless(first_ml_state_bits);
+                const second_of_state = sequenceSymbolNextState(first_of_word) + fields.readBranchless(first_of_state_bits);
                 const second_ll_word = spec.literal_fse.symbolWordUnchecked(second_ll_state);
                 const second_of_word = spec.offset_fse.symbolWordUnchecked(second_of_state);
                 if (second_ll_word & literal_one_no_extra_mask != 1 or
@@ -11592,9 +11592,9 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 if (pair_total_bits > 56) break :pair;
                 const second_match_len = sequenceSymbolBase(second_ml_word) + fields.read(second_ml_additional_bits);
                 if (remaining != 2) {
-                    state.ll_state = sequenceSymbolNextState(second_ll_word) + fields.read(second_ll_state_bits);
-                    state.ml_state = sequenceSymbolNextState(second_ml_word) + fields.read(second_ml_state_bits);
-                    state.of_state = sequenceSymbolNextState(second_of_word) + fields.read(second_of_state_bits);
+                    state.ll_state = sequenceSymbolNextState(second_ll_word) + fields.readBranchless(second_ll_state_bits);
+                    state.ml_state = sequenceSymbolNextState(second_ml_word) + fields.readBranchless(second_ml_state_bits);
+                    state.of_state = sequenceSymbolNextState(second_of_word) + fields.readBranchless(second_of_state_bits);
                 }
                 wide_reader.remaining_bits -= pair_total_bits;
                 remaining -= 2;
