@@ -17183,3 +17183,14 @@ reuse, so production keeps the simpler independently owned plans.
   direct tests, compatibility/decodecorpus/reference gates, cross-target
   builds, full tests, build check, and CLI smoke pass. Evidence is in
   `docs/performance/zstd-pair-terminal-branch-x86.md` and its JSON companion.
+
+- A follow-up isolated a width-ten six-symbol Huffman loop in a new section
+  after every existing Zstd hot section. The original Huffman and compact-pair
+  section addresses and sizes stayed fixed, and an actual-loaded-prefix proof
+  raised the locked oracle from one to 81 six-symbol batches. Even so, seven
+  complete-frame `large_json` pairs were only `1.0004x` median / `1.0004x`
+  geometric and `0.9960x` after libzstd normalization; fifteen prepared-stage
+  pairs were `1.0003x` / `1.0018x`. The external call/state round-trip erased
+  the local batching benefit, so the candidate was removed. Future Huffman
+  work should reduce the existing five-symbol loop itself rather than add a
+  second execution boundary.

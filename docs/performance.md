@@ -41,6 +41,9 @@ effect, and complete one-shot/reusable measurements.
 records one shared cold terminal-pair predicate, its production executor size
 reduction, complete-frame gains, non-target controls, and rejected bit-limit
 layout.
+[Zstd large-JSON follow-ups](performance/zstd-large-json-followups-x86.md)
+records rejected compact-pair, copy, state, and isolated width-ten Huffman
+experiments that did not survive complete-frame validation.
 [Zstd x86-64 dense FSE construction](performance/zstd-dense-fse-x86.md)
 records the dense-gap mapped-table builder on x86-64, including threshold and
 write-width rejection experiments.

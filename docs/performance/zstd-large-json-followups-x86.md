@@ -141,6 +141,19 @@ byte-for-byte output check before timing.
   Fifteen complete-frame pairs, however, measured only 1.0006x median / 1.0030x
   geometric; simultaneous libzstd normalization was 0.9988x geometric. It was
   removed.
+- A 2026-10-03 follow-up isolated the width-ten six-symbol loop in an exported
+  `0xbd7`-byte section placed after every existing Zstd hot section. A cold
+  call fit entirely inside the Huffman helper's existing alignment gap: the
+  `.vort_zstd_huffman_only_decode` and compact-pair sections retained their
+  addresses, sizes, and pair-instance addresses. A speculative five-symbol
+  prefix plus loaded-word check safely increased the locked oracle's coverage
+  from one to 81 six-symbol batches, about 1,944 literals. Despite that
+  isolation and coverage, seven complete-frame pairs measured only 1.0004x
+  median / 1.0004x geometric, 4/7, and 0.9960x after simultaneous libzstd
+  normalization. Fifteen prepared-stage pairs measured 1.0003x median /
+  1.0018x geometric, 9/15, with a 0.9896x--1.0303x range. The call/state
+  round-trip consumed the local loop gain, so the helper and loaded-prefix
+  API were removed.
 - Filling the complete 11-bit lookup 16 entries at a time instead of eight
   measured only 1.0029x stage geometric and shifted the following Huffman text
   section by 256 bytes. It was removed without a full-frame campaign.
