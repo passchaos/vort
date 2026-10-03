@@ -17299,3 +17299,12 @@ reuse, so production keeps the simpler independently owned plans.
   direct codes and use regular distances for 77.53%/77.68%. This rules out
   direct-distance work for the priority corpus and identifies a block-scoped
   zero-postfix regular-distance specialization as the next decoder target.
+
+- A source-level zero-postfix early return in the shared prepared-distance
+  helper did not produce that specialization. The ordinary text, Large Window,
+  paired full-tier, 10-bit auxiliary, and 9-bit middle sections were all
+  byte-identical to baseline. Seven clean pairs on source q9/q5 and roadmap
+  q9/q5 ranged from `0.9954x` to `1.0018x` geometrically and are treated as
+  noise because the executed code is identical. The source spelling was
+  removed; the next attempt must select a distinct zero-postfix executor once
+  per block rather than branch inside the shared inline helper.

@@ -45,6 +45,16 @@ The next decoder experiment should instead specialize the existing prepared
 regular-distance calculation for the block-wide `NPOSTFIX=0, NDIRECT=0`
 shape, while preserving the generic path for all other Brotli streams.
 
+A first source-level follow-up added a zero-postfix early return inside the
+shared prepared-distance helper. LLVM compiled the ordinary `.text`, Large
+Window, paired full-tier, 10-bit auxiliary, and 9-bit middle sections
+byte-for-byte identically to baseline. Seven clean pairs on each of the four
+profiled frames ranged from 0.9954x to 1.0018x geometrically, demonstrating the
+remaining measurement noise rather than a code effect. The spelling was
+removed without a performance claim. A useful zero-postfix optimization must
+therefore specialize at block/executor scope strongly enough to eliminate the
+dynamic shift in generated code.
+
 Exact hashes, counters, and validation results are recorded in
 [brotli-distance-code-profile-20261004.json](data/brotli-distance-code-profile-20261004.json).
 

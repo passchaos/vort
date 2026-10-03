@@ -96,6 +96,50 @@
       "max_direct_distance_codes": 0
     }
   },
+  "rejected_zero_postfix_source_fast_path": {
+    "baseline_git": "b1c50562",
+    "baseline_executable_sha256": "640c991136e01f19356db25e241a4c9ce0f937af8bc56c1d05f78cb6deede442",
+    "candidate_executable_sha256": "2d584f19d02ae4f666f86e3452622a4a5f683efca3fcc024d1c197ab64bacb7c",
+    "baseline_executable_bytes": 6126296,
+    "candidate_executable_bytes": 6127072,
+    "byte_identical_code_sections": {
+      ".text": "b7683b5c0375279707114ed1e7849e1a550dbfe648253729a247e0e02ad34ee7",
+      ".vort_br_large_window": "3e31e4fd336c1d0269c2a824caf17a7a515dc57ce198f7e7e7a2137dd961c371",
+      ".vort_br_paired_literal": "f7dabde6964009e6f607c47e5d9971a17039f797162c089ff5f96506355dddb3",
+      ".vort_br_wide_lookup10_aux": "96da937b561f06f7f34fa5530d892d75d43d618f9cab9df6c84aec7d9e547509",
+      ".vort_br_wide_lookup9": "1080579291a4972f08c5868bc522f5da130270522d0b2aef496ffc612ca771a6"
+    },
+    "iterations": 500,
+    "observed_ratios_not_attributed": {
+      "source_q9": {
+        "pairs": 7,
+        "median": 0.994651056217,
+        "geometric_mean": 0.995396658328,
+        "wins": 1
+      },
+      "source_q5": {
+        "pairs": 7,
+        "median": 1.000576799858,
+        "geometric_mean": 1.000482627238,
+        "wins": 4
+      },
+      "roadmap_q9": {
+        "pairs": 7,
+        "median": 1.001445659817,
+        "geometric_mean": 0.999705113344,
+        "wins": 4
+      },
+      "roadmap_q5": {
+        "pairs": 7,
+        "median": 1.001984715949,
+        "geometric_mean": 1.001777223435,
+        "wins": 4
+      }
+    },
+    "monitoring": "each retained pair used a corrected one-second process monitor; contaminated attempts were discarded",
+    "timing_interpretation": "all relevant code sections are byte-identical, so observed ratios are measurement noise",
+    "removed": true
+  },
   "validation": {
     "focused_releasefast_tests": 5,
     "root_summary_tests": 9,
