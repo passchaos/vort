@@ -1177,10 +1177,24 @@ fn validateCommandShape(summary: vort.BrotliStreamSummary) !void {
         summary.lz77_copy_count,
         summary.static_dictionary_copy_count,
     ) catch return error.ReferenceDecodeFailed;
+    const explicit_distance_copy_count = std.math.add(
+        usize,
+        summary.short_distance_copy_count,
+        summary.direct_distance_copy_count,
+    ) catch return error.ReferenceDecodeFailed;
+    const classified_distance_copy_count = std.math.add(
+        usize,
+        summary.implicit_distance_copy_count,
+        std.math.add(usize, explicit_distance_copy_count, summary.regular_distance_copy_count) catch return error.ReferenceDecodeFailed,
+    ) catch return error.ReferenceDecodeFailed;
     if (histogram_total != summary.command_count or
         short_insert_commands > summary.command_count or
         summary.implicit_distance_command_count > summary.command_count or
+        summary.implicit_distance_copy_count > summary.implicit_distance_command_count or
+        classified_distance_copy_count != applied_copy_count or
         applied_copy_count > summary.command_count or
+        summary.max_distance_postfix_bits > 3 or
+        summary.max_direct_distance_codes > 120 or
         summary.compressed_meta_block_count > summary.command_count)
         return error.ReferenceDecodeFailed;
 }

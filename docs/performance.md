@@ -81,6 +81,9 @@ plus isolated code generation, source q9/q5 A/B data, and non-target controls.
 [Brotli middle-tier positive-distance invariant](performance/brotli-middle-positive-distance-x86.md)
 records removal of a redundant ReleaseFast distance-zero branch from prepared
 auxiliary decoding, its proof, fixed-CPU A/B data, and full compatibility gates.
+[Brotli distance-code profile](performance/brotli-distance-code-profile.md)
+adds summary-only implicit/short/direct/regular copy accounting and records the
+dominant zero-postfix regular-distance shape of the current priority frames.
 [Brotli identity dictionary borrowing](performance/brotli-static-dictionary-borrow.md)
 records the zero-copy identity transform, full transform equivalence coverage,
 and paired dictionary-heavy decode measurements.

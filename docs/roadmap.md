@@ -17288,3 +17288,14 @@ reuse, so production keeps the simpler independently owned plans.
   wins. A single clean q9 pair reached `1.0026x`, but was insufficient to
   overturn the q5 regression. All batches overlapping external Zig work were
   discarded, and the full-tier runtime check remains.
+
+- Brotli stream summaries now classify every applied copy by its actual
+  distance coding path: implicit command distance, explicit short code,
+  NDIRECT code, or regular postfix code. The four overflow-checked counters
+  must sum exactly to LZ77 plus static-dictionary copies in library, CSV, and
+  upstream-differential gates; summaries also expose maximum NPOSTFIX and
+  NDIRECT. Frozen roadmap q9/q5 frames use `NPOSTFIX=0`, `NDIRECT=0`, and
+  regular codes for 96.14%/97.16% of copies. Frozen source q9/q5 also have no
+  direct codes and use regular distances for 77.53%/77.68%. This rules out
+  direct-distance work for the priority corpus and identifies a block-scoped
+  zero-postfix regular-distance specialization as the next decoder target.

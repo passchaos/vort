@@ -22,9 +22,12 @@ COLUMNS = [
     "literal_lsb6_bytes", "literal_msb6_bytes",
     "literal_utf8_bytes", "literal_signed_bytes",
     "max_literal_context_trees", "max_command_block_types",
-    "max_distance_context_trees",
+    "max_distance_context_trees", "max_distance_postfix_bits",
+    "max_direct_distance_codes",
     "command_count", "zero_insert_commands", "single_literal_insert_commands",
-    "implicit_distance_commands", "copy_length_log2_histogram",
+    "implicit_distance_commands", "implicit_distance_copies",
+    "short_distance_copies", "direct_distance_copies",
+    "regular_distance_copies", "copy_length_log2_histogram",
 ] + PROVENANCE_COLUMNS
 CASES = {
     "tiny", "text", "structured", "repetitive", "random4k",
@@ -120,6 +123,12 @@ def main() -> int:
         zero_insert_commands = int(row["zero_insert_commands"])
         single_literal_insert_commands = int(row["single_literal_insert_commands"])
         implicit_distance_commands = int(row["implicit_distance_commands"])
+        implicit_distance_copies = int(row["implicit_distance_copies"])
+        short_distance_copies = int(row["short_distance_copies"])
+        direct_distance_copies = int(row["direct_distance_copies"])
+        regular_distance_copies = int(row["regular_distance_copies"])
+        max_distance_postfix_bits = int(row["max_distance_postfix_bits"])
+        max_direct_distance_codes = int(row["max_direct_distance_codes"])
         copy_length_histogram = [
             int(value) for value in row["copy_length_log2_histogram"].split(";")
         ]
@@ -131,8 +140,15 @@ def main() -> int:
             raise AssertionError(f"bad insert command subsets: {row}")
         if implicit_distance_commands > command_count:
             raise AssertionError(f"bad implicit-distance subset: {row}")
-        if int(row["lz77_copies"]) + int(row["static_dictionary_copies"]) > command_count:
+        if implicit_distance_copies > implicit_distance_commands:
+            raise AssertionError(f"bad implicit-distance copy subset: {row}")
+        applied_copy_count = int(row["lz77_copies"]) + int(row["static_dictionary_copies"])
+        if applied_copy_count > command_count:
             raise AssertionError(f"bad command copy accounting: {row}")
+        if implicit_distance_copies + short_distance_copies + direct_distance_copies + regular_distance_copies != applied_copy_count:
+            raise AssertionError(f"bad distance-code accounting: {row}")
+        if max_distance_postfix_bits > 3 or max_direct_distance_codes > 120:
+            raise AssertionError(f"bad distance parameters: {row}")
         if int(row["non_overlapping_lz77_copies"]) > int(row["lz77_copies"]) or int(row["non_overlapping_lz77_bytes"]) > int(row["lz77_bytes"]):
             raise AssertionError(f"bad non-overlapping LZ77 subset: {row}")
         if int(row["short_non_overlapping_lz77_copies"]) > int(row["non_overlapping_lz77_copies"]) or int(row["short_non_overlapping_lz77_bytes"]) > int(row["non_overlapping_lz77_bytes"]):

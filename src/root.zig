@@ -3574,6 +3574,12 @@ test "root brotli stream summary exposes capability flags" {
     try std.testing.expectEqual(@as(usize, 0), stored_summary.zero_insert_command_count);
     try std.testing.expectEqual(@as(usize, 0), stored_summary.single_literal_insert_command_count);
     try std.testing.expectEqual(@as(usize, 0), stored_summary.implicit_distance_command_count);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.implicit_distance_copy_count);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.short_distance_copy_count);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.direct_distance_copy_count);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.regular_distance_copy_count);
+    try std.testing.expectEqual(@as(u2, 0), stored_summary.max_distance_postfix_bits);
+    try std.testing.expectEqual(@as(u16, 0), stored_summary.max_direct_distance_codes);
     try std.testing.expectEqual([_]usize{ 0, 0, 0, 0, 0, 0, 0, 0, 0 }, stored_summary.copy_length_log2_histogram);
     try std.testing.expectEqual(@as(usize, 0), stored_summary.lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 0), stored_summary.lz77_copy_bytes);
@@ -3590,6 +3596,11 @@ test "root brotli stream summary exposes capability flags" {
     try std.testing.expect(static_summary.uses_static_dictionary);
     try std.testing.expect(static_summary.static_dictionary_copy_count > 0);
     try std.testing.expect(static_summary.static_dictionary_bytes > 0);
+    try std.testing.expectEqual(
+        static_summary.lz77_copy_count + static_summary.static_dictionary_copy_count,
+        static_summary.implicit_distance_copy_count + static_summary.short_distance_copy_count +
+            static_summary.direct_distance_copy_count + static_summary.regular_distance_copy_count,
+    );
 }
 
 test "root brotli compressed support limits expose current bounded capacities" {
@@ -3611,6 +3622,14 @@ test "root brotli stream summary exposes compressed tree coverage" {
     try std.testing.expectEqual(@as(usize, 0), summary.zero_insert_command_count);
     try std.testing.expectEqual(@as(usize, 1), summary.single_literal_insert_command_count);
     try std.testing.expectEqual(@as(usize, 0), summary.implicit_distance_command_count);
+    try std.testing.expectEqual(@as(usize, 0), summary.implicit_distance_copy_count);
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        summary.short_distance_copy_count + summary.direct_distance_copy_count +
+            summary.regular_distance_copy_count,
+    );
+    try std.testing.expect(summary.max_distance_postfix_bits <= 3);
+    try std.testing.expect(summary.max_direct_distance_codes <= 120);
     try std.testing.expectEqual([_]usize{ 0, 0, 0, 0, 0, 0, 1, 0, 0 }, summary.copy_length_log2_histogram);
     try std.testing.expectEqual(@as(usize, 1), summary.lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 127), summary.lz77_copy_bytes);

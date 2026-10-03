@@ -1171,6 +1171,14 @@ pub const StreamSummary = struct {
     zero_insert_command_count: usize = 0,
     single_literal_insert_command_count: usize = 0,
     implicit_distance_command_count: usize = 0,
+    /// Applied copy commands grouped by the distance coding path. Implicit
+    /// commands consume no distance symbol; short covers explicit symbols
+    /// 0--15, direct covers the NDIRECT range, and regular covers the remaining
+    /// postfix-coded alphabet.
+    implicit_distance_copy_count: usize = 0,
+    short_distance_copy_count: usize = 0,
+    direct_distance_copy_count: usize = 0,
+    regular_distance_copy_count: usize = 0,
     /// Copy-length command shape indexed by floor(log2(copy length)); the last
     /// bucket includes every copy length greater than or equal to 256.
     copy_length_log2_histogram: [9]usize = @splat(0),
@@ -1187,6 +1195,8 @@ pub const StreamSummary = struct {
     max_command_block_types: usize = 0,
     max_distance_block_types: usize = 0,
     max_distance_context_trees: usize = 0,
+    max_distance_postfix_bits: u2 = 0,
+    max_direct_distance_codes: u16 = 0,
     stored_only: bool = true,
 };
 
@@ -1221,6 +1231,10 @@ const StreamSummaryMetaBlockStats = struct {
     zero_insert_command_count: usize = 0,
     single_literal_insert_command_count: usize = 0,
     implicit_distance_command_count: usize = 0,
+    implicit_distance_copy_count: usize = 0,
+    short_distance_copy_count: usize = 0,
+    direct_distance_copy_count: usize = 0,
+    regular_distance_copy_count: usize = 0,
     copy_length_log2_histogram: [9]usize = @splat(0),
     lz77_copy_count: usize = 0,
     lz77_copy_bytes: usize = 0,
@@ -1235,6 +1249,8 @@ const StreamSummaryMetaBlockStats = struct {
     max_command_block_types: usize = 0,
     max_distance_block_types: usize = 0,
     max_distance_context_trees: usize = 0,
+    max_distance_postfix_bits: u2 = 0,
+    max_direct_distance_codes: u16 = 0,
 };
 
 const BitWriter = struct {
@@ -5571,6 +5587,10 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
     summary.zero_insert_command_count = std.math.add(usize, summary.zero_insert_command_count, stats.zero_insert_command_count) catch return error.IntegerOverflow;
     summary.single_literal_insert_command_count = std.math.add(usize, summary.single_literal_insert_command_count, stats.single_literal_insert_command_count) catch return error.IntegerOverflow;
     summary.implicit_distance_command_count = std.math.add(usize, summary.implicit_distance_command_count, stats.implicit_distance_command_count) catch return error.IntegerOverflow;
+    summary.implicit_distance_copy_count = std.math.add(usize, summary.implicit_distance_copy_count, stats.implicit_distance_copy_count) catch return error.IntegerOverflow;
+    summary.short_distance_copy_count = std.math.add(usize, summary.short_distance_copy_count, stats.short_distance_copy_count) catch return error.IntegerOverflow;
+    summary.direct_distance_copy_count = std.math.add(usize, summary.direct_distance_copy_count, stats.direct_distance_copy_count) catch return error.IntegerOverflow;
+    summary.regular_distance_copy_count = std.math.add(usize, summary.regular_distance_copy_count, stats.regular_distance_copy_count) catch return error.IntegerOverflow;
     for (&summary.copy_length_log2_histogram, stats.copy_length_log2_histogram) |*total, count|
         total.* = std.math.add(usize, total.*, count) catch return error.IntegerOverflow;
     summary.lz77_copy_count = std.math.add(usize, summary.lz77_copy_count, stats.lz77_copy_count) catch return error.IntegerOverflow;
@@ -5587,6 +5607,8 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
     summary.max_command_block_types = @max(summary.max_command_block_types, stats.max_command_block_types);
     summary.max_distance_block_types = @max(summary.max_distance_block_types, stats.max_distance_block_types);
     summary.max_distance_context_trees = @max(summary.max_distance_context_trees, stats.max_distance_context_trees);
+    summary.max_distance_postfix_bits = @max(summary.max_distance_postfix_bits, stats.max_distance_postfix_bits);
+    summary.max_direct_distance_codes = @max(summary.max_direct_distance_codes, stats.max_direct_distance_codes);
 }
 
 test "br stream summary aggregates command and LZ77 copy shapes" {
@@ -5603,6 +5625,10 @@ test "br stream summary aggregates command and LZ77 copy shapes" {
         .zero_insert_command_count = 6,
         .single_literal_insert_command_count = 2,
         .implicit_distance_command_count = 4,
+        .implicit_distance_copy_count = 3,
+        .short_distance_copy_count = 2,
+        .direct_distance_copy_count = 1,
+        .regular_distance_copy_count = 1,
         .copy_length_log2_histogram = .{ 0, 2, 3, 1, 0, 1, 1, 0, 1 },
         .lz77_copy_count = 7,
         .lz77_copy_bytes = 91,
@@ -5612,11 +5638,17 @@ test "br stream summary aggregates command and LZ77 copy shapes" {
         .short_non_overlapping_lz77_copy_count = 3,
         .short_non_overlapping_lz77_copy_bytes = 27,
         .literal_context_mode_bytes = .{ 4, 3, 2, 1 },
+        .max_distance_postfix_bits = 2,
+        .max_direct_distance_codes = 12,
     });
     try std.testing.expectEqual(@as(usize, 10), summary.command_count);
     try std.testing.expectEqual(@as(usize, 7), summary.zero_insert_command_count);
     try std.testing.expectEqual(@as(usize, 2), summary.single_literal_insert_command_count);
     try std.testing.expectEqual(@as(usize, 5), summary.implicit_distance_command_count);
+    try std.testing.expectEqual(@as(usize, 3), summary.implicit_distance_copy_count);
+    try std.testing.expectEqual(@as(usize, 2), summary.short_distance_copy_count);
+    try std.testing.expectEqual(@as(usize, 1), summary.direct_distance_copy_count);
+    try std.testing.expectEqual(@as(usize, 1), summary.regular_distance_copy_count);
     try std.testing.expectEqual([_]usize{ 0, 3, 3, 1, 0, 1, 1, 0, 1 }, summary.copy_length_log2_histogram);
     try std.testing.expectEqual(@as(usize, 7), summary.lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 91), summary.lz77_copy_bytes);
@@ -5626,6 +5658,22 @@ test "br stream summary aggregates command and LZ77 copy shapes" {
     try std.testing.expectEqual(@as(usize, 3), summary.short_non_overlapping_lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 27), summary.short_non_overlapping_lz77_copy_bytes);
     try std.testing.expectEqual([_]usize{ 4, 3, 2, 1 }, summary.literal_context_mode_bytes);
+    try std.testing.expectEqual(@as(u2, 2), summary.max_distance_postfix_bits);
+    try std.testing.expectEqual(@as(u16, 12), summary.max_direct_distance_codes);
+}
+
+test "br stream summary classifies distance coding paths" {
+    var stats: StreamSummaryMetaBlockStats = .{};
+    try recordSummaryDistanceCode(&stats, true, 0, 4);
+    try recordSummaryDistanceCode(&stats, false, 0, 4);
+    try recordSummaryDistanceCode(&stats, false, 15, 4);
+    try recordSummaryDistanceCode(&stats, false, 16, 4);
+    try recordSummaryDistanceCode(&stats, false, 19, 4);
+    try recordSummaryDistanceCode(&stats, false, 20, 4);
+    try std.testing.expectEqual(@as(usize, 1), stats.implicit_distance_copy_count);
+    try std.testing.expectEqual(@as(usize, 2), stats.short_distance_copy_count);
+    try std.testing.expectEqual(@as(usize, 2), stats.direct_distance_copy_count);
+    try std.testing.expectEqual(@as(usize, 1), stats.regular_distance_copy_count);
 }
 
 fn recordSummaryCommand(stats: ?*StreamSummaryMetaBlockStats, lengths: InsertCopyLengths) SummaryError!void {
@@ -8332,6 +8380,8 @@ fn skipMinimalCompressedMetaBlock(
         s.max_command_block_types = header.command_block.block_type_count;
         s.max_distance_block_types = header.distance_block.block_type_count;
         s.max_distance_context_trees = header.distance_tree_count;
+        s.max_distance_postfix_bits = header.npostfix;
+        s.max_direct_distance_codes = header.ndirect;
     }
     if (header.literal_tree_count >= clustered_literal_tree_threshold and prepareLiteralTailLookups(&header)) {
         const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(&header);
@@ -8360,6 +8410,8 @@ noinline fn skipMinimalCompressedMetaBlockLargeWindow(
         s.max_command_block_types = header.command_block.block_type_count;
         s.max_distance_block_types = header.distance_block.block_type_count;
         s.max_distance_context_trees = header.distance_tree_count;
+        s.max_distance_postfix_bits = header.npostfix;
+        s.max_direct_distance_codes = header.ndirect;
     }
     if (header.literal_tree_count >= clustered_literal_tree_threshold and prepareLargeLiteralTailLookups(&header)) {
         const auxiliary_tail_lookups = prepareLargeAuxiliaryTailLookups(&header);
@@ -8410,11 +8462,14 @@ noinline fn skipDecodedCompressedPayload(
         if (written == meta_block_end) {
             return;
         }
-        var decoded_distance: DecodedBrotliDistance = undefined;
-        if (auxiliary_tail_lookups)
-            try readMinimalDistanceTailLookupInto(header, reader, lengths, last_distances, &decoded_distance)
-        else
-            decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
+        const decoded_distance = try readSummaryMinimalDistance(
+            auxiliary_tail_lookups,
+            header,
+            reader,
+            lengths,
+            last_distances,
+            stats,
+        );
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written);
@@ -8487,10 +8542,14 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
         if (written == meta_block_end) return;
-        const decoded_distance = if (auxiliary_tail_lookups)
-            try readMinimalDistanceTailLookupLargeWindow(header, reader, lengths, last_distances)
-        else
-            try readMinimalDistanceLargeWindow(header, reader, lengths, last_distances);
+        const decoded_distance = try readSummaryMinimalDistanceLargeWindow(
+            auxiliary_tail_lookups,
+            header,
+            reader,
+            lengths,
+            last_distances,
+            stats,
+        );
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written);
@@ -11570,6 +11629,107 @@ fn readMinimalDistanceLargeWindow(
         @as(usize, direct_index) + 1
     else
         try readRegularDistanceWithOptions(true, header, reader, symbol), .update_ring = true };
+}
+
+fn recordSummaryDistanceCode(
+    stats: ?*StreamSummaryMetaBlockStats,
+    implicit: bool,
+    symbol: u16,
+    ndirect: u16,
+) SummaryError!void {
+    const s = stats orelse return;
+    const count = if (implicit)
+        &s.implicit_distance_copy_count
+    else if (symbol < 16)
+        &s.short_distance_copy_count
+    else if (@as(usize, symbol) < 16 + @as(usize, ndirect))
+        &s.direct_distance_copy_count
+    else
+        &s.regular_distance_copy_count;
+    count.* = std.math.add(usize, count.*, 1) catch return error.IntegerOverflow;
+}
+
+fn readSummaryMinimalDistance(
+    comptime tail_lookup: bool,
+    header: *MinimalCompressedHeader,
+    reader: anytype,
+    lengths: InsertCopyLengths,
+    last_distances: *[4]usize,
+    stats: ?*StreamSummaryMetaBlockStats,
+) SummaryError!DecodedBrotliDistance {
+    const implicit = lengths.distance_symbol_zero;
+    const symbol: u16 = if (implicit) 0 else blk: {
+        try ensureDistanceBlock(header, reader);
+        const context = distanceContext(lengths.copy_len);
+        if (header.distance_block.current_type >= max_distance_block_types)
+            return error.UnsupportedBrotliFeature;
+        const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
+        if (tree_index >= max_distance_context_trees)
+            return error.UnsupportedBrotliFeature;
+        const tree = try distancePrefixForDecode(header, tree_index);
+        const decoded = if (comptime tail_lookup)
+            try tree.decodeTailLookup9(reader)
+        else
+            try tree.decode(reader);
+        if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
+        break :blk decoded;
+    };
+    const decoded: DecodedBrotliDistance = if (symbol < 16)
+        .{
+            .distance = try resolveShortDistance(symbol, last_distances),
+            .update_ring = symbol != 0,
+        }
+    else
+        .{
+            .distance = try readPreparedDistance(header, reader, symbol),
+            .update_ring = true,
+        };
+    try recordSummaryDistanceCode(stats, implicit, symbol, header.ndirect);
+    return decoded;
+}
+
+fn readSummaryMinimalDistanceLargeWindow(
+    comptime tail_lookup: bool,
+    header: *LargeWindowCompressedHeader,
+    reader: anytype,
+    lengths: InsertCopyLengths,
+    last_distances: *[4]usize,
+    stats: ?*StreamSummaryMetaBlockStats,
+) SummaryError!DecodedBrotliDistance {
+    const implicit = lengths.distance_symbol_zero;
+    const symbol: u16 = if (implicit) 0 else blk: {
+        try ensureLargeDistanceBlock(header, reader);
+        const context = distanceContext(lengths.copy_len);
+        if (header.distance_block.current_type >= max_distance_block_types)
+            return error.UnsupportedBrotliFeature;
+        const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
+        if (tree_index >= max_distance_context_trees)
+            return error.UnsupportedBrotliFeature;
+        const tree = try largeDistancePrefixForDecode(header, tree_index);
+        const decoded = if (comptime tail_lookup)
+            try tree.decodeTailLookup9(reader)
+        else
+            try tree.decode(reader);
+        if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
+        break :blk decoded;
+    };
+    const decoded: DecodedBrotliDistance = if (symbol < 16)
+        .{
+            .distance = try resolveShortDistance(symbol, last_distances),
+            .update_ring = symbol != 0,
+        }
+    else blk: {
+        const direct_index = symbol - 16;
+        break :blk .{
+            .distance = if (direct_index < header.ndirect)
+                @as(usize, direct_index) + 1
+            else
+                try readRegularDistanceWithOptions(true, header, reader, symbol),
+            .update_ring = true,
+        };
+    };
+    try recordSummaryDistanceCode(stats, implicit, symbol, header.ndirect);
+    return decoded;
 }
 
 inline fn readMinimalDistanceTailLookupInto(
