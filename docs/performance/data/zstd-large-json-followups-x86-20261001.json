@@ -307,6 +307,55 @@
       "target_disassembly_identical": true,
       "timed": false,
       "removed": true
+    },
+    "u16_sequence_decode_state": {
+      "date": "2026-10-03",
+      "baseline_git": "edfca52e",
+      "candidate_frame_executable_sha256": "a4c39d238abda32558eebd7abb43fc20b7c4014ed38e4b5b1a39bcbefc9bc3a1",
+      "baseline_executable_bytes": 6489112,
+      "candidate_executable_bytes": 6489192,
+      "baseline_raw_fse_section_bytes": 18585,
+      "candidate_raw_fse_section_bytes": 18312,
+      "baseline_split_section_bytes": 18094,
+      "candidate_split_section_bytes": 18265,
+      "pairs": 7,
+      "median": 0.975695,
+      "geometric_mean": 0.978385,
+      "wins": 0,
+      "libzstd_normalized_geometric_mean": 0.979585,
+      "removed": true
+    },
+    "u32_branchless_transition_mask": {
+      "date": "2026-10-03",
+      "baseline_git": "edfca52e",
+      "candidate_frame_executable_sha256": "351c1a557959a13d553616d03457cc204cda48d29d28fee25666b21b55231850",
+      "baseline_executor_bytes": 9651,
+      "candidate_executor_bytes": 9829,
+      "pairs": 7,
+      "median": 0.962182,
+      "ordinary_wins": 0,
+      "scheduler_outlier": 1.867936,
+      "removed": true
+    },
+    "u32_first_pair_next_states": {
+      "date": "2026-10-03",
+      "baseline_git": "edfca52e",
+      "candidate_frame_executable_sha256": "8516d0f299ec82298b2b9ad775799267246ed551a3e2115045c0dd062d755f89",
+      "pairs": 7,
+      "median": 0.999175,
+      "geometric_mean": 0.998578,
+      "wins": 3,
+      "libzstd_normalized_geometric_mean": 0.997409,
+      "removed": true
+    },
+    "pair_copy_reuse_coverage": {
+      "date": "2026-10-03",
+      "pair_count": 663,
+      "equal_match_lengths": 658,
+      "second_source_reuses_first_output": 4,
+      "match_70_70_distance_71": 0,
+      "match_71_71_distance_72": 0,
+      "implemented": false
     }
   }
 }

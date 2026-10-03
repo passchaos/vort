@@ -116,6 +116,16 @@ byte-for-byte output check before timing.
   identical target assembly. All four were removed. The succeeding independent
   pair-entry guards are documented in
   [zstd-pair-entry-guards-x86.md](zstd-pair-entry-guards-x86.md).
+- Narrowing all three block-level FSE states from `usize` to `u16` reduced the
+  raw/all-FSE section but regressed `large_json` to 0.9757x median / 0.9784x
+  geometric with 0/7 wins. Restricting 32-bit arithmetic to the pair's
+  branchless masks was worse at a 0.9622x ordinary median; limiting it to the
+  first next-state triplet was neutral-negative at 0.9992x / 0.9986x. All
+  state-width candidates were removed.
+- A copy-reuse audit found 658/663 pairs with equal match lengths, but only
+  4/663 where the second match source exactly reused the first match output;
+  neither dominant 70/70 nor 71/71 pair had that distance. A fused reload-free
+  pair copier therefore has no useful coverage on the locked fixture.
 - An exact 64-byte forward loop for the separate `large_text` row's four
   distance-82, approximately 128 KiB overlapping matches measured only
   0.5681x / 0.5689x with 0/15 wins. The retained logarithmic seed-and-double
