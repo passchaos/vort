@@ -17234,4 +17234,10 @@ reuse, so production keeps the simpler independently owned plans.
   pairs nevertheless regressed to `0.9874x` median / `0.9876x` geometric with
   0/7 wins and `0.9866x` after libzstd normalization. The saved instruction
   bytes do not repay the extra long-lived register, so production retains
-  direct `SequenceModeSpec` addressing.
+  direct `SequenceModeSpec` addressing. Restricting the source-level base to
+  pair scope did not constrain that live range: LLVM emitted the same
+  `0x4758`-byte split section byte-for-byte (SHA-256
+  `fcf5cee3d344d67957a0235475c22b89c6db990e612482a2335eee69a72a8102`),
+  with the same `0x223d` strict and `0x251b` production instances. The existing
+  clean timing result therefore applies without a duplicate campaign, and the
+  pair-scoped spelling was removed as well.

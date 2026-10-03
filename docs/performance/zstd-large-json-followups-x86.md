@@ -144,6 +144,15 @@ byte-for-byte output check before timing.
   pairs measured 0.9874x median / 0.9876x geometric, 0/7, and 0.9866x after
   libzstd normalization. Direct table-base caching was removed; the offset
   table was not repeated because it has the same register-pressure tradeoff.
+  Restricting the source-level match-table base to the successful pair scope
+  did not shorten its generated live range: LLVM emitted a byte-identical
+  `0x4758`-byte split-executor section for the pair-scoped and whole-function
+  candidates, with SHA-256
+  `fcf5cee3d344d67957a0235475c22b89c6db990e612482a2335eee69a72a8102`.
+  The strict and production instances also retained the same `0x223d` and
+  `0x251b` sizes. The identical machine code makes the existing clean 0/7
+  result directly applicable, so timing was not repeated and the pair-scoped
+  source candidate was removed.
 - A copy-reuse audit found 658/663 pairs with equal match lengths, but only
   4/663 where the second match source exactly reused the first match output;
   neither dominant 70/70 nor 71/71 pair had that distance. A fused reload-free
