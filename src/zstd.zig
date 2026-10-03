@@ -11591,21 +11591,22 @@ inline fn decodeAllFseSplitHuffmanSequences(
                 const second_of_state_bits: u8 = @truncate(second_of_word >> 56);
                 const first_total_bits = first_ml_additional_bits + first_ll_state_bits +
                     first_ml_state_bits + first_of_state_bits;
-                const second_transition_bits: u8 = if (remaining == 2)
-                    0
-                else
-                    second_ll_state_bits + second_ml_state_bits + second_of_state_bits;
+                const pair_is_terminal = remaining == 2;
+                const second_transition_bits: u8 = if (pair_is_terminal) terminal: {
+                    @branchHint(.unlikely);
+                    break :terminal 0;
+                } else second_ll_state_bits + second_ml_state_bits + second_of_state_bits;
                 const pair_total_bits = first_total_bits + second_ml_additional_bits + second_transition_bits;
                 if (pair_total_bits > 56) break :pair;
                 const second_match_len = sequenceSymbolBase(second_ml_word) + fields.read(second_ml_additional_bits);
-                if (remaining != 2) {
+                if (!pair_is_terminal) {
                     state.ll_state = sequenceSymbolNextState(second_ll_word) + fields.readBranchless(second_ll_state_bits);
                     state.ml_state = sequenceSymbolNextState(second_ml_word) + fields.readBranchless(second_ml_state_bits);
                     state.of_state = sequenceSymbolNextState(second_of_word) + fields.readBranchless(second_of_state_bits);
                 }
                 wide_reader.remaining_bits -= pair_total_bits;
                 remaining -= 2;
-                if (remaining == 0) try wide_reader.expectEnd();
+                if (pair_is_terminal) try wide_reader.expectEnd();
 
                 const match_offset = if (comptime allow_wildcopy)
                     state.repeated_offsets[0]

@@ -17167,3 +17167,19 @@ reuse, so production keeps the simpler independently owned plans.
   relative to local libzstd 1.6.0-dev, leaving the broader leadership target
   open. Full correctness, compatibility, corpus, cross-target, and performance
   evidence is in `docs/performance/zstd-pair-entry-guards-x86.md`.
+
+- The compact split-Huffman pair path now names and cold-marks its terminal
+  two-sequence state once, then reuses that predicate for second-transition
+  omission and reverse-bitstream completion. The locked oracle records 663
+  completed pairs with no terminal hit; all pair field groups use only 8--11
+  bits. This preserves terminal semantics while shrinking the production
+  wildcopy instance by 53 bytes. Fifteen clean fixed-CPU-2 `large_json` pairs
+  improve one-shot decode by `1.0140x` median / `1.0131x` geometric with 14/15
+  wins and reusable decode by `1.0115x` / `1.0137x` with 15/15 wins. Candidate
+  throughput reaches `0.9144x` one-shot and `0.8883x` reusable at the median
+  relative to local libzstd 1.6.0-dev, so the leadership gap remains open.
+  Long non-target medians are neutral-positive, and the independent
+  30,000-iteration `large_text` control is `1.0004x` geometrically. All 682
+  direct tests, compatibility/decodecorpus/reference gates, cross-target
+  builds, full tests, build check, and CLI smoke pass. Evidence is in
+  `docs/performance/zstd-pair-terminal-branch-x86.md` and its JSON companion.

@@ -1,0 +1,313 @@
+{
+  "date": "2026-10-03",
+  "baseline_git": "c336646bbb201f94849a37b4955fbe06fc012638",
+  "host": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "environment": {
+    "os": "linux",
+    "arch": "x86_64",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_affinity": "2",
+    "codec_threads": 1,
+    "reference": "libzstd 1.6.0-dev 01b7154f",
+    "reference_library_sha256": "b734e265f838f7a18c378fe2b34c505e6fc5025fd84ceac159faa27b794b78b0"
+  },
+  "baseline_executable_sha256": "12a5efe4c5d4ddc203354ff2d922f8abe962e6ac3cc84ee13c96d09481d6c386",
+  "candidate_executable_sha256": "93fd7635636a424c72b61d7df7d177ac48c25d29d0c1e3cee70f8514a59a4045",
+  "order": "baseline,candidate on odd pairs; candidate,baseline on even pairs",
+  "command": "taskset -c 2 BINARY --input /tmp/vort-large-json-512k.txt --name large_json [--reusable] --iterations 3000 --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so --csv OUT",
+  "input": {
+    "bytes": 524307,
+    "sha256": "b0d873df5fbe94a60e8e10a51cde4b08b3370ae4f251357c16adbfc69fd27c95",
+    "encoded_bytes": 9905,
+    "block_count": 5,
+    "sequence_count": 7299,
+    "checksum": 3146580000
+  },
+  "implementation": {
+    "scope": "compact split-Huffman pair terminal-state branch",
+    "semantic_change": false,
+    "baseline_executable_bytes": 6489112,
+    "candidate_executable_bytes": 6491576,
+    "baseline_split_section_bytes": 18094,
+    "candidate_split_section_bytes": 18364,
+    "baseline_non_wildcopy_instance_bytes": 8443,
+    "candidate_non_wildcopy_instance_bytes": 8766,
+    "baseline_wildcopy_instance_bytes": 9651,
+    "candidate_wildcopy_instance_bytes": 9598,
+    "byte_identical_non_target_sections": {
+      ".vort_zstd_huffman_only_decode": "5ac48bbe6be668a297a59a8c3f16de8820875478d63dbb5fe840a933bf481c8f",
+      ".vort_zstd_raw_fse_decode": "e92c15becf6fd0a421a2f954744d38a240227c066197c8bc77c2209e1414db47",
+      ".vort_zstd_split_wide_literal_decode": "7c3f5e55afe37e3ac3c7ceda93c133de35194cf77e1bb6c55627916e6ed06df7",
+      ".vort_zstd_split_dense_literal_decode": "a0a771fa65434e04ad0e94ccc583ce6065f6cbccc9a1f113248b23b22bc39b51"
+    }
+  },
+  "locked_oracle_audit": {
+    "first_shape_hits": 708,
+    "second_shape_hits": 663,
+    "completed_pairs": 663,
+    "terminal_pairs": 0,
+    "bit_limit_rejects": 0,
+    "pair_total_bits_histogram": {
+      "8": 190,
+      "9": 344,
+      "10": 124,
+      "11": 5
+    }
+  },
+  "one_shot": {
+    "iterations": 3000,
+    "pairs": 15,
+    "median": 1.013968587389,
+    "geometric_mean": 1.013060897145,
+    "minimum": 0.997788496217,
+    "maximum": 1.027029510890,
+    "wins": 14,
+    "normalized_median": 1.016510815143,
+    "normalized_geometric_mean": 1.015755027161,
+    "normalized_minimum": 0.999331311650,
+    "normalized_maximum": 1.031129286711,
+    "normalized_wins": 14,
+    "candidate_over_libzstd_median": 0.914416661715,
+    "candidate_over_libzstd_geometric_mean": 0.914668731636,
+    "observation_order": [
+      "baseline_vort_ns",
+      "baseline_reference_ns",
+      "candidate_vort_ns",
+      "candidate_reference_ns"
+    ],
+    "observations": [
+      [229090658, 205275873, 223061417, 204264554],
+      [228236564, 204965619, 223417358, 206883489],
+      [227717866, 203070393, 225039613, 206051351],
+      [225730872, 204139624, 224545488, 203232577],
+      [226844269, 204759945, 223207646, 204168105],
+      [225029949, 203207520, 222629300, 203254278],
+      [226086704, 203840330, 222371599, 206356341],
+      [227234779, 205163145, 224859632, 204363508],
+      [226618352, 204617577, 223899194, 204968806],
+      [226237259, 202594060, 223108509, 204014138],
+      [226757707, 204556321, 227260294, 208394578],
+      [227473567, 204074291, 222865939, 203648516],
+      [227372386, 204186973, 224240069, 205020660],
+      [228518688, 204866768, 225122317, 203543518],
+      [225162914, 206011959, 224604921, 205364009]
+    ]
+  },
+  "reusable": {
+    "iterations": 3000,
+    "pairs": 15,
+    "median": 1.011502388917,
+    "geometric_mean": 1.013691296151,
+    "minimum": 1.001879747384,
+    "maximum": 1.040280065297,
+    "wins": 15,
+    "normalized_median": 1.014434789788,
+    "normalized_geometric_mean": 1.010173198738,
+    "normalized_minimum": 0.982304217178,
+    "normalized_maximum": 1.023196323774,
+    "normalized_wins": 12,
+    "candidate_over_libzstd_median": 0.888300374398,
+    "candidate_over_libzstd_geometric_mean": 0.887632027235,
+    "observation_order": [
+      "baseline_vort_ns",
+      "baseline_reference_ns",
+      "candidate_vort_ns",
+      "candidate_reference_ns"
+    ],
+    "observations": [
+      [232350482, 203135621, 230030086, 203140589],
+      [248173903, 217547056, 238564509, 212188123],
+      [248081028, 218192237, 244824250, 213242700],
+      [238186986, 209088502, 236630147, 207391097],
+      [237501503, 208336239, 235411687, 209058550],
+      [238893562, 209190095, 234843788, 210414042],
+      [236967342, 208688872, 236522739, 211199166],
+      [238586472, 216834584, 234808327, 209624596],
+      [238532557, 208440640, 236563999, 209704390],
+      [237914684, 207831666, 233549841, 207339437],
+      [237418106, 207770181, 234718285, 208882819],
+      [236458529, 207762732, 233876299, 208494635],
+      [236334178, 207878899, 234256103, 208089784],
+      [237243012, 207412639, 234118659, 207764459],
+      [237618924, 208007411, 233008930, 208255076]
+    ]
+  },
+  "controls": {
+    "external_zig_process_detected": false,
+    "long_large_text_one_shot": {
+      "iterations": 30000,
+      "pairs": 15,
+      "median": 1.000950089318,
+      "geometric_mean": 1.000387036150,
+      "minimum": 0.988895897602,
+      "maximum": 1.011959642785,
+      "wins": 8,
+      "normalized_geometric_mean": 1.001703321104,
+      "normalized_wins": 9,
+      "observations": [
+        [748217163, 723379757, 739374508, 721551593],
+        [747923596, 724093501, 743156270, 724112748],
+        [742695849, 725417839, 746207541, 722791012],
+        [747205319, 723490680, 747853692, 724899647],
+        [749842295, 721091017, 746459672, 724310290],
+        [738443721, 723882458, 746735549, 725034447],
+        [741640610, 720648168, 740936654, 726355512],
+        [749397301, 721786191, 754057190, 723665217],
+        [744120018, 724402007, 744331548, 724235673],
+        [743904893, 723745429, 742866424, 725364020],
+        [746078566, 720182392, 751755866, 719810099],
+        [744434098, 720507232, 741575983, 721028658],
+        [739952568, 721234712, 744088825, 718802069],
+        [750566655, 723652043, 745978355, 724837808],
+        [749088199, 720228954, 743815513, 725220996]
+      ]
+    },
+    "long_rows": {
+      "iterations": 10000,
+      "pairs": 7,
+      "one_shot": {
+        "huffman80k": {
+          "median": 1.000642559555,
+          "geometric_mean": 1.001709221682,
+          "minimum": 0.993957703259,
+          "maximum": 1.009329263723,
+          "wins": 4,
+          "normalized_geometric_mean": 1.003159151434,
+          "observations": [
+            [356934002, 409829960, 357595553, 411218418],
+            [360730454, 414828605, 358666852, 412076433],
+            [361551018, 413574806, 358623454, 415325438],
+            [360007946, 411807846, 359776768, 415174986],
+            [359563545, 414246187, 360979026, 412497501],
+            [359423248, 412731351, 361608192, 417572528],
+            [362975983, 416380476, 359620984, 413724569]
+          ]
+        },
+        "large_text": {
+          "median": 1.005566920125,
+          "geometric_mean": 1.001591869005,
+          "minimum": 0.986551775432,
+          "maximum": 1.010536144421,
+          "wins": 4,
+          "normalized_geometric_mean": 1.003557832310,
+          "observations": [
+            [247965888, 241795019, 246165400, 239508995],
+            [245728352, 239508424, 249078009, 241929160],
+            [247669855, 239475204, 245117193, 240205074],
+            [248669592, 241649050, 247292932, 241580825],
+            [245126028, 241605284, 247225680, 242651879],
+            [247739542, 239198215, 247857842, 240908307],
+            [250450028, 241793355, 247838763, 241542577]
+          ]
+        },
+        "binary_mixed": {
+          "median": 1.000498797413,
+          "geometric_mean": 0.998367535541,
+          "minimum": 0.991174131607,
+          "maximum": 1.003767091184,
+          "wins": 4,
+          "normalized_geometric_mean": 1.000165830223,
+          "observations": [
+            [481323052, 617274630, 481083089, 616281470],
+            [476469497, 616565698, 478752492, 618421083],
+            [476843174, 618499787, 481089204, 620753545],
+            [481716081, 614795907, 480984310, 617502135],
+            [478198828, 614967709, 480607920, 613744191],
+            [481284145, 617538461, 479477908, 619147469],
+            [482712078, 616018164, 482010357, 617598916]
+          ]
+        }
+      },
+      "reusable": {
+        "huffman80k": {
+          "median": 1.000850488108,
+          "geometric_mean": 0.995243570755,
+          "minimum": 0.975898739293,
+          "maximum": 1.007069750266,
+          "wins": 4,
+          "normalized_geometric_mean": 1.001568516848,
+          "observations": [
+            [338691109, 412098202, 337249119, 413776337],
+            [338095195, 413353599, 337589582, 413500354],
+            [337400184, 413242539, 337113473, 412434169],
+            [338354626, 411562580, 335979336, 412324027],
+            [337728536, 414817238, 346069241, 420860641],
+            [337165134, 413542356, 344633427, 421804602],
+            [338386877, 411742451, 338633216, 414133466]
+          ]
+        },
+        "large_text": {
+          "median": 1.001671570023,
+          "geometric_mean": 0.999837049058,
+          "minimum": 0.988482230404,
+          "maximum": 1.010431321013,
+          "wins": 4,
+          "normalized_geometric_mean": 0.999752052814,
+          "observations": [
+            [242272013, 240310042, 241364073, 238324715],
+            [242203208, 237769226, 241799024, 238145975],
+            [239760755, 239326656, 240789752, 240315318],
+            [240393938, 239248056, 243195002, 239270641],
+            [243023979, 237883618, 243784527, 238782321],
+            [242018606, 240314128, 239520095, 239774496],
+            [243263707, 240410416, 242765778, 240501270]
+          ]
+        },
+        "binary_mixed": {
+          "median": 1.001212005229,
+          "geometric_mean": 0.998774806237,
+          "minimum": 0.991063569089,
+          "maximum": 1.004974504156,
+          "wins": 4,
+          "normalized_geometric_mean": 0.993404236441,
+          "observations": [
+            [480110659, 617334103, 484439822, 617044793],
+            [483464095, 636042137, 482576507, 616162080],
+            [477916617, 615416166, 476856825, 614984918],
+            [479842588, 615849547, 483303471, 614512305],
+            [475117655, 615819561, 474542507, 614353056],
+            [479594478, 612761377, 480866787, 614214240],
+            [476607220, 611782074, 474248071, 610176791]
+          ]
+        }
+      }
+    },
+    "discarded_campaigns": "Campaigns overlapping external spectra Zig processes were rejected in full. A short 3000-iteration large_text screen was superseded by the 30000-iteration control. GNU objcopy was found to rewrite input ELF metadata when only --dump-section was supplied; control binaries were restored to the exact main-campaign hashes before retained runs."
+  },
+  "rejected_bit_limit_hint": {
+    "candidate_executable_sha256": "9eba718d1b599498ce30b34cc2a68097cebc7fbf3f6ebfd290f58253243c38e0",
+    "candidate_split_section_bytes": 19358,
+    "candidate_non_wildcopy_instance_bytes": 8883,
+    "candidate_wildcopy_instance_bytes": 10475,
+    "pairs": 7,
+    "median": 0.977940,
+    "geometric_mean": 0.977709,
+    "wins": 0,
+    "normalized_geometric_mean": 0.980537,
+    "removed": true
+  },
+  "validation": {
+    "direct_zstd_releasefast_tests": 682,
+    "direct_zstd_releasefast_status": 0,
+    "full_project_test_status": 0,
+    "local_reference_gate_one_shot_rows": 13,
+    "local_reference_gate_reusable_rows": 13,
+    "reference_path_smoke_rows": 12,
+    "decode_profile_rows": 5,
+    "decode_profile_path_smoke_rows": 3,
+    "decode_profile_path_smoke_invalid_rows": 7,
+    "compatibility_cases": 276,
+    "compatibility_unsupported": 0,
+    "decodecorpus_campaigns": 9,
+    "decodecorpus_frames": 9900,
+    "decodecorpus_sequence_mode_combinations": 64,
+    "decodecorpus_block_stream_cases": 2699,
+    "generic_x86_64_releasefast_compile": "pass",
+    "aarch64_linux_releasefast_compile": "pass",
+    "zig_build_check": "pass",
+    "cli_help": "pass"
+  },
+  "decision": "retain terminal-pair branch layout only; preserve every terminal-state semantic and the 56-bit safety check"
+}

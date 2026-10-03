@@ -37,6 +37,10 @@ results, non-target controls, and compatibility validation.
 [Zstd pair entry guards](performance/zstd-pair-entry-guards-x86.md) records
 separate cold remaining-sequence/bit-count guards, their x86-64 code-generation
 effect, and complete one-shot/reusable measurements.
+[Zstd pair terminal-state branch](performance/zstd-pair-terminal-branch-x86.md)
+records one shared cold terminal-pair predicate, its production executor size
+reduction, complete-frame gains, non-target controls, and rejected bit-limit
+layout.
 [Zstd x86-64 dense FSE construction](performance/zstd-dense-fse-x86.md)
 records the dense-gap mapped-table builder on x86-64, including threshold and
 write-width rejection experiments.
