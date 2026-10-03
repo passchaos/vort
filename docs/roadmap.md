@@ -17241,3 +17241,14 @@ reuse, so production keeps the simpler independently owned plans.
   with the same `0x223d` strict and `0x251b` production instances. The existing
   clean timing result therefore applies without a duplicate campaign, and the
   pair-scoped spelling was removed as well.
+
+- Marking the compact pair path's first LL/OF shape failure likely was rejected
+  despite reducing the strict/production instances from `0x223e`/`0x257e` to
+  `0x2144`/`0x2566` and the split section from `0x47bc` to `0x46aa`. The shape
+  succeeds only 708 times across 6,636 outer iterations, but seven clean
+  `large_json` pairs regressed to `0.9475x` median / `0.9480x` geometric with
+  0/7 wins and `0.9452x` after libzstd normalization. The successful pair body
+  must remain the fallthrough even though the outer-loop shape is infrequent.
+  Explicit byte-field predicates compiled identically to the existing masks;
+  noinline-template and outlined-68/69 screens grew the production body and
+  were also removed before timing.

@@ -153,6 +153,23 @@ byte-for-byte output check before timing.
   `0x251b` sizes. The identical machine code makes the existing clean 0/7
   result directly applicable, so timing was not repeated and the pair-scoped
   source candidate was removed.
+- Three additional code-generation screens did not justify timing. Splitting
+  each packed LL/OF shape mask into explicit base and additional-width tests
+  produced a byte-identical `0x47bc` split section (SHA-256
+  `2afa094dcee74d401b4069e3b270a954ca966b81387c3cb5d14d5561a33ec75d`).
+  Making the complete generic split template noinline grew the production body
+  from `0x257e` to `0x25de` and scattered four instances into ordinary text.
+  Outlining only the pair's rare 68/69-byte copies reduced the aggregate split
+  section to `0x46ed`, but call-site saves grew the production instance to
+  `0x260a`; all three source variants were removed.
+- The first LL/OF pair shape succeeds only 708 times across the locked frame's
+  6,636 outer iterations. Marking its failure edge likely shrank the strict
+  instance from `0x223e` to `0x2144`, the production instance from `0x257e` to
+  `0x2566`, and the split section from `0x47bc` to `0x46aa`. That smaller layout
+  was substantially slower: seven clean complete-frame pairs measured 0.9475x
+  median / 0.9480x geometric throughput with 0/7 wins, and 0.9452x after
+  libzstd normalization. Pair success needs to remain the fallthrough despite
+  its lower outer-loop frequency; the hint was removed.
 - A copy-reuse audit found 658/663 pairs with equal match lengths, but only
   4/663 where the second match source exactly reused the first match output;
   neither dominant 70/70 nor 71/71 pair had that distance. A fused reload-free
