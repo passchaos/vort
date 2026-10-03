@@ -24,10 +24,12 @@ distance table test additionally requires every valid prepared value to be
 positive. Truncation, invalid-symbol, output-bound, dictionary, and ring-update
 ordering are unchanged.
 
-The frozen q9/q5 frames execute 48,751/52,136 LZ77 copies. The selected
-middle-tier instance grows from `0x112e` to `0x11c5` bytes after LLVM relayout,
-while another auxiliary instance shrinks from `0x154a` to `0x1482`; the whole
-`.vort_br_wide_lookup9` section falls from `0x438a` to `0x4382`. The ordinary
+The frozen q9/q5 frames execute 48,751/52,136 LZ77 copies. A debugger breakpoint
+on the three concrete template instances confirms both source frames select
+the command/distance-lookup instance, which shrinks from `0x154a` to `0x1482`
+bytes. The unused auxiliary-without-command-lookup instance grows from `0x112e`
+to `0x11c5`; the whole `.vort_br_wide_lookup9` section falls from `0x438a` to
+`0x4382`. The ordinary
 `.text`, Large Window, paired full-tier, and 10-bit auxiliary sections retain
 their addresses, sizes, and exact bytes.
 
