@@ -17252,3 +17252,14 @@ reuse, so production keeps the simpler independently owned plans.
   Explicit byte-field predicates compiled identically to the existing masks;
   noinline-template and outlined-68/69 screens grew the production body and
   were also removed before timing.
+
+- Moving the compact executor's ordinary single-sequence fallback behind one
+  noinline call was also rejected. Pair, direct-offset, and short-rep0 prefixes
+  cover 1,682/1,834 sequences in the locked block, and the split reduced the
+  production hot instance from `0x257e` to `0x10b6`; the unchanged logic became
+  a `0x1569` helper. Three clean `large_json` pairs still regressed to `0.9522x`
+  median / `0.9521x` geometric with 0/3 wins and `0.9478x` after libzstd
+  normalization. A preceding seven-pair campaign was correctly discarded when
+  the monitor caught an external Zig build. Per-sequence pointerized state
+  transfer remains too costly even at about 8.3% fallback frequency, so future
+  executor compaction must avoid a call on each fallback sequence.

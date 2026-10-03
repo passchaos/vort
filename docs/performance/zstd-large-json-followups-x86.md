@@ -161,7 +161,10 @@ byte-for-byte output check before timing.
   from `0x257e` to `0x25de` and scattered four instances into ordinary text.
   Outlining only the pair's rare 68/69-byte copies reduced the aggregate split
   section to `0x46ed`, but call-site saves grew the production instance to
-  `0x260a`; all three source variants were removed.
+  `0x260a`. Marking the second LL/OF shape failure unlikely was also rejected
+  before timing: despite only 45 failures after 708 first-shape hits, it grew
+  the production instance to `0x28a1` and the split section to `0x49df`. All
+  four source variants were removed.
 - The first LL/OF pair shape succeeds only 708 times across the locked frame's
   6,636 outer iterations. Marking its failure edge likely shrank the strict
   instance from `0x223e` to `0x2144`, the production instance from `0x257e` to
@@ -170,6 +173,17 @@ byte-for-byte output check before timing.
   median / 0.9480x geometric throughput with 0/7 wins, and 0.9452x after
   libzstd normalization. Pair success needs to remain the fallthrough despite
   its lower outer-loop frequency; the hint was removed.
+- A structurally smaller production executor kept pair, direct-offset, and
+  short-rep0 handling inline, but moved the remaining ordinary sequence into a
+  noinline helper. Those prefixes cover 1,682/1,834 sequences in the locked
+  block, so only 152 sequences (8.3%) crossed the new boundary. The production
+  hot instance fell from `0x257e` to `0x10b6` while the strict instance stayed
+  `0x223e`; a `0x1569` fallback moved into the later generic-split section.
+  Nevertheless, three clean complete-frame pairs measured only 0.9522x median
+  / 0.9521x geometric throughput with 0/3 wins, and 0.9478x after libzstd
+  normalization. A separate seven-pair run was discarded because the corrected
+  monitor caught an external Zig build. Even the lower-frequency pointerized
+  call/state boundary is too expensive, so the candidate was removed.
 - A copy-reuse audit found 658/663 pairs with equal match lengths, but only
   4/663 where the second match source exactly reused the first match output;
   neither dominant 70/70 nor 71/71 pair had that distance. A fused reload-free
