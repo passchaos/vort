@@ -60,6 +60,18 @@ Several longer reference batches and one attempted q5 extension were discarded
 when the continuous monitor caught unrelated `spectra` Zig builds. Only the
 clean q9 7-pair and q5 7-pair campaigns are included in the result above.
 
+## Rejected full-tier extension
+
+The same invariant was also applied to the 129--256-tree paired executor. It
+passed the focused full-tier transition/boundary oracle, but LLVM expanded the
+payload from `0x1690` to `0x16d3` bytes and the paired section from `0x259b` to
+`0x25db`. Three clean 500-iteration roadmap-q5 pairs measured 0.9964x median /
+0.9948x geometric throughput with only 1/3 wins. One clean roadmap-q9 pair was
+1.0026x, which is not enough to offset the repeatable q5 loss. Other attempted
+batches were discarded when the monitor observed external Zig work. The
+full-tier runtime check therefore remains; the invariant is retained only in
+the independently measured middle tier.
+
 Exact hashes, nanosecond observations, and validation counts are recorded in
 [brotli-middle-positive-distance-x86-20261003.json](data/brotli-middle-positive-distance-x86-20261003.json).
 

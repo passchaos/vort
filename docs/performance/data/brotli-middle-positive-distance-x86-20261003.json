@@ -171,6 +171,42 @@
       ]
     }
   },
+  "rejected_full_tier_extension": {
+    "date": "2026-10-03",
+    "baseline_git": "ae9e5db3",
+    "baseline_executable_sha256": "77425d9d467dc236b9ec143e929f42685c4350da01e6c8f26499f84dc7226f33",
+    "candidate_executable_sha256": "3ad5dcb68ede49a180350ceca4abe7ba7002dc303108ac4c3d6d0ceea618b3ec",
+    "baseline_executable_bytes": 6107728,
+    "candidate_executable_bytes": 6108272,
+    "baseline_paired_section_sha256": "4abc6e76f50ed969998c3312d3582a6c7564357992de347bb09db8bb095e9395",
+    "candidate_paired_section_sha256": "f7392d6928a5fe0c84ba830e755cff17fea4a344d313213edc72dca1ab3d035f",
+    "baseline_paired_section_bytes": 9627,
+    "candidate_paired_section_bytes": 9691,
+    "baseline_payload_bytes": 5776,
+    "candidate_payload_bytes": 5843,
+    "roadmap_q9_clean_screen": {
+      "pairs": 1,
+      "ratio": 1.002586322412,
+      "samples_ns": [[1348675280, 1345196169]]
+    },
+    "roadmap_q5_clean_screen": {
+      "iterations": 500,
+      "pairs": 3,
+      "median": 0.996449738749,
+      "geometric_mean": 0.994817030967,
+      "minimum": 0.987836058172,
+      "maximum": 1.000205785956,
+      "wins": 1,
+      "samples_ns": [
+        [1398545008, 1415766307],
+        [1402094531, 1401806059],
+        [1399309632, 1404295247]
+      ]
+    },
+    "discarded_campaigns": "combined and retry batches were discarded whenever the corrected monitor observed an external spectra Zig process",
+    "validation": "focused full-tier transition/boundary and prepared-distance tests passed",
+    "removed": true
+  },
   "monitoring": {
     "retained_batches": "corrected one-second ps monitor remained alive; no concurrent Zig process was observed",
     "discarded_batches": "combined reference retries and one q5 extension were discarded after the monitor observed external spectra Zig builds"
