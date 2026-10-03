@@ -136,6 +136,14 @@ byte-for-byte output check before timing.
   continuous monitor all lost: 0.9787x median / 0.9769x geometric, and 0.9746x
   after libzstd normalization. The original field order was restored; a
   smaller aggregate section is not useful when its selected instance grows.
+- Precomputing the match-FSE entry-array base for x86-64 ReleaseFast changed
+  the three hot ML loads from `spec+0x2028+state*8` to `base+state*8`. It added
+  no branch and shrank the production executor by 99 bytes and the split
+  section by 100 bytes. The extra long-lived base register was nevertheless
+  more expensive than the shorter addressing: seven clean complete-frame
+  pairs measured 0.9874x median / 0.9876x geometric, 0/7, and 0.9866x after
+  libzstd normalization. Direct table-base caching was removed; the offset
+  table was not repeated because it has the same register-pressure tradeoff.
 - A copy-reuse audit found 658/663 pairs with equal match lengths, but only
   4/663 where the second match source exactly reused the first match output;
   neither dominant 70/70 nor 71/71 pair had that distance. A fused reload-free

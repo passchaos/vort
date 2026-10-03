@@ -17227,3 +17227,11 @@ reuse, so production keeps the simpler independently owned plans.
   bytes. Three continuously monitored `large_json` pairs regressed to
   `0.9787x` median / `0.9769x` geometric with 0/3 wins and `0.9746x` after
   libzstd normalization. Production retains LL/OF/ML physical order.
+
+- Precomputing the match-FSE entry-array base removed the `0x2028`
+  displacement from three hot loads and shrank the selected production
+  executor by 99 bytes without adding a branch. Seven clean `large_json`
+  pairs nevertheless regressed to `0.9874x` median / `0.9876x` geometric with
+  0/7 wins and `0.9866x` after libzstd normalization. The saved instruction
+  bytes do not repay the extra long-lived register, so production retains
+  direct `SequenceModeSpec` addressing.
