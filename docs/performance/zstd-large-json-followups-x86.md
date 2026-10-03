@@ -122,6 +122,13 @@ byte-for-byte output check before timing.
   branchless masks was worse at a 0.9622x ordinary median; limiting it to the
   first next-state triplet was neutral-negative at 0.9992x / 0.9986x. All
   state-width candidates were removed.
+- Localizing the compact executor's three repeated offsets and committing them
+  with `defer` preserved partial-progress state on every error exit, but made
+  LLVM duplicate that commit across the large function. The production
+  instance grew from `0x257e` to `0x4109` bytes and the complete split section
+  from `0x47bc` to `0x78f5`. Three clean complete-frame pairs regressed to
+  0.7805x median / 0.7805x geometric, 0/3, and 0.7810x after libzstd
+  normalization. Repeated offsets therefore remain in the caller-owned state.
 - A copy-reuse audit found 658/663 pairs with equal match lengths, but only
   4/663 where the second match source exactly reused the first match output;
   neither dominant 70/70 nor 71/71 pair had that distance. A fused reload-free

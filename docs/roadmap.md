@@ -17211,3 +17211,12 @@ reuse, so production keeps the simpler independently owned plans.
   store-to-load dependency and larger branch body cost far more than the one
   removed destination store; production retains separate literal and match
   copies.
+
+- Localizing the compact executor's repeated-offset array with a deferred
+  all-exit commit was rejected. It preserved partial-progress semantics but
+  expanded the production pair executor from `0x257e` to `0x4109` bytes and
+  the split section from `0x47bc` to `0x78f5`. Three clean `large_json` pairs
+  regressed to `0.7805x` median / `0.7805x` geometric with 0/3 wins and
+  `0.7810x` after libzstd normalization. Production retains in-place repcode
+  state updates; future state work must not duplicate commits across error
+  exits.

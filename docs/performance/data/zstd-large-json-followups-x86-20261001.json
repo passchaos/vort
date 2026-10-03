@@ -434,6 +434,35 @@
       "libzstd_normalized_geometric_mean": 0.997409,
       "removed": true
     },
+    "local_repeated_offsets": {
+      "date": "2026-10-03",
+      "baseline_git": "a51157f7",
+      "baseline_frame_executable_sha256": "93fd7635636a424c72b61d7df7d177ac48c25d29d0c1e3cee70f8514a59a4045",
+      "candidate_frame_executable_sha256": "294f62c4608fb62923d07f7459e000cd0c004319ae3f71992b14ef3bee28d834",
+      "baseline_frame_bytes": 6491576,
+      "candidate_frame_bytes": 6594976,
+      "baseline_pair_section_bytes": 18364,
+      "candidate_pair_section_bytes": 30965,
+      "baseline_non_wildcopy_instance_bytes": 8766,
+      "candidate_non_wildcopy_instance_bytes": 14316,
+      "baseline_wildcopy_instance_bytes": 9598,
+      "candidate_wildcopy_instance_bytes": 16649,
+      "iterations": 3000,
+      "pairs": 3,
+      "median": 0.780504083842,
+      "geometric_mean": 0.780546076463,
+      "wins": 0,
+      "libzstd_normalized_median": 0.783528393436,
+      "libzstd_normalized_geometric_mean": 0.780989587871,
+      "observations": [
+        [225030270, 205415641, 287069091, 205321175],
+        [226031752, 205609687, 289597142, 207054950],
+        [226272449, 205892041, 291115768, 204897839]
+      ],
+      "continuous_monitor": "one-second ps monitor remained alive; no concurrent Zig process was observed",
+      "validation": "locked split-Huffman specialized-versus-generic oracle passed",
+      "removed": true
+    },
     "pair_copy_reuse_coverage": {
       "date": "2026-10-03",
       "pair_count": 663,
