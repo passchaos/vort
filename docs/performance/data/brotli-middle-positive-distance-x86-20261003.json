@@ -191,16 +191,20 @@
     },
     "roadmap_q5_clean_screen": {
       "iterations": 500,
-      "pairs": 3,
-      "median": 0.996449738749,
-      "geometric_mean": 0.994817030967,
+      "pairs": 7,
+      "median": 0.999495552778,
+      "geometric_mean": 0.998210550021,
       "minimum": 0.987836058172,
-      "maximum": 1.000205785956,
-      "wins": 1,
+      "maximum": 1.003941785624,
+      "wins": 3,
       "samples_ns": [
         [1398545008, 1415766307],
         [1402094531, 1401806059],
-        [1399309632, 1404295247]
+        [1399309632, 1404295247],
+        [1394805756, 1395509717],
+        [1401107000, 1410703878],
+        [1397829997, 1395548999],
+        [1401993264, 1398989838]
       ]
     },
     "discarded_campaigns": "combined and retry batches were discarded whenever the corrected monitor observed an external spectra Zig process",

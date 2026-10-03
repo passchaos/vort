@@ -17283,8 +17283,8 @@ reuse, so production keeps the simpler independently owned plans.
 
 - Extending that positive-distance assertion to the 129--256-tree paired
   executor was rejected. LLVM enlarged its payload from `0x1690` to `0x16d3`
-  and the paired section from `0x259b` to `0x25db`; three clean 500-iteration
-  roadmap-q5 pairs measured `0.9964x` median / `0.9948x` geometric with 1/3
+  and the paired section from `0x259b` to `0x25db`; seven clean 500-iteration
+  roadmap-q5 pairs measured `0.9995x` median / `0.9982x` geometric with 3/7
   wins. A single clean q9 pair reached `1.0026x`, but was insufficient to
   overturn the q5 regression. All batches overlapping external Zig work were
   discarded, and the full-tier runtime check remains.
