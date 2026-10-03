@@ -129,6 +129,13 @@ byte-for-byte output check before timing.
   from `0x47bc` to `0x78f5`. Three clean complete-frame pairs regressed to
   0.7805x median / 0.7805x geometric, 0/3, and 0.7810x after libzstd
   normalization. Repeated offsets therefore remain in the caller-owned state.
+- Reordering the internal `SequenceDecodeState` fields from LL/OF/ML to
+  LL/ML/OF made the complete split section 19 bytes smaller and the strict
+  instance 275 bytes smaller, but enlarged the production wildcopy instance
+  from `0x257e` to `0x267e`. Three complete-frame pairs under the corrected
+  continuous monitor all lost: 0.9787x median / 0.9769x geometric, and 0.9746x
+  after libzstd normalization. The original field order was restored; a
+  smaller aggregate section is not useful when its selected instance grows.
 - A copy-reuse audit found 658/663 pairs with equal match lengths, but only
   4/663 where the second match source exactly reused the first match output;
   neither dominant 70/70 nor 71/71 pair had that distance. A fused reload-free

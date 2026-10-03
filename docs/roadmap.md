@@ -17220,3 +17220,10 @@ reuse, so production keeps the simpler independently owned plans.
   `0.7810x` after libzstd normalization. Production retains in-place repcode
   state updates; future state work must not duplicate commits across error
   exits.
+
+- Reordering the internal sequence state from LL/OF/ML to LL/ML/OF was also
+  rejected. It reduced the aggregate split section by 19 bytes and its strict
+  instance by 275 bytes, but enlarged the selected production instance by 256
+  bytes. Three continuously monitored `large_json` pairs regressed to
+  `0.9787x` median / `0.9769x` geometric with 0/3 wins and `0.9746x` after
+  libzstd normalization. Production retains LL/OF/ML physical order.
