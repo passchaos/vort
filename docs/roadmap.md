@@ -17194,3 +17194,11 @@ reuse, so production keeps the simpler independently owned plans.
   the local batching benefit, so the candidate was removed. Future Huffman
   work should reduce the existing five-symbol loop itself rather than add a
   second execution boundary.
+
+- Replacing the existing five-symbol Huffman loop's twenty interleaved byte
+  stores with four local five-byte record writes was also rejected. Although
+  seven `large_json` pairs reached `1.0026x` median, a single 1.0257x sample
+  inflated the `1.0047x` geometric result and libzstd-normalized median was
+  only `1.0019x`. The helper grew by 234 bytes and moved the otherwise
+  unchanged compact-pair section by 256 bytes, so the evidence was too weak
+  for that layout cost. Production retains direct interleaved stores.

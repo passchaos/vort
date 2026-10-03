@@ -154,6 +154,15 @@ byte-for-byte output check before timing.
   1.0018x geometric, 9/15, with a 0.9896x--1.0303x range. The call/state
   round-trip consumed the local loop gain, so the helper and loaded-prefix
   API were removed.
+- Batching the existing five-symbol loop's twenty scattered byte stores into
+  four local five-byte records passed the locked specialized/generic oracle.
+  LLVM emitted wider stores, but the reservoir helper grew from `0xb67` to
+  `0xc51` bytes and shifted the unchanged compact-pair section by 256 bytes.
+  Seven complete-frame pairs measured 1.0026x median / 1.0047x geometric,
+  5/7; a single 1.0257x observation inflated the geometric result, while the
+  libzstd-normalized median was only 1.0019x. That evidence did not justify
+  the code growth and pair relocation, so direct interleaved byte stores were
+  restored.
 - Filling the complete 11-bit lookup 16 entries at a time instead of eight
   measured only 1.0029x stage geometric and shifted the following Huffman text
   section by 256 bytes. It was removed without a full-frame campaign.
