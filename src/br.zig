@@ -7799,7 +7799,7 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
             var second_previous: u8 = if (output_cursor < 2) 0 else output[output_cursor - 2];
             var i: usize = 0;
             while (i < lengths.insert_len) {
-                if (header.literal_block.block_type_count > 1 and literal_block_remaining == 0) {
+                if (literal_block_remaining == 0 and header.literal_block.block_type_count > 1) {
                     header.literal_block.remaining = 0;
                     try switchBlockAny(max_literal_block_types, &header.literal_block, reader);
                     literal_block_remaining = header.literal_block.remaining;

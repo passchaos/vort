@@ -65,6 +65,12 @@ whole-frame measurements.
 [Brotli middle-tier nonzero copy entry](performance/brotli-middle-tier-nonzero-copy-x86.md)
 extends the same proven command invariant to the isolated 65--128-tree
 executor, with byte-identical non-target text sections and source-file A/B data.
+[Brotli middle-tier non-overlap branch](performance/brotli-middle-nonoverlap-branch-x86.md)
+records the dominant non-overlapping copy shape, the retained middle-tier-only
+layout hint, rejected copy/check alternatives, and fixed-CPU source controls.
+[Brotli middle-tier literal countdown](performance/brotli-middle-literal-countdown-x86.md)
+records a per-literal short-circuit that avoids the active block-type load,
+plus isolated code generation, source q9/q5 A/B data, and non-target controls.
 [Brotli identity dictionary borrowing](performance/brotli-static-dictionary-borrow.md)
 records the zero-copy identity transform, full transform equivalence coverage,
 and paired dictionary-heavy decode measurements.

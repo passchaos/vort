@@ -17079,6 +17079,26 @@ reuse, so production keeps the simpler independently owned plans.
   `docs/performance/brotli-middle-nonoverlap-branch-x86.md` and its JSON
   companion.
 
+- The same 65--128 literal-tree executor now checks its local literal-block
+  countdown before loading the header's block-type count. A preceding audit of
+  the same source-family q9 path observed 20,486 literals but only ten literal
+  block switches; the current frozen q9 frame contains 20,459 literal bytes.
+  The common path now short-circuits a repeated dependent header read without
+  changing switching, error, or output semantics. Fifteen 500-iteration
+  decoder-only pairs improve source q9 by `1.0061x` median / `1.0067x`
+  geometric with 14/15 wins and source q5 by `1.0035x` / `1.0034x` with 13/15
+  wins. Same-process libbrotli normalization is near-neutral `1.0004x` for q9
+  and positive `1.0061x` for q5; candidate throughput remains only
+  `0.7305x`/`0.7274x`
+  local libbrotli 1.2.0-dev. Full-tier roadmap controls are neutral-positive,
+  and a clean 15-pair, 1,000-decode 52-tree clustered control measures
+  `1.0043x` median / `1.0029x` geometric with 10/15 wins. Large Window, paired
+  full-tier, and wide10 auxiliary sections are byte-identical to baseline. All
+  direct tests, reference/upstream/real-corpus gates, AArch64 compilation,
+  full tests, build check, and CLI smoke pass. Evidence is in
+  `docs/performance/brotli-middle-literal-countdown-x86.md` and its JSON
+  companion.
+
 - Two command-to-distance context propagation designs were evaluated and
   removed. Reusing two spare bits in the 32-bit Brotli command root improved
   source q9/q5 by 1.0061x/1.0082x geometrically, but regressed the deterministic

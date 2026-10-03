@@ -1,0 +1,261 @@
+{
+  "date": "2026-10-03",
+  "baseline_git": "bd289c98d4fce0c34d3a8c821e76085d58765b29",
+  "host": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "environment": {
+    "os": "linux",
+    "arch": "x86_64",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_affinity": "2",
+    "codec_threads": 1,
+    "reference": "libbrotli 1.2.0-dev 558fc647",
+    "reference_libraries": {
+      "libbrotlidec": "e3e18631aaa421912afddbef2246eb3e6abe4e15a10f983d31ac2dcbe3d20eb3",
+      "libbrotlicommon": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739",
+      "libbrotlienc": "cc82e22aba04d134b95425d936c1d834edc64a1379c008c896d7fe68cd258899"
+    }
+  },
+  "baseline_executable_sha256": "82c05e7857ee7c307a86087a60550ef9d1e8704cbc695df252670c346dbf7fbc",
+  "candidate_executable_sha256": "552b9bde938c8995dae5befa0e0abf1e89ab5ec4da38380dca21a7dab587c3df",
+  "order": "baseline,candidate on odd pairs; candidate,baseline on even pairs",
+  "decoder_only_command": "taskset -c 2 BINARY --input /tmp/vort-decoder-20261001/source.zig --encoded-input FRAME --name CASE --iterations 500 --vort-only --csv OUT",
+  "reference_command": "taskset -c 2 BINARY --input /tmp/vort-decoder-20261001/source.zig --encoded-input FRAME --name CASE --iterations 100 --csv OUT",
+  "implementation": {
+    "change": "test literal_block_remaining before literal block_type_count in the 65--128-tree per-literal loop",
+    "scope": "processWideExternalLiteralLookup9CompressedPayload only",
+    "bitstream_behavior_changed": false,
+    "error_order_changed": false,
+    "persistent_state_bytes_added": 0,
+    "allocation_bytes_added": 0,
+    "selected_executor_bytes_before": 4254,
+    "selected_executor_bytes_after": 4398,
+    "middle_section_bytes_before": 17001,
+    "middle_section_bytes_after": 17290,
+    "baseline_executable_bytes": 6105304,
+    "candidate_executable_bytes": 6106736,
+    "byte_identical_non_target_sections": {
+      ".vort_br_large_window": "2c4e6713ff5c48c4ef7b5207fb7dd5af1bad2d9463c04eb0cadb6a82a88048fa",
+      ".vort_br_paired_literal": "4abc6e76f50ed969998c3312d3582a6c7564357992de347bb09db8bb095e9395",
+      ".vort_br_wide_lookup10_aux": "e4b18ce2da5bf3b6c24490dbb0dbf9e52094d1af82cf211b772d3ec597ec3a92"
+    }
+  },
+  "inputs": {
+    "source": {
+      "bytes": 1726567,
+      "sha256": "b75cf6294797c217c0e4a17054a65c5e2d6a355529eccd65c7fd94c24f26fff0"
+    },
+    "source_q9": {
+      "encoded_bytes": 141001,
+      "encoded_sha256": "867477d8c87c432884a2398abcc02063b23bea85fb9ec1cf6abafbb4a6182a6e",
+      "literal_bytes": 20459,
+      "commands": 50574,
+      "zero_insert_commands": 39619,
+      "single_literal_insert_commands": 7167,
+      "implicit_distance_commands": 2460,
+      "max_literal_context_trees": 104,
+      "max_command_block_types": 10,
+      "max_distance_context_trees": 37
+    },
+    "source_q5": {
+      "encoded_bytes": 147580,
+      "encoded_sha256": "e6e0e004ce7d3d94a7afc850c42eba440b8ebc22ff925dad6dbe2d3cc52cb379",
+      "literal_bytes": 23048,
+      "commands": 54075,
+      "zero_insert_commands": 41033,
+      "single_literal_insert_commands": 9089,
+      "implicit_distance_commands": 3529,
+      "max_literal_context_trees": 117,
+      "max_command_block_types": 10,
+      "max_distance_context_trees": 38
+    }
+  },
+  "decoder_only": {
+    "iterations": 500,
+    "source_q9": {
+      "pairs": 15,
+      "median": 1.006086506815,
+      "geometric_mean": 1.006667397308,
+      "minimum": 0.998041871547,
+      "maximum": 1.013029488151,
+      "wins": 14,
+      "samples_ns": [
+        [736683054, 733295309],
+        [738486015, 734958577],
+        [740944484, 736462003],
+        [738453753, 734936919],
+        [742469932, 733085074],
+        [740719610, 735259424],
+        [737986329, 734841794],
+        [738712834, 734278109],
+        [736948486, 738394357],
+        [742224543, 736427069],
+        [742234253, 735988350],
+        [739095943, 736120777],
+        [745806057, 736213571],
+        [737320777, 732517434],
+        [738601144, 730388049]
+      ]
+    },
+    "source_q5": {
+      "pairs": 15,
+      "median": 1.003463464343,
+      "geometric_mean": 1.003425492788,
+      "minimum": 0.989340804848,
+      "maximum": 1.012126497819,
+      "wins": 13,
+      "samples_ns": [
+        [782736599, 779384002],
+        [785873271, 781779726],
+        [778951700, 787344155],
+        [783699272, 780994326],
+        [785852425, 783582473],
+        [783870014, 781551537],
+        [783130999, 782098755],
+        [780147655, 780466886],
+        [783171966, 780106887],
+        [786417798, 776995563],
+        [785326955, 781477899],
+        [789701765, 783052080],
+        [786297536, 785521990],
+        [784215750, 783386363],
+        [785851730, 777344401]
+      ]
+    }
+  },
+  "same_process_reference": {
+    "iterations": 100,
+    "source_q9": {
+      "pairs": 7,
+      "raw_median": 1.000892692514,
+      "raw_geometric_mean": 1.003952062396,
+      "raw_minimum": 0.992845786909,
+      "raw_maximum": 1.023741968717,
+      "raw_wins": 4,
+      "normalized_median": 0.996447116699,
+      "normalized_geometric_mean": 1.000393224423,
+      "normalized_minimum": 0.990059912854,
+      "normalized_maximum": 1.021845985800,
+      "normalized_wins": 3,
+      "candidate_over_libbrotli_median": 0.7305,
+      "candidate_over_libbrotli_geometric_mean": 0.733170134988,
+      "samples_ns": [
+        [[147775170, 108774980], [146503485, 106859544]],
+        [[147710883, 107831928], [147103814, 107461724]],
+        [[146971118, 107277929], [146840035, 107921445]],
+        [[150026733, 109791266], [146547409, 106858332]],
+        [[146373272, 107665148], [146420058, 107298730]],
+        [[146071104, 107268420], [147123658, 106977900]],
+        [[147341432, 107916611], [147637661, 110495746]]
+      ]
+    },
+    "source_q5": {
+      "pairs": 7,
+      "raw_median": 1.008285815591,
+      "raw_geometric_mean": 1.013501994610,
+      "raw_minimum": 1.000261242024,
+      "raw_maximum": 1.031431275390,
+      "raw_wins": 7,
+      "normalized_median": 1.005668463985,
+      "normalized_geometric_mean": 1.006051931312,
+      "normalized_minimum": 0.990955187063,
+      "normalized_maximum": 1.014885920979,
+      "normalized_wins": 6,
+      "candidate_over_libbrotli_median": 0.7274,
+      "candidate_over_libbrotli_geometric_mean": 0.727364800466,
+      "samples_ns": [
+        [[157899783, 113162444], [156602206, 113700935]],
+        [[156164213, 113949343], [156123427, 112899972]],
+        [[155922854, 112994495], [154914436, 112288999]],
+        [[160255569, 115918966], [155372028, 113023930]],
+        [[159816524, 115819320], [155267017, 112937398]],
+        [[157081949, 112904868], [154946062, 113031385]],
+        [[156166764, 112927051], [155331611, 113926303]]
+      ]
+    }
+  },
+  "controls": {
+    "full_tier": {
+      "requested_iterations": 500,
+      "pairs": 5,
+      "external_spectra_process_detected": false,
+      "roadmap_q9": {
+        "median": 1.003262968689,
+        "geometric_mean": 1.002587162338,
+        "minimum": 0.992276890635,
+        "maximum": 1.010803915594,
+        "wins": 4,
+        "samples_ns": [
+          [1361369470, 1346818556],
+          [1346790414, 1345379084],
+          [1353623640, 1346037482],
+          [1344121777, 1339750214],
+          [1343911770, 1354371731]
+        ]
+      },
+      "roadmap_q5": {
+        "median": 1.000324854901,
+        "geometric_mean": 1.000636715436,
+        "minimum": 0.995898028189,
+        "maximum": 1.006056780482,
+        "wins": 3,
+        "samples_ns": [
+          [1400593790, 1400138948],
+          [1399425710, 1402641641],
+          [1386021350, 1391730188],
+          [1405279715, 1396819486],
+          [1396219080, 1391723446]
+        ]
+      }
+    },
+    "clustered_q8": {
+      "requested_iterations": 10000,
+      "effective_iterations": 1000,
+      "pairs": 15,
+      "external_spectra_process_detected": false,
+      "max_literal_context_trees": 52,
+      "median": 1.004317793293,
+      "geometric_mean": 1.002937659835,
+      "minimum": 0.995563478989,
+      "maximum": 1.013751779653,
+      "wins": 10,
+      "samples_ns": [
+        [571909240, 570341922],
+        [572409824, 574960649],
+        [575728820, 572154786],
+        [575602106, 567793929],
+        [572791955, 575080751],
+        [569704662, 571568742],
+        [574480635, 570805213],
+        [574017875, 570331090],
+        [575730291, 573255094],
+        [578660084, 573986604],
+        [570463087, 572132476],
+        [572757855, 570060178],
+        [579273110, 575275651],
+        [572226240, 573217465],
+        [571495114, 571038570]
+      ]
+    },
+    "discarded_campaigns": "Earlier clean/idle/remfirst/final2-control/final3-control/final5 timings were excluded when leftover or external Zig processes were present, or because clustered_q8 used too few effective iterations. The retained final6 campaign started after the external spectra verification exited and its one-second monitor remained clear."
+  },
+  "validation": {
+    "direct_brotli_releasefast_tests": 549,
+    "reference_gate_rows": 13,
+    "path_smoke_rows": 3,
+    "path_smoke_invalid_rows": 5,
+    "upstream_generated_one_shot": 7056,
+    "upstream_progressive": 7056,
+    "upstream_fragmentation": 1401,
+    "high_tree_truncations": 64,
+    "large_window_cases": 7,
+    "real_corpus_one_shot": "16/16",
+    "real_corpus_progressive": "16/16",
+    "aarch64_releasefast_compile": "pass",
+    "zig_build_check": "pass",
+    "zig_build_test": "pass",
+    "cli_help_smoke": "pass"
+  },
+  "decision": "retain countdown-first short-circuit only; all adjacent hint and state-layout candidates were removed"
+}
