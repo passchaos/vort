@@ -17308,3 +17308,18 @@ reuse, so production keeps the simpler independently owned plans.
   noise because the executed code is identical. The source spelling was
   removed; the next attempt must select a distinct zero-postfix executor once
   per block rather than branch inside the shared inline helper.
+
+- The Brotli 65--128-tree external nine-bit decoder now selects a distinct
+  `NPOSTFIX=0, NDIRECT=0` executor once per compressed block. Regular prepared
+  distances become offset-plus-extra without a dynamic shift; the generic
+  fallback and all error/truncation behavior remain available. The specialized
+  instance is `0x1472` bytes versus the generic selected instance's `0x1482`,
+  while preserving the latter for other streams grows the containing section
+  from `0x4382` to `0x58b2`. Fifteen clean source-q9 pairs improve `1.0110x`
+  median / `1.0125x` geometric with 15/15 wins, and seven source-q5 pairs
+  improve `1.0128x` / `1.0125x` with 7/7 wins. Same-process libbrotli-
+  normalized geometry is `1.0116x`/`1.0185x`; the candidates remain only
+  `0.7729x`/`0.7678x` libbrotli at the median, so broad leadership remains
+  open. Three non-target controls combine to `1.0008x` geometrically. Full
+  correctness, compatibility, corpus, cross-target, and build validation are
+  recorded in `docs/performance/brotli-middle-zero-postfix-x86.md`.

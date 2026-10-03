@@ -84,6 +84,10 @@ auxiliary decoding, its proof, fixed-CPU A/B data, and full compatibility gates.
 [Brotli distance-code profile](performance/brotli-distance-code-profile.md)
 adds summary-only implicit/short/direct/regular copy accounting and records the
 dominant zero-postfix regular-distance shape of the current priority frames.
+[Brotli middle-tier zero-postfix distances](performance/brotli-middle-zero-postfix-x86.md)
+records the block-selected `NPOSTFIX=0, NDIRECT=0` executor, its eliminated
+dynamic shift, target-frame gains, neutral controls, and full compatibility
+validation.
 [Brotli identity dictionary borrowing](performance/brotli-static-dictionary-borrow.md)
 records the zero-copy identity transform, full transform equivalence coverage,
 and paired dictionary-heavy decode measurements.
