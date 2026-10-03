@@ -1,0 +1,196 @@
+{
+  "date": "2026-10-03",
+  "baseline_git": "808ec2a870d8b92a4f29a4305cda1a2a81909996",
+  "host": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "environment": {
+    "os": "linux",
+    "arch": "x86_64",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_affinity": "2",
+    "codec_threads": 1,
+    "reference": "libbrotli 1.2.0-dev 558fc647",
+    "reference_libraries": {
+      "libbrotlidec": "e3e18631aaa421912afddbef2246eb3e6abe4e15a10f983d31ac2dcbe3d20eb3",
+      "libbrotlicommon": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739"
+    }
+  },
+  "baseline_executable_sha256": "a096fa4f49fa1aed0ea1d5bf39753e927a5dfef55ea28ca2a4993857b5934869",
+  "candidate_executable_sha256": "0e1c611d78b8944b58525dd80f6e5bc719edee46d86c8267aa3d8c51206294d9",
+  "final_source_executable_sha256": "77425d9d467dc236b9ec143e929f42685c4350da01e6c8f26499f84dc7226f33",
+  "measured_middle_section_byte_identical_to_final_source": true,
+  "baseline_executable_bytes": 6106736,
+  "candidate_executable_bytes": 6107720,
+  "order": "baseline,candidate on odd pairs; candidate,baseline on even pairs",
+  "decoder_only_command": "taskset -c 2 BINARY --input /tmp/vort-decoder-20261001/source.zig --encoded-input FRAME --name CASE --iterations 500 --vort-only --csv OUT",
+  "reference_command": "LD_LIBRARY_PATH=/tmp/vort-brotli-upstream-build taskset -c 2 BINARY --input /tmp/vort-decoder-20261001/source.zig --encoded-input FRAME --name CASE --iterations 100 --csv OUT",
+  "implementation": {
+    "scope": "processWideExternalLiteralLookup9CompressedPayload auxiliary instances",
+    "change": "replace the post-decode distance-zero runtime branch with a safe-build assertion",
+    "non_auxiliary_runtime_check_retained": true,
+    "bitstream_behavior_changed": false,
+    "error_behavior_changed": false,
+    "persistent_state_bytes_added": 0,
+    "allocation_bytes_added": 0,
+    "baseline_middle_section_bytes": 17290,
+    "candidate_middle_section_bytes": 17282,
+    "baseline_selected_instance_bytes": 4398,
+    "candidate_selected_instance_bytes": 4549,
+    "baseline_command_lookup_instance_bytes": 5450,
+    "candidate_command_lookup_instance_bytes": 5250,
+    "unchanged_non_auxiliary_instance_bytes": 2907,
+    "baseline_middle_section_sha256": "13322c55ed64e3a08b00f33420f441cfd85e225319c6db72ffd75e0e13198b7f",
+    "candidate_middle_section_sha256": "61bb1a3320042555e981c991b1f0eae04064d9c22a48c61d2393f50319dc8569",
+    "byte_identical_non_target_sections": {
+      ".text": "f4edf0570abc11fde417d23532dbfdb1e3c0d5f20c866433471a3d553dfd4fac",
+      ".vort_br_large_window": "2c4e6713ff5c48c4ef7b5207fb7dd5af1bad2d9463c04eb0cadb6a82a88048fa",
+      ".vort_br_paired_literal": "4abc6e76f50ed969998c3312d3582a6c7564357992de347bb09db8bb095e9395",
+      ".vort_br_wide_lookup10_aux": "e4b18ce2da5bf3b6c24490dbb0dbf9e52094d1af82cf211b772d3ec597ec3a92"
+    }
+  },
+  "invariant": {
+    "initial_last_distances": [16, 15, 11, 4],
+    "direct_distance_minimum": 1,
+    "regular_distance_terminal_increment": 1,
+    "short_nonpositive_delta_result": "InvalidMatch",
+    "safe_build_assertion_retained": true,
+    "exhaustive_prepared_table_positive_check": true
+  },
+  "inputs": {
+    "source": {
+      "bytes": 1726567,
+      "sha256": "b75cf6294797c217c0e4a17054a65c5e2d6a355529eccd65c7fd94c24f26fff0"
+    },
+    "source_q9": {
+      "encoded_bytes": 141001,
+      "encoded_sha256": "867477d8c87c432884a2398abcc02063b23bea85fb9ec1cf6abafbb4a6182a6e",
+      "literal_trees": 104,
+      "lz77_copies": 48751
+    },
+    "source_q5": {
+      "encoded_bytes": 147580,
+      "encoded_sha256": "e6e0e004ce7d3d94a7afc850c42eba440b8ebc22ff925dad6dbe2d3cc52cb379",
+      "literal_trees": 117,
+      "lz77_copies": 52136
+    }
+  },
+  "decoder_only": {
+    "iterations": 500,
+    "source_q9": {
+      "pairs": 15,
+      "median": 1.001788546077,
+      "geometric_mean": 1.001754199872,
+      "minimum": 0.994279668440,
+      "maximum": 1.009513010329,
+      "wins": 10,
+      "samples_ns": [
+        [731772076, 731876707],
+        [734747879, 727824081],
+        [733153157, 730080167],
+        [734921459, 728504898],
+        [729648256, 733846099],
+        [730701480, 729396920],
+        [734075607, 731600836],
+        [732078380, 731810480],
+        [732324583, 733486113],
+        [735709083, 734604864],
+        [735981096, 733747846],
+        [734686813, 735645934],
+        [734650684, 732180162],
+        [736036533, 734666249],
+        [730666294, 732628121]
+      ]
+    },
+    "source_q5": {
+      "pairs": 7,
+      "median": 1.001464142179,
+      "geometric_mean": 1.001266491340,
+      "minimum": 0.995373296734,
+      "maximum": 1.006298088516,
+      "wins": 4,
+      "samples_ns": [
+        [778293722, 781911394],
+        [777076808, 777902877],
+        [781289414, 779278801],
+        [783603833, 780025106],
+        [783815624, 778909980],
+        [782584212, 782847127],
+        [784621576, 783474458]
+      ]
+    }
+  },
+  "same_process_reference": {
+    "iterations": 100,
+    "source_q9": {
+      "pairs": 7,
+      "raw_median": 1.003181020757,
+      "raw_geometric_mean": 1.001088762912,
+      "raw_minimum": 0.988117196261,
+      "raw_maximum": 1.009376885013,
+      "raw_wins": 4,
+      "normalized_median": 1.005038058738,
+      "normalized_geometric_mean": 1.005905151985,
+      "normalized_minimum": 0.987684092668,
+      "normalized_maximum": 1.024944478498,
+      "normalized_wins": 5,
+      "candidate_over_libbrotli_median": 0.764570460303,
+      "candidate_over_libbrotli_geometric_mean": 0.765391974563,
+      "samples_ns": [
+        [[146557788, 111784547], [145196299, 112118351]],
+        [[146743517, 111633343], [146278203, 111839993]],
+        [[148006814, 113175645], [148441875, 112110363]],
+        [[147669524, 111271293], [148040322, 114333269]],
+        [[146923718, 111829902], [146224183, 111293154]],
+        [[147040138, 112733078], [148808399, 114307568]],
+        [[147116674, 111351763], [145983493, 111576747]]
+      ]
+    },
+    "source_q5": {
+      "pairs": 7,
+      "raw_median": 1.009370716403,
+      "raw_geometric_mean": 1.008283351653,
+      "raw_minimum": 0.991126069401,
+      "raw_maximum": 1.018860474839,
+      "raw_wins": 6,
+      "normalized_median": 1.005651473463,
+      "normalized_geometric_mean": 1.006923070242,
+      "normalized_minimum": 0.992613343688,
+      "normalized_maximum": 1.019552310612,
+      "normalized_wins": 6,
+      "candidate_over_libbrotli_median": 0.756747306539,
+      "candidate_over_libbrotli_geometric_mean": 0.758002002925,
+      "samples_ns": [
+        [[156576838, 117453608], [154547742, 116586698]],
+        [[158482836, 119299471], [155549106, 117711367]],
+        [[156526198, 117624306], [154376744, 118277307]],
+        [[156813756, 118060426], [156099284, 118461470]],
+        [[156193822, 118206139], [157592285, 118383518]],
+        [[158557130, 119098124], [157418285, 118565482]],
+        [[156907985, 118370314], [155451295, 119013014]]
+      ]
+    }
+  },
+  "monitoring": {
+    "retained_batches": "corrected one-second ps monitor remained alive; no concurrent Zig process was observed",
+    "discarded_batches": "combined reference retries and one q5 extension were discarded after the monitor observed external spectra Zig builds"
+  },
+  "validation": {
+    "focused_releasefast_tests": 4,
+    "full_project_test": "pass",
+    "reference_gate_rows": 13,
+    "path_smoke_rows": 3,
+    "path_smoke_invalid_rows": 5,
+    "upstream_generated_one_shot": 7056,
+    "upstream_progressive": 7056,
+    "upstream_fragmentation": 1401,
+    "high_tree_truncations": 64,
+    "large_window_cases": 7,
+    "real_corpus_one_shot": "16/16",
+    "real_corpus_progressive": "16/16",
+    "aarch64_releasefast_compile": "pass",
+    "zig_build_check": "pass",
+    "cli_help_smoke": "pass"
+  },
+  "decision": "retain the auxiliary middle-tier positive-distance invariant; broader Brotli leadership remains open"
+}

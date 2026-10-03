@@ -78,6 +78,9 @@ layout hint, rejected copy/check alternatives, and fixed-CPU source controls.
 [Brotli middle-tier literal countdown](performance/brotli-middle-literal-countdown-x86.md)
 records a per-literal short-circuit that avoids the active block-type load,
 plus isolated code generation, source q9/q5 A/B data, and non-target controls.
+[Brotli middle-tier positive-distance invariant](performance/brotli-middle-positive-distance-x86.md)
+records removal of a redundant ReleaseFast distance-zero branch from prepared
+auxiliary decoding, its proof, fixed-CPU A/B data, and full compatibility gates.
 [Brotli identity dictionary borrowing](performance/brotli-static-dictionary-borrow.md)
 records the zero-copy identity transform, full transform equivalence coverage,
 and paired dictionary-heavy decode measurements.

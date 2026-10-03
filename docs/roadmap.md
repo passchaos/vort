@@ -17263,3 +17263,20 @@ reuse, so production keeps the simpler independently owned plans.
   the monitor caught an external Zig build. Per-sequence pointerized state
   transfer remains too costly even at about 8.3% fallback frequency, so future
   executor compaction must avoid a call on each fallback sequence.
+
+- The Brotli 65--128 literal-tree executor now relies on the prepared auxiliary
+  distance decoder's positive-result invariant in ReleaseFast instead of
+  checking `distance == 0` after every LZ77 command. The ring starts at
+  `16/15/11/4`, accepts only decoded positive values, direct/regular prepared
+  bases start at one, and invalid short negative deltas already return an
+  error; Debug and ReleaseSafe retain an assertion, while non-auxiliary paths
+  retain the runtime check. Against frozen `808ec2a8`, source q9 improves
+  `1.0018x` median / `1.0018x` geometric over 15 decoder-only pairs and source
+  q5 improves `1.0015x` / `1.0013x` over seven. Seven-pair same-process
+  libbrotli-normalized geometry is `1.0059x`/`1.0069x`; final candidate ratios
+  remain only `0.7646x`/`0.7567x` at the median. Ordinary `.text`, Large
+  Window, paired full-tier, and 10-bit auxiliary sections are byte-identical.
+  Full tests, upstream/generated/progressive/fragmentation/Large Window and
+  real-corpus differentials, reference gates, AArch64 compilation, build check,
+  and CLI smoke pass. Exact evidence is in
+  `docs/performance/brotli-middle-positive-distance-x86.md`.

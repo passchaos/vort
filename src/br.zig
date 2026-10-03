@@ -7863,7 +7863,12 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
         else
             decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
-        if (distance == 0) return error.InvalidMatch;
+        if (comptime auxiliary_tail_lookups) {
+            // The distance ring starts positive and accepts only these decoded
+            // values. Tail/prepared decoders produce positive direct/regular
+            // distances and reject short-code deltas before they reach zero.
+            std.debug.assert(distance != 0);
+        } else if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, output_cursor);
         if (distance > max_distance) {
             const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
@@ -23011,6 +23016,7 @@ test "br prepared distance lookup matches RFC resolver" {
                 else
                     try resolveRegularDistance(header.npostfix, header.ndirect, @intCast(symbol), max_extra);
                 try std.testing.expectEqual(expected, prepared);
+                try std.testing.expect(prepared != 0);
             }
         }
     }
