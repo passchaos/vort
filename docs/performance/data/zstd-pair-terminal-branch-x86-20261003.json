@@ -135,7 +135,9 @@
     ]
   },
   "controls": {
-    "external_zig_process_detected": false,
+    "process_snapshots": "clear before and after retained campaigns",
+    "continuous_monitor_valid": false,
+    "continuous_monitor_note": "The original set -e monitor exited when its first ps -C zig query found no process; it is not treated as evidence. Same-process libzstd timings provide the drift normalization.",
     "long_large_text_one_shot": {
       "iterations": 30000,
       "pairs": 15,

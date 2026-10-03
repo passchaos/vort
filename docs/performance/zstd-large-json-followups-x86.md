@@ -126,6 +126,16 @@ byte-for-byte output check before timing.
   4/663 where the second match source exactly reused the first match output;
   neither dominant 70/70 nor 71/71 pair had that distance. A fused reload-free
   pair copier therefore has no useful coverage on the locked fixture.
+- A pair-only literal-plus-71-byte copier packed the literal and first seven
+  match bytes into one eight-byte store, followed by two 32-byte stores. The
+  direct oracle covered distances 71--75 and all relevant destination
+  alignments, but inlining the extra path grew the production pair executor
+  from `0x257e` to `0x279a` bytes. Three complete-frame pairs under a corrected
+  continuous process monitor regressed to 0.8574x median / 0.8578x geometric,
+  0/3, and 0.8468x after libzstd normalization. At the minimum distance the
+  required literal store precedes a partially overlapping 32-byte source load;
+  that dependency plus the larger branch body overwhelms the saved store. The
+  candidate was removed.
 - An exact 64-byte forward loop for the separate `large_text` row's four
   distance-82, approximately 128 KiB overlapping matches measured only
   0.5681x / 0.5689x with 0/15 wins. The retained logarithmic seed-and-double

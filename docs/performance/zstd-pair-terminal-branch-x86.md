@@ -38,8 +38,11 @@ The frozen 524,307-byte `large_json` input has SHA-256
 Its 9,905-byte level-1 frame contains five compressed blocks and 7,299
 sequences. Every process uses 3,000 iterations, retains the fastest of five
 interleaved Vort/libzstd rounds, runs on CPU 2, and alternates frozen
-baseline/candidate launch order. A one-second monitor observed no concurrent
-Zig process during either retained 15-pair campaign.
+baseline/candidate launch order. Process snapshots were clear before and after
+the retained campaigns. The original continuous-monitor shell exited early
+when its first `ps -C zig` query found no process, so it is not counted as
+additional evidence; the simultaneous libzstd normalization remains the
+control for within-campaign host drift.
 
 | API | Candidate / baseline median / geometric | Wins | libzstd-normalized median / geometric | Candidate/libzstd median / geometric |
 | --- | ---: | ---: | ---: | ---: |

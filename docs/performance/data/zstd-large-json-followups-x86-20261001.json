@@ -442,6 +442,39 @@
       "match_70_70_distance_71": 0,
       "match_71_71_distance_72": 0,
       "implemented": false
+    },
+    "pair_literal_plus_71_copy": {
+      "date": "2026-10-03",
+      "baseline_git": "4f9919af",
+      "baseline_frame_executable_sha256": "93fd7635636a424c72b61d7df7d177ac48c25d29d0c1e3cee70f8514a59a4045",
+      "candidate_frame_executable_sha256": "f77c880bee87c3bb588a0a4905a7187f2a0544a698913412f7560d18d4f2ce8c",
+      "baseline_frame_bytes": 6491576,
+      "candidate_frame_bytes": 6493936,
+      "baseline_pair_section_bytes": 18364,
+      "candidate_pair_section_bytes": 18904,
+      "baseline_wildcopy_instance_bytes": 9598,
+      "candidate_wildcopy_instance_bytes": 10138,
+      "covered_pair_sequences": 582,
+      "covered_match_length": 71,
+      "oracle_distances": "71--75",
+      "iterations": 3000,
+      "pairs": 3,
+      "median": 0.857407903303,
+      "geometric_mean": 0.857821114244,
+      "minimum": 0.854956153583,
+      "maximum": 0.861110470815,
+      "wins": 0,
+      "libzstd_normalized_median": 0.855697582554,
+      "libzstd_normalized_geometric_mean": 0.846830979906,
+      "candidate_over_libzstd_median": 0.776717548535,
+      "observations": [
+        [225302805, 212842880, 262772018, 204047375],
+        [223963194, 205519323, 261958690, 205697552],
+        [226796063, 204027209, 263376269, 204568970]
+      ],
+      "continuous_monitor": "one-second ps monitor remained alive; no concurrent Zig process was observed",
+      "validation": "direct match-copy oracle and locked split-Huffman specialized-versus-generic oracle passed",
+      "removed": true
     }
   }
 }

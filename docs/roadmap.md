@@ -17202,3 +17202,12 @@ reuse, so production keeps the simpler independently owned plans.
   only `1.0019x`. The helper grew by 234 bytes and moved the otherwise
   unchanged compact-pair section by 256 bytes, so the evidence was too weak
   for that layout cost. Production retains direct interleaved stores.
+
+- Fusing each literal with its following 71-byte pair match was rejected. The
+  exact three-store copier passed distances 71--75, but grew the production
+  pair executor by 540 bytes. A corrected continuously monitored three-pair
+  `large_json` screen regressed to `0.8574x` median / `0.8578x` geometric with
+  0/3 wins and `0.8468x` after libzstd normalization. The minimum-distance
+  store-to-load dependency and larger branch body cost far more than the one
+  removed destination store; production retains separate literal and match
+  copies.
