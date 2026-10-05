@@ -110,6 +110,13 @@ const fse_fse_rle_decode_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+const fse_fse_rle_pair_text_section = switch (builtin.object_format) {
+    .elf => ".vort_zstd_zz_ffr_pair",
+    .macho => "__TEXT,__vort_zstd_ffp",
+    .coff => ".text$vort_zstd_zz_ffr_pair",
+    else => ".text",
+};
+
 const fse_rle_rle_decode_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_frr_decode",
     .macho => "__TEXT,__vort_zstd_frr",
@@ -258,6 +265,7 @@ var test_all_fse_raw_wildcopy_hits: usize = 0;
 var test_all_fse_raw_field_group_hits: usize = 0;
 var test_all_fse_raw_short_pair_hits: usize = 0;
 var test_fse_rle_rle_pair_hits: usize = 0;
+var test_fse_fse_rle_pair_hits: usize = 0;
 var test_disable_fast_direct_match_commit = false;
 var test_fast_direct_match_commit_hits: usize = 0;
 var test_disable_fast_large_direct_transitions = false;
@@ -314,6 +322,79 @@ noinline fn decodeFseRleRleRawSequencePairs(
             sequence_match_copy.appendNonOverlapping48(output, written, written.* - match_offset);
         }
         if (builtin.is_test) test_fse_rle_rle_pair_hits += 1;
+    }
+    return literal_offset;
+}
+
+noinline fn decodeFseFseRleRawSequencePairs(
+    literals: []const u8,
+    spec: *const SequenceModeSpec,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    state: *SequenceDecodeState,
+) linksection(fse_fse_rle_pair_text_section) usize {
+    var literal_offset: usize = 0;
+    while (state.remaining > 2 and state.reader.remaining_bits >= 64) {
+        const first_ll_word = spec.literal_fse.symbolWordUnchecked(state.ll_state);
+        const first_of_word = spec.offset_fse.symbolWordUnchecked(state.of_state);
+        if (sequenceSymbolBase(first_ll_word) != 16 or
+            sequenceSymbolAdditionalBits(first_ll_word) != 1)
+            break;
+        const first_of_additional_bits = sequenceSymbolAdditionalBits(first_of_word);
+        if (first_of_additional_bits != 0) break;
+        const first_ll_state_bits = sequenceSymbolStateBits(first_ll_word);
+        const first_of_state_bits = sequenceSymbolStateBits(first_of_word);
+        const first_bits: u8 = 3 + first_ll_state_bits + first_of_state_bits;
+        if (first_bits > 56) break;
+        var fields = sequence_field_group.Group.initProven(&state.reader);
+        const first_match_extra = fields.read(2);
+        const first_literal_extra = fields.read(1);
+        const second_ll_state = sequenceSymbolNextState(first_ll_word) + fields.read(first_ll_state_bits);
+        const second_of_state = sequenceSymbolNextState(first_of_word) + fields.read(first_of_state_bits);
+        const second_ll_word = spec.literal_fse.symbolWordUnchecked(second_ll_state);
+        const second_of_word = spec.offset_fse.symbolWordUnchecked(second_of_state);
+        if (sequenceSymbolBase(second_ll_word) != 16 or
+            sequenceSymbolAdditionalBits(second_ll_word) != 1)
+            break;
+        const second_of_additional_bits = sequenceSymbolAdditionalBits(second_of_word);
+        if (second_of_additional_bits != 0) break;
+        const second_ll_state_bits = sequenceSymbolStateBits(second_ll_word);
+        const second_of_state_bits = sequenceSymbolStateBits(second_of_word);
+        const pair_bits: u8 = first_bits + 3 +
+            second_ll_state_bits + second_of_state_bits;
+        if (pair_bits > 56) break;
+
+        const second_match_extra = fields.read(2);
+        const second_literal_extra = fields.read(1);
+        const next_ll_state = sequenceSymbolNextState(second_ll_word) + fields.read(second_ll_state_bits);
+        const next_of_state = sequenceSymbolNextState(second_of_word) + fields.read(second_of_state_bits);
+        if (first_match_extra != 1 or first_literal_extra != 0 or
+            second_match_extra != 1 or second_literal_extra != 0) break;
+
+        const match_offset = state.repeated_offsets[0];
+        if (literal_offset > literals.len or literals.len - literal_offset < 32 or
+            written.* < frame_output_start or written.* > output.len or
+            output.len - written.* < 128 or
+            match_offset < 48 or
+            match_offset > written.* + 16 - frame_output_start) break;
+
+        state.reader.remaining_bits -= pair_bits;
+        state.remaining -= 2;
+        state.ll_state = next_ll_state;
+        state.of_state = next_of_state;
+
+        const first_literal: @Vector(16, u8) = literals[literal_offset..][0..16].*;
+        output[written.*..][0..16].* = first_literal;
+        written.* += 16;
+        literal_offset += 16;
+        sequence_match_copy.appendNonOverlapping48(output, written, written.* - match_offset);
+        const second_literal: @Vector(16, u8) = literals[literal_offset..][0..16].*;
+        output[written.*..][0..16].* = second_literal;
+        written.* += 16;
+        literal_offset += 16;
+        sequence_match_copy.appendNonOverlapping48(output, written, written.* - match_offset);
+        if (builtin.is_test) test_fse_fse_rle_pair_hits += 1;
     }
     return literal_offset;
 }
@@ -12204,7 +12285,23 @@ noinline fn decodeFseFseRleSequences(
     const literals = block[section.literal_payload_offset..][0..section.regenerated_size];
     var literal_offset: usize = 0;
     const ml_symbol = spec.match_rle orelse return error.CorruptFrame;
+    const pair_shape = ml_symbol.base == 47 and ml_symbol.additional_bits == 2;
     while (state.remaining != 0) {
+        if (pair_shape and literal_offset <= literals.len) {
+            const paired_literal_bytes = decodeFseFseRleRawSequencePairs(
+                literals[literal_offset..],
+                spec,
+                output,
+                written,
+                frame_output_start,
+                state,
+            );
+            if (paired_literal_bytes != 0) {
+                literal_offset += paired_literal_bytes;
+                continue;
+            }
+        }
+
         const ll_symbol = spec.literal_fse.symbolUnchecked(state.ll_state);
         const of_symbol = spec.offset_fse.symbolUnchecked(state.of_state);
         const offset_extra = try state.reader.readSequenceField(of_symbol.additional_bits);
@@ -12325,7 +12422,7 @@ noinline fn decodeFseRleRleRawSequences(
     }
 }
 
-fn decodeFseRleRleRawSequencesGenericOracle(
+fn decodeModeSequencesGenericOracle(
     block: []const u8,
     section: LiteralOnlySection,
     output: []u8,
@@ -12411,7 +12508,7 @@ test "zstd FSE RLE RLE raw sequence loop matches generic decode" {
     for (expected[0..prefix_len], 0..) |*byte, index| byte.* = @truncate(index * 19 + 7);
     var expected_written: usize = prefix_len;
     var expected_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
-    try decodeFseRleRleRawSequencesGenericOracle(&literals, section, &expected, &expected_written, 0, &expected_state);
+    try decodeModeSequencesGenericOracle(&literals, section, &expected, &expected_written, 0, &expected_state);
     try std.testing.expectEqual(output_len, expected_written);
 
     var actual: [output_len]u8 = undefined;
@@ -12446,7 +12543,7 @@ test "zstd FSE RLE RLE raw sequence loop matches generic decode" {
     @memset(expected_short[prefix_len..], 0xa5);
     var expected_short_written: usize = prefix_len;
     var expected_short_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
-    try std.testing.expectError(error.OutputTooSmall, decodeFseRleRleRawSequencesGenericOracle(
+    try std.testing.expectError(error.OutputTooSmall, decodeModeSequencesGenericOracle(
         &literals,
         section,
         &expected_short,
@@ -12487,7 +12584,7 @@ test "zstd FSE RLE RLE raw sequence loop matches generic decode" {
     @memset(expected_invalid[prefix_len..], 0xa5);
     var expected_invalid_written: usize = prefix_len;
     var expected_invalid_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), invalid_offsets);
-    try std.testing.expectError(error.InvalidMatch, decodeFseRleRleRawSequencesGenericOracle(
+    try std.testing.expectError(error.InvalidMatch, decodeModeSequencesGenericOracle(
         &literals,
         section,
         &expected_invalid,
@@ -12524,6 +12621,7 @@ test "zstd FSE RLE RLE raw sequence loop matches generic decode" {
 }
 
 test "zstd FSE FSE RLE raw sequence loop matches generic decode" {
+    defer test_fse_fse_rle_pair_hits = 0;
     const sequence_count = 256;
     const prefix_len = 64;
     const literal_len = 16;
@@ -12545,7 +12643,7 @@ test "zstd FSE FSE RLE raw sequence loop matches generic decode" {
     var literal_table: SequenceFseTable = .{};
     literal_table.len = 2;
     literal_table.accuracy_log = 1;
-    literal_table.entries[0] = .{ .base = literal_len, .additional_bits = 0, .next_state = 0, .state_bits = 1 };
+    literal_table.entries[0] = .{ .base = literal_len, .additional_bits = 1, .next_state = 0, .state_bits = 1 };
     literal_table.entries[1] = literal_table.entries[0];
     var offset_table: SequenceFseTable = .{};
     offset_table.len = 2;
@@ -12565,7 +12663,7 @@ test "zstd FSE FSE RLE raw sequence loop matches generic decode" {
         .bitstream_offset = 0,
     };
 
-    var fields: [sequence_count * 3]BitField = undefined;
+    var fields: [sequence_count * 4]BitField = undefined;
     var field_count: usize = 0;
     fields[field_count] = .{ .value = 0, .bits = 1 };
     field_count += 1;
@@ -12573,6 +12671,8 @@ test "zstd FSE FSE RLE raw sequence loop matches generic decode" {
     field_count += 1;
     for (0..sequence_count) |index| {
         fields[field_count] = .{ .value = 1, .bits = 2 };
+        field_count += 1;
+        fields[field_count] = .{ .value = 0, .bits = 1 };
         field_count += 1;
         if (index + 1 < sequence_count) {
             fields[field_count] = .{ .value = index & 1, .bits = 1 };
@@ -12589,14 +12689,7 @@ test "zstd FSE FSE RLE raw sequence loop matches generic decode" {
     for (expected[0..prefix_len], 0..) |*byte, index| byte.* = @truncate(index * 19 + 7);
     var expected_written: usize = prefix_len;
     var expected_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
-    var literal_offset: usize = 0;
-    while (expected_state.remaining != 0) {
-        const sequence = try readModeSequence(&expected_state);
-        try copyLiteralsFromSection(&literals, section, literal_offset, &expected, &expected_written, sequence.literal_len);
-        literal_offset += sequence.literal_len;
-        try copyMatchFromHistory(&expected, &expected_written, 0, &.{}, sequence.match_offset, sequence.match_len);
-    }
-    try std.testing.expectEqual(literals.len, literal_offset);
+    try decodeModeSequencesGenericOracle(&literals, section, &expected, &expected_written, 0, &expected_state);
     try std.testing.expectEqual(output_len, expected_written);
 
     var actual: [output_len]u8 = undefined;
@@ -12605,6 +12698,7 @@ test "zstd FSE FSE RLE raw sequence loop matches generic decode" {
     var actual_written: usize = prefix_len;
     var actual_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
     var actual_frame_state: SequenceFrameState = .{ .repeated_offsets = .{ prefix_len, 4, 8 } };
+    test_fse_fse_rle_pair_hits = 0;
     try decodeFseFseRleSequences(
         &literals,
         section,
@@ -12624,38 +12718,90 @@ test "zstd FSE FSE RLE raw sequence loop matches generic decode" {
     try std.testing.expectEqual(SymbolMode.compressed, actual_frame_state.previous_tables.?.ll_mode);
     try std.testing.expectEqual(SymbolMode.compressed, actual_frame_state.previous_tables.?.of_mode);
     try std.testing.expectEqual(SymbolMode.rle, actual_frame_state.previous_tables.?.ml_mode);
+    try std.testing.expect(test_fse_fse_rle_pair_hits > sequence_count / 4);
 
-    var short_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
-    var short_written: usize = prefix_len;
+    var expected_short: [output_len - 1]u8 = undefined;
+    @memcpy(expected_short[0..prefix_len], expected[0..prefix_len]);
+    @memset(expected_short[prefix_len..], 0xa5);
+    var expected_short_written: usize = prefix_len;
+    var expected_short_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
+    try std.testing.expectError(error.OutputTooSmall, decodeModeSequencesGenericOracle(
+        &literals,
+        section,
+        &expected_short,
+        &expected_short_written,
+        0,
+        &expected_short_state,
+    ));
+
+    var actual_short: [output_len - 1]u8 = undefined;
+    @memcpy(actual_short[0..prefix_len], expected[0..prefix_len]);
+    @memset(actual_short[prefix_len..], 0xa5);
+    var actual_short_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len, 4, 8 });
+    var actual_short_written: usize = prefix_len;
     var short_frame_state: SequenceFrameState = .{ .repeated_offsets = .{ prefix_len, 4, 8 } };
     try std.testing.expectError(error.OutputTooSmall, decodeFseFseRleSequences(
         &literals,
         section,
         &spec,
-        actual[0 .. actual.len - 1],
-        &short_written,
+        &actual_short,
+        &actual_short_written,
         0,
         &.{},
         &short_frame_state,
         .terminal,
-        &short_state,
+        &actual_short_state,
+    ));
+    try std.testing.expectEqual(expected_short_written, actual_short_written);
+    try std.testing.expectEqual(expected_short_state.reader.remaining_bits, actual_short_state.reader.remaining_bits);
+    try std.testing.expectEqual(expected_short_state.remaining, actual_short_state.remaining);
+    try std.testing.expectEqual(expected_short_state.ll_state, actual_short_state.ll_state);
+    try std.testing.expectEqual(expected_short_state.ml_state, actual_short_state.ml_state);
+    try std.testing.expectEqual(expected_short_state.of_state, actual_short_state.of_state);
+    try std.testing.expectEqual(expected_short_state.repeated_offsets, actual_short_state.repeated_offsets);
+    try std.testing.expectEqualSlices(u8, &expected_short, &actual_short);
+
+    const invalid_offsets = [3]usize{ prefix_len + literal_len + 1, 4, 8 };
+    var expected_invalid: [output_len]u8 = undefined;
+    @memcpy(expected_invalid[0..prefix_len], expected[0..prefix_len]);
+    @memset(expected_invalid[prefix_len..], 0xa5);
+    var expected_invalid_written: usize = prefix_len;
+    var expected_invalid_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), invalid_offsets);
+    try std.testing.expectError(error.InvalidMatch, decodeModeSequencesGenericOracle(
+        &literals,
+        section,
+        &expected_invalid,
+        &expected_invalid_written,
+        0,
+        &expected_invalid_state,
     ));
 
-    var invalid_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), .{ prefix_len + literal_len + 1, 4, 8 });
-    var invalid_written: usize = prefix_len;
+    var actual_invalid: [output_len]u8 = undefined;
+    @memcpy(actual_invalid[0..prefix_len], expected[0..prefix_len]);
+    @memset(actual_invalid[prefix_len..], 0xa5);
+    var actual_invalid_state = try initSequenceDecodeState(&spec, sequence_count, try ReverseBitReader.init(sequence_bits.items), invalid_offsets);
+    var actual_invalid_written: usize = prefix_len;
     var invalid_frame_state: SequenceFrameState = .{ .repeated_offsets = .{ prefix_len + literal_len + 1, 4, 8 } };
     try std.testing.expectError(error.InvalidMatch, decodeFseFseRleSequences(
         &literals,
         section,
         &spec,
-        &actual,
-        &invalid_written,
+        &actual_invalid,
+        &actual_invalid_written,
         0,
         &.{},
         &invalid_frame_state,
         .terminal,
-        &invalid_state,
+        &actual_invalid_state,
     ));
+    try std.testing.expectEqual(expected_invalid_written, actual_invalid_written);
+    try std.testing.expectEqual(expected_invalid_state.reader.remaining_bits, actual_invalid_state.reader.remaining_bits);
+    try std.testing.expectEqual(expected_invalid_state.remaining, actual_invalid_state.remaining);
+    try std.testing.expectEqual(expected_invalid_state.ll_state, actual_invalid_state.ll_state);
+    try std.testing.expectEqual(expected_invalid_state.ml_state, actual_invalid_state.ml_state);
+    try std.testing.expectEqual(expected_invalid_state.of_state, actual_invalid_state.of_state);
+    try std.testing.expectEqual(expected_invalid_state.repeated_offsets, actual_invalid_state.repeated_offsets);
+    try std.testing.expectEqualSlices(u8, &expected_invalid, &actual_invalid);
 }
 
 fn decodeSinglePredefinedSequence(

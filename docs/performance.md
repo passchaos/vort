@@ -2480,6 +2480,30 @@ floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
 
+## Zstd FSE/FSE/RLE sequence pairs (2026-10-04)
+
+The raw-literal FSE/FSE/RLE decoder now processes two proven 16-literal,
+48-match rep0 sequences per iteration. It validates both LL/OF symbols and
+transitions, both extra-field values, the complete 64-bit suffix, literal and
+output capacity, and non-overlapping in-frame history before committing any
+reader or decode state. Irregular and terminal shapes retain the exact former
+single-sequence decoder. The separately compiled pair body is 907 bytes, and
+the final validated source reproduces both frozen hot sections byte-for-byte.
+
+Seven continuously monitored fixed-CPU-2 pairs improve the complete
+`binary_mixed` frame by `1.1508x` median / `1.1535x` geometric throughput,
+7/7, and by `1.1486x` / `1.1464x` after same-process libzstd normalization.
+The candidate reaches `1.4416x` median local libzstd 1.6.0-dev throughput on
+this exact FSE-heavy frame. Fifteen-pair `large_text`, `large_json`, and
+`huffman80k` controls are neutral-positive at every direct median and
+geometric mean. All 682 direct tests, the complete project ReleaseFast suite,
+build check, generic x86-64 and AArch64 builds, 276 compatibility cases, and
+nine decodecorpus campaigns / 9,900 frames / 64 sequence modes pass. The known
+host-sensitive reusable `numbered_json` absolute gate failure and its direct
+100,000-iteration candidate/baseline control are recorded in
+`docs/performance/zstd-fse-fse-rle-pair-x86.md` and its JSON companion. The
+result is an exact-frame lead, not broad Zstd leadership.
+
 ## Zstd shifted single-beam match reuse (2026-09-15)
 
 The speed-oriented one-state Zstd parser now reuses the exact length of an

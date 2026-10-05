@@ -17323,3 +17323,20 @@ reuse, so production keeps the simpler independently owned plans.
   open. Three non-target controls combine to `1.0008x` geometrically. Full
   correctness, compatibility, corpus, cross-target, and build validation are
   recorded in `docs/performance/brotli-middle-zero-postfix-x86.md`.
+
+- The first raw-literal FSE/FSE/RLE block in the synthetic Zstd
+  `binary_mixed` frame now uses a separate two-sequence executor for its
+  steady 16-byte-literal / 48-byte-rep0 shape. Both LL/OF symbols,
+  transitions, extras, capacities, bit reservoir, and history are proven
+  before state is committed; every other shape retains the former decoder.
+  Seven clean fixed-CPU-2 pairs improve the complete frame by `1.1508x`
+  median / `1.1535x` geometric throughput with 7/7 wins, and the candidate
+  reaches `1.4416x` median local libzstd 1.6.0-dev throughput. Three 15-pair
+  long controls are neutral-positive at every direct median and geometric
+  mean. All 682 direct Zstd tests, the complete project ReleaseFast suite,
+  build check, generic x86-64 and AArch64 builds, 276 compatibility cases, and
+  9,900 decodecorpus frames across 64/64 sequence modes pass. The reusable
+  `numbered_json` absolute gate remains host-sensitive, while a separate
+  100,000-iteration candidate/baseline control stays within 1%. This is
+  another exact-frame lead, while broad Zstd decode leadership remains open;
+  evidence is in `docs/performance/zstd-fse-fse-rle-pair-x86.md`.
