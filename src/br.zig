@@ -8182,10 +8182,13 @@ noinline fn processPairedWideLiteralMetaBlock(
     if (builtin.is_test) test_wide_auxiliary_lookup10_hits += 1;
     var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
     defer fast_reader.syncTo(reader);
-    return processPairedWideLiteralPayload(&fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
+    if (allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]))
+        return processPairedWideLiteralPayload(true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
+    return processPairedWideLiteralPayload(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
 }
 
 noinline fn processPairedWideLiteralPayload(
+    comptime force_utf8_context: bool,
     reader: anytype,
     output: []u8,
     written: *usize,
@@ -8198,7 +8201,10 @@ noinline fn processPairedWideLiteralPayload(
     distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
 ) align(64) linksection(paired_literal_text_section) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
-    const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
+    const utf8_context_only = if (comptime force_utf8_context)
+        true
+    else
+        allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     var literal_block_remaining = header.literal_block.remaining;
     var active_literal_context_map: [*]const u8 = @ptrCast(&header.literal_context_map[@as(usize, header.literal_block.current_type) * 64]);
     var active_literal_context_mode = header.literal_context_modes[header.literal_block.current_type];
@@ -8251,7 +8257,9 @@ noinline fn processPairedWideLiteralPayload(
                 std.debug.assert(run_len != 0);
                 const run_end = i + run_len;
                 while (i < run_end) : (i += 1) {
-                    const context = if (utf8_context_only)
+                    const context = if (comptime force_utf8_context)
+                        literal_context.valueUtf8Clustered(previous, second_previous)
+                    else if (utf8_context_only)
                         literal_context.valueUtf8Clustered(previous, second_previous)
                     else
                         literal_context.valueClustered(active_literal_context_mode, previous, second_previous);

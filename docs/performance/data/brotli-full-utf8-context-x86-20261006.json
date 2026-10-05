@@ -1,0 +1,154 @@
+{
+  "date": "2026-10-06",
+  "recorded_at": "2026-10-06T07:28:08+08:00",
+  "validation_completed_at": "2026-10-06T07:29:55+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "reference_version": "1.2.0-dev",
+  "reference_git": "558fc647cdaf391228d614ca85f711e02e4e583b",
+  "reference_library": "/tmp/vort-brotli-upstream-build/libbrotlidec.so.1.2.0",
+  "reference_library_sha256": "e3e18631aaa421912afddbef2246eb3e6abe4e15a10f983d31ac2dcbe3d20eb3",
+  "baseline_git": "e44b22d8",
+  "baseline_executable_sha256": "1527271eddf6e1b4a38dab95b44ce5f493115d9e84182e08e986fe5939961cf9",
+  "candidate_executable_sha256": "b17c81ddc8c740f7453b380a67e41c8f07c395cf0723125aa6a24d81fb07ed81",
+  "order": "baseline,candidate on odd pairs; candidate,baseline on even pairs",
+  "monitor": "0.2-second continuous ps -C zig; discard every non-empty attempt",
+  "decoder_only_command": "taskset -c 2 BINARY --input INPUT --encoded-input FRAME --name CASE --iterations 500 --vort-only --csv OUT",
+  "reference_command": "LD_LIBRARY_PATH=/tmp/vort-brotli-upstream-build taskset -c 2 BINARY --input INPUT --encoded-input FRAME --name CASE --iterations 100 --csv OUT",
+  "inputs": {
+    "roadmap": {
+      "bytes": 1251399,
+      "sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9"
+    },
+    "roadmap_q9": {
+      "encoded_bytes": 335220,
+      "encoded_sha256": "9abffe5d08e94da35fd31c14ad4192076e5f6b1b97cd73271638be50fd72b19d",
+      "literal_trees": 143,
+      "literal_bytes": 47239,
+      "utf8_literal_bytes": 47239
+    },
+    "roadmap_q5": {
+      "encoded_bytes": 350069,
+      "encoded_sha256": "e49f16f8392606508d0cc3a5da8bd8fa12e6035d2d341e1954b602ab3d7d1740",
+      "literal_trees": 143,
+      "literal_bytes": 53639,
+      "utf8_literal_bytes": 53639
+    }
+  },
+  "code_shape": {
+    "baseline_selected_instance_bytes": 5776,
+    "candidate_utf8_instance_bytes": 5309,
+    "selected_instance_reduction_bytes": 467,
+    "baseline_paired_section_bytes": 9627,
+    "candidate_paired_section_bytes": 15099,
+    "paired_section_growth_bytes": 5472,
+    "baseline_paired_section_sha256": "c36aa3cbc56a3decd52b4ffbeaca4a833eda5ffcbd03abb8215f33cda97939e0",
+    "candidate_paired_section_sha256": "92235837385bc51f4eb34a2e7c6ce4a329d524badb91d7e15e74c7cbda387f9d",
+    "paired_section_address_delta_bytes": 64,
+    "following_section_address_delta_bytes": 5504
+  },
+  "decoder_only": {
+    "iterations": 500,
+    "roadmap_q9": {
+      "pairs": 15,
+      "median": 1.0159810601759924,
+      "geometric_mean": 1.016968241948462,
+      "minimum": 1.0030083813148771,
+      "maximum": 1.0347551646963455,
+      "wins": 15,
+      "discarded_contaminated_attempts": 3,
+      "samples_ns": [[1367541274, 1363439528], [1400508469, 1371380172], [1363871897, 1339245213], [1361900333, 1340509939], [1360932828, 1342253591], [1362520811, 1340764174], [1364343789, 1342999142], [1370784254, 1349222252], [1390764601, 1353666348], [1390939615, 1344220993], [1360676561, 1348011228], [1369489542, 1345791514], [1360126259, 1340479172], [1369822873, 1347168190], [1362399164, 1344079447]]
+    },
+    "roadmap_q5": {
+      "pairs": 15,
+      "median": 1.01455065801409,
+      "geometric_mean": 1.0156557250170462,
+      "minimum": 1.0095510433487418,
+      "maximum": 1.0251065090106959,
+      "wins": 15,
+      "discarded_contaminated_attempts": 1,
+      "samples_ns": [[1417288113, 1390470201], [1413206495, 1399836595], [1424917298, 1390018779], [1417407843, 1389127677], [1418477582, 1398133815], [1412131346, 1391896813], [1414275074, 1386549809], [1415512979, 1395575834], [1415287710, 1393369382], [1414247366, 1394769297], [1416272895, 1398059592], [1414677660, 1399858509], [1411793989, 1395462739], [1411903440, 1388302912], [1413000579, 1391750783]]
+    }
+  },
+  "reference": {
+    "iterations": 100,
+    "roadmap_q9": {
+      "pairs": 7,
+      "direct_median": 1.0146914341855737,
+      "direct_geometric_mean": 1.0142240962267313,
+      "normalized_median": 1.0103645430646144,
+      "normalized_geometric_mean": 1.0093846061127862,
+      "candidate_over_reference_median": 0.77375683869394,
+      "candidate_over_reference_geometric_mean": 0.7740318136087199,
+      "discarded_contaminated_attempts": 0,
+      "samples_ns": [[272167120, 209014883, 267621003, 206520469], [272680338, 209460078, 268727168, 208569230], [272157909, 208272259, 267657287, 208808854], [272826268, 208484448, 269175735, 208617682], [273117485, 209159903, 270255436, 208776762], [272727377, 208311871, 268733634, 207935683], [272749484, 210750842, 269495365, 207245878]]
+    },
+    "roadmap_q5": {
+      "pairs": 7,
+      "direct_median": 1.021114425034323,
+      "direct_geometric_mean": 1.0186422176729224,
+      "normalized_median": 1.0143190800480428,
+      "normalized_geometric_mean": 1.0183791632626626,
+      "candidate_over_reference_median": 0.7962315785580889,
+      "candidate_over_reference_geometric_mean": 0.7968084081497322,
+      "discarded_contaminated_attempts": 0,
+      "samples_ns": [[283014703, 222353072, 277093486, 224067400], [282810024, 219825036, 276661403, 221305916], [283691318, 220531132, 277148514, 220673642], [282075848, 222063713, 278237463, 220419434], [282491807, 222252915, 276656276, 220674289], [282523992, 221128750, 277682263, 219906516], [282239753, 220169820, 279158297, 220881486]]
+    }
+  },
+  "controls": {
+    "combined_pairs": 21,
+    "combined_geometric_mean": 1.0021488499758209,
+    "source_q9": {
+      "pairs": 7,
+      "median": 1.0032470942136305,
+      "geometric_mean": 1.0032004603465274,
+      "minimum": 0.9988711523699477,
+      "maximum": 1.0059471443274035,
+      "wins": 6,
+      "samples_ns": [[728140295, 724233565], [726239338, 721945822], [725294371, 723862259], [726125866, 723384141], [725236429, 722929270], [725253378, 722906034], [725418148, 726237960]]
+    },
+    "source_q5": {
+      "pairs": 7,
+      "median": 1.0017693648185448,
+      "geometric_mean": 1.002423987010326,
+      "minimum": 0.9997049738883157,
+      "maximum": 1.0058524922829075,
+      "wins": 6,
+      "samples_ns": [[770823524, 770407059], [773657357, 770906747], [772693384, 772921416], [773938556, 772571595], [773153641, 768655093], [774930207, 771247278], [773442059, 772844274]]
+    },
+    "clustered_q8": {
+      "pairs": 7,
+      "requested_iterations": 10000,
+      "effective_iterations": 1000,
+      "median": 1.0012155012321426,
+      "geometric_mean": 1.0008235687790086,
+      "minimum": 0.9966595258536382,
+      "maximum": 1.0041902724255611,
+      "wins": 5,
+      "discarded_contaminated_attempts": 2,
+      "samples_ns": [[576287141, 576449980], [576567538, 576426218], [576550740, 578483148], [577058057, 575729973], [578611566, 576197143], [577586379, 576751990], [576431016, 575731214]]
+    }
+  },
+  "validation": {
+    "direct_releasefast_tests": 551,
+    "full_project_test": "pass",
+    "reference_gate_rows": 13,
+    "path_smoke_rows": 3,
+    "path_smoke_invalid_rows": 5,
+    "upstream_generated_one_shot": 7056,
+    "upstream_progressive": 7056,
+    "upstream_fragmentation": 1401,
+    "high_tree_truncations": 64,
+    "large_window_cases": 7,
+    "real_corpus_one_shot": "16/16",
+    "real_corpus_progressive": "16/16",
+    "aarch64_releasefast_compile": "pass",
+    "zig_build_check": "pass",
+    "cli_help_smoke": "pass"
+  }
+}

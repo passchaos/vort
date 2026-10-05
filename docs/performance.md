@@ -2480,6 +2480,24 @@ floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
 
+## Brotli full-tier UTF-8 context specialization (2026-10-06)
+
+The roadmap q9/q5 streams use UTF-8 literal context mode for all 47,239/53,639
+literal bytes across 143 trees. The paired 129--256-tree wrapper now selects a
+compile-time UTF-8 payload after proving every literal block type has that
+mode; mixed-mode streams retain the generic payload. LLVM removes the dynamic
+mode branch and state, shrinking the selected executor by 467 bytes.
+
+Fifteen clean fixed-CPU-2 pairs improve roadmap q9 by `1.0160x` median /
+`1.0170x` geometric and roadmap q5 by `1.0146x` / `1.0157x`, with 30/30 wins.
+Same-process libbrotli-normalized geometry improves `1.0094x`/`1.0184x`;
+candidate absolute medians reach `0.7738x`/`0.7962x` libbrotli. Source q9/q5
+and clustered q8 controls combine to `1.0021x` geometrically. All 551 direct
+tests, upstream/generated/progressive/fragmentation/Large Window and
+real-corpus differentials, reference gates, AArch64 compilation, full tests,
+build check, and CLI smoke pass. Exact evidence is in
+`docs/performance/brotli-full-utf8-context-x86.md`.
+
 ## Brotli middle-tier UTF-8 context specialization (2026-10-06)
 
 The source q9/q5 streams use UTF-8 literal context mode for all 20,459/23,048

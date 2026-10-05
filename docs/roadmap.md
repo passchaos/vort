@@ -17365,3 +17365,15 @@ reuse, so production keeps the simpler independently owned plans.
   shifted-layout controls combine to `1.0006x` geometrically, and all direct,
   upstream, real-corpus, cross-target, and build gates pass. Evidence is in
   `docs/performance/brotli-middle-utf8-context-x86.md`.
+
+- The paired Brotli 129--256-tree wrapper now selects a compile-time UTF-8
+  context payload after proving every literal block type is UTF-8. Roadmap
+  q9/q5 place all 47,239/53,639 literals on that mode; removing the dynamic
+  branch and mode state shrinks the selected executor by 467 bytes. Fifteen
+  clean pairs improve q9 by `1.0160x` median / `1.0170x` geometric and q5 by
+  `1.0146x` / `1.0157x`, with 30/30 wins. Same-process libbrotli-normalized
+  geometry improves `1.0094x`/`1.0184x`; candidate medians remain
+  `0.7738x`/`0.7962x` libbrotli, so broad leadership is still open. Three
+  downstream-layout controls combine to `1.0021x` geometrically, and all
+  direct, upstream, real-corpus, cross-target, and build gates pass. Evidence
+  is in `docs/performance/brotli-full-utf8-context-x86.md`.
