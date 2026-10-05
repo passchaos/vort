@@ -2480,6 +2480,26 @@ floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
 
+## Brotli middle-tier direct distance context (2026-10-06)
+
+The 65--128 literal-tree executor now selects its cached RFC distance-context
+three tree directly when `copy_len >= 5`, instead of computing
+`min(copy_len, 5) - 2` for every explicit distance. Source q9 uses context
+three for 47,701/48,113 explicit distances. A compile-time option keeps the
+canonical selector byte-identical in the paired and full-tier executors; an
+oracle compares all contexts for copy lengths 2...9.
+
+Fifteen clean fixed-CPU-2 decoder-only pairs improve source q9 by `1.0031x`
+median / `1.0028x` geometric and source q5 by `1.0024x` / `1.0024x`.
+Same-process libbrotli-normalized geometry improves `1.0061x`/`1.0049x`;
+candidate absolute medians remain only `0.7755x`/`0.7695x` libbrotli.
+Three non-target controls combine to `1.0007x` geometrically, and their hot
+sections are byte-identical. All 551 direct Brotli tests, upstream/generated/
+progressive/fragmentation/Large Window and real-corpus differentials,
+reference gates, AArch64 compilation, full tests, build check, and CLI smoke
+pass. Exact evidence and three rejected neighboring candidates are in
+`docs/performance/brotli-middle-direct-context-x86.md`.
+
 ## Zstd FSE/FSE/RLE sequence pairs (2026-10-04)
 
 The raw-literal FSE/FSE/RLE decoder now processes two proven 16-literal,

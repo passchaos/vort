@@ -17340,3 +17340,16 @@ reuse, so production keeps the simpler independently owned plans.
   100,000-iteration candidate/baseline control stays within 1%. This is
   another exact-frame lead, while broad Zstd decode leadership remains open;
   evidence is in `docs/performance/zstd-fse-fse-rle-pair-x86.md`.
+
+- The Brotli 65--128 literal-tree executor now uses the copy-length boundary
+  directly for its cached distance-context-three tree. The source-q9 profile
+  places 47,701/48,113 explicit distances on that context, so the common path
+  no longer computes `min(copy_len, 5) - 2`; paired and full-tier executors
+  retain byte-identical canonical code. Fifteen clean target pairs improve
+  source q9 by `1.0031x` median / `1.0028x` geometric and q5 by `1.0024x` /
+  `1.0024x`; same-process libbrotli-normalized geometry improves
+  `1.0061x`/`1.0049x`. Candidate absolute medians remain only
+  `0.7755x`/`0.7695x` libbrotli, so broad leadership is still open. Three
+  control families combine to `1.0007x` geometrically, and all correctness,
+  upstream, real-corpus, cross-target, and build gates pass. Evidence is in
+  `docs/performance/brotli-middle-direct-context-x86.md`.

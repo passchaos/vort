@@ -7561,7 +7561,7 @@ noinline fn processTailLookupCompressedPayload(
         }
         var decoded_distance: DecodedBrotliDistance = undefined;
         if (comptime command_lookup10)
-            try readMinimalDistanceExternalLookupIntoFixed9Current(zero_insert_command_lookup, false, header, reader, lengths, last_distances, &decoded_distance, distance_lookups.?, active_distance_context_map, active_distance_context_three_tree)
+            try readMinimalDistanceExternalLookupIntoFixed9Current(zero_insert_command_lookup, false, false, header, reader, lengths, last_distances, &decoded_distance, distance_lookups.?, active_distance_context_map, active_distance_context_three_tree)
         else if (comptime auxiliary_tail_lookups)
             try readMinimalDistanceTailLookupIntoFixed9(header, reader, lengths, last_distances, &decoded_distance)
         else
@@ -7921,7 +7921,7 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
         }
         var decoded_distance: DecodedBrotliDistance = undefined;
         if (comptime command_lookup10)
-            try readMinimalDistanceExternalLookupIntoFixed9Current(true, zero_postfix_distance, header, reader, lengths, last_distances, &decoded_distance, distance_lookups.?, active_distance_context_map, active_distance_context_three_tree)
+            try readMinimalDistanceExternalLookupIntoFixed9Current(true, true, zero_postfix_distance, header, reader, lengths, last_distances, &decoded_distance, distance_lookups.?, active_distance_context_map, active_distance_context_three_tree)
         else if (comptime auxiliary_tail_lookups)
             if (comptime fixed_nine_bit_peek)
                 try readMinimalDistanceTailLookupIntoFixed9(header, reader, lengths, last_distances, &decoded_distance)
@@ -8094,7 +8094,7 @@ noinline fn processWideExternalLiteralLookup10AuxiliaryPayload(
             active_distance_context_three_tree = active_distance_context_map[3];
         }
         var decoded_distance: DecodedBrotliDistance = undefined;
-        try readMinimalDistanceExternalLookupIntoFixed9Current(true, false, header, reader, lengths, last_distances, &decoded_distance, distance_lookups, active_distance_context_map, active_distance_context_three_tree);
+        try readMinimalDistanceExternalLookupIntoFixed9Current(true, false, false, header, reader, lengths, last_distances, &decoded_distance, distance_lookups, active_distance_context_map, active_distance_context_three_tree);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, output_cursor);
@@ -8258,7 +8258,7 @@ noinline fn processPairedWideLiteralPayload(
             active_distance_context_three_tree = active_distance_context_map[3];
         }
         var decoded_distance: DecodedBrotliDistance = undefined;
-        try readMinimalDistanceExternalLookupIntoFixed9Current(true, false, header, reader, lengths, last_distances, &decoded_distance, distance_lookups, active_distance_context_map, active_distance_context_three_tree);
+        try readMinimalDistanceExternalLookupIntoFixed9Current(true, false, false, header, reader, lengths, last_distances, &decoded_distance, distance_lookups, active_distance_context_map, active_distance_context_three_tree);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, output_cursor);
@@ -11783,7 +11783,7 @@ inline fn readMinimalDistanceExternalLookupIntoFixed9(
     const distance_type = header.distance_block.current_type;
     if (distance_type >= header.distance_block.block_type_count) return error.CorruptFrame;
     const context_map: [*]const u8 = @ptrCast(&header.distance_context_map[@as(usize, distance_type) * 4]);
-    return readMinimalDistanceExternalLookupIntoFixed9Current(false, false, header, reader, lengths, last_distances, decoded_distance, distance_lookups, context_map, 0);
+    return readMinimalDistanceExternalLookupIntoFixed9Current(false, false, false, header, reader, lengths, last_distances, decoded_distance, distance_lookups, context_map, 0);
 }
 
 inline fn readMinimalDistanceSingleExternalLookup9(
@@ -11814,6 +11814,7 @@ inline fn readMinimalDistanceSingleExternalLookup9(
 
 inline fn readMinimalDistanceExternalLookupIntoFixed9Current(
     comptime cached_context_three: bool,
+    comptime direct_context_three: bool,
     comptime zero_postfix_distance: bool,
     header: *MinimalCompressedHeader,
     reader: anytype,
@@ -11828,11 +11829,22 @@ inline fn readMinimalDistanceExternalLookupIntoFixed9Current(
         decoded_distance.* = .{ .distance = last_distances[3], .update_ring = false };
         return;
     }
-    const context = distanceContext(lengths.copy_len);
+    // The middle tier's profiled explicit distances use context three more
+    // than 99% of the time. Select that tree directly from the copy-length
+    // boundary there; other executors retain the canonical context helper so
+    // their established code shape remains unchanged.
     const tree_index = if (comptime cached_context_three)
-        if (context == 3) context_three_tree else context_map[context]
+        if (comptime direct_context_three)
+            if (lengths.copy_len >= 5) blk: {
+                @branchHint(.likely);
+                break :blk context_three_tree;
+            } else context_map[lengths.copy_len - 2]
+        else blk: {
+            const context = distanceContext(lengths.copy_len);
+            break :blk if (context == 3) context_three_tree else context_map[context];
+        }
     else
-        context_map[context];
+        context_map[distanceContext(lengths.copy_len)];
     if (tree_index >= header.distance_tree_count) return error.CorruptFrame;
     const lookup = &distance_lookups[tree_index];
     const symbol = (try lookup.decodeValueFast9(reader)) orelse
@@ -23152,39 +23164,104 @@ test "br cached distance context three preserves alternate contexts" {
     lookups[0] = try ExternalDistanceLookup.initSingle(5);
     lookups[1] = try ExternalDistanceLookup.initSingle(1);
     const context_map = [4]u8{ 0, 0, 0, 0 };
-    var last_distances = initial_last_distances;
-    var decoded: DecodedBrotliDistance = undefined;
+    inline for (.{ false, true }) |direct_context_three| {
+        header.distance_block.remaining = 2;
+        var last_distances = initial_last_distances;
+        var decoded: DecodedBrotliDistance = undefined;
 
-    var context_three_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
-    try readMinimalDistanceExternalLookupIntoFixed9Current(
-        true,
-        false,
-        &header,
-        &context_three_reader,
-        .{ .insert_len = 0, .copy_len = 5, .distance_symbol_zero = false },
-        &last_distances,
-        &decoded,
-        &lookups,
-        &context_map,
-        1,
-    );
-    try std.testing.expectEqual(@as(usize, 11), decoded.distance);
+        var context_three_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+        try readMinimalDistanceExternalLookupIntoFixed9Current(
+            true,
+            direct_context_three,
+            false,
+            &header,
+            &context_three_reader,
+            .{ .insert_len = 0, .copy_len = 5, .distance_symbol_zero = false },
+            &last_distances,
+            &decoded,
+            &lookups,
+            &context_map,
+            1,
+        );
+        try std.testing.expectEqual(@as(usize, 11), decoded.distance);
 
-    var alternate_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
-    try readMinimalDistanceExternalLookupIntoFixed9Current(
-        true,
-        false,
-        &header,
-        &alternate_reader,
-        .{ .insert_len = 0, .copy_len = 4, .distance_symbol_zero = false },
-        &last_distances,
-        &decoded,
-        &lookups,
-        &context_map,
-        1,
-    );
-    try std.testing.expectEqual(@as(usize, 5), decoded.distance);
-    try std.testing.expectEqual(@as(usize, 0), header.distance_block.remaining);
+        var alternate_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+        try readMinimalDistanceExternalLookupIntoFixed9Current(
+            true,
+            direct_context_three,
+            false,
+            &header,
+            &alternate_reader,
+            .{ .insert_len = 0, .copy_len = 4, .distance_symbol_zero = false },
+            &last_distances,
+            &decoded,
+            &lookups,
+            &context_map,
+            1,
+        );
+        try std.testing.expectEqual(@as(usize, 5), decoded.distance);
+        try std.testing.expectEqual(@as(usize, 0), header.distance_block.remaining);
+    }
+}
+
+test "br direct cached distance context matches canonical contexts" {
+    var header: MinimalCompressedHeader = undefined;
+    header.npostfix = 0;
+    header.ndirect = 0;
+    prepareDistanceLookup(&header, 16 + 48);
+    header.distance_tree_count = 4;
+    header.distance_block = .{ .block_type_count = 1, .remaining = 1 };
+
+    var lookups: [inline_distance_tree_count]ExternalDistanceLookup = undefined;
+    for (0..4) |index| {
+        const symbol: u16 = @intCast(4 + index);
+        header.distance_trees[index] = .{ .single_symbol = symbol };
+        lookups[index] = try ExternalDistanceLookup.initSingle(symbol);
+    }
+    const context_map = [4]u8{ 0, 1, 2, 3 };
+
+    for (2..10) |copy_len| {
+        var canonical_last_distances = initial_last_distances;
+        var canonical: DecodedBrotliDistance = undefined;
+        var canonical_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+        header.distance_block.remaining = 1;
+        try readMinimalDistanceExternalLookupIntoFixed9Current(
+            true,
+            false,
+            false,
+            &header,
+            &canonical_reader,
+            .{ .insert_len = 0, .copy_len = copy_len, .distance_symbol_zero = false },
+            &canonical_last_distances,
+            &canonical,
+            &lookups,
+            &context_map,
+            3,
+        );
+
+        var direct_last_distances = initial_last_distances;
+        var direct: DecodedBrotliDistance = undefined;
+        var direct_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+        header.distance_block.remaining = 1;
+        try readMinimalDistanceExternalLookupIntoFixed9Current(
+            true,
+            true,
+            false,
+            &header,
+            &direct_reader,
+            .{ .insert_len = 0, .copy_len = copy_len, .distance_symbol_zero = false },
+            &direct_last_distances,
+            &direct,
+            &lookups,
+            &context_map,
+            3,
+        );
+
+        try std.testing.expectEqual(canonical, direct);
+        try std.testing.expectEqual(canonical_last_distances, direct_last_distances);
+        try std.testing.expectEqual(canonical_reader.bitPosition(), direct_reader.bitPosition());
+        try std.testing.expectEqual(@as(usize, 0), header.distance_block.remaining);
+    }
 }
 
 test "br regular distance resolver covers postfix and extra bits" {
