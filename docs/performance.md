@@ -2480,6 +2480,24 @@ floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
 
+## Brotli middle-tier UTF-8 context specialization (2026-10-06)
+
+The source q9/q5 streams use UTF-8 literal context mode for all 20,459/23,048
+literal bytes. The 65--128-tree wrapper now selects a compile-time UTF-8
+payload instance only after proving every literal block type has that mode;
+mixed-mode streams retain the dynamic classifier. LLVM removes the per-literal
+mode branch and unused mode state, shrinking the selected payload by 414 bytes.
+
+Fifteen clean fixed-CPU-2 pairs improve source q9 by `1.0068x` median /
+`1.0073x` geometric and source q5 by `1.0075x` / `1.0081x`, with 30/30 wins.
+Same-process libbrotli-normalized geometry improves `1.0072x`/`1.0082x`;
+candidate absolute medians remain `0.7793x`/`0.7727x` libbrotli. Three control
+families combine to `1.0006x` geometrically with a `0.9964x` row-median floor.
+All 551 direct tests, upstream/generated/progressive/fragmentation/Large
+Window and real-corpus differentials, reference gates, AArch64 compilation,
+full tests, build check, and CLI smoke pass. Exact evidence is in
+`docs/performance/brotli-middle-utf8-context-x86.md`.
+
 ## Brotli middle-tier direct distance context (2026-10-06)
 
 The 65--128 literal-tree executor now selects its cached RFC distance-context

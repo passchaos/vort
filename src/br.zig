@@ -7302,12 +7302,31 @@ noinline fn processWideExternalLiteralLookup9MetaBlock(
             else
                 try ExternalDistanceLookup.init(&tree.table);
         }
-        if (header.npostfix == 0 and header.ndirect == 0)
+        if (header.npostfix == 0 and header.ndirect == 0) {
+            if (allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]))
+                return processWideExternalLiteralLookup9CompressedPayload(
+                    true,
+                    wideAuxiliaryUsesFixedNineBitPeek(capacity),
+                    true,
+                    true,
+                    true,
+                    &fast_reader,
+                    output,
+                    written,
+                    meta_block_end,
+                    last_distances,
+                    window_bits,
+                    header,
+                    literal_lookups[0..header.literal_tree_count],
+                    &command_lookups,
+                    &distance_lookups,
+                );
             return processWideExternalLiteralLookup9CompressedPayload(
                 true,
                 wideAuxiliaryUsesFixedNineBitPeek(capacity),
                 true,
                 true,
+                false,
                 &fast_reader,
                 output,
                 written,
@@ -7319,10 +7338,12 @@ noinline fn processWideExternalLiteralLookup9MetaBlock(
                 &command_lookups,
                 &distance_lookups,
             );
+        }
         return processWideExternalLiteralLookup9CompressedPayload(
             true,
             wideAuxiliaryUsesFixedNineBitPeek(capacity),
             true,
+            false,
             false,
             &fast_reader,
             output,
@@ -7337,8 +7358,8 @@ noinline fn processWideExternalLiteralLookup9MetaBlock(
         );
     }
     if (auxiliary_tail_lookups)
-        return processWideExternalLiteralLookup9CompressedPayload(true, wideAuxiliaryUsesFixedNineBitPeek(capacity), false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count], null, null);
-    return processWideExternalLiteralLookup9CompressedPayload(false, false, false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count], null, null);
+        return processWideExternalLiteralLookup9CompressedPayload(true, wideAuxiliaryUsesFixedNineBitPeek(capacity), false, false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count], null, null);
+    return processWideExternalLiteralLookup9CompressedPayload(false, false, false, false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count], null, null);
 }
 
 fn wideAuxiliaryUsesFixedNineBitPeek(comptime capacity: usize) bool {
@@ -7800,6 +7821,7 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
     comptime fixed_nine_bit_peek: bool,
     comptime command_lookup10: bool,
     comptime zero_postfix_distance: bool,
+    comptime force_utf8_context: bool,
     reader: anytype,
     output: []u8,
     written: *usize,
@@ -7812,7 +7834,10 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
     distance_lookups: ?*const [inline_distance_tree_count]ExternalDistanceLookup,
 ) align(64) linksection(wide_literal_lookup9_text_section) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
-    const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
+    const utf8_context_only = if (comptime force_utf8_context)
+        true
+    else
+        allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     const literal_lookup_ptr = literal_lookups.ptr;
     var literal_block_remaining = header.literal_block.remaining;
     var active_literal_context_map: [*]const u8 = @ptrCast(&header.literal_context_map[@as(usize, header.literal_block.current_type) * 64]);
@@ -7884,7 +7909,9 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
                 std.debug.assert(run_len != 0);
                 const run_end = i + run_len;
                 while (i < run_end) : (i += 1) {
-                    const context = if (utf8_context_only)
+                    const context = if (comptime force_utf8_context)
+                        literal_context.valueUtf8Clustered(previous, second_previous)
+                    else if (utf8_context_only)
                         literal_context.valueUtf8Clustered(previous, second_previous)
                     else
                         literal_context.valueClustered(active_literal_context_mode, previous, second_previous);
