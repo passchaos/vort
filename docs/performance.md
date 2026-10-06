@@ -42,8 +42,8 @@ records one shared cold terminal-pair predicate, its production executor size
 reduction, complete-frame gains, non-target controls, and rejected bit-limit
 layout.
 [Zstd large-JSON follow-ups](performance/zstd-large-json-followups-x86.md)
-records rejected compact-pair, copy, packed-state, and isolated width-ten
-Huffman experiments that did not survive complete-frame validation.
+records rejected compact-pair, copy, packed-state, compact-ABI, and isolated
+width-ten Huffman experiments that did not survive complete-frame validation.
 [Zstd x86-64 dense FSE construction](performance/zstd-dense-fse-x86.md)
 records the dense-gap mapped-table builder on x86-64, including threshold and
 write-width rejection experiments.
@@ -2499,6 +2499,27 @@ source was restored. This rules out per-sequence integer-lane extraction and
 reassembly as the sought smaller representation; exact hashes, commands, and
 samples are in
 `docs/performance/data/zstd-packed-compact-state-x86-20261006.json`.
+
+## Zstd compact executor ABI follow-up (2026-10-06)
+
+The compact `large_json` executor was also tested with its native-width state
+unchanged while moving the successful repeated-offset commit to the block
+caller. Removing `frame_state` and `continuation` from the noinline boundary
+reduced the complete-frame production instance from `0x257e` to `0x2550`
+bytes and its split section from `0x47bc` to `0x4653`; the prepared binary's
+corresponding values fell from `0x257c` to `0x2553` and `0x47be` to `0x4643`.
+The caller-side success commit was checked against direct executor state, while
+error and fallback paths retained the previous no-commit behavior.
+
+The prepared-stage median was `1.0033x`, but a clean 1.1625x slow-baseline
+outlier inflated its geometric result; the other six pairs are only `1.0032x`
+median / `1.0024x` geometric. More importantly, three independent clean
+seven-pair complete-frame campaigns combine to `0.9983x` median / `0.9986x`
+geometric throughput with 9/21 wins. Candidate/libzstd geometry fell from
+`0.8897x` to `0.8870x`. The candidate was removed: a smaller internal section
+without target throughput is not progress toward the decoder objective. Exact
+hashes, discarded-contamination accounting, and samples are in
+`docs/performance/data/zstd-compact-abi-followup-x86-20261006.json`.
 
 ## Brotli flat distance-countdown follow-up (2026-10-06)
 

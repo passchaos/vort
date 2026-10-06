@@ -256,16 +256,33 @@ byte-for-byte output check before timing.
   checksums matched. The candidate was removed; exact samples and binary hashes
   are recorded in
   [zstd-packed-compact-state-x86-20261006.json](data/zstd-packed-compact-state-x86-20261006.json).
+- A second 2026-10-06 follow-up kept the native-width 88-byte state but removed
+  `frame_state` and `continuation` from the compact executor's per-block ABI.
+  Successful callers committed repeated offsets after return; false and error
+  paths retained the former no-commit semantics. The complete-frame production
+  instance shrank from `0x257e` to `0x2550`, its strict sibling from `0x223e`
+  to `0x2103`, and the split section from `0x47bc` to `0x4653`. The prepared
+  binary similarly reduced its production instance from `0x257c` to `0x2553`
+  and section from `0x47be` to `0x4643`. Seven clean prepared-stage pairs had
+  a 1.0033x median, but one isolated 1.1625x slow baseline made the geometric
+  result unusable; excluding it leaves only 1.0032x median / 1.0024x geometric.
+  Three independent clean seven-pair complete-frame campaigns combine to
+  0.9983x median / 0.9986x geometric throughput with 9/21 wins. Candidate
+  libzstd-normalized geometry also fell from 0.8897x to 0.8870x. The candidate
+  was removed despite its smaller executor because it did not improve the
+  real target. Exact hashes and samples are in
+  [zstd-compact-abi-followup-x86-20261006.json](data/zstd-compact-abi-followup-x86-20261006.json).
 
 These results rule out another round of local branch growth, wider copy loops,
 larger Huffman batches, table-fill tuning, or shrinking the executor by
 removing its prefixed paths. They now also rule out integer-lane packing as a
 smaller state representation: the hot extraction/reassembly cost dominates
-the 24-byte call-boundary reduction. The next credible `large_json` direction
-must preserve native-width hot state and the current two-sequence,
-direct-offset, short-rep0, and long-copy semantics while reducing the executor
-ABI or state traffic without a per-sequence call, repack, or duplicated error
-exit.
+the 24-byte call-boundary reduction. Moving the one-time continuation commit
+out of the executor does make its section smaller, but does not improve the
+complete frame either. The next credible `large_json` direction is therefore
+not another local state/ABI spelling; it must remove work from the native-width
+hot loop or change its table/bitstream execution model while preserving the
+current two-sequence, direct-offset, short-rep0, and long-copy semantics.
 
 Exact binary hashes, commands, and summary ratios are recorded in
 [zstd-large-json-followups-x86-20261001.json](data/zstd-large-json-followups-x86-20261001.json).

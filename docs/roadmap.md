@@ -17459,3 +17459,18 @@ reuse, so production keeps the simpler independently owned plans.
   native-width values and reduce ABI/state traffic without per-sequence
   repacking, calls, or duplicated error exits; evidence is in
   `docs/performance/data/zstd-packed-compact-state-x86-20261006.json`.
+
+- A native-width compact-executor ABI reduction was also rejected. Removing
+  `frame_state` and `continuation` from the noinline boundary and committing
+  repeated offsets in the successful block caller reduced the complete-frame
+  production instance from `0x257e` to `0x2550`, its strict sibling from
+  `0x223e` to `0x2103`, and the split section from `0x47bc` to `0x4653`.
+  Prepared code shrank similarly and its ordinary six-pair geometry improved
+  only `1.0024x`; a seventh clean scheduler outlier was not treated as evidence.
+  Three independent clean seven-pair complete-frame campaigns combine to
+  `0.9983x` median / `0.9986x` geometric throughput with 9/21 wins, while
+  candidate/libzstd geometry falls from `0.8897x` to `0.8870x`. The source was
+  restored. Further `large_json` work should stop respelling the block state
+  or ABI and instead remove native-width hot-loop work or change the sequence
+  table/bitstream execution model. Evidence is in
+  `docs/performance/data/zstd-compact-abi-followup-x86-20261006.json`.
