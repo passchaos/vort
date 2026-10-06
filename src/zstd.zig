@@ -47,145 +47,28 @@ const large_offset = @import("zstd/sequence/large/offset.zig");
 const large_fast_plan = @import("zstd/sequence/large/plan.zig");
 const large_predefined = @import("zstd/sequence/large/predefined.zig");
 
-const wide_sequence_emit_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_wide_sequence",
-    .macho => "__TEXT,__vort_zstd_seq",
-    .coff => ".text$vort_zstd_wide_sequence",
-    else => ".text",
-};
+const code_sections = @import("zstd/code_sections.zig");
 
-const fast_encode_helper_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_fast_encode",
-    .macho => "__TEXT,__vort_zstd_fast",
-    .coff => ".text$vort_zstd_fast_encode",
-    else => ".text",
-};
-
-const fast_sequence_record_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_fast_records",
-    .macho => "__TEXT,__vort_zstd_rec",
-    .coff => ".text$vort_zstd_fast_records",
-    else => ".text",
-};
-
-const fse_encode_helper_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_fse_encode",
-    .macho => "__TEXT,__vort_zstd_fse",
-    .coff => ".text$vort_zstd_fse_encode",
-    else => ".text",
-};
-
-const dominance_helper_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_dominance",
-    .macho => "__TEXT,__vort_zstd_dom",
-    .coff => ".text$vort_zstd_dominance",
-    else => ".text",
-};
-
-const huffman_build_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_huffman_build",
-    .macho => "__TEXT,__vort_zstd_hb",
-    .coff => ".text$vort_zstd_huffman_build",
-    else => ".text",
-};
-
-const reusable_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_reusable_decode",
-    .macho => "__TEXT,__vort_zstd_rd",
-    .coff => ".text$vort_zstd_reusable_decode",
-    else => ".text",
-};
-
-const raw_fse_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_raw_fse_decode",
-    .macho => "__TEXT,__vort_zstd_rfd",
-    .coff => ".text$vort_zstd_raw_fse_decode",
-    else => ".text",
-};
-
-const fse_fse_rle_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_ffr_decode",
-    .macho => "__TEXT,__vort_zstd_ffr",
-    .coff => ".text$vort_zstd_ffr_decode",
-    else => ".text",
-};
-
-const fse_fse_rle_pair_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_zz_ffr_pair",
-    .macho => "__TEXT,__vort_zstd_ffp",
-    .coff => ".text$vort_zstd_zz_ffr_pair",
-    else => ".text",
-};
-
-const fse_rle_rle_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_frr_decode",
-    .macho => "__TEXT,__vort_zstd_frr",
-    .coff => ".text$vort_zstd_frr_decode",
-    else => ".text",
-};
-
-const fse_rle_rle_pair_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_zz_frr_pair",
-    .macho => "__TEXT,__vort_zstd_frp",
-    .coff => ".text$vort_zstd_zz_frr_pair",
-    else => ".text",
-};
-
-const huffman_only_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_huffman_only_decode",
-    .macho => "__TEXT,__vort_zstd_hod",
-    .coff => ".text$vort_zstd_huffman_only_decode",
-    else => ".text",
-};
-
-const small_sequence_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_small_sequence_decode",
-    .macho => "__TEXT,__vort_zstd_ssd",
-    .coff => ".text$vort_zstd_small_sequence_decode",
-    else => ".text",
-};
-
-const small_frame_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_small_frame_decode",
-    .macho => "__TEXT,__vort_zstd_sfd",
-    .coff => ".text$vort_zstd_small_frame_decode",
-    else => ".text",
-};
-
-const split_literal_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_split_literal_decode",
-    .macho => "__TEXT,__vort_zstd_sld",
-    .coff => ".text$vort_zstd_split_literal_decode",
-    else => ".text",
-};
-
-const split_wide_literal_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_split_wide_literal_decode",
-    .macho => "__TEXT,__vort_zstd_slw",
-    .coff => ".text$vort_zstd_split_wide_literal_decode",
-    else => ".text",
-};
-
-const split_dense_literal_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_split_dense_literal_decode",
-    .macho => "__TEXT,__vort_zstd_sldn",
-    .coff => ".text$vort_zstd_split_dense_literal_decode",
-    else => ".text",
-};
-
-const split_generic_literal_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_split_zz",
-    .macho => "__TEXT,__vort_zstd_slz",
-    .coff => ".text$vort_zstd_split_zz",
-    else => ".text",
-};
-
-const medium_split_literal_decode_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_medium_split",
-    .macho => "__TEXT,__vort_zstd_msl",
-    .coff => ".text$vort_zstd_medium_split",
-    else => ".text",
-};
+const wide_sequence_emit_text_section = code_sections.wide_sequence_emit;
+const fast_encode_helper_text_section = code_sections.fast_encode_helper;
+const fast_sequence_record_text_section = code_sections.fast_sequence_record;
+const fse_encode_helper_text_section = code_sections.fse_encode_helper;
+const dominance_helper_text_section = code_sections.dominance_helper;
+const huffman_build_text_section = code_sections.huffman_build;
+const reusable_decode_text_section = code_sections.reusable_decode;
+const raw_fse_decode_text_section = code_sections.raw_fse_decode;
+const fse_fse_rle_decode_text_section = code_sections.fse_fse_rle_decode;
+const fse_fse_rle_pair_text_section = code_sections.fse_fse_rle_pair;
+const fse_rle_rle_decode_text_section = code_sections.fse_rle_rle_decode;
+const fse_rle_rle_pair_text_section = code_sections.fse_rle_rle_pair;
+const huffman_only_decode_text_section = code_sections.huffman_only_decode;
+const small_sequence_decode_text_section = code_sections.small_sequence_decode;
+const small_frame_decode_text_section = code_sections.small_frame_decode;
+const split_literal_decode_text_section = code_sections.split_literal_decode;
+const split_wide_literal_decode_text_section = code_sections.split_wide_literal_decode;
+const split_dense_literal_decode_text_section = code_sections.split_dense_literal_decode;
+const split_generic_literal_decode_text_section = code_sections.split_generic_literal_decode;
+const medium_split_literal_decode_text_section = code_sections.medium_split_literal_decode;
 
 const split_x2_huffman_literal_min = 12 * 1024;
 const split_huffman_literal_capacity = 16 * 1024;
@@ -193,12 +76,7 @@ const split_huffman_literal_capacity = 16 * 1024;
 // bulk decoder. Zstd bounds each regenerated block to this size.
 const split_wide_huffman_literal_capacity = std.compress.zstd.block_size_max;
 
-const multi_sequence_winner_text_section = switch (builtin.object_format) {
-    .elf => ".vort_zstd_multi_sequence_winner",
-    .macho => "__TEXT,__vort_zstd_msw",
-    .coff => ".text$vort_zstd_multi_sequence_winner",
-    else => ".text",
-};
+const multi_sequence_winner_text_section = code_sections.multi_sequence_winner;
 
 const small_sequence_stack_input_max = 1024;
 const small_sequence_stack_scratch_len = 4096;
