@@ -1,0 +1,211 @@
+{
+  "date": "2026-10-06",
+  "recorded_at": "2026-10-06T10:23:50+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "b1c327d1",
+  "baseline_executable_sha256": "f5680dfc4705b118f34ba750669241f89dc41d1b040cc34f97abca43c593331a",
+  "reference_version": "1.2.0-dev",
+  "reference_git": "558fc647cdaf391228d614ca85f711e02e4e583b",
+  "order": "baseline,candidate on odd pairs; candidate,baseline on even pairs",
+  "monitor": "0.2-second continuous ps -C zig; discard every non-empty attempt",
+  "command": "taskset -c 2 BINARY --input INPUT --encoded-input FRAME --name CASE --iterations 500 --vort-only --csv OUT",
+  "inputs": {
+    "roadmap": {
+      "bytes": 1251399,
+      "sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9"
+    },
+    "roadmap_q9": {
+      "encoded_bytes": 335220,
+      "encoded_sha256": "9abffe5d08e94da35fd31c14ad4192076e5f6b1b97cd73271638be50fd72b19d",
+      "literal_bytes": 47239,
+      "max_distance_postfix_bits": 0,
+      "max_direct_distance_codes": 0
+    },
+    "roadmap_q5": {
+      "encoded_bytes": 350069,
+      "encoded_sha256": "e49f16f8392606508d0cc3a5da8bd8fa12e6035d2d341e1954b602ab3d7d1740",
+      "literal_bytes": 53639,
+      "max_distance_postfix_bits": 0,
+      "max_direct_distance_codes": 0
+    }
+  },
+  "baseline_code_shape": {
+    "selected_payload_bytes": 5312,
+    "generic_payload_bytes": 5776,
+    "paired_section_bytes": 15115,
+    "wide10_section_bytes": 7974,
+    "wide9_section_bytes": 27675
+  },
+  "candidates": {
+    "payload_local_reader": {
+      "candidate_executable_sha256": "ad4a1931ef14e31d7976ef6c72dd4efee58a4b95f88bda596f1c6587cb7e31ac",
+      "change": "copy the fast reader into payload-local storage and synchronize it on every exit",
+      "decision": "reject q5 regression and code expansion",
+      "code_shape": {
+        "selected_payload_bytes": 7232,
+        "generic_payload_bytes": 7889,
+        "paired_section_bytes": 19147
+      },
+      "roadmap_q9": {
+        "pairs": 7,
+        "median": 1.003872868465071,
+        "geometric_mean": 1.003464093369465,
+        "minimum": 0.9949140097134539,
+        "maximum": 1.011695546606717,
+        "wins": 5,
+        "discarded_contaminated_attempts": 2,
+        "samples_ns": [[1321002950, 1305731704], [1318412637, 1313326297], [1308358240, 1315046554], [1308160182, 1311001488], [1321416845, 1318071602], [1314973901, 1307460746], [1318371859, 1308236370]]
+      },
+      "roadmap_q5": {
+        "pairs": 7,
+        "median": 0.9989634476739769,
+        "geometric_mean": 0.9965996033588601,
+        "minimum": 0.9838155634762316,
+        "maximum": 1.00936610052604,
+        "wins": 3,
+        "discarded_contaminated_attempts": 0,
+        "samples_ns": [[1359984936, 1359949962], [1359806367, 1361217340], [1370128060, 1368560542], [1368359205, 1355661939], [1359286235, 1362715478], [1396133980, 1416472586], [1371970210, 1394540055]]
+      }
+    },
+    "outlined_reader_tail": {
+      "candidate_executable_sha256": "ed89ec75566e9a41d8b3f79b25d9299a0057c23ceb670518062fcfd03e53dc52",
+      "change": "outline the byte-at-a-time logical input tail into a 119-byte helper",
+      "decision": "reject neutral q9 and negative q5 screen",
+      "code_shape": {
+        "selected_payload_bytes": 4993,
+        "generic_payload_bytes": 5472,
+        "paired_section_bytes": 14475,
+        "wide10_section_bytes": 7719,
+        "wide9_section_bytes": 27236,
+        "tail_helper_bytes": 119
+      },
+      "roadmap_q9": {
+        "pairs": 6,
+        "median": 0.9997997110756833,
+        "geometric_mean": 0.999086247636782,
+        "minimum": 0.99039085624039,
+        "maximum": 1.010465341047718,
+        "wins": 3,
+        "discarded_contaminated_attempts": 8,
+        "samples_ns": [[1317315695, 1329034684], [1341386373, 1340891408], [1319867253, 1315890756], [1320387216, 1321404313], [1319720546, 1332524970], [1338767910, 1324902355]]
+      },
+      "roadmap_q5": {
+        "pairs": 5,
+        "median": 0.9932197301214295,
+        "geometric_mean": 0.9979996883136223,
+        "minimum": 0.989831063558154,
+        "maximum": 1.020536879028052,
+        "wins": 1,
+        "discarded_contaminated_attempts": 17,
+        "samples_ns": [[1368884029, 1375938450], [1368069692, 1379300722], [1356008405, 1365265272], [1398902471, 1370751513], [1357380106, 1371325023]]
+      }
+    },
+    "zero_postfix_instance": {
+      "candidate_executable_sha256": "2d7d920e79b521de1ae76508715ebac0493e65dbafc687cf7bb212530fb58072",
+      "change": "add a compile-time all-UTF8 NPOSTFIX=0 NDIRECT=0 payload instance",
+      "decision": "reject q9 regression",
+      "code_shape": {
+        "zero_postfix_payload_bytes": 5296,
+        "ordinary_utf8_payload_bytes": 5312,
+        "generic_payload_bytes": 5776,
+        "paired_section_bytes": 20539
+      },
+      "roadmap_q9": {
+        "pairs": 7,
+        "median": 0.994447106865901,
+        "geometric_mean": 0.9957078618313254,
+        "minimum": 0.9856109995999609,
+        "maximum": 1.015521312298502,
+        "wins": 2,
+        "discarded_contaminated_attempts": 3,
+        "samples_ns": [[1318311590, 1325672910], [1315464805, 1332956079], [1320216504, 1316897468], [1310460992, 1329592499], [1315221455, 1322271107], [1342353587, 1321836943], [1312546063, 1324958384]]
+      },
+      "roadmap_q5": {
+        "pairs": 7,
+        "median": 0.9992215371810874,
+        "geometric_mean": 1.001122128709781,
+        "minimum": 0.9926875320646931,
+        "maximum": 1.030117304439943,
+        "wins": 3,
+        "discarded_contaminated_attempts": 3,
+        "samples_ns": [[1374037143, 1373138900], [1367175854, 1377246928], [1361883366, 1371813976], [1416185564, 1374780870], [1358570396, 1368486983], [1372307247, 1372060103], [1364263752, 1365326608]]
+      }
+    },
+    "isolated_zero_postfix_fallback": {
+      "candidate_executable_sha256": "765ee4a0a3a1189b84b62ab2ec6af1f3b37b0aea8cc6e98cf6084b0b89a9a6e0",
+      "change": "keep zero-postfix and generic payloads in the paired section and move the nonzero UTF8 fallback to a separate section",
+      "decision": "reject both target qualities",
+      "code_shape": {
+        "zero_postfix_payload_bytes": 5296,
+        "generic_payload_bytes": 5776,
+        "paired_section_bytes": 15227,
+        "nonzero_utf8_fallback_bytes": 5312,
+        "target_address_delta_bytes": 128
+      },
+      "roadmap_q9": {
+        "pairs": 5,
+        "median": 0.9972352119589974,
+        "geometric_mean": 0.9956322336692678,
+        "minimum": 0.9781562957109844,
+        "maximum": 1.010369977087209,
+        "wins": 1,
+        "discarded_contaminated_attempts": 2,
+        "samples_ns": [[1313071251, 1342394111], [1315549307, 1319196606], [1327784098, 1314156327], [1319661427, 1322682938], [1315494230, 1322169908]]
+      },
+      "roadmap_q5": {
+        "pairs": 5,
+        "median": 0.9911624816574081,
+        "geometric_mean": 0.9949246181435205,
+        "minimum": 0.985176512804141,
+        "maximum": 1.008917633212667,
+        "wins": 1,
+        "discarded_contaminated_attempts": 0,
+        "samples_ns": [[1385067597, 1372825245], [1358201233, 1370311385], [1359353560, 1371764851], [1368065672, 1370009046], [1360360166, 1380828865]]
+      }
+    },
+    "literal_countdown_first": {
+      "candidate_executable_sha256": "5f85bf2d68a5d0b471cf7d828054710e445debd0cf2c188004f56835e5ab9866",
+      "change": "test the local literal countdown before loading block_type_count in the paired payload",
+      "decision": "reject both target qualities",
+      "code_shape": {
+        "selected_payload_bytes": 5357,
+        "generic_payload_bytes": 5795,
+        "paired_section_bytes": 15147,
+        "downstream_sections_unchanged": true
+      },
+      "roadmap_q9": {
+        "pairs": 7,
+        "median": 0.9918750091194251,
+        "geometric_mean": 0.9937235657454379,
+        "minimum": 0.9897512788609346,
+        "maximum": 1.001175417099093,
+        "wins": 1,
+        "discarded_contaminated_attempts": 3,
+        "samples_ns": [[1318391028, 1316843188], [1312829977, 1326424128], [1310277038, 1322200896], [1313904079, 1327073412], [1318179169, 1319535914], [1313814208, 1324576379], [1311843082, 1320698207]]
+      },
+      "roadmap_q5": {
+        "pairs": 7,
+        "median": 0.9974234240899188,
+        "geometric_mean": 0.9972647665044547,
+        "minimum": 0.9897431389628278,
+        "maximum": 1.006274760823948,
+        "wins": 2,
+        "discarded_contaminated_attempts": 0,
+        "samples_ns": [[1366659390, 1370189788], [1387927418, 1379272811], [1363386426, 1370685468], [1368602971, 1382786015], [1365528771, 1368335265], [1362824289, 1372636758], [1367606846, 1364835508]]
+      }
+    }
+  },
+  "validation": {
+    "reader_focused_releasefast_tests": 6,
+    "full_wide_transition_boundary_tests": 3,
+    "prepared_distance_tests": 2,
+    "direct_releasefast_tests": 551,
+    "production_candidates_retained": 0
+  }
+}

@@ -2480,6 +2480,24 @@ floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
 
+## Brotli full-tier follow-up experiments (2026-10-06)
+
+Five follow-ups to the retained full-tier UTF-8/direct-context executor were
+measured and removed. A payload-local reader grew the selected function by
+1,920 bytes and lost q5 geometrically. Outlining the cold reader byte tail
+shrank the selected function by 319 bytes but remained neutral-negative.
+Zero-postfix specialization lost q9 both with an added in-section instance and
+with its nonzero-postfix fallback isolated in a separate section. Moving the
+literal countdown before `block_type_count`, which helps the middle tier, lost
+q9/q5 by `0.9937x`/`0.9973x` geometrically.
+
+Only empty-monitor fixed-CPU pairs are retained; all candidates were removed
+after their target screen. Reader oracles, full-wide transition/boundary tests,
+prepared-distance truncation coverage, and the 551-test ReleaseFast suite pass.
+The evidence narrows the next work to a smaller command/distance execution
+model rather than more instances or local branch reshaping. Exact results are
+in `docs/performance/brotli-full-followups-x86.md`.
+
 ## Brotli full-tier direct distance context (2026-10-06)
 
 Roadmap q9/q5 place 107,157/116,728 explicit distances on RFC distance

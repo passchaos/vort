@@ -17389,3 +17389,16 @@ reuse, so production keeps the simpler independently owned plans.
   remains open. Three controls combine to `1.0007x` geometrically, and all
   direct, upstream, real-corpus, cross-target, and build gates pass. Evidence
   is in `docs/performance/brotli-full-direct-context-x86.md`.
+
+- Five adjacent Brotli full-tier follow-ups were measured and removed. A
+  payload-private fast reader improved q9 slightly but regressed q5 to
+  `0.9966x` geometric while expanding the selected payload by 1,920 bytes.
+  Outlining the logical byte tail shrank that payload by 319 bytes but remained
+  neutral-negative. Compile-time zero-postfix distance decoding lost q9 both
+  as a third paired instance and with its nonzero fallback isolated; testing
+  literal countdown before block type, despite its middle-tier win, measured
+  only `0.9937x`/`0.9973x` q9/q5 geometry. Every candidate was removed, and
+  only empty-monitor samples are retained. The next credible full-tier step
+  must reduce the command/distance execution model without more instances,
+  wider return state, or hot call boundaries. Evidence is in
+  `docs/performance/brotli-full-followups-x86.md`.
