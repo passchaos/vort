@@ -17377,3 +17377,15 @@ reuse, so production keeps the simpler independently owned plans.
   downstream-layout controls combine to `1.0021x` geometrically, and all
   direct, upstream, real-corpus, cross-target, and build gates pass. Evidence
   is in `docs/performance/brotli-full-utf8-context-x86.md`.
+
+- The all-UTF8 paired Brotli 129--256-tree instance now selects its cached
+  distance context-three tree directly for copy lengths at least five while
+  preserving canonical selection for short copies and the generic fallback.
+  Roadmap q9/q5 place 107,157/116,728 explicit distances on that context,
+  covering 99.12%/99.65% of explicit distance symbols. Fifteen clean pairs
+  improve q9 by `1.0032x` median / `1.0029x` geometric and q5 by `1.0014x` /
+  `1.0007x`; libbrotli-normalized geometry is `1.0050x`/`1.0001x`. Candidate
+  medians remain `0.7784x`/`0.7931x` libbrotli, so the larger decode gap
+  remains open. Three controls combine to `1.0007x` geometrically, and all
+  direct, upstream, real-corpus, cross-target, and build gates pass. Evidence
+  is in `docs/performance/brotli-full-direct-context-x86.md`.

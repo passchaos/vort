@@ -8183,12 +8183,13 @@ noinline fn processPairedWideLiteralMetaBlock(
     var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
     defer fast_reader.syncTo(reader);
     if (allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]))
-        return processPairedWideLiteralPayload(true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
-    return processPairedWideLiteralPayload(false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
+        return processPairedWideLiteralPayload(true, true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
+    return processPairedWideLiteralPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
 }
 
 noinline fn processPairedWideLiteralPayload(
     comptime force_utf8_context: bool,
+    comptime direct_context_three: bool,
     reader: anytype,
     output: []u8,
     written: *usize,
@@ -8293,7 +8294,7 @@ noinline fn processPairedWideLiteralPayload(
             active_distance_context_three_tree = active_distance_context_map[3];
         }
         var decoded_distance: DecodedBrotliDistance = undefined;
-        try readMinimalDistanceExternalLookupIntoFixed9Current(true, false, false, header, reader, lengths, last_distances, &decoded_distance, distance_lookups, active_distance_context_map, active_distance_context_three_tree);
+        try readMinimalDistanceExternalLookupIntoFixed9Current(true, direct_context_three, false, header, reader, lengths, last_distances, &decoded_distance, distance_lookups, active_distance_context_map, active_distance_context_three_tree);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, output_cursor);
@@ -11864,10 +11865,10 @@ inline fn readMinimalDistanceExternalLookupIntoFixed9Current(
         decoded_distance.* = .{ .distance = last_distances[3], .update_ring = false };
         return;
     }
-    // The middle tier's profiled explicit distances use context three more
-    // than 99% of the time. Select that tree directly from the copy-length
-    // boundary there; other executors retain the canonical context helper so
-    // their established code shape remains unchanged.
+    // The profiled middle tier and selected full UTF-8 tier use context three
+    // for more than 99% of explicit distances. Opt those instances into the
+    // copy-length boundary directly; generic instances retain the canonical
+    // context helper and their established code shape.
     const tree_index = if (comptime cached_context_three)
         if (comptime direct_context_three)
             if (lengths.copy_len >= 5) blk: {

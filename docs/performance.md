@@ -2480,6 +2480,24 @@ floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
 
+## Brotli full-tier direct distance context (2026-10-06)
+
+Roadmap q9/q5 place 107,157/116,728 explicit distances on RFC distance
+context three, covering 99.12%/99.65% of their explicit distance symbols. The
+all-UTF-8 129--256-tree instance now selects its cached context-three tree
+directly for copy lengths at least five, while short lengths and the mixed-
+context generic instance retain canonical selection.
+
+Fifteen clean fixed-CPU-2 pairs improve roadmap q9 by `1.0032x` median /
+`1.0029x` geometric and q5 by `1.0014x` / `1.0007x`, with 13/15 and 10/15
+wins. Same-process libbrotli-normalized geometry is `1.0050x`/`1.0001x`;
+candidate absolute medians reach `0.7784x`/`0.7931x` libbrotli. Source q9/q5
+and clustered q8 controls combine to `1.0007x` geometrically. All 551 direct
+tests, upstream/generated/progressive/fragmentation/Large Window and
+real-corpus differentials, reference gates, AArch64 compilation, full tests,
+build check, and CLI smoke pass. Exact evidence is in
+`docs/performance/brotli-full-direct-context-x86.md`.
+
 ## Brotli full-tier UTF-8 context specialization (2026-10-06)
 
 The roadmap q9/q5 streams use UTF-8 literal context mode for all 47,239/53,639
