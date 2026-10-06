@@ -1,0 +1,251 @@
+{
+  "date": "2026-10-06",
+  "recorded_at": "2026-10-06T21:42:53+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "b70c39d5",
+  "change": "force the proven exact 71-byte pair tail to retain one 32-byte second vector store and one overlapping unaligned u64 tail store under LLVM",
+  "input": {
+    "path": "/tmp/vort-large-json-512k.txt",
+    "bytes": 524307,
+    "sha256": "b0d873df5fbe94a60e8e10a51cde4b08b3370ae4f251357c16adbfc69fd27c95",
+    "encoded_bytes": 9905,
+    "selected_blocks": 4,
+    "selected_decoded_bytes": 524288,
+    "literal_bytes": 8329,
+    "sequence_count": 7298
+  },
+  "profiling": {
+    "perf_unavailable": "perf_event_paranoid=4",
+    "upstream_dispatch_breakpoints": {
+      "regular_bmi2_hits": 30,
+      "split_bmi2_hits": 0,
+      "long_bmi2_hits": 0
+    },
+    "upstream_gprof": {
+      "iterations": 100000,
+      "clean_monitor": true,
+      "profiled_seconds": 7.05,
+      "regular_sequence_percent": 80.43,
+      "fse_table_build_percent": 8.37,
+      "huffman_payload_percent": 5.25,
+      "regular_sequence_calls": 500500,
+      "static_library_sha256": "10b2d1f45cac8a7c27eade59a51c718ed527f8ab6bd3a6520091e5176ec628d5",
+      "harness_sha256": "def6bd55e830b02479447a428fb11428ea6644f5bcdd278a8e299cf8c559622d"
+    },
+    "vort_ptrace_samples": {
+      "accepted": 1000,
+      "attempts": 1405,
+      "clean_monitor": true,
+      "overlap_tail_percent": 11.1,
+      "exact_71_percent": 4.4,
+      "shifting_group_branchless_percent": 6.6,
+      "shifting_group_read_percent": 3.2,
+      "group_read_percent": 3.4,
+      "group_init_percent": 3.0,
+      "next_state_percent": 2.3,
+      "match_68_70_percent": 1.7
+    },
+    "forced_long_decoder": {
+      "normal_library_sha256": "b734e265f838f7a18c378fe2b34c505e6fc5025fd84ceac159faa27b794b78b0",
+      "forced_long_library_sha256": "754b414522111f3b514c4fffbfe3de1a527a6e70a8af0d05002403e40c70dd6b",
+      "pairs": 7,
+      "median": 0.7905935779421345,
+      "geometric_mean": 0.7893030815297897,
+      "minimum": 0.7824264477547934,
+      "maximum": 0.7937086410430143,
+      "wins": 0,
+      "samples_ns": [
+        [213646941, 270236120],
+        [212918106, 269120569],
+        [213948953, 270595818],
+        [214161039, 271175223],
+        [212568412, 270143983],
+        [212103245, 271083941],
+        [214363590, 270078438]
+      ],
+      "decision": "reject decode-ahead; upstream regular BMI2 is materially faster on this frame"
+    }
+  },
+  "code_shape": {
+    "baseline_reference_sha256": "c0f79cfc6a11a2c5746a444caef4d7711f31b62fabf30c1ef6c86a5f8c89edaf",
+    "candidate_reference_sha256": "151150eada83b63c591f0697c22a50fc46e7e21e9e87b1b9cd00da5db0e247cf",
+    "baseline_stage_sha256": "c6fc49388b214281d2afddbe33b0f75756772ec73ef00ea8a5fe13b0cca6a902",
+    "candidate_stage_sha256": "55d0b685b085b77793a47a7ea9712f7833dc5dfea41713f1841217e301c186ee",
+    "reference": {
+      "baseline_strict_instance_bytes": 8766,
+      "candidate_strict_instance_bytes": 8718,
+      "baseline_production_instance_bytes": 9598,
+      "candidate_production_instance_bytes": 9520,
+      "baseline_section_bytes": 18364,
+      "candidate_section_bytes": 18238,
+      "baseline_text_bytes": 1205588,
+      "candidate_text_bytes": 1205462
+    },
+    "prepared_stage": {
+      "baseline_strict_instance_bytes": 8770,
+      "candidate_strict_instance_bytes": 8720,
+      "baseline_production_instance_bytes": 9596,
+      "candidate_production_instance_bytes": 9470,
+      "baseline_section_bytes": 18366,
+      "candidate_section_bytes": 18190,
+      "baseline_text_bytes": 961277,
+      "candidate_text_bytes": 961101
+    },
+    "baseline_tail_lowering": "two 32-byte vector moves plus 4+2+1 tail loads/stores",
+    "candidate_tail_lowering": "two 32-byte vector moves plus one unaligned u64 tail load/store"
+  },
+  "prepared_stage": {
+    "command": "taskset -c 2 BINARY --input /tmp/vort-large-json-512k.txt --name large_json --level 1 --iterations 1000 --rounds 7 --min-sequences 1024 --max-sequences 4096 --allow-non-wildcopy --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so --csv OUT",
+    "pairs": 7,
+    "median": 1.0190332497838936,
+    "geometric_mean": 1.0183975142193606,
+    "minimum": 1.0165394303193904,
+    "maximum": 1.0198414503505264,
+    "wins": 7,
+    "checksum": 17063778966896642040,
+    "samples_ns": [
+      [69833174, 68479912],
+      [69684616, 68372822],
+      [69413441, 68116954],
+      [69523945, 68171327],
+      [69871915, 68735076],
+      [69776027, 68613856],
+      [69835557, 68635205]
+    ]
+  },
+  "complete_frame": {
+    "command": "taskset -c 2 BINARY --case large_json --iterations 3000 --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so --csv OUT",
+    "campaign_pairs": [7, 3, 3, 3, 3],
+    "pairs": 19,
+    "median": 1.0123037461727948,
+    "geometric_mean": 1.0130530838321927,
+    "minimum": 1.0024487243562994,
+    "maximum": 1.0215354697018584,
+    "wins": 19,
+    "checksum": 3146580000,
+    "baseline_over_libzstd_median": 0.9138524873402271,
+    "baseline_over_libzstd_geometric_mean": 0.9137995215648781,
+    "candidate_over_libzstd_median": 0.9254584929393819,
+    "candidate_over_libzstd_geometric_mean": 0.9286403647813701,
+    "samples_ns": [
+      [233021835, 228715430],
+      [232728049, 230182519],
+      [233172135, 229369443],
+      [231911035, 231344536],
+      [233050747, 230803046],
+      [233149813, 230405946],
+      [233301417, 230465824],
+      [233130197, 228525699],
+      [234379762, 229438692],
+      [232666155, 228541780],
+      [232521548, 229815061],
+      [231730544, 229476175],
+      [233337189, 230775215],
+      [233291586, 230396187],
+      [232000988, 229921196],
+      [233499943, 229766738],
+      [232287404, 231046022],
+      [232602089, 229498238],
+      [232970677, 229264490]
+    ],
+    "reference_samples_ns": [
+      [213309459, 214967762],
+      [211995260, 212528034],
+      [212346692, 212044449],
+      [213468605, 212885806],
+      [212103044, 213722602],
+      [213298510, 215004418],
+      [212870971, 213160719],
+      [212897573, 211413608],
+      [212483978, 212645312],
+      [211954312, 213651957],
+      [212490395, 212583580],
+      [212965584, 215057227],
+      [212570625, 212833495],
+      [213385017, 213222108],
+      [212135422, 212151535],
+      [213000889, 214091170],
+      [212778869, 212075291],
+      [213103427, 219499247],
+      [214179029, 212641872]
+    ]
+  },
+  "matched_layout_controls": {
+    "command": "taskset -c 2 BINARY --case CASE --iterations 1000 --input-offset 0 --output-offset 0 --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so --csv OUT",
+    "pairs": 7,
+    "huffman80k": {
+      "median": 1.000920129378842,
+      "geometric_mean": 1.0002286121715558,
+      "minimum": 0.9965012261646832,
+      "maximum": 1.0055406984771678,
+      "wins": 4,
+      "hot_section_byte_identical": true,
+      "samples_ns": [[37542229, 37335365], [37388158, 37519430], [37488951, 37594060], [37485715, 37451255], [37456675, 37532590], [37432622, 37344002], [37476694, 37434963]]
+    },
+    "ascii64k": {
+      "median": 0.9993622206511186,
+      "geometric_mean": 0.9961002507576887,
+      "minimum": 0.9800907248935513,
+      "maximum": 1.0142931535339519,
+      "wins": 3,
+      "hot_section_byte_identical": true,
+      "samples_ns": [[41146521, 40566695], [40585323, 40611224], [40743252, 41486716], [40608606, 40865140], [40584716, 41409142], [40639414, 40552929], [40744637, 40685414]]
+    },
+    "large_text": {
+      "median": 0.9970781255596093,
+      "geometric_mean": 0.9975418567867652,
+      "minimum": 0.98629502449007,
+      "maximum": 1.0061132275930447,
+      "wins": 3,
+      "selected_compact_pair_path": false,
+      "samples_ns": [[25559038, 25657933], [25683294, 25677336], [25617017, 25972976], [25622850, 25575257], [25668187, 25743406], [25511747, 25635171], [25583916, 25428466]]
+    },
+    "large_json": {
+      "median": 1.0174843837732808,
+      "geometric_mean": 1.0182669581358117,
+      "minimum": 1.0065005003125183,
+      "maximum": 1.0322899669981627,
+      "wins": 7,
+      "samples_ns": [[78893217, 76425442], [78121940, 76395096], [77413905, 76913926], [77652029, 76330919], [77356726, 76319258], [77565769, 76232884], [78176628, 76773727]]
+    },
+    "binary_mixed": {
+      "median": 0.9942326746316457,
+      "geometric_mean": 0.9992373905974937,
+      "minimum": 0.9880712858142561,
+      "maximum": 1.0141535433495898,
+      "wins": 3,
+      "hot_section_byte_identical": true,
+      "samples_ns": [[43608888, 43294585], [43681878, 43072253], [43238121, 43760123], [43246079, 43620977], [43317594, 43625312], [43385210, 43088319], [43543969, 43796558]]
+    }
+  },
+  "monitoring": {
+    "poll_interval_ms": 20,
+    "required_pre_campaign_clear_seconds": 60,
+    "discarded_contaminated_attempts": 28,
+    "discarded_unmatched_layout_control_pairs": 1,
+    "samples_from_contaminated_attempts_retained": 0
+  },
+  "validation": {
+    "direct_releasefast_zstd_tests": 682,
+    "compatibility_cases": 276,
+    "compatibility_unsupported": 0,
+    "decodecorpus_campaigns": 9,
+    "decodecorpus_frames": 9900,
+    "decodecorpus_block_stream_cases": 2699,
+    "decodecorpus_streamed_sequence_blocks": 76578,
+    "decodecorpus_sequence_mode_combinations": 64,
+    "full_releasefast_tests": 1701,
+    "build_check_steps": 104,
+    "generic_x86_64_compile": "passed",
+    "aarch64_compile": "passed",
+    "release_safe_copy_oracle": "passed",
+    "cli_help_smoke": "passed"
+  },
+  "decision": "retain; current LLVM lowering is restored to the intended exact two-vector plus one-u64 overlap-tail copy and improves every target pair"
+}

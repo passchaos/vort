@@ -27,7 +27,8 @@ records removal of the redundant validity bit from the proven-complete
 seven-bit table and a bounded one-shot/reusable lead over libzstd.
 [Zstd large-JSON overlap-tail copy](performance/zstd-large-json-overlap-tail-x86.md)
 records an exact 71-byte match kernel for the compact split-Huffman pair path
-and its complete-frame and prepared-stage measurements.
+and its complete-frame and prepared-stage measurements, plus the Zig 0.16
+lowering fix that restores its intended two-vector/one-u64 machine shape.
 [Zstd pair shifting field group](performance/zstd-pair-shifting-fields-x86.md)
 records the x86-64 pair-only destructive bit reservoir and its complete-frame,
 reusable, prepared-stage, and long-control measurements.
@@ -2479,6 +2480,28 @@ baseline, but an equivalent-harness control matrix had a 0.9587 row-median
 floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
+
+## Zstd exact overlap-tail lowering (2026-10-06)
+
+Clean gprof and ptrace attribution found 11.1% of the compact `large_json`
+executor samples inside the exact 71-byte pair-tail helper. Current LLVM had
+optimized away the overlap byte shared by its second 32-byte store and final
+eight-byte store, lowering the seven remaining tail bytes as 4+2+1 scalar
+loads/stores. Proven unaligned volatile accesses now retain both full vector
+moves and one exact in-range `u64` tail without reading or writing the caller's
+suffix. The production executor shrinks from `0x257e` to `0x2530` bytes and
+the complete split section from `0x47bc` to `0x473e`.
+
+Five independent clean campaigns improve the 512 KiB `large_json` frame by
+`1.0123x` median / `1.0131x` geometric throughput across 19/19 wins, with a
+`1.0024x` minimum. Candidate/libzstd 1.6.0 median rises from `0.9139x` to
+`0.9255x`; Vort therefore remains behind on this row. Seven prepared-stage
+pairs improve `1.0190x` / `1.0184x`, and a separate fixed-layout target control
+improves `1.0175x` / `1.0183x` with 7/7 wins. Long non-target controls remain
+within the measured noise floor, with their raw-FSE/Huffman-only/FFR hot
+sections byte-identical where applicable. Exact samples, attribution, rejected
+forced-long evidence, and validation counts are in
+`docs/performance/data/zstd-overlap-tail-lowering-x86-20261006.json`.
 
 ## Zstd packed compact split state (2026-10-06)
 

@@ -77,10 +77,16 @@ pub inline fn appendNonOverlapping71OverlapTail(
     std.debug.assert(destination_start - repeat_start >= 71);
     const first: @Vector(32, u8) = output[repeat_start..][0..32].*;
     const second: @Vector(32, u8) = output[repeat_start + 32 ..][0..32].*;
-    const tail: @Vector(8, u8) = output[repeat_start + 63 ..][0..8].*;
+    // Preserve the intentional overlapping eight-byte move. Without the
+    // volatile access LLVM removes its redundant first byte and lowers the
+    // seven remaining bytes into 4+2+1 scalar loads and stores.
+    const tail_source: *align(1) const volatile u64 = @ptrCast(output[repeat_start + 63 ..].ptr);
+    const tail = tail_source.*;
     output[destination_start..][0..32].* = first;
-    output[destination_start + 32 ..][0..32].* = second;
-    output[destination_start + 63 ..][0..8].* = tail;
+    const second_destination: *align(1) volatile @Vector(32, u8) = @ptrCast(output[destination_start + 32 ..].ptr);
+    second_destination.* = second;
+    const tail_destination: *align(1) volatile u64 = @ptrCast(output[destination_start + 63 ..].ptr);
+    tail_destination.* = tail;
     written.* += 71;
 }
 

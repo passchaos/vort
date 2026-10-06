@@ -17474,3 +17474,23 @@ reuse, so production keeps the simpler independently owned plans.
   or ABI and instead remove native-width hot-loop work or change the sequence
   table/bitstream execution model. Evidence is in
   `docs/performance/data/zstd-compact-abi-followup-x86-20261006.json`.
+
+- Instruction-level attribution found a retained Zstd compact-executor win
+  without another state or branch experiment. Current Zig 0.16 LLVM lowered
+  the exact 71-byte pair helper's overlapping tail into 4+2+1 scalar
+  loads/stores, even though the source and original benchmark evidence called
+  for one eight-byte move. Proven unaligned volatile accesses now preserve the
+  second 32-byte vector store and one in-range `u64` tail store; all source
+  loads still precede destination writes and no suffix byte is touched. The
+  production instance shrinks `0x257e -> 0x2530` and the split section
+  `0x47bc -> 0x473e`. Five clean campaigns improve complete 512 KiB
+  `large_json` frames by `1.0123x` median / `1.0131x` geometric throughput
+  across 19/19 wins with a `1.0024x` floor; fixed-layout pairs improve
+  `1.0175x` / `1.0183x` with 7/7 wins. Candidate/libzstd median rises from
+  `0.9139x` to `0.9255x`, so the broad gap remains open. GDB proved all target
+  blocks use upstream's regular BMI2 decoder; forcing its eight-entry long
+  queue regressed to `0.7906x`, ruling out decode-ahead for this workload.
+  Direct, compatibility, decodecorpus, cross-target, full-test, check, and CLI
+  gates pass. Evidence is in
+  `docs/performance/zstd-large-json-overlap-tail-x86.md` and
+  `docs/performance/data/zstd-overlap-tail-lowering-x86-20261006.json`.
