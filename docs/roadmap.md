@@ -17529,3 +17529,15 @@ reuse, so production keeps the simpler independently owned plans.
   work should change the table/bitstream execution model rather than retry
   neighboring 68--71-byte copy tails. Evidence is in
   `docs/performance/data/zstd-second-70-overlap-tail-x86-20261007.json`.
+
+- A two-pair reverse-bit window was measured and rejected. One 16-byte preload
+  seeded the current compact pair and derived the next pair's 64-bit shifting
+  group, avoiding its reader-position calculation and second load. Randomized
+  ReleaseFast/ReleaseSafe tests covered the handoff and the locked oracle used
+  the cached path more than 100 times, but live cached state grew the production
+  instance `0x2530 -> 0x25c1` and split section `0x473e -> 0x48b7`. Seven clean
+  fixed-layout complete-frame pairs regressed to `0.9390x` median / `0.9387x`
+  geometric throughput with 0/7 wins. The source was restored. Future
+  bitstream work must remove more work than one location/load without extending
+  the compact executor's state or live ranges; evidence is in
+  `docs/performance/data/zstd-pair-window-x86-20261007.json`.

@@ -1,0 +1,81 @@
+{
+  "date": "2026-10-07",
+  "recorded_at": "2026-10-07T06:40:55+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "4083ef37",
+  "reference": {
+    "source": "~/Work/zstd",
+    "git": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+    "version": "1.6.0"
+  },
+  "change": "preload a 16-byte reverse-bit window for one compact sequence pair and cache a derived 64-bit shifting group for the following pair, avoiding its second bitstream location and load",
+  "coverage": {
+    "known_pair_successors": 563,
+    "locked_oracle_cached_pair_hits": "greater than 100",
+    "cache_policy": "alternate successful pairs; a cached pair does not preload another window"
+  },
+  "binary": {
+    "baseline_sha256": "9c4997857c555cba2f7aeca755a7cb47268ecc3c73cdf70e4a66564c958b44a0",
+    "candidate_sha256": "15834493d3992df7c7cb14f470d1d72a046bf328c0db784191788290be0cb11c",
+    "baseline_split_section_sha256": "6d6ba4684164025d877dd471ca4b5bd60e3b32d5c579163493df437f254bee69",
+    "candidate_split_section_sha256": "e2eceb520f5d5b1ca90dc18899c12cf479b6a2329a246556537ea7542569409d",
+    "baseline_strict_instance_bytes": 8718,
+    "candidate_strict_instance_bytes": 8950,
+    "baseline_production_instance_bytes": 9520,
+    "candidate_production_instance_bytes": 9665,
+    "baseline_split_section_bytes": 18238,
+    "candidate_split_section_bytes": 18615
+  },
+  "complete_frame_fixed_layout": {
+    "pairs": 7,
+    "iterations": 3000,
+    "inner_alternating_rounds": 5,
+    "input_mod128": 16,
+    "output_mod128": 112,
+    "reference_output_mod128": 112,
+    "raw_median": 0.9390181992776497,
+    "raw_geometric_mean": 0.9387009582852387,
+    "raw_minimum": 0.9322550391570862,
+    "raw_maximum": 0.9458715808294503,
+    "raw_wins": 0,
+    "reference_normalized_median": 0.9396405648952494,
+    "reference_normalized_geometric_mean": 0.9395694695495693,
+    "baseline_over_libzstd_median": 0.9167854846081298,
+    "candidate_over_libzstd_median": 0.8613948334178981,
+    "checksum": 3146580000,
+    "samples_ns": [
+      [228803089, 245115578, 209558546, 211366190],
+      [230080292, 243246860, 210934272, 210459179],
+      [230075355, 245324085, 211068764, 211193948],
+      [229194701, 244079083, 210163173, 208646376],
+      [228027719, 244598001, 208572830, 210225189],
+      [228571300, 242894582, 208956157, 209228138],
+      [229743710, 244016100, 211453602, 210946343]
+    ],
+    "sample_columns": [
+      "baseline_vort_ns",
+      "candidate_vort_ns",
+      "baseline_libzstd_ns",
+      "candidate_libzstd_ns"
+    ]
+  },
+  "monitoring": {
+    "required_pre_campaign_clear_seconds": 60,
+    "poll_interval_ms": 20,
+    "campaign_clean": true,
+    "discarded_contaminated_campaigns": 0
+  },
+  "validation": {
+    "pair_window_release_fast": "17/17 field-group and bit-reader tests passed before source restoration",
+    "pair_window_release_safe": "17/17 field-group and bit-reader tests passed before source restoration",
+    "split_huffman_generic_parity": "2/2 filtered ReleaseFast tests passed and cached-window coverage exceeded 100 hits",
+    "production_source_restored": true
+  },
+  "decision": "reject; the saved second reverse-bit location/load is overwhelmed by the 16-byte preload, cached-window state, extra branch/live ranges, and larger hot executor"
+}

@@ -272,6 +272,18 @@ byte-for-byte output check before timing.
   was removed despite its smaller executor because it did not improve the
   real target. Exact hashes and samples are in
   [zstd-compact-abi-followup-x86-20261006.json](data/zstd-compact-abi-followup-x86-20261006.json).
+- A 2026-10-07 bitstream-model follow-up preloaded a 16-byte reverse-bit window
+  for one successful pair and derived the next pair's 64-bit shifting group
+  from its lower word. The cached pair avoided a second reader position
+  calculation and memory load; the locked oracle exercised this route more
+  than 100 times and randomized ReleaseFast/ReleaseSafe tests covered the
+  two-word handoff. The extra cached state and live 128-bit preload enlarged
+  the production instance from `0x2530` to `0x25c1`, the strict instance from
+  `0x220e` to `0x22f6`, and the split section from `0x473e` to `0x48b7`.
+  Seven clean fixed-layout complete-frame pairs regressed to `0.9390x` median /
+  `0.9387x` geometric throughput with 0/7 wins. The source was restored;
+  details are in
+  [zstd-pair-window-x86-20261007.json](data/zstd-pair-window-x86-20261007.json).
 
 These results rule out another round of local branch growth, wider copy loops,
 larger Huffman batches, table-fill tuning, or shrinking the executor by
@@ -280,9 +292,11 @@ smaller state representation: the hot extraction/reassembly cost dominates
 the 24-byte call-boundary reduction. Moving the one-time continuation commit
 out of the executor does make its section smaller, but does not improve the
 complete frame either. The next credible `large_json` direction is therefore
-not another local state/ABI spelling; it must remove work from the native-width
-hot loop or change its table/bitstream execution model while preserving the
-current two-sequence, direct-offset, short-rep0, and long-copy semantics.
+not another local state/ABI spelling. A wider preload that merely caches the
+next pair is also insufficient: future table/bitstream work must remove more
+than one location/load without extending hot state or live ranges, while
+preserving the current two-sequence, direct-offset, short-rep0, and long-copy
+semantics.
 
 Exact binary hashes, commands, and summary ratios are recorded in
 [zstd-large-json-followups-x86-20261001.json](data/zstd-large-json-followups-x86-20261001.json).

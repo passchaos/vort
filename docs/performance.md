@@ -2733,6 +2733,19 @@ host-sensitive reusable `numbered_json` absolute gate failure and its direct
 `docs/performance/zstd-fse-fse-rle-pair-x86.md` and its JSON companion. The
 result is an exact-frame lead, not broad Zstd leadership.
 
+## Zstd two-pair bit-window follow-up (2026-10-07)
+
+A compact-executor experiment used one 16-byte reverse-bit preload to seed the
+current pair and derive a cached 64-bit shifting group for the following pair.
+It avoided that following pair's reader-position calculation and load, and a
+randomized ReleaseFast/ReleaseSafe oracle covered the two-word handoff. Cached
+coverage exceeded 100 hits in the locked `large_json` oracle. The additional
+state and live window nevertheless grew the production instance by 145 bytes
+and the split section by 377 bytes. Seven clean fixed-layout pairs regressed to
+`0.9390x` median / `0.9387x` geometric throughput with 0/7 wins; libzstd 1.6.0
+normalization was similarly negative. The source was restored. Evidence is in
+`docs/performance/data/zstd-pair-window-x86-20261007.json`.
+
 ## Zstd second 70-byte pair-tail follow-up (2026-10-07)
 
 A post-lowering experiment replaced the compact pair executor's second exact
