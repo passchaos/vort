@@ -1,0 +1,78 @@
+{
+  "date": "2026-10-06",
+  "recorded_at": "2026-10-06T23:26:57+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "87310faa",
+  "change": "force the final pair LL/ML/OF branchless transition reads and state commits to remain scalar instead of LLVM SLP-vectorizing adjacent LL/OF state",
+  "reference_binary": {
+    "baseline_sha256": "151150eada83b63c591f0697c22a50fc46e7e21e9e87b1b9cd00da5db0e247cf",
+    "candidate_sha256": "ffb6a22df8678a68cd7bfe9c5e3d516fdee1bc684c5ff78eafb66caccb6784f9",
+    "baseline_strict_instance_bytes": 8718,
+    "candidate_strict_instance_bytes": 8372,
+    "baseline_production_instance_bytes": 9520,
+    "candidate_production_instance_bytes": 9491,
+    "baseline_section_bytes": 18238,
+    "candidate_section_bytes": 17863
+  },
+  "prepared_stage_binary": {
+    "baseline_sha256": "55d0b685b085b77793a47a7ea9712f7833dc5dfea41713f1841217e301c186ee",
+    "candidate_sha256": "986aaf6f85e6b33f40a23a2aded6e2d12e6229013371747e128fec16d4c60faf",
+    "baseline_strict_instance_bytes": 8720,
+    "candidate_strict_instance_bytes": 8365,
+    "baseline_production_instance_bytes": 9470,
+    "candidate_production_instance_bytes": 9479,
+    "baseline_section_bytes": 18190,
+    "candidate_section_bytes": 17844
+  },
+  "prepared_stage": {
+    "pairs": 7,
+    "median": 0.9911473485141985,
+    "geometric_mean": 0.990204293803376,
+    "minimum": 0.9819217472870286,
+    "maximum": 1.0002465015614117,
+    "wins": 1,
+    "checksum": 17063778966896642040,
+    "samples_ns": [
+      [68605486, 69119534],
+      [68287345, 69238813],
+      [68757996, 69212654],
+      [67903790, 69153973],
+      [68795423, 68778469],
+      [68512105, 69124036],
+      [68145505, 69114964]
+    ]
+  },
+  "complete_frame": {
+    "pairs": 7,
+    "median": 0.9903988491501782,
+    "geometric_mean": 0.9885024919662144,
+    "minimum": 0.9808154115577392,
+    "maximum": 0.9941816993490945,
+    "wins": 0,
+    "checksum": 3146580000,
+    "samples_ns": [
+      [231360880, 233247653],
+      [231298902, 233429317],
+      [230288256, 233921961],
+      [229069356, 233549915],
+      [230506323, 231855327],
+      [229894771, 232123423],
+      [228355026, 231377423]
+    ]
+  },
+  "monitoring": {
+    "required_pre_campaign_clear_seconds": 60,
+    "poll_interval_ms": 20,
+    "discarded_contaminated_campaigns": 1,
+    "campaign_clean": true
+  },
+  "validation": "ReleaseFast specialized-versus-generic split-Huffman oracle passed before timing",
+  "decision": "reject; LLVM SLP packing of adjacent LL/OF transition state is faster despite the larger machine-code block",
+  "production_source_restored": true
+}

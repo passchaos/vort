@@ -17504,3 +17504,15 @@ reuse, so production keeps the simpler independently owned plans.
   The pair path retains the new two-vector/one-u64 lowering while ordinary
   sequences keep their suffix-preserving helper. Evidence is in
   `docs/performance/data/zstd-single-71-overlap-followup-x86-20261006.json`.
+
+- Post-change sampling then attributed 6.75% of the compact executor to
+  branchless shifting-group transition extraction. Current LLVM combines the
+  adjacent LL/OF work into an XMM/AVX SLP block and leaves ML scalar. Forcing
+  three native-width scalar commits preserved bit order and branchless
+  semantics and reduced the reference split section `0x473e -> 0x45c7`, but
+  the prepared production instance grew nine bytes. Seven clean prepared pairs
+  regressed to `0.9911x` median / `0.9902x` geometric throughput and complete
+  frames to `0.9904x` / `0.9885x`, with 1/7 and 0/7 wins. The vectorized
+  lowering remains. Evidence is in
+  `docs/performance/zstd-pair-branchless-transitions-x86.md` and
+  `docs/performance/data/zstd-pair-scalar-transition-x86-20261006.json`.

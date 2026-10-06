@@ -85,6 +85,18 @@ Exact observations and hashes are retained in
   the target by 1.0300x median / 1.0291x geometric over 21 pairs, but was weaker
   than transition-only extraction and produced negative one-shot long-control
   geometry on `large_text`, `binary_mixed`, and `numbered_json`. It was removed.
+- A 2026-10-06 post-profile follow-up tested the current LLVM SLP lowering of
+  the final LL/ML/OF triplet. The production binary packs adjacent LL/OF
+  extraction and commits through XMM/AVX while leaving ML scalar. Volatile
+  native-width LL/OF commits forced three independent scalar
+  `shrx`/`bzhi`/`shlx` chains without changing bit order or branchless
+  semantics. The strict instance shrank from `0x220e` to `0x20b4` and the
+  complete split section from `0x473e` to `0x45c7`; the prepared production
+  instance, however, grew by nine bytes. Seven clean prepared-stage pairs
+  measured only 0.9911x median / 0.9902x geometric throughput with 1/7 wins,
+  and complete frames measured 0.9904x / 0.9885x with 0/7 wins. LLVM's SLP
+  packing is therefore retained. Exact samples are in
+  [zstd-pair-scalar-transition-x86-20261006.json](data/zstd-pair-scalar-transition-x86-20261006.json).
 
 ## Validation
 

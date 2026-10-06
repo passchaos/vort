@@ -2511,6 +2511,14 @@ complete-frame pairs measured only `0.9969x`/`0.9961x` and
 raw evidence is in
 `docs/performance/data/zstd-single-71-overlap-followup-x86-20261006.json`.
 
+The next clean PC profile attributed 6.75% to branchless shifting-group
+transitions and exposed LLVM's XMM/AVX packing of adjacent LL/OF state. Forcing
+three scalar transition chains reduced the split section but regressed seven
+prepared pairs to `0.9911x` median / `0.9902x` geometric and seven complete
+frames to `0.9904x` / `0.9885x`, with 0/7 frame wins. The vectorized lowering
+remains; evidence is in
+`docs/performance/data/zstd-pair-scalar-transition-x86-20261006.json`.
+
 ## Zstd packed compact split state (2026-10-06)
 
 The `large_json` compact split executor was screened with a private 64-byte
