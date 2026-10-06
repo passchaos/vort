@@ -242,13 +242,30 @@ byte-for-byte output check before timing.
   0.9943x stage median / 0.9984x geometric with 1/7 wins. It also exposed an
   X2 `CorruptFrame` versus canonical `TruncatedFrame` mismatch on a mutated
   stream; the selector and temporary cold fallback were both removed.
+- A 2026-10-06 compact-state follow-up replaced the selected executor's
+  88-byte `SequenceDecodeState` with a 64-byte representation that packed
+  LL/OF/ML and remaining-sequence state into four `u16` lanes. Unlike the
+  earlier global `u16` field experiment, this state was private to the compact
+  executor and combined each three-state transition into one packed store.
+  Extraction and reassembly still enlarged the complete-frame production
+  instance from `0x257e` to `0x26c5` bytes and the split section from `0x47bc`
+  to `0x4934`; the independently built prepared-stage instance grew from
+  `0x257c` to `0x26b4`. Seven continuously monitored fixed-CPU-2 pairs
+  regressed the prepared stage to 0.9297x median / 0.9268x geometric and the
+  complete frame to 0.9426x / 0.9425x, both with 0/7 wins. All stage and frame
+  checksums matched. The candidate was removed; exact samples and binary hashes
+  are recorded in
+  [zstd-packed-compact-state-x86-20261006.json](data/zstd-packed-compact-state-x86-20261006.json).
 
 These results rule out another round of local branch growth, wider copy loops,
 larger Huffman batches, table-fill tuning, or shrinking the executor by
-removing its prefixed paths. The next credible `large_json` direction is a
-genuinely smaller independently compiled executor/state representation that
-preserves the current two-sequence, direct-offset, short-rep0, and long-copy
-semantics without pointerized calls or duplicated error exits.
+removing its prefixed paths. They now also rule out integer-lane packing as a
+smaller state representation: the hot extraction/reassembly cost dominates
+the 24-byte call-boundary reduction. The next credible `large_json` direction
+must preserve native-width hot state and the current two-sequence,
+direct-offset, short-rep0, and long-copy semantics while reducing the executor
+ABI or state traffic without a per-sequence call, repack, or duplicated error
+exit.
 
 Exact binary hashes, commands, and summary ratios are recorded in
 [zstd-large-json-followups-x86-20261001.json](data/zstd-large-json-followups-x86-20261001.json).

@@ -17444,3 +17444,18 @@ reuse, so production keeps the simpler independently owned plans.
   did not improve the generated hot layout. Production keeps the original
   ordering; evidence is in
   `docs/performance/data/brotli-flat-distance-followup-x86-20261006.json`.
+
+- A genuinely smaller Zstd compact split state was measured and rejected. The
+  candidate packed LL/OF/ML and remaining-sequence state into four `u16` lanes,
+  reducing the selected executor's caller-owned state from 88 to 64 bytes while
+  keeping reader/repeated-offset widths and every pair, direct-offset,
+  short-rep0, and match-copy path intact. Per-sequence extraction and packed
+  transition stores enlarged the complete-frame production instance from
+  `0x257e` to `0x26c5` bytes and the prepared-stage instance from `0x257c` to
+  `0x26b4`. Seven clean fixed-CPU-2 pairs regressed prepared execution to
+  `0.9297x` median / `0.9268x` geometric and complete `large_json` frames to
+  `0.9426x` / `0.9425x`, with 0/7 wins and matching checksums in both sets.
+  The source candidate was removed. Future compact-state work must keep hot
+  native-width values and reduce ABI/state traffic without per-sequence
+  repacking, calls, or duplicated error exits; evidence is in
+  `docs/performance/data/zstd-packed-compact-state-x86-20261006.json`.

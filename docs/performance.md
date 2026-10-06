@@ -42,8 +42,8 @@ records one shared cold terminal-pair predicate, its production executor size
 reduction, complete-frame gains, non-target controls, and rejected bit-limit
 layout.
 [Zstd large-JSON follow-ups](performance/zstd-large-json-followups-x86.md)
-records rejected compact-pair, copy, state, and isolated width-ten Huffman
-experiments that did not survive complete-frame validation.
+records rejected compact-pair, copy, packed-state, and isolated width-ten
+Huffman experiments that did not survive complete-frame validation.
 [Zstd x86-64 dense FSE construction](performance/zstd-dense-fse-x86.md)
 records the dense-gap mapped-table builder on x86-64, including threshold and
 write-width rejection experiments.
@@ -2479,6 +2479,26 @@ baseline, but an equivalent-harness control matrix had a 0.9587 row-median
 floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
+
+## Zstd packed compact split state (2026-10-06)
+
+The `large_json` compact split executor was screened with a private 64-byte
+state that packed LL/OF/ML and remaining-sequence values into four `u16` lanes,
+down from the shared state's 88 bytes. The route's 2,047-sequence ceiling and
+512-state FSE tables make the representation lossless; reader and repeated
+offset widths, pair/direct-offset/short-rep0 paths, copy semantics, and all
+error checks remained unchanged.
+
+The smaller call-boundary state produced a larger hot loop: the complete-frame
+production instance grew from `0x257e` to `0x26c5` bytes and the split section
+from `0x47bc` to `0x4934`, while the prepared-stage instance grew from `0x257c`
+to `0x26b4`. Seven clean fixed-CPU-2 pairs regressed the prepared stage to
+`0.9297x` median / `0.9268x` geometric and the complete frame to `0.9426x` /
+`0.9425x`, with 0/7 wins in both campaigns and matching checksums. Production
+source was restored. This rules out per-sequence integer-lane extraction and
+reassembly as the sought smaller representation; exact hashes, commands, and
+samples are in
+`docs/performance/data/zstd-packed-compact-state-x86-20261006.json`.
 
 ## Brotli flat distance-countdown follow-up (2026-10-06)
 

@@ -1,0 +1,113 @@
+{
+  "date": "2026-10-06",
+  "recorded_at": "2026-10-06T14:05:56+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "521b0f817cd6e85d39f8c2c2904f10ee7ab97315",
+  "change": "replace the compact split executor's 88-byte SequenceDecodeState with a 64-byte state packing LL/OF/ML/remaining into four u16 lanes",
+  "input": {
+    "path": "/tmp/vort-large-json-512k.txt",
+    "bytes": 524307,
+    "sha256": "b0d873df5fbe94a60e8e10a51cde4b08b3370ae4f251357c16adbfc69fd27c95",
+    "encoded_bytes": 9905,
+    "selected_blocks": 4,
+    "selected_decoded_bytes": 524288,
+    "literal_bytes": 8329,
+    "sequence_count": 7298
+  },
+  "state_bytes": {
+    "baseline": 88,
+    "candidate": 64
+  },
+  "reference_binary": {
+    "baseline_sha256": "be07ebafc31e70c4263f2754b58b3590a7c469e22b99af36ce4a0fbbed830c89",
+    "candidate_sha256": "fc835c327d6370fe9ce5e10f4608b31aac7e98bd7826fa5690a02a35ef837ed1",
+    "baseline_strict_instance_bytes": 8766,
+    "candidate_strict_instance_bytes": 8815,
+    "baseline_production_instance_bytes": 9598,
+    "candidate_production_instance_bytes": 9925,
+    "baseline_section_bytes": 18364,
+    "candidate_section_bytes": 18740
+  },
+  "prepared_stage_binary": {
+    "baseline_sha256": "df7d0d8a2f36ab69faf298fba078922fa2ce901f79b81d11fa21a52b17f6c035",
+    "candidate_sha256": "dc2da3cf0eb17809877dd1dc6b8376de844e2a4b46aba61915f79234ca30a01b",
+    "baseline_strict_instance_bytes": 8770,
+    "candidate_strict_instance_bytes": 8827,
+    "baseline_production_instance_bytes": 9596,
+    "candidate_production_instance_bytes": 9908,
+    "baseline_section_bytes": 18366,
+    "candidate_section_bytes": 18735
+  },
+  "prepared_stage": {
+    "command": "taskset -c 2 BINARY --input /tmp/vort-large-json-512k.txt --name large_json --level 1 --iterations 1000 --rounds 7 --min-sequences 1024 --max-sequences 4096 --allow-non-wildcopy --csv OUT",
+    "pairs": 7,
+    "median": 0.929714715,
+    "geometric_mean": 0.926833144,
+    "minimum": 0.911516129,
+    "maximum": 0.937694506,
+    "wins": 0,
+    "checksum": 17063778966896642040,
+    "samples_ns": [
+      [70787392, 76198755],
+      [71413979, 76159110],
+      [71306096, 76173459],
+      [69713446, 76279372],
+      [69595817, 76351712],
+      [69381953, 74627143],
+      [69216905, 74407580]
+    ]
+  },
+  "complete_frame": {
+    "command": "taskset -c 2 BINARY --case large_json --iterations 3000 --csv OUT",
+    "reference_version": "1.4.8",
+    "pairs": 7,
+    "median": 0.942643489,
+    "geometric_mean": 0.942474404,
+    "minimum": 0.937264935,
+    "maximum": 0.948461386,
+    "wins": 0,
+    "checksum": 3146580000,
+    "baseline_over_libzstd_median": 0.888868439,
+    "baseline_over_libzstd_geometric_mean": 0.887884127,
+    "candidate_over_libzstd_median": 0.836414765,
+    "candidate_over_libzstd_geometric_mean": 0.835532959,
+    "samples_ns": [
+      [234115357, 248065916],
+      [233785899, 246489633],
+      [232525084, 248088961],
+      [231807932, 246625647],
+      [232921506, 247093953],
+      [231962675, 246153404],
+      [233206200, 247313464]
+    ],
+    "reference_samples_ns": [
+      [206331971, 206063446],
+      [206709089, 206087336],
+      [207075887, 207505270],
+      [206668033, 206467633],
+      [206928688, 205702181],
+      [206528948, 206488523],
+      [207289631, 207016076]
+    ]
+  },
+  "monitoring": {
+    "initial_clear_at": "2026-10-06T14:01:51+08:00",
+    "poll_interval_ms": 20,
+    "campaign_clean": true,
+    "external_zig_work_before_campaign": true,
+    "samples_taken_while_external_zig_present": 0
+  },
+  "validation": [
+    "ReleaseFast locked split-Huffman specialized-versus-generic oracle passed",
+    "prepared-stage checksums matched in all seven pairs",
+    "complete-frame checksums matched in all seven pairs"
+  ],
+  "decision": "reject; packed extraction and transition reassembly grow the executor and regress both prepared-stage and complete-frame throughput",
+  "production_source_restored": true
+}
