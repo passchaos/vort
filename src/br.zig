@@ -8190,7 +8190,9 @@ noinline fn processPairedWideLiteralMetaBlock(
 noinline fn processPairedWideLiteralPayload(
     comptime force_utf8_context: bool,
     comptime direct_context_three: bool,
-    reader: anytype,
+    // The wrapper owns this reservoir independently of output, header state,
+    // distance history, and every prepared lookup plane passed below.
+    noalias reader: anytype,
     output: []u8,
     written: *usize,
     meta_block_end: usize,

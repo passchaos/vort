@@ -65,3 +65,7 @@ rather than add another instance or reorder a small branch. In particular, a
 credible design must keep the reservoir live without duplicating exit-state
 synchronization and must reduce actual regular-distance work without enlarging
 `InsertCopyLengths` or introducing a hot call boundary.
+
+The subsequent no-copy solution expresses the wrapper-owned reader's existing
+non-aliasing invariant directly. Its retained implementation and measurements
+are in [brotli-full-noalias-reader-x86.md](brotli-full-noalias-reader-x86.md).

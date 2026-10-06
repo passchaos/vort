@@ -2480,6 +2480,22 @@ floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
 
+## Brotli full-tier noalias reader (2026-10-06)
+
+The paired 129--256-tree wrapper owns its fast reader independently from
+output, header state, distance history, and lookup planes. Marking that payload
+parameter `noalias` exposes the existing invariant without copying reader state
+or adding error-exit synchronization.
+
+Fifteen clean fixed-CPU-2 pairs improve roadmap q9 by `1.0060x` median /
+`1.0067x` geometric with 15/15 wins and q5 by `1.0067x` / `1.0066x` with
+14/15 wins. Same-process libbrotli-normalized geometry is `1.0035x`/`1.0069x`;
+candidate absolute medians reach `0.7818x`/`0.8046x` libbrotli. Three controls
+combine to `1.0013x` geometrically. All 551 direct tests, upstream and
+real-corpus differentials, reference gates, AArch64 compilation, full tests,
+build check, and CLI smoke pass. Exact evidence is in
+`docs/performance/brotli-full-noalias-reader-x86.md`.
+
 ## Brotli full-tier follow-up experiments (2026-10-06)
 
 Five follow-ups to the retained full-tier UTF-8/direct-context executor were

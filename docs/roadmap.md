@@ -17402,3 +17402,14 @@ reuse, so production keeps the simpler independently owned plans.
   must reduce the command/distance execution model without more instances,
   wider return state, or hot call boundaries. Evidence is in
   `docs/performance/brotli-full-followups-x86.md`.
+
+- The paired Brotli full-tier payload now marks its wrapper-owned fast reader
+  `noalias` relative to output, header/distance state, and prepared lookup
+  planes. This exposes an existing ownership invariant without the rejected
+  reader copy or per-exit synchronization. Fifteen clean roadmap q9/q5 pairs
+  improve by `1.0067x`/`1.0066x` geometrically with 15/15 and 14/15 wins;
+  libbrotli-normalized geometry is `1.0035x`/`1.0069x`. Candidate medians reach
+  `0.7818x`/`0.8046x` local libbrotli, so the main decode gap remains. Source
+  q9/q5 and clustered q8 controls combine to `1.0013x`, and all direct,
+  upstream, real-corpus, cross-target, and build gates pass. Evidence is in
+  `docs/performance/brotli-full-noalias-reader-x86.md`.
