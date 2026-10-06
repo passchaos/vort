@@ -2480,6 +2480,20 @@ floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
 
+## Brotli reader noalias follow-ups (2026-10-06)
+
+The remaining reader tiers were audited after the retained full/middle wins.
+The old wide10 auxiliary executor is no longer production-reachable because
+eligible >128-tree blocks route to the paired executor. Reachable flat and
+single-tree candidates were measured and removed: clustered q8 reached only
+`0.9987x` median / `0.9946x` geometric with 5/15 wins, while source/roadmap q1
+measured `0.9940x`/`0.9874x` geometrically with 0/7 wins on both rows.
+
+No production source change remains. This closes reader alias metadata as a
+general strategy: it is retained only for the independently proven paired and
+middle layouts. Raw evidence is in
+`docs/performance/brotli-reader-noalias-followups-x86.md`.
+
 ## Brotli middle-tier noalias reader (2026-10-06)
 
 The isolated 65--128-tree payload now marks its wrapper-owned fast reader

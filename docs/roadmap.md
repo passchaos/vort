@@ -17423,3 +17423,15 @@ reuse, so production keeps the simpler independently owned plans.
   `0.9993x`; their minimum pair stays above `0.9905x`. All direct, upstream,
   real-corpus, cross-target, and build gates pass. Evidence is in
   `docs/performance/brotli-middle-noalias-reader-x86.md`.
+
+- The remaining Brotli reader-ownership tiers were audited rather than
+  mechanically annotated. The old wide10 auxiliary payload is no longer
+  production-reachable because eligible >128-tree blocks enter the paired
+  executor. A reachable flat-payload `noalias` candidate shrank its selected
+  instance by 20 bytes but measured only `0.9987x` median / `0.9946x`
+  geometric on clustered q8 with 5/15 wins. The single-tree candidate grew 15
+  bytes and lost all 7/7 source q1 and 7/7 roadmap q1 pairs at `0.9940x` and
+  `0.9874x` geometry. Both candidates were removed. Reader alias metadata is
+  therefore retained only in the independently proven paired and middle
+  layouts. Evidence is in
+  `docs/performance/brotli-reader-noalias-followups-x86.md`.

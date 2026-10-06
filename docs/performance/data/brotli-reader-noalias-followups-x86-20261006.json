@@ -1,0 +1,91 @@
+{
+  "date": "2026-10-06",
+  "recorded_at": "2026-10-06T13:27:44+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "c7b9c4ba",
+  "baseline_executable_sha256": "fb760042ef7c7f7f1f6c9ffb8f68c4dd1d361167d4fd138e2ade6f9bcaba6b33",
+  "order": "baseline,candidate on odd pairs; candidate,baseline on even pairs",
+  "monitor": "0.2-second continuous ps -C zig; discard every non-empty attempt",
+  "routing_audit": {
+    "wide10_production_reachable": false,
+    "reason": "eligible >128-tree auxiliary blocks route directly to paired; failed auxiliary preparation also makes the nested wide10 condition false",
+    "retained_role": "explicit transition and boundary oracle"
+  },
+  "candidates": {
+    "flat_tail_lookup_reader": {
+      "candidate_executable_sha256": "f7c77c674e15eea74da97b0940eb189254359ff96ce2e2aee4a866bd4dbe20cb",
+      "change": "mark the production flat tail-lookup payload reader noalias",
+      "decision": "reject clustered q8 regression",
+      "code_shape": {
+        "baseline_selected_instance_bytes": 4710,
+        "candidate_selected_instance_bytes": 4690,
+        "selected_instance_reduction_bytes": 20,
+        "baseline_secondary_instance_bytes": 4309,
+        "candidate_secondary_instance_bytes": 4305,
+        "custom_sections_unchanged": true
+      },
+      "clustered_q8": {
+        "requested_iterations": 10000,
+        "effective_iterations": 1000,
+        "pairs": 15,
+        "median": 0.9986823737434246,
+        "geometric_mean": 0.9946084779222227,
+        "minimum": 0.9683791086984402,
+        "maximum": 1.010781187181184,
+        "wins": 5,
+        "discarded_contaminated_attempts": 0,
+        "samples_ns": [[568929204, 568140709], [566349856, 567097078], [566528392, 565816247], [567220037, 570179415], [565847348, 566547136], [565039714, 583490194], [565701495, 565460277], [565225736, 566283759], [572572961, 571177929], [562535413, 568714582], [567829364, 569631002], [566814188, 567107070], [576275905, 570129235], [562418290, 569615110], [565847778, 582056098]]
+      }
+    },
+    "single_tree_reader": {
+      "candidate_executable_sha256": "db95ba632c47683047db00618c9c9867c681c1137815e9ab82461bf073ad6629",
+      "change": "mark the large single-tree payload reader noalias",
+      "decision": "reject both q1 targets with zero wins",
+      "code_shape": {
+        "baseline_instance_bytes": 3797,
+        "candidate_instance_bytes": 3812,
+        "instance_growth_bytes": 15,
+        "instance_address_unchanged": true,
+        "custom_sections_unchanged": true
+      },
+      "source_q1": {
+        "input_bytes": 1726567,
+        "input_sha256": "b75cf6294797c217c0e4a17054a65c5e2d6a355529eccd65c7fd94c24f26fff0",
+        "encoded_bytes": 218630,
+        "iterations": 200,
+        "pairs": 7,
+        "median": 0.9944165471881956,
+        "geometric_mean": 0.9940460113450857,
+        "minimum": 0.989954130109391,
+        "maximum": 0.9964352876432659,
+        "wins": 0,
+        "discarded_contaminated_attempts": 18,
+        "samples_ns": [[328263450, 329437801], [330040494, 331860097], [326868575, 328905494], [328315403, 329644259], [327891302, 329732347], [328081895, 330315798], [326876425, 330193506]]
+      },
+      "roadmap_q1": {
+        "input_bytes": 1251399,
+        "input_sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9",
+        "encoded_bytes": 423778,
+        "iterations": 200,
+        "pairs": 7,
+        "median": 0.9863030212027303,
+        "geometric_mean": 0.9874123559505575,
+        "minimum": 0.9807527352311196,
+        "maximum": 0.9932954517408751,
+        "wins": 0,
+        "discarded_contaminated_attempts": 0,
+        "samples_ns": [[497473803, 502493733], [498729539, 507336417], [498520657, 508304121], [499740686, 503113837], [496596887, 503493223], [494535020, 501826408], [497089101, 500546970]]
+      }
+    }
+  },
+  "validation": {
+    "all_benchmark_sizes_and_checksums_equal": true,
+    "production_candidates_retained": 0
+  }
+}
