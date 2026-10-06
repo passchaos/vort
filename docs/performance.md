@@ -2480,6 +2480,17 @@ floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
 
+## Brotli flat distance-countdown follow-up (2026-10-06)
+
+The clustered-q8 flat executor processes 16,663 explicit distances but only 17
+distance block switches. Testing the local distance countdown before loading
+`block_type_count` avoided that dominant dependent header read, but all seven
+clean fixed-CPU-2 pairs regressed: `0.9911x` median / `0.9910x` geometric, with
+a `0.9885x--0.9945x` range. The selected instance kept the same address and
+size, so smaller source work did not produce a faster hot layout. The candidate
+was removed; raw evidence is in
+`docs/performance/data/brotli-flat-distance-followup-x86-20261006.json`.
+
 ## Brotli reader noalias follow-ups (2026-10-06)
 
 The remaining reader tiers were audited after the retained full/middle wins.

@@ -126,6 +126,14 @@ setup-only shrinking, and outlining the dictionary path for this stream. A
 credible next step needs to reduce actual distance/copy work without expanding
 returned state or adding a hot call boundary.
 
+A later x86-64 follow-up used the cached-distance audit's 16,663 explicit
+distances and only 17 distance-block switches to test the local countdown
+before `block_type_count`. The selected multi-tree instance kept the same
+address and size, but all seven clean clustered-q8 pairs lost at `0.9911x`
+median / `0.9910x` geometric throughput. The change was removed; exact samples
+are in
+[brotli-flat-distance-followup-x86-20261006.json](data/brotli-flat-distance-followup-x86-20261006.json).
+
 ## Distance and copy shape audit
 
 A second non-timing parse examined every copy before changing the copy

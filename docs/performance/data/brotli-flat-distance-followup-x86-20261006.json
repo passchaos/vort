@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-06",
+  "recorded_at": "2026-10-06T13:37:44+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "c7b9c4ba",
+  "baseline_executable_sha256": "fb760042ef7c7f1f6c9ffb8f68c4dd1d361167d4fd138e2ade6f9bcaba6b33",
+  "candidate_executable_sha256": "1581aaee1e84d3df204a2853c01559819f02c81b25324a2d22125f3fa81c2722",
+  "change": "test distance block remaining before block_type_count in the flat command-lookup payload",
+  "audit": {
+    "explicit_distances": 16663,
+    "distance_block_switches": 17,
+    "context_three_explicit_distances": 15997
+  },
+  "code_shape": {
+    "selected_instance_address_unchanged": true,
+    "selected_instance_bytes": 4710,
+    "baseline_secondary_instance_bytes": 4309,
+    "candidate_secondary_instance_bytes": 4304,
+    "custom_sections_unchanged": true
+  },
+  "clustered_q8": {
+    "input_bytes": 1048576,
+    "encoded_bytes": 52623,
+    "requested_iterations": 10000,
+    "effective_iterations": 1000,
+    "pairs": 7,
+    "median": 0.9910992152106489,
+    "geometric_mean": 0.9910245482258206,
+    "minimum": 0.9884992644765235,
+    "maximum": 0.9945282592979096,
+    "wins": 0,
+    "discarded_contaminated_attempts": 5,
+    "samples_ns": [[567828003, 573047598], [567437005, 572532998], [565569450, 571989184], [567469097, 572039636], [568290962, 571417611], [567839937, 572777551], [566030480, 572615985]]
+  },
+  "decision": "reject; all target pairs regress despite avoiding the dominant block_type_count load"
+}

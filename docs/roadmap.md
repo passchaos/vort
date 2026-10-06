@@ -17435,3 +17435,12 @@ reuse, so production keeps the simpler independently owned plans.
   therefore retained only in the independently proven paired and middle
   layouts. Evidence is in
   `docs/performance/brotli-reader-noalias-followups-x86.md`.
+
+- Reordering the flat Brotli executor's distance switch checks was rejected.
+  Although clustered q8 has 16,663 explicit distances and only 17 block
+  switches, testing the local countdown before `block_type_count` lost all
+  seven clean pairs at `0.9911x` median / `0.9910x` geometric throughput. The
+  selected instance retained its address and size, so the avoided header load
+  did not improve the generated hot layout. Production keeps the original
+  ordering; evidence is in
+  `docs/performance/data/brotli-flat-distance-followup-x86-20261006.json`.
