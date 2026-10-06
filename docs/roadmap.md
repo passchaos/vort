@@ -17413,3 +17413,13 @@ reuse, so production keeps the simpler independently owned plans.
   q9/q5 and clustered q8 controls combine to `1.0013x`, and all direct,
   upstream, real-corpus, cross-target, and build gates pass. Evidence is in
   `docs/performance/brotli-full-noalias-reader-x86.md`.
+
+- The 65--128-tree Brotli payload now independently states the same proven
+  `noalias` contract for its wrapper-owned fast reader. Fifteen clean source
+  q9/q5 pairs improve by `1.0037x`/`1.0055x` geometrically with 12/15 and
+  13/15 wins; libbrotli-normalized geometry is `1.0034x`/`1.0024x`. Candidate
+  medians reach `0.7861x`/`0.7827x` libbrotli, so the main gap remains open.
+  Twenty-nine controls over byte-identical paired/wide10 paths combine to
+  `0.9993x`; their minimum pair stays above `0.9905x`. All direct, upstream,
+  real-corpus, cross-target, and build gates pass. Evidence is in
+  `docs/performance/brotli-middle-noalias-reader-x86.md`.

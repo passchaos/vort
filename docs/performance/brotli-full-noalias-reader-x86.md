@@ -74,3 +74,7 @@ discarded-attempt counts, and validation totals are in
 - The 13-row libbrotli reference gate and three-row path smoke pass.
 - The full project test suite, `zig build check -j2`, CLI help smoke, and
   AArch64 Linux ReleaseFast compilation pass.
+
+The same proven ownership contract was subsequently evaluated independently
+for the 65--128-tree executor. Its retained results are in
+[brotli-middle-noalias-reader-x86.md](brotli-middle-noalias-reader-x86.md).

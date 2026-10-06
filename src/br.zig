@@ -7822,7 +7822,9 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
     comptime command_lookup10: bool,
     comptime zero_postfix_distance: bool,
     comptime force_utf8_context: bool,
-    reader: anytype,
+    // The wrapper owns this reservoir independently of output, header state,
+    // distance history, and every optional lookup plane passed below.
+    noalias reader: anytype,
     output: []u8,
     written: *usize,
     meta_block_end: usize,

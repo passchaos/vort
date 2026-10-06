@@ -2480,6 +2480,22 @@ floor. Helper, wrapper, compile-time, and text-section isolation did not restore
 the required 0.99 non-target floor, so all production parser code was removed.
 Future work should integrate Brotli-aware costs behind a layout-stable boundary.
 
+## Brotli middle-tier noalias reader (2026-10-06)
+
+The isolated 65--128-tree payload now marks its wrapper-owned fast reader
+`noalias` relative to output, header/distance state, and all lookup planes.
+This exposes an existing ownership invariant without copying or synchronizing
+reader state.
+
+Fifteen clean fixed-CPU-2 pairs improve source q9 by `1.0030x` median /
+`1.0037x` geometric and source q5 by `1.0067x` / `1.0055x`, with 12/15 and
+13/15 wins. Same-process libbrotli-normalized geometry is `1.0034x`/`1.0024x`;
+candidate absolute medians reach `0.7861x`/`0.7827x` libbrotli. Twenty-nine
+byte-identical-path controls combine to `0.9993x` geometrically. All 551 direct
+tests, upstream and real-corpus differentials, reference gates, AArch64
+compilation, full tests, build check, and CLI smoke pass. Exact evidence is in
+`docs/performance/brotli-middle-noalias-reader-x86.md`.
+
 ## Brotli full-tier noalias reader (2026-10-06)
 
 The paired 129--256-tree wrapper owns its fast reader independently from
