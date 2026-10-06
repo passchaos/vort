@@ -90,6 +90,23 @@ hashes, retained observations, discarded-contamination accounting, and
 control samples are in
 [zstd-overlap-tail-lowering-x86-20261006.json](data/zstd-overlap-tail-lowering-x86-20261006.json).
 
+### Single-sequence coverage follow-up
+
+After retaining the lowering fix, a clean 2,000-sample PC profile placed 4.95%
+of the compact executor in the older suffix-preserving 71-byte helper used by
+four non-pair branches. Reusing the exact overlap-tail helper there was
+semantically valid and let LLVM merge substantially more code: the production
+instance fell from `0x2530` to `0x2413`, the strict instance from `0x220e` to
+`0x2019`, and the split section from `0x473e` to `0x442c`.
+
+The smaller layout was nevertheless slower. Seven clean prepared-stage pairs
+measured 0.9969x median / 0.9961x geometric throughput with 1/7 wins, and seven
+complete-frame pairs measured 0.9969x / 0.9984x with 3/7 wins. The four
+single-sequence call sites therefore keep the suffix-preserving helper; only
+the independently proven pair path uses the overlap-tail helper. Exact hashes
+and observations are in
+[zstd-single-71-overlap-followup-x86-20261006.json](data/zstd-single-71-overlap-followup-x86-20261006.json).
+
 ## Validation and remaining work
 
 - The copy helper is compared with the generic LZ match copy across lengths,

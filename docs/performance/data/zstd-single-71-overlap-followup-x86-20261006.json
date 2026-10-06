@@ -1,0 +1,92 @@
+{
+  "date": "2026-10-06",
+  "recorded_at": "2026-10-06T22:08:21+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "13ad4850",
+  "change": "reuse the exact overlap-tail helper for four non-pair 71-byte branches in the compact split executor",
+  "input": {
+    "bytes": 524307,
+    "sha256": "b0d873df5fbe94a60e8e10a51cde4b08b3370ae4f251357c16adbfc69fd27c95",
+    "encoded_bytes": 9905,
+    "sequence_count": 7298
+  },
+  "reference_binary": {
+    "baseline_sha256": "151150eada83b63c591f0697c22a50fc46e7e21e9e87b1b9cd00da5db0e247cf",
+    "candidate_sha256": "d570dc8b1a2920831bef6f9875fd4a8d39630d44359aa5635ad13ea9b2d99008",
+    "baseline_strict_instance_bytes": 8718,
+    "candidate_strict_instance_bytes": 8217,
+    "baseline_production_instance_bytes": 9520,
+    "candidate_production_instance_bytes": 9235,
+    "baseline_section_bytes": 18238,
+    "candidate_section_bytes": 17452
+  },
+  "prepared_stage_binary": {
+    "baseline_sha256": "55d0b685b085b77793a47a7ea9712f7833dc5dfea41713f1841217e301c186ee",
+    "candidate_sha256": "a7f217c624ef0a51a0667826fdc6383011932c63637b27c4bcc2259e505837ba",
+    "baseline_strict_instance_bytes": 8720,
+    "candidate_strict_instance_bytes": 8237,
+    "baseline_production_instance_bytes": 9470,
+    "candidate_production_instance_bytes": 9196,
+    "baseline_section_bytes": 18190,
+    "candidate_section_bytes": 17433
+  },
+  "prepared_stage": {
+    "pairs": 7,
+    "median": 0.996888441923292,
+    "geometric_mean": 0.9960674495593088,
+    "minimum": 0.9882799783782351,
+    "maximum": 1.0018118265222105,
+    "wins": 1,
+    "checksum": 17063778966896642040,
+    "samples_ns": [
+      [68286475, 68327407],
+      [68254600, 68707727],
+      [68402997, 68799596],
+      [68027604, 68834344],
+      [68099021, 68200520],
+      [68276806, 68153324],
+      [68212937, 68425848]
+    ]
+  },
+  "complete_frame": {
+    "pairs": 7,
+    "median": 0.9968759322543892,
+    "geometric_mean": 0.9984106364969922,
+    "minimum": 0.991776492876332,
+    "maximum": 1.007354943716846,
+    "wins": 3,
+    "checksum": 3146580000,
+    "samples_ns": [
+      [229208206, 229926512],
+      [229233980, 231134718],
+      [228760402, 229785447],
+      [229149571, 230586452],
+      [231081889, 230313507],
+      [230227625, 230155086],
+      [232592435, 230894221]
+    ],
+    "reference_samples_ns": [
+      [213038618, 212548085],
+      [212486679, 212924809],
+      [211991831, 212616258],
+      [212590164, 212548868],
+      [212388927, 212684803],
+      [212512578, 213346950],
+      [214316011, 214376229]
+    ]
+  },
+  "monitoring": {
+    "required_pre_campaign_clear_seconds": 60,
+    "poll_interval_ms": 20,
+    "campaign_clean": true
+  },
+  "validation": "ReleaseFast specialized-versus-generic split-Huffman oracle passed before timing",
+  "decision": "reject; code-size deduplication does not offset the single-sequence scheduling regression",
+  "production_source_restored": true
+}

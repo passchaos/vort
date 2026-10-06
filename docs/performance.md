@@ -2503,6 +2503,14 @@ sections byte-identical where applicable. Exact samples, attribution, rejected
 forced-long evidence, and validation counts are in
 `docs/performance/data/zstd-overlap-tail-lowering-x86-20261006.json`.
 
+A post-change PC profile then tested the same exact helper at four ordinary
+single-sequence 71-byte sites. Although this reduced the production executor by
+another 285 bytes and the split section by 786 bytes, seven clean prepared and
+complete-frame pairs measured only `0.9969x`/`0.9961x` and
+`0.9969x`/`0.9984x` median/geometric throughput. The extension was removed;
+raw evidence is in
+`docs/performance/data/zstd-single-71-overlap-followup-x86-20261006.json`.
+
 ## Zstd packed compact split state (2026-10-06)
 
 The `large_json` compact split executor was screened with a private 64-byte

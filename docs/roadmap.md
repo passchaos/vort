@@ -17494,3 +17494,13 @@ reuse, so production keeps the simpler independently owned plans.
   gates pass. Evidence is in
   `docs/performance/zstd-large-json-overlap-tail-x86.md` and
   `docs/performance/data/zstd-overlap-tail-lowering-x86-20261006.json`.
+
+- Extending that exact overlap-tail helper to the compact executor's four
+  ordinary single-sequence 71-byte sites was rejected. The reuse was safe and
+  enabled major deduplication (`0x2530 -> 0x2413` production instance,
+  `0x473e -> 0x442c` split section), but seven clean prepared-stage pairs
+  measured only `0.9969x` median / `0.9961x` geometric throughput and seven
+  complete-frame pairs measured `0.9969x` / `0.9984x`, with 1/7 and 3/7 wins.
+  The pair path retains the new two-vector/one-u64 lowering while ordinary
+  sequences keep their suffix-preserving helper. Evidence is in
+  `docs/performance/data/zstd-single-71-overlap-followup-x86-20261006.json`.
