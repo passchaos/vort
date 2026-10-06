@@ -1,0 +1,95 @@
+{
+  "date": "2026-10-07",
+  "recorded_at": "2026-10-07T05:07:52+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "2f7f301e",
+  "reference": {
+    "source": "~/Work/zstd",
+    "git": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+    "version": "1.6.0"
+  },
+  "change": "replace the compact pair executor's second exact 70-byte 4+2 scalar tail with a volatile in-range u64 tail overlapping the second 32-byte vector by two bytes",
+  "binary": {
+    "baseline_sha256": "9c4997857c555cba2f7aeca755a7cb47268ecc3c73cdf70e4a66564c958b44a0",
+    "candidate_sha256": "297ac6422d242f6e34fc3939e633c7cde93b060f1c0ad659eb47f0d03a0270dd",
+    "baseline_split_section_sha256": "6d6ba4684164025d877dd471ca4b5bd60e3b32d5c579163493df437f254bee69",
+    "candidate_split_section_sha256": "f73717b60c84e623bebb35b7c9ed66be0eaba51ff766904cebed95a6d9edec5a",
+    "baseline_strict_instance_bytes": 8718,
+    "candidate_strict_instance_bytes": 8718,
+    "baseline_production_instance_bytes": 9520,
+    "candidate_production_instance_bytes": 9520,
+    "baseline_split_section_bytes": 18238,
+    "candidate_split_section_bytes": 18238,
+    "baseline_second_70_tail": "u32 plus u16 load/store",
+    "candidate_second_70_tail": "one unaligned u64 load/store at offsets 62 through 69"
+  },
+  "complete_frame_default_layout": {
+    "pairs": 7,
+    "iterations": 3000,
+    "inner_alternating_rounds": 5,
+    "raw_median": 0.9994176091547052,
+    "raw_geometric_mean": 0.9993394046070909,
+    "raw_minimum": 0.9848888015172626,
+    "raw_maximum": 1.0091010543111811,
+    "raw_wins": 3,
+    "reference_normalized_median": 1.0009153815883784,
+    "reference_normalized_geometric_mean": 1.0023773535784402,
+    "baseline_over_libzstd_median": 0.915970571188292,
+    "candidate_over_libzstd_median": 0.914539222371731,
+    "checksum": 3146580000,
+    "samples_ns": [
+      [231943387, 230983309, 212305044, 214162275],
+      [229784042, 230338013, 210971564, 214202161],
+      [231918639, 232053785, 212577288, 211543698],
+      [232652897, 230554607, 210690661, 210851231],
+      [230047345, 233576973, 210716598, 211144218],
+      [230484488, 229338318, 210378368, 209523802],
+      [229768957, 230828722, 210488282, 211225409]
+    ],
+    "sample_columns": [
+      "baseline_vort_ns",
+      "candidate_vort_ns",
+      "baseline_libzstd_ns",
+      "candidate_libzstd_ns"
+    ],
+    "matched_layout_subset": {
+      "pairs": 5,
+      "input_mod128": 16,
+      "output_mod128": 112,
+      "raw_median": 0.999417609154705,
+      "raw_geometric_mean": 1.000308237690857,
+      "raw_wins": 2,
+      "reference_normalized_median": 1.000915381588378,
+      "reference_normalized_geometric_mean": 1.004007859081573
+    }
+  },
+  "monitoring": {
+    "required_pre_campaign_clear_seconds": 60,
+    "poll_interval_ms": 20,
+    "clean_campaigns": 1,
+    "discarded_contaminated_campaigns": 4,
+    "discarded_campaign_shapes": [
+      "15 pairs x 5000 iterations, fixed 16/112 layout",
+      "15 pairs x 5000 iterations, fixed 16/112 layout",
+      "15 pairs x 5000 iterations, fixed 16/112 layout",
+      "7 pairs x 3000 iterations, fixed 16/112 layout"
+    ]
+  },
+  "validation": {
+    "match_copy_release_fast": "23/23 passed before source restoration",
+    "match_copy_release_safe": "23/23 passed before source restoration",
+    "direct_zstd_release_fast": "683/683 passed before source restoration",
+    "cross_compile": [
+      "x86_64-linux-gnu baseline ReleaseFast",
+      "aarch64-linux-gnu baseline ReleaseFast"
+    ],
+    "production_source_restored": true
+  },
+  "decision": "reject; the intended two-vector plus u64 lowering is real but complete-frame raw throughput is neutral-negative, so the second 70-byte copy retains its exact 4+2 scalar tail"
+}

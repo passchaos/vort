@@ -17516,3 +17516,16 @@ reuse, so production keeps the simpler independently owned plans.
   lowering remains. Evidence is in
   `docs/performance/zstd-pair-branchless-transitions-x86.md` and
   `docs/performance/data/zstd-pair-scalar-transition-x86-20261006.json`.
+
+- A post-lowering exact-tail follow-up for the compact pair executor's second
+  70-byte match was rejected. Volatile unaligned accesses produced the intended
+  two 32-byte vector moves plus one in-range `u64` move, replacing the retained
+  `4+2` scalar tail without changing the `0x2530` production instance or
+  `0x473e` split-section sizes. Seven clean complete-frame pairs measured only
+  `0.9994x` median / `0.9993x` geometric raw throughput with 3/7 wins, while
+  candidate/libzstd 1.6.0 median fell from `0.9160x` to `0.9145x`. Four longer
+  fixed-layout campaigns were discarded after continuous monitoring detected
+  an external Zig workload. The source was restored; further `large_json`
+  work should change the table/bitstream execution model rather than retry
+  neighboring 68--71-byte copy tails. Evidence is in
+  `docs/performance/data/zstd-second-70-overlap-tail-x86-20261007.json`.

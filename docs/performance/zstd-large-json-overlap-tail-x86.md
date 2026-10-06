@@ -107,6 +107,28 @@ the independently proven pair path uses the overlap-tail helper. Exact hashes
 and observations are in
 [zstd-single-71-overlap-followup-x86-20261006.json](data/zstd-single-71-overlap-followup-x86-20261006.json).
 
+### Second 70-byte pair-tail follow-up (2026-10-07)
+
+The same lowering lesson was tested on the pair executor's second 70-byte
+match. Its retained exact tail uses a four-byte plus two-byte load/store. A
+candidate loaded all source bytes before writing and forced one unaligned
+eight-byte move at offsets 62--69, overlapping the second 32-byte vector by two
+bytes without touching the caller suffix. LLVM emitted exactly the intended
+two vector moves plus one `u64` move and removed two tail instructions. The
+strict and production instances remained `0x220e` and `0x2530`; the complete
+split section remained `0x473e`.
+
+The smaller tail did not improve the complete frame. Seven continuously
+monitored fixed-CPU-2 pairs measured **0.9994x median / 0.9993x geometric** raw
+throughput with **3/7 wins**. Candidate/libzstd 1.6.0 median fell from 0.9160x
+to 0.9145x. Five pairs happened to share the same 128-byte input/output layout;
+their median remained 0.9994x with 2/5 wins. Four attempted fixed-layout
+campaigns were discarded in full because a separate Zig workload appeared
+during their measurement windows. The source candidate was removed; the
+second 70-byte pair match retains its exact 4+2 tail. Exact hashes, samples,
+layout accounting, and discarded-campaign metadata are in
+[zstd-second-70-overlap-tail-x86-20261007.json](data/zstd-second-70-overlap-tail-x86-20261007.json).
+
 ## Validation and remaining work
 
 - The copy helper is compared with the generic LZ match copy across lengths,
@@ -129,5 +151,7 @@ the CLI help smoke.
 
 A combined 68--71-byte tail kernel regressed the target, and a pair-first
 one-byte-overwrite variant had zero hits in the fixed fixture; both were
-removed. Remaining work should reduce the compact loop's FSE state-update and
-branch cost, then address the wider `binary_mixed` path.
+removed. A post-lowering exact `u64` tail for the pair's second 70-byte match
+was also neutral-negative and removed. Remaining work should change the
+compact loop's table/bitstream execution model rather than revisit adjacent
+68--71-byte tail spellings, then address the wider `binary_mixed` path.

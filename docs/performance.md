@@ -2733,6 +2733,21 @@ host-sensitive reusable `numbered_json` absolute gate failure and its direct
 `docs/performance/zstd-fse-fse-rle-pair-x86.md` and its JSON companion. The
 result is an exact-frame lead, not broad Zstd leadership.
 
+## Zstd second 70-byte pair-tail follow-up (2026-10-07)
+
+A post-lowering experiment replaced the compact pair executor's second exact
+70-byte `4+2` tail with one in-range unaligned `u64` move. The intended machine
+shape was achieved without growing the `0x2530` production instance or the
+`0x473e` split section, and the direct exact-copy oracle covered distances
+70--85 and 16 destination alignments. Seven continuously monitored fixed-CPU-2
+complete-frame pairs nevertheless measured only `0.9994x` median / `0.9993x`
+geometric raw throughput with 3/7 wins; candidate/libzstd 1.6.0 median also
+fell from `0.9160x` to `0.9145x`. Four fixed-layout campaigns were discarded
+because an external Zig process appeared during measurement. The candidate was
+removed, so future work should not revisit adjacent 68--71-byte tail spellings.
+Evidence is in
+`docs/performance/data/zstd-second-70-overlap-tail-x86-20261007.json`.
+
 ## Zstd shifted single-beam match reuse (2026-09-15)
 
 The speed-oriented one-state Zstd parser now reuses the exact length of an
