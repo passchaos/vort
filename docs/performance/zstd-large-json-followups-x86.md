@@ -305,6 +305,17 @@ byte-for-byte output check before timing.
   median / `0.9990x` geometric with 3/7 wins. The scalar one-gap loops were
   restored; their compiler lowering is faster than the explicit packed-run
   setup despite the larger static builder.
+- Another 2026-10-07 follow-up applied upstream libzstd commit `cc101959`'s
+  state-field load sinking to the compact pair path: first-pair state widths
+  moved below match-extra decode, while second-pair state widths and next-state
+  extraction moved to the final FSE update. ReleaseFast and ReleaseSafe pair
+  oracles passed. LLVM shrank the strict instance from `0x220e` to `0x2195`,
+  but grew the production target from `0x2530` to `0x25a5`; the complete split
+  section changed by only -4 bytes. Seven clean `large_json` pairs all lost:
+  `0.9857x` median / `0.9873x` geometric raw throughput and `0.9876x` /
+  `0.9870x` after libzstd normalization. Vort's packed words and branchless
+  pair transitions create different register-allocation tradeoffs from
+  upstream's generic C loop, so the source was restored.
 
 These results rule out another round of local branch growth, wider copy loops,
 larger Huffman batches, table-fill tuning, or shrinking the executor by

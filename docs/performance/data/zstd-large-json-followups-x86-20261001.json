@@ -777,6 +777,55 @@
       "validation": "23/23 ReleaseFast match-copy tests passed, including guarded 64 KiB+127 overlap at distances 64, 82, 127, and 4096",
       "decision": "reject; forward ERMS overlap serializes on the source-after-destination dependency and is far slower than seed-and-double",
       "removed": true
+    },
+    "sunk_pair_state_fields": {
+      "date": "2026-10-07",
+      "recorded_at": "2026-10-07T20:39:26+08:00",
+      "baseline_git": "15eb33be",
+      "upstream_reference_commit": "cc101959870fc5a37e82099611c193486845d1dc",
+      "change": "sink first-pair state-bit extraction below match-extra decode and re-extract second-pair state widths and next states only at final FSE state update",
+      "baseline_executable_sha256": "e87ea448f4efa3e534cb5d75ae9280b40a230e2fdda2f7df9c3ab65c8421c1cc",
+      "candidate_executable_sha256": "ef79bb46100c692866a71cb2309e9c0d5a431e1653ec0da06841a60e650013c8",
+      "baseline_executable_bytes": 6504304,
+      "candidate_executable_bytes": 6505072,
+      "baseline_strict_instance_bytes": 8718,
+      "candidate_strict_instance_bytes": 8597,
+      "baseline_production_instance_bytes": 9520,
+      "candidate_production_instance_bytes": 9637,
+      "baseline_split_section_bytes": 18238,
+      "candidate_split_section_bytes": 18234,
+      "iterations": 3000,
+      "pairs": 7,
+      "raw_median": 0.9857249582,
+      "raw_geometric_mean": 0.987286203131,
+      "raw_minimum": 0.978206140321,
+      "raw_maximum": 0.995945141111,
+      "raw_wins": 0,
+      "libzstd_normalized_median": 0.987599332071,
+      "libzstd_normalized_geometric_mean": 0.986965277873,
+      "libzstd_normalized_minimum": 0.980092428069,
+      "libzstd_normalized_maximum": 0.998751956609,
+      "libzstd_normalized_wins": 0,
+      "checksum": 3146580000,
+      "observations": [
+        [227672953, 232745373, 211856233, 214902047],
+        [229840414, 231223032, 213595147, 212256860],
+        [231731464, 232674928, 213167560, 213768318],
+        [230541589, 234003683, 213822841, 213102978],
+        [228746435, 233007746, 213118784, 212857054],
+        [229961259, 232209843, 213008219, 212423762],
+        [229317347, 232638268, 215059272, 213830402]
+      ],
+      "observation_order": [
+        "baseline_vort_ns",
+        "candidate_vort_ns",
+        "baseline_reference_ns",
+        "candidate_reference_ns"
+      ],
+      "continuous_monitor": "20-millisecond ps -C zig monitor remained clean for the complete campaign",
+      "validation": "split-Huffman all-FSE oracle passed in ReleaseFast and ReleaseSafe; 13-row reference gate passed before restoration",
+      "decision": "reject; production executor growth and changed scheduling outweighed shorter state-field live ranges",
+      "removed": true
     }
   }
 }
