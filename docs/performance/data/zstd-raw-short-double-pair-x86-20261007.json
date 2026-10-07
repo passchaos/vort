@@ -81,5 +81,16 @@
     "fixed_frame_release_safe": "passed with more than 2000 double-pair hits",
     "reference_gate": "13/13 rows passed before source restoration"
   },
+  "pair_transition_cache_audit": {
+    "ll_distinct_states": 175,
+    "of_distinct_states": 72,
+    "ml_distinct_states": 104,
+    "pair_opportunities": 5159,
+    "direct_mapped_64_hits": 0,
+    "direct_mapped_256_hits": 0,
+    "key": "LL state, OF state, ML state, and next two transition bits",
+    "decision": "reject compact transition caching; the combined trajectory does not repeat within the frame",
+    "instrumentation_removed": true
+  },
   "decision": "reject; saved outer-loop dispatch and combined transition peek did not offset second-shape validation and the larger production executor"
 }

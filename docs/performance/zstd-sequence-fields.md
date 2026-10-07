@@ -863,6 +863,15 @@ throughput and `0.9974x` / `0.9968x` after libzstd normalization. The source
 was restored; exact samples are in
 [zstd-raw-short-double-pair-x86-20261007.json](data/zstd-raw-short-double-pair-x86-20261007.json).
 
+A test-only follow-up audited whether a compact predecoded pair-transition
+cache could remove the second shape validation without building the full
+LL/OF/ML state product. The fixed frame visits 175 distinct LL states, 72 OF
+states, and 104 ML states. A combined key containing all three states and the
+next two transition bits produced zero hits across 5,159 opportunities in both
+64-entry and 256-entry direct-mapped caches. The joint FSE trajectory does not
+repeat within the frame, so a small transition cache cannot replace the table
+loads; the instrumentation was removed.
+
 ## Persistent Huffman-weight reservoir and grouped small fields
 
 The `numbered_json` one-shot path still spends substantial time rebuilding its
