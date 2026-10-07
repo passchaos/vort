@@ -395,3 +395,35 @@ single-sequence materialization gives away more time than batching can recover.
 Exact counts, stage samples, executable hashes, monitoring, and validation are
 recorded in
 [zstd-batch8-record-feasibility-x86-20261008.json](data/zstd-batch8-record-feasibility-x86-20261008.json).
+
+### Pair-preserving four-pair follow-up
+
+A production follow-up kept the established branchless two-sequence field
+model instead of calling the generic single-sequence decoder. A separate
+noinline reader decoded four consecutive compact pairs transactionally, and
+the caller committed its reader/FSE state only after proving eight literals,
+68--71-byte matches, complete output capacity, valid rep0 history, and a rep0
+distance at least as large as the complete batch output. The copy phase reused
+the retained exact/wild 68--71-byte kernels.
+
+ReleaseFast and ReleaseSafe module oracles each passed 18/18 tests, including
+success, insufficient-remaining, and shape-failure state preservation. Complete
+frame and prepared-stage output checks also passed. The helper was `0x334`
+bytes, while its call/validation/copy body enlarged the production executor
+from `0x2530` to `0x2a73` and the split section from `0x473e` to `0x4c81`;
+the strict sibling remained `0x220e`.
+
+Three clean fixed-CPU-2 pairs were decisively negative. Complete-frame raw
+throughput measured 0.5554x median / 0.5545x geometric, libzstd-normalized
+throughput measured 0.5562x / 0.5561x, and the interleaved prepared stage fell
+to 0.5232x median / 0.5241x geometric, all with 0/3 wins. The extra function
+boundary, transactional state copies, four-record materialization, and batch
+copy loop cost far more than the saved outer dispatch. The candidate and its
+section/test plumbing were removed. Exact samples are in
+[zstd-pair-batch4-x86-20261008.json](data/zstd-pair-batch4-x86-20261008.json).
+
+Together these screens rule out both generic whole-record materialization and
+an additional noinline pair-batch boundary. Any future decode-ahead experiment
+must replace existing hot-loop instructions in place and remain code-size
+stable; merely surrounding the retained pair decoder with a wider layer is not
+competitive.

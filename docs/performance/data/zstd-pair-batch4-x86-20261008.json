@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-08T06:06:25+08:00",
+  "candidate": "transactional noinline four-pair reader plus far-source batch copy",
+  "host": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "target": "x86_64-linux-gnu skylake+pku+sgx",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "affinity_cpu": 2,
+    "codec_threads": 1
+  },
+  "reference": {
+    "source": "/home/passchaos/Work/zstd",
+    "commit": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+    "version": "1.6.0-dev",
+    "library": "/tmp/vort-zstd-upstream-build/lib/libzstd.so.1.6.0",
+    "sha256": "b734e265f838f7a18c378fe2b34c505e6fc5025fd84ceac159faa27b794b78b0"
+  },
+  "input": {
+    "case": "large_json",
+    "decoded_bytes": 524307,
+    "decoded_sha256": "b0d873df5fbe94a60e8e10a51cde4b08b3370ae4f251357c16adbfc69fd27c95",
+    "encoded_bytes": 9905,
+    "level": 1
+  },
+  "binaries": {
+    "frame_baseline": {
+      "path": "/tmp/vort-zstd-sunk-state-baseline",
+      "sha256": "e87ea448f4efa3e534cb5d75ae9280b40a230e2fdda2f7df9c3ab65c8421c1cc"
+    },
+    "frame_candidate": {
+      "path": "/tmp/vort-zstd-pair-batch4-reference-candidate",
+      "sha256": "9b315f60173dc88dc957e0362b3212053d54d45a3d4b6922d50621a5a303e995"
+    },
+    "stage_baseline": {
+      "path": "/tmp/vort-zstd-batch8-interleaved-stage-baseline",
+      "sha256": "730f7d6e3fb97ac8efa77596ad17c0fc55a87de6a68bcad212d624ea0a705a8d"
+    },
+    "stage_candidate": {
+      "path": "/tmp/vort-zstd-pair-batch4-stage-candidate",
+      "sha256": "85d815cfbcd8da6d0a21ee08657fc886b64ebb3047183593d11792875864c2ab"
+    }
+  },
+  "machine_code": {
+    "baseline_strict_instance_bytes": 8718,
+    "candidate_strict_instance_bytes": 8718,
+    "baseline_production_instance_bytes": 9520,
+    "candidate_production_instance_bytes": 10867,
+    "baseline_split_section_bytes": 18238,
+    "candidate_split_section_bytes": 19585,
+    "pair_batch_helper_bytes": 820,
+    "production_growth_bytes": 1347
+  },
+  "campaign": {
+    "directory": "/tmp/vort-zstd-pair-batch4-screen.XuDMbe",
+    "frame_command": "taskset -c 2 BINARY --case large_json --iterations 3000 --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so.1.6.0 --csv OUT",
+    "stage_command": "taskset -c 2 BINARY --input /tmp/vort-large-json-512k.txt --name large_json --level 1 --iterations 1000 --rounds 7 --min-sequences 1024 --max-sequences 4096 --allow-non-wildcopy --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so.1.6.0 --csv OUT",
+    "pairs": 3,
+    "sample_columns": [
+      "baseline_vort_ns",
+      "baseline_libzstd_ns",
+      "candidate_vort_ns",
+      "candidate_libzstd_ns",
+      "baseline_stage_ns_per_frame",
+      "candidate_stage_ns_per_frame"
+    ],
+    "samples": [
+      [229123876, 212572165, 414606877, 213937753, 68938.246, 131015.774],
+      [230696326, 212970547, 415232148, 213115246, 68416.198, 130827.072],
+      [230670817, 212606140, 415293006, 212935842, 68034.653, 130041.233]
+    ],
+    "candidate_over_baseline": {
+      "median": 0.555441131123,
+      "geometric_mean": 0.554549771026,
+      "minimum": 0.552629222308,
+      "maximum": 0.555583971788,
+      "wins": 0
+    },
+    "libzstd_normalized": {
+      "median": 0.556179375897,
+      "geometric_mean": 0.556147754980,
+      "minimum": 0.555961453305,
+      "maximum": 0.556302489369,
+      "wins": 0
+    },
+    "stage_candidate_over_baseline": {
+      "median": 0.523177544772,
+      "geometric_mean": 0.524101839648,
+      "minimum": 0.522951381194,
+      "maximum": 0.526182793837,
+      "wins": 0
+    },
+    "candidate_over_libzstd": {
+      "median": 0.513243608489,
+      "geometric_mean": 0.513991823311,
+      "minimum": 0.512736402789,
+      "maximum": 0.516001457930,
+      "wins": 0
+    }
+  },
+  "monitoring": {
+    "required_pre_campaign_clear_seconds": 60,
+    "poll_interval_ms": 20,
+    "campaign_clean": true,
+    "discard_rule": "discard the complete campaign if any Zig process appears during sampling",
+    "discarded_campaigns": 2
+  },
+  "validation": {
+    "pair_batch_release_fast": "18/18 passed",
+    "pair_batch_release_safe": "18/18 passed",
+    "transactional_cases": "successful batch, insufficient remaining, and invalid literal shape",
+    "complete_frame_output": "matched original payload and libzstd output",
+    "prepared_stage_checksum": "matched baseline expected output",
+    "production_source_restored": true
+  },
+  "decision": "reject; preserving the pair transition model is insufficient when an added noinline boundary and batch copy loop grow the hot executor and roughly halve stage and complete-frame throughput"
+}
