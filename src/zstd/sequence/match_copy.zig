@@ -1,4 +1,10 @@
 const std = @import("std");
+const builtin = @import("builtin");
+const long_match_text_section = @import("code_sections.zig").long_match_decode;
+
+const rep_movsb_nonoverlap_min_len = 32 * 1024;
+const has_enhanced_rep_movsb = builtin.cpu.arch == .x86_64 and
+    std.Target.x86.featureSetHas(builtin.cpu.features, .ermsb);
 
 /// Replay a match whose source is entirely in the current output frame.
 /// Non-overlapping matches use one memcpy; overlapping matches seed one period
@@ -34,6 +40,64 @@ pub fn append(
         );
         copied += copy_len;
     }
+}
+
+pub inline fn preferErmsDoubling(distance: usize, match_len: usize) bool {
+    if (comptime !has_enhanced_rep_movsb) return false;
+    return distance >= 64 and match_len >= 64 * 1024 and match_len > distance;
+}
+
+/// Variant of `append` for the already validated, infrequent long-overlap
+/// route. Keeping it out of line preserves the shared match-copy code shape;
+/// only the selected single-predefined path opts into ERMS for its
+/// non-overlapping doubling chunks.
+pub noinline fn appendLongOverlapErms(
+    output: []u8,
+    written: *usize,
+    repeat_start: usize,
+    match_len: usize,
+) linksection(long_match_text_section) void {
+    if (comptime !has_enhanced_rep_movsb)
+        return append(output, written, repeat_start, match_len);
+
+    const distance = written.* - repeat_start;
+    std.debug.assert(preferErmsDoubling(distance, match_len));
+    const destination_start = written.*;
+    written.* += match_len;
+    @memcpy(
+        output[destination_start..][0..distance],
+        output[repeat_start..][0..distance],
+    );
+    var copied = distance;
+    while (copied < match_len) {
+        const copy_len = @min(copied, match_len - copied);
+        if (copy_len >= rep_movsb_nonoverlap_min_len)
+            copyForwardRepMovsb(
+                output.ptr + destination_start + copied,
+                output.ptr + destination_start,
+                copy_len,
+            )
+        else
+            @memcpy(
+                output[destination_start + copied ..][0..copy_len],
+                output[destination_start..][0..copy_len],
+            );
+        copied += copy_len;
+    }
+}
+
+noinline fn copyForwardRepMovsb(destination: [*]u8, source: [*]const u8, len_value: usize) linksection(long_match_text_section) void {
+    var destination_ptr = destination;
+    var source_ptr = source;
+    var len = len_value;
+    asm volatile ("rep movsb"
+        : [destination] "={di}" (destination_ptr),
+          [source] "={si}" (source_ptr),
+          [len] "={cx}" (len),
+        : [destination_input] "0" (destination_ptr),
+          [source_input] "1" (source_ptr),
+          [len_input] "2" (len),
+        : .{ .memory = true });
 }
 
 pub inline fn appendNonOverlapping71(
@@ -447,6 +511,34 @@ test "Zstd match copy handles non-overlapping source" {
     var written: usize = 8;
     append(&output, &written, 0, 4);
     try std.testing.expectEqualSlices(u8, "abcdefghabcd", output[0..written]);
+}
+
+test "Zstd long overlap doubling preserves periods and guards" {
+    const allocator = std.testing.allocator;
+    const match_len = 128 * 1024 - 97;
+    const prefix_len = 8 * 1024;
+    const guard_len = 32;
+    const expected = try allocator.alloc(u8, prefix_len + match_len + guard_len);
+    defer allocator.free(expected);
+    const actual = try allocator.alloc(u8, expected.len);
+    defer allocator.free(actual);
+
+    for ([_]usize{ 64, 82, 127, 4096 }) |distance| {
+        for (expected[0..prefix_len], 0..) |*byte, index|
+            byte.* = @truncate(index *% 73 +% (index >> 5));
+        @memset(expected[prefix_len..], 0xa5);
+        @memcpy(actual, expected);
+        for (0..match_len) |index|
+            expected[prefix_len + index] = expected[prefix_len + index - distance];
+
+        var written: usize = prefix_len;
+        if (preferErmsDoubling(distance, match_len))
+            appendLongOverlapErms(actual, &written, prefix_len - distance, match_len)
+        else
+            append(actual, &written, prefix_len - distance, match_len);
+        try std.testing.expectEqual(prefix_len + match_len, written);
+        try std.testing.expectEqualSlices(u8, expected, actual);
+    }
 }
 
 test "Zstd fixed 71-byte match copy preserves output tail" {

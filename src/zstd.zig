@@ -69,6 +69,7 @@ const split_wide_literal_decode_text_section = code_sections.split_wide_literal_
 const split_dense_literal_decode_text_section = code_sections.split_dense_literal_decode;
 const split_generic_literal_decode_text_section = code_sections.split_generic_literal_decode;
 const medium_split_literal_decode_text_section = code_sections.medium_split_literal_decode;
+const long_match_decode_text_section = code_sections.long_match_decode;
 
 const split_x2_huffman_literal_min = 12 * 1024;
 const split_huffman_literal_capacity = 16 * 1024;
@@ -12712,7 +12713,7 @@ fn decodeSinglePredefinedSequence(
         written,
         sequence.literal_len,
     );
-    try copyMatchFromHistory(
+    try copySinglePredefinedMatch(
         output,
         written,
         frame_output_start,
@@ -12742,6 +12743,38 @@ fn decodeSinglePredefinedSequence(
         };
         frame_state.repeated_offsets = repeated_offsets;
     }
+}
+
+noinline fn copySinglePredefinedMatch(
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    dictionary_history: []const u8,
+    match_offset: usize,
+    match_len: usize,
+) linksection(long_match_decode_text_section) Error!void {
+    if (dictionary_history.len != 0 or
+        !sequence_match_copy.preferErmsDoubling(match_offset, match_len))
+    {
+        return @call(.never_inline, copyMatchFromHistory, .{
+            output,
+            written,
+            frame_output_start,
+            dictionary_history,
+            match_offset,
+            match_len,
+        });
+    }
+    if (frame_output_start > written.*) return error.CorruptFrame;
+    const available_in_frame = written.* - frame_output_start;
+    if (match_offset == 0 or match_offset > available_in_frame) return error.InvalidMatch;
+    if (output.len - written.* < match_len) return error.OutputTooSmall;
+    sequence_match_copy.appendLongOverlapErms(
+        output,
+        written,
+        written.* - match_offset,
+        match_len,
+    );
 }
 
 fn rleSequencesCompressedBlockDecodedSize(

@@ -146,3 +146,5 @@ pub const multi_sequence_winner = switch (builtin.object_format) {
     .coff => ".text$vort_zstd_multi_sequence_winner",
     else => ".text",
 };
+
+pub const long_match_decode = @import("sequence/code_sections.zig").long_match_decode;
