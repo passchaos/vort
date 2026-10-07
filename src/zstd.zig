@@ -7258,6 +7258,7 @@ pub const NativeSequenceCopyProfile = struct {
     fse_accuracy_log_histogram: [fse_accuracy_log_bucket_count]usize = @splat(0),
     no_low_fse_accuracy_log_histogram: [fse_accuracy_log_bucket_count]usize = @splat(0),
     split_paths: sequence_split_profile.Profile = .{},
+    far_batch8: sequence_split_profile.FarWindowProfile(8) = .{},
 };
 
 pub const NativeSequenceDecodeStageShape = struct {
@@ -13757,12 +13758,20 @@ pub fn benchmarkNativeSequenceCopyProfile(frame: []const u8) Error!NativeSequenc
                         frame_state.repeated_offsets,
                     );
                     var literal_offset: usize = 0;
+                    profile.far_batch8.resetBlock();
                     while (state.remaining != 0) {
                         const sequence = try readModeSequence(&state);
+                        const sequence_output_start = produced;
                         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < sequence.literal_len) return error.CorruptFrame;
                         literal_offset = try checkedAdd(literal_offset, sequence.literal_len);
                         produced = try checkedAdd(produced, sequence.literal_len);
                         if (sequence.match_offset == 0 or sequence.match_offset > produced) return error.InvalidMatch;
+                        profile.far_batch8.record(
+                            sequence_output_start,
+                            sequence.literal_len,
+                            sequence.match_len,
+                            sequence.match_offset,
+                        );
                         profile.sequence_count += 1;
                         profile.split_paths.recordSequence(split_path, sequence.match_len);
                         profile.zero_literal_sequences += @intFromBool(sequence.literal_len == 0);

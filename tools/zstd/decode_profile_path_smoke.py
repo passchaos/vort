@@ -69,6 +69,8 @@ def main() -> int:
         assert sum(int(value) for value in row["split_path_blocks"].split(";")) == int(row["sequence_blocks"]), row
         assert sum(int(value) for value in row["split_path_sequences"].split(";")) == int(row["total_sequences"]), row
         assert sum(int(value) for value in row["split_path_match_bytes"].split(";")) == int(row["match_bytes"]), row
+        assert int(row["far_batch8_all_far_common"]) <= int(row["far_batch8_all_far"]) <= int(row["far_batch8_windows"]), row
+        assert int(row["far_batch8_all_far_same_offset"]) <= int(row["far_batch8_all_far"]), row
         assert "/source%20data.txt" in row["command"], row
 
         reusable = run(

@@ -56,6 +56,84 @@ pub const Profile = struct {
     }
 };
 
+pub fn FarWindowProfile(comptime window_len: usize) type {
+    if (window_len == 0) @compileError("far-window profile requires a nonzero window");
+    return struct {
+        const Self = @This();
+
+        const Observation = struct {
+            output_start: usize,
+            literal_len: usize,
+            match_len: usize,
+            match_offset: usize,
+        };
+
+        observations: [window_len]Observation = undefined,
+        next: usize = 0,
+        filled: usize = 0,
+        window_count: usize = 0,
+        all_far_window_count: usize = 0,
+        all_far_common_window_count: usize = 0,
+        all_far_same_offset_window_count: usize = 0,
+
+        pub fn resetBlock(self: *Self) void {
+            self.next = 0;
+            self.filled = 0;
+        }
+
+        pub fn record(
+            self: *Self,
+            output_start: usize,
+            literal_len: usize,
+            match_len: usize,
+            match_offset: usize,
+        ) void {
+            self.observations[self.next] = .{
+                .output_start = output_start,
+                .literal_len = literal_len,
+                .match_len = match_len,
+                .match_offset = match_offset,
+            };
+            self.next = (self.next + 1) % window_len;
+            self.filled = @min(self.filled + 1, window_len);
+            if (self.filled != window_len) return;
+
+            self.window_count += 1;
+            const batch_start = self.observations[self.next].output_start;
+            const first_offset = self.observations[self.next].match_offset;
+            var all_far = true;
+            var all_common = true;
+            var same_offset = true;
+            for (0..window_len) |logical_index| {
+                const observation = self.observations[(self.next + logical_index) % window_len];
+                const source_end_distance = std.math.add(
+                    usize,
+                    std.math.add(
+                        usize,
+                        observation.output_start - batch_start,
+                        observation.literal_len,
+                    ) catch {
+                        all_far = false;
+                        continue;
+                    },
+                    observation.match_len,
+                ) catch {
+                    all_far = false;
+                    continue;
+                };
+                all_far = all_far and observation.match_offset >= source_end_distance;
+                all_common = all_common and observation.literal_len == 1 and
+                    observation.match_len >= 68 and observation.match_len <= 71;
+                same_offset = same_offset and observation.match_offset == first_offset;
+            }
+            if (!all_far) return;
+            self.all_far_window_count += 1;
+            self.all_far_common_window_count += @intFromBool(all_common);
+            self.all_far_same_offset_window_count += @intFromBool(same_offset);
+        }
+    };
+}
+
 test "split profile classifies production routing priority" {
     const all_fse: Classification = .{
         .huffman_literals = true,
@@ -99,4 +177,28 @@ test "split profile accumulates path-weighted work" {
     try std.testing.expectEqual(@as(usize, 52), profile.match_bytes[@intFromEnum(Path.all_fse)]);
     try std.testing.expectEqual(@as(usize, 1), profile.blocks[@intFromEnum(Path.incomplete_lookup)]);
     try std.testing.expectEqual(@as(usize, 31), profile.match_bytes[@intFromEnum(Path.incomplete_lookup)]);
+}
+
+test "far-window profile recognizes fully initialized source batches" {
+    var profile: FarWindowProfile(4) = .{};
+    profile.resetBlock();
+    for (0..5) |index| profile.record(index * 71, 1, 70, 512);
+    try std.testing.expectEqual(@as(usize, 2), profile.window_count);
+    try std.testing.expectEqual(@as(usize, 2), profile.all_far_window_count);
+    try std.testing.expectEqual(@as(usize, 2), profile.all_far_common_window_count);
+    try std.testing.expectEqual(@as(usize, 2), profile.all_far_same_offset_window_count);
+
+    profile.resetBlock();
+    for (0..4) |index| profile.record(index * 71, 1, 70, if (index == 3) 70 else 512);
+    try std.testing.expectEqual(@as(usize, 3), profile.window_count);
+    try std.testing.expectEqual(@as(usize, 2), profile.all_far_window_count);
+    try std.testing.expectEqual(@as(usize, 2), profile.all_far_common_window_count);
+    try std.testing.expectEqual(@as(usize, 2), profile.all_far_same_offset_window_count);
+
+    var overflow: FarWindowProfile(2) = .{};
+    overflow.resetBlock();
+    overflow.record(0, 1, 1, 1);
+    overflow.record(std.math.maxInt(usize) - 1, std.math.maxInt(usize), 1, std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 1), overflow.window_count);
+    try std.testing.expectEqual(@as(usize, 0), overflow.all_far_window_count);
 }

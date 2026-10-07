@@ -361,3 +361,37 @@ when its incidental code placement changed. The resumed fixed-NOP padding,
 a page-aligned variant, and a bounded-wildcopy-only local cursor were all
 removed. The complete-row evidence and retained validation work are recorded
 in [decoder-distance-cursor-x86.md](decoder-distance-cursor-x86.md).
+
+## Eight-sequence far-window feasibility (2026-10-08)
+
+A non-production sliding-window profiler now measures whether every match
+source in eight consecutive sequences is fully initialized before the window
+starts. This is the prerequisite for decoding a small record ring ahead of
+copy execution without introducing intra-batch source dependencies.
+
+The current 512 KiB `large_json` frame contains 7,270 complete sliding windows.
+Of those, 7,262 (99.8900%) are entirely far-source, 4,574 (62.9161%) are also
+entirely composed of one-literal/68--71-byte matches, and 2,589 (35.6121%) use
+one common offset throughout the window. The locality is therefore real and
+dense enough to justify batch work.
+
+The first execution-model screen deliberately used the existing checked
+single-sequence decoder to materialize preallocated three-`u32` records. Record
+allocation and validation were outside timing; timed iterations only decoded
+and overwrote records, with a small sentinel read preventing dead-store
+elimination. Five clean fixed-CPU-2 runs measured:
+
+- current fused Huffman/sequence/copy stage: 68.473 microseconds per frame;
+- existing sequence/checksum stage: 94.357 microseconds;
+- generic record-store stage: 120.649 microseconds.
+
+The generic record pass is 1.7620x the complete fused stage time before doing
+any literal or match copies, and 1.2786x the existing checksum stage. It cannot
+form the basis of a faster two-pass decoder. The record-stage implementation
+was removed. Future batch work must preserve the established two-sequence
+transition decoder and feed a small ring directly; falling back to checked
+single-sequence materialization gives away more time than batching can recover.
+
+Exact counts, stage samples, executable hashes, monitoring, and validation are
+recorded in
+[zstd-batch8-record-feasibility-x86-20261008.json](data/zstd-batch8-record-feasibility-x86-20261008.json).

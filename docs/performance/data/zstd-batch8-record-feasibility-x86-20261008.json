@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-08T05:12:49+08:00",
+  "host": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "target": "x86_64-linux-gnu skylake+pku+sgx",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "affinity_cpu": 2,
+    "codec_threads": 1
+  },
+  "reference": {
+    "source": "/home/passchaos/Work/zstd",
+    "commit": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+    "version": "1.6.0-dev",
+    "library": "/tmp/vort-zstd-upstream-build/lib/libzstd.so.1.6.0",
+    "sha256": "b734e265f838f7a18c378fe2b34c505e6fc5025fd84ceac159faa27b794b78b0"
+  },
+  "input": {
+    "case": "large_json",
+    "path": "/tmp/vort-large-json-512k.txt",
+    "decoded_bytes": 524307,
+    "decoded_sha256": "b0d873df5fbe94a60e8e10a51cde4b08b3370ae4f251357c16adbfc69fd27c95",
+    "encoded_bytes": 9905,
+    "total_sequences": 7299,
+    "profiled_all_fse_sequences": 7298,
+    "literal_bytes": 8330,
+    "match_bytes": 515977
+  },
+  "far_window_profile": {
+    "window_sequences": 8,
+    "complete_windows": 7270,
+    "all_far_windows": 7262,
+    "all_far_ratio": 0.998899587345,
+    "all_far_common_shape_windows": 4574,
+    "all_far_common_shape_ratio": 0.629160935351,
+    "all_far_same_offset_windows": 2589,
+    "all_far_same_offset_ratio": 0.356121045392,
+    "common_shape": "literal length 1 and match length 68 through 71",
+    "far_definition": "every match source range ends at or before the first output byte of its sliding eight-sequence window"
+  },
+  "profile_binary": {
+    "sha256": "6462b852364d8479827a94686b56b4ae6f65617154f573ab4c732cb5cd46e7a7"
+  },
+  "baseline_stage_campaign": {
+    "directory": "/tmp/vort-zstd-batch8-stage-baseline.gyzbSB",
+    "command": "taskset -c 2 BINARY --input /tmp/vort-large-json-512k.txt --name large_json --level 1 --iterations 1000 --rounds 7 --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so.1.6.0 --csv OUT",
+    "sequence_stage_sha256": "564673b35e0eeaf14e0aa7a03029f08240e9b1962a2a1cb0337b7da33211994c",
+    "interleaved_stage_sha256": "730f7d6e3fb97ac8efa77596ad17c0fc55a87de6a68bcad212d624ea0a705a8d",
+    "sequence_ns_per_frame": [94730.169, 94473.622, 94735.484, 94491.362, 94600.454, 94493.704, 94584.256],
+    "interleaved_ns_per_frame": [68510.297, 68475.872, 69057.713, 69410.440, 69109.091, 68608.065, 69104.330],
+    "sequence_median_ns_per_frame": 94584.256,
+    "interleaved_median_ns_per_frame": 69057.713,
+    "sequence_over_interleaved_time": 1.369640723550
+  },
+  "record_stage_screen": {
+    "directory": "/tmp/vort-zstd-record-stage-screen.TaeCsn",
+    "record_stage_sha256": "b65a15251acb3a3c327a181f4f2e02b983fb4a9af7c77456f7c5946e0acef0ee",
+    "runs": 5,
+    "iterations": 1000,
+    "rounds": 7,
+    "checksum_ns_per_frame": [94598.212, 94259.493, 94356.870, 94440.891, 94303.829],
+    "record_ns_per_frame": [120417.416, 121268.786, 121194.394, 120649.195, 120174.312],
+    "interleaved_ns_per_frame": [68721.141, 68472.948, 68381.652, 68546.971, 68337.461],
+    "checksum_median_ns_per_frame": 94356.870,
+    "record_median_ns_per_frame": 120649.195,
+    "interleaved_median_ns_per_frame": 68472.948,
+    "record_over_checksum_time": 1.278647702069,
+    "record_over_interleaved_time": 1.761997964510,
+    "record_layout": "preallocated three-u32 records; allocation and full checksum validation outside timing",
+    "record_decoder": "existing checked readModeSequence path",
+    "implementation_removed": true
+  },
+  "monitoring": {
+    "required_pre_campaign_clear_seconds": 60,
+    "poll_interval_ms": 20,
+    "baseline_campaign_clean": true,
+    "record_screen_clean": true,
+    "discard_rule": "discard the complete campaign if any Zig process appears during sampling",
+    "discarded_record_campaigns": 1
+  },
+  "validation": {
+    "split_profile_release_fast": "3/3 passed",
+    "split_profile_release_safe": "3/3 passed",
+    "decode_profile_gate": "5/5 rows passed",
+    "decode_profile_path_smoke": "3 valid rows and 7 invalid paths passed across 2 API modes",
+    "complete_frame_profile_output": "matched expected decoded size and checksum",
+    "production_decode_changed": false
+  },
+  "decision": "retain the far-window diagnostic; reject generic whole-record materialization because it is 76.2% slower than the complete fused stage before copy execution; any future batch decoder must preserve the current paired transition path"
+}

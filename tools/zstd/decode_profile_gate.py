@@ -7,7 +7,8 @@ from pathlib import Path
 
 PROVENANCE_COLUMNS = ["provenance_version", "optimize", "zig_version", "target_arch", "target_os", "target_abi", "target_cpu", "cpu_model", "cpu_affinity", "affinity_cpu_count", "benchmark_threads", "codec_thread_policy", "executable_sha256", "command"]
 SPLIT_PATHS = ["all_fse", "generic", "non_huffman_literals", "below_policy", "one_stream", "incomplete_lookup"]
-COLUMNS = ["case", "api_mode", "input_bytes", "input_sha256", "encoded_bytes", "iterations", "vort_ns", "vort_mib_s", "checksum", "reusable_sequence_table_hits", "reusable_huffman_tree_hits", "block_count", "compressed_blocks", "literals_kind", "sequence_count", "ll_mode", "of_mode", "ml_mode", "sequence_blocks", "raw_literal_blocks", "rle_literal_blocks", "compressed_literal_blocks", "treeless_literal_blocks", "compressed_table_modes", "no_low_probability_tables", "low_probability_tables", "repeat_table_modes", "rle_table_modes", "predefined_table_modes", "fse_accuracy_log_histogram", "no_low_fse_accuracy_log_histogram", "split_path_order", "split_path_blocks", "split_path_sequences", "split_path_literal_bytes", "split_path_match_bytes", "total_sequences", "literal_bytes", "match_bytes", "zero_literal_sequences", "overlapping_matches", "overlapping_match_bytes", "non_overlapping_matches", "non_overlapping_match_bytes", "vector32_eligible_matches", "vector32_eligible_bytes", "match_length_histogram", "offset_histogram", "medium_length_histogram"] + PROVENANCE_COLUMNS
+BATCH_COLUMNS = ["far_batch8_windows", "far_batch8_all_far", "far_batch8_all_far_common", "far_batch8_all_far_same_offset"]
+COLUMNS = ["case", "api_mode", "input_bytes", "input_sha256", "encoded_bytes", "iterations", "vort_ns", "vort_mib_s", "checksum", "reusable_sequence_table_hits", "reusable_huffman_tree_hits", "block_count", "compressed_blocks", "literals_kind", "sequence_count", "ll_mode", "of_mode", "ml_mode", "sequence_blocks", "raw_literal_blocks", "rle_literal_blocks", "compressed_literal_blocks", "treeless_literal_blocks", "compressed_table_modes", "no_low_probability_tables", "low_probability_tables", "repeat_table_modes", "rle_table_modes", "predefined_table_modes", "fse_accuracy_log_histogram", "no_low_fse_accuracy_log_histogram", "split_path_order", "split_path_blocks", "split_path_sequences", "split_path_literal_bytes", "split_path_match_bytes", "total_sequences", "literal_bytes", "match_bytes", "zero_literal_sequences", "overlapping_matches", "overlapping_match_bytes", "non_overlapping_matches", "non_overlapping_match_bytes", "vector32_eligible_matches", "vector32_eligible_bytes", "match_length_histogram", "offset_histogram", "medium_length_histogram"] + BATCH_COLUMNS + PROVENANCE_COLUMNS
 CASES = {"numbered_json", "huffman80k", "ascii64k", "large_json", "binary_mixed"}
 
 def main() -> int:
@@ -65,6 +66,15 @@ def main() -> int:
         assert sum(int(value) for value in row["offset_histogram"].split(";")) == sequences, row
         medium_total = sum(int(value) for value in row["medium_length_histogram"].split(";"))
         assert medium_total <= sequences, row
+        far_windows = int(row["far_batch8_windows"])
+        far_all = int(row["far_batch8_all_far"])
+        far_common = int(row["far_batch8_all_far_common"])
+        far_same_offset = int(row["far_batch8_all_far_same_offset"])
+        assert 0 <= far_windows <= sequences, row
+        assert 0 <= far_common <= far_all <= far_windows, row
+        assert 0 <= far_same_offset <= far_all, row
+        if sequences < 8:
+            assert far_windows == 0, row
         assert int(row["overlapping_match_bytes"]) + int(row["non_overlapping_match_bytes"]) == int(row["match_bytes"]), row
         assert int(row["vector32_eligible_matches"]) <= non_overlapping, row
         assert int(row["vector32_eligible_bytes"]) <= int(row["non_overlapping_match_bytes"]), row
@@ -80,6 +90,7 @@ def main() -> int:
         assert int(row["block_count"]) >= 4 and int(row["compressed_blocks"]) >= 4, row
         assert int(row["sequence_count"]) >= 1000, row
         assert row["of_mode"] == "compressed", row
+    assert int(by_case["large_json"]["far_batch8_all_far"]) > 0, by_case["large_json"]
     print(f"zstd_decode_profile_gate=ok rows={len(rows)}")
     return 0
 
