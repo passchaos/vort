@@ -1,0 +1,85 @@
+{
+  "date": "2026-10-07",
+  "recorded_at": "2026-10-07T21:16:33+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "6ac3b2c5",
+  "reference": {
+    "source": "~/Work/zstd",
+    "git": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+    "version": "1.6.0",
+    "library_sha256": "b734e265f838f7a18c378fe2b34c505e6fc5025fd84ceac159faa27b794b78b0"
+  },
+  "change": "decode two validated dense raw-literal all-FSE short sequences from one two-bit transition peek, preserving fallback before any reader, state, repcode, or output progress",
+  "coverage": {
+    "frame_sequences": 5161,
+    "eight_byte_distance_seven_matches": 2574,
+    "non_overlapping_23_byte_matches": 2575,
+    "double_pair_hits": "greater than 2000"
+  },
+  "binary": {
+    "baseline_sha256": "e87ea448f4efa3e534cb5d75ae9280b40a230e2fdda2f7df9c3ab65c8421c1cc",
+    "candidate_sha256": "1842462bf9bc8752ace23841a22c7c63660a0b1831d8ec7aefe240a47bbc2bfc",
+    "baseline_bytes": 6504304,
+    "candidate_bytes": 6510976,
+    "baseline_target_instance_bytes": 6378,
+    "candidate_target_instance_bytes": 6972,
+    "baseline_raw_fse_section_bytes": 18578,
+    "candidate_raw_fse_section_bytes": 19170,
+    "other_raw_fse_instances_unchanged_or_two_bytes_smaller": true
+  },
+  "performance": {
+    "case": "huffman80k",
+    "input_bytes": 80000,
+    "input_sha256": "b175e4daec83dc1869cceda78ff399c6b5af3b3b40825ea091d2d879fef02a70",
+    "encoded_bytes": 754,
+    "iterations": 5000,
+    "pairs": 7,
+    "raw_median": 0.995753239839,
+    "raw_geometric_mean": 0.995405968734,
+    "raw_minimum": 0.991636506442,
+    "raw_maximum": 0.998307038245,
+    "raw_wins": 0,
+    "reference_normalized_median": 0.997353879365,
+    "reference_normalized_geometric_mean": 0.996758549039,
+    "reference_normalized_minimum": 0.988265324756,
+    "reference_normalized_maximum": 1.003236782877,
+    "reference_normalized_wins": 2,
+    "baseline_over_libzstd_median": 1.148667283334,
+    "baseline_over_libzstd_geometric_mean": 1.147896252139,
+    "candidate_over_libzstd_median": 1.144332053144,
+    "candidate_over_libzstd_geometric_mean": 1.14417540273,
+    "checksum": 800650000,
+    "samples_ns": [
+      [186958751, 188535567, 215215000, 214483352],
+      [186813907, 187702942, 215215312, 214794493],
+      [187340673, 188139657, 215189615, 215535525],
+      [188347932, 188871374, 215277399, 216574424],
+      [187878199, 188196809, 214615794, 215242604],
+      [187663964, 188322626, 215725901, 216322235],
+      [187353326, 188642401, 215206636, 215546523]
+    ],
+    "sample_columns": [
+      "baseline_vort_ns",
+      "candidate_vort_ns",
+      "baseline_libzstd_ns",
+      "candidate_libzstd_ns"
+    ]
+  },
+  "monitoring": {
+    "required_pre_campaign_clear_seconds": 60,
+    "poll_interval_ms": 20,
+    "campaign_clean": true
+  },
+  "validation": {
+    "fixed_frame_release_fast": "passed with more than 2000 double-pair hits",
+    "fixed_frame_release_safe": "passed with more than 2000 double-pair hits",
+    "reference_gate": "13/13 rows passed before source restoration"
+  },
+  "decision": "reject; saved outer-loop dispatch and combined transition peek did not offset second-shape validation and the larger production executor"
+}

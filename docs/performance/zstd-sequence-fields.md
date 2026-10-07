@@ -850,6 +850,19 @@ the five-row decode-profile gate, 13-row reference gate, 276-case
 compatibility matrix, full 9,900-frame/64-mode decodecorpus, and
 `zig build check -j1` pass.
 
+A 2026-10-07 follow-up turned the steady-state route into an actual two-
+sequence executor. It peeked both one-bit ML transitions together, proved the
+second LL/OF/ML shape before committing progress, observed that two rep1
+rotations restore the original repcode order, and then issued the existing
+8-byte/distance-seven and non-overlapping 23-byte copies consecutively. The
+fixed frame exercised more than 2,000 pairs and matched the generic decoder in
+ReleaseFast and ReleaseSafe. The target instance nevertheless grew from
+`0x18ea` to `0x1b3c` bytes and the raw-FSE section by 592 bytes. Seven clean
+`huffman80k` pairs all lost: `0.9958x` median / `0.9954x` geometric raw
+throughput and `0.9974x` / `0.9968x` after libzstd normalization. The source
+was restored; exact samples are in
+[zstd-raw-short-double-pair-x86-20261007.json](data/zstd-raw-short-double-pair-x86-20261007.json).
+
 ## Persistent Huffman-weight reservoir and grouped small fields
 
 The `numbered_json` one-shot path still spends substantial time rebuilding its
