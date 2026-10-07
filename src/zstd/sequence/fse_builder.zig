@@ -126,6 +126,8 @@ inline fn buildMappedBounded(
 
     var normalized_total: usize = 0;
     var low_probability_count: usize = 0;
+    var dominant_symbol: usize = 0;
+    var dominant_probability: usize = 0;
     var symbol_next: [max_symbol_count]u16 = undefined;
     @memset(symbol_next[0..values.len], 0);
     for (values, 0..) |value, symbol| {
@@ -133,8 +135,15 @@ inline fn buildMappedBounded(
             normalized_total += 1;
             low_probability_count += 1;
         } else if (value > 1) {
-            normalized_total += value - 1;
+            const probability = value - 1;
+            normalized_total += probability;
             symbol_next[symbol] = value - 1;
+            if (comptime max_table_size == 32) {
+                if (probability > dominant_probability) {
+                    dominant_probability = probability;
+                    dominant_symbol = symbol;
+                }
+            }
         }
     }
     if (normalized_total != entries.len) return error.CorruptFrame;
@@ -157,13 +166,37 @@ inline fn buildMappedBounded(
         low_index += 1;
     }
 
+    const use_dominant_fill = if (comptime max_table_size == 32)
+        low_probability_count == 0 and
+            dominant_probability * 4 >= entries.len * 3
+    else
+        false;
     var position: usize = 0;
-    for (values, 0..) |value, symbol| {
-        if (value <= 1) continue;
-        for (0..value - 1) |_| {
-            symbols[position] = @intCast(symbol);
-            position = (position + spread_step) & (entries.len - 1);
-            while (position >= normal_end) position = (position + spread_step) & (entries.len - 1);
+    if (use_dominant_fill) {
+        // With no low-probability tail, spreading is pure modular addition.
+        // Pre-fill the dominant symbol and jump over its contiguous input run;
+        // only sparse symbols still need individual spread stores.
+        @memset(symbols[0..entries.len], @intCast(dominant_symbol));
+        for (values, 0..) |value, symbol| {
+            if (value <= 1) continue;
+            const probability = value - 1;
+            if (symbol == dominant_symbol) {
+                position = (position + probability * spread_step) & (entries.len - 1);
+                continue;
+            }
+            for (0..probability) |_| {
+                symbols[position] = @intCast(symbol);
+                position = (position + spread_step) & (entries.len - 1);
+            }
+        }
+    } else {
+        for (values, 0..) |value, symbol| {
+            if (value <= 1) continue;
+            for (0..value - 1) |_| {
+                symbols[position] = @intCast(symbol);
+                position = (position + spread_step) & (entries.len - 1);
+                while (position >= normal_end) position = (position + spread_step) & (entries.len - 1);
+            }
         }
     }
     if (position != 0) return error.CorruptFrame;
@@ -289,8 +322,30 @@ test "Zstd mapped FSE builder matches entry conversion" {
     try expectMappedMatches(32, &.{ 17, 9, 5, 3, 2, 0 });
     try expectMappedMatches(32, &.{ 14, 8, 6, 5, 3, 0 });
     try expectMappedMatches(32, &.{ 21, 8, 4, 0, 0, 1 });
+    try expectMappedMatches(32, &.{ 25, 1, 1, 1, 1, 1, 2, 1, 1, 8 });
     try expectMappedMatches(256, &.{ 129, 65, 33, 17, 9, 5, 0, 0, 0, 0 });
     try expectMappedMatches(512, &.{ 256, 129, 65, 33, 17, 9, 5, 3, 2, 0, 0 });
+}
+
+test "Zstd dominant 32-state mapped builder matches generic distributions" {
+    var values: [32]u16 = undefined;
+    var random_state: u64 = 0x9e37_79b9_7f4a_7c15;
+    for (0..256) |_| {
+        random_state = random_state *% 6_364_136_223_846_793_005 +% 1_442_695_040_888_963_407;
+        const symbol_count = 2 + @as(usize, @intCast((random_state >> 32) % 31));
+        @memset(values[0..symbol_count], 1);
+        const dominant_symbol = @as(usize, @intCast(random_state % symbol_count));
+        const dominant_probability = 24 + @as(u16, @intCast((random_state >> 48) % 8));
+        values[dominant_symbol] = dominant_probability + 1;
+        var remaining = 32 - dominant_probability;
+        while (remaining != 0) : (remaining -= 1) {
+            random_state = random_state *% 6_364_136_223_846_793_005 +% 1_442_695_040_888_963_407;
+            var symbol = @as(usize, @intCast((random_state >> 32) % symbol_count));
+            if (symbol == dominant_symbol) symbol = (symbol + 1) % symbol_count;
+            values[symbol] += 1;
+        }
+        try expectMappedMatches(32, values[0..symbol_count]);
+    }
 }
 
 test "Zstd 256-state no-low mapped builder matches generic table" {

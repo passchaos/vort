@@ -92,3 +92,8 @@ Exact paired timings, hashes, matrix summaries, and validation results are in
 - Native `zig build check`, CLI help, and AArch64 Linux ReleaseFast library
   compilation pass. A full AArch64 `check` reaches 95/98 targets and then
   stops because this host has no AArch64 `libz` for an unrelated C benchmark.
+
+The subsequent dominant-symbol 32-state FSE builder raises the same one-shot
+row from near parity to a small median lead over local libzstd 1.6.0-dev. It is
+documented in
+[zstd-small-dominant-fse32-x86.md](zstd-small-dominant-fse32-x86.md).

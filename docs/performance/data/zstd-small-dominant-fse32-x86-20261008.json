@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-08T03:02:05+08:00",
+  "candidate": "dominant-symbol modular spread for no-low-probability 32-state mapped FSE tables",
+  "host": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "target": "x86_64-linux-gnu skylake+pku+sgx",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "affinity_cpu": 2,
+    "codec_threads": 1
+  },
+  "reference": {
+    "source": "/home/passchaos/Work/zstd",
+    "commit": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+    "version": "1.6.0-dev",
+    "library": "/tmp/vort-zstd-upstream-build/lib/libzstd.so.1.6.0",
+    "sha256": "b734e265f838f7a18c378fe2b34c505e6fc5025fd84ceac159faa27b794b78b0"
+  },
+  "input": {
+    "case": "numbered_json",
+    "decoded_bytes": 1290,
+    "decoded_sha256": "394cbb2d4c4709369e761604ad29c5b4a2757b77003fae36f4673ec5e979e11d",
+    "encoded_bytes": 183,
+    "sequence_count": 39,
+    "literal_bytes": 102,
+    "match_bytes": 1188,
+    "offset_fse_normalized_values": [25, 1, 1, 1, 1, 1, 2, 1, 1, 8],
+    "offset_fse_probabilities": [24, 0, 0, 0, 0, 0, 1, 0, 0, 7]
+  },
+  "binaries": {
+    "baseline": {
+      "path": "/tmp/vort-zstd-sunk-state-baseline",
+      "sha256": "e87ea448f4efa3e534cb5d75ae9280b40a230e2fdda2f7df9c3ab65c8421c1cc"
+    },
+    "candidate": {
+      "path": "/tmp/vort-zstd-dominant32-reference-candidate-final",
+      "sha256": "290fe7569b5f5ed97e4b5b8492c65e914370c28904064067602e67f096b17f6a"
+    }
+  },
+  "machine_code": {
+    "baseline_small32_builder_bytes": 1092,
+    "candidate_small32_builder_bytes": 1249,
+    "baseline_mapped_fse_section_bytes": 2412,
+    "candidate_mapped_fse_section_bytes": 2569,
+    "generic_mapped_builder_bytes_both": 1320,
+    "small_sequence_section_bytes_both": 33437,
+    "small_frame_section_bytes_both": 911,
+    "following_section_address_shift_bytes": 256,
+    "generic_builder_address_and_bytes_identical": true
+  },
+  "target_campaign": {
+    "command": "taskset -c 2 BINARY --case numbered_json --iterations 100000 --input-offset 0 --output-offset 0 --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so.1.6.0 --csv OUT",
+    "retained_batches": [
+      "/tmp/vort-zstd-dominant32-matched.jK7Scd",
+      "/tmp/vort-zstd-dominant32-extension.txErCD"
+    ],
+    "pairs": 15,
+    "iterations": 100000,
+    "input_mod128": 0,
+    "vort_output_mod128": 0,
+    "reference_output_mod128": 0,
+    "process_order": "baseline-first on odd pairs, candidate-first on even pairs",
+    "sample_columns": [
+      "baseline_vort_ns",
+      "baseline_libzstd_ns",
+      "candidate_vort_ns",
+      "candidate_libzstd_ns"
+    ],
+    "samples_ns": [
+      [149785005, 148348548, 148876157, 149102707],
+      [149614983, 149522795, 147692183, 148397784],
+      [150328263, 149375744, 150205151, 149029947],
+      [149560605, 149239562, 147579983, 148405910],
+      [150403033, 149376318, 148790140, 150034267],
+      [150360321, 149659057, 151679682, 149535022],
+      [150405572, 149899996, 148206116, 149482076],
+      [149783135, 149119729, 147933632, 148795899],
+      [150120703, 148589146, 147933112, 149415069],
+      [149798366, 149565378, 147961428, 148460338],
+      [149762682, 148494061, 147994620, 150252732],
+      [149706521, 148633768, 147778511, 148853886],
+      [149908307, 149433626, 147856241, 148824437],
+      [150264097, 149139416, 148299236, 149302942],
+      [154910217, 148887469, 147810034, 148557906]
+    ],
+    "candidate_over_baseline": {
+      "median": 1.013018969325,
+      "geometric_mean": 1.012618486729,
+      "minimum": 0.991301662935,
+      "maximum": 1.048035866090,
+      "wins": 14
+    },
+    "libzstd_normalized": {
+      "median": 1.011219456125,
+      "geometric_mean": 1.012238818330,
+      "minimum": 0.990480088189,
+      "maximum": 1.045716034566,
+      "wins": 13
+    },
+    "baseline_over_libzstd": {
+      "median": 0.993663739732,
+      "geometric_mean": 0.992300621157,
+      "wins": 0
+    },
+    "candidate_over_libzstd": {
+      "median": 1.005828742175,
+      "geometric_mean": 1.004445208188,
+      "minimum": 0.985860597994,
+      "maximum": 1.015258068165,
+      "wins": 13
+    },
+    "without_pair_15": {
+      "candidate_over_baseline_median": 1.012760608815,
+      "candidate_over_baseline_geometric_mean": 1.010134960570,
+      "libzstd_normalized_median": 1.010761471854,
+      "libzstd_normalized_geometric_mean": 1.009889011391
+    },
+    "median_candidate_mib_s": 831.459850579,
+    "median_libzstd_mib_s": 825.498426946
+  },
+  "control_matrix": {
+    "directory": "/tmp/vort-zstd-dominant32-matrix.rRCN1h",
+    "pairs": 7,
+    "iterations": 500,
+    "input_mod128": 0,
+    "output_mod128": 0,
+    "row_median_geometric_mean": {
+      "raw": 1.004234237280,
+      "libzstd_normalized": 1.004249575205
+    },
+    "rows": {
+      "tiny": { "raw_median": 0.999832916, "normalized_median": 1.004332804 },
+      "text": { "raw_median": 1.022212813, "normalized_median": 1.021173147 },
+      "structured": { "raw_median": 0.997909145, "normalized_median": 0.999400753 },
+      "repetitive": { "raw_median": 0.997260822, "normalized_median": 1.012233400 },
+      "incompressible": { "raw_median": 0.994838001, "normalized_median": 0.995280950 },
+      "rle64k": { "raw_median": 1.000758728, "normalized_median": 0.998984738 },
+      "raw256k": { "raw_median": 1.018440321, "normalized_median": 1.011429313 },
+      "numbered_json": { "raw_median": 1.015748969, "normalized_median": 1.001133926 },
+      "huffman80k": { "raw_median": 1.001176824, "normalized_median": 0.999772977 },
+      "ascii64k": { "raw_median": 1.003419953, "normalized_median": 1.004022130 },
+      "large_text": { "raw_median": 1.001598847, "normalized_median": 1.002468541 },
+      "large_json": { "raw_median": 1.001966021, "normalized_median": 1.003619560 },
+      "binary_mixed": { "raw_median": 1.000328721, "normalized_median": 1.001676208 }
+    }
+  },
+  "monitoring": {
+    "required_pre_batch_clear_seconds": 60,
+    "poll_interval_ms": 20,
+    "retained_batches_clean": 3,
+    "discard_rule": "discard the complete batch if any Zig process appears during sampling",
+    "discarded_attempts": [
+      "one unmatched-layout baseline campaign",
+      "two complete 15-pair matched-layout campaigns interrupted by external Spectra Zig tests"
+    ]
+  },
+  "validation": {
+    "fse_builder_release_fast": "5/5 passed",
+    "fse_builder_release_safe": "5/5 passed",
+    "randomized_dominant_distributions": 256,
+    "full_project_release_fast": "1703/1703 passed",
+    "libzstd_compatibility": "276/276 passed; unsupported=0",
+    "decodecorpus": "9 campaigns; 9900 frames; 2699 block streams; 76578 streamed sequence blocks; 64/64 modes",
+    "build_check": "104/104 steps passed",
+    "cli_help": "passed",
+    "aarch64_linux_releasefast_static_library": {
+      "passed": true,
+      "sha256": "1c2fd299cb6179e87443bf0f8382d0cef95c7acce5b3a16570299fac0f566d55"
+    }
+  },
+  "decision": "retain; the general 32-state dominant-symbol shortcut improves matched-layout one-shot numbered_json by about 1.3%, crosses local libzstd 1.6.0 at the median, keeps generic mapped FSE code unchanged, and passes full correctness, compatibility, corpus, cross-target, and build validation"
+}
