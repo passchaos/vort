@@ -1,0 +1,208 @@
+{
+  "date": "2026-10-07",
+  "recorded_at": "2026-10-07T09:46:38+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "8af08866",
+  "reference": {
+    "source": "~/Work/brotli",
+    "git": "558fc647cdaf391228d614ca85f711e02e4e583b",
+    "version": "1.2.0-dev"
+  },
+  "change": "the selected UTF-8/direct-context full-tier distance helper returns the decoded distance and commits nonzero recent distances only when they are inside the advertised history window; implicit and static-dictionary distances skip the ring without returning an update flag to the payload",
+  "profile": {
+    "roadmap_q9_commands": 109100,
+    "roadmap_q5_commands": 118278,
+    "roadmap_q9_explicit_distances": 108109,
+    "roadmap_q5_explicit_distances": 117142,
+    "roadmap_q9_context_three_distances": 107157,
+    "roadmap_q5_context_three_distances": 116728
+  },
+  "binary": {
+    "baseline_sha256": "fb760042ef7c7f7f1f6c9ffb8f68c4dd1d361167d4fd138e2ade6f9bcaba6b33",
+    "measured_candidate_sha256": "5f913197332beae3400227051bf11d49137e7f8511a3238597039b600b26d430",
+    "final_source_candidate_sha256": "f3e2b6d6f8518611dd469b9a1800af7523ac8e9be1755c7c9f680ebb9d1e3a43",
+    "baseline_bytes": 6208984,
+    "candidate_bytes": 6210632,
+    "baseline_paired_section_sha256": "515bf7175e3a242aa331f98db26d3da659060594d470147c3b6db5513b87113f",
+    "candidate_paired_section_sha256": "36ed0d7359ba4d6665187f7177b4bb46bfffc386d8f1813dce697f1080087248",
+    "baseline_paired_section_bytes": 15147,
+    "candidate_paired_section_bytes": 15259,
+    "baseline_selected_instance_bytes": 5350,
+    "candidate_selected_instance_bytes": 5463,
+    "baseline_generic_instance_bytes": 5784,
+    "candidate_generic_instance_bytes": 5784,
+    "following_section_address_shift_bytes": 128,
+    "final_source_code_sections_match_measured_candidate": true
+  },
+  "inputs": {
+    "roadmap": {
+      "bytes": 1251399,
+      "sha256": "f1da3a855bd2c0370e4a17054a65c5e2d6a355529eccd65c7fd94c24f26fff0",
+      "q9_frame_bytes": 335220,
+      "q9_frame_sha256": "9abffe5d08e94da35fd31c14ad4192076e5f6b1b97cd73271638be50fd72b19d",
+      "q5_frame_bytes": 350069,
+      "q5_frame_sha256": "e49f16f8392606508d0cc3a5da8bd8fa12e6035d2d341e1954b602ab3d7d1740"
+    },
+    "source": {
+      "bytes": 1726567,
+      "sha256": "b75cf6294797c217c0e4a17054a65c5e2d6a355529eccd65c7fd94c24f26fff0",
+      "q9_frame_bytes": 141001,
+      "q9_frame_sha256": "867477d8c87c432884a2398abcc02063b23bea85fb9ec1cf6abafbb4a6182a6e",
+      "q5_frame_bytes": 147580,
+      "q5_frame_sha256": "e6e0e004ce7d3d94a7afc850c42eba440b8ebc22ff925dad6dbe2d3cc52cb379"
+    }
+  },
+  "decoder_only": {
+    "roadmap_q9": {
+      "pairs": 15,
+      "iterations": 500,
+      "median": 1.0035884238123842,
+      "geometric_mean": 1.0030435869145344,
+      "minimum": 1.000265441918571,
+      "maximum": 1.0058237706840578,
+      "wins": 15,
+      "checksum": 625717000,
+      "samples_ns": [
+        [1358969214, 1356412349], [1362745634, 1362146871],
+        [1358198460, 1353342095], [1362843451, 1360171927],
+        [1363359033, 1355465115], [1362587338, 1361898168],
+        [1366237280, 1360901682], [1359596666, 1353397398],
+        [1360254558, 1354412911], [1363596211, 1360566375],
+        [1358868637, 1352804285], [1361040609, 1354351046],
+        [1360144275, 1357744329], [1362271454, 1355528371],
+        [1359562086, 1359201297]
+      ]
+    },
+    "roadmap_q5": {
+      "pairs": 15,
+      "iterations": 500,
+      "median": 1.0026953761124577,
+      "geometric_mean": 1.0026919627541759,
+      "minimum": 0.9989064836890643,
+      "maximum": 1.0105116680493302,
+      "wins": 13,
+      "checksum": 625717000,
+      "samples_ns": [
+        [1409338153, 1405549668], [1411725870, 1404286375],
+        [1412042843, 1408097841], [1416143332, 1410315036],
+        [1409416546, 1409342301], [1411649684, 1409337671],
+        [1410655422, 1408785215], [1411573114, 1413118382],
+        [1412300521, 1407627557], [1410945699, 1405337987],
+        [1411525417, 1406777191], [1410359629, 1411636408],
+        [1410014226, 1406353380], [1419019387, 1404258290],
+        [1412612310, 1411643988]
+      ]
+    }
+  },
+  "reference_normalized": {
+    "roadmap_q9": {
+      "pairs": 7,
+      "iterations": 100,
+      "raw_median": 1.0033774517931013,
+      "raw_geometric_mean": 1.0043475058376254,
+      "raw_wins": 6,
+      "normalized_median": 1.0040850607550955,
+      "normalized_geometric_mean": 1.0057858655967087,
+      "normalized_wins": 6,
+      "baseline_over_libbrotli_median": 0.7805524411551235,
+      "candidate_over_libbrotli_median": 0.7841583659350655,
+      "candidate_over_libbrotli_geometric_mean": 0.7830672382090808,
+      "checksum": 250286800,
+      "samples_ns": [
+        [274587065, 272416845, 211875752, 212984732],
+        [274499893, 271124414, 212555161, 212661971],
+        [273361726, 272549169, 212205235, 213721711],
+        [271807266, 272418034, 212159825, 211948782],
+        [271956215, 271815135, 212910983, 213369405],
+        [272533683, 271616312, 213411284, 212852304],
+        [272967798, 271488096, 213264565, 212974978]
+      ]
+    },
+    "roadmap_q5": {
+      "pairs": 7,
+      "iterations": 100,
+      "raw_median": 1.0030228760484063,
+      "raw_geometric_mean": 1.0034930236742738,
+      "raw_wins": 6,
+      "normalized_median": 0.9997218642112409,
+      "normalized_geometric_mean": 1.0000934009860458,
+      "normalized_wins": 3,
+      "baseline_over_libbrotli_median": 0.8032303865290351,
+      "candidate_over_libbrotli_median": 0.8022687524645082,
+      "candidate_over_libbrotli_geometric_mean": 0.802437846600419,
+      "checksum": 250286800,
+      "samples_ns": [
+        [287355334, 286544629, 230812536, 230097337],
+        [287914560, 286901682, 232857870, 231398473],
+        [287365065, 287070454, 231003161, 230307655],
+        [287546186, 284103016, 228778828, 226614827],
+        [282505879, 283623054, 225665015, 226778787],
+        [282515157, 280848956, 226979875, 226437939],
+        [282227968, 281377399, 226596921, 225607062]
+      ]
+    }
+  },
+  "controls": {
+    "source_q9": {
+      "pairs": 7,
+      "iterations": 500,
+      "median": 1.0043125475034924,
+      "geometric_mean": 1.0039933444390927,
+      "minimum": 1.0017139626594846,
+      "maximum": 1.0055481723835855,
+      "wins": 7,
+      "checksum": 863333000,
+      "samples_ns": [[735940484, 732780334], [735933319, 734674115], [738213514, 736180589], [736687955, 732623235], [738491775, 734828648], [737137855, 734022666], [735881198, 732662263]]
+    },
+    "source_q5": {
+      "pairs": 7,
+      "iterations": 500,
+      "median": 1.0039920796822597,
+      "geometric_mean": 1.003667040346508,
+      "minimum": 1.0008588345107643,
+      "maximum": 1.0062727946252064,
+      "wins": 7,
+      "checksum": 863333000,
+      "samples_ns": [[785382729, 780486895], [785371327, 780963488], [785202261, 782397705], [783211290, 782472170], [785209097, 784535311], [783513376, 780092221], [784647658, 781527737]]
+    },
+    "clustered_q8": {
+      "pairs": 15,
+      "requested_iterations": 500,
+      "effective_iterations": 50,
+      "median": 1.0005398996127337,
+      "geometric_mean": 1.0009265572543886,
+      "minimum": 0.9982061898864761,
+      "maximum": 1.0052144774038294,
+      "wins": 10,
+      "checksum": 52434600,
+      "samples_ns": [[29530712, 29465142], [29569047, 29473777], [29482580, 29444910], [29496914, 29492002], [29525958, 29557802], [29465781, 29518732], [29570982, 29551845], [29497235, 29485390], [29491764, 29475850], [29518644, 29487545], [29477686, 29520947], [29584558, 29606225], [29611208, 29457602], [29521249, 29532595], [29658317, 29521928]]
+    },
+    "combined_pair_geometric_mean": 1.0023272556382743,
+    "combined_row_median_geometric_mean": 1.0029467202414322
+  },
+  "monitoring": {
+    "required_pre_campaign_clear_seconds": 60,
+    "poll_interval_ms": 20,
+    "retained_clean_campaigns": 7,
+    "discarded_contaminated_campaigns": 1,
+    "discarded_campaign": "15 pairs x 500 roadmap q9 decoder-only"
+  },
+  "validation": {
+    "direct_brotli_release_fast": "555/555 passed",
+    "cross_compile": ["x86_64-linux-gnu baseline ReleaseFast", "aarch64-linux-gnu baseline ReleaseFast"],
+    "reference_gate": "13/13 rows passed",
+    "reference_path_smoke": "3 valid and 5 invalid paths passed",
+    "upstream_differential": "98 core, 7056 one-shot, 7056 progressive, 1401 fragmentation, 64 high-tree truncation, 7 Large Window",
+    "real_corpus_differential": "16/16 one-shot and 16/16 progressive across 4 categories",
+    "full_project_release_fast": "1701/1701 passed",
+    "build_check": "104/104 steps passed",
+    "cli_help": "passed"
+  },
+  "decision": "retain; both full-tier target qualities improve in long decoder-only campaigns, q9 reference normalization agrees, q5 reference normalization is neutral, and all measured shifted-layout controls remain neutral-positive"
+}

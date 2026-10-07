@@ -17541,3 +17541,18 @@ reuse, so production keeps the simpler independently owned plans.
   bitstream work must remove more work than one location/load without extending
   the compact executor's state or live ranges; evidence is in
   `docs/performance/data/zstd-pair-window-x86-20261007.json`.
+
+- The selected Brotli UTF-8/direct-context full tier now fuses recent-distance
+  ring commits into its distance helper. Implicit and explicit symbol-zero
+  reuse still skip the ring, and static-dictionary distances remain
+  non-committing because the helper receives the current maximum history
+  distance. This removes the returned update flag and payload branch without
+  changing the mixed-context full instance or middle-tier function sizes.
+  Fifteen clean roadmap q9/q5 pairs improve by `1.0030x`/`1.0027x`
+  geometrically with 15/15 and 13/15 wins; q9 libbrotli-normalized geometry is
+  `1.0058x`, while q5 is neutral at `1.0001x`. Source q9/q5 and clustered q8
+  controls combine to `1.0023x`. Candidate medians remain only
+  `0.7842x`/`0.8023x` libbrotli, so the broad gap stays open. All direct,
+  differential, cross-target, project-test, check, and CLI gates pass;
+  evidence is in `docs/performance/brotli-full-ring-commit-x86.md` and its JSON
+  companion.

@@ -2671,6 +2671,24 @@ real-corpus differentials, reference gates, AArch64 compilation, full tests,
 build check, and CLI smoke pass. Exact evidence is in
 `docs/performance/brotli-full-utf8-context-x86.md`.
 
+## Brotli full-tier distance-ring commit fusion (2026-10-07)
+
+The selected UTF-8/direct-context full-tier distance helper now commits
+nonzero recent distances only when they fall inside the current history
+window. Implicit and explicit symbol-zero reuse still skip the ring, and
+larger static-dictionary references remain non-committing. This removes the
+payload's returned `update_ring` flag and hot conditional while preserving the
+mixed-context full instance and all middle-tier function sizes.
+
+Fifteen clean fixed-CPU-2 decoder-only pairs improve roadmap q9 by `1.0036x`
+median / `1.0030x` geometric and q5 by `1.0027x` / `1.0027x`, with 15/15 and
+13/15 wins. Same-process libbrotli normalization is `1.0058x` geometric on q9
+and neutral at `1.0001x` on q5. Candidate medians reach `0.7842x`/`0.8023x`
+libbrotli, so the main decode gap remains. Source q9/q5 and clustered q8
+controls combine to `1.0023x` geometrically. All direct, upstream, real-corpus,
+cross-target, full-test, build-check, and CLI gates pass. Evidence is in
+`docs/performance/brotli-full-ring-commit-x86.md`.
+
 ## Brotli middle-tier UTF-8 context specialization (2026-10-06)
 
 The source q9/q5 streams use UTF-8 literal context mode for all 20,459/23,048

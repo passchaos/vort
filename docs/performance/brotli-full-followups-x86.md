@@ -69,3 +69,11 @@ synchronization and must reduce actual regular-distance work without enlarging
 The subsequent no-copy solution expresses the wrapper-owned reader's existing
 non-aliasing invariant directly. Its retained implementation and measurements
 are in [brotli-full-noalias-reader-x86.md](brotli-full-noalias-reader-x86.md).
+
+A later distance-execution change removes the selected payload's returned
+ring-update flag: its distance helper commits only nonzero in-window distances,
+while implicit and static-dictionary references retain their exact ring
+semantics. Long roadmap q9/q5 campaigns improve by 1.0030x/1.0027x
+geometrically with 15/15 and 13/15 wins, and all shifted-layout controls remain
+neutral-positive. The retained implementation and evidence are in
+[brotli-full-ring-commit-x86.md](brotli-full-ring-commit-x86.md).

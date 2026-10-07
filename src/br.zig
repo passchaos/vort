@@ -8297,6 +8297,21 @@ noinline fn processPairedWideLiteralPayload(
             active_distance_context_map = @ptrCast(&header.distance_context_map[@as(usize, distance_type) * 4]);
             active_distance_context_three_tree = active_distance_context_map[3];
         }
+        if (comptime force_utf8_context and direct_context_three) {
+            const max_distance = maxBackwardDistanceForWindow(window_bits, output_cursor);
+            const distance = try readSelectedFullDistanceCommitted(header, reader, lengths, last_distances, max_distance, distance_lookups, active_distance_context_map, active_distance_context_three_tree);
+            if (distance == 0) return error.InvalidMatch;
+            if (distance > max_distance) {
+                const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+                if (word.len > meta_block_end - output_cursor) return error.CorruptFrame;
+                @memcpy(output[output_cursor..][0..word.len], word);
+                output_cursor += word.len;
+                continue;
+            }
+            if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
+            match_copy.appendWideNonZero(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
+            continue;
+        }
         var decoded_distance: DecodedBrotliDistance = undefined;
         try readMinimalDistanceExternalLookupIntoFixed9Current(true, direct_context_three, false, header, reader, lengths, last_distances, &decoded_distance, distance_lookups, active_distance_context_map, active_distance_context_three_tree);
         const distance = decoded_distance.distance;
@@ -11899,6 +11914,40 @@ inline fn readMinimalDistanceExternalLookupIntoFixed9Current(
         .distance = try readPreparedDistanceStagedWithOptions(zero_postfix_distance, header, reader, symbol),
         .update_ring = true,
     };
+}
+
+/// Selected full-tier payloads commit recent distances inside the decode
+/// helper. Static-dictionary references deliberately remain outside the
+/// advertised history window and therefore do not update the ring.
+inline fn readSelectedFullDistanceCommitted(
+    header: *MinimalCompressedHeader,
+    reader: anytype,
+    lengths: InsertCopyLengths,
+    last_distances: *[4]usize,
+    max_distance: usize,
+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
+    context_map: [*]const u8,
+    context_three_tree: u8,
+) Error!usize {
+    if (lengths.distance_symbol_zero) return last_distances[3];
+    const tree_index = if (lengths.copy_len >= 5) blk: {
+        @branchHint(.likely);
+        break :blk context_three_tree;
+    } else context_map[lengths.copy_len - 2];
+    if (tree_index >= header.distance_tree_count) return error.CorruptFrame;
+    const lookup = &distance_lookups[tree_index];
+    const symbol = (try lookup.decodeValueFast9(reader)) orelse
+        try lookup.decodeValueLong(&header.distance_trees[tree_index].table, reader);
+    if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
+    if (symbol < 16) {
+        var distance: usize = undefined;
+        try resolveShortDistanceInto(symbol, last_distances, &distance);
+        if (symbol != 0 and distance <= max_distance) pushLastDistance(last_distances, distance);
+        return distance;
+    }
+    const distance = try readPreparedDistanceStaged(header, reader, symbol);
+    if (distance <= max_distance) pushLastDistance(last_distances, distance);
+    return distance;
 }
 
 inline fn readMinimalDistanceTailLookupIntoWithOptions(
@@ -23301,6 +23350,41 @@ test "br direct cached distance context matches canonical contexts" {
         try std.testing.expectEqual(canonical_last_distances, direct_last_distances);
         try std.testing.expectEqual(canonical_reader.bitPosition(), direct_reader.bitPosition());
         try std.testing.expectEqual(@as(usize, 0), header.distance_block.remaining);
+
+        var committed_last_distances = initial_last_distances;
+        var committed_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+        header.distance_block.remaining = 1;
+        const committed_distance = try readSelectedFullDistanceCommitted(
+            &header,
+            &committed_reader,
+            .{ .insert_len = 0, .copy_len = copy_len, .distance_symbol_zero = false },
+            &committed_last_distances,
+            std.math.maxInt(usize),
+            &lookups,
+            &context_map,
+            3,
+        );
+        var expected_last_distances = canonical_last_distances;
+        if (canonical.update_ring) pushLastDistance(&expected_last_distances, canonical.distance);
+        try std.testing.expectEqual(canonical.distance, committed_distance);
+        try std.testing.expectEqual(expected_last_distances, committed_last_distances);
+        try std.testing.expectEqual(canonical_reader.bitPosition(), committed_reader.bitPosition());
+        try std.testing.expectEqual(@as(usize, 0), header.distance_block.remaining);
+
+        var dictionary_last_distances = initial_last_distances;
+        var dictionary_reader = fast_bit_reader.Reader.initFrom(bitstream.BitReader.init(&.{}));
+        header.distance_block.remaining = 1;
+        _ = try readSelectedFullDistanceCommitted(
+            &header,
+            &dictionary_reader,
+            .{ .insert_len = 0, .copy_len = copy_len, .distance_symbol_zero = false },
+            &dictionary_last_distances,
+            0,
+            &lookups,
+            &context_map,
+            3,
+        );
+        try std.testing.expectEqual(initial_last_distances, dictionary_last_distances);
     }
 }
 
