@@ -202,6 +202,16 @@ byte-for-byte output check before timing.
   distance-82, approximately 128 KiB overlapping matches measured only
   0.5681x / 0.5689x with 0/15 wins. The retained logarithmic seed-and-double
   copier is decisively better.
+- A later x86 ERMS follow-up routed validated overlapping matches of at least
+  64 KiB and distance at least 64 through forward `rep movsb`. A direct oracle
+  covered distances 64, 82, 127, and 4,096 with exact output and suffix guards;
+  all 23 match-copy tests passed. The instruction's byte-serial overlap
+  dependency was nevertheless disastrous: the 13-row gate measured
+  `large_text` at 11,433.69 MiB/s versus 21,042.64 MiB/s for system libzstd
+  (`0.5434x`) and failed its established floor. A subsequent paired campaign
+  was discarded when an external Spectra Zig process appeared, so none of its
+  observations are retained. The ERMS path and its 11-byte helper were removed;
+  seed-and-double remains authoritative for long overlapping matches.
 
 ## Rejected Huffman and lookup variants
 

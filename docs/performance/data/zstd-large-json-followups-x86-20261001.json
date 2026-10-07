@@ -747,6 +747,36 @@
       "continuous_monitor": "20-millisecond ps -C zig monitor remained clean for the complete campaign",
       "validation": "4/4 ReleaseFast FSE builder tests and the 13-row reference gate passed before source restoration",
       "removed": true
+    },
+    "forward_overlap_erms": {
+      "date": "2026-10-07",
+      "recorded_at": "2026-10-07T16:49:32+08:00",
+      "baseline_git": "7b869825",
+      "change": "route x86 ERMS-capable overlapping matches of at least 64 KiB and distance at least 64 through forward rep movsb",
+      "baseline_executable_sha256": "9c4997857c555cba2f7aeca755a7cb47268ecc3c73cdf70e4a66564c958b44a0",
+      "candidate_executable_sha256": "3a7c4c8fd1a869f513dd4fc89c318133a2bcea31aaba0f31ff167fd5c03d198e",
+      "baseline_executable_bytes": 6502344,
+      "candidate_executable_bytes": 6506640,
+      "baseline_copy_match_from_history_bytes": 490,
+      "candidate_copy_match_from_history_bytes": 520,
+      "candidate_rep_movsb_helper_bytes": 11,
+      "reference_gate": {
+        "reference_version": "1.4.8",
+        "case": "large_text",
+        "iterations": 5000,
+        "vort_ns": 218652062,
+        "reference_ns": 118806378,
+        "vort_mib_s": 11433.69,
+        "reference_mib_s": 21042.64,
+        "vort_over_reference": 0.5434,
+        "checksum": 5243740000,
+        "result": "failed established large_text floor"
+      },
+      "discarded_campaigns": 1,
+      "discard_reason": "an external Spectra Zig process appeared during the three-pair fixed-CPU campaign; no paired observations retained",
+      "validation": "23/23 ReleaseFast match-copy tests passed, including guarded 64 KiB+127 overlap at distances 64, 82, 127, and 4096",
+      "decision": "reject; forward ERMS overlap serializes on the source-after-destination dependency and is far slower than seed-and-double",
+      "removed": true
     }
   }
 }
