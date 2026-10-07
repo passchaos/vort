@@ -8175,7 +8175,8 @@ noinline fn processPairedWideLiteralMetaBlock(
     if (builtin.is_test) test_wide_auxiliary_lookup10_hits += 1;
     var fast_reader = fast_bit_reader.Reader.initFrom(reader.*);
     defer fast_reader.syncTo(reader);
-    if (allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]))
+    if (header.npostfix == 0 and
+        allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]))
         return processPairedWideLiteralPayload(true, true, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
     return processPairedWideLiteralPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
 }
@@ -11936,7 +11937,8 @@ inline fn readSelectedFullDistanceCommitted(
         if (symbol != 0 and distance <= max_distance) pushLastDistance(last_distances, distance);
         return distance;
     }
-    const distance = try readPreparedDistanceStaged(header, reader, symbol);
+    std.debug.assert(header.npostfix == 0);
+    const distance = try readPreparedDistanceStagedWithOptions(true, header, reader, symbol);
     if (distance <= max_distance) pushLastDistance(last_distances, distance);
     return distance;
 }
@@ -22016,6 +22018,13 @@ test "br full wide auxiliary executor matches prior transitions and boundaries" 
         const block = (try readStreamMetaBlockHeader(&reader)).compressed;
         try readMinimalCompressedHeaderInto(&reader, header);
         const original_tree_count = header.literal_tree_count;
+        if (fixture == .regular) {
+            try std.testing.expectEqual(@as(u2, 1), header.npostfix);
+            @memset(
+                header.literal_context_modes[0..header.literal_block.block_type_count],
+                literal_context.mode_utf8,
+            );
+        }
         for (original_tree_count..inline_literal_tree_count) |index|
             header.literal_trees[index] = .{ .single_symbol = 0 };
         for (inline_literal_tree_count..129) |index|

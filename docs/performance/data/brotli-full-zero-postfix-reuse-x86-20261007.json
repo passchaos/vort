@@ -1,0 +1,158 @@
+{
+  "date": "2026-10-07",
+  "recorded_at": "2026-10-07T15:32:03+08:00",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "target_cpu": "skylake+pku+sgx",
+  "os": "Linux 6.8.0-79-generic x86_64",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "2",
+  "codec_threads": 1,
+  "baseline_git": "e8743c95cb9a356179778761df087bd1c76375fd",
+  "reference": {
+    "source": "~/Work/brotli",
+    "git": "558fc647cdaf391228d614ca85f711e02e4e583b",
+    "version": "1.2.0-dev",
+    "libbrotlidec_sha256": "e3e18631aaa421912afddbef2246eb3e6abe4e15a10f983d31ac2dcbe3d20eb3",
+    "libbrotlicommon_sha256": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739"
+  },
+  "change": "route the existing selected UTF-8 full-tier payload only for NPOSTFIX=0 and use its compile-time zero-postfix prepared-distance reader; route nonzero-postfix UTF-8 blocks through the existing generic payload without adding a third instance",
+  "binary": {
+    "baseline_sha256": "2500695d57a2db74a59d8c1595f0f1fac5365c351bc969bbc8d13c2586d6e1d4",
+    "measured_candidate_sha256": "595893d93d2573cae4e1e738b04548c08e59641a2123c99eb00b200e30252ed2",
+    "final_source_candidate_sha256": "595893d93d2573cae4e1e738b04548c08e59641a2123c99eb00b200e30252ed2",
+    "baseline_bytes": 6210944,
+    "candidate_bytes": 6210880,
+    "selected_payload_address": "0x1122980",
+    "selected_payload_bytes": 5463,
+    "generic_payload_address": "0x11212c0",
+    "generic_payload_bytes": 5784,
+    "paired_section_address": "0x1120640",
+    "paired_section_bytes": 15259,
+    "baseline_paired_section_sha256": "36ed0d7359ba4d6665187f7177b4bb46bfffc386d8f1813dce697f1080087248",
+    "candidate_paired_section_sha256": "5d53c123b4cf71d1048340ffbae4ca0d088e81684b65524d29f5741f3dc14e9c",
+    "unchanged_sections": {
+      ".text": "cc681cc1abd6c7d525e9c105b3f2e8247a925a3078ce267f4e6f7ff1ce233a5a",
+      ".rodata": "10724170eef4c80330c8f791f414bc33dc549910c45dbd0c1459d51bef938cb7",
+      ".vort_br_large_window": "806e9f0f3c46d65c56d16fd165fd845d7e4c184cb5904bad644cb36615e111c9",
+      ".vort_br_wide_lookup10_aux": "a1086846b339492e1da22fc66e401ff4a70e84ffae56650f63e25d4a92458bba",
+      ".vort_br_wide_lookup9": "aac30c0ab1524d98b5ff6146a5e6c5a96e451e0f35fa7ae9375473bc46b3879e"
+    },
+    "payload_instance_count_changed": false,
+    "section_addresses_changed": false,
+    "final_source_matches_measured_candidate": true
+  },
+  "inputs": {
+    "roadmap": {
+      "bytes": 1251399,
+      "sha256": "f1da3a855bd2c0370e3cc1e3ac6894cd6de62243e8273e0278b7d8c8973f6ba9"
+    },
+    "roadmap_q9": {
+      "encoded_bytes": 335220,
+      "encoded_sha256": "9abffe5d08e94da35fd31c14ad4192076e5f6b1b97cd73271638be50fd72b19d",
+      "literal_bytes": 47239,
+      "max_distance_postfix_bits": 0,
+      "max_direct_distance_codes": 0
+    },
+    "roadmap_q5": {
+      "encoded_bytes": 350069,
+      "encoded_sha256": "e49f16f8392606508d0cc3a5da8bd8fa12e6035d2d341e1954b602ab3d7d1740",
+      "literal_bytes": 53639,
+      "max_distance_postfix_bits": 0,
+      "max_direct_distance_codes": 0
+    }
+  },
+  "decoder_only": {
+    "iterations": 500,
+    "order": "baseline,candidate on odd pairs; candidate,baseline on even pairs",
+    "command": "taskset -c 2 BINARY --input INPUT --encoded-input FRAME --name CASE --iterations 500 --vort-only --csv OUT",
+    "roadmap_q9": {
+      "pairs": 15,
+      "median": 1.006206813720593,
+      "geometric_mean": 1.00581273809645,
+      "minimum": 1.000065141687428,
+      "maximum": 1.012830378926075,
+      "wins": 15,
+      "checksum": 625717000,
+      "samples_ns": [
+        [1358675106, 1347825190],
+        [1359832290, 1359743714],
+        [1359934078, 1358806659],
+        [1364652150, 1352735128],
+        [1365294500, 1352463692],
+        [1366368461, 1354483332],
+        [1359275330, 1352642307],
+        [1371511657, 1354137559],
+        [1360542139, 1354786582],
+        [1364707189, 1355390509],
+        [1362371720, 1355750403],
+        [1355569385, 1354023228],
+        [1362985643, 1352223999],
+        [1356686482, 1353679614],
+        [1357877049, 1349500948]
+      ]
+    },
+    "roadmap_q5": {
+      "pairs": 15,
+      "median": 1.004049144296294,
+      "geometric_mean": 1.003679269910637,
+      "minimum": 1.000115780815419,
+      "maximum": 1.00812058504664,
+      "wins": 15,
+      "checksum": 625717000,
+      "samples_ns": [
+        [1408215112, 1402983955],
+        [1403454757, 1398132940],
+        [1406517423, 1405782868],
+        [1406440703, 1406277883],
+        [1405072602, 1398898683],
+        [1410649894, 1399286866],
+        [1407354721, 1401072043],
+        [1403931163, 1401431274],
+        [1408321577, 1400713580],
+        [1408133578, 1402454836],
+        [1402203402, 1400233429],
+        [1406288534, 1402989180],
+        [1405769022, 1398168492],
+        [1412079922, 1405812665],
+        [1407495814, 1400337547]
+      ]
+    }
+  },
+  "reference_normalized": {
+    "retained": false,
+    "published_statistics": false,
+    "reason": "every campaign that reached sampling overlapped an external Spectra Zig process or a conservatively invalidated local Zig version probe",
+    "completed_discarded_campaigns": 4,
+    "zero_sample_waiting_attempts_stopped": 1,
+    "discarded_directories": [
+      "/tmp/vort-br-zero-reuse-q9-reference.xwY19O",
+      "/tmp/vort-br-zero-reuse-q9-reference-rerun.XEjbcL",
+      "/tmp/vort-br-zero-reuse-q9-reference-rerun2.sFCvoa",
+      "/tmp/vort-br-zero-reuse-reference-combined.nOosl1"
+    ]
+  },
+  "monitoring": {
+    "poll_interval_ms": 20,
+    "required_pre_campaign_clear_seconds": 60,
+    "later_retry_pre_campaign_clear_seconds": 300,
+    "retained_decoder_only_campaigns": 2,
+    "retained_reference_campaigns": 0,
+    "rule": "discard the entire campaign if any Zig process appears during sampling"
+  },
+  "validation": {
+    "direct_brotli_release_fast": "555/555 passed",
+    "target_compile": [
+      "x86_64-linux-gnu ReleaseFast",
+      "aarch64-linux-gnu ReleaseFast"
+    ],
+    "reference_gate": "13/13 rows passed",
+    "reference_path_smoke": "3 valid and 5 invalid paths passed",
+    "upstream_differential": "98 core, 7056 one-shot, 7056 progressive, 1401 fragmentation, 64 high-tree truncation, 7 Large Window",
+    "real_corpus_differential": "16/16 one-shot and 16/16 progressive across 4 categories",
+    "full_project_release_fast": "1701/1701 passed",
+    "build_check": "104/104 steps passed",
+    "cli_help": "passed"
+  },
+  "decision": "retain; both full-tier target qualities improve in clean 15-pair campaigns, no payload instance or section layout is added, non-target sections remain byte-identical, and all correctness and compatibility gates pass; broad Brotli decode leadership remains open"
+}
