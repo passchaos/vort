@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-07T22:18:52+08:00",
+  "candidate": "preload both far-source matches for equal 70/70 compact split-Huffman pairs",
+  "host": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "target": "x86_64-linux-gnu skylake+pku+sgx",
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "affinity_cpu": 2
+  },
+  "reference": {
+    "source": "/home/passchaos/Work/zstd",
+    "commit": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+    "version": "1.6.0-dev",
+    "library": "/tmp/vort-zstd-upstream-build/lib/libzstd.so.1.6.0",
+    "sha256": "b734e265f838f7a18c378fe2b34c505e6fc5025fd84ceac159faa27b794b78b0"
+  },
+  "input": {
+    "case": "large_json",
+    "decoded_bytes": 524307,
+    "decoded_sha256": "b0d873df5fbe94a60e8e10a51cde4b08b3370ae4f251357c16adbfc69fd27c95",
+    "encoded_bytes": 9905,
+    "level": 1,
+    "sequence_count": 7299,
+    "literal_bytes": 8330,
+    "match_bytes": 515977
+  },
+  "binaries": {
+    "baseline": {
+      "path": "/tmp/vort-zstd-sunk-state-baseline",
+      "sha256": "e87ea448f4efa3e534cb5d75ae9280b40a230e2fdda2f7df9c3ab65c8421c1cc"
+    },
+    "candidate": {
+      "path": "/tmp/vort-zstd-far70-reference-candidate",
+      "sha256": "163e85f6eb102825a71ca264b96094200a7eff9e975d1c0b948085a87d061ae7"
+    }
+  },
+  "machine_code": {
+    "baseline_strict_instance_bytes": 8718,
+    "candidate_strict_instance_bytes": 8718,
+    "baseline_production_instance_bytes": 9520,
+    "candidate_production_instance_bytes": 9863,
+    "baseline_split_section_bytes": 18238,
+    "candidate_split_section_bytes": 18581,
+    "baseline_huffman_section_bytes": 5415,
+    "candidate_huffman_section_bytes": 5415,
+    "production_instance_growth_bytes": 343,
+    "audit": "all second-match vector and tail loads precede the first pair destination store; LLVM packs the second literal with the second match"
+  },
+  "campaign": {
+    "directory": "/tmp/vort-zstd-far70-frame.G0Kk9X",
+    "command": "taskset -c 2 BINARY --case large_json --iterations 3000 --libzstd /tmp/vort-zstd-upstream-build/lib/libzstd.so.1.6.0 --csv OUT",
+    "pairs": 7,
+    "process_order": "baseline-first on odd pairs, candidate-first on even pairs",
+    "sample_columns": [
+      "baseline_vort_ns",
+      "baseline_libzstd_ns",
+      "candidate_vort_ns",
+      "candidate_libzstd_ns"
+    ],
+    "samples_ns": [
+      [230587195, 214112399, 231515736, 214241274],
+      [231334193, 213826299, 232805903, 214298756],
+      [230905451, 214362030, 232215976, 213953669],
+      [231331574, 213446931, 232164423, 220947946],
+      [229511989, 212307827, 231371754, 215777508],
+      [230104321, 214218404, 231381032, 213874063],
+      [232875456, 214288274, 232596721, 213044247]
+    ],
+    "layout_columns": [
+      "baseline_output_mod128",
+      "baseline_reference_output_mod128",
+      "candidate_output_mod128",
+      "candidate_reference_output_mod128"
+    ],
+    "layouts": [
+      [112, 16, 112, 16],
+      [112, 16, 112, 16],
+      [112, 16, 112, 16],
+      [112, 16, 112, 16],
+      [112, 16, 96, 0],
+      [112, 16, 112, 16],
+      [112, 16, 112, 16]
+    ]
+  },
+  "summary": {
+    "candidate_over_baseline_raw_median": 0.994482214082,
+    "candidate_over_baseline_raw_geometric_mean": 0.995436207796,
+    "candidate_over_baseline_raw_minimum": 0.991962005008,
+    "candidate_over_baseline_raw_maximum": 1.001198361691,
+    "candidate_over_baseline_raw_wins": 1,
+    "libzstd_normalized_median": 0.995873950541,
+    "libzstd_normalized_geometric_mean": 1.001744489556,
+    "libzstd_normalized_minimum": 0.992462183912,
+    "libzstd_normalized_maximum": 1.031428904156,
+    "libzstd_normalized_wins": 2,
+    "matched_layout_pairs": 6,
+    "matched_layout_raw_median": 0.995235755232,
+    "matched_layout_raw_geometric_mean": 0.996016423434,
+    "matched_layout_raw_wins": 1,
+    "candidate_over_libzstd_median": 0.924337060611,
+    "candidate_over_libzstd_geometric_mean": 0.927336859236,
+    "normalization_note": "pair 4 candidate libzstd took 220947946 ns versus a 213-216 ms ordinary band and inflated the normalized geometric mean; the raw target lost that pair and 6/7 overall"
+  },
+  "monitoring": {
+    "required_pre_campaign_clear_seconds": 60,
+    "poll_interval_ms": 20,
+    "campaign_clean": true,
+    "rule": "discard the complete campaign if any Zig process appears during sampling"
+  },
+  "validation": {
+    "direct_pair_oracle_release_fast": "128/128 offset/alignment combinations passed with exact suffixes",
+    "direct_pair_oracle_release_safe": "128/128 offset/alignment combinations passed with exact suffixes",
+    "complete_frame_processes": "all seven baseline and seven candidate benchmark processes verified Vort and libzstd output before timing",
+    "full_project_test": "not claimed; a pre-screen full ReleaseFast compile was interrupted after more than 30 minutes, and the candidate was rejected by the clean complete-frame campaign before broader validation"
+  },
+  "decision": "reject; far-source preloading changed register allocation across the hot executor, grew it by 343 bytes, and regressed clean complete-frame throughput; production source and test instrumentation restored"
+}

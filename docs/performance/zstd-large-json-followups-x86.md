@@ -188,6 +188,28 @@ byte-for-byte output check before timing.
   4/663 where the second match source exactly reused the first match output;
   neither dominant 70/70 nor 71/71 pair had that distance. A fused reload-free
   pair copier therefore has no useful coverage on the locked fixture.
+- A later far-source experiment targeted the different case where an equal
+  70/70 pair's repeated offset is at least the complete 142-byte pair extent.
+  It loaded both pairs of 32-byte match vectors and both tails before the first
+  destination store, then packed the second literal with the second match.
+  Direct ReleaseFast and ReleaseSafe oracles covered 128 combinations of the
+  minimum/far offsets and 32 destination alignments with exact suffixes. LLVM
+  emitted the intended preload group, but changed register allocation across
+  the complete production executor: that instance grew from `0x2530` to
+  `0x2687` bytes and the split section from `0x473e` to `0x4895`; the strict
+  instance and Huffman section stayed byte-for-byte sized at `0x220e` and
+  `0x1527`.
+
+  Seven clean fixed-CPU-2 complete-frame pairs measured only `0.9945x` median /
+  `0.9954x` geometric raw throughput with 1/7 wins. Six pairs sharing the same
+  128-byte input/output layout were also negative at `0.9952x` median /
+  `0.9960x` geometric with 1/6 wins. Same-process libzstd normalization had a
+  `0.9959x` median and 2/7 wins; its positive `1.0017x` geometric mean was
+  caused by one candidate-side libzstd outlier and does not overturn the raw
+  losses. Candidate throughput remained `0.9243x` local libzstd 1.6.0-dev at
+  the median. The helper, selector, and test-only hit counter were removed;
+  exact samples are in
+  [zstd-far-equal70-pair-x86-20261007.json](data/zstd-far-equal70-pair-x86-20261007.json).
 - A pair-only literal-plus-71-byte copier packed the literal and first seven
   match bytes into one eight-byte store, followed by two 32-byte stores. The
   direct oracle covered distances 71--75 and all relevant destination
