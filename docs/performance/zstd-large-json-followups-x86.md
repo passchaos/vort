@@ -284,6 +284,17 @@ byte-for-byte output check before timing.
   `0.9387x` geometric throughput with 0/7 wins. The source was restored;
   details are in
   [zstd-pair-window-x86-20261007.json](data/zstd-pair-window-x86-20261007.json).
+- A later 2026-10-07 FSE-builder follow-up reused the existing four-entry
+  packed writer for the two dominant-symbol runs in the 255/256 one-gap path.
+  The fixed and randomized 256-state table oracle passed, and the specialized
+  builder plus `.vort_zstd_fse_256` section shrank by 127 bytes (`0x1188` to
+  `0x1109`) without moving the preceding Huffman or sequence executors. A
+  clean seven-pair, fixed-CPU-2 `large_json` campaign nevertheless measured
+  only `0.9969x` median / `0.9976x` geometric raw throughput with 2/7 wins.
+  Same-process libzstd 1.6.0 normalization was neutral-negative at `0.9972x`
+  median / `0.9990x` geometric with 3/7 wins. The scalar one-gap loops were
+  restored; their compiler lowering is faster than the explicit packed-run
+  setup despite the larger static builder.
 
 These results rule out another round of local branch growth, wider copy loops,
 larger Huffman batches, table-fill tuning, or shrinking the executor by
@@ -296,7 +307,8 @@ not another local state/ABI spelling. A wider preload that merely caches the
 next pair is also insufficient: future table/bitstream work must remove more
 than one location/load without extending hot state or live ranges, while
 preserving the current two-sequence, direct-offset, short-rep0, and long-copy
-semantics.
+semantics. Smaller FSE-builder code is likewise insufficient when it adds
+packed-run setup to the 255/256 distribution.
 
 Exact binary hashes, commands, and summary ratios are recorded in
 [zstd-large-json-followups-x86-20261001.json](data/zstd-large-json-followups-x86-20261001.json).

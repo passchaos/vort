@@ -698,6 +698,55 @@
       "continuous_monitor": "corrected one-second ps monitor remained alive; no concurrent Zig process was observed during the retained three pairs",
       "validation": "locked split-Huffman specialized-versus-generic oracle passed",
       "removed": true
+    },
+    "packed_one_gap_fse_runs": {
+      "date": "2026-10-07",
+      "baseline_git": "4979ae5a",
+      "change": "reuse the four-entry packed mapped-table writer for both contiguous dominant-symbol runs in the 255/256 one-gap no-low FSE builder",
+      "baseline_executable_sha256": "9c4997857c555cba2f7aeca755a7cb47268ecc3c73cdf70e4a66564c958b44a0",
+      "candidate_executable_sha256": "2ecdf1e8c5d16df75b2e431e17b98ff06f89d75c36169c28da58aee621e1f0c8",
+      "baseline_executable_bytes": 6502344,
+      "candidate_executable_bytes": 6504048,
+      "baseline_fse_256_section_bytes": 4488,
+      "candidate_fse_256_section_bytes": 4361,
+      "baseline_builder_bytes": 4488,
+      "candidate_builder_bytes": 4361,
+      "preceding_zstd_hot_sections_unchanged_in_size_and_address": true,
+      "iterations": 3000,
+      "pairs": 7,
+      "raw_median": 0.996916489198,
+      "raw_geometric_mean": 0.997578569474,
+      "raw_minimum": 0.990420461663,
+      "raw_maximum": 1.007457447955,
+      "raw_wins": 2,
+      "libzstd_normalized_median": 0.997243941363,
+      "libzstd_normalized_geometric_mean": 0.999004704033,
+      "libzstd_normalized_minimum": 0.9914571878,
+      "libzstd_normalized_maximum": 1.006243039315,
+      "libzstd_normalized_wins": 3,
+      "baseline_over_libzstd_median": 0.932525578978,
+      "baseline_over_libzstd_geometric_mean": 0.932122633906,
+      "candidate_over_libzstd_median": 0.93125479196,
+      "candidate_over_libzstd_geometric_mean": 0.931194896007,
+      "checksum": 3146580000,
+      "observations": [
+        [228869836, 227980739, 212964706, 212782885],
+        [228471279, 229154779, 213445175, 213092633],
+        [229486104, 231705738, 214001662, 214225669],
+        [229095473, 229970847, 213366915, 215519338],
+        [229410259, 230119836, 214229833, 214300200],
+        [228825021, 230842436, 213514762, 214328229],
+        [230493823, 228787651, 214207182, 213628017]
+      ],
+      "observation_order": [
+        "baseline_vort_ns",
+        "candidate_vort_ns",
+        "baseline_reference_ns",
+        "candidate_reference_ns"
+      ],
+      "continuous_monitor": "20-millisecond ps -C zig monitor remained clean for the complete campaign",
+      "validation": "4/4 ReleaseFast FSE builder tests and the 13-row reference gate passed before source restoration",
+      "removed": true
     }
   }
 }
