@@ -64,6 +64,32 @@ Exact executable and section hashes, raw nanosecond pairs, monitoring
 disposition, and validation totals are in
 [brotli-full-zero-postfix-reuse-x86-20261007.json](data/brotli-full-zero-postfix-reuse-x86-20261007.json).
 
+## Rejected packed-distance follow-up
+
+A follow-up tried to combine each prepared distance's extra-bit count and base
+offset into one 64-bit entry. The global form replaced the existing byte and
+32-bit tables throughout the minimal decoder. It reduced the selected payload
+from `0x1557` to `0x1508` bytes and replaced two indexed loads with one indexed
+64-bit load plus bit extraction, but it also enlarged every entry, changed the
+ordinary and middle-tier code, and grew the executable by 4,696 bytes.
+
+An isolated form retained the generic tables and built a 79-entry packed view
+only for the selected full tier. That kept the other function sizes stable,
+but the extra pointer pressure grew the selected payload to `0x1560`; its
+252-byte setup helper grew the paired section by 320 bytes.
+
+A clean seven-trial q9 campaign rotated all three binaries on CPU 2:
+
+| Candidate | Median | Geometric mean | Wins | Range |
+| --- | ---: | ---: | ---: | ---: |
+| global packed table | 0.9982x | 0.9982x | 1/7 | 0.9957x--1.0017x |
+| isolated packed view | 0.9907x | 0.9911x | 0/7 | 0.9868x--0.9965x |
+
+Every checksum matched. One earlier q9 campaign was discarded after an
+external Spectra Zig process appeared. Both packed variants were removed; the
+current two-table implementation remains faster despite the extra indexed
+load, and q5 was not measured after the decisive q9 rejection.
+
 ## Validation
 
 - All 555 direct ReleaseFast Brotli tests pass, including the explicit UTF-8

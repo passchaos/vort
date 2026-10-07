@@ -140,6 +140,77 @@
     "retained_reference_campaigns": 0,
     "rule": "discard the entire campaign if any Zig process appears during sampling"
   },
+  "rejected_followups": {
+    "packed_prepared_distance": {
+      "recorded_at": "2026-10-07T16:14:12+08:00",
+      "baseline_git": "b5a9a54d",
+      "change": "pack prepared distance extra bits and base offset into one 64-bit symbol-indexed entry",
+      "baseline_sha256": "595893d93d2573cae4e1e738b04548c08e59641a2123c99eb00b200e30252ed2",
+      "baseline_bytes": 6210880,
+      "global_variant": {
+        "sha256": "b65ad55a539d6aa17f0e2b65ed5732e96020537a9ba11667d8fc51ffb3baf729",
+        "bytes": 6215576,
+        "selected_payload_bytes": 5384,
+        "generic_payload_bytes": 5784,
+        "paired_section_bytes": 15179,
+        "text_growth_bytes": 96,
+        "wide9_section_growth_bytes": 105,
+        "mechanism_confirmed": "selected regular-distance code uses one scale-eight qword load followed by low-five-bit extraction and a right shift",
+        "median": 0.998172610134,
+        "geometric_mean": 0.99818727215,
+        "minimum": 0.995738558626,
+        "maximum": 1.001749165473,
+        "wins": 1
+      },
+      "isolated_variant": {
+        "sha256": "ea79549169aebc3e803a4b57f44d5280c6568a6f74e2dd7704d4369becbfee9e",
+        "bytes": 6212160,
+        "selected_payload_bytes": 5472,
+        "generic_payload_bytes": 5784,
+        "setup_helper_bytes": 252,
+        "paired_section_bytes": 15579,
+        "large_window_section_byte_identical": true,
+        "median": 0.99072340892,
+        "geometric_mean": 0.991120752093,
+        "minimum": 0.986807393164,
+        "maximum": 0.996462180762,
+        "wins": 0
+      },
+      "campaign": {
+        "quality": 9,
+        "pairs": 7,
+        "iterations": 500,
+        "order": "three-way rotation across baseline, global, and isolated binaries",
+        "cpu_affinity": "2",
+        "monitor_poll_interval_ms": 20,
+        "clean": true,
+        "checksum": 625717000,
+        "samples_ns": [
+          [1348742986, 1354515173, 1366774302],
+          [1350967678, 1353726257, 1363617399],
+          [1353057631, 1355028774, 1361639843],
+          [1348049517, 1352513967, 1363175840],
+          [1350226657, 1352316713, 1361045607],
+          [1357386031, 1355015884, 1362205267],
+          [1348557028, 1351025879, 1363235787]
+        ],
+        "sample_columns": [
+          "baseline_ns",
+          "global_variant_ns",
+          "isolated_variant_ns"
+        ]
+      },
+      "discarded_contaminated_campaigns": 1,
+      "focused_validation": {
+        "prepared_distance_rfc_and_truncation": "3/3 passed",
+        "global_direct_brotli_release_fast": "555/555 passed",
+        "global_reference_gate": "13/13 rows passed",
+        "isolated_direct_context_oracle": "2/2 passed",
+        "isolated_reference_gate": "13/13 rows passed"
+      },
+      "decision": "reject both variants after clean q9 regressions; q5 not run"
+    }
+  },
   "validation": {
     "direct_brotli_release_fast": "555/555 passed",
     "target_compile": [
