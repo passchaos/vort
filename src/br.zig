@@ -43,18 +43,14 @@ const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
 const incremental_planned_encoder_tests = @import("br/incremental/planned_encoder_tests.zig");
 const fast_bit_reader = @import("br/fast_bit_reader.zig");
 const paired_literal_lookup = @import("br/paired_literal_lookup.zig");
+const code_sections = @import("br/format/code_sections.zig");
 
 var test_external_literal_lookup_hits: usize = 0;
 var test_context_independent_literal_lookup_hits: usize = 0;
 var test_single_tree_external_lookup_hits: usize = 0;
 var test_wide_auxiliary_lookup10_hits: usize = 0;
 
-const large_window_text_section = switch (builtin.object_format) {
-    .elf => ".vort_br_large_window",
-    .macho => "__TEXT,__vort_br_lgwin",
-    .coff => ".text$vort_br_large_window",
-    else => ".text",
-};
+const large_window_text_section = code_sections.large_window;
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
@@ -6980,13 +6976,8 @@ const external_literal_lookup_tree_limit: usize = inline_literal_tree_count;
 const external_literal_lookup_middle_tree_limit: usize = 128;
 const external_literal_lookup_meta_block_min: usize = 64 * 1024;
 const multi_tree_zero_insert_command_limit: usize = 4;
-const wide_literal_lookup9_text_section = ".vort_br_wide_lookup9";
-const wide_literal_lookup10_auxiliary_text_section = switch (builtin.object_format) {
-    .elf => ".vort_br_wide_lookup10_aux",
-    .macho => "__TEXT,__vort_br_w10",
-    .coff => ".text$vort_br_wide10_aux",
-    else => ".text",
-};
+const wide_literal_lookup9_text_section = code_sections.wide_literal_lookup9;
+const wide_literal_lookup10_auxiliary_text_section = code_sections.wide_literal_lookup10_auxiliary;
 const paired_literal_text_section = paired_literal_lookup.text_section;
 const ExternalLiteralLookup = huffman.PackedLookup(10);
 const WideExternalLiteralLookup9 = huffman.PackedLookup(9);
