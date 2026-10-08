@@ -776,6 +776,70 @@ test "raw deflate incremental fixed decoder handles mixed stored blocks" {
     try std.testing.expectEqualSlices(u8, first ++ second, &output);
 }
 
+test "raw deflate incremental bulk stored copy seeds wrapped match history" {
+    const allocator = std.testing.allocator;
+    const first = try allocator.alloc(u8, 40 * 1024);
+    defer allocator.free(first);
+    var random = std.Random.DefaultPrng.init(0x5eed_5eed_cafe_babe);
+    random.random().bytes(first);
+    const second = first[first.len - 4096 ..];
+
+    const stored = try deflate.encodeRawStoredAlloc(allocator, first);
+    defer allocator.free(stored);
+    const fixed = try deflate.encodeRawFixedWithDictionaryAlloc(
+        allocator,
+        second,
+        first,
+        deflate.optionsForLevel(.fast),
+    );
+    defer allocator.free(fixed);
+    try std.testing.expect(fixed.len < second.len);
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    try encoded.appendSlice(allocator, stored);
+    encoded.items[0] &= 0xfe;
+    try encoded.appendSlice(allocator, fixed);
+
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.RawDeflateIncrementalFixedLiteralDecoder
+        .initWithHistory(.{
+        .expected_output_len = first.len + second.len,
+    }, &history);
+    const output = try allocator.alloc(u8, first.len + second.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    var status: core.StepResult.Status = .need_input;
+    while (input_offset < encoded.items.len) {
+        const result = try decoder.step(
+            encoded.items[input_offset..],
+            output[output_offset..],
+        );
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        status = result.status;
+        try std.testing.expect(
+            result.progress.input_read != 0 or
+                result.progress.output_written != 0 or
+                result.status == .done,
+        );
+        if (result.status == .done) break;
+    }
+    while (status != .done) {
+        const result = try decoder.step("", output[output_offset..]);
+        output_offset += result.progress.output_written;
+        status = result.status;
+        if (result.status == .done) break;
+        try std.testing.expect(result.progress.output_written != 0);
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(encoded.items.len, input_offset);
+    try std.testing.expectEqual(first.len + second.len, output_offset);
+    try std.testing.expectEqualSlices(u8, first, output[0..first.len]);
+    try std.testing.expectEqualSlices(u8, second, output[first.len..]);
+}
+
 test "raw deflate incremental mixed decoder validates stored lengths" {
     var decoder = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
     try std.testing.expectError(error.StoredLengthMismatch, decoder.step(&.{ 0x01, 1, 0, 0xff, 0xff }, &.{}));

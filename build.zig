@@ -685,6 +685,17 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+    const deflate_incremental_decode_bench_exe = b.addExecutable(.{
+        .name = "vort-bench-deflate-incremental-decode",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("bench/deflate/incremental_decode.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+            },
+        }),
+    });
     const zlib_translate = b.addTranslateC(.{
         .root_source_file = if (zlib_ng_root) |root| .{ .cwd_relative = b.pathJoin(&.{ root, "build/zlib.h" }) } else b.path("bench/deflate/zlib_compat.h"),
         .target = target,
@@ -694,16 +705,38 @@ pub fn build(b: *std.Build) void {
         zlib_translate.addIncludePath(.{ .cwd_relative = b.pathJoin(&.{ root, "build" }) });
         zlib_translate.defineCMacro("VORT_ZLIB_BENCH_NAME", "\"zlib-ng-2.3.90-level6\"");
         deflate_incremental_encode_bench_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
+        deflate_incremental_decode_bench_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
     } else {
         zlib_translate.linkSystemLibrary("z", .{});
         zlib_translate.defineCMacro("VORT_ZLIB_BENCH_NAME", "\"zlib-1.3-level6\"");
         deflate_incremental_encode_bench_exe.root_module.linkSystemLibrary("z", .{});
+        deflate_incremental_decode_bench_exe.root_module.linkSystemLibrary("z", .{});
     }
-    deflate_incremental_encode_bench_exe.root_module.addImport("zlib", zlib_translate.createModule());
+    const zlib_compat_mod = zlib_translate.createModule();
+    deflate_incremental_encode_bench_exe.root_module.addImport("zlib", zlib_compat_mod);
+    deflate_incremental_decode_bench_exe.root_module.addImport("zlib", zlib_compat_mod);
     const run_deflate_incremental_encode_bench = b.addRunArtifact(deflate_incremental_encode_bench_exe);
     if (b.args) |args| run_deflate_incremental_encode_bench.addArgs(args);
     const deflate_incremental_encode_bench_step = b.step("bench-deflate-incremental-encode", "Compare persistent and rebuilt incremental DEFLATE match indexes");
     deflate_incremental_encode_bench_step.dependOn(&run_deflate_incremental_encode_bench.step);
+
+    const run_deflate_incremental_decode_bench = b.addRunArtifact(deflate_incremental_decode_bench_exe);
+    if (b.args) |args| run_deflate_incremental_decode_bench.addArgs(args);
+    const deflate_incremental_decode_bench_step = b.step("bench-deflate-incremental-decode", "Compare reusable Vort and zlib incremental gzip decode");
+    deflate_incremental_decode_bench_step.dependOn(&run_deflate_incremental_decode_bench.step);
+
+    const deflate_incremental_decode_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/deflate_incremental_decode_gate.py",
+    });
+    const run_deflate_incremental_decode_gate_bench = b.addRunArtifact(deflate_incremental_decode_bench_exe);
+    run_deflate_incremental_decode_gate_bench.addArg("200");
+    deflate_incremental_decode_gate.addArg("--csv");
+    deflate_incremental_decode_gate.addFileArg(run_deflate_incremental_decode_gate_bench.captureStdOut(.{}));
+    deflate_incremental_decode_gate.addArg("--expect-competitor");
+    deflate_incremental_decode_gate.addArg(if (zlib_ng_root != null) "zlib-ng" else "zlib");
+    const deflate_incremental_decode_gate_step = b.step("run-deflate-incremental-decode-gate", "Validate reusable Vort/zlib incremental gzip decode coverage and regression bounds");
+    deflate_incremental_decode_gate_step.dependOn(&deflate_incremental_decode_gate.step);
 
     const deflate_incremental_encode_gate = b.addSystemCommand(&.{
         "python3",
@@ -4445,6 +4478,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zlib_encode_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
     check_step.dependOn(&deflate_incremental_encode_bench_exe.step);
+    check_step.dependOn(&deflate_incremental_decode_bench_exe.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&fuzz_corpus_exe.step);
@@ -4602,6 +4636,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(deflate_chunked_huffman_bench_gate_step);
     ci_smoke_step.dependOn(deflate_match_copy_bench_gate_step);
     ci_smoke_step.dependOn(deflate_extra_bits_bench_gate_step);
+    ci_smoke_step.dependOn(deflate_incremental_decode_gate_step);
     ci_smoke_step.dependOn(chunk_cursor_bench_gate_step);
     ci_smoke_step.dependOn(chunked_zlib_bench_report_gate_step);
     ci_smoke_step.dependOn(png_streaming_zlib_bench_report_gate_step);

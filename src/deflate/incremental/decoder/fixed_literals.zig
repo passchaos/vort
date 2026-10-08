@@ -74,7 +74,41 @@ pub const Decoder = struct {
         return .{ .options = options };
     }
     pub fn reset(self: *Decoder) void {
-        self.* = .{ .options = self.options, .history = self.history };
+        // Lookup tables are rebuilt before their next dynamic block is decoded.
+        // Preserve their backing storage instead of clearing the largest part
+        // of the reusable decoder on every independent stream.
+        self.phase = .block_header;
+        self.bit_buffer = 0;
+        self.bit_count = 0;
+        self.code = 0;
+        self.code_bits = 0;
+        self.final_block = false;
+        self.history_pos = 0;
+        self.history_len = 0;
+        self.length_base = 0;
+        self.length_extra_bits = 0;
+        self.distance_code = 0;
+        self.distance_code_bits = 0;
+        self.match_len = 0;
+        self.match_remaining = 0;
+        self.match_distance = 0;
+        self.stored_length_received = 0;
+        self.stored_remaining = 0;
+        self.dynamic_hlit = 0;
+        self.dynamic_hdist = 0;
+        self.dynamic_hclen = 0;
+        self.dynamic_code_length_index = 0;
+        self.dynamic_length_pos = 0;
+        self.dynamic_previous_length = 0;
+        self.dynamic_repeat_symbol = 0;
+        self.dynamic_code = 0;
+        self.dynamic_code_bits = 0;
+        self.dynamic_block = false;
+        self.input_finished = false;
+        self.total_input = 0;
+        self.total_output = 0;
+        self.last_error_name = "";
+        self.last_error_phase = .block_header;
     }
     pub fn seedDictionary(self: *Decoder, dictionary: []const u8) void {
         if (self.history.len == 0) return;
@@ -150,12 +184,33 @@ pub const Decoder = struct {
             .stored_payload => {
                 if (output_written == output.len) return result(input_read, output_written, .need_output);
                 if (input_read == input.len and self.bit_count == 0) return result(input_read, output_written, .need_input);
-                while (self.stored_remaining != 0 and output_written < output.len) {
+                while (self.stored_remaining != 0 and
+                    output_written < output.len and
+                    self.bit_count >= 8)
+                {
                     const byte = self.readBits(input, &input_read, 8) orelse return result(input_read, output_written, .need_input);
                     output[output_written] = @intCast(byte);
                     output_written += 1;
                     try self.recordByte(@intCast(byte));
                     self.stored_remaining -= 1;
+                }
+                if (self.stored_remaining != 0 and
+                    output_written < output.len and
+                    self.bit_count == 0)
+                {
+                    const n = @min(
+                        self.stored_remaining,
+                        @min(input.len - input_read, output.len - output_written),
+                    );
+                    if (n != 0) {
+                        const produced = output[output_written..][0..n];
+                        @memcpy(produced, input[input_read..][0..n]);
+                        self.recordSpan(produced);
+                        input_read += n;
+                        self.total_input += n;
+                        output_written += n;
+                        self.stored_remaining -= n;
+                    }
                 }
                 if (self.stored_remaining == 0) self.completeBlock();
             },
@@ -483,16 +538,25 @@ pub const Decoder = struct {
             }
         }
 
-        const retained_len = @min(output.len, self.history.len);
-        const retained = output[output.len - retained_len ..];
-        const destination = (self.history_pos + output.len - retained_len) % self.history.len;
+        self.recordSpan(output);
+    }
+
+    fn recordSpan(self: *Decoder, bytes: []const u8) void {
+        std.debug.assert(bytes.len != 0);
+        if (self.history.len == 0) {
+            self.total_output += bytes.len;
+            return;
+        }
+        const retained_len = @min(bytes.len, self.history.len);
+        const retained = bytes[bytes.len - retained_len ..];
+        const destination = (self.history_pos + bytes.len - retained_len) % self.history.len;
         const first_destination_len = @min(retained.len, self.history.len - destination);
         @memcpy(self.history[destination..][0..first_destination_len], retained[0..first_destination_len]);
         if (first_destination_len != retained.len)
             @memcpy(self.history[0 .. retained.len - first_destination_len], retained[first_destination_len..]);
-        self.history_pos = (self.history_pos + output.len) % self.history.len;
-        self.history_len = @min(self.history_len + output.len, self.history.len);
-        self.total_output += output.len;
+        self.history_pos = (self.history_pos + bytes.len) % self.history.len;
+        self.history_len = @min(self.history_len + bytes.len, self.history.len);
+        self.total_output += bytes.len;
     }
 
     fn readBits(self: *Decoder, input: []const u8, input_read: *usize, count: u6) ?usize {

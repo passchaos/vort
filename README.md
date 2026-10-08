@@ -463,10 +463,14 @@ zig build -Doptimize=ReleaseFast run-zstd-decodecorpus-gate -j1 -- \
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build bench-deflate-incremental-encode -Doptimize=ReleaseFast -- 8
 zig build run-deflate-incremental-encode-gate
+zig build bench-deflate-incremental-decode -- 2000
+zig build run-deflate-incremental-decode-gate
 # Optional direct zlib-ng compat-library comparison:
 zig build bench-deflate-incremental-encode -Doptimize=ReleaseFast \
   -Dzlib-ng-root=$HOME/Work/zlib-ng -- 8
 zig build -Dzlib-ng-root=$HOME/Work/zlib-ng run-deflate-incremental-encode-gate
+zig build -Dzlib-ng-root=$HOME/Work/zlib-ng bench-deflate-incremental-decode -- 2000
+zig build -Dzlib-ng-root=$HOME/Work/zlib-ng run-deflate-incremental-decode-gate
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report -- --iterations 1000
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv
@@ -835,7 +839,8 @@ defer zstd_incremental_encoder.deinit();
 // Set low_entropy_block_len to a larger bounded cap to amortize dynamic-tree
 // headers for byte runs/tiny alphabets while retaining block_len for other data.
 // RawDeflateIncrementalStoredDecoder is the caller-to-caller byte-progressive
-// decode reference path for RFC 1951 stored blocks and bounded hostile input.
+// decode reference path for RFC 1951 stored blocks and bounded hostile input;
+// aligned payload spans copy directly into caller output and the history ring.
 // RawDeflateIncrementalFixedLiteralDecoder adds resumable fixed-Huffman bit
 // decoding plus caller-owned 32 KiB history for split length/distance matches.
 // The same decoder switches between stored, fixed, and dynamic blocks without
