@@ -297,6 +297,41 @@ stride. Raw nanoseconds, CSV and executable hashes, affinity evidence, shape
 counts, and discarded-campaign notes are in
 [brotli-flat-command-root-working-set-x86-20261008.json](data/brotli-flat-command-root-working-set-x86-20261008.json).
 
+## Literal-root working-set follow-up
+
+The same workload actively indexes 52 eight-bit literal roots. The canonical
+external representation stores `(symbol + 1, bit_count)` in one aligned u16,
+using 512 bytes per tree and 32 KiB for the 64-tree flat capacity. A compact
+candidate split each root into a 256-byte symbol plane and a packed 128-byte
+encoded-length plane. Both planes retained power-of-two tree strides and used
+the same root index, so their loads were independent rather than palette
+dependent. Encoding `bit_count + 1` left zero as the long-code sentinel while
+preserving literal zero, literal 255, and zero-bit single-symbol trees.
+
+The representation reduced each tree from 512 to 384 bytes, the full flat
+allocation from 32 to 24 KiB, and the target's 52 active roots from 26 to
+19.5 KiB. Ordinary `.text` grew only 32 bytes and rodata four bytes; the target
+executor grew `0x10d5 -> 0x1106` (+49 B). Exhaustive eight-bit-root, literal
+255, single-symbol, bit-progress, and atomic-fallback oracles passed.
+
+The same user-authorized physical-core isolation was used: Vort ran on CPU 2,
+its sibling CPU 10 was reserved, and the live Spectra process group was pinned
+to `4-7,12-15`. Fifteen alternating pairs saw no Zig process allowed on the
+reserved core and preserved every checksum:
+
+| Metric | Result |
+| --- | ---: |
+| paired median | 0.98172x |
+| paired geometric mean | 0.98180x |
+| wins | 0/15 |
+| range | 0.97680x--0.98659x |
+
+The second independent load plus nibble extraction costs more than the 25%
+root reduction saves. The candidate was removed, retaining the single aligned
+u16 literal-root load. Exact samples, hashes, affinities, generated sizes, and
+oracle coverage are in
+[brotli-flat-literal-root-working-set-x86-20261008.json](data/brotli-flat-literal-root-working-set-x86-20261008.json).
+
 ## Correctness evidence
 
 The focused lookup test checks zero-insert copy-extra decoding and exact

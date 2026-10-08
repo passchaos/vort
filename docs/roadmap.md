@@ -17594,3 +17594,13 @@ reuse, so production keeps the simpler independently owned plans.
   roots; future working-set changes must preserve power-of-two addressing and
   single-load metadata. Evidence is in
   `docs/performance/data/brotli-flat-command-root-working-set-x86-20261008.json`.
+
+- Splitting the flat Brotli literal root into independent byte-symbol and
+  nibble-length planes was also rejected. It reduced the 64-tree allocation
+  from 32 to 24 KiB and the target's active literal roots from 26 to 19.5 KiB
+  while retaining power-of-two tree strides, but fifteen physical-core-isolated
+  pairs lost 15/15 at `0.9817x` median / `0.9818x` geometric throughput. The
+  extra load and nibble extraction outweigh the smaller footprint. Production
+  keeps one aligned u16 root load; literal working-set work must remove bytes
+  without splitting hot metadata. Evidence is in
+  `docs/performance/data/brotli-flat-literal-root-working-set-x86-20261008.json`.
