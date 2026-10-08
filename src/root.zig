@@ -22,6 +22,7 @@ pub const zstd = @import("zstd.zig");
 pub const zip = @import("zip.zig");
 pub const bzip2 = @import("bzip2.zig");
 pub const xz = @import("xz.zig");
+pub const lzma = @import("lzma.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -97,6 +98,17 @@ pub const decodeXzConcatenatedAlloc = xz.decodeConcatenatedAlloc;
 pub const decodeXzConcatenatedAllocLimited = xz.decodeConcatenatedAllocLimited;
 pub const xzDecodedSizeConcatenated = xz.decodedSizeConcatenated;
 pub const xzDecodedSizeConcatenatedLimited = xz.decodedSizeConcatenatedLimited;
+
+pub const LzmaError = lzma.Error;
+pub const LzmaHeader = lzma.Header;
+pub const LzmaDecodeOptions = lzma.DecodeOptions;
+pub const parseLzmaHeader = lzma.parseHeader;
+pub const decodeLzmaInto = lzma.decodeInto;
+pub const decodeLzmaAlloc = lzma.decodeAlloc;
+pub const decodeLzmaAllocLimited = lzma.decodeAllocLimited;
+pub const decodeLzmaAllocWithOptions = lzma.decodeAllocWithOptions;
+pub const lzmaDecodedSize = lzma.decodedSize;
+pub const lzmaDecodedSizeLimited = lzma.decodedSizeLimited;
 
 pub const BrotliError = br.Error;
 pub const BrotliDecodeOptions = br.DecodeOptions;
@@ -2243,6 +2255,7 @@ test {
     _ = zip;
     _ = bzip2;
     _ = xz;
+    _ = lzma;
 }
 
 test "root exports lz4 and zstd codec helpers" {

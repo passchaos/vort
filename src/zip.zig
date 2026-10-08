@@ -3,10 +3,11 @@ const bzip2 = @import("bzip2.zig");
 const core = @import("core.zig");
 const checksum = @import("checksum.zig");
 const deflate = @import("deflate.zig");
+const lzma = @import("lzma.zig");
 const records = @import("zip/records.zig");
 pub const writer = @import("zip/writer.zig");
 
-pub const Error = writer.Error || bzip2.Error || error{
+pub const Error = writer.Error || bzip2.Error || lzma.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -133,6 +134,18 @@ pub const Archive = struct {
                 const written = try bzip2.decodeInto(scratch_allocator, compressed, target);
                 if (written != target.len) return error.SizeMismatch;
             },
+            .lzma => {
+                const scratch_allocator = allocator orelse return error.ZipEntryRequiresAllocator;
+                const written = try lzma.decodeZipPayloadInto(
+                    scratch_allocator,
+                    compressed,
+                    target.len,
+                    target,
+                    std.math.maxInt(usize),
+                    canonical.flags & 0x0002 != 0,
+                );
+                if (written != target.len) return error.SizeMismatch;
+            },
             else => return error.UnsupportedZipCompressionMethod,
         }
         if (checksum.crc32Best(target) != canonical.crc32) return error.ChecksumMismatch;
@@ -255,6 +268,7 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     );
     if (values.zip64 and version_needed < 45) return error.InvalidZipArchive;
     if (method == .bzip2 and version_needed < 46) return error.InvalidZipArchive;
+    if (method == .lzma and version_needed < 63) return error.InvalidZipArchive;
     if (values.local_header_offset >= archive.central_directory_offset) return error.InvalidZipArchive;
 
     return .{
@@ -297,6 +311,7 @@ fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
     if ((local_compressed == std.math.maxInt(u32) or local_uncompressed == std.math.maxInt(u32)) and
         local_version_needed < 45) return error.InvalidZipArchive;
     if (entry.method == .bzip2 and local_version_needed < 46) return error.InvalidZipArchive;
+    if (entry.method == .lzma and local_version_needed < 63) return error.InvalidZipArchive;
     if (local_flags & 0x0008 == 0) {
         const local_sizes = try records.resolveLocalSizes(
             archive.bytes[name_end..data_start],
