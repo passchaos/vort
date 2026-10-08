@@ -977,9 +977,20 @@ pub fn build(b: *std.Build) void {
     const gzip_cli_diff_step = b.step("run-gzip-cli-diff", "Run black-box differential smoke against system gzip CLI");
     gzip_cli_diff_step.dependOn(&gzip_cli_diff.step);
 
-    const zip_diff = b.addSystemCommand(&.{ "python3", "tools/zip_diff.py", "--cli" });
+    const zip_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-zip-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zip/writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const zip_diff = b.addSystemCommand(&.{ "python3", "tools/zip/diff.py", "--cli" });
     zip_diff.addArtifactArg(cli_exe);
-    const zip_diff_step = b.step("run-zip-diff", "Validate ZIP32 stored/deflate extraction against Python zipfile");
+    zip_diff.addArg("--writer");
+    zip_diff.addArtifactArg(zip_writer_probe_exe);
+    const zip_diff_step = b.step("run-zip-diff", "Validate bidirectional ZIP32 stored/deflate interoperability with Python zipfile");
     zip_diff_step.dependOn(&zip_diff.step);
 
     const br_stored_cli_diff = b.addSystemCommand(&.{ "python3", "tools/br_stored_cli_diff.py" });

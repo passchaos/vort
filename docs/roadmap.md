@@ -17616,11 +17616,15 @@ reuse, so production keeps the simpler independently owned plans.
   `docs/performance/data/brotli-flat-literal-root-working-set-x86-20261008.json`.
 
 - Functionality-first format coverage now includes dependency-free ZIP32
-  archive reading. The library parses EOCD and central-directory metadata,
-  iterates and finds entries without allocation, extracts stored and raw-
-  Deflate members into caller buffers or bounded allocations, accepts data
-  descriptors, and validates names, sizes, complete compressed consumption,
-  and CRC-32. Encrypted, multi-disk, ZIP64, and unsupported-method entries fail
-  explicitly. A Python `zipfile` differential covers stored/Deflate entries,
-  non-seekable data descriptors, UTF-8 names, directories, comments, and CLI
-  extraction. Usage and limitations are documented in `docs/formats/zip.md`.
+  archive reading and deterministic writing. The library parses EOCD and
+  central-directory metadata, iterates and finds entries without allocation,
+  extracts stored and raw-Deflate members into caller buffers or bounded
+  allocations, and encodes multi-entry stored/Deflate archives through owned
+  or transactional append APIs. Writer options cover signed data descriptors,
+  UTF-8 flags, per-entry/archive comments, and caller-selected Deflate policy;
+  fixed DOS timestamps keep output reproducible, and non-empty destinations
+  become valid self-extracting prefixes. Encrypted, multi-disk, ZIP64, and
+  unsupported-method inputs fail explicitly. A bidirectional Python `zipfile`
+  differential covers descriptors, UTF-8 names, directories, comments,
+  deterministic output, prefixed archives, and CLI extraction. Usage and
+  limitations are documented in `docs/formats/zip.md`.
