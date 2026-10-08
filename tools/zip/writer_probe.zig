@@ -13,10 +13,12 @@ pub fn main(init: std.process.Init) !void {
 
     const stored = [_]u8{ 0, 1, 2, 0xff } ++ "stored by Vort".*;
     const deflated = "Vort ZIP writer differential.\n" ** 128;
+    const bzip2_payload = "Vort ZIP Bzip2 method 12.\n" ** 96;
     const utf8_payload = "ZIP UTF-8 文件名\n" ** 17;
     const entries = [_]vort.ZipEncodeEntry{
         .{ .name = "stored.bin", .data = &stored, .method = .stored, .comment = "stored entry" },
         .{ .name = "folder/deflated.txt", .data = deflated, .method = .deflate, .comment = "deflated entry" },
+        .{ .name = "folder/bzip2.txt", .data = bzip2_payload, .method = .bzip2, .comment = "bzip2 entry" },
         .{ .name = "utf8-目录/数据.txt", .data = utf8_payload, .method = .deflate },
         .{ .name = "empty/", .data = "", .method = .stored },
     };

@@ -995,7 +995,7 @@ pub fn build(b: *std.Build) void {
 
     const bzip2_diff = b.addSystemCommand(&.{ "python3", "tools/bzip2/diff.py", "--cli" });
     bzip2_diff.addArtifactArg(cli_exe);
-    const bzip2_diff_step = b.step("run-bzip2-diff", "Validate dependency-free Bzip2 decoding against Python bz2");
+    const bzip2_diff_step = b.step("run-bzip2-diff", "Validate dependency-free Bzip2 encode/decode against Python bz2");
     bzip2_diff_step.dependOn(&bzip2_diff.step);
 
     const br_stored_cli_diff = b.addSystemCommand(&.{ "python3", "tools/br_stored_cli_diff.py" });

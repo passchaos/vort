@@ -17631,14 +17631,16 @@ reuse, so production keeps the simpler independently owned plans.
   prefixed archives, and CLI extraction. Usage and limitations are documented
   in `docs/formats/zip.md`.
 
-- Added dependency-free Bzip2 decoding for standard `BZh1` through `BZh9`
-  streams. The modular decoder covers mapping tables, selector and payload MTF,
+- Added dependency-free Bzip2 encoding and decoding for standard `BZh1` through
+  `BZh9` streams. The modular decoder covers mapping tables, selector and payload MTF,
   RUNA/RUNB expansion, canonical Huffman tables, inverse BWT, first-stage RLE,
   multiple blocks, strict single-stream handling, explicit concatenated
   streams, caller-owned output, bounded allocation, decoded-size preflight,
   CRC-32/BZIP2 block verification, and combined stream CRC verification.
-  Python `bz2` differential coverage includes empty, text, long-run, binary,
-  multi-block, concatenated, corrupt, and output-limit cases. Obsolete
-  randomized blocks remain explicitly unsupported; encoding and ZIP method 12
-  integration are the next Bzip2 functionality slices. See
+  The deterministic baseline encoder adds bounded-block RLE1, a doubling cyclic
+  suffix-array BWT, MTF/RUNA/RUNB, and valid equal-length Huffman groups; Python
+  `bz2` decodes its empty, text, long-run, binary, random, and multi-block
+  outputs. ZIP method 12 now shares the same codec in both directions, with an
+  explicit allocator-bearing caller-output API for inverse-BWT scratch.
+  Obsolete randomized blocks remain explicitly unsupported. See
   `docs/formats/bzip2.md`.

@@ -58,6 +58,22 @@ def main() -> None:
             if f"decoded_bytes={len(payload)}" not in size_output:
                 raise AssertionError(f"Vort size mismatch for {name}: {size_output}")
 
+            source_path = temp / f"{name}.source"
+            vort_path = temp / f"{name}.vort.bz2"
+            source_path.write_bytes(payload)
+            run(args.cli, "encode-bzip2-file", str(source_path), str(vort_path), str(level))
+            vort_encoded = vort_path.read_bytes()
+            if not vort_encoded.startswith(f"BZh{level}".encode()):
+                raise AssertionError(f"Vort Bzip2 header mismatch for {name}")
+            if bz2.decompress(vort_encoded) != payload:
+                raise AssertionError(f"Python could not decode Vort output for {name}")
+
+            if name == "text":
+                repeat_path = temp / "text-repeat.vort.bz2"
+                run(args.cli, "encode-bzip2-file", str(source_path), str(repeat_path), str(level))
+                if repeat_path.read_bytes() != vort_encoded:
+                    raise AssertionError("Vort Bzip2 output is not deterministic")
+
         first = b"first concatenated member\n" * 97
         second = bytes(range(251)) * 313
         concatenated = bz2.compress(first, compresslevel=1) + bz2.compress(second, compresslevel=9)
@@ -103,7 +119,7 @@ def main() -> None:
             raise AssertionError("corrupt Bzip2 stream was accepted")
 
     print(
-        f"bzip2_diff=ok cases={len(cases)} compressed_bytes={compressed_total} "
+        f"bzip2_diff=ok directions=2 cases={len(cases)} compressed_bytes={compressed_total} "
         f"decoded_bytes={decoded_total} concatenated_bytes={len(first) + len(second)}"
     )
 

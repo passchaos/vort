@@ -83,11 +83,12 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   Vort;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free ZIP32/ZIP64 archive reading and deterministic writing with
-  EOCD/ZIP64-locator/central-directory iteration, exact entry lookup, stored
-  and raw-deflate multi-entry encoding/extraction, transactional prefix append,
-  32-/64-bit data descriptors, archive/entry comments, CRC-32/size validation,
-  UTF-8 flags, and explicit encrypted/multi-disk/unknown-method errors;
-- dependency-free Bzip2 `BZh1`...`BZh9` decoding with canonical Huffman,
+  EOCD/ZIP64-locator/central-directory iteration, exact entry lookup, stored,
+  raw-deflate, and Bzip2-method-12 multi-entry encoding/extraction,
+  transactional prefix append, 32-/64-bit data descriptors, archive/entry
+  comments, CRC-32/size validation, UTF-8 flags, and explicit
+  encrypted/multi-disk/unknown-method errors;
+- dependency-free Bzip2 `BZh1`...`BZh9` encoding and decoding with canonical Huffman,
   selector/inverse move-to-front, RUNA/RUNB, inverse BWT, first-stage RLE,
   multi-block and explicit concatenated-stream support, caller-owned/bounded
   allocation APIs, decoded-size preflight, and block/combined CRC validation;
@@ -167,6 +168,7 @@ zig build run -- gzip-store-roundtrip "hello vort"
 zig build run -- list-zip-file /tmp/archive.zip
 zig build run -- extract-zip-file /tmp/archive.zip path/in/archive.txt /tmp/archive.out 1048576
 zig build run-zip-diff
+zig build run -- encode-bzip2-file README.md /tmp/readme.bz2 9
 zig build run -- decode-bzip2-file /tmp/archive.bz2 /tmp/archive.out 67108864
 zig build run -- decode-bzip2-concat-file /tmp/members.bz2 /tmp/members.out 67108864
 zig build run -- size-bzip2-file /tmp/archive.bz2 67108864

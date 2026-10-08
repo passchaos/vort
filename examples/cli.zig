@@ -136,6 +136,16 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "encode-bzip2-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const block_size_100k: u4 = if (args.next()) |value| try std.fmt.parseInt(u4, value, 10) else 9;
+        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(input);
+        const encoded = try vort.encodeBzip2Alloc(init.gpa, input, .{ .block_size_100k = block_size_100k });
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("bzip2_input_bytes={d} compressed_bytes={d} path={s}\n", .{ input.len, encoded.len, output_path });
     } else if (std.mem.eql(u8, command, "decode-bzip2-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -184,6 +194,7 @@ pub fn main(init: std.process.Init) !void {
             const method_name: []const u8 = switch (entry.method) {
                 .stored => "stored",
                 .deflate => "deflate",
+                .bzip2 => "bzip2",
                 else => "unsupported",
             };
             try stdout.print("index={d} method={s} compressed={d} uncompressed={d} crc32={d} directory={} name={s}\n", .{
@@ -1715,6 +1726,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode file bytes as dependency-free Brotli stored stream
         \\  decode-br-file-to <in> <out> [max_output]
         \\                              Decode dependency-free Brotli stored stream file
+        \\  encode-bzip2-file <in> <out> [block_size_100k]
+        \\                              Encode a deterministic Bzip2 stream
         \\  decode-bzip2-file <in> <out> [max_output]
         \\                              Decode one Bzip2 stream with CRC validation
         \\  decode-bzip2-concat-file <in> <out> [max_output]

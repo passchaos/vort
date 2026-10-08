@@ -34,6 +34,7 @@ def validate_python_archive_with_vort(cli: Path, temp: Path) -> int:
     payloads = {
         "stored.bin": bytes(range(64)) + b"\x00stored\xff",
         "folder/deflated.txt": b"Vort ZIP deflate differential.\n" * 256,
+        "folder/bzip2.txt": b"Python ZIP Bzip2 method 12.\n" * 96,
         "utf8-目录/数据.txt": "ZIP UTF-8 文件名\n".encode() * 17,
         "python-force-zip64.bin": b"Python force_zip64 member\n" * 31,
         "empty/": b"",
@@ -46,6 +47,12 @@ def validate_python_archive_with_vort(cli: Path, temp: Path) -> int:
             "folder/deflated.txt",
             payloads["folder/deflated.txt"],
             compress_type=zipfile.ZIP_DEFLATED,
+            compresslevel=9,
+        )
+        archive.writestr(
+            "folder/bzip2.txt",
+            payloads["folder/bzip2.txt"],
+            compress_type=zipfile.ZIP_BZIP2,
             compresslevel=9,
         )
         archive.writestr(
@@ -96,6 +103,7 @@ def validate_vort_archive_with_python(
     payloads = {
         "stored.bin": bytes([0, 1, 2, 255]) + b"stored by Vort",
         "folder/deflated.txt": b"Vort ZIP writer differential.\n" * 128,
+        "folder/bzip2.txt": b"Vort ZIP Bzip2 method 12.\n" * 96,
         "utf8-目录/数据.txt": "ZIP UTF-8 文件名\n".encode() * 17,
         "empty/": b"",
     }
@@ -122,7 +130,14 @@ def validate_vort_archive_with_python(
             raise AssertionError(f"unexpected Vort entry order: {archive.namelist()!r}")
         if archive.testzip() is not None:
             raise AssertionError("Python reported a corrupt Vort entry")
-        for index, (name, expected) in enumerate(payloads.items()):
+        expected_methods = {
+            "stored.bin": zipfile.ZIP_STORED,
+            "folder/deflated.txt": zipfile.ZIP_DEFLATED,
+            "folder/bzip2.txt": zipfile.ZIP_BZIP2,
+            "utf8-目录/数据.txt": zipfile.ZIP_DEFLATED,
+            "empty/": zipfile.ZIP_STORED,
+        }
+        for name, expected in payloads.items():
             info = archive.getinfo(name)
             if archive.read(info) != expected:
                 raise AssertionError(f"Python extraction mismatch for {name!r}")
@@ -132,8 +147,7 @@ def validate_vort_archive_with_python(
                 raise AssertionError(f"data-descriptor flag omitted for {name!r}")
             if not info.flag_bits & 0x0800:
                 raise AssertionError(f"UTF-8 flag omitted for {name!r}")
-            expected_method = zipfile.ZIP_STORED if index in (0, 3) else zipfile.ZIP_DEFLATED
-            if info.compress_type != expected_method:
+            if info.compress_type != expected_methods[name]:
                 raise AssertionError(f"compression method mismatch for {name!r}")
             if force_zip64 and info.extract_version < 45:
                 raise AssertionError(f"ZIP64 version-needed omitted for {name!r}")
@@ -166,7 +180,7 @@ def validate_vort_archive_with_python(
                 raise AssertionError(f"descriptor values mismatch for {name!r}")
 
     listing = run(cli, "list-zip-file", str(first)).stdout
-    if "zip_entries=4" not in listing:
+    if f"zip_entries={len(payloads)}" not in listing:
         raise AssertionError(f"Vort could not list its generated archive: {listing}")
     expected_zip64 = str(force_zip64).lower()
     if f"zip64={expected_zip64}" not in listing:
@@ -193,7 +207,7 @@ def main() -> None:
 
     print(
         "zip_diff=ok directions=2 "
-        f"python_entries=5 vort_entries=4 python_bytes={python_bytes} "
+        f"python_entries=6 vort_entries=5 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes}"
     )
 
