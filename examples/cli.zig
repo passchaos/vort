@@ -136,6 +136,42 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "decode-bzip2-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeBzip2AllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.decodeBzip2Alloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("bzip2_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "decode-bzip2-concat-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeBzip2ConcatenatedAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.decodeBzip2ConcatenatedAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("bzip2_stream_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "size-bzip2-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded_len = if (max_output_len) |limit|
+            try vort.bzip2DecodedSizeLimited(init.gpa, compressed, limit)
+        else
+            try vort.bzip2DecodedSize(init.gpa, compressed);
+        try stdout.print("bzip2_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
     } else if (std.mem.eql(u8, command, "list-zip-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
@@ -1679,6 +1715,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode file bytes as dependency-free Brotli stored stream
         \\  decode-br-file-to <in> <out> [max_output]
         \\                              Decode dependency-free Brotli stored stream file
+        \\  decode-bzip2-file <in> <out> [max_output]
+        \\                              Decode one Bzip2 stream with CRC validation
+        \\  decode-bzip2-concat-file <in> <out> [max_output]
+        \\                              Decode concatenated Bzip2 streams
+        \\  size-bzip2-file <path> [max_output]
+        \\                              Preflight a Bzip2 stream's decoded size
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
         \\  extract-zip-file <zip> <entry> <out> [max_output]
         \\                              Extract a stored/deflate ZIP entry with CRC validation

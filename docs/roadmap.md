@@ -17630,3 +17630,15 @@ reuse, so production keeps the simpler independently owned plans.
   descriptors, UTF-8 names, directories, comments, deterministic output,
   prefixed archives, and CLI extraction. Usage and limitations are documented
   in `docs/formats/zip.md`.
+
+- Added dependency-free Bzip2 decoding for standard `BZh1` through `BZh9`
+  streams. The modular decoder covers mapping tables, selector and payload MTF,
+  RUNA/RUNB expansion, canonical Huffman tables, inverse BWT, first-stage RLE,
+  multiple blocks, strict single-stream handling, explicit concatenated
+  streams, caller-owned output, bounded allocation, decoded-size preflight,
+  CRC-32/BZIP2 block verification, and combined stream CRC verification.
+  Python `bz2` differential coverage includes empty, text, long-run, binary,
+  multi-block, concatenated, corrupt, and output-limit cases. Obsolete
+  randomized blocks remain explicitly unsupported; encoding and ZIP method 12
+  integration are the next Bzip2 functionality slices. See
+  `docs/formats/bzip2.md`.
