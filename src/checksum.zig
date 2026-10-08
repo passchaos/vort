@@ -1262,6 +1262,32 @@ test "CRC-32 ARM path matches slicing across lengths offsets and updates" {
             try std.testing.expectEqual(expected, incremental);
         }
     }
+
+    const large_lengths = [_]usize{
+        3 * 800 * @sizeOf(u64),
+        3 * 800 * @sizeOf(u64) + 1,
+        32 * 1024,
+        64 * 1024,
+    };
+    var large_input: [64 * 1024 + 16]u8 = undefined;
+    for (&large_input) |*byte| {
+        state = state *% 1664525 +% 1013904223;
+        byte.* = @truncate(state >> 24);
+    }
+    for (0..16) |offset| {
+        for (large_lengths) |len| {
+            const bytes = large_input[offset..][0..len];
+            const expected = crc32Slice32(bytes);
+            try std.testing.expectEqual(expected, crc32Hardware(bytes));
+
+            const split = len / 5;
+            const incremental = crc32UpdateBest(
+                crc32Slice32(bytes[0..split]),
+                bytes[split..],
+            );
+            try std.testing.expectEqual(expected, incremental);
+        }
+    }
 }
 
 test "CRC-32C hardware path matches table path" {
