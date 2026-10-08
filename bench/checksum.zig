@@ -87,7 +87,10 @@ pub fn main(init: std.process.Init) !void {
         defer csv.deinit();
         try csv.writer.writeAll("algorithm,bytes,iterations,elapsed_s,throughput_mib_s,mix\n");
         for (rows) |row| try writeCsvRow(&csv.writer, row, len, iterations);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
+        const cwd = std.Io.Dir.cwd();
+        if (std.fs.path.dirname(path)) |directory|
+            try cwd.createDirPath(init.io, directory);
+        try cwd.writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
     }
 }
 

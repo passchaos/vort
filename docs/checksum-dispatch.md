@@ -1,19 +1,17 @@
 # Checksum dispatch plan
 
 Vort dispatches IEEE CRC-32 to a portable slice-by-32 implementation by default.
-Architecture-specific candidates are tracked for ARMv8 (CRC32 instructions) and
-x86 (PCLMULQDQ folding), but dispatch only enables paths that are validated on
-the active Zig/toolchain combination. ARM feature availability is reported, while
-IEEE CRC-32 dispatch stays on slice-by-32 until the AArch64 inline-asm path is
-validated. The x86 PCLMUL path is implemented and selected when its feature is
-available and its differential tests pass.
+Validated hardware paths are selected for ARMv8 CRC32 and x86 PCLMULQDQ when
+their target features are available. Generic AArch64, x86 without PCLMUL, and
+other targets retain the portable fallback.
 
 Current status:
 
 - Adler-32: scalar zlib-compatible path.
 - IEEE CRC-32: scalar, slice-by-4, slice-by-8, slice-by-16, and slice-by-32 portable paths;
   best dispatch selects slice-by-32 unless a validated hardware path is active.
-- ARMv8 CRC32 feature reporting is present, but IEEE CRC-32 hardware dispatch is disabled pending Zig 0.16 AArch64 inline-asm validation.
+- ARMv8 CRC32 instructions are enabled for one-shot and incremental IEEE CRC-32
+  when the target exposes the `crc` feature.
 - x86 PCLMULQDQ folding path implemented and independently tested before dispatch.
 - CRC-32C: scalar, portable slice-by-8 and slice-by-16 fallbacks, and x86
   SSE4.2 hardware path when available.
@@ -36,7 +34,14 @@ Required gates before enabling an architecture-specific IEEE path:
    over empty, tiny, aligned, unaligned, and multi-KiB buffers.
 3. `run-checksum-diff` and `run-checksum-zlib-diff` must both pass.
 4. `run-cpu-features` must report the selected IEEE path explicitly; portable
-   builds currently report `portable-ieee-slice32`.
+   builds report `portable-ieee-slice32`, while feature-enabled AArch64 builds
+   report the hardware path.
+
+The AArch64 path was enabled after exhaustive differential coverage over every
+length `0...8192`, sixteen starting offsets, and split incremental updates. Five
+CPU-0 ReleaseFast checksum samples over a repeatedly perturbed 1 MiB input put
+`crc32-best` at a median 18,323 MiB/s versus 3,920 MiB/s for slice-by-32, a
+`4.67x` improvement with identical digest mixes.
 
 ## Block checksum composition
 

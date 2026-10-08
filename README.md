@@ -10,7 +10,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - zlib-compatible Adler-32;
 - gzip/zip-compatible IEEE CRC-32;
 - storage/network-oriented CRC-32C/Castagnoli;
-- portable slice-by-4/slice-by-8/slice-by-16 IEEE CRC-32, slice-by-32 IEEE CRC-32, and slice-by-8/slice-by-16/slice-by-32 CRC-32C fast paths, checksum dispatch reporting, and Adler-32/CRC-32/CRC-32C combine helpers for block/parallel checksum composition;
+- portable slice-by-4/slice-by-8/slice-by-16 IEEE CRC-32, slice-by-32 IEEE CRC-32, ARMv8 CRC32 and x86 PCLMUL hardware dispatch, slice-by-8/slice-by-16/slice-by-32 CRC-32C fast paths, checksum dispatch reporting, and Adler-32/CRC-32/CRC-32C combine helpers for block/parallel checksum composition;
 - shared progress/error/frame metadata types;
 - pure Zig LZ4 frame/block
   decode/fallback encode with skippable/concatenated stream handling,

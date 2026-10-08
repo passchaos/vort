@@ -318,7 +318,7 @@ reuse, so production keeps the simpler independently owned plans.
 - [x] x86 SSE4.2 CRC32C hardware path selected by dispatch.
 - [x] Architecture-specific IEEE CRC32 dispatch plan and safety gates.
 - [x] x86 PCLMUL candidate reporting for future IEEE CRC32 dispatch.
-- [x] ARM CRC32 feature reporting for future IEEE CRC32 dispatch.
+- [x] ARM CRC32 feature detection and validated IEEE CRC32 hardware dispatch.
 - [x] Architecture-specific IEEE CRC32 implementation / dispatch on validated targets.
 - [x] Differential checksum smoke against Zig std reference implementations.
 - [x] Differential checksum tests against Python zlib and local/system gzip wrapper trailers.
@@ -1962,11 +1962,14 @@ reuse, so production keeps the simpler independently owned plans.
   `3161.27` / `4977.06` / `5444.98` / `5484.38` MiB/s and Paeth bpp=3/4/6/8
   around `809.03` / `935.57` / `966.00` / `1065.70` MiB/s.
 
-- Re-aligned IEEE CRC-32 dispatch reporting on AArch64 with the actually
-  validated implementation. ARM CRC32 feature detection remains visible through
-  `arm_crc32`, but `bestCrc32Dispatch` stays on the portable slice-by-32 path
-  until the Zig 0.16 AArch64 inline-asm path is validated across targets, so
-  `zig build test` is not blocked by an unvalidated hardware candidate.
+- Enabled the ARMv8 CRC32 instruction path for IEEE CRC-32 one-shot and
+  incremental updates when the AArch64 target exposes `crc`; generic AArch64,
+  x86 without PCLMUL, and other targets retain slice-by-32. Differential tests
+  cover every length `0...8192`, sixteen offsets, and split updates, while
+  generic AArch64, x86_64 baseline, and wasm32-wasi compile checks preserve the
+  fallback. Five CPU-0 ReleaseFast checksum samples measured median
+  `crc32-best` throughput of 18,323 MiB/s versus 3,920 MiB/s for slice-by-32
+  (`4.67x`) with identical digests.
 
 - Made the focused PNG scanline reconstruction gate repeat-aware. The benchmark
   now accepts `--repeat`, records a `repeat` CSV column, and reports the median

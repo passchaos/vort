@@ -28,6 +28,7 @@ pub const compress_z = @import("compress_z.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
+pub const Crc32Best = checksum.Crc32Best;
 pub const Crc32C = checksum.Crc32C;
 pub const adler32 = checksum.adler32;
 pub const adler32Combine = checksum.adler32Combine;

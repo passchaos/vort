@@ -254,7 +254,7 @@ const IncrementalGzipFixedEncoderCodec = struct {
     pub const RawEncoder = deflate.RawDeflateIncrementalFixedEncoder;
     pub const RawOptions = RawEncoder.Options;
     pub const HeaderOptions = deflate.GzipHeaderOptions;
-    pub const Crc32 = checksum.Crc32Slice32;
+    pub const Crc32 = checksum.Crc32Best;
 
     pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: HeaderOptions) IncrementalGzipFixedEncoderCodec.Error!void {
         const header_len = try gzipHeaderEncodedSize(options);
@@ -276,7 +276,7 @@ const IncrementalGzipBestEncoderCodec = struct {
     pub const RawEncoder = deflate.RawDeflateIncrementalBestEncoder;
     pub const RawOptions = RawEncoder.Options;
     pub const HeaderOptions = deflate.GzipHeaderOptions;
-    pub const Crc32 = checksum.Crc32Slice32;
+    pub const Crc32 = checksum.Crc32Best;
     pub const writeHeader = IncrementalGzipFixedEncoderCodec.writeHeader;
     pub const writeFooter = IncrementalGzipFixedEncoderCodec.writeFooter;
 };
@@ -297,7 +297,7 @@ pub const ZlibIncrementalDecoder = incremental_zlib_decoder.Decoder(IncrementalZ
 const IncrementalGzipDecoderCodec = struct {
     pub const Error = deflate.Error;
     pub const RawDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
-    pub const Crc32 = checksum.Crc32Slice32;
+    pub const Crc32 = checksum.Crc32Best;
 };
 
 pub const GzipIncrementalDecoder = incremental_gzip_decoder.Decoder(IncrementalGzipDecoderCodec);
@@ -16511,7 +16511,7 @@ pub fn inspectGzipMemberFromChunksAllocLimited(
 
 pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
     const data_offset = try parseGzipHeader(input);
-    const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[data_offset..], output)) orelse return error.InvalidDeflateBlockType;
+    const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Best, input[data_offset..], output)) orelse return error.InvalidDeflateBlockType;
     const footer_offset = data_offset + stored.result.input_read;
     try validateGzipFooter(input, footer_offset, stored.digest, stored.result.output_written);
     return stored.result.output_written;
@@ -16531,7 +16531,7 @@ pub fn decodeGzipWithOptions(input: []const u8, output: []u8, options: GzipDecod
             return stored.output_written;
         }
     } else {
-        if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[data_offset..], output)) |stored| {
+        if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Best, input[data_offset..], output)) |stored| {
             const footer_offset = data_offset + stored.result.input_read;
             try validateGzipFooterWithOptions(input, footer_offset, stored.digest, stored.result.output_written, options);
             return stored.result.output_written;
@@ -17168,7 +17168,7 @@ fn precheckGzipConcatenatedStoredExact(input: []const u8, options: GzipDecodeOpt
 
 fn validateGzipStoredMemberBeforeAlloc(input: []const u8, raw_offset: usize, plan: StoredOnlyPlan, options: GzipDecodeOptions) Error!void {
     const footer_offset = raw_offset + plan.input_read;
-    const actual_crc = if (options.ignore_crc32) 0 else hashRawStoredOnlyPlanned(checksum.Crc32Slice32, input[raw_offset..], plan);
+    const actual_crc = if (options.ignore_crc32) 0 else hashRawStoredOnlyPlanned(checksum.Crc32Best, input[raw_offset..], plan);
     try validateGzipFooterPartialWithOptions(input, footer_offset, actual_crc, plan.output_len, options);
 }
 
@@ -17197,7 +17197,7 @@ pub fn decodeGzipConcatenatedWithOptions(input: []const u8, output: []u8, option
                 continue;
             }
         } else {
-            if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[raw_offset..], output[out_offset..])) |stored| {
+            if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Best, input[raw_offset..], output[out_offset..])) |stored| {
                 const footer_offset = raw_offset + stored.result.input_read;
                 try validateGzipFooterPartialWithOptions(input, footer_offset, stored.digest, stored.result.output_written, options);
                 out_offset += stored.result.output_written;
@@ -17308,7 +17308,7 @@ fn decodeGzipConcatenatedAllocWithOptionsLimitedInternal(allocator: std.mem.Allo
             const digest = if (options.ignore_crc32) blk: {
                 try appendRawStoredOnlyPlanned(allocator, raw_input[0..plan.input_read], &out, plan, max_output_len);
                 break :blk @as(u32, 0);
-            } else try appendRawStoredOnlyPlannedWithHash(checksum.Crc32Slice32, allocator, raw_input[0..plan.input_read], &out, plan, max_output_len);
+            } else try appendRawStoredOnlyPlannedWithHash(checksum.Crc32Best, allocator, raw_input[0..plan.input_read], &out, plan, max_output_len);
             const footer_offset = raw_offset + plan.input_read;
             try validateGzipFooterPartialWithOptions(input, footer_offset, digest, plan.output_len, options);
             offset = footer_offset + 8;
@@ -17348,7 +17348,7 @@ fn decodeGzipConcatenatedAppendWithOptionsLimitedInternal(allocator: std.mem.All
             const digest = if (options.ignore_crc32) blk: {
                 try appendRawStoredOnlyPlanned(allocator, raw_input[0..plan.input_read], out, plan, absolute_limit);
                 break :blk @as(u32, 0);
-            } else try appendRawStoredOnlyPlannedWithHash(checksum.Crc32Slice32, allocator, raw_input[0..plan.input_read], out, plan, absolute_limit);
+            } else try appendRawStoredOnlyPlannedWithHash(checksum.Crc32Best, allocator, raw_input[0..plan.input_read], out, plan, absolute_limit);
             const footer_offset = raw_offset + plan.input_read;
             try validateGzipFooterPartialWithOptions(input, footer_offset, digest, plan.output_len, options);
             offset = footer_offset + 8;
@@ -17481,7 +17481,7 @@ fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input
             return stored.bytes;
         }
     } else {
-        if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice32, allocator, raw_input, max_output_len)) |stored| {
+        if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Best, allocator, raw_input, max_output_len)) |stored| {
             errdefer stored.deinit(allocator);
             const footer_offset = data_offset + stored.result.input_read;
             try validateGzipFooterWithOptions(input, footer_offset, stored.digest, stored.result.bytes.len, options);
@@ -17503,7 +17503,7 @@ fn validateGzipStoredPlanBeforeAlloc(input: []const u8, data_offset: usize, plan
     if (!options.allow_trailing_data and footer_offset + 8 != input.len) return error.TrailingData;
     if (!options.ignore_crc32) {
         const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
-        const actual_crc = hashRawStoredOnlyPlanned(checksum.Crc32Slice32, input[data_offset..], plan);
+        const actual_crc = hashRawStoredOnlyPlanned(checksum.Crc32Best, input[data_offset..], plan);
         if (actual_crc != expected_crc) return error.ChecksumMismatch;
     }
     if (!options.ignore_isize) {

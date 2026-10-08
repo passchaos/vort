@@ -74,6 +74,31 @@ pub const Crc32C = struct {
     }
 };
 
+/// Incremental IEEE CRC-32 state that follows the best validated backend for
+/// the active target while retaining the same init/update/digest contract as
+/// the portable slicing implementations.
+pub const Crc32Best = struct {
+    value: u32 = 0xffff_ffff,
+
+    pub fn init() Crc32Best {
+        return .{};
+    }
+
+    pub fn update(self: *Crc32Best, input: []const u8) void {
+        self.value = ~crc32UpdateBest(~self.value, input);
+    }
+
+    pub fn digest(self: Crc32Best) u32 {
+        return ~self.value;
+    }
+
+    pub fn hash(input: []const u8) u32 {
+        var state = Crc32Best.init();
+        state.update(input);
+        return state.digest();
+    }
+};
+
 pub const Crc32Slice4 = struct {
     value: u32 = 0xffff_ffff,
 
@@ -561,10 +586,7 @@ pub fn cpuFeatureReport() CpuFeatureReport {
     } else if (builtin.cpu.arch == .aarch64) {
         const aarch64 = std.Target.aarch64;
         report.arm_crc32 = aarch64.featureSetHas(builtin.cpu.features, .crc);
-        // The ARM CRC32 instruction path remains a reported candidate until
-        // its inline-asm shape is validated on Zig 0.16 across Apple/Linux
-        // AArch64 targets. Dispatch stays on the portable slice-by-32 path.
-        report.ieee_crc32_uses_hardware = false;
+        report.ieee_crc32_uses_hardware = report.arm_crc32;
     }
     return report;
 }
@@ -572,6 +594,8 @@ pub fn cpuFeatureReport() CpuFeatureReport {
 pub fn bestCrc32Dispatch() Crc32Dispatch {
     if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
         if (cpuFeatureReport().x86_pclmul) return .hardware;
+    } else if (builtin.cpu.arch == .aarch64) {
+        if (cpuFeatureReport().arm_crc32) return .hardware;
     }
     return .slice32;
 }
@@ -593,6 +617,8 @@ pub fn crc32Best(input: []const u8) u32 {
 /// helper suitable for framed formats whose type bytes and payload bytes arrive
 /// as separate slices.
 pub fn crc32UpdateBest(previous: u32, input: []const u8) u32 {
+    if (builtin.cpu.arch == .aarch64 and cpuFeatureReport().arm_crc32)
+        return crc32ArmUpdate(previous, input);
     if ((builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) and
         cpuFeatureReport().x86_pclmul and input.len >= 128)
     {
@@ -776,12 +802,43 @@ inline fn pclmul128(a: u128, b: u128, comptime immediate: u8) u128 {
 
 pub fn crc32Hardware(input: []const u8) u32 {
     if (builtin.cpu.arch == .aarch64) {
-        return crc32Slice32(input);
+        if (!cpuFeatureReport().arm_crc32) return crc32Slice32(input);
+        return crc32ArmUpdate(0, input);
     }
     if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
         return crc32HardwareX86(input);
     }
     return crc32Slice16(input);
+}
+
+fn crc32ArmUpdate(previous: u32, input: []const u8) u32 {
+    if (builtin.cpu.arch != .aarch64) return crc32Slice32Update(previous, input);
+    var crc = ~previous;
+    var index: usize = 0;
+    while (index + 8 <= input.len) : (index += 8)
+        crc = crc32Arm64(crc, std.mem.readInt(u64, input[index..][0..8], .little));
+    while (index < input.len) : (index += 1)
+        crc = crc32Arm8(crc, input[index]);
+    return ~crc;
+}
+
+fn crc32Arm64(accumulator: u32, value: u64) u32 {
+    var crc = accumulator;
+    asm volatile ("crc32x %[crc:w], %[crc:w], %[value:x]"
+        : [crc] "+r" (crc),
+        : [value] "r" (value),
+    );
+    return crc;
+}
+
+fn crc32Arm8(accumulator: u32, value: u8) u32 {
+    var crc = accumulator;
+    const byte: u32 = value;
+    asm volatile ("crc32b %[crc:w], %[crc:w], %[byte:w]"
+        : [crc] "+r" (crc),
+        : [byte] "r" (byte),
+    );
+    return crc;
 }
 
 pub fn crc32cHardwareX86(input: []const u8) u32 {
@@ -1127,8 +1184,14 @@ test "CRC combine is associative across block boundaries" {
 test "CRC-32 best dispatch matches scalar" {
     const input = "dispatch checksum" ** 31;
     try std.testing.expectEqual(crc32(input), crc32Best(input));
+    var incremental = Crc32Best.init();
+    incremental.update(input[0..17]);
+    incremental.update(input[17..]);
+    try std.testing.expectEqual(crc32(input), incremental.digest());
     const report = cpuFeatureReport();
     if ((builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) and report.x86_pclmul) {
+        try std.testing.expectEqual(Crc32Dispatch.hardware, bestCrc32Dispatch());
+    } else if (builtin.cpu.arch == .aarch64 and report.arm_crc32) {
         try std.testing.expectEqual(Crc32Dispatch.hardware, bestCrc32Dispatch());
     } else {
         try std.testing.expectEqual(Crc32Dispatch.slice32, bestCrc32Dispatch());
@@ -1139,7 +1202,10 @@ test "CPU feature report selects validated IEEE CRC32 hardware paths" {
     const report = cpuFeatureReport();
     if (report.ieee_crc32_pclmul_candidate) try std.testing.expect(report.x86_pclmul);
     if (builtin.cpu.arch == .aarch64) {
-        try std.testing.expect(!report.ieee_crc32_uses_hardware);
+        try std.testing.expectEqual(
+            report.arm_crc32,
+            report.ieee_crc32_uses_hardware,
+        );
     } else if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
         try std.testing.expectEqual(report.x86_pclmul, report.ieee_crc32_uses_hardware);
     } else {
@@ -1167,6 +1233,32 @@ test "CRC-32 PCLMUL path matches slicing across lengths offsets and updates" {
 
             const split = len / 3;
             const incremental = crc32UpdateBest(crc32Slice32(bytes[0..split]), bytes[split..]);
+            try std.testing.expectEqual(expected, incremental);
+        }
+    }
+}
+
+test "CRC-32 ARM path matches slicing across lengths offsets and updates" {
+    if (builtin.cpu.arch != .aarch64 or !cpuFeatureReport().arm_crc32) return;
+
+    var input: [8192 + 16]u8 = undefined;
+    var state: u32 = 7;
+    for (&input) |*byte| {
+        state = state *% 1664525 +% 1013904223;
+        byte.* = @truncate(state >> 24);
+    }
+
+    for (0..16) |offset| {
+        for (0..8193) |len| {
+            const bytes = input[offset..][0..len];
+            const expected = crc32Slice32(bytes);
+            try std.testing.expectEqual(expected, crc32Hardware(bytes));
+
+            const split = len / 3;
+            const incremental = crc32UpdateBest(
+                crc32Slice32(bytes[0..split]),
+                bytes[split..],
+            );
             try std.testing.expectEqual(expected, incremental);
         }
     }
