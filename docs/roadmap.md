@@ -17708,3 +17708,13 @@ reuse, so production keeps the simpler independently owned plans.
   five variants through existing Vort codecs. Python `tarfile`, GNU tar, and
   system zstd validate raw/PAX/GNU metadata and compressed tarballs. See
   `docs/formats/tar.md`.
+
+- Added pure Zig Unix `compress` (`.Z`) encoding and decoding. The codec
+  validates the `1f 9d` header and reserved flags, supports 9 through 16 maximum
+  code bits, block and non-block dictionaries, LSB-first packing, ncompress's
+  eight-code alignment at width changes and clears, caller-owned output,
+  bounded allocation, decoded-size preflight, and transactional deterministic
+  encoding. Block mode clears a full dictionary deterministically; non-block
+  mode freezes it. The external smoke validates Vort output with system
+  `uncompress` and also tests ncompress output when `compress` is installed.
+  See `docs/formats/compress-z.md`.

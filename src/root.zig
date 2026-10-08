@@ -24,6 +24,7 @@ pub const bzip2 = @import("bzip2.zig");
 pub const xz = @import("xz.zig");
 pub const lzma = @import("lzma.zig");
 pub const tar = @import("tar.zig");
+pub const compress_z = @import("compress_z.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -134,6 +135,19 @@ pub const encodeCompressedTarAlloc = tar.encodeCompressedAlloc;
 pub const encodeCompressedTarAppend = tar.encodeCompressedAppend;
 pub const decodeCompressedTarAlloc = tar.decodeCompressedAlloc;
 pub const decodeTarAutoAlloc = tar.decodeAutoAlloc;
+
+pub const CompressZError = compress_z.Error;
+pub const CompressZHeader = compress_z.Header;
+pub const CompressZEncodeOptions = compress_z.EncodeOptions;
+pub const parseCompressZHeader = compress_z.parseHeader;
+pub const encodeCompressZAlloc = compress_z.encodeAlloc;
+pub const encodeCompressZAppend = compress_z.encodeAppend;
+pub const encodeCompressZInto = compress_z.encodeInto;
+pub const decodeCompressZInto = compress_z.decodeInto;
+pub const decodeCompressZAlloc = compress_z.decodeAlloc;
+pub const decodeCompressZAllocLimited = compress_z.decodeAllocLimited;
+pub const compressZDecodedSize = compress_z.decodedSize;
+pub const compressZDecodedSizeLimited = compress_z.decodedSizeLimited;
 
 pub const BrotliError = br.Error;
 pub const BrotliDecodeOptions = br.DecodeOptions;
@@ -2282,6 +2296,22 @@ test {
     _ = xz;
     _ = lzma;
     _ = tar;
+    _ = compress_z;
+}
+
+test "root Unix compress exports round trip .Z streams" {
+    const input = "Vort Unix compress root API" ** 32;
+    const encoded = try encodeCompressZAlloc(std.testing.allocator, input, .{
+        .max_code_bits = 12,
+        .block_mode = true,
+    });
+    defer std.testing.allocator.free(encoded);
+    const header = try parseCompressZHeader(encoded);
+    try std.testing.expectEqual(@as(u5, 12), header.max_code_bits);
+    try std.testing.expect(header.block_mode);
+    const decoded = try decodeCompressZAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "root exports lz4 and zstd codec helpers" {

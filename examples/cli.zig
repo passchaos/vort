@@ -1,5 +1,6 @@
 const std = @import("std");
 const vort = @import("vort");
+const compress_z_cli = @import("cli/compress_z.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [2048]u8 = undefined;
@@ -182,6 +183,12 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.bzip2DecodedSize(init.gpa, compressed);
         try stdout.print("bzip2_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "encode-compress-z-file")) {
+        try compress_z_cli.encodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-compress-z-file")) {
+        try compress_z_cli.decodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "size-compress-z-file")) {
+        try compress_z_cli.sizeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1898,6 +1905,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode concatenated Bzip2 streams
         \\  size-bzip2-file <path> [max_output]
         \\                              Preflight a Bzip2 stream's decoded size
+        \\  encode-compress-z-file <in> <out> [max_bits] [block|nonblock]
+        \\                              Encode a deterministic Unix compress (.Z) stream
+        \\  decode-compress-z-file <in> <out> [max_output]
+        \\                              Decode a Unix compress (.Z) stream
+        \\  size-compress-z-file <path> [max_output]
+        \\                              Preflight a Unix compress stream's decoded size
         \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]
         \\                              Decode an LZMA-Alone stream with explicit limits
         \\  size-lzma-file <path> [max_output]
