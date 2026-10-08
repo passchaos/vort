@@ -92,10 +92,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   selector/inverse move-to-front, RUNA/RUNB, inverse BWT, first-stage RLE,
   multi-block and explicit concatenated-stream support, caller-owned/bounded
   allocation APIs, decoded-size preflight, and block/combined CRC validation;
-- dependency-free XZ decoding for single-filter LZMA2 streams with strict
-  stream/block/index/footer validation, none/CRC-32/CRC-64/SHA-256 checks,
-  multi-block and concatenated-stream handling, bounded APIs and metadata
-  inspection, plus deterministic XZ writing with uncompressed LZMA2 chunks;
+- dependency-free XZ decoding for LZMA2 streams with optional Delta/x86 BCJ
+  filters, strict stream/block/index/footer validation,
+  none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream
+  handling, bounded APIs and metadata inspection, plus deterministic XZ writing
+  with uncompressed LZMA2 chunks;
 - dependency-free LZMA-Alone decoding with known/unknown-size headers,
   caller-selected output/dictionary limits, caller-owned output, and ZIP
   method-14 extraction through the same LZMA core;

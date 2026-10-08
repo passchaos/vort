@@ -1,21 +1,22 @@
 # XZ and LZMA2 support
 
-Vort provides dependency-free XZ decoding for the common single-filter LZMA2
-pipeline, plus a deterministic baseline writer that stores payload bytes in
-uncompressed LZMA2 chunks.
+Vort provides dependency-free XZ decoding for LZMA2 streams with optional
+Delta and x86 BCJ preprocessing filters, plus a deterministic baseline writer
+that stores payload bytes in uncompressed LZMA2 chunks.
 
 The container implementation validates:
 
 - stream magic, flags, header CRC-32, footer CRC-32, backward size, and footer
   magic;
 - block headers, canonical variable-length integers, LZMA2 filter properties,
-  declared packed/unpacked sizes, and zero padding;
+  ordered filter chains, declared packed/unpacked sizes, and zero padding;
 - Index record count, per-block unpadded/uncompressed sizes, and Index CRC-32;
 - block checks `none`, CRC-32, CRC-64/XZ, and SHA-256.
 
 Normal multi-block streams and concatenated streams with four-byte-aligned
 stream padding are supported. `StreamInfo` reports the check type, block count,
 compressed and uncompressed sizes, and largest declared LZMA2 dictionary.
+It also reports how many blocks use Delta and x86 filters.
 
 ```zig
 const info = try vort.inspectXz(allocator, compressed);
@@ -48,7 +49,8 @@ zig build run -- inspect-xz-file input.xz
 zig build run-xz-diff
 ```
 
-The current reader deliberately rejects filter chains with BCJ or Delta
-filters and accepts only a single LZMA2 filter. The writer emits standards-
-compatible uncompressed LZMA2 chunks; compressed LZMA encoding and additional
-filters remain later functionality and performance work.
+The reader currently supports Delta and x86 BCJ filters followed by LZMA2. The
+writer emits standards-compatible uncompressed LZMA2 chunks without a
+preprocessing filter. ARM, ARM-Thumb, PowerPC, IA-64, and SPARC BCJ filters,
+compressed LZMA encoding, and filter-aware writing remain later functionality
+and performance work.

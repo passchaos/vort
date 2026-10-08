@@ -17667,9 +17667,11 @@ reuse, so production keeps the simpler independently owned plans.
   metadata inspection, and concatenated-stream APIs. A deterministic baseline
   writer emits multi-block XZ streams using uncompressed LZMA2 chunks and all
   four supported checks. Python `lzma` validates both directions, while the
-  system `xz` differential contributes a real four-block stream. BCJ/Delta
-  filter chains and compressed LZMA encoding remain follow-up work. See
-  `docs/formats/xz.md`.
+  system `xz` differential contributes a real four-block stream. Decoding now
+  also applies Delta and x86 BCJ preprocessing filters, including a three-stage
+  x86+Delta+LZMA2 chain in reverse order, and exposes per-filter block counts in
+  stream metadata. Other architecture BCJ filters, filter-aware writing, and
+  compressed LZMA encoding remain follow-up work. See `docs/formats/xz.md`.
 
 - Added dependency-free LZMA-Alone decoding with strict 13-byte property header
   parsing, known and end-marker-sized streams, explicit dictionary and output

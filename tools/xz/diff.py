@@ -145,26 +145,53 @@ def main() -> None:
         if corrupted.returncode == 0:
             raise AssertionError("corrupt XZ stream was accepted")
 
-        filtered = lzma.compress(
-            b"BCJ filter rejection\n" * 64,
-            format=lzma.FORMAT_XZ,
-            check=lzma.CHECK_CRC64,
-            filters=[
-                {"id": lzma.FILTER_X86},
-                {"id": lzma.FILTER_LZMA2, "preset": 1},
-            ],
-        )
-        filtered_path = temp / "bcj-filter.xz"
-        filtered_path.write_bytes(filtered)
-        unsupported = run(
-            args.cli,
-            "decode-xz-file",
-            str(filtered_path),
-            str(temp / "bcj-filter.out"),
-            check=False,
-        )
-        if unsupported.returncode == 0:
-            raise AssertionError("unsupported XZ BCJ filter chain was accepted")
+        x86_payload = (b"\x90\xe8\x10\x00\x00\x00\x90\xe9\xf0\xff\xff\xff" * 4096) + b"tail"
+        filter_cases = [
+            (
+                "delta",
+                bytes(range(251)) * 401,
+                [
+                    {"id": lzma.FILTER_DELTA, "dist": 7},
+                    {"id": lzma.FILTER_LZMA2, "preset": 1},
+                ],
+                "delta_blocks=1",
+            ),
+            (
+                "x86",
+                x86_payload,
+                [
+                    {"id": lzma.FILTER_X86, "start_offset": 4096},
+                    {"id": lzma.FILTER_LZMA2, "preset": 1},
+                ],
+                "x86_blocks=1",
+            ),
+            (
+                "x86-delta",
+                x86_payload,
+                [
+                    {"id": lzma.FILTER_X86},
+                    {"id": lzma.FILTER_DELTA, "dist": 4},
+                    {"id": lzma.FILTER_LZMA2, "preset": 1},
+                ],
+                "delta_blocks=1 x86_blocks=1",
+            ),
+        ]
+        for name, payload, filters, expected_counter in filter_cases:
+            filtered = lzma.compress(
+                payload,
+                format=lzma.FORMAT_XZ,
+                check=lzma.CHECK_CRC64,
+                filters=filters,
+            )
+            filtered_path = temp / f"{name}-filter.xz"
+            filtered_output = temp / f"{name}-filter.out"
+            filtered_path.write_bytes(filtered)
+            run(args.cli, "decode-xz-file", str(filtered_path), str(filtered_output))
+            if filtered_output.read_bytes() != payload:
+                raise AssertionError(f"Vort {name} filter decode mismatch")
+            inspect_output = run(args.cli, "inspect-xz-file", str(filtered_path)).stdout
+            if expected_counter not in inspect_output:
+                raise AssertionError(f"Vort {name} filter metadata mismatch: {inspect_output}")
 
         multiblock_count = 0
         if xz_tool is not None:
@@ -190,7 +217,7 @@ def main() -> None:
     print(
         f"xz_diff=ok directions=2 cases={len(cases)} compressed_bytes={compressed_total} "
         f"decoded_bytes={decoded_total} concatenated_bytes={len(expected_concatenated)} "
-        f"multiblock_count={multiblock_count}"
+        f"filter_cases={len(filter_cases)} multiblock_count={multiblock_count}"
     )
 
 

@@ -263,12 +263,14 @@ pub fn main(init: std.process.Init) !void {
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(compressed);
         const info = try vort.inspectXz(init.gpa, compressed);
-        try stdout.print("xz_check={s} blocks={d} compressed_bytes={d} decoded_bytes={d} max_dictionary={d}\n", .{
+        try stdout.print("xz_check={s} blocks={d} compressed_bytes={d} decoded_bytes={d} max_dictionary={d} delta_blocks={d} x86_blocks={d}\n", .{
             @tagName(info.check),
             info.block_count,
             info.compressed_size,
             info.uncompressed_size,
             info.max_dictionary_size,
+            info.delta_filter_blocks,
+            info.x86_filter_blocks,
         });
     } else if (std.mem.eql(u8, command, "list-zip-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
