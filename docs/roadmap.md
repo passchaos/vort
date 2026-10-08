@@ -17633,13 +17633,15 @@ reuse, so production keeps the simpler independently owned plans.
   single-disk ZIP64 reading and deterministic writing. The library parses EOCD,
   ZIP64 locator/EOCD, ordered `0x0001` central/local extra fields, and 32-/64-bit
   data descriptors; it iterates and finds entries without allocation, extracts
-  stored and raw-Deflate members into caller buffers or bounded allocations,
-  and encodes multi-entry stored/Deflate archives through owned or
+  stored, raw-Deflate, Bzip2, LZMA, and Zstandard members into caller buffers or
+  bounded allocations where their scratch requirements allow, and encodes
+  multi-entry stored/Deflate/Bzip2/Zstandard archives through owned or
   transactional append APIs. Writer `.auto`/`.always`/`.never` policy handles
   count, size, and offset transitions; UTF-8 flags, per-entry/archive comments,
   caller-selected Deflate policy, fixed timestamps, and self-extracting
   prefixes remain deterministic. Encrypted, multi-disk, malformed ZIP64, and
-  unsupported-method inputs fail explicitly. A bidirectional Python `zipfile`
+  unsupported-method inputs fail explicitly. ZIP methods 12, 14, and 93 reuse
+  the standalone Bzip2, LZMA, and Zstandard codecs. A bidirectional Python `zipfile`
   differential covers Python `force_zip64`, fully forced Vort ZIP64 archives,
   descriptors, UTF-8 names, directories, comments, deterministic output,
   prefixed archives, and CLI extraction. Usage and limitations are documented

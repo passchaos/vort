@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import binascii
 import io
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -28,6 +30,59 @@ def run(program: Path, *args: str) -> subprocess.CompletedProcess[str]:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+
+
+def make_single_entry_zip(name: str, payload: bytes, compressed: bytes, method: int) -> bytes:
+    encoded_name = name.encode("utf-8")
+    crc = binascii.crc32(payload) & 0xFFFFFFFF
+    flags = 0x0800
+    version = 63
+    local = struct.pack(
+        "<IHHHHHIIIHH",
+        0x04034B50,
+        version,
+        flags,
+        method,
+        0,
+        0x0021,
+        crc,
+        len(compressed),
+        len(payload),
+        len(encoded_name),
+        0,
+    ) + encoded_name + compressed
+    central = struct.pack(
+        "<IHHHHHHIIIHHHHHII",
+        0x02014B50,
+        version,
+        version,
+        flags,
+        method,
+        0,
+        0x0021,
+        crc,
+        len(compressed),
+        len(payload),
+        len(encoded_name),
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ) + encoded_name
+    eocd = struct.pack(
+        "<IHHHHIIH",
+        0x06054B50,
+        0,
+        0,
+        1,
+        1,
+        len(central),
+        len(local),
+        0,
+    )
+    return local + central + eocd
 
 
 def validate_python_archive_with_vort(cli: Path, temp: Path) -> int:
@@ -92,6 +147,24 @@ def validate_python_archive_with_vort(cli: Path, temp: Path) -> int:
         run(cli, "extract-zip-file", str(zip_path), name, str(output))
         if output.read_bytes() != expected:
             raise AssertionError(f"Vort extraction mismatch for {name!r}")
+
+    zstd_tool = shutil.which("zstd")
+    if zstd_tool is None:
+        raise AssertionError("zstd CLI is required for ZIP method 93 differential")
+    zstd_payload = b"External Zstandard ZIP method 93.\n" * 128
+    zstd_frame = subprocess.run(
+        [zstd_tool, "-q", "-3", "-c"],
+        input=zstd_payload,
+        check=True,
+        stdout=subprocess.PIPE,
+    ).stdout
+    zstd_zip = make_single_entry_zip("external-zstd.txt", zstd_payload, zstd_frame, 93)
+    zstd_zip_path = temp / "external-zstd.zip"
+    zstd_output_path = temp / "external-zstd.out"
+    zstd_zip_path.write_bytes(zstd_zip)
+    run(cli, "extract-zip-file", str(zstd_zip_path), "external-zstd.txt", str(zstd_output_path))
+    if zstd_output_path.read_bytes() != zstd_payload:
+        raise AssertionError("Vort ZIP method 93 extraction mismatch")
     local_offset = fixture.index(b"python-force-zip64.bin") - 30
     local_name_len = struct.unpack_from("<H", fixture, local_offset + 26)[0]
     local_extra_len = struct.unpack_from("<H", fixture, local_offset + 28)[0]
@@ -110,6 +183,7 @@ def validate_vort_archive_with_python(
         "stored.bin": bytes([0, 1, 2, 255]) + b"stored by Vort",
         "folder/deflated.txt": b"Vort ZIP writer differential.\n" * 128,
         "folder/bzip2.txt": b"Vort ZIP Bzip2 method 12.\n" * 96,
+        "folder/zstd.txt": b"Vort ZIP Zstandard method 93.\n" * 96,
         "utf8-目录/数据.txt": "ZIP UTF-8 文件名\n".encode() * 17,
         "empty/": b"",
     }
@@ -134,18 +208,31 @@ def validate_vort_archive_with_python(
             raise AssertionError("Vort archive comment mismatch")
         if archive.namelist() != list(payloads):
             raise AssertionError(f"unexpected Vort entry order: {archive.namelist()!r}")
-        if archive.testzip() is not None:
-            raise AssertionError("Python reported a corrupt Vort entry")
         expected_methods = {
             "stored.bin": zipfile.ZIP_STORED,
             "folder/deflated.txt": zipfile.ZIP_DEFLATED,
             "folder/bzip2.txt": zipfile.ZIP_BZIP2,
+            "folder/zstd.txt": 93,
             "utf8-目录/数据.txt": zipfile.ZIP_DEFLATED,
             "empty/": zipfile.ZIP_STORED,
         }
+        zstd_tool = shutil.which("zstd")
+        if zstd_tool is None:
+            raise AssertionError("zstd CLI is required for ZIP method 93 differential")
         for name, expected in payloads.items():
             info = archive.getinfo(name)
-            if archive.read(info) != expected:
+            name_len, extra_len = struct.unpack_from("<HH", raw, info.header_offset + 26)
+            data_offset = info.header_offset + 30 + name_len + extra_len
+            if info.compress_type == 93:
+                actual = subprocess.run(
+                    [zstd_tool, "-q", "-d", "-c"],
+                    input=raw[data_offset : data_offset + info.compress_size],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                ).stdout
+            else:
+                actual = archive.read(info)
+            if actual != expected:
                 raise AssertionError(f"Python extraction mismatch for {name!r}")
             if info.date_time != (1980, 1, 1, 0, 0, 0):
                 raise AssertionError(f"non-deterministic timestamp for {name!r}")
@@ -162,8 +249,6 @@ def validate_vort_archive_with_python(
             local_crc, local_compressed, local_uncompressed = struct.unpack_from(
                 "<III", raw, info.header_offset + 14
             )
-            name_len, extra_len = struct.unpack_from("<HH", raw, info.header_offset + 26)
-            data_offset = info.header_offset + 30 + name_len + extra_len
             descriptor_offset = data_offset + info.compress_size
             expected_local_sizes = (0xFFFFFFFF, 0xFFFFFFFF) if force_zip64 else (0, 0)
             if local_flags & 0x0008 == 0 or local_crc != 0 or (local_compressed, local_uncompressed) != expected_local_sizes:
@@ -213,7 +298,7 @@ def main() -> None:
 
     print(
         "zip_diff=ok directions=2 "
-        f"python_entries=7 vort_entries=5 python_bytes={python_bytes} "
+        f"python_entries=7 vort_entries=6 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes}"
     )
 

@@ -298,6 +298,7 @@ pub fn main(init: std.process.Init) !void {
                 .deflate => "deflate",
                 .bzip2 => "bzip2",
                 .lzma => "lzma",
+                .zstandard => "zstd",
                 else => "unsupported",
             };
             try stdout.print("index={d} method={s} compressed={d} uncompressed={d} crc32={d} directory={} name={s}\n", .{

@@ -84,7 +84,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free ZIP32/ZIP64 archive reading and deterministic writing with
   EOCD/ZIP64-locator/central-directory iteration, exact entry lookup, stored,
-  raw-deflate, and Bzip2-method-12 multi-entry encoding/extraction,
+  raw-deflate, Bzip2-method-12, LZMA-method-14 decode, and
+  Zstandard-method-93 multi-entry encoding/extraction,
   transactional prefix append, 32-/64-bit data descriptors, archive/entry
   comments, CRC-32/size validation, UTF-8 flags, and explicit
   encrypted/multi-disk/unknown-method errors;
