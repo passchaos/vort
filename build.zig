@@ -1041,6 +1041,11 @@ pub fn build(b: *std.Build) void {
     const lzma_diff_step = b.step("run-lzma-diff", "Validate dependency-free LZMA-Alone decoding against Python lzma");
     lzma_diff_step.dependOn(&lzma_diff.step);
 
+    const compress_z_diff = b.addSystemCommand(&.{ "python3", "tools/compress_z/diff.py", "--cli" });
+    compress_z_diff.addArtifactArg(cli_exe);
+    const compress_z_diff_step = b.step("run-compress-z-diff", "Validate Unix compress (.Z) encode/decode interoperability");
+    compress_z_diff_step.dependOn(&compress_z_diff.step);
+
     const tar_writer_probe_exe = b.addExecutable(.{
         .name = "vort-tar-writer-probe",
         .root_module = b.createModule(.{
@@ -4587,6 +4592,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(bzip2_diff_step);
     ci_smoke_step.dependOn(xz_diff_step);
     ci_smoke_step.dependOn(lzma_diff_step);
+    ci_smoke_step.dependOn(compress_z_diff_step);
     ci_smoke_step.dependOn(tar_diff_step);
     ci_smoke_step.dependOn(br_stored_cli_diff_step);
     ci_smoke_step.dependOn(br_literal_cli_diff_step);
