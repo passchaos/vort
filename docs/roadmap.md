@@ -17615,16 +17615,18 @@ reuse, so production keeps the simpler independently owned plans.
   without splitting hot metadata. Evidence is in
   `docs/performance/data/brotli-flat-literal-root-working-set-x86-20261008.json`.
 
-- Functionality-first format coverage now includes dependency-free ZIP32
-  archive reading and deterministic writing. The library parses EOCD and
-  central-directory metadata, iterates and finds entries without allocation,
-  extracts stored and raw-Deflate members into caller buffers or bounded
-  allocations, and encodes multi-entry stored/Deflate archives through owned
-  or transactional append APIs. Writer options cover signed data descriptors,
-  UTF-8 flags, per-entry/archive comments, and caller-selected Deflate policy;
-  fixed DOS timestamps keep output reproducible, and non-empty destinations
-  become valid self-extracting prefixes. Encrypted, multi-disk, ZIP64, and
+- Functionality-first format coverage now includes dependency-free ZIP32 and
+  single-disk ZIP64 reading and deterministic writing. The library parses EOCD,
+  ZIP64 locator/EOCD, ordered `0x0001` central/local extra fields, and 32-/64-bit
+  data descriptors; it iterates and finds entries without allocation, extracts
+  stored and raw-Deflate members into caller buffers or bounded allocations,
+  and encodes multi-entry stored/Deflate archives through owned or
+  transactional append APIs. Writer `.auto`/`.always`/`.never` policy handles
+  count, size, and offset transitions; UTF-8 flags, per-entry/archive comments,
+  caller-selected Deflate policy, fixed timestamps, and self-extracting
+  prefixes remain deterministic. Encrypted, multi-disk, malformed ZIP64, and
   unsupported-method inputs fail explicitly. A bidirectional Python `zipfile`
-  differential covers descriptors, UTF-8 names, directories, comments,
-  deterministic output, prefixed archives, and CLI extraction. Usage and
-  limitations are documented in `docs/formats/zip.md`.
+  differential covers Python `force_zip64`, fully forced Vort ZIP64 archives,
+  descriptors, UTF-8 names, directories, comments, deterministic output,
+  prefixed archives, and CLI extraction. Usage and limitations are documented
+  in `docs/formats/zip.md`.
