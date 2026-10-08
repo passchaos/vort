@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const filters = @import("filters.zig");
 
 pub const Error = core.Error || error{
     InvalidXzHeader,
@@ -21,6 +22,8 @@ pub const StreamInfo = struct {
     compressed_size: usize,
     uncompressed_size: usize,
     max_dictionary_size: u64,
+    delta_filter_blocks: usize,
+    x86_filter_blocks: usize,
 };
 
 const stream_magic = [_]u8{ 0xfd, '7', 'z', 'X', 'Z', 0x00 };
@@ -32,6 +35,8 @@ const BlockHeader = struct {
     packed_size: ?u64,
     unpacked_size: ?u64,
     dictionary_size: u64,
+    filters: [3]filters.Filter = undefined,
+    filter_count: usize = 0,
 };
 
 const BlockRecord = struct {
@@ -162,6 +167,8 @@ fn decodeOneWithInfo(
     var records: std.ArrayList(BlockRecord) = .empty;
     defer records.deinit(allocator);
     var max_dictionary_size: u64 = 0;
+    var delta_filter_blocks: usize = 0;
+    var x86_filter_blocks: usize = 0;
     var offset: usize = 12;
     while (true) {
         if (offset >= input.len) return error.TruncatedFrame;
@@ -182,6 +189,7 @@ fn decodeOneWithInfo(
 
         const decoded = try decodeLzma2Alloc(allocator, input[header.end_offset..data_end], scan.unpacked_size);
         defer allocator.free(decoded);
+        filters.decodeChain(decoded, header.filters[0..header.filter_count]);
         try verifyCheck(check, decoded, input[padding_end..check_end]);
         const output_end = std.math.add(usize, output.items.len, decoded.len) catch return error.OutputLimitExceeded;
         if (output_end > max_output_len) return error.OutputLimitExceeded;
@@ -196,6 +204,10 @@ fn decodeOneWithInfo(
             .unpadded_size = unpadded_size,
             .uncompressed_size = scan.unpacked_size,
         });
+        for (header.filters[0..header.filter_count]) |filter| switch (filter.kind) {
+            .delta => delta_filter_blocks += 1,
+            .x86 => x86_filter_blocks += 1,
+        };
         offset = check_end;
     }
 
@@ -236,6 +248,8 @@ fn decodeOneWithInfo(
             .compressed_size = footer_end,
             .uncompressed_size = produced,
             .max_dictionary_size = max_dictionary_size,
+            .delta_filter_blocks = delta_filter_blocks,
+            .x86_filter_blocks = x86_filter_blocks,
         },
     };
 }
@@ -253,14 +267,27 @@ fn parseBlockHeader(input: []const u8, start: usize) Error!BlockHeader {
     const flags = try readByte(input, &cursor, crc_offset);
     if (flags & 0x3c != 0) return error.InvalidXzHeader;
     const filter_count = @as(usize, flags & 0x03) + 1;
-    if (filter_count != 1) return error.UnsupportedXzFeature;
     const packed_size = if (flags & 0x40 != 0) try readVli(input, &cursor, crc_offset) else null;
     const unpacked_size = if (flags & 0x80 != 0) try readVli(input, &cursor, crc_offset) else null;
-    if (try readVli(input, &cursor, crc_offset) != 0x21) return error.UnsupportedXzFeature;
-    const properties_size = try readVli(input, &cursor, crc_offset);
-    if (properties_size != 1) return error.InvalidXzHeader;
-    const dictionary_property = try readByte(input, &cursor, crc_offset);
-    if (dictionary_property > 40) return error.InvalidXzHeader;
+    var decoded_filters: [3]filters.Filter = undefined;
+    var decoded_filter_count: usize = 0;
+    var dictionary_property: ?u8 = null;
+    for (0..filter_count) |filter_index| {
+        const filter_id = try readVli(input, &cursor, crc_offset);
+        const properties_size_u64 = try readVli(input, &cursor, crc_offset);
+        const properties_size = std.math.cast(usize, properties_size_u64) orelse return error.UnsupportedXzFeature;
+        const properties_end = try checkedEnd(cursor, properties_size, crc_offset);
+        const properties = input[cursor..properties_end];
+        cursor = properties_end;
+        if (filter_index + 1 == filter_count) {
+            if (filter_id != 0x21) return error.UnsupportedXzFeature;
+            if (properties.len != 1 or properties[0] > 40) return error.InvalidXzHeader;
+            dictionary_property = properties[0];
+        } else {
+            decoded_filters[decoded_filter_count] = try filters.parse(filter_id, properties);
+            decoded_filter_count += 1;
+        }
+    }
     while (cursor < crc_offset) : (cursor += 1)
         if (input[cursor] != 0) return error.InvalidXzHeader;
 
@@ -269,7 +296,9 @@ fn parseBlockHeader(input: []const u8, start: usize) Error!BlockHeader {
         .header_size = header_without_crc + 4,
         .packed_size = packed_size,
         .unpacked_size = unpacked_size,
-        .dictionary_size = lzma2DictionarySize(dictionary_property),
+        .dictionary_size = lzma2DictionarySize(dictionary_property orelse return error.InvalidXzHeader),
+        .filters = decoded_filters,
+        .filter_count = decoded_filter_count,
     };
 }
 
@@ -447,6 +476,8 @@ test "XZ decoder validates and decodes a CRC64 LZMA2 stream" {
     try std.testing.expectEqual(encoded.len, info.compressed_size);
     try std.testing.expectEqual(expected.len, info.uncompressed_size);
     try std.testing.expectEqual(@as(u64, 256 * 1024), info.max_dictionary_size);
+    try std.testing.expectEqual(@as(usize, 0), info.delta_filter_blocks);
+    try std.testing.expectEqual(@as(usize, 0), info.x86_filter_blocks);
 
     var output: [expected.len]u8 = undefined;
     try std.testing.expectEqual(expected.len, try decodeInto(std.testing.allocator, &encoded, &output));
