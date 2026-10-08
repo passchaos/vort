@@ -1056,6 +1056,22 @@ pub fn build(b: *std.Build) void {
     const lzop_diff_step = b.step("run-lzop-diff", "Validate LZOP stored output and optional lzop LZO1X streams");
     lzop_diff_step.dependOn(&lzop_diff.step);
 
+    const seven_zip_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-seven-zip-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/seven_zip/writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const seven_zip_diff = b.addSystemCommand(&.{ "python3", "tools/seven_zip/diff.py", "--cli" });
+    seven_zip_diff.addArtifactArg(cli_exe);
+    seven_zip_diff.addArg("--writer");
+    seven_zip_diff.addArtifactArg(seven_zip_writer_probe_exe);
+    const seven_zip_diff_step = b.step("run-seven-zip-diff", "Validate Copy/Deflate/Bzip2/LZMA/LZMA2 7z archives against 7-Zip");
+    seven_zip_diff_step.dependOn(&seven_zip_diff.step);
+
     const tar_writer_probe_exe = b.addExecutable(.{
         .name = "vort-tar-writer-probe",
         .root_module = b.createModule(.{
@@ -4605,6 +4621,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(compress_z_diff_step);
     ci_smoke_step.dependOn(lzip_diff_step);
     ci_smoke_step.dependOn(lzop_diff_step);
+    ci_smoke_step.dependOn(seven_zip_diff_step);
     ci_smoke_step.dependOn(tar_diff_step);
     ci_smoke_step.dependOn(br_stored_cli_diff_step);
     ci_smoke_step.dependOn(br_literal_cli_diff_step);
