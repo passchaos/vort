@@ -104,6 +104,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - pure Zig Unix `compress` (`.Z`) LZW encoding and decoding with 9..16-bit
   variable-width LSB-first codes, block-mode dictionary clears, non-block
   dictionary freeze, caller-owned/bounded APIs, and decoded-size preflight;
+- pure Zig lzip v1 decoding with LZMA-302eos payloads, coded dictionary sizes,
+  per-member CRC/data/member-size validation, strict multimember handling, and
+  caller-selected output and dictionary limits;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
   safe-path classification, borrowed entry views, and automatic raw/gzip/
   Bzip2/XZ/Zstandard tarball composition;

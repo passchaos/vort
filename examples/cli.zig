@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const compress_z_cli = @import("cli/compress_z.zig");
+const lzip_cli = @import("cli/lzip.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [2048]u8 = undefined;
@@ -189,6 +190,12 @@ pub fn main(init: std.process.Init) !void {
         try compress_z_cli.decodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-compress-z-file")) {
         try compress_z_cli.sizeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-lzip-file")) {
+        try lzip_cli.decodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "size-lzip-file")) {
+        try lzip_cli.sizeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-lzip-file")) {
+        try lzip_cli.inspectFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1911,6 +1918,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode a Unix compress (.Z) stream
         \\  size-compress-z-file <path> [max_output]
         \\                              Preflight a Unix compress stream's decoded size
+        \\  decode-lzip-file <in> <out> [max_output] [max_dictionary]
+        \\                              Decode and verify a single- or multi-member lzip file
+        \\  size-lzip-file <path> [max_output] [max_dictionary]
+        \\                              Decode and report a verified lzip file's size
+        \\  inspect-lzip-file <path>    Parse and print structural lzip member metadata
         \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]
         \\                              Decode an LZMA-Alone stream with explicit limits
         \\  size-lzma-file <path> [max_output]

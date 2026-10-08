@@ -25,6 +25,7 @@ pub const xz = @import("xz.zig");
 pub const lzma = @import("lzma.zig");
 pub const tar = @import("tar.zig");
 pub const compress_z = @import("compress_z.zig");
+pub const lzip = @import("lzip.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -149,6 +150,20 @@ pub const decodeCompressZAlloc = compress_z.decodeAlloc;
 pub const decodeCompressZAllocLimited = compress_z.decodeAllocLimited;
 pub const compressZDecodedSize = compress_z.decodedSize;
 pub const compressZDecodedSizeLimited = compress_z.decodedSizeLimited;
+
+pub const LzipError = lzip.Error;
+pub const LzipHeader = lzip.Header;
+pub const LzipFileInfo = lzip.FileInfo;
+pub const LzipDecodeOptions = lzip.DecodeOptions;
+pub const parseLzipHeader = lzip.parseHeader;
+pub const inspectLzip = lzip.inspect;
+pub const decodeLzipInto = lzip.decodeInto;
+pub const decodeLzipAlloc = lzip.decodeAlloc;
+pub const decodeLzipAllocLimited = lzip.decodeAllocLimited;
+pub const decodeLzipAllocWithOptions = lzip.decodeAllocWithOptions;
+pub const lzipDecodedSize = lzip.decodedSize;
+pub const lzipDecodedSizeLimited = lzip.decodedSizeLimited;
+pub const lzipDecodedSizeWithOptions = lzip.decodedSizeWithOptions;
 
 pub const BrotliError = br.Error;
 pub const BrotliDecodeOptions = br.DecodeOptions;
@@ -2298,6 +2313,7 @@ test {
     _ = lzma;
     _ = tar;
     _ = compress_z;
+    _ = lzip;
 }
 
 test "root Unix compress exports round trip .Z streams" {
@@ -2313,6 +2329,17 @@ test "root Unix compress exports round trip .Z streams" {
     const decoded = try decodeCompressZAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "root lzip exports decode reference members" {
+    const encoded_hex = "4c5a4950010c00341949ee8de9148a6a3e85eb7b90eba1fffffbfde0003a319d3216000000000000003100000000000000";
+    var encoded: [encoded_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&encoded, encoded_hex);
+    const info = try inspectLzip(std.testing.allocator, &encoded);
+    try std.testing.expectEqual(@as(usize, 1), info.member_count);
+    const decoded = try decodeLzipAlloc(std.testing.allocator, &encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "hello lzip\nhello lzip\n", decoded);
 }
 
 test "root exports lz4 and zstd codec helpers" {

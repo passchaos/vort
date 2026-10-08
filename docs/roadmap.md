@@ -17721,3 +17721,14 @@ reuse, so production keeps the simpler independently owned plans.
   mode freezes it. The external smoke validates Vort output with system
   `uncompress` and also tests ncompress output when `compress` is installed.
   See `docs/formats/compress-z.md`.
+
+- Added pure Zig lzip v1 decoding on the existing LZMA1 range-decoder core.
+  The container validates coded 4 KiB through 512 MiB dictionaries, mandatory
+  LZMA-302eos termination, CRC-32, uncompressed size, member size, trailer
+  consistency bounds, and strict coverage of all input bytes. Its reverse
+  distributed-index pass supports concatenated members in original order and
+  rejects empty members in multimember files. Public APIs provide structural
+  inspection, caller-owned output, bounded allocation, decoded-size preflight,
+  and independent output/dictionary limits. Python raw-LZMA generation and the
+  optional reference `lzip` tool provide interoperability coverage. See
+  `docs/formats/lzip.md`.

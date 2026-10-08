@@ -133,6 +133,30 @@ pub fn decodeZipPayloadAllocLimited(
     );
 }
 
+/// Decode the marker-terminated raw LZMA-302eos payload used by lzip members.
+/// This integration helper is public within the source tree but is not
+/// re-exported by the standalone LZMA facade.
+pub fn decodeLzipPayloadAllocLimited(
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    dictionary_size: u32,
+    max_output_len: usize,
+) ![]u8 {
+    return decodeRawAlloc(
+        allocator,
+        payload,
+        .{
+            .lc = 3,
+            .lp = 0,
+            .pb = 2,
+            .dictionary_size = dictionary_size,
+            .uncompressed_size = null,
+        },
+        max_output_len,
+        true,
+    );
+}
+
 const Properties = struct { lc: u4, lp: u3, pb: u3 };
 
 fn parseProperties(value: u8) Error!Properties {
