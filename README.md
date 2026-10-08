@@ -101,6 +101,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free LZMA-Alone decoding with known/unknown-size headers,
   caller-selected output/dictionary limits, caller-owned output, and ZIP
   method-14 extraction through the same LZMA core;
+- deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
+  safe-path classification, borrowed entry views, and automatic raw/gzip/
+  Bzip2/XZ/Zstandard tarball composition;
 - dependency-free Brotli `br` stored/uncompressed and planner-backed fast encode/decode surfaces, including explicit 10..16-bit one-shot planned windows at every level and the complete 10..24 range at ratio level with distance-bounded matching, exact-wire-selected two-type literal/command/distance entropy splitting for heterogeneous ratio inputs, one-shot planned metadata at every level, opt-in bounded static-dictionary probing for 257-byte through 4 KiB ratio inputs, arbitrarily large ratio inputs encoded as one bounded-memory multi-meta-block stream, a caller-to-caller incremental planned encoder with flush/metadata, compressed-or-stored arbitration, and bounded cross-block LZ77 history, chunked encoding with bounded parser scratch into one mixed compressed/stored multi-meta-block stream plus 10..24-bit window and metadata options, strict-by-default RFC 7932 window bits 10..24 plus explicit opt-in decoding of the Large Window Brotli 10..30-bit extension across one-shot, chunked, summary, buffered-incremental, and byte-progressive copy APIs, metadata meta-block skipping, caller-history stream summaries for large-window preflight without hidden allocation, a bounded split-input general facade that validates on explicit finish, byte-progressive stored-subset encode/decode, and bounded-header byte-progressive decoders for insert-only Huffman literals, single-command RLE, and copy streams with literal/distance context maps, entropy block switching across the complete 256-entry literal/command/distance block-type count range and literal/distance context-tree ranges, caller-owned compressed-header scratch beyond the default 16 KiB bound, dynamic direct/regular/recent distances, transformed static-dictionary references, non-final compressed blocks followed by metadata/stored blocks and a final-empty terminator, plus libbrotli streaming-operation differentials covering PROCESS accumulation, empty/repeated FLUSH, METADATA transitions, and FINISH with pending input; compressed output honors caller backpressure and copy history is caller-owned;
 - dependency-free Snappy raw block full decode plus greedy match raw/framed encode with reusable encoder state, encoded-bound helpers, raw-block and framed-stream summaries, split-input and exact-size decode helpers, decoded-size preflight, bounded allocation, masked CRC-32C validation, skippable framed chunks, and caller-owned incremental framed encode/decode with 64 KiB input chunking, optional pledged input/output sizes, split headers/payloads, bounded input/output memory, tiny-output draining, exact-output continuation through following skippable chunks, reset/next-stream reuse with cumulative and per-stream counters, snapshots, and diagnostics;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, frame-index CRC composition, range CRC summaries, caller-owned and batch range decode APIs, and bounded streaming APIs;
@@ -189,6 +192,10 @@ zig build run-xz-diff
 zig build run -- decode-lzma-file /tmp/archive.lzma /tmp/archive.out 67108864 67108864
 zig build run -- size-lzma-file /tmp/archive.lzma 67108864
 zig build run-lzma-diff
+zig build run -- create-tar-file /tmp/archive.tar.gz payload.bin README.md gzip
+zig build run -- list-tar-file /tmp/archive.tar.gz 67108864
+zig build run -- extract-tar-file /tmp/archive.tar.gz payload.bin /tmp/payload.out 67108864
+zig build run-tar-diff
 zig build run -- encode-br-stored-hex "hello vort" 16 metadata
 zig build run -- decode-br-hex 40001068656c6c6f03 5
 zig build run-br-stored-corpus

@@ -17696,3 +17696,15 @@ reuse, so production keeps the simpler independently owned plans.
   Python `zipfile` supplies method-14 interoperability coverage. LZMA-Alone has
   no intrinsic content checksum, so XZ or ZIP remains preferable when integrity
   verification is required. See `docs/formats/lzma.md`.
+
+- Added deterministic TAR archive reading and writing. The reader validates
+  header checksums, octal and positive base-256 sizes, payload padding, USTAR
+  prefix paths, POSIX PAX path/linkpath/size records, and GNU long-name/link
+  records. It exposes zero-copy iteration, lookup, bounded extraction, and a
+  cross-platform safe-relative-path predicate without writing archive paths to
+  disk. The writer emits regular files, directories, symbolic/hard links, and
+  deterministic PAX long paths. A compositional layer automatically detects
+  and decodes raw TAR, tar.gz, tar.bz2, tar.xz, and tar.zst and writes the same
+  five variants through existing Vort codecs. Python `tarfile`, GNU tar, and
+  system zstd validate raw/PAX/GNU metadata and compressed tarballs. See
+  `docs/formats/tar.md`.

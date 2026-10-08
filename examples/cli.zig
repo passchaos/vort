@@ -284,6 +284,66 @@ pub fn main(init: std.process.Init) !void {
             info.arm_thumb_filter_blocks,
             info.sparc_filter_blocks,
         });
+    } else if (std.mem.eql(u8, command, "create-tar-file")) {
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const entry_name = args.next() orelse return error.MissingCorpusPath;
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const compression = try parseTarCompression(args.next());
+        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(input);
+        const entries = [_]vort.TarEncodeEntry{.{ .name = entry_name, .data = input }};
+        const encoded = try vort.encodeCompressedTarAlloc(init.gpa, &entries, .{ .compression = compression });
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("tar_compression={s} input_bytes={d} archive_bytes={d} path={s}\n", .{
+            @tagName(compression),
+            input.len,
+            encoded.len,
+            output_path,
+        });
+    } else if (std.mem.eql(u8, command, "list-tar-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const max_tar_size = (try parseOptionalLimit(args.next())) orelse 512 * 1024 * 1024;
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(bytes);
+        const compression = vort.detectTarCompression(bytes);
+        const owned = try vort.decodeTarAutoAlloc(init.gpa, bytes, max_tar_size);
+        defer owned.deinit(init.gpa);
+        try stdout.print("tar_entries={d} compression={s}\n", .{ owned.archive.entry_count, @tagName(compression) });
+        var iterator_value = owned.archive.iterator();
+        var index: usize = 0;
+        while (try iterator_value.next()) |entry| : (index += 1) {
+            const name = try entry.path.alloc(init.gpa);
+            defer init.gpa.free(name);
+            try stdout.print("index={d} kind={s} size={d} mode={o} safe={} name={s}", .{
+                index,
+                @tagName(entry.kind),
+                entry.size,
+                entry.mode,
+                entry.path.isSafeRelative(),
+                name,
+            });
+            if (entry.link_name.len != 0) try stdout.print(" link={s}", .{entry.link_name});
+            try stdout.writeByte('\n');
+        }
+    } else if (std.mem.eql(u8, command, "extract-tar-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const entry_name = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_tar_size = (try parseOptionalLimit(args.next())) orelse 512 * 1024 * 1024;
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(bytes);
+        const owned = try vort.decodeTarAutoAlloc(init.gpa, bytes, max_tar_size);
+        defer owned.deinit(init.gpa);
+        const decoded = try owned.archive.extractByNameAllocLimited(init.gpa, entry_name, max_tar_size);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("tar_bytes={d} decoded_bytes={d} entry={s} path={s}\n", .{
+            owned.bytes.len,
+            decoded.len,
+            entry_name,
+            output_path,
+        });
     } else if (std.mem.eql(u8, command, "list-zip-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
@@ -1851,6 +1911,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-xz-file <path> [max_output]
         \\                              Preflight an XZ stream's decoded size
         \\  inspect-xz-file <path>      Validate and print XZ stream metadata
+        \\  create-tar-file <out> <entry> <in> [none|gzip|bzip2|xz|zstd]
+        \\                              Create a deterministic one-entry tarball
+        \\  list-tar-file <path> [max_tar_size]
+        \\                              List a tar/tar.gz/tar.bz2/tar.xz/tar.zst archive
+        \\  extract-tar-file <tar> <entry> <out> [max_tar_size]
+        \\                              Extract one named regular file without path traversal
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
         \\  extract-zip-file <zip> <entry> <out> [max_output]
         \\                              Extract a stored/deflate ZIP entry with CRC validation
@@ -2832,6 +2898,16 @@ fn parseXzFilters(text: ?[]const u8, storage: *[3]vort.XzFilter) ![]const vort.X
         count += 1;
     }
     return storage[0..count];
+}
+
+fn parseTarCompression(text: ?[]const u8) !vort.TarCompression {
+    const value = text orelse return .none;
+    if (std.mem.eql(u8, value, "none") or std.mem.eql(u8, value, "tar")) return .none;
+    if (std.mem.eql(u8, value, "gzip") or std.mem.eql(u8, value, "gz")) return .gzip;
+    if (std.mem.eql(u8, value, "bzip2") or std.mem.eql(u8, value, "bz2")) return .bzip2;
+    if (std.mem.eql(u8, value, "xz")) return .xz;
+    if (std.mem.eql(u8, value, "zstandard") or std.mem.eql(u8, value, "zstd")) return .zstandard;
+    return error.UnknownTarCompression;
 }
 
 fn parseSeekabilityTier(text: ?[]const u8) !vort.SeekabilityTier {

@@ -1041,6 +1041,22 @@ pub fn build(b: *std.Build) void {
     const lzma_diff_step = b.step("run-lzma-diff", "Validate dependency-free LZMA-Alone decoding against Python lzma");
     lzma_diff_step.dependOn(&lzma_diff.step);
 
+    const tar_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-tar-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/tar/writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const tar_diff = b.addSystemCommand(&.{ "python3", "tools/tar/diff.py", "--cli" });
+    tar_diff.addArtifactArg(cli_exe);
+    tar_diff.addArg("--writer");
+    tar_diff.addArtifactArg(tar_writer_probe_exe);
+    const tar_diff_step = b.step("run-tar-diff", "Validate TAR and common compressed tarballs against Python tarfile");
+    tar_diff_step.dependOn(&tar_diff.step);
+
     const br_stored_cli_diff = b.addSystemCommand(&.{ "python3", "tools/br_stored_cli_diff.py" });
     br_stored_cli_diff.addArtifactArg(cli_exe);
     const br_stored_cli_diff_step = b.step("run-br-stored-cli-diff", "Run black-box smoke for dependency-free Brotli stored streams against Node Brotli");
@@ -4571,6 +4587,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(bzip2_diff_step);
     ci_smoke_step.dependOn(xz_diff_step);
     ci_smoke_step.dependOn(lzma_diff_step);
+    ci_smoke_step.dependOn(tar_diff_step);
     ci_smoke_step.dependOn(br_stored_cli_diff_step);
     ci_smoke_step.dependOn(br_literal_cli_diff_step);
     ci_smoke_step.dependOn(br_stored_corpus_step);
