@@ -2,8 +2,9 @@ const std = @import("std");
 const core = @import("core.zig");
 const checksum = @import("checksum.zig");
 const deflate = @import("deflate.zig");
+pub const writer = @import("zip/writer.zig");
 
-pub const Error = core.Error || error{
+pub const Error = writer.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -17,11 +18,11 @@ const end_of_central_signature: u32 = 0x0605_4b50;
 const end_of_central_len: usize = 22;
 const max_comment_len: usize = std.math.maxInt(u16);
 
-pub const CompressionMethod = enum(u16) {
-    stored = 0,
-    deflate = 8,
-    _,
-};
+pub const CompressionMethod = writer.CompressionMethod;
+pub const EncodeEntry = writer.EncodeEntry;
+pub const EncodeOptions = writer.EncodeOptions;
+pub const encodeAlloc = writer.encodeAlloc;
+pub const encodeAppend = writer.encodeAppend;
 
 pub const Entry = struct {
     name: []const u8,
@@ -465,4 +466,89 @@ test "ZIP rejects unsupported archive and entry features" {
 
     std.mem.writeInt(u16, empty[4..6], 1, .little);
     try std.testing.expectError(error.UnsupportedZipFeature, parse(&empty));
+}
+
+test "ZIP writer deterministically round trips multiple stored and deflate entries" {
+    const allocator = std.testing.allocator;
+    const deflated_payload = "deterministic ZIP writer payload\n" ** 64;
+    const entries = [_]EncodeEntry{
+        .{ .name = "plain.bin", .data = "\x00stored\xff", .method = .stored, .comment = "stored entry" },
+        .{ .name = "utf8-目录/data.txt", .data = deflated_payload, .method = .deflate },
+        .{ .name = "empty/", .data = "", .method = .stored },
+    };
+    const options = EncodeOptions{
+        .archive_comment = "vort deterministic archive",
+        .data_descriptor = true,
+    };
+    const first = try encodeAlloc(allocator, &entries, options);
+    defer allocator.free(first);
+    const second = try encodeAlloc(allocator, &entries, options);
+    defer allocator.free(second);
+    try std.testing.expectEqualSlices(u8, first, second);
+
+    const archive = try parse(first);
+    try std.testing.expectEqual(@as(usize, entries.len), archive.entry_count);
+    try std.testing.expectEqualStrings(options.archive_comment, archive.comment);
+    var it = archive.iterator();
+    var index: usize = 0;
+    while (try it.next()) |entry| : (index += 1) {
+        try std.testing.expectEqualStrings(entries[index].name, entry.name);
+        try std.testing.expectEqual(entries[index].method, entry.method);
+        try std.testing.expect(entry.flags & 0x0008 != 0);
+        try std.testing.expect(entry.flags & 0x0800 != 0);
+        try std.testing.expectEqual(@as(u16, 0), try readU16(first, entry.local_header_offset + 10));
+        try std.testing.expectEqual(@as(u16, 0x0021), try readU16(first, entry.local_header_offset + 12));
+        const decoded = try archive.extractAlloc(allocator, entry);
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, entries[index].data, decoded);
+    }
+    try std.testing.expectEqual(entries.len, index);
+}
+
+test "ZIP writer appends a valid archive after a prefix and rejects inputs transactionally" {
+    const allocator = std.testing.allocator;
+    const entries = [_]EncodeEntry{
+        .{ .name = "payload.txt", .data = "prefixed archive", .method = .stored },
+    };
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
+    try out.appendSlice(allocator, "MZ-prefix");
+    const prefix_len = out.items.len;
+    const written = try encodeAppend(allocator, &out, &entries, .{ .utf8 = false });
+    try std.testing.expectEqual(out.items.len - prefix_len, written);
+
+    const archive = try parse(out.items);
+    const entry = try archive.entryAt(0);
+    try std.testing.expectEqual(prefix_len, entry.local_header_offset);
+    try std.testing.expectEqual(@as(u16, 0), entry.flags & 0x0808);
+    const decoded = try archive.extractAlloc(allocator, entry);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualStrings(entries[0].data, decoded);
+
+    const before = try allocator.dupe(u8, out.items);
+    defer allocator.free(before);
+    const invalid_name = [_]EncodeEntry{.{ .name = "", .data = "invalid" }};
+    try std.testing.expectError(error.InvalidZipEntryName, encodeAppend(allocator, &out, &invalid_name, .{}));
+    try std.testing.expectEqualSlices(u8, before, out.items);
+
+    const invalid_utf8_name = [_]u8{0xff};
+    const invalid_utf8 = [_]EncodeEntry{.{ .name = &invalid_utf8_name, .data = "invalid" }};
+    try std.testing.expectError(error.InvalidZipTextEncoding, encodeAppend(allocator, &out, &invalid_utf8, .{}));
+    try std.testing.expectEqualSlices(u8, before, out.items);
+
+    const unsupported = [_]EncodeEntry{.{
+        .name = "unsupported.bin",
+        .data = "invalid",
+        .method = @enumFromInt(12),
+    }};
+    try std.testing.expectError(error.UnsupportedZipCompressionMethod, encodeAppend(allocator, &out, &unsupported, .{}));
+    try std.testing.expectEqualSlices(u8, before, out.items);
+}
+
+test "ZIP writer emits and parses an empty archive" {
+    const bytes = try encodeAlloc(std.testing.allocator, &.{}, .{});
+    defer std.testing.allocator.free(bytes);
+    const archive = try parse(bytes);
+    try std.testing.expectEqual(@as(usize, 0), archive.entry_count);
+    try std.testing.expectEqual(@as(usize, 0), archive.central_directory_size);
 }
