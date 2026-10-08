@@ -297,6 +297,18 @@ stride. Raw nanoseconds, CSV and executable hashes, affinity evidence, shape
 counts, and discarded-campaign notes are in
 [brotli-flat-command-root-working-set-x86-20261008.json](data/brotli-flat-command-root-working-set-x86-20261008.json).
 
+An aligned single-load follow-up retained the 32-bit fused metadata and only
+reduced the root width from ten to nine bits. This cut the three active command
+roots from 12 to 6 KiB without changing rodata or any flat executor size; the
+ordinary text section also shrank by 576 bytes. Long command codes now fall
+back after nine bits instead of ten.
+
+Fifteen physical-core-isolated pairs still lost 15/15 at `0.99013x` median /
+`0.98995x` geometric throughput, ranging from `0.98625x` to `0.99330x`.
+The additional long-code work costs more than the 6 KiB footprint reduction,
+so production retains the ten-bit fused root. Exact samples and hashes are in
+[brotli-flat-fused-command9-x86-20261008.json](data/brotli-flat-fused-command9-x86-20261008.json).
+
 ## Literal-root working-set follow-up
 
 The same workload actively indexes 52 eight-bit literal roots. The canonical

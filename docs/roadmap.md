@@ -17595,6 +17595,16 @@ reuse, so production keeps the simpler independently owned plans.
   single-load metadata. Evidence is in
   `docs/performance/data/brotli-flat-command-root-working-set-x86-20261008.json`.
 
+- Keeping aligned 32-bit fused entries but narrowing the flat command root from
+  ten to nine bits was also rejected. It halved the three active command roots
+  from 12 to 6 KiB, kept the selected executor at `0x10d5`, left rodata
+  unchanged, and shrank ordinary text by 576 bytes. Nevertheless, fifteen
+  physical-core-isolated pairs lost 15/15 at `0.9901x` median / `0.9899x`
+  geometric throughput because more ten-bit command codes entered the long
+  fallback. The measured optimum remains the aligned ten-bit fused root.
+  Evidence is in
+  `docs/performance/data/brotli-flat-fused-command9-x86-20261008.json`.
+
 - Splitting the flat Brotli literal root into independent byte-symbol and
   nibble-length planes was also rejected. It reduced the 64-tree allocation
   from 32 to 24 KiB and the target's active literal roots from 26 to 19.5 KiB
