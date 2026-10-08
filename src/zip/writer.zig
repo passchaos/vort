@@ -4,8 +4,9 @@ const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const deflate = @import("../deflate.zig");
 const types = @import("types.zig");
+const zstd = @import("../zstd.zig");
 
-pub const Error = core.Error || bzip2.Error || error{
+pub const Error = core.Error || bzip2.Error || zstd.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -34,6 +35,8 @@ pub const EncodeOptions = struct {
     zip64: Zip64Mode = .auto,
     deflate_options: deflate.CompressionOptions = deflate.optionsForLevel(.default),
     bzip2_options: bzip2.EncodeOptions = .{},
+    zstd_level: c_int = zstd.default_compression_level,
+    zstd_options: zstd.FrameOptions = .{},
 };
 
 const local_file_signature: u32 = 0x0403_4b50;
@@ -110,6 +113,16 @@ pub fn encodeAppend(
             },
             .bzip2 => blk: {
                 const bytes = try bzip2.encodeAlloc(allocator, entry.data, options.bzip2_options);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
+            .zstandard => blk: {
+                const bytes = try zstd.encodeFrameWithLevelAndOptionsAlloc(
+                    allocator,
+                    entry.data,
+                    options.zstd_level,
+                    options.zstd_options,
+                );
                 owned_compressed = bytes;
                 break :blk bytes;
             },
@@ -205,7 +218,7 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
         if (options.zip64 == .never and entry.data.len >= std.math.maxInt(u32))
             return error.Zip32LimitExceeded;
         switch (entry.method) {
-            .stored, .deflate, .bzip2 => {},
+            .stored, .deflate, .bzip2, .zstandard => {},
             else => return error.UnsupportedZipCompressionMethod,
         }
         if (options.utf8 and
@@ -340,6 +353,7 @@ fn anyZip64Entry(entries: []const EncodedEntry) bool {
 
 fn requiredVersion(method: CompressionMethod, zip64: bool) u16 {
     if (method == .bzip2) return 46;
+    if (method == .zstandard) return 63;
     return if (zip64) version_45 else version_20;
 }
 
