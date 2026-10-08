@@ -1016,9 +1016,9 @@ by doubling. Raw decoding stays strict by default, while zlib/gzip wrappers opt
 into exact-prefix completion so they can offer the remaining input in one batch
 without surrendering their footer. A CPU-0 `netz` integration A/B over a 4 KiB
 payload and 80-byte gzip representation (five ReleaseFast runs of 50,000
-iterations) reduced median incremental decode latency from 85,330 ns to 4,647
-ns (`18.36x`, 94.55% lower). The whole-body caller-buffer median was effectively
-flat at 2,850 ns before and 2,837 ns after; this is an incremental-core result,
+iterations) reduced median incremental decode latency from 85,330 ns to 4,664
+ns (`18.30x`, 94.53% lower). The whole-body caller-buffer median was effectively
+flat at 2,850 ns before and 2,820 ns after; this is an incremental-core result,
 not a one-shot regression claim.
 
 `bench-deflate-incremental-decode` now compares reusable Vort and system-zlib
@@ -1028,18 +1028,18 @@ iterations per row against zlib 1.3 produced these median nanoseconds per decode
 
 | case | Vort full | zlib full | Vort 7x31 | zlib 7x31 |
 | --- | ---: | ---: | ---: | ---: |
-| HTTP 4 KiB | 4,775 | 3,607 | 12,476 | 14,132 |
-| JSON 32 KiB | 21,050 | 12,938 | 82,948 | 102,991 |
-| binary 64 KiB | 17,592 | 15,761 | 387,906 | 290,177 |
+| HTTP 4 KiB | 4,764 | 3,587 | 12,564 | 14,086 |
+| JSON 32 KiB | 21,089 | 12,923 | 83,823 | 102,679 |
+| binary 64 KiB | 17,567 | 15,753 | 388,896 | 286,722 |
 
-The geometric-mean Vort/zlib latency ratio is `1.340x` for full buffers and
-`0.983x` for fragmented buffers. Vort is therefore already ahead on fragmented
+The geometric-mean Vort/zlib latency ratio is `1.342x` for full buffers and
+`0.996x` for fragmented buffers. Vort is therefore already ahead on fragmented
 HTTP/JSON input while system zlib remains ahead on full-buffer dynamic streams
 and fragmented incompressible input. The benchmark gate checks all twelve rows,
 matching output/checksum values, the exact fragmentation shape, and a
 conservative 4x per-row regression bound. The binary full-buffer gain came from
 copying aligned stored payloads directly into caller output and committing the
-history suffix in spans; its throughput is now about 3.55 GiB/s versus zlib's
+history suffix in spans; its throughput is now about 3.56 GiB/s versus zlib's
 3.97 GiB/s, rather than the earlier byte-at-a-time 141 MiB/s smoke.
 
 The Huffman table now stores bit-length bucket offsets/counts for active canonical

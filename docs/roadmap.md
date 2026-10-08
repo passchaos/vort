@@ -7488,20 +7488,20 @@ reuse, so production keeps the simpler independently owned plans.
   match replay with prefix lookups plus bounded history/output span copies.
   A CPU-0 `netz` HTTP Content-Encoding integration A/B over a 4 KiB payload and
   80-byte gzip representation (five ReleaseFast runs, 50,000 iterations each)
-  reduced median incremental decode latency from 85,330 ns to 4,647 ns
-  (`18.36x`, or 94.55%); the whole-body caller-buffer median remained effectively
-  flat at 2,850 ns before and 2,837 ns after. Arbitrary 1-byte input splits,
+  reduced median incremental decode latency from 85,330 ns to 4,664 ns
+  (`18.30x`, or 94.53%); the whole-body caller-buffer median remained effectively
+  flat at 2,850 ns before and 2,820 ns after. Arbitrary 1-byte input splits,
   tiny output backpressure, strict trailing-data rejection, concatenated members,
   footer corruption, truncation, and reset remain covered.
 - Added a reusable incremental gzip decode comparison against system zlib 1.3,
   with identical Vort-generated frames and full-buffer or 7-byte-input/31-byte-
   output fragmentation. Five CPU-0 runs of 5,000 decodes per row measured
-  Vort/zlib latency ratios of 1.324/1.627/1.116 for full-buffer HTTP 4 KiB,
-  JSON 32 KiB, and binary 64 KiB, for a 1.340x geometric mean. Fragmented ratios
-  were 0.883/0.805/1.337, for a 0.983x geometric mean. The gate validates all
+  Vort/zlib latency ratios of 1.328/1.632/1.115 for full-buffer HTTP 4 KiB,
+  JSON 32 KiB, and binary 64 KiB, for a 1.342x geometric mean. Fragmented ratios
+  were 0.892/0.816/1.356, for a 0.996x geometric mean. The gate validates all
   twelve rows, byte counts, checksums, chunk shapes, and a conservative 4x
   per-row regression ceiling. Aligned stored-block payloads now copy and commit
-  history in spans; the binary full-buffer row reaches about 3.55 GiB/s versus
+  history in spans; the binary full-buffer row reaches about 3.56 GiB/s versus
   zlib's 3.97 GiB/s instead of the earlier byte-at-a-time 141 MiB/s smoke.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
