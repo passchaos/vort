@@ -21,6 +21,7 @@ pub const lz4 = @import("lz4.zig");
 pub const zstd = @import("zstd.zig");
 pub const zip = @import("zip.zig");
 pub const bzip2 = @import("bzip2.zig");
+pub const xz = @import("xz.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -77,6 +78,25 @@ pub const decodeBzip2ConcatenatedAlloc = bzip2.decodeConcatenatedAlloc;
 pub const decodeBzip2ConcatenatedAllocLimited = bzip2.decodeConcatenatedAllocLimited;
 pub const bzip2DecodedSizeConcatenated = bzip2.decodedSizeConcatenated;
 pub const bzip2DecodedSizeConcatenatedLimited = bzip2.decodedSizeConcatenatedLimited;
+
+pub const XzError = xz.Error;
+pub const XzCheck = xz.Check;
+pub const XzStreamInfo = xz.StreamInfo;
+pub const XzEncodeOptions = xz.EncodeOptions;
+pub const encodeXzStoredAlloc = xz.encodeStoredAlloc;
+pub const encodeXzStoredAppend = xz.encodeStoredAppend;
+pub const encodeXzStoredInto = xz.encodeStoredInto;
+pub const inspectXz = xz.inspect;
+pub const decodeXzInto = xz.decodeInto;
+pub const decodeXzAlloc = xz.decodeAlloc;
+pub const decodeXzAllocLimited = xz.decodeAllocLimited;
+pub const xzDecodedSize = xz.decodedSize;
+pub const xzDecodedSizeLimited = xz.decodedSizeLimited;
+pub const decodeXzConcatenatedInto = xz.decodeConcatenatedInto;
+pub const decodeXzConcatenatedAlloc = xz.decodeConcatenatedAlloc;
+pub const decodeXzConcatenatedAllocLimited = xz.decodeConcatenatedAllocLimited;
+pub const xzDecodedSizeConcatenated = xz.decodedSizeConcatenated;
+pub const xzDecodedSizeConcatenatedLimited = xz.decodedSizeConcatenatedLimited;
 
 pub const BrotliError = br.Error;
 pub const BrotliDecodeOptions = br.DecodeOptions;
@@ -2222,6 +2242,7 @@ test {
     _ = zstd;
     _ = zip;
     _ = bzip2;
+    _ = xz;
 }
 
 test "root exports lz4 and zstd codec helpers" {
