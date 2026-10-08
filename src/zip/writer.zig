@@ -1,10 +1,11 @@
 const std = @import("std");
+const bzip2 = @import("../bzip2.zig");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const deflate = @import("../deflate.zig");
 const types = @import("types.zig");
 
-pub const Error = core.Error || error{
+pub const Error = core.Error || bzip2.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -32,6 +33,7 @@ pub const EncodeOptions = struct {
     utf8: bool = true,
     zip64: Zip64Mode = .auto,
     deflate_options: deflate.CompressionOptions = deflate.optionsForLevel(.default),
+    bzip2_options: bzip2.EncodeOptions = .{},
 };
 
 const local_file_signature: u32 = 0x0403_4b50;
@@ -103,6 +105,11 @@ pub fn encodeAppend(
             .stored => entry.data,
             .deflate => blk: {
                 const bytes = try deflate.encodeRawBestAlloc(allocator, entry.data, options.deflate_options);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
+            .bzip2 => blk: {
+                const bytes = try bzip2.encodeAlloc(allocator, entry.data, options.bzip2_options);
                 owned_compressed = bytes;
                 break :blk bytes;
             },
@@ -198,7 +205,7 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
         if (options.zip64 == .never and entry.data.len >= std.math.maxInt(u32))
             return error.Zip32LimitExceeded;
         switch (entry.method) {
-            .stored, .deflate => {},
+            .stored, .deflate, .bzip2 => {},
             else => return error.UnsupportedZipCompressionMethod,
         }
         if (options.utf8 and
@@ -219,7 +226,7 @@ fn appendLocalHeader(
 ) !void {
     const descriptor = flags & descriptor_flag != 0;
     try appendU32(allocator, out, local_file_signature);
-    try appendU16(allocator, out, if (zip64) version_45 else version_20);
+    try appendU16(allocator, out, requiredVersion(entry.method, zip64));
     try appendU16(allocator, out, flags);
     try appendU16(allocator, out, @intFromEnum(entry.method));
     try appendU16(allocator, out, deterministic_dos_time);
@@ -244,8 +251,8 @@ fn appendCentralHeader(
     entry: EncodedEntry,
 ) !void {
     try appendU32(allocator, out, central_file_signature);
-    try appendU16(allocator, out, if (entry.zip64) version_45 else version_20);
-    try appendU16(allocator, out, if (entry.zip64) version_45 else version_20);
+    try appendU16(allocator, out, requiredVersion(entry.source.method, entry.zip64));
+    try appendU16(allocator, out, requiredVersion(entry.source.method, entry.zip64));
     try appendU16(allocator, out, entry.flags);
     try appendU16(allocator, out, @intFromEnum(entry.source.method));
     try appendU16(allocator, out, deterministic_dos_time);
@@ -329,6 +336,11 @@ fn appendLegacyEnd(
 fn anyZip64Entry(entries: []const EncodedEntry) bool {
     for (entries) |entry| if (entry.zip64) return true;
     return false;
+}
+
+fn requiredVersion(method: CompressionMethod, zip64: bool) u16 {
+    if (method == .bzip2) return 46;
+    return if (zip64) version_45 else version_20;
 }
 
 fn absoluteOffset(base: usize, relative: usize) Error!u64 {

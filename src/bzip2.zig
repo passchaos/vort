@@ -1,6 +1,11 @@
 const decoder = @import("bzip2/decoder.zig");
+const encoder = @import("bzip2/encoder.zig");
 
-pub const Error = decoder.Error;
+pub const Error = decoder.Error || encoder.Error;
+pub const EncodeOptions = encoder.EncodeOptions;
+pub const encodeAlloc = encoder.encodeAlloc;
+pub const encodeAppend = encoder.encodeAppend;
+pub const encodeInto = encoder.encodeInto;
 pub const decodeInto = decoder.decodeInto;
 pub const decodeAlloc = decoder.decodeAlloc;
 pub const decodeAllocLimited = decoder.decodeAllocLimited;
@@ -14,4 +19,5 @@ pub const decodedSizeConcatenatedLimited = decoder.decodedSizeConcatenatedLimite
 
 test {
     _ = decoder;
+    _ = encoder;
 }

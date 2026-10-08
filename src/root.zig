@@ -56,12 +56,17 @@ pub const parseZipArchive = zip.parse;
 pub const zipEncodeAlloc = zip.encodeAlloc;
 pub const zipEncodeAppend = zip.encodeAppend;
 pub const zipExtractEntryInto = zip.extractEntryInto;
+pub const zipExtractEntryIntoWithAllocator = zip.extractEntryIntoWithAllocator;
 pub const zipExtractEntryAlloc = zip.extractEntryAlloc;
 pub const zipExtractEntryAllocLimited = zip.extractEntryAllocLimited;
 pub const zipExtractByNameAlloc = zip.extractByNameAlloc;
 pub const zipExtractByNameAllocLimited = zip.extractByNameAllocLimited;
 
 pub const Bzip2Error = bzip2.Error;
+pub const Bzip2EncodeOptions = bzip2.EncodeOptions;
+pub const encodeBzip2Alloc = bzip2.encodeAlloc;
+pub const encodeBzip2Append = bzip2.encodeAppend;
+pub const encodeBzip2Into = bzip2.encodeInto;
 pub const decodeBzip2Into = bzip2.decodeInto;
 pub const decodeBzip2Alloc = bzip2.decodeAlloc;
 pub const decodeBzip2AllocLimited = bzip2.decodeAllocLimited;

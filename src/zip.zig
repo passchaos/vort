@@ -1,16 +1,18 @@
 const std = @import("std");
+const bzip2 = @import("bzip2.zig");
 const core = @import("core.zig");
 const checksum = @import("checksum.zig");
 const deflate = @import("deflate.zig");
 const records = @import("zip/records.zig");
 pub const writer = @import("zip/writer.zig");
 
-pub const Error = writer.Error || error{
+pub const Error = writer.Error || bzip2.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
     UnsupportedZipCompressionMethod,
     ZipEntryNotFound,
+    ZipEntryRequiresAllocator,
 };
 
 const local_file_signature: u32 = 0x0403_4b50;
@@ -88,6 +90,27 @@ pub const Archive = struct {
     }
 
     pub fn extractInto(self: Archive, entry: Entry, output: []u8) Error!usize {
+        return self.extractIntoOptionalAllocator(null, entry, output) catch |err| switch (err) {
+            error.OutOfMemory => unreachable,
+            else => |zip_error| return zip_error,
+        };
+    }
+
+    pub fn extractIntoWithAllocator(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        output: []u8,
+    ) !usize {
+        return self.extractIntoOptionalAllocator(allocator, entry, output);
+    }
+
+    fn extractIntoOptionalAllocator(
+        self: Archive,
+        allocator: ?std.mem.Allocator,
+        entry: Entry,
+        output: []u8,
+    ) !usize {
         const parsed = try parseCentralEntry(self, entry.central_header_offset);
         const canonical = parsed.entry;
         if (output.len < canonical.uncompressed_size) return error.OutputTooSmall;
@@ -105,6 +128,11 @@ pub const Archive = struct {
                 if (decoded.input_read != compressed.len) return error.InvalidZipArchive;
                 if (decoded.output_written != target.len) return error.SizeMismatch;
             },
+            .bzip2 => {
+                const scratch_allocator = allocator orelse return error.ZipEntryRequiresAllocator;
+                const written = try bzip2.decodeInto(scratch_allocator, compressed, target);
+                if (written != target.len) return error.SizeMismatch;
+            },
             else => return error.UnsupportedZipCompressionMethod,
         }
         if (checksum.crc32Best(target) != canonical.crc32) return error.ChecksumMismatch;
@@ -119,7 +147,7 @@ pub const Archive = struct {
         if (entry.uncompressed_size > max_output_len) return error.OutputLimitExceeded;
         const output = try allocator.alloc(u8, entry.uncompressed_size);
         errdefer allocator.free(output);
-        const written = try self.extractInto(entry, output);
+        const written = try self.extractIntoWithAllocator(allocator, entry, output);
         if (written != output.len) return error.SizeMismatch;
         return output;
     }
@@ -165,6 +193,16 @@ pub fn extractEntryInto(bytes: []const u8, index: usize, output: []u8) Error!usi
     return archive.extractInto(try archive.entryAt(index), output);
 }
 
+pub fn extractEntryIntoWithAllocator(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    index: usize,
+    output: []u8,
+) !usize {
+    const archive = try parse(bytes);
+    return archive.extractIntoWithAllocator(allocator, try archive.entryAt(index), output);
+}
+
 pub fn extractEntryAlloc(allocator: std.mem.Allocator, bytes: []const u8, index: usize) ![]u8 {
     const archive = try parse(bytes);
     return archive.extractAlloc(allocator, try archive.entryAt(index));
@@ -194,6 +232,7 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     const flags = try readU16(archive.bytes, offset + 8);
     const version_needed = try readU16(archive.bytes, offset + 6);
     const method_raw = try readU16(archive.bytes, offset + 10);
+    const method: CompressionMethod = @enumFromInt(method_raw);
     const crc = try readU32(archive.bytes, offset + 16);
     const compressed_u32 = try readU32(archive.bytes, offset + 20);
     const uncompressed_u32 = try readU32(archive.bytes, offset + 24);
@@ -215,12 +254,13 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
         disk_start_u16,
     );
     if (values.zip64 and version_needed < 45) return error.InvalidZipArchive;
+    if (method == .bzip2 and version_needed < 46) return error.InvalidZipArchive;
     if (values.local_header_offset >= archive.central_directory_offset) return error.InvalidZipArchive;
 
     return .{
         .entry = .{
             .name = archive.bytes[name_start..name_end],
-            .method = @enumFromInt(method_raw),
+            .method = method,
             .flags = flags,
             .crc32 = crc,
             .compressed_size = values.compressed_size,
@@ -256,6 +296,7 @@ fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
     const data_end = try checkedEnd(data_start, entry.compressed_size, archive.central_directory_offset);
     if ((local_compressed == std.math.maxInt(u32) or local_uncompressed == std.math.maxInt(u32)) and
         local_version_needed < 45) return error.InvalidZipArchive;
+    if (entry.method == .bzip2 and local_version_needed < 46) return error.InvalidZipArchive;
     if (local_flags & 0x0008 == 0) {
         const local_sizes = try records.resolveLocalSizes(
             archive.bytes[name_end..data_start],
@@ -418,8 +459,8 @@ test "ZIP parses and extracts stored and descriptor-backed deflate entries" {
 
     var unsupported = try allocator.dupe(u8, bytes.items);
     defer allocator.free(unsupported);
-    std.mem.writeInt(u16, unsupported[entries[0].local_offset + 8 ..][0..2], 12, .little);
-    std.mem.writeInt(u16, unsupported[listed[0].central_header_offset + 10 ..][0..2], 12, .little);
+    std.mem.writeInt(u16, unsupported[entries[0].local_offset + 8 ..][0..2], 99, .little);
+    std.mem.writeInt(u16, unsupported[listed[0].central_header_offset + 10 ..][0..2], 99, .little);
     const unsupported_archive = try parse(unsupported);
     const unsupported_entry = try unsupported_archive.entryAt(0);
     try std.testing.expectError(error.UnsupportedZipCompressionMethod, unsupported_archive.extractInto(unsupported_entry, &encrypted_output));
@@ -521,7 +562,7 @@ test "ZIP writer appends a valid archive after a prefix and rejects inputs trans
     const unsupported = [_]EncodeEntry{.{
         .name = "unsupported.bin",
         .data = "invalid",
-        .method = @enumFromInt(12),
+        .method = @enumFromInt(99),
     }};
     try std.testing.expectError(error.UnsupportedZipCompressionMethod, encodeAppend(allocator, &out, &unsupported, .{}));
     try std.testing.expectEqualSlices(u8, before, out.items);
@@ -594,4 +635,34 @@ test "ZIP writer auto promotes the ZIP32 entry-count sentinel" {
     try std.testing.expect(!first.zip64);
     try std.testing.expect(!last.zip64);
     try std.testing.expectEqualStrings("x", last.name);
+}
+
+test "ZIP method 12 round trips through the allocating Bzip2 extraction path" {
+    const allocator = std.testing.allocator;
+    const payload = "Bzip2-compressed ZIP entry " ** 128;
+    const entries = [_]EncodeEntry{.{
+        .name = "compressed-with-bzip2.txt",
+        .data = payload,
+        .method = .bzip2,
+    }};
+    const bytes = try encodeAlloc(allocator, &entries, .{
+        .data_descriptor = true,
+        .bzip2_options = .{ .block_size_100k = 1 },
+    });
+    defer allocator.free(bytes);
+
+    const archive = try parse(bytes);
+    const entry = try archive.entryAt(0);
+    try std.testing.expectEqual(CompressionMethod.bzip2, entry.method);
+    try std.testing.expectEqual(@as(u16, 46), try readU16(bytes, entry.local_header_offset + 4));
+    try std.testing.expectEqual(@as(u16, 46), try readU16(bytes, entry.central_header_offset + 6));
+
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectError(error.ZipEntryRequiresAllocator, archive.extractInto(entry, &output));
+    try std.testing.expectEqual(payload.len, try archive.extractIntoWithAllocator(allocator, entry, &output));
+    try std.testing.expectEqualSlices(u8, payload, &output);
+
+    const allocated = try archive.extractAlloc(allocator, entry);
+    defer allocator.free(allocated);
+    try std.testing.expectEqualSlices(u8, payload, allocated);
 }
