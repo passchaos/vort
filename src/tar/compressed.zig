@@ -5,8 +5,9 @@ const bzip2 = @import("../bzip2.zig");
 const deflate = @import("../deflate.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
+const lzop = @import("../lzop.zig");
 
-pub const Error = archive.Error || writer.Error || bzip2.Error || xz.Error || zstd.Error || deflate.Error || error{
+pub const Error = archive.Error || writer.Error || bzip2.Error || xz.Error || zstd.Error || lzop.Error || deflate.Error || error{
     UnknownTarCompression,
 };
 
@@ -16,6 +17,7 @@ pub const Compression = enum {
     bzip2,
     xz,
     zstandard,
+    lzop,
 };
 
 pub const EncodeOptions = struct {
@@ -25,6 +27,7 @@ pub const EncodeOptions = struct {
     xz_options: xz.EncodeOptions = .{},
     zstd_level: c_int = zstd.default_compression_level,
     zstd_options: zstd.FrameOptions = .{},
+    lzop_options: lzop.EncodeOptions = .{},
 };
 
 pub const OwnedArchive = struct {
@@ -41,6 +44,7 @@ pub fn detect(input: []const u8) Compression {
     if (input.len >= 3 and std.mem.eql(u8, input[0..3], "BZh")) return .bzip2;
     if (input.len >= 6 and std.mem.eql(u8, input[0..6], &.{ 0xfd, '7', 'z', 'X', 'Z', 0 })) return .xz;
     if (input.len >= 4 and std.mem.readInt(u32, input[0..4], .little) == 0xfd2f_b528) return .zstandard;
+    if (input.len >= 9 and std.mem.eql(u8, input[0..9], &lzop.header_magic)) return .lzop;
     return .none;
 }
 
@@ -63,6 +67,7 @@ pub fn encodeAlloc(
             options.zstd_level,
             options.zstd_options,
         ),
+        .lzop => lzop.encodeStoredAlloc(allocator, tar_bytes, options.lzop_options),
     };
 }
 
@@ -102,6 +107,7 @@ pub fn decodeAlloc(
         .bzip2 => try bzip2.decodeAllocLimited(allocator, input, max_tar_size),
         .xz => try xz.decodeAllocLimited(allocator, input, max_tar_size),
         .zstandard => try zstd.decodeFrameAllocLimited(allocator, input, max_tar_size),
+        .lzop => try lzop.decodeAllocLimited(allocator, input, max_tar_size),
     };
     errdefer allocator.free(bytes);
     return .{ .bytes = bytes, .archive = try archive.parse(bytes) };
@@ -113,7 +119,7 @@ test "compressed TAR wrappers round trip every available encoder" {
         .{ .name = "folder/", .kind = .directory },
         .{ .name = "folder/data.txt", .data = "tarball payload " ** 64 },
     };
-    inline for (.{ Compression.none, .gzip, .bzip2, .xz, .zstandard }) |compression| {
+    inline for (.{ Compression.none, .gzip, .bzip2, .xz, .zstandard, .lzop }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{ .compression = compression });
         defer allocator.free(encoded);
         try std.testing.expectEqual(compression, detect(encoded));

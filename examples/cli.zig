@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 const compress_z_cli = @import("cli/compress_z.zig");
 const lzip_cli = @import("cli/lzip.zig");
+const lzop_cli = @import("cli/lzop.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [2048]u8 = undefined;
@@ -196,6 +197,14 @@ pub fn main(init: std.process.Init) !void {
         try lzip_cli.sizeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-lzip-file")) {
         try lzip_cli.inspectFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-lzop-stored-file")) {
+        try lzop_cli.encodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-lzop-file")) {
+        try lzop_cli.decodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "size-lzop-file")) {
+        try lzop_cli.sizeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-lzop-file")) {
+        try lzop_cli.inspectFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1923,6 +1932,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-lzip-file <path> [max_output] [max_dictionary]
         \\                              Decode and report a verified lzip file's size
         \\  inspect-lzip-file <path>    Parse and print structural lzip member metadata
+        \\  encode-lzop-stored-file <in> <out> [block_size] [adler32|crc32]
+        \\                              Encode a deterministic stored-block LZOP stream
+        \\  decode-lzop-file <in> <out> [max_output] [max_block]
+        \\                              Decode LZO1X and stored LZOP blocks
+        \\  size-lzop-file <path> [max_output] [max_block]
+        \\                              Decode and report a verified LZOP stream's size
+        \\  inspect-lzop-file <path>    Parse and print structural LZOP metadata
         \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]
         \\                              Decode an LZMA-Alone stream with explicit limits
         \\  size-lzma-file <path> [max_output]
@@ -1936,10 +1952,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-xz-file <path> [max_output]
         \\                              Preflight an XZ stream's decoded size
         \\  inspect-xz-file <path>      Validate and print XZ stream metadata
-        \\  create-tar-file <out> <entry> <in> [none|gzip|bzip2|xz|zstd]
+        \\  create-tar-file <out> <entry> <in> [none|gzip|bzip2|xz|zstd|lzop]
         \\                              Create a deterministic one-entry tarball
         \\  list-tar-file <path> [max_tar_size]
-        \\                              List a tar/tar.gz/tar.bz2/tar.xz/tar.zst archive
+        \\                              List a tar/tar.gz/tar.bz2/tar.xz/tar.zst/tar.lzo archive
         \\  extract-tar-file <tar> <entry> <out> [max_tar_size]
         \\                              Extract one named regular file without path traversal
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
@@ -2932,6 +2948,7 @@ fn parseTarCompression(text: ?[]const u8) !vort.TarCompression {
     if (std.mem.eql(u8, value, "bzip2") or std.mem.eql(u8, value, "bz2")) return .bzip2;
     if (std.mem.eql(u8, value, "xz")) return .xz;
     if (std.mem.eql(u8, value, "zstandard") or std.mem.eql(u8, value, "zstd")) return .zstandard;
+    if (std.mem.eql(u8, value, "lzop") or std.mem.eql(u8, value, "lzo") or std.mem.eql(u8, value, "tzo")) return .lzop;
     return error.UnknownTarCompression;
 }
 

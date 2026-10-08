@@ -26,6 +26,8 @@ pub const lzma = @import("lzma.zig");
 pub const tar = @import("tar.zig");
 pub const compress_z = @import("compress_z.zig");
 pub const lzip = @import("lzip.zig");
+pub const lzo1x = @import("lzo1x.zig");
+pub const lzop = @import("lzop.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -164,6 +166,28 @@ pub const decodeLzipAllocWithOptions = lzip.decodeAllocWithOptions;
 pub const lzipDecodedSize = lzip.decodedSize;
 pub const lzipDecodedSizeLimited = lzip.decodedSizeLimited;
 pub const lzipDecodedSizeWithOptions = lzip.decodedSizeWithOptions;
+
+pub const Lzo1xError = lzo1x.Error;
+pub const decodeLzo1xInto = lzo1x.decodeInto;
+pub const LzopError = lzop.Error;
+pub const LzopHeader = lzop.Header;
+pub const LzopMethod = lzop.Method;
+pub const LzopDecodeOptions = lzop.DecodeOptions;
+pub const LzopFileInfo = lzop.FileInfo;
+pub const LzopChecksum = lzop.Checksum;
+pub const LzopEncodeOptions = lzop.EncodeOptions;
+pub const parseLzopHeader = lzop.parseHeader;
+pub const inspectLzop = lzop.inspect;
+pub const decodeLzopInto = lzop.decodeInto;
+pub const decodeLzopAlloc = lzop.decodeAlloc;
+pub const decodeLzopAllocLimited = lzop.decodeAllocLimited;
+pub const decodeLzopAllocWithOptions = lzop.decodeAllocWithOptions;
+pub const lzopDecodedSize = lzop.decodedSize;
+pub const lzopDecodedSizeLimited = lzop.decodedSizeLimited;
+pub const lzopDecodedSizeWithOptions = lzop.decodedSizeWithOptions;
+pub const encodeLzopStoredAlloc = lzop.encodeStoredAlloc;
+pub const encodeLzopStoredAppend = lzop.encodeStoredAppend;
+pub const encodeLzopStoredInto = lzop.encodeStoredInto;
 
 pub const BrotliError = br.Error;
 pub const BrotliDecodeOptions = br.DecodeOptions;
@@ -2314,6 +2338,8 @@ test {
     _ = tar;
     _ = compress_z;
     _ = lzip;
+    _ = lzo1x;
+    _ = lzop;
 }
 
 test "root Unix compress exports round trip .Z streams" {
@@ -2340,6 +2366,17 @@ test "root lzip exports decode reference members" {
     const decoded = try decodeLzipAlloc(std.testing.allocator, &encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "hello lzip\nhello lzip\n", decoded);
+}
+
+test "root LZOP exports round trip stored blocks" {
+    const input = "Vort LZOP root API" ** 32;
+    const encoded = try encodeLzopStoredAlloc(std.testing.allocator, input, .{ .block_size = 128 });
+    defer std.testing.allocator.free(encoded);
+    const info = try inspectLzop(encoded);
+    try std.testing.expectEqual(@as(usize, 1), info.stream_count);
+    const decoded = try decodeLzopAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "root exports lz4 and zstd codec helpers" {
