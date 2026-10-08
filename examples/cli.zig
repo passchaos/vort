@@ -3,6 +3,7 @@ const vort = @import("vort");
 const compress_z_cli = @import("cli/compress_z.zig");
 const lzip_cli = @import("cli/lzip.zig");
 const lzop_cli = @import("cli/lzop.zig");
+const seven_zip_cli = @import("cli/seven_zip.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [2048]u8 = undefined;
@@ -205,6 +206,12 @@ pub fn main(init: std.process.Init) !void {
         try lzop_cli.sizeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-lzop-file")) {
         try lzop_cli.inspectFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-7z-file")) {
+        try seven_zip_cli.createFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-7z-file")) {
+        try seven_zip_cli.listFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-7z-file")) {
+        try seven_zip_cli.extractFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1939,6 +1946,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-lzop-file <path> [max_output] [max_block]
         \\                              Decode and report a verified LZOP stream's size
         \\  inspect-lzop-file <path>    Parse and print structural LZOP metadata
+        \\  create-7z-file <out> <entry> <in>
+        \\                              Create a deterministic Copy-method 7z archive
+        \\  list-7z-file <path>         List entries in a supported 7z archive
+        \\  extract-7z-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder]
+        \\                              Extract a Copy/Deflate/Bzip2/LZMA/LZMA2 7z entry
         \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]
         \\                              Decode an LZMA-Alone stream with explicit limits
         \\  size-lzma-file <path> [max_output]

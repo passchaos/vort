@@ -28,6 +28,7 @@ pub const compress_z = @import("compress_z.zig");
 pub const lzip = @import("lzip.zig");
 pub const lzo1x = @import("lzo1x.zig");
 pub const lzop = @import("lzop.zig");
+pub const seven_zip = @import("seven_zip.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -188,6 +189,22 @@ pub const lzopDecodedSizeWithOptions = lzop.decodedSizeWithOptions;
 pub const encodeLzopStoredAlloc = lzop.encodeStoredAlloc;
 pub const encodeLzopStoredAppend = lzop.encodeStoredAppend;
 pub const encodeLzopStoredInto = lzop.encodeStoredInto;
+
+pub const SevenZipError = seven_zip.Error;
+pub const SevenZipKind = seven_zip.Kind;
+pub const SevenZipEntry = seven_zip.Entry;
+pub const SevenZipArchive = seven_zip.Archive;
+pub const SevenZipDecodeOptions = seven_zip.DecodeOptions;
+pub const SevenZipParseOptions = seven_zip.ParseOptions;
+pub const SevenZipEncodeEntry = seven_zip.EncodeEntry;
+pub const SevenZipEncodeOptions = seven_zip.EncodeOptions;
+pub const parseSevenZipArchiveAlloc = seven_zip.parseAlloc;
+pub const parseSevenZipArchiveAllocWithOptions = seven_zip.parseAllocWithOptions;
+pub const sevenZipExtractByNameAlloc = seven_zip.extractByNameAlloc;
+pub const sevenZipExtractByNameAllocLimited = seven_zip.extractByNameAllocLimited;
+pub const encodeSevenZipStoredAlloc = seven_zip.encodeStoredAlloc;
+pub const encodeSevenZipStoredAppend = seven_zip.encodeStoredAppend;
+pub const encodeSevenZipStoredInto = seven_zip.encodeStoredInto;
 
 pub const BrotliError = br.Error;
 pub const BrotliDecodeOptions = br.DecodeOptions;
@@ -2340,6 +2357,22 @@ test {
     _ = lzip;
     _ = lzo1x;
     _ = lzop;
+    _ = seven_zip;
+}
+
+test "root 7z exports create list and extract Copy archives" {
+    const entries = [_]SevenZipEncodeEntry{
+        .{ .name = "hello.txt", .data = "seven zip root API" },
+        .{ .name = "empty", .kind = .directory },
+    };
+    const encoded = try encodeSevenZipStoredAlloc(std.testing.allocator, &entries, .{});
+    defer std.testing.allocator.free(encoded);
+    const archive = try parseSevenZipArchiveAlloc(std.testing.allocator, encoded);
+    defer archive.deinit();
+    try std.testing.expectEqual(@as(usize, 2), archive.entries.len);
+    const decoded = try sevenZipExtractByNameAlloc(std.testing.allocator, encoded, "hello.txt");
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, entries[0].data, decoded);
 }
 
 test "root Unix compress exports round trip .Z streams" {

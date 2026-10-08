@@ -110,6 +110,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - pure Zig LZO1X decoding plus LZOP parsing and deterministic stored-block
   writing, including Adler-32/CRC-32 header and block checks, legacy delta
   filters, concatenated streams, and bounded output/block APIs;
+- pure Zig 7z parsing and deterministic Copy-method writing, with Copy/Deflate/
+  Bzip2/LZMA/LZMA2 decode, compressed Next Headers, solid substreams, CRC
+  validation, UTF-16LE names, directories, empty files, and bounded extraction;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
   safe-path classification, borrowed entry views, and automatic raw/gzip/
   Bzip2/XZ/Zstandard/LZOP tarball composition;
@@ -1337,7 +1340,8 @@ as required functionality/performance competitors once their executable harnesse
 are wired into Vort validation.
 
 Compatibility formats (`raw deflate`, `zlib`, `gzip`, `bzip2`, `XZ/LZMA2`,
-LZMA-Alone, and selected zstd-facing workflows) should be behavior-compatible where claimed.
+LZMA-Alone, Unix `.Z`, lzip, LZOP, 7z, and selected zstd-facing workflows)
+should be behavior-compatible where claimed.
 Native Vort formats may innovate more aggressively, but they must be versioned,
 documented, fuzzed, benchmarked, and differentially tested against reference
 implementations where a reference exists.

@@ -408,6 +408,24 @@ fn decodeLzma2Alloc(
     return output.toOwnedSlice();
 }
 
+/// Decode a raw LZMA2 payload stored by a 7z coder. The property byte and
+/// unpacked size are carried by the 7z folder metadata rather than the stream.
+pub fn decode7zPayloadAllocLimited(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary_property: u8,
+    expected_size: usize,
+    max_dictionary_size: usize,
+) ![]u8 {
+    if (dictionary_property > 40) return error.InvalidXzHeader;
+    if (lzma2DictionarySize(dictionary_property) > max_dictionary_size)
+        return error.OutputLimitExceeded;
+    const scan = try scanLzma2(input, expected_size);
+    if (scan.packed_size != input.len or scan.unpacked_size != expected_size)
+        return error.SizeMismatch;
+    return decodeLzma2Alloc(allocator, input, expected_size);
+}
+
 fn verifyCheck(check: Check, decoded: []const u8, stored: []const u8) Error!void {
     switch (check) {
         .none => {},

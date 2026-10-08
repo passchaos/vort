@@ -157,6 +157,35 @@ pub fn decodeLzipPayloadAllocLimited(
     );
 }
 
+/// Decode a raw LZMA1 payload stored by a 7z coder. The five property bytes
+/// contain the normal LZMA property byte followed by a little-endian
+/// dictionary size; 7z supplies the exact unpacked size out of band.
+pub fn decode7zPayloadAllocLimited(
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    properties: []const u8,
+    expected_size: usize,
+    max_dictionary_size: usize,
+) ![]u8 {
+    if (properties.len != 5) return error.InvalidLzmaHeader;
+    const parsed = try parseProperties(properties[0]);
+    const dictionary_size = @max(@as(u32, 4096), std.mem.readInt(u32, properties[1..5], .little));
+    if (dictionary_size > max_dictionary_size) return error.OutputLimitExceeded;
+    return decodeRawAlloc(
+        allocator,
+        payload,
+        .{
+            .lc = parsed.lc,
+            .lp = parsed.lp,
+            .pb = parsed.pb,
+            .dictionary_size = dictionary_size,
+            .uncompressed_size = expected_size,
+        },
+        expected_size,
+        false,
+    );
+}
+
 const Properties = struct { lc: u4, lp: u3, pb: u3 };
 
 fn parseProperties(value: u8) Error!Properties {
