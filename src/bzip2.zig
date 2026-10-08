@@ -1,0 +1,17 @@
+const decoder = @import("bzip2/decoder.zig");
+
+pub const Error = decoder.Error;
+pub const decodeInto = decoder.decodeInto;
+pub const decodeAlloc = decoder.decodeAlloc;
+pub const decodeAllocLimited = decoder.decodeAllocLimited;
+pub const decodedSize = decoder.decodedSize;
+pub const decodedSizeLimited = decoder.decodedSizeLimited;
+pub const decodeConcatenatedInto = decoder.decodeConcatenatedInto;
+pub const decodeConcatenatedAlloc = decoder.decodeConcatenatedAlloc;
+pub const decodeConcatenatedAllocLimited = decoder.decodeConcatenatedAllocLimited;
+pub const decodedSizeConcatenated = decoder.decodedSizeConcatenated;
+pub const decodedSizeConcatenatedLimited = decoder.decodedSizeConcatenatedLimited;
+
+test {
+    _ = decoder;
+}

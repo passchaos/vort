@@ -20,6 +20,7 @@ pub const planner = @import("planner.zig");
 pub const lz4 = @import("lz4.zig");
 pub const zstd = @import("zstd.zig");
 pub const zip = @import("zip.zig");
+pub const bzip2 = @import("bzip2.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -59,6 +60,18 @@ pub const zipExtractEntryAlloc = zip.extractEntryAlloc;
 pub const zipExtractEntryAllocLimited = zip.extractEntryAllocLimited;
 pub const zipExtractByNameAlloc = zip.extractByNameAlloc;
 pub const zipExtractByNameAllocLimited = zip.extractByNameAllocLimited;
+
+pub const Bzip2Error = bzip2.Error;
+pub const decodeBzip2Into = bzip2.decodeInto;
+pub const decodeBzip2Alloc = bzip2.decodeAlloc;
+pub const decodeBzip2AllocLimited = bzip2.decodeAllocLimited;
+pub const bzip2DecodedSize = bzip2.decodedSize;
+pub const bzip2DecodedSizeLimited = bzip2.decodedSizeLimited;
+pub const decodeBzip2ConcatenatedInto = bzip2.decodeConcatenatedInto;
+pub const decodeBzip2ConcatenatedAlloc = bzip2.decodeConcatenatedAlloc;
+pub const decodeBzip2ConcatenatedAllocLimited = bzip2.decodeConcatenatedAllocLimited;
+pub const bzip2DecodedSizeConcatenated = bzip2.decodedSizeConcatenated;
+pub const bzip2DecodedSizeConcatenatedLimited = bzip2.decodedSizeConcatenatedLimited;
 
 pub const BrotliError = br.Error;
 pub const BrotliDecodeOptions = br.DecodeOptions;
@@ -2202,6 +2215,8 @@ test {
     _ = planner;
     _ = lz4;
     _ = zstd;
+    _ = zip;
+    _ = bzip2;
 }
 
 test "root exports lz4 and zstd codec helpers" {
