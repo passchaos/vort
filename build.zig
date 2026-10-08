@@ -998,6 +998,11 @@ pub fn build(b: *std.Build) void {
     const bzip2_diff_step = b.step("run-bzip2-diff", "Validate dependency-free Bzip2 encode/decode against Python bz2");
     bzip2_diff_step.dependOn(&bzip2_diff.step);
 
+    const xz_diff = b.addSystemCommand(&.{ "python3", "tools/xz/diff.py", "--cli" });
+    xz_diff.addArtifactArg(cli_exe);
+    const xz_diff_step = b.step("run-xz-diff", "Validate dependency-free XZ/LZMA2 encode/decode against Python lzma and xz");
+    xz_diff_step.dependOn(&xz_diff.step);
+
     const br_stored_cli_diff = b.addSystemCommand(&.{ "python3", "tools/br_stored_cli_diff.py" });
     br_stored_cli_diff.addArtifactArg(cli_exe);
     const br_stored_cli_diff_step = b.step("run-br-stored-cli-diff", "Run black-box smoke for dependency-free Brotli stored streams against Node Brotli");
@@ -4525,6 +4530,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(zip_diff_step);
     ci_smoke_step.dependOn(bzip2_diff_step);
+    ci_smoke_step.dependOn(xz_diff_step);
     ci_smoke_step.dependOn(br_stored_cli_diff_step);
     ci_smoke_step.dependOn(br_literal_cli_diff_step);
     ci_smoke_step.dependOn(br_stored_corpus_step);

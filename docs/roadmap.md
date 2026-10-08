@@ -17644,3 +17644,15 @@ reuse, so production keeps the simpler independently owned plans.
   explicit allocator-bearing caller-output API for inverse-BWT scratch.
   Obsolete randomized blocks remain explicitly unsupported. See
   `docs/formats/bzip2.md`.
+
+- Added dependency-free XZ decoding around Zig's pure LZMA2 range decoder, with
+  a Vort-owned strict container layer. Stream headers/footers, block headers,
+  canonical VLIs, packed/unpacked declarations, block padding, Index records,
+  backward size, and none/CRC-32/CRC-64/SHA-256 block checks are validated.
+  The public surface includes caller-owned, bounded allocation, decoded-size,
+  metadata inspection, and concatenated-stream APIs. A deterministic baseline
+  writer emits multi-block XZ streams using uncompressed LZMA2 chunks and all
+  four supported checks. Python `lzma` validates both directions, while the
+  system `xz` differential contributes a real four-block stream. BCJ/Delta
+  filter chains and compressed LZMA encoding remain follow-up work. See
+  `docs/formats/xz.md`.

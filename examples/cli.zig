@@ -182,6 +182,70 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.bzip2DecodedSize(init.gpa, compressed);
         try stdout.print("bzip2_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "encode-xz-stored-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const check = try parseXzCheck(args.next());
+        const block_size = try parseBlockLen(args.next(), 1024 * 1024);
+        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(input);
+        const encoded = try vort.encodeXzStoredAlloc(init.gpa, input, .{ .check = check, .block_size = block_size });
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("xz_input_bytes={d} compressed_bytes={d} blocks={d} path={s}\n", .{
+            input.len,
+            encoded.len,
+            if (input.len == 0) 0 else 1 + (input.len - 1) / block_size,
+            output_path,
+        });
+    } else if (std.mem.eql(u8, command, "decode-xz-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeXzAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.decodeXzAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("xz_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "decode-xz-concat-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeXzConcatenatedAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.decodeXzConcatenatedAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("xz_stream_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "size-xz-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded_len = if (max_output_len) |limit|
+            try vort.xzDecodedSizeLimited(init.gpa, compressed, limit)
+        else
+            try vort.xzDecodedSize(init.gpa, compressed);
+        try stdout.print("xz_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "inspect-xz-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const info = try vort.inspectXz(init.gpa, compressed);
+        try stdout.print("xz_check={s} blocks={d} compressed_bytes={d} decoded_bytes={d} max_dictionary={d}\n", .{
+            @tagName(info.check),
+            info.block_count,
+            info.compressed_size,
+            info.uncompressed_size,
+            info.max_dictionary_size,
+        });
     } else if (std.mem.eql(u8, command, "list-zip-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
@@ -1734,6 +1798,15 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode concatenated Bzip2 streams
         \\  size-bzip2-file <path> [max_output]
         \\                              Preflight a Bzip2 stream's decoded size
+        \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size]
+        \\                              Encode deterministic XZ with uncompressed LZMA2 chunks
+        \\  decode-xz-file <in> <out> [max_output]
+        \\                              Decode one XZ/LZMA2 stream with check validation
+        \\  decode-xz-concat-file <in> <out> [max_output]
+        \\                              Decode concatenated XZ streams and stream padding
+        \\  size-xz-file <path> [max_output]
+        \\                              Preflight an XZ stream's decoded size
+        \\  inspect-xz-file <path>      Validate and print XZ stream metadata
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
         \\  extract-zip-file <zip> <entry> <out> [max_output]
         \\                              Extract a stored/deflate ZIP entry with CRC validation
@@ -2672,6 +2745,15 @@ fn parseBlockLen(text: ?[]const u8, default: usize) !usize {
     const parsed = try std.fmt.parseInt(usize, value, 10);
     if (parsed == 0) return error.InvalidBlockPlan;
     return parsed;
+}
+
+fn parseXzCheck(text: ?[]const u8) !vort.XzCheck {
+    const value = text orelse return .crc64;
+    if (std.mem.eql(u8, value, "none")) return .none;
+    if (std.mem.eql(u8, value, "crc32")) return .crc32;
+    if (std.mem.eql(u8, value, "crc64")) return .crc64;
+    if (std.mem.eql(u8, value, "sha256")) return .sha256;
+    return error.InvalidChecksumMode;
 }
 
 fn parseSeekabilityTier(text: ?[]const u8) !vort.SeekabilityTier {
