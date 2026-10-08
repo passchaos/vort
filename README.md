@@ -830,18 +830,23 @@ defer zstd_incremental_encoder.deinit();
 // decode reference path for RFC 1951 stored blocks and bounded hostile input.
 // RawDeflateIncrementalFixedLiteralDecoder adds resumable fixed-Huffman bit
 // decoding plus caller-owned 32 KiB history for split length/distance matches.
-// The same byte-progressive decoder switches between stored and fixed blocks
-// without losing bit-reservoir or history state.
+// The same decoder switches between stored, fixed, and dynamic blocks without
+// losing bit-reservoir or history state. Fixed/dynamic Huffman symbols use
+// bounded prefix lookups, and matches copy in resumable spans rather than one
+// byte at a time.
 // Dynamic blocks currently progress through HLIT/HDIST/HCLEN and the split
 // code-length alphabet/repeats into byte-progressive payload literals and matches.
 // ZlibIncrementalDecoder layers split CMF/FLG and streaming Adler/footer
-// validation over that raw decoder without allowing footer prefetch. Exact-size
-// caller output can finish the raw match and consume EOB/footer in the same step.
+// validation over that raw decoder. The raw core reports the exact compressed
+// prefix at EOB, so wrappers can batch input without consuming footer bytes.
+// Exact-size caller output can finish the raw match and consume EOB/footer in
+// the same step.
 // initWithDictionary validates split DICTID and seeds the raw 32 KiB history
 // from the caller-owned preset dictionary.
 // GzipIncrementalDecoder supports split FEXTRA/FNAME/FCOMMENT/FHCRC plus
-// streaming CRC-32/ISIZE. Set allow_concatenated to continue through RFC 1952
-// members while enforcing max_output_len/expected_output_len cumulatively.
+// streaming CRC-32/ISIZE and batches raw input up to the exact member footer.
+// Set allow_concatenated to continue through RFC 1952 members while enforcing
+// max_output_len/expected_output_len cumulatively.
 // snapshot() reports the active/last member index and compressed offset; after
 // an error it preserves the failing member, phase, and detection offset.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };

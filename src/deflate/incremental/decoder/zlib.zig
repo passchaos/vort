@@ -1,9 +1,9 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 
-/// Byte-progressive zlib wrapper around the raw stored/fixed/dynamic decoder.
-/// The wrapper deliberately offers raw input one byte at a time so the first
-/// Adler footer byte is never hidden by raw bit-reservoir prefetch.
+/// Incremental zlib wrapper around the raw stored/fixed/dynamic decoder. The
+/// raw decoder stops at the final DEFLATE block and leaves the Adler footer
+/// unconsumed for this wrapper.
 pub fn Decoder(comptime Codec: type) type {
     return struct {
         options: Options,
@@ -64,6 +64,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .raw = try Codec.RawDecoder.initWithHistory(.{
                     .max_output_len = initialRawLimit(options),
                     .expected_output_len = if (options.allow_concatenated) null else options.expected_output_len,
+                    .allow_trailing_data = true,
                 }, history),
             };
         }
@@ -73,6 +74,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .raw = try Codec.RawDecoder.initWithDictionary(.{
                     .max_output_len = initialRawLimit(options),
                     .expected_output_len = if (options.allow_concatenated) null else options.expected_output_len,
+                    .allow_trailing_data = true,
                 }, history, dictionary),
                 .dictionary = dictionary,
             };
@@ -83,6 +85,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .raw = try Codec.RawDecoder.initWithHistory(.{
                     .max_output_len = initialRawLimit(options),
                     .expected_output_len = if (options.allow_concatenated) null else options.expected_output_len,
+                    .allow_trailing_data = true,
                 }, history),
                 .dictionaries = dictionaries,
             };
@@ -214,7 +217,7 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
 
-                    const supplied = self.raw.step(input[input_read .. input_read + 1], output[output_written..]) catch |err| return self.failRaw(err);
+                    const supplied = self.raw.step(input[input_read..], output[output_written..]) catch |err| return self.failRaw(err);
                     self.recordRawProgress(supplied, output, &input_read, &output_written);
                     if (supplied.status == .done) {
                         self.phase = .footer;

@@ -695,6 +695,54 @@ test "raw deflate incremental fixed decoder requires history for matches" {
     try std.testing.expectError(error.OutputTooSmall, decoder.step(matched, &output));
 }
 
+test "raw deflate incremental decoder can stop before wrapper data" {
+    const payload = "raw prefix boundary" ** 8;
+    const encoded = try deflate.encodeRawDynamicWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        deflate.optionsForLevel(.default),
+    );
+    defer std.testing.allocator.free(encoded);
+    const framed = try std.mem.concat(
+        std.testing.allocator,
+        u8,
+        &.{ encoded, "footer" },
+    );
+    defer std.testing.allocator.free(framed);
+
+    var history: [32 * 1024]u8 = undefined;
+    var output: [payload.len]u8 = undefined;
+    var strict = try deflate.RawDeflateIncrementalFixedLiteralDecoder
+        .initWithHistory(.{ .expected_output_len = payload.len }, &history);
+    const strict_first = try strict.step(framed, &output);
+    try std.testing.expectEqual(
+        core.StepResult.Status.need_output,
+        strict_first.status,
+    );
+    try std.testing.expectError(
+        error.TrailingData,
+        strict.step(framed[strict_first.progress.input_read..], &.{}),
+    );
+
+    var prefix = try deflate.RawDeflateIncrementalFixedLiteralDecoder
+        .initWithHistory(.{
+        .expected_output_len = payload.len,
+        .allow_trailing_data = true,
+    }, &history);
+    const first = try prefix.step(framed, &output);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, first.status);
+    const result = try prefix.step(framed[first.progress.input_read..], &.{});
+    try std.testing.expectEqual(core.StepResult.Status.done, result.status);
+    try std.testing.expectEqual(
+        encoded.len,
+        first.progress.input_read + result.progress.input_read,
+    );
+    try std.testing.expectEqual(payload.len, first.progress.output_written);
+    try std.testing.expectEqual(@as(usize, 0), result.progress.output_written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try prefix.finish();
+}
+
 test "raw deflate incremental fixed decoder handles mixed stored blocks" {
     const first = "fixed-prefix-fixed-prefix-fixed-prefix";
     const second = "stored suffix after fixed block";
@@ -955,6 +1003,53 @@ test "gzip incremental decoder streams dynamic input and validates footer" {
         output_offset += result.progress.output_written;
     }
     try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "gzip incremental decoder bulk matches survive history wrap and backpressure" {
+    const payload = "incremental-history-ring-wrap-0123456789abcdef\n" ** 2048;
+    const encoded = try deflate.encodeGzipBestAlloc(
+        std.testing.allocator,
+        payload,
+        deflate.optionsForLevel(.default),
+    );
+    defer std.testing.allocator.free(encoded);
+
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.GzipIncrementalDecoder.init(
+        .{ .expected_output_len = payload.len },
+        &history,
+    );
+    var output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    var turn: usize = 0;
+    while (input_offset < encoded.len) : (turn += 1) {
+        const input_end = @min(encoded.len, input_offset + 1 + turn % 31);
+        const output_end = @min(output.len, output_offset + 1 + turn % 509);
+        const result = try decoder.step(
+            encoded[input_offset..input_end],
+            output[output_offset..output_end],
+        );
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        try std.testing.expect(
+            result.progress.input_read != 0 or
+                result.progress.output_written != 0 or
+                result.status == .done,
+        );
+        if (result.status == .done) break;
+    }
+    while (decoder.snapshot().phase != .done) {
+        const output_end = @min(output.len, output_offset + 509);
+        const result = try decoder.step("", output[output_offset..output_end]);
+        output_offset += result.progress.output_written;
+        if (result.status == .done) break;
+        try std.testing.expect(result.progress.output_written != 0);
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqual(payload.len, output_offset);
     try std.testing.expectEqualSlices(u8, payload, &output);
 }
 

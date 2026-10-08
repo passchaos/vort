@@ -7446,7 +7446,10 @@ reuse, so production keeps the simpler independently owned plans.
   reservoir and partial canonical-code state. It handles arbitrary byte splits
   and tiny output without frame buffering, decodes split length/distance extra
   fields and overlapping copies through a caller-owned 32 KiB history ring, and
-  enforces output limits/exact size before match execution.
+  enforces output limits/exact size before match execution. Fixed and dynamic
+  symbols now use bounded prefix tables, while matches seed a caller-output span
+  from the history ring and expand overlap by doubling before committing the
+  newest span back to history.
 - Unified stored and fixed block execution in that byte-progressive decoder.
   Stored LEN/NLEN and aligned payload state now share the same bit reservoir and
   caller-owned history ring, enabling mixed block streams without handing
@@ -7467,9 +7470,11 @@ reuse, so production keeps the simpler independently owned plans.
   the caller-owned 32 KiB history ring, and missing/wrong dictionaries report
   `NeedDictionary` with retry diagnostics.
 - Added a byte-progressive single-member gzip decoder. It composes the unified
-  raw decoder one byte at a time, validates streaming CRC-32 and ISIZE from a
-  split footer, and incrementally parses/skips bounded FEXTRA, FNAME, FCOMMENT,
-  and FHCRC fields with header CRC validation and truncation diagnostics.
+  raw decoder in batches, using its strict-by-default prefix mode to stop at
+  EOB with exact input progress before the wrapper-owned footer. It validates
+  streaming CRC-32 and ISIZE from a split footer, and incrementally parses/skips
+  bounded FEXTRA, FNAME, FCOMMENT, and FHCRC fields with header CRC validation
+  and truncation diagnostics.
 - Extended the byte-progressive gzip decoder with opt-in concatenated-member
   traversal. Member headers, DEFLATE history, CRC-32, and ISIZE reset at each
   boundary while stream input/output accounting, exact-size and output limits
@@ -7479,6 +7484,15 @@ reuse, so production keeps the simpler independently owned plans.
   compressed-stream offset and local input progress. Failure snapshots retain
   the failing member index/offset, phase, and cumulative detection offset across
   split headers, payloads, and footers, and reset clears all error context.
+- Replaced incremental DEFLATE's per-bit full-alphabet scans and byte-at-a-time
+  match replay with prefix lookups plus bounded history/output span copies.
+  A CPU-0 `netz` HTTP Content-Encoding integration A/B over a 4 KiB payload and
+  80-byte gzip representation (five ReleaseFast runs, 50,000 iterations each)
+  reduced median incremental decode latency from 85,330 ns to 5,113 ns
+  (`16.69x`, or 94.01%); the whole-body caller-buffer median remained effectively
+  flat at 2,850 ns before and 2,859 ns after. Arbitrary 1-byte input splits,
+  tiny output backpressure, strict trailing-data rejection, concatenated members,
+  footer corruption, truncation, and reset remain covered.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

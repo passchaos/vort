@@ -31,8 +31,11 @@ pub const Decoder = struct {
     dynamic_hclen: usize = 0,
     dynamic_code_length_index: usize = 0,
     dynamic_code_lengths: [19]u4 = @splat(0),
+    dynamic_code_lookup: [1 << 7]u16 = @splat(0),
     dynamic_literal_lengths: [286]u4 = @splat(0),
+    dynamic_literal_lookup: [1 << 9]u16 = @splat(0),
     dynamic_distance_lengths: [30]u4 = @splat(0),
+    dynamic_distance_lookup: [1 << 8]u16 = @splat(0),
     dynamic_length_pos: usize = 0,
     dynamic_previous_length: u4 = 0,
     dynamic_repeat_symbol: u5 = 0,
@@ -49,6 +52,9 @@ pub const Decoder = struct {
     pub const Options = struct {
         max_output_len: usize = std.math.maxInt(usize),
         expected_output_len: ?usize = null,
+        /// Stop at the first final block and leave any suffix unconsumed.
+        /// Format wrappers use this to retain ownership of their footer.
+        allow_trailing_data: bool = false,
     };
     pub const Phase = enum { block_header, stored_lengths, stored_payload, dynamic_counts, dynamic_code_lengths, dynamic_lengths, dynamic_repeat, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
 
@@ -96,7 +102,8 @@ pub const Decoder = struct {
 
     pub fn step(self: *Decoder, input: []const u8, output: []u8) Error!core.StepResult {
         if (self.input_finished) {
-            if (input.len != 0) return self.fail(self.phase, error.TrailingData);
+            if (input.len != 0 and !self.options.allow_trailing_data)
+                return self.fail(self.phase, error.TrailingData);
             return .{ .status = if (self.phase == .done) .done else .need_input };
         }
         var input_read: usize = 0;
@@ -169,6 +176,7 @@ pub const Decoder = struct {
                     self.dynamic_code_length_index += 1;
                 }
                 if (!validCodeLengthAlphabet(self.dynamic_code_lengths)) return self.fail(.dynamic_code_lengths, error.InvalidDynamicBlockHeader);
+                buildCanonicalLookup(7, &self.dynamic_code_lookup, &self.dynamic_code_lengths);
                 self.dynamic_literal_lengths = @splat(0);
                 self.dynamic_distance_lengths = @splat(0);
                 self.dynamic_length_pos = 0;
@@ -182,6 +190,8 @@ pub const Decoder = struct {
                     if (!validDynamicAlphabet(self.dynamic_literal_lengths[0..self.dynamic_hlit]) or
                         !validDynamicAlphabet(self.dynamic_distance_lengths[0..self.dynamic_hdist]))
                         return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
+                    buildCanonicalLookup(9, &self.dynamic_literal_lookup, self.dynamic_literal_lengths[0..self.dynamic_hlit]);
+                    buildCanonicalLookup(8, &self.dynamic_distance_lookup, self.dynamic_distance_lengths[0..self.dynamic_hdist]);
                     self.phase = .symbols;
                     continue;
                 }
@@ -290,14 +300,10 @@ pub const Decoder = struct {
                     continue;
                 }
                 if (output_written == output.len) return result(input_read, output_written, .need_output);
-                while (self.match_remaining != 0 and output_written < output.len) {
-                    const source = (self.history_pos + self.history.len - self.match_distance) % self.history.len;
-                    const byte = self.history[source];
-                    output[output_written] = byte;
-                    output_written += 1;
-                    try self.recordByte(byte);
-                    self.match_remaining -= 1;
-                }
+                const n = @min(self.match_remaining, output.len - output_written);
+                self.copyMatchSpan(output[output_written..][0..n]);
+                output_written += n;
+                self.match_remaining -= n;
                 if (self.match_remaining == 0) {
                     self.match_len = 0;
                     self.phase = .symbols;
@@ -306,7 +312,8 @@ pub const Decoder = struct {
             .done => {
                 // A partial final byte belongs to the stream as padding; bytes
                 // staged by the same input call have already been accounted for.
-                if (input_read != input.len) return self.fail(.done, error.TrailingData);
+                if (input_read != input.len and !self.options.allow_trailing_data)
+                    return self.fail(.done, error.TrailingData);
                 return result(input_read, output_written, .done);
             },
         };
@@ -319,17 +326,7 @@ pub const Decoder = struct {
             self.code_bits = 0;
             return symbol;
         }
-        while (self.code_bits < 9) {
-            const bit = self.readBits(input, input_read, 1) orelse return null;
-            self.code |= @as(u16, @intCast(bit)) << self.code_bits;
-            self.code_bits += 1;
-            if (fixedSymbol(self.code, self.code_bits)) |symbol| {
-                self.code = 0;
-                self.code_bits = 0;
-                return symbol;
-            }
-        }
-        return self.fail(.symbols, error.InvalidHuffmanCode);
+        return self.readLookupSymbol(input, input_read, 9, &fixed_lookup);
     }
     fn readLiteralSymbol(self: *Decoder, input: []const u8, input_read: *usize) Error!?u16 {
         if (!self.dynamic_block) return self.readFixedSymbol(input, input_read);
@@ -338,6 +335,11 @@ pub const Decoder = struct {
             self.code = 0;
             self.code_bits = 0;
             return symbol;
+        }
+        if (self.code_bits == 0) {
+            if (self.readLookupSymbol(input, input_read, 9, &self.dynamic_literal_lookup)) |symbol|
+                return symbol;
+            if (self.bit_count < 9 and input_read.* == input.len) return null;
         }
         while (self.code_bits < 15) {
             const bit = self.readBits(input, input_read, 1) orelse return null;
@@ -381,6 +383,11 @@ pub const Decoder = struct {
     }
     fn readDistanceSymbol(self: *Decoder, input: []const u8, input_read: *usize) Error!?usize {
         if (!self.dynamic_block) return self.readFixedDistanceSymbol(input, input_read);
+        if (self.dynamic_code_bits == 0) {
+            if (self.readLookupSymbol(input, input_read, 8, &self.dynamic_distance_lookup)) |symbol|
+                return symbol;
+            if (self.bit_count < 8 and input_read.* == input.len) return null;
+        }
         while (self.dynamic_code_bits < 15) {
             const bit = self.readBits(input, input_read, 1) orelse return null;
             self.dynamic_code |= @as(u16, @intCast(bit)) << self.dynamic_code_bits;
@@ -394,6 +401,11 @@ pub const Decoder = struct {
         return self.fail(.distance_symbol, error.InvalidHuffmanCode);
     }
     fn readCodeLengthSymbol(self: *Decoder, input: []const u8, input_read: *usize) Error!?u16 {
+        if (self.dynamic_code_bits == 0) {
+            if (self.readLookupSymbol(input, input_read, 7, &self.dynamic_code_lookup)) |symbol|
+                return symbol;
+            if (self.bit_count < 7 and input_read.* == input.len) return null;
+        }
         while (self.dynamic_code_bits < 7) {
             const bit = self.readBits(input, input_read, 1) orelse return null;
             self.dynamic_code |= @as(u16, @intCast(bit)) << self.dynamic_code_bits;
@@ -405,6 +417,32 @@ pub const Decoder = struct {
             }
         }
         return self.fail(.dynamic_lengths, error.InvalidHuffmanCode);
+    }
+    fn readLookupSymbol(
+        self: *Decoder,
+        input: []const u8,
+        input_read: *usize,
+        comptime lookup_bits: u6,
+        lookup: *const [@as(usize, 1) << lookup_bits]u16,
+    ) ?u16 {
+        const mask = (@as(u64, 1) << lookup_bits) - 1;
+        while (true) {
+            const lookup_entry = lookup[@intCast(self.bit_buffer & mask)];
+            if (lookup_entry != 0) {
+                const bits: u6 = @intCast(lookup_entry & 0x0f);
+                if (self.bit_count >= bits) {
+                    self.bit_buffer >>= bits;
+                    self.bit_count -= bits;
+                    return (lookup_entry >> 4) - 1;
+                }
+            }
+            if (self.bit_count >= lookup_bits or input_read.* == input.len)
+                return null;
+            self.bit_buffer |= @as(u64, input[input_read.*]) << self.bit_count;
+            self.bit_count += 8;
+            input_read.* += 1;
+            self.total_input += 1;
+        }
     }
     fn setDynamicLength(self: *Decoder, value: u4) void {
         if (self.dynamic_length_pos < self.dynamic_hlit) {
@@ -420,6 +458,41 @@ pub const Decoder = struct {
             self.history_len = @min(self.history_len + 1, self.history.len);
         }
         self.total_output += 1;
+    }
+
+    fn copyMatchSpan(self: *Decoder, output: []u8) void {
+        std.debug.assert(output.len != 0);
+        std.debug.assert(self.match_distance != 0);
+        std.debug.assert(self.match_distance <= self.history_len);
+
+        const seed_len = @min(output.len, self.match_distance);
+        const source = (self.history_pos + self.history.len - self.match_distance) % self.history.len;
+        if (self.match_distance == 1) {
+            @memset(output, self.history[source]);
+        } else {
+            const first_source_len = @min(seed_len, self.history.len - source);
+            @memcpy(output[0..first_source_len], self.history[source..][0..first_source_len]);
+            if (first_source_len != seed_len)
+                @memcpy(output[first_source_len..seed_len], self.history[0 .. seed_len - first_source_len]);
+
+            var produced = seed_len;
+            while (produced < output.len) {
+                const n = @min(produced, output.len - produced);
+                std.mem.copyForwards(u8, output[produced..][0..n], output[0..n]);
+                produced += n;
+            }
+        }
+
+        const retained_len = @min(output.len, self.history.len);
+        const retained = output[output.len - retained_len ..];
+        const destination = (self.history_pos + output.len - retained_len) % self.history.len;
+        const first_destination_len = @min(retained.len, self.history.len - destination);
+        @memcpy(self.history[destination..][0..first_destination_len], retained[0..first_destination_len]);
+        if (first_destination_len != retained.len)
+            @memcpy(self.history[0 .. retained.len - first_destination_len], retained[first_destination_len..]);
+        self.history_pos = (self.history_pos + output.len) % self.history.len;
+        self.history_len = @min(self.history_len + output.len, self.history.len);
+        self.total_output += output.len;
     }
 
     fn readBits(self: *Decoder, input: []const u8, input_read: *usize, count: u6) ?usize {
@@ -446,16 +519,20 @@ pub const Decoder = struct {
     }
 };
 
-fn fixedSymbol(code: u16, bits: u4) ?u16 {
-    for (fixed_table) |entry| {
-        if (entry.bits == bits and entry.code == code) return entry.symbol;
-    }
-    return null;
-}
-
 const fixed_table = blk: {
     @setEvalBranchQuota(20_000);
     break :blk buildFixedTable(fixedLengths());
+};
+
+const fixed_lookup = blk: {
+    var lookup: [1 << 9]u16 = @splat(0);
+    for (fixed_table) |entry| {
+        const lookup_entry = ((entry.symbol + 1) << 4) | entry.bits;
+        const fill = @as(usize, 1) << @intCast(9 - entry.bits);
+        for (0..fill) |suffix|
+            lookup[entry.code | (suffix << entry.bits)] = lookup_entry;
+    }
+    break :blk lookup;
 };
 
 const FixedEntry = struct { symbol: u16, code: u16, bits: u4 };
@@ -485,6 +562,36 @@ fn buildFixedTable(lengths: [288]u4) [288]FixedEntry {
         next[bits] += 1;
     }
     return out;
+}
+
+fn buildCanonicalLookup(
+    comptime lookup_bits: u4,
+    lookup: *[@as(usize, 1) << lookup_bits]u16,
+    lengths: []const u4,
+) void {
+    @memset(lookup, 0);
+    var counts: [16]u16 = @splat(0);
+    for (lengths) |bits| if (bits != 0) {
+        counts[bits] += 1;
+    };
+    var next: [16]u16 = @splat(0);
+    var code: u16 = 0;
+    for (1..16) |bits| {
+        code = (code + counts[bits - 1]) << 1;
+        next[bits] = code;
+    }
+    for (lengths, 0..) |bits, symbol| {
+        if (bits == 0) continue;
+        const canonical = next[bits];
+        next[bits] += 1;
+        if (bits > lookup_bits) continue;
+        const shift: u4 = @intCast(@as(u5, 16) - @as(u5, bits));
+        const reversed = @bitReverse(canonical) >> shift;
+        const lookup_entry: u16 = ((@as(u16, @intCast(symbol)) + 1) << 4) | bits;
+        const fill = @as(usize, 1) << @intCast(lookup_bits - bits);
+        for (0..fill) |suffix|
+            lookup[reversed | (suffix << bits)] = lookup_entry;
+    }
 }
 
 const BaseBits = struct { base: usize, bits: u6 };

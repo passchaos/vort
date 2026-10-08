@@ -1,10 +1,10 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 
-/// Byte-progressive gzip decoder with opt-in concatenated-member support. Raw
-/// input is offered one byte at a time so footer ownership remains outside the
-/// DEFLATE bit reservoir. Each member gets independent header, history, CRC-32,
-/// and ISIZE state while stream output limits remain cumulative.
+/// Incremental gzip decoder with opt-in concatenated-member support. The raw
+/// decoder stops at the final DEFLATE block and leaves the footer unconsumed.
+/// Each member gets independent header, history, CRC-32, and ISIZE state while
+/// stream output limits remain cumulative.
 pub fn Decoder(comptime Codec: type) type {
     return struct {
         options: Options,
@@ -72,6 +72,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .raw = try Codec.RawDecoder.initWithHistory(.{
                     .max_output_len = initialRawLimit(options),
                     .expected_output_len = if (options.allow_concatenated) null else options.expected_output_len,
+                    .allow_trailing_data = true,
                 }, history),
             };
         }
@@ -222,10 +223,9 @@ pub fn Decoder(comptime Codec: type) type {
                 },
                 .raw => {
                     // Drain symbols already present in the raw bit reservoir
-                    // before offering another byte. Dynamic EOB codes can end
-                    // there; pre-supplying a byte in that case would make the
-                    // strict raw decoder mistake the first footer byte for raw
-                    // trailing data.
+                    // before supplying more bytes. The raw decoder stops at
+                    // EOB and reports the exact prefix consumed, leaving this
+                    // wrapper to own the footer that follows it.
                     const drained = self.raw.step("", output[output_written..]) catch |err| return self.failRaw(err);
                     self.recordRawProgress(drained, output, &input_read, &output_written);
                     if (drained.status == .done) {
@@ -244,7 +244,7 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
 
-                    const supplied = self.raw.step(input[input_read .. input_read + 1], output[output_written..]) catch |err| return self.failRaw(err);
+                    const supplied = self.raw.step(input[input_read..], output[output_written..]) catch |err| return self.failRaw(err);
                     self.recordRawProgress(supplied, output, &input_read, &output_written);
                     if (supplied.status == .done) {
                         self.phase = .footer;
