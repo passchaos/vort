@@ -17582,3 +17582,15 @@ reuse, so production keeps the simpler independently owned plans.
   should stop adding local dictionary/distance branches and instead reduce the
   command loop's overall execution model or working set. Evidence is in
   `docs/performance/data/brotli-flat-identity-fast-x86-20261008.json`.
+
+- Two attempts to shrink the flat Brotli command-root working set were
+  rejected. The target combines roughly 26 KiB of literal roots, 12 KiB of
+  command roots, and 17 KiB of distance roots. A 16-bit root plus 24-bit
+  metadata palette reduced command storage but its dependent load collapsed
+  throughput to `0.8824x` median. A direct three-byte root avoided that load,
+  kept rodata unchanged, and grew the executor only 18 bytes, but fifteen
+  physical-core-isolated pairs still lost 15/15 at `0.9925x` median /
+  `0.9926x` geometric throughput. Production retains aligned 32-bit direct
+  roots; future working-set changes must preserve power-of-two addressing and
+  single-load metadata. Evidence is in
+  `docs/performance/data/brotli-flat-command-root-working-set-x86-20261008.json`.

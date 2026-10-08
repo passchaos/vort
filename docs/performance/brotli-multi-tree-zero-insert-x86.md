@@ -254,6 +254,49 @@ restored. Exact nanoseconds, executable/fixture/CSV hashes, monitoring data,
 and shape evidence are in
 [brotli-flat-identity-fast-x86-20261008.json](data/brotli-flat-identity-fast-x86-20261008.json).
 
+## Command-root working-set follow-ups
+
+The flat workload's prepared roots occupy about 55 KiB before canonical-tree
+fallback state: 52 eight-bit literal roots use 26 KiB, three direct 32-bit
+command roots use 12 KiB, and 17 nine-bit distance roots use 17 KiB. The three
+command trees contain 78, 208, and 129 active symbols, so two compact forms
+were tested without changing lookup width or zero-insert coverage.
+
+The first form used 16-bit roots that indexed a dense 24-bit metadata palette.
+It reduced each command lookup from 4,096 to 2,816 bytes but added a dependent
+palette load on every root hit. Three clean fixed-CPU pairs were decisive:
+the candidate reached only `0.88243x` median / `0.88214x` geometric throughput
+with 0/3 wins. It was removed.
+
+The second form stored the complete command metadata directly in three bytes.
+Command symbols need at most ten bits and zero-insert copy bases fit twelve, so
+the representation retained all fields without a palette. A one-byte pad made
+the final unaligned u32 load bounded. Each lookup used 3,073 bytes; ordinary
+`.text` shrank by 912 bytes, rodata stayed unchanged, and the target executor
+grew only `0x10d5 -> 0x10e7` (+18 B). Its hot difference was an `index * 3`
+address calculation plus an unaligned u32 load instead of the baseline's
+scale-four aligned load.
+
+For the longer direct-root campaign, the user authorized physical-core
+separation: Vort ran on CPU 2 while its SMT sibling CPU 10 was also excluded
+from the live Spectra process group, which was restricted to CPUs
+`4-7,12-15`. Fifteen alternating pairs observed no Zig process allowed on the
+reserved core and all checksums matched:
+
+| Metric | Result |
+| --- | ---: |
+| paired median | 0.99251x |
+| paired geometric mean | 0.99258x |
+| wins | 0/15 |
+| range | 0.98818x--0.99706x |
+
+The three-byte stride still costs more than the smaller working set saves.
+Both forms were removed, retaining aligned 32-bit direct roots. Future
+working-set work must avoid both a dependent lookup and a non-power-of-two hot
+stride. Raw nanoseconds, CSV and executable hashes, affinity evidence, shape
+counts, and discarded-campaign notes are in
+[brotli-flat-command-root-working-set-x86-20261008.json](data/brotli-flat-command-root-working-set-x86-20261008.json).
+
 ## Correctness evidence
 
 The focused lookup test checks zero-insert copy-extra decoding and exact

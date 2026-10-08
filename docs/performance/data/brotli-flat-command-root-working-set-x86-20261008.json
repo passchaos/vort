@@ -1,0 +1,530 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-08",
+  "host": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "benchmark_cpu": 2,
+    "benchmark_smt_sibling": 10,
+    "threads": 1,
+    "arch": "x86_64",
+    "os": "linux",
+    "abi": "gnu",
+    "zig_version": "0.16.0",
+    "optimize": "ReleaseFast"
+  },
+  "baseline": {
+    "vort_commit": "bd2572b54a6be1ac73349db4cbe7efbfed4b4356",
+    "executable_sha256": "30d6c2f7100ff288cb41ab887bf9de25a91a51339efb3804d349ee51261ce56c",
+    "lookup_bytes_per_tree": 4096,
+    "target_instance_bytes": 4309,
+    "ordinary_text_bytes": 647737
+  },
+  "fixture": {
+    "input_bytes": 1048576,
+    "input_sha256": "d9644e1c8c6e6b29bb8f00a10cf36accb5d592afd7458e94bbd278fe0c32558f",
+    "encoded_bytes": 52622,
+    "encoded_sha256": "828aab9db9c321e35db5f4777c97da2d4123db113d648fc5d4c4ac1187b77718"
+  },
+  "shape": {
+    "literal_trees": 52,
+    "literal_root_bytes": 26624,
+    "command_trees": 3,
+    "command_tree_active_entries": [
+      78,
+      208,
+      129
+    ],
+    "command_root_bytes": 12288,
+    "distance_trees": 17,
+    "distance_root_bytes": 17408,
+    "combined_lookup_bytes": 56320
+  },
+  "command": "taskset -c 2 env LD_LIBRARY_PATH=/tmp/vort-brotli-upstream-build BINARY --input FROZEN/clustered_q8.raw --encoded-input FROZEN/clustered_q8.br --name clustered_q8 --iterations 500 --vort-only --csv OUT",
+  "palette_candidate": {
+    "executable_sha256": "1704b38e8ae41f638bb46be17796fd737174da9224484db904131ec0e5f5f0c5",
+    "description": "16-bit 10-bit roots index a per-tree 24-bit metadata palette; dependent metadata load on every root hit",
+    "lookup_bytes_per_tree": 2816,
+    "target_instance_bytes": 4390,
+    "target_instance_growth_bytes": 81,
+    "ordinary_text_bytes": 646793,
+    "ordinary_text_delta_bytes": -944,
+    "rodata_delta_bytes": 28,
+    "campaign": {
+      "pairs": [
+        {
+          "pair": 1,
+          "launch_order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ns": 296346355,
+          "candidate_ns": 335336444,
+          "speedup": 0.883728447362,
+          "baseline_mib_s": 1687.21,
+          "candidate_mib_s": 1491.04,
+          "checksum": 524346000
+        },
+        {
+          "pair": 2,
+          "launch_order": [
+            "candidate",
+            "baseline"
+          ],
+          "baseline_ns": 296167713,
+          "candidate_ns": 335628322,
+          "speedup": 0.882427654601,
+          "baseline_mib_s": 1688.23,
+          "candidate_mib_s": 1489.74,
+          "checksum": 524346000
+        },
+        {
+          "pair": 3,
+          "launch_order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ns": 296656336,
+          "candidate_ns": 337008837,
+          "speedup": 0.880262780765,
+          "baseline_mib_s": 1685.45,
+          "candidate_mib_s": 1483.64,
+          "checksum": 524346000
+        }
+      ],
+      "csv_sha256": [
+        {
+          "pair": 1,
+          "binary": "baseline",
+          "sha256": "7045be1358a4d45b1912a833062aa859636b7115de4acd9ae6e52bbedbbd8d84"
+        },
+        {
+          "pair": 1,
+          "binary": "candidate",
+          "sha256": "a23addcb166165a1b8627cbc9a05bfd0a883ab2f6bbef849b817b37d092ae4c7"
+        },
+        {
+          "pair": 2,
+          "binary": "baseline",
+          "sha256": "8d1680ab74035b6126bc71f434c918d5b9de05a9c78fcc64d2e8e22003657661"
+        },
+        {
+          "pair": 2,
+          "binary": "candidate",
+          "sha256": "711815efed62f93d2a337ee1995f6f23f190b0cda8f3619b5b0d2d5e60f5058b"
+        },
+        {
+          "pair": 3,
+          "binary": "baseline",
+          "sha256": "e50bd0fdcc5f80a4af69b22639c813ea3e783ac5f3d02288ed99ea06b3599fe5"
+        },
+        {
+          "pair": 3,
+          "binary": "candidate",
+          "sha256": "91faeeb31adc4bc0dbc69971e16113039dfff727b6b466f6d6f8783fb1e0eb61"
+        }
+      ],
+      "summary": {
+        "pairs": 3,
+        "wins": 0,
+        "median": 0.882427654601,
+        "geometric_mean": 0.882138469064,
+        "minimum": 0.880262780765,
+        "maximum": 0.883728447362,
+        "baseline_mib_s_median": 1687.21,
+        "candidate_mib_s_median": 1489.74
+      }
+    },
+    "decision": "reject after decisive clean fixed-CPU screen"
+  },
+  "direct_24_candidate": {
+    "executable_sha256": "a052eba3f1a82a1ad3039a581eeebd41fa51fba0b0f4158c420a633b3ec087f0",
+    "description": "three-byte direct roots use a 12-bit value and unaligned u32 load, with no dependent palette load",
+    "lookup_bytes_per_tree": 3073,
+    "target_instance_bytes": 4327,
+    "target_instance_growth_bytes": 18,
+    "ordinary_text_bytes": 646825,
+    "ordinary_text_delta_bytes": -912,
+    "rodata_delta_bytes": 0,
+    "isolation": {
+      "spectra_process_group": 2263485,
+      "spectra_allowed_cpus": "4-7,12-15",
+      "reserved_benchmark_cpus": "2,10",
+      "benchmark_cpu": 2,
+      "reserved_core_zig_observations": 0,
+      "method": "user-authorized process affinity separation plus alternating adjacent pairs"
+    },
+    "campaign": {
+      "pairs": [
+        {
+          "pair": 1,
+          "launch_order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ns": 296145339,
+          "candidate_ns": 297721692,
+          "speedup": 0.99470527999,
+          "baseline_mib_s": 1688.36,
+          "candidate_mib_s": 1679.42,
+          "checksum": 524346000
+        },
+        {
+          "pair": 2,
+          "launch_order": [
+            "candidate",
+            "baseline"
+          ],
+          "baseline_ns": 295766095,
+          "candidate_ns": 298115306,
+          "speedup": 0.992119790723,
+          "baseline_mib_s": 1690.53,
+          "candidate_mib_s": 1677.2,
+          "checksum": 524346000
+        },
+        {
+          "pair": 3,
+          "launch_order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ns": 296503345,
+          "candidate_ns": 298165268,
+          "speedup": 0.994426168376,
+          "baseline_mib_s": 1686.32,
+          "candidate_mib_s": 1676.92,
+          "checksum": 524346000
+        },
+        {
+          "pair": 4,
+          "launch_order": [
+            "candidate",
+            "baseline"
+          ],
+          "baseline_ns": 296091422,
+          "candidate_ns": 296965288,
+          "speedup": 0.997057346312,
+          "baseline_mib_s": 1688.67,
+          "candidate_mib_s": 1683.7,
+          "checksum": 524346000
+        },
+        {
+          "pair": 5,
+          "launch_order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ns": 295915297,
+          "candidate_ns": 298333151,
+          "speedup": 0.991895456499,
+          "baseline_mib_s": 1689.67,
+          "candidate_mib_s": 1675.98,
+          "checksum": 524346000
+        },
+        {
+          "pair": 6,
+          "launch_order": [
+            "candidate",
+            "baseline"
+          ],
+          "baseline_ns": 295311034,
+          "candidate_ns": 298385824,
+          "speedup": 0.989695254423,
+          "baseline_mib_s": 1693.13,
+          "candidate_mib_s": 1675.68,
+          "checksum": 524346000
+        },
+        {
+          "pair": 7,
+          "launch_order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ns": 296558457,
+          "candidate_ns": 298107995,
+          "speedup": 0.994802091772,
+          "baseline_mib_s": 1686.01,
+          "candidate_mib_s": 1677.24,
+          "checksum": 524346000
+        },
+        {
+          "pair": 8,
+          "launch_order": [
+            "candidate",
+            "baseline"
+          ],
+          "baseline_ns": 295591447,
+          "candidate_ns": 298372070,
+          "speedup": 0.990680686031,
+          "baseline_mib_s": 1691.52,
+          "candidate_mib_s": 1675.76,
+          "checksum": 524346000
+        },
+        {
+          "pair": 9,
+          "launch_order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ns": 296038320,
+          "candidate_ns": 297795564,
+          "speedup": 0.994099159919,
+          "baseline_mib_s": 1688.97,
+          "candidate_mib_s": 1679.0,
+          "checksum": 524346000
+        },
+        {
+          "pair": 10,
+          "launch_order": [
+            "candidate",
+            "baseline"
+          ],
+          "baseline_ns": 296078992,
+          "candidate_ns": 297699690,
+          "speedup": 0.994555929837,
+          "baseline_mib_s": 1688.74,
+          "candidate_mib_s": 1679.54,
+          "checksum": 524346000
+        },
+        {
+          "pair": 11,
+          "launch_order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ns": 296163662,
+          "candidate_ns": 299455305,
+          "speedup": 0.989007898858,
+          "baseline_mib_s": 1688.26,
+          "candidate_mib_s": 1669.7,
+          "checksum": 524346000
+        },
+        {
+          "pair": 12,
+          "launch_order": [
+            "candidate",
+            "baseline"
+          ],
+          "baseline_ns": 295529107,
+          "candidate_ns": 297759121,
+          "speedup": 0.992510677784,
+          "baseline_mib_s": 1691.88,
+          "candidate_mib_s": 1679.21,
+          "checksum": 524346000
+        },
+        {
+          "pair": 13,
+          "launch_order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ns": 295730876,
+          "candidate_ns": 298395321,
+          "speedup": 0.991070754759,
+          "baseline_mib_s": 1690.73,
+          "candidate_mib_s": 1675.63,
+          "checksum": 524346000
+        },
+        {
+          "pair": 14,
+          "launch_order": [
+            "candidate",
+            "baseline"
+          ],
+          "baseline_ns": 296260865,
+          "candidate_ns": 298067831,
+          "speedup": 0.993937735602,
+          "baseline_mib_s": 1687.7,
+          "candidate_mib_s": 1677.47,
+          "checksum": 524346000
+        },
+        {
+          "pair": 15,
+          "launch_order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ns": 295853185,
+          "candidate_ns": 299391796,
+          "speedup": 0.988180668117,
+          "baseline_mib_s": 1690.03,
+          "candidate_mib_s": 1670.05,
+          "checksum": 524346000
+        }
+      ],
+      "csv_sha256": [
+        {
+          "pair": 1,
+          "binary": "baseline",
+          "sha256": "61b823ab8b8462c1a75af0ff3af240f67fc11fed3e7ab6fb6b08ebda9c243dab"
+        },
+        {
+          "pair": 1,
+          "binary": "candidate",
+          "sha256": "fa5281ab7bc262052c52941ca7e4706191631b4f41dfe9b414e50459098b7fd5"
+        },
+        {
+          "pair": 2,
+          "binary": "baseline",
+          "sha256": "05955375123e4d11815b7944611739bd23f0f8ae5af61bdbd32cf87ac7ed2c48"
+        },
+        {
+          "pair": 2,
+          "binary": "candidate",
+          "sha256": "b6e55ee1f660c8e7530fa6adb5d1b0fb5db20f95024edf698ef6143521139e67"
+        },
+        {
+          "pair": 3,
+          "binary": "baseline",
+          "sha256": "6681120ee65ace88ff54dc5d449ba9e4ca175d81ad7f5a80958c9dd9b474f0e8"
+        },
+        {
+          "pair": 3,
+          "binary": "candidate",
+          "sha256": "3b5360474b60f2904828555767608b7c0d7ba24c15430fbd6a98cf18d18aaaaa"
+        },
+        {
+          "pair": 4,
+          "binary": "baseline",
+          "sha256": "cbeb9827f23c0b631ae3c0c339935c109327ce9ebe1df6abd9f2a3bfd34ed900"
+        },
+        {
+          "pair": 4,
+          "binary": "candidate",
+          "sha256": "9e38732441e7106c84fb36cef6ac2acb44a5b8790a69431d9617dd2dc45fd264"
+        },
+        {
+          "pair": 5,
+          "binary": "baseline",
+          "sha256": "38623b67b84b32d588e156a3dabd197d5c2317e529d203acbe4d372d21fb1cdc"
+        },
+        {
+          "pair": 5,
+          "binary": "candidate",
+          "sha256": "0fc2c3412ef1af5b66b300f77f3ff362db07ff79d65416504124b02fbef72cd7"
+        },
+        {
+          "pair": 6,
+          "binary": "baseline",
+          "sha256": "c4570b3d1023e65c5f52ffdeddf808519c69968eecdaea4837ef4bd0abc9653f"
+        },
+        {
+          "pair": 6,
+          "binary": "candidate",
+          "sha256": "ae03b17bb5fe718bddccd4253b104ff02aafdb2a1a04c72c145ff8f76c87f972"
+        },
+        {
+          "pair": 7,
+          "binary": "baseline",
+          "sha256": "b757746e668c3268883240b41d0b909dc32e517e9f450c5161d78136de012093"
+        },
+        {
+          "pair": 7,
+          "binary": "candidate",
+          "sha256": "59ac638880d8d3876272837123394a438eb7536a47390d6e03f561218ad9c30a"
+        },
+        {
+          "pair": 8,
+          "binary": "baseline",
+          "sha256": "e0ada41e17ee0f0209e95ff4ed5348aacd4b58c960d522773f63ad2352fef5ae"
+        },
+        {
+          "pair": 8,
+          "binary": "candidate",
+          "sha256": "9d59816dcdcefcf16bda2d18210d7c4e42417b8a799869518271a64973e7e105"
+        },
+        {
+          "pair": 9,
+          "binary": "baseline",
+          "sha256": "ff92dffd71201a6f41714f151aa7eea1942c3d8042bd53a374180ea161ffa54d"
+        },
+        {
+          "pair": 9,
+          "binary": "candidate",
+          "sha256": "208479a8fd32803265c3ba9e02d90e9672f89afcc577e5f2be00b8f917f0f717"
+        },
+        {
+          "pair": 10,
+          "binary": "baseline",
+          "sha256": "e3425e453d06d46cbf3fd2b5244cbeb027bc16f55e8a16b454645c9431fad146"
+        },
+        {
+          "pair": 10,
+          "binary": "candidate",
+          "sha256": "fb041edb5153d027649839447ca704afeaef928d06b0eb3fc26eb087416f16b0"
+        },
+        {
+          "pair": 11,
+          "binary": "baseline",
+          "sha256": "0b88e0d2ace58ddb3f45509e5f2794b5e11110e463b6723b7ee69f9fa7111844"
+        },
+        {
+          "pair": 11,
+          "binary": "candidate",
+          "sha256": "afcb50db6aa5c1ca283aa47a5b24bde27d1c64b64f4ad4395c34256b06c52dfb"
+        },
+        {
+          "pair": 12,
+          "binary": "baseline",
+          "sha256": "046fe7edc14f534498b9f21df57474049c374f52de2327e9d48f2faa9809b203"
+        },
+        {
+          "pair": 12,
+          "binary": "candidate",
+          "sha256": "669e704a4b993135ca53915706aa706e44ac511235b50d430d3497bb0026e907"
+        },
+        {
+          "pair": 13,
+          "binary": "baseline",
+          "sha256": "707e4a468413368a66680bb2f00ed6f13d0eacc0b23e1264141cff031f23041b"
+        },
+        {
+          "pair": 13,
+          "binary": "candidate",
+          "sha256": "705d191d1545e8a7de7b6694ca9c43ffb4f9b205a4687a7c01eda256b0abca26"
+        },
+        {
+          "pair": 14,
+          "binary": "baseline",
+          "sha256": "d6a675f9ceefeb9350d7c659822ebed02ab3f287d8af4539e9a7ca28cd5941ff"
+        },
+        {
+          "pair": 14,
+          "binary": "candidate",
+          "sha256": "385fbdfe642bda660faf9ca491122a14bbd6b780446b45cdf405e8db44b133d6"
+        },
+        {
+          "pair": 15,
+          "binary": "baseline",
+          "sha256": "6b4a39697d05728dad2ba00ee27c6936c0725a8d6ba4496ed5cde7a3c67f49fb"
+        },
+        {
+          "pair": 15,
+          "binary": "candidate",
+          "sha256": "f22994c9c66fdb768edaad7a6ca98568712f6310a831f9923d4630039f2640fd"
+        }
+      ],
+      "summary": {
+        "pairs": 15,
+        "wins": 0,
+        "median": 0.992510677784,
+        "geometric_mean": 0.99258003816,
+        "minimum": 0.988180668117,
+        "maximum": 0.997057346312,
+        "baseline_mib_s_median": 1688.97,
+        "candidate_mib_s_median": 1677.2
+      }
+    },
+    "decision": "reject; source restored exactly to baseline"
+  },
+  "discarded_campaigns": [
+    "an earlier palette build with large default-value rodata was used only to diagnose layout and not retained",
+    "an earlier direct-root campaign overlapped unisolated Spectra work and was not retained"
+  ],
+  "validation": {
+    "lookup_oracle": "direct, palette, and 24-bit roots matched command metadata and bit progress",
+    "decoder_integration": "zero-insert and nonzero-insert command progress tests passed",
+    "checksums": "all retained pairs identical",
+    "production_after_rejection": "git worktree source restored to baseline before evidence commit"
+  },
+  "decision": "Both compact representations lose. Preserve the aligned 32-bit direct command roots; future work must reduce working set without a dependent lookup or three-byte stride."
+}
