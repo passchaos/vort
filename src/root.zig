@@ -19,6 +19,7 @@ pub const long_distance = @import("long_distance.zig");
 pub const planner = @import("planner.zig");
 pub const lz4 = @import("lz4.zig");
 pub const zstd = @import("zstd.zig");
+pub const zip = @import("zip.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -41,6 +42,18 @@ pub const crc32cSlice16 = checksum.crc32cSlice16;
 pub const crc32cSlice32 = checksum.crc32cSlice32;
 pub const crc32cBest = checksum.crc32cBest;
 pub const crc32cCombine = checksum.crc32cCombine;
+
+pub const ZipError = zip.Error;
+pub const ZipArchive = zip.Archive;
+pub const ZipEntry = zip.Entry;
+pub const ZipIterator = zip.Iterator;
+pub const ZipCompressionMethod = zip.CompressionMethod;
+pub const parseZipArchive = zip.parse;
+pub const zipExtractEntryInto = zip.extractEntryInto;
+pub const zipExtractEntryAlloc = zip.extractEntryAlloc;
+pub const zipExtractEntryAllocLimited = zip.extractEntryAllocLimited;
+pub const zipExtractByNameAlloc = zip.extractByNameAlloc;
+pub const zipExtractByNameAllocLimited = zip.extractByNameAllocLimited;
 
 pub const BrotliError = br.Error;
 pub const BrotliDecodeOptions = br.DecodeOptions;

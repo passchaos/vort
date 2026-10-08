@@ -977,6 +977,11 @@ pub fn build(b: *std.Build) void {
     const gzip_cli_diff_step = b.step("run-gzip-cli-diff", "Run black-box differential smoke against system gzip CLI");
     gzip_cli_diff_step.dependOn(&gzip_cli_diff.step);
 
+    const zip_diff = b.addSystemCommand(&.{ "python3", "tools/zip_diff.py", "--cli" });
+    zip_diff.addArtifactArg(cli_exe);
+    const zip_diff_step = b.step("run-zip-diff", "Validate ZIP32 stored/deflate extraction against Python zipfile");
+    zip_diff_step.dependOn(&zip_diff.step);
+
     const br_stored_cli_diff = b.addSystemCommand(&.{ "python3", "tools/br_stored_cli_diff.py" });
     br_stored_cli_diff.addArtifactArg(cli_exe);
     const br_stored_cli_diff_step = b.step("run-br-stored-cli-diff", "Run black-box smoke for dependency-free Brotli stored streams against Node Brotli");
@@ -4502,6 +4507,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(python_zlib_diff_step);
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
+    ci_smoke_step.dependOn(zip_diff_step);
     ci_smoke_step.dependOn(br_stored_cli_diff_step);
     ci_smoke_step.dependOn(br_literal_cli_diff_step);
     ci_smoke_step.dependOn(br_stored_corpus_step);

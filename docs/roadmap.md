@@ -17614,3 +17614,13 @@ reuse, so production keeps the simpler independently owned plans.
   keeps one aligned u16 root load; literal working-set work must remove bytes
   without splitting hot metadata. Evidence is in
   `docs/performance/data/brotli-flat-literal-root-working-set-x86-20261008.json`.
+
+- Functionality-first format coverage now includes dependency-free ZIP32
+  archive reading. The library parses EOCD and central-directory metadata,
+  iterates and finds entries without allocation, extracts stored and raw-
+  Deflate members into caller buffers or bounded allocations, accepts data
+  descriptors, and validates names, sizes, complete compressed consumption,
+  and CRC-32. Encrypted, multi-disk, ZIP64, and unsupported-method entries fail
+  explicitly. A Python `zipfile` differential covers stored/Deflate entries,
+  non-seekable data descriptors, UTF-8 names, directories, comments, and CLI
+  extraction. Usage and limitations are documented in `docs/formats/zip.md`.

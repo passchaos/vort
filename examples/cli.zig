@@ -136,6 +136,44 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "list-zip-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(bytes);
+        const archive = try vort.parseZipArchive(bytes);
+        try stdout.print("zip_entries={d} comment_bytes={d}\n", .{ archive.entry_count, archive.comment.len });
+        var it = archive.iterator();
+        var index: usize = 0;
+        while (try it.next()) |entry| : (index += 1) {
+            const method_name: []const u8 = switch (entry.method) {
+                .stored => "stored",
+                .deflate => "deflate",
+                else => "unsupported",
+            };
+            try stdout.print("index={d} method={s} compressed={d} uncompressed={d} crc32={d} directory={} name={s}\n", .{
+                index,
+                method_name,
+                entry.compressed_size,
+                entry.uncompressed_size,
+                entry.crc32,
+                entry.isDirectory(),
+                entry.name,
+            });
+        }
+    } else if (std.mem.eql(u8, command, "extract-zip-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const entry_name = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(bytes);
+        const decoded = if (max_output_len) |limit|
+            try vort.zipExtractByNameAllocLimited(init.gpa, bytes, entry_name, limit)
+        else
+            try vort.zipExtractByNameAlloc(init.gpa, bytes, entry_name);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("zip_bytes={d} decoded_bytes={d} entry={s} path={s}\n", .{ bytes.len, decoded.len, entry_name, output_path });
     } else if (std.mem.eql(u8, command, "size-br-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1641,6 +1679,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode file bytes as dependency-free Brotli stored stream
         \\  decode-br-file-to <in> <out> [max_output]
         \\                              Decode dependency-free Brotli stored stream file
+        \\  list-zip-file <path>        List ZIP32 central-directory entries
+        \\  extract-zip-file <zip> <entry> <out> [max_output]
+        \\                              Extract a stored/deflate ZIP entry with CRC validation
         \\  size-br-file <path> [max_output]
         \\                              Preflight dependency-free Brotli stored stream decoded size
         \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
