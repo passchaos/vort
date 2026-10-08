@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("core.zig");
 const checksum = @import("checksum.zig");
 const deflate = @import("deflate.zig");
+const records = @import("zip/records.zig");
 pub const writer = @import("zip/writer.zig");
 
 pub const Error = writer.Error || error{
@@ -16,9 +17,9 @@ const local_file_signature: u32 = 0x0403_4b50;
 const central_file_signature: u32 = 0x0201_4b50;
 const end_of_central_signature: u32 = 0x0605_4b50;
 const end_of_central_len: usize = 22;
-const max_comment_len: usize = std.math.maxInt(u16);
 
 pub const CompressionMethod = writer.CompressionMethod;
+pub const Zip64Mode = writer.Zip64Mode;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const encodeAlloc = writer.encodeAlloc;
@@ -33,6 +34,7 @@ pub const Entry = struct {
     uncompressed_size: usize,
     local_header_offset: usize,
     central_header_offset: usize,
+    zip64: bool,
 
     pub fn isDirectory(self: Entry) bool {
         return self.name.len != 0 and self.name[self.name.len - 1] == '/';
@@ -49,6 +51,7 @@ pub const Archive = struct {
     central_directory_offset: usize,
     central_directory_size: usize,
     comment: []const u8,
+    zip64: bool,
 
     pub fn iterator(self: Archive) Iterator {
         return .{
@@ -146,34 +149,14 @@ pub const Iterator = struct {
 };
 
 pub fn parse(bytes: []const u8) Error!Archive {
-    const eocd_offset = findEndOfCentralDirectory(bytes) orelse return error.InvalidZipArchive;
-    const disk_number = try readU16(bytes, eocd_offset + 4);
-    const central_disk = try readU16(bytes, eocd_offset + 6);
-    const entries_on_disk = try readU16(bytes, eocd_offset + 8);
-    const entry_count_u16 = try readU16(bytes, eocd_offset + 10);
-    const central_size_u32 = try readU32(bytes, eocd_offset + 12);
-    const central_offset_u32 = try readU32(bytes, eocd_offset + 16);
-    const comment_len: usize = try readU16(bytes, eocd_offset + 20);
-    if (disk_number != 0 or central_disk != 0 or entries_on_disk != entry_count_u16)
-        return error.UnsupportedZipFeature;
-    if (entry_count_u16 == std.math.maxInt(u16) or
-        central_size_u32 == std.math.maxInt(u32) or
-        central_offset_u32 == std.math.maxInt(u32)) return error.UnsupportedZipFeature;
-
-    const comment_start = eocd_offset + end_of_central_len;
-    const comment_end = try checkedEnd(comment_start, comment_len, bytes.len);
-    if (comment_end != bytes.len) return error.InvalidZipArchive;
-    const central_offset: usize = central_offset_u32;
-    const central_size: usize = central_size_u32;
-    const central_end = try checkedEnd(central_offset, central_size, bytes.len);
-    if (central_end > eocd_offset) return error.InvalidZipArchive;
-
+    const directory = try records.parseDirectory(bytes);
     return .{
         .bytes = bytes,
-        .entry_count = entry_count_u16,
-        .central_directory_offset = central_offset,
-        .central_directory_size = central_size,
-        .comment = bytes[comment_start..comment_end],
+        .entry_count = directory.entry_count,
+        .central_directory_offset = directory.central_directory_offset,
+        .central_directory_size = directory.central_directory_size,
+        .comment = directory.comment,
+        .zip64 = directory.zip64,
     };
 }
 
@@ -209,6 +192,7 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     _ = try checkedEnd(offset, 46, central_end);
 
     const flags = try readU16(archive.bytes, offset + 8);
+    const version_needed = try readU16(archive.bytes, offset + 6);
     const method_raw = try readU16(archive.bytes, offset + 10);
     const crc = try readU32(archive.bytes, offset + 16);
     const compressed_u32 = try readU32(archive.bytes, offset + 20);
@@ -216,19 +200,22 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     const name_len: usize = try readU16(archive.bytes, offset + 28);
     const extra_len: usize = try readU16(archive.bytes, offset + 30);
     const comment_len: usize = try readU16(archive.bytes, offset + 32);
-    const disk_start = try readU16(archive.bytes, offset + 34);
+    const disk_start_u16 = try readU16(archive.bytes, offset + 34);
     const local_offset_u32 = try readU32(archive.bytes, offset + 42);
-    if (disk_start != 0) return error.UnsupportedZipFeature;
-    if (compressed_u32 == std.math.maxInt(u32) or
-        uncompressed_u32 == std.math.maxInt(u32) or
-        local_offset_u32 == std.math.maxInt(u32)) return error.UnsupportedZipFeature;
 
     const name_start = offset + 46;
     const name_end = try checkedEnd(name_start, name_len, central_end);
     const extra_end = try checkedEnd(name_end, extra_len, central_end);
     const next_offset = try checkedEnd(extra_end, comment_len, central_end);
-    const local_offset: usize = local_offset_u32;
-    if (local_offset >= archive.central_directory_offset) return error.InvalidZipArchive;
+    const values = try records.resolveCentralEntry(
+        archive.bytes[name_end..extra_end],
+        compressed_u32,
+        uncompressed_u32,
+        local_offset_u32,
+        disk_start_u16,
+    );
+    if (values.zip64 and version_needed < 45) return error.InvalidZipArchive;
+    if (values.local_header_offset >= archive.central_directory_offset) return error.InvalidZipArchive;
 
     return .{
         .entry = .{
@@ -236,10 +223,11 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
             .method = @enumFromInt(method_raw),
             .flags = flags,
             .crc32 = crc,
-            .compressed_size = compressed_u32,
-            .uncompressed_size = uncompressed_u32,
-            .local_header_offset = local_offset,
+            .compressed_size = values.compressed_size,
+            .uncompressed_size = values.uncompressed_size,
+            .local_header_offset = values.local_header_offset,
             .central_header_offset = offset,
+            .zip64 = values.zip64,
         },
         .next_offset = next_offset,
     };
@@ -250,6 +238,7 @@ fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
     if (try readU32(archive.bytes, offset) != local_file_signature) return error.InvalidZipArchive;
     _ = try checkedEnd(offset, 30, archive.central_directory_offset);
     const local_flags = try readU16(archive.bytes, offset + 6);
+    const local_version_needed = try readU16(archive.bytes, offset + 4);
     const local_method = try readU16(archive.bytes, offset + 8);
     const local_crc = try readU32(archive.bytes, offset + 14);
     const local_compressed = try readU32(archive.bytes, offset + 18);
@@ -265,27 +254,20 @@ fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
     if (!std.mem.eql(u8, archive.bytes[name_start..name_end], entry.name)) return error.InvalidZipArchive;
     const data_start = try checkedEnd(name_end, extra_len, archive.central_directory_offset);
     const data_end = try checkedEnd(data_start, entry.compressed_size, archive.central_directory_offset);
+    if ((local_compressed == std.math.maxInt(u32) or local_uncompressed == std.math.maxInt(u32)) and
+        local_version_needed < 45) return error.InvalidZipArchive;
     if (local_flags & 0x0008 == 0) {
-        if (local_crc != entry.crc32 or local_compressed != entry.compressed_size or local_uncompressed != entry.uncompressed_size)
+        const local_sizes = try records.resolveLocalSizes(
+            archive.bytes[name_end..data_start],
+            local_compressed,
+            local_uncompressed,
+        );
+        if (local_crc != entry.crc32 or
+            local_sizes.compressed_size != entry.compressed_size or
+            local_sizes.uncompressed_size != entry.uncompressed_size)
             return error.InvalidZipArchive;
     }
     return archive.bytes[data_start..data_end];
-}
-
-fn findEndOfCentralDirectory(bytes: []const u8) ?usize {
-    if (bytes.len < end_of_central_len) return null;
-    const search_len = @min(bytes.len, end_of_central_len + max_comment_len);
-    const lower = bytes.len - search_len;
-    var offset = bytes.len - end_of_central_len;
-    while (true) {
-        if (std.mem.readInt(u32, bytes[offset..][0..4], .little) == end_of_central_signature) {
-            const comment_len = std.mem.readInt(u16, bytes[offset + 20 ..][0..2], .little);
-            if (offset + end_of_central_len + @as(usize, comment_len) == bytes.len) return offset;
-        }
-        if (offset == lower) break;
-        offset -= 1;
-    }
-    return null;
 }
 
 fn readU16(bytes: []const u8, offset: usize) Error!u16 {
@@ -446,7 +428,7 @@ test "ZIP parses and extracts stored and descriptor-backed deflate entries" {
     defer allocator.free(zip64);
     std.mem.writeInt(u32, zip64[listed[0].central_header_offset + 20 ..][0..4], std.math.maxInt(u32), .little);
     const zip64_archive = try parse(zip64);
-    try std.testing.expectError(error.UnsupportedZipFeature, zip64_archive.entryAt(0));
+    try std.testing.expectError(error.InvalidZipArchive, zip64_archive.entryAt(0));
 
     var mismatched_name = try allocator.dupe(u8, bytes.items);
     defer allocator.free(mismatched_name);
@@ -551,4 +533,65 @@ test "ZIP writer emits and parses an empty archive" {
     const archive = try parse(bytes);
     try std.testing.expectEqual(@as(usize, 0), archive.entry_count);
     try std.testing.expectEqual(@as(usize, 0), archive.central_directory_size);
+}
+
+test "ZIP64 writer emits forced records and round trips descriptor and header sizes" {
+    const allocator = std.testing.allocator;
+    const payload = "forced ZIP64 payload " ** 32;
+    const entries = [_]EncodeEntry{
+        .{ .name = "stored.bin", .data = "zip64 stored", .method = .stored },
+        .{ .name = "compressed.txt", .data = payload, .method = .deflate },
+    };
+
+    inline for (.{ false, true }) |descriptor| {
+        const bytes = try encodeAlloc(allocator, &entries, .{
+            .archive_comment = "zip64",
+            .data_descriptor = descriptor,
+            .zip64 = .always,
+        });
+        defer allocator.free(bytes);
+        const archive = try parse(bytes);
+        try std.testing.expect(archive.zip64);
+        try std.testing.expectEqual(entries.len, archive.entry_count);
+        try std.testing.expectEqualStrings("zip64", archive.comment);
+
+        var it = archive.iterator();
+        var index: usize = 0;
+        while (try it.next()) |entry| : (index += 1) {
+            try std.testing.expect(entry.zip64);
+            try std.testing.expectEqual(std.math.maxInt(u32), try readU32(bytes, entry.central_header_offset + 20));
+            try std.testing.expectEqual(std.math.maxInt(u32), try readU32(bytes, entry.central_header_offset + 24));
+            try std.testing.expectEqual(std.math.maxInt(u32), try readU32(bytes, entry.central_header_offset + 42));
+            const decoded = try archive.extractAlloc(allocator, entry);
+            defer allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, entries[index].data, decoded);
+        }
+        try std.testing.expectEqual(entries.len, index);
+
+        const eocd_offset = bytes.len - end_of_central_len - archive.comment.len;
+        try std.testing.expectEqual(@as(u32, 0x0706_4b50), try readU32(bytes, eocd_offset - 20));
+        const zip64_record_offset: usize = @intCast(std.mem.readInt(u64, bytes[eocd_offset - 12 ..][0..8], .little));
+        try std.testing.expectEqual(@as(u32, 0x0606_4b50), try readU32(bytes, zip64_record_offset));
+        try std.testing.expectEqual(std.math.maxInt(u16), try readU16(bytes, eocd_offset + 10));
+        try std.testing.expectEqual(std.math.maxInt(u32), try readU32(bytes, eocd_offset + 12));
+        try std.testing.expectEqual(std.math.maxInt(u32), try readU32(bytes, eocd_offset + 16));
+    }
+}
+
+test "ZIP writer auto promotes the ZIP32 entry-count sentinel" {
+    const allocator = std.testing.allocator;
+    const entries = try allocator.alloc(EncodeEntry, std.math.maxInt(u16));
+    defer allocator.free(entries);
+    for (entries) |*entry| entry.* = .{ .name = "x", .data = "", .method = .stored };
+
+    const bytes = try encodeAlloc(allocator, entries, .{});
+    defer allocator.free(bytes);
+    const archive = try parse(bytes);
+    try std.testing.expect(archive.zip64);
+    try std.testing.expectEqual(entries.len, archive.entry_count);
+    const first = try archive.entryAt(0);
+    const last = try archive.entryAt(entries.len - 1);
+    try std.testing.expect(!first.zip64);
+    try std.testing.expect(!last.zip64);
+    try std.testing.expectEqualStrings("x", last.name);
 }

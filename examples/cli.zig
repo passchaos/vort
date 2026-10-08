@@ -141,7 +141,7 @@ pub fn main(init: std.process.Init) !void {
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(bytes);
         const archive = try vort.parseZipArchive(bytes);
-        try stdout.print("zip_entries={d} comment_bytes={d}\n", .{ archive.entry_count, archive.comment.len });
+        try stdout.print("zip_entries={d} zip64={} comment_bytes={d}\n", .{ archive.entry_count, archive.zip64, archive.comment.len });
         var it = archive.iterator();
         var index: usize = 0;
         while (try it.next()) |entry| : (index += 1) {
@@ -1679,7 +1679,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode file bytes as dependency-free Brotli stored stream
         \\  decode-br-file-to <in> <out> [max_output]
         \\                              Decode dependency-free Brotli stored stream file
-        \\  list-zip-file <path>        List ZIP32 central-directory entries
+        \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
         \\  extract-zip-file <zip> <entry> <out> [max_output]
         \\                              Extract a stored/deflate ZIP entry with CRC validation
         \\  size-br-file <path> [max_output]

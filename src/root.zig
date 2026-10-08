@@ -48,6 +48,7 @@ pub const ZipArchive = zip.Archive;
 pub const ZipEntry = zip.Entry;
 pub const ZipIterator = zip.Iterator;
 pub const ZipCompressionMethod = zip.CompressionMethod;
+pub const Zip64Mode = zip.Zip64Mode;
 pub const ZipEncodeEntry = zip.EncodeEntry;
 pub const ZipEncodeOptions = zip.EncodeOptions;
 pub const parseZipArchive = zip.parse;
