@@ -154,7 +154,8 @@ def main() -> None:
                     {"id": lzma.FILTER_DELTA, "dist": 7},
                     {"id": lzma.FILTER_LZMA2, "preset": 1},
                 ],
-                "delta_blocks=1",
+                ["delta_blocks=1"],
+                "delta:7",
             ),
             (
                 "x86",
@@ -163,7 +164,8 @@ def main() -> None:
                     {"id": lzma.FILTER_X86, "start_offset": 4096},
                     {"id": lzma.FILTER_LZMA2, "preset": 1},
                 ],
-                "x86_blocks=1",
+                ["bcj_blocks=1", "x86_blocks=1"],
+                "x86:4096",
             ),
             (
                 "x86-delta",
@@ -173,15 +175,66 @@ def main() -> None:
                     {"id": lzma.FILTER_DELTA, "dist": 4},
                     {"id": lzma.FILTER_LZMA2, "preset": 1},
                 ],
-                "delta_blocks=1 x86_blocks=1",
+                ["delta_blocks=1", "bcj_blocks=1", "x86_blocks=1"],
+                "x86,delta:4",
+            ),
+            (
+                "powerpc",
+                b"\x48\x00\x00\x01\x4b\xff\xff\xfd" * 4096,
+                [
+                    {"id": lzma.FILTER_POWERPC, "start_offset": 4096},
+                    {"id": lzma.FILTER_LZMA2, "preset": 1},
+                ],
+                ["bcj_blocks=1", "powerpc_blocks=1"],
+                "powerpc:4096",
+            ),
+            (
+                "ia64",
+                b"\x16\x00\x00\x00\x00\xa0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" * 2048,
+                [
+                    {"id": lzma.FILTER_IA64, "start_offset": 4096},
+                    {"id": lzma.FILTER_LZMA2, "preset": 1},
+                ],
+                ["bcj_blocks=1", "ia64_blocks=1"],
+                "ia64:4096",
+            ),
+            (
+                "arm",
+                b"\x04\x00\x00\xeb\xfc\xff\xff\xeb" * 4096,
+                [
+                    {"id": lzma.FILTER_ARM, "start_offset": 4096},
+                    {"id": lzma.FILTER_LZMA2, "preset": 1},
+                ],
+                ["bcj_blocks=1", "arm_blocks=1"],
+                "arm:4096",
+            ),
+            (
+                "arm-thumb",
+                b"\x00\xf0\x00\xf8\xff\xf7\xff\xff" * 4096,
+                [
+                    {"id": lzma.FILTER_ARMTHUMB, "start_offset": 4096},
+                    {"id": lzma.FILTER_LZMA2, "preset": 1},
+                ],
+                ["bcj_blocks=1", "arm_thumb_blocks=1"],
+                "armthumb:4096",
+            ),
+            (
+                "sparc",
+                b"\x40\x00\x00\x00\x7f\xff\xff\xff" * 4096,
+                [
+                    {"id": lzma.FILTER_SPARC, "start_offset": 4096},
+                    {"id": lzma.FILTER_LZMA2, "preset": 1},
+                ],
+                ["bcj_blocks=1", "sparc_blocks=1"],
+                "sparc:4096",
             ),
         ]
-        for name, payload, filters, expected_counter in filter_cases:
+        for name, payload, filter_chain, expected_counters, writer_filter in filter_cases:
             filtered = lzma.compress(
                 payload,
                 format=lzma.FORMAT_XZ,
                 check=lzma.CHECK_CRC64,
-                filters=filters,
+                filters=filter_chain,
             )
             filtered_path = temp / f"{name}-filter.xz"
             filtered_output = temp / f"{name}-filter.out"
@@ -190,8 +243,24 @@ def main() -> None:
             if filtered_output.read_bytes() != payload:
                 raise AssertionError(f"Vort {name} filter decode mismatch")
             inspect_output = run(args.cli, "inspect-xz-file", str(filtered_path)).stdout
-            if expected_counter not in inspect_output:
-                raise AssertionError(f"Vort {name} filter metadata mismatch: {inspect_output}")
+            for expected_counter in expected_counters:
+                if expected_counter not in inspect_output:
+                    raise AssertionError(f"Vort {name} filter metadata mismatch: {inspect_output}")
+
+            source_path = temp / f"{name}-filter.source"
+            vort_filtered_path = temp / f"{name}-filter.vort.xz"
+            source_path.write_bytes(payload)
+            run(
+                args.cli,
+                "encode-xz-stored-file",
+                str(source_path),
+                str(vort_filtered_path),
+                "crc64",
+                "1048576",
+                writer_filter,
+            )
+            if lzma.decompress(vort_filtered_path.read_bytes()) != payload:
+                raise AssertionError(f"Python could not decode Vort {name} filter output")
 
         multiblock_count = 0
         if xz_tool is not None:

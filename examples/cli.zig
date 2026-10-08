@@ -211,9 +211,15 @@ pub fn main(init: std.process.Init) !void {
         const output_path = args.next() orelse return error.MissingCorpusPath;
         const check = try parseXzCheck(args.next());
         const block_size = try parseBlockLen(args.next(), 1024 * 1024);
+        var filter_storage: [3]vort.XzFilter = undefined;
+        const xz_filters = try parseXzFilters(args.next(), &filter_storage);
         const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(input);
-        const encoded = try vort.encodeXzStoredAlloc(init.gpa, input, .{ .check = check, .block_size = block_size });
+        const encoded = try vort.encodeXzStoredAlloc(init.gpa, input, .{
+            .check = check,
+            .block_size = block_size,
+            .filters = xz_filters,
+        });
         defer init.gpa.free(encoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
         try stdout.print("xz_input_bytes={d} compressed_bytes={d} blocks={d} path={s}\n", .{
@@ -263,14 +269,20 @@ pub fn main(init: std.process.Init) !void {
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(compressed);
         const info = try vort.inspectXz(init.gpa, compressed);
-        try stdout.print("xz_check={s} blocks={d} compressed_bytes={d} decoded_bytes={d} max_dictionary={d} delta_blocks={d} x86_blocks={d}\n", .{
+        try stdout.print("xz_check={s} blocks={d} compressed_bytes={d} decoded_bytes={d} max_dictionary={d} delta_blocks={d} bcj_blocks={d} x86_blocks={d} powerpc_blocks={d} ia64_blocks={d} arm_blocks={d} arm_thumb_blocks={d} sparc_blocks={d}\n", .{
             @tagName(info.check),
             info.block_count,
             info.compressed_size,
             info.uncompressed_size,
             info.max_dictionary_size,
             info.delta_filter_blocks,
+            info.bcj_filter_blocks,
             info.x86_filter_blocks,
+            info.powerpc_filter_blocks,
+            info.ia64_filter_blocks,
+            info.arm_filter_blocks,
+            info.arm_thumb_filter_blocks,
+            info.sparc_filter_blocks,
         });
     } else if (std.mem.eql(u8, command, "list-zip-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
@@ -1829,7 +1841,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode an LZMA-Alone stream with explicit limits
         \\  size-lzma-file <path> [max_output]
         \\                              Decode and report an LZMA-Alone stream's size
-        \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size]
+        \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters]
         \\                              Encode deterministic XZ with uncompressed LZMA2 chunks
         \\  decode-xz-file <in> <out> [max_output]
         \\                              Decode one XZ/LZMA2 stream with check validation
@@ -2785,6 +2797,40 @@ fn parseXzCheck(text: ?[]const u8) !vort.XzCheck {
     if (std.mem.eql(u8, value, "crc64")) return .crc64;
     if (std.mem.eql(u8, value, "sha256")) return .sha256;
     return error.InvalidChecksumMode;
+}
+
+fn parseXzFilters(text: ?[]const u8, storage: *[3]vort.XzFilter) ![]const vort.XzFilter {
+    const value = text orelse return storage[0..0];
+    if (std.mem.eql(u8, value, "none")) return storage[0..0];
+    var parts = std.mem.splitScalar(u8, value, ',');
+    var count: usize = 0;
+    while (parts.next()) |part| {
+        if (count == storage.len) return error.UnsupportedXzFeature;
+        const separator = std.mem.indexOfScalar(u8, part, ':');
+        const name = if (separator) |index| part[0..index] else part;
+        const parameter = if (separator) |index|
+            try std.fmt.parseInt(u32, part[index + 1 ..], 10)
+        else
+            0;
+        storage[count] = if (std.mem.eql(u8, name, "delta"))
+            try vort.XzFilter.delta(if (separator == null) 1 else parameter)
+        else if (std.mem.eql(u8, name, "x86"))
+            vort.XzFilter.x86(parameter)
+        else if (std.mem.eql(u8, name, "powerpc"))
+            try vort.XzFilter.powerpc(parameter)
+        else if (std.mem.eql(u8, name, "ia64"))
+            try vort.XzFilter.ia64(parameter)
+        else if (std.mem.eql(u8, name, "arm"))
+            try vort.XzFilter.arm(parameter)
+        else if (std.mem.eql(u8, name, "armthumb") or std.mem.eql(u8, name, "arm-thumb"))
+            try vort.XzFilter.armThumb(parameter)
+        else if (std.mem.eql(u8, name, "sparc"))
+            try vort.XzFilter.sparc(parameter)
+        else
+            return error.UnsupportedXzFeature;
+        count += 1;
+    }
+    return storage[0..count];
 }
 
 fn parseSeekabilityTier(text: ?[]const u8) !vort.SeekabilityTier {

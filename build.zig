@@ -1000,7 +1000,7 @@ pub fn build(b: *std.Build) void {
 
     const xz_diff = b.addSystemCommand(&.{ "python3", "tools/xz/diff.py", "--cli" });
     xz_diff.addArtifactArg(cli_exe);
-    const xz_diff_step = b.step("run-xz-diff", "Validate XZ/LZMA2 and Delta/x86 filter interoperability with Python lzma and xz");
+    const xz_diff_step = b.step("run-xz-diff", "Validate XZ/LZMA2 and standard filter interoperability with Python lzma and xz");
     xz_diff_step.dependOn(&xz_diff.step);
 
     const lzma_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/diff.py", "--cli" });

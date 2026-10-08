@@ -1,8 +1,9 @@
 # XZ and LZMA2 support
 
 Vort provides dependency-free XZ decoding for LZMA2 streams with optional
-Delta and x86 BCJ preprocessing filters, plus a deterministic baseline writer
-that stores payload bytes in uncompressed LZMA2 chunks.
+Delta and x86, PowerPC, IA-64, ARM, ARM-Thumb, or SPARC BCJ preprocessing
+filters. Its deterministic baseline writer stores payload bytes in
+uncompressed LZMA2 chunks and can apply the same filter chains.
 
 The container implementation validates:
 
@@ -15,8 +16,8 @@ The container implementation validates:
 
 Normal multi-block streams and concatenated streams with four-byte-aligned
 stream padding are supported. `StreamInfo` reports the check type, block count,
-compressed and uncompressed sizes, and largest declared LZMA2 dictionary.
-It also reports how many blocks use Delta and x86 filters.
+compressed and uncompressed sizes, and largest declared LZMA2 dictionary. It
+also reports aggregate and per-architecture filter block counts.
 
 ```zig
 const info = try vort.inspectXz(allocator, compressed);
@@ -27,9 +28,14 @@ const decoded = try vort.decodeXzAllocLimited(
 );
 defer allocator.free(decoded);
 
+const filter_chain = [_]vort.XzFilter{
+    vort.XzFilter.x86(0),
+    try vort.XzFilter.delta(4),
+};
 const encoded = try vort.encodeXzStoredAlloc(allocator, input, .{
     .check = .crc64,
     .block_size = 1024 * 1024,
+    .filters = &filter_chain,
 });
 defer allocator.free(encoded);
 ```
@@ -41,7 +47,7 @@ The writer provides alloc, transactional append, and caller-owned output APIs.
 CLI validation surfaces:
 
 ```sh
-zig build run -- encode-xz-stored-file input.bin output.xz crc64 1048576
+zig build run -- encode-xz-stored-file input.bin output.xz crc64 1048576 x86,delta:4
 zig build run -- decode-xz-file input.xz output.bin 268435456
 zig build run -- decode-xz-concat-file streams.xz output.bin 268435456
 zig build run -- size-xz-file input.xz 268435456
@@ -49,8 +55,7 @@ zig build run -- inspect-xz-file input.xz
 zig build run-xz-diff
 ```
 
-The reader currently supports Delta and x86 BCJ filters followed by LZMA2. The
-writer emits standards-compatible uncompressed LZMA2 chunks without a
-preprocessing filter. ARM, ARM-Thumb, PowerPC, IA-64, and SPARC BCJ filters,
-compressed LZMA encoding, and filter-aware writing remain later functionality
-and performance work.
+The reader and writer support Delta plus all six classic XZ BCJ filters. Filter
+chains may contain up to three preprocessing filters followed by LZMA2, and
+BCJ start offsets are checked for their architecture's alignment. Compressed
+LZMA encoding remains later functionality and performance work.
