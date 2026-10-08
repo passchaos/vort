@@ -17556,3 +17556,19 @@ reuse, so production keeps the simpler independently owned plans.
   differential, cross-target, project-test, check, and CLI gates pass;
   evidence is in `docs/performance/brotli-full-ring-commit-x86.md` and its JSON
   companion.
+
+- A clean seven-process Brotli HEAD matrix now fixes the current x86-64
+  priority: twelve of thirteen rows beat local libbrotli 1.2.0 in every run,
+  while `clustered_q8` remains the sole loss at `0.8632x` median / `0.8626x`
+  geometric reference throughput. Applying the full tier's distance-ring
+  commit shape to that flat multi-tree executor was rejected: fifteen clean
+  pre-encoded pairs lost 15/15 at `0.9885x` median / `0.9883x` geometric, and
+  the target instance grew 61 bytes. The hot candidate was removed. The
+  cohesive short-distance, checked-delta, and ring-push helpers were instead
+  moved into `src/br/decoder/distance_history.zig`; ordinary text, read-only
+  data, and all Brotli custom production sections remain byte-identical to the
+  frozen baseline. Direct, differential, cross-target, project-test, check,
+  and CLI gates pass. Evidence is in
+  `docs/performance/brotli-head-clean-matrix-x86.md`,
+  `docs/performance/brotli-flat-ring-commit-followup-x86.md`, and their JSON
+  companions.

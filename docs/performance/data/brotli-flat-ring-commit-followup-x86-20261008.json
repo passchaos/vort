@@ -1,0 +1,440 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-08",
+  "host": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": 2,
+    "threads": 1,
+    "arch": "x86_64",
+    "os": "linux",
+    "abi": "gnu",
+    "zig_version": "0.16.0",
+    "optimize": "ReleaseFast"
+  },
+  "baseline": {
+    "vort_commit": "54e93ed60693ec5084d7da47bc048fddb7dca2f5",
+    "executable_sha256": "595893d93d2573cae4e1e738b04548c08e59641a2123c99eb00b200e30252ed2",
+    "target_instance_bytes": 4309
+  },
+  "rejected_candidate": {
+    "executable_sha256": "eae98a097b8c902b29027bfdbbcac239845eab61449321e2b1182940aaff33d2",
+    "change": "Move the flat multi-tree update_ring decision next to distance decode and return only the distance to the payload.",
+    "target_instance_bytes": 4370,
+    "target_instance_growth_bytes": 61
+  },
+  "fixture": {
+    "input_bytes": 1048576,
+    "input_sha256": "d9644e1c8c6e6b29bb8f00a10cf36accb5d592afd7458e94bbd278fe0c32558f",
+    "encoded_bytes": 52622,
+    "encoded_sha256": "828aab9db9c321e35db5f4777c97da2d4123db113d648fc5d4c4ac1187b77718"
+  },
+  "command": "taskset -c 2 env LD_LIBRARY_PATH=/tmp/vort-brotli-upstream-build BINARY --input /tmp/vort-br-clustered-q8.raw --encoded-input /tmp/vort-br-clustered-q8.br --name clustered_q8 --iterations 500 --vort-only --csv OUT",
+  "cleanliness": {
+    "pre_sample_window_seconds": 60,
+    "pre_sample_poll_interval_ms": 20,
+    "pre_sample_observations": 1996,
+    "batch_poll_interval_ms": 20,
+    "zig_observed": false,
+    "discarded_campaigns": [
+      "one candidate-only campaign caused by zsh scalar word-splitting semantics",
+      "one correctly paired campaign overlapped an external Zig process",
+      "all earlier incomplete clean windows"
+    ]
+  },
+  "pairs": [
+    {
+      "pair": 1,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 297012924,
+      "candidate_ns": 300901386,
+      "speedup": 0.987077287839,
+      "baseline_mib_s": 1683.43,
+      "candidate_mib_s": 1661.67,
+      "checksum": 524346000
+    },
+    {
+      "pair": 2,
+      "launch_order": [
+        "candidate",
+        "baseline"
+      ],
+      "baseline_ns": 294516932,
+      "candidate_ns": 300377651,
+      "speedup": 0.980488831374,
+      "baseline_mib_s": 1697.7,
+      "candidate_mib_s": 1664.57,
+      "checksum": 524346000
+    },
+    {
+      "pair": 3,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 295022430,
+      "candidate_ns": 299587244,
+      "speedup": 0.984762989442,
+      "baseline_mib_s": 1694.79,
+      "candidate_mib_s": 1668.96,
+      "checksum": 524346000
+    },
+    {
+      "pair": 4,
+      "launch_order": [
+        "candidate",
+        "baseline"
+      ],
+      "baseline_ns": 295703886,
+      "candidate_ns": 298618475,
+      "speedup": 0.990239756599,
+      "baseline_mib_s": 1690.88,
+      "candidate_mib_s": 1674.38,
+      "checksum": 524346000
+    },
+    {
+      "pair": 5,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 295940526,
+      "candidate_ns": 299388782,
+      "speedup": 0.988482347345,
+      "baseline_mib_s": 1689.53,
+      "candidate_mib_s": 1670.07,
+      "checksum": 524346000
+    },
+    {
+      "pair": 6,
+      "launch_order": [
+        "candidate",
+        "baseline"
+      ],
+      "baseline_ns": 295702789,
+      "candidate_ns": 299090437,
+      "speedup": 0.988673499447,
+      "baseline_mib_s": 1690.89,
+      "candidate_mib_s": 1671.74,
+      "checksum": 524346000
+    },
+    {
+      "pair": 7,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 296046282,
+      "candidate_ns": 298793492,
+      "speedup": 0.990805656503,
+      "baseline_mib_s": 1688.93,
+      "candidate_mib_s": 1673.4,
+      "checksum": 524346000
+    },
+    {
+      "pair": 8,
+      "launch_order": [
+        "candidate",
+        "baseline"
+      ],
+      "baseline_ns": 294936174,
+      "candidate_ns": 298773132,
+      "speedup": 0.987157620318,
+      "baseline_mib_s": 1695.28,
+      "candidate_mib_s": 1673.51,
+      "checksum": 524346000
+    },
+    {
+      "pair": 9,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 295825584,
+      "candidate_ns": 298639301,
+      "speedup": 0.990578209263,
+      "baseline_mib_s": 1690.19,
+      "candidate_mib_s": 1674.26,
+      "checksum": 524346000
+    },
+    {
+      "pair": 10,
+      "launch_order": [
+        "candidate",
+        "baseline"
+      ],
+      "baseline_ns": 295404604,
+      "candidate_ns": 299096863,
+      "speedup": 0.987655306836,
+      "baseline_mib_s": 1692.59,
+      "candidate_mib_s": 1671.7,
+      "checksum": 524346000
+    },
+    {
+      "pair": 11,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 296431941,
+      "candidate_ns": 299174050,
+      "speedup": 0.990834402248,
+      "baseline_mib_s": 1686.73,
+      "candidate_mib_s": 1671.27,
+      "checksum": 524346000
+    },
+    {
+      "pair": 12,
+      "launch_order": [
+        "candidate",
+        "baseline"
+      ],
+      "baseline_ns": 297062267,
+      "candidate_ns": 299537979,
+      "speedup": 0.991734897831,
+      "baseline_mib_s": 1683.15,
+      "candidate_mib_s": 1669.24,
+      "checksum": 524346000
+    },
+    {
+      "pair": 13,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 296801163,
+      "candidate_ns": 299691397,
+      "speedup": 0.990355966074,
+      "baseline_mib_s": 1684.63,
+      "candidate_mib_s": 1668.38,
+      "checksum": 524346000
+    },
+    {
+      "pair": 14,
+      "launch_order": [
+        "candidate",
+        "baseline"
+      ],
+      "baseline_ns": 296463045,
+      "candidate_ns": 300029351,
+      "speedup": 0.988113476271,
+      "baseline_mib_s": 1686.55,
+      "candidate_mib_s": 1666.5,
+      "checksum": 524346000
+    },
+    {
+      "pair": 15,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 296535001,
+      "candidate_ns": 300209574,
+      "speedup": 0.987759973971,
+      "baseline_mib_s": 1686.14,
+      "candidate_mib_s": 1665.5,
+      "checksum": 524346000
+    }
+  ],
+  "csv_sha256": [
+    {
+      "pair": 1,
+      "binary": "baseline",
+      "sha256": "9b90e2805d5fe74879564a5639dd1cfe5bd93c3c8ef7bbaf760dc5bbbcbda7d1"
+    },
+    {
+      "pair": 1,
+      "binary": "candidate",
+      "sha256": "82fd75c873f3e367ebc7b8f358a45128ff7e1087da5d4e8e7967f543e4c48ff1"
+    },
+    {
+      "pair": 2,
+      "binary": "baseline",
+      "sha256": "a72bd14f4571e2d0ec4b323dbab1f9dd2f8b1a29520e2c0cf5f750815051d57a"
+    },
+    {
+      "pair": 2,
+      "binary": "candidate",
+      "sha256": "1888a3fdaa36f499aafd18ac1908019f8cff27a7f3c1624b1ad4dcc2ac8e01ab"
+    },
+    {
+      "pair": 3,
+      "binary": "baseline",
+      "sha256": "01de03e1764beb10a9ea9d4a26867531fc79c2096c0c8e239b926d1f26d411ea"
+    },
+    {
+      "pair": 3,
+      "binary": "candidate",
+      "sha256": "6a64d42c5a9b9f6b9586b5d2c3daa9c7c06e7b504d439ba67d999d625bab77b6"
+    },
+    {
+      "pair": 4,
+      "binary": "baseline",
+      "sha256": "f5334e7172dd31758fcef2f6f67b79c40896b001b89e6f62c597603cb65ab166"
+    },
+    {
+      "pair": 4,
+      "binary": "candidate",
+      "sha256": "c688c21811dece6104e6f52b69893ed245f801ed8b2ec53bfe172f6c7afd5761"
+    },
+    {
+      "pair": 5,
+      "binary": "baseline",
+      "sha256": "b71cc62236e97dff16c3b50c0dccd9ff44659bcac487435052ca211559da159e"
+    },
+    {
+      "pair": 5,
+      "binary": "candidate",
+      "sha256": "3f9a99600449a0ac8279345889420ad588c0fe2bd207499d59506d56e7e013e1"
+    },
+    {
+      "pair": 6,
+      "binary": "baseline",
+      "sha256": "54fd99a278bd40219838edc93105dd0187dc46d29704ad06a7339e4647353831"
+    },
+    {
+      "pair": 6,
+      "binary": "candidate",
+      "sha256": "c2d8ea3298fa86864d1fb550fcb7cde69bc05ae400c454b7a76415828eb9b7c4"
+    },
+    {
+      "pair": 7,
+      "binary": "baseline",
+      "sha256": "b4961070a189dabd45fa8a0ffab478da5035bf61d796e722a0f41ce24f696c60"
+    },
+    {
+      "pair": 7,
+      "binary": "candidate",
+      "sha256": "b42de994122172322474e68c3ee94dd23e729fdabe5ca57c94b1e4134d314008"
+    },
+    {
+      "pair": 8,
+      "binary": "baseline",
+      "sha256": "633364b7856691d31edb58afb050f0a04cfa7cfda5fc36d742a1215ee2585d28"
+    },
+    {
+      "pair": 8,
+      "binary": "candidate",
+      "sha256": "d2a7cc3f08359dd1dfb10821367da5e523d1db58f20d5eecbe63060e8d088f61"
+    },
+    {
+      "pair": 9,
+      "binary": "baseline",
+      "sha256": "253102efa558db8fe6e57df018f0b498a6c365b8789daf81e566310c0d22e2cd"
+    },
+    {
+      "pair": 9,
+      "binary": "candidate",
+      "sha256": "2f7d2a59a2bd22be2defdc5408eebe5e56c52492454b5c75c576d62b2ab69450"
+    },
+    {
+      "pair": 10,
+      "binary": "baseline",
+      "sha256": "75f01197068d1f2563539aa8295232cdeb09bf6f64788ac510bcee73170addfb"
+    },
+    {
+      "pair": 10,
+      "binary": "candidate",
+      "sha256": "e34a7be0d4642021926ef753c0604d911fdcb803b900dbd613e3b1b56eff72d9"
+    },
+    {
+      "pair": 11,
+      "binary": "baseline",
+      "sha256": "ef9b90ddd39d219a28ccbcebc8208575373a2a881483c66696eaaedacd8175db"
+    },
+    {
+      "pair": 11,
+      "binary": "candidate",
+      "sha256": "ae7d09955abd015dcf53c589d745b4982165b26b96f2fe2fce5b229f5aa3def7"
+    },
+    {
+      "pair": 12,
+      "binary": "baseline",
+      "sha256": "0f1d3ceb0fdf4e8ea67316a2b0b48e9fa1e7efeb1f8477ed07da8db2619b989d"
+    },
+    {
+      "pair": 12,
+      "binary": "candidate",
+      "sha256": "68267d84231f6110a43d890cb7396406eedd0c1fc9e695fc6857004f85640a09"
+    },
+    {
+      "pair": 13,
+      "binary": "baseline",
+      "sha256": "b11fc420a3355ecae771f46390a74e0c28535e5def406e36dac221f5cc16a341"
+    },
+    {
+      "pair": 13,
+      "binary": "candidate",
+      "sha256": "b2dfef5b8511350c7f642a6643269411b51cf46083ba3f273188a45dc288a089"
+    },
+    {
+      "pair": 14,
+      "binary": "baseline",
+      "sha256": "5e8f666796852604478af743a7f46beb5f9303dce80e4f1b68d74a4ee6ab7456"
+    },
+    {
+      "pair": 14,
+      "binary": "candidate",
+      "sha256": "5bafa6dd176486c55f3dff0f69f6b584447994b73394126f24dd01bd0b1844bf"
+    },
+    {
+      "pair": 15,
+      "binary": "baseline",
+      "sha256": "9818065e0dd0010505f86235ffc306a498999981f1ffb55e0f77a1d8f0c79ead"
+    },
+    {
+      "pair": 15,
+      "binary": "candidate",
+      "sha256": "b4bc4980fbf719e39d759dbc67b2ba60349966ff694db59e51f646acd9eed54f"
+    }
+  ],
+  "summary": {
+    "pairs": 15,
+    "wins": 0,
+    "median": 0.988482347345,
+    "geometric_mean": 0.988310795758,
+    "minimum": 0.980488831374,
+    "maximum": 0.991734897831,
+    "baseline_mib_s_median": 1689.53,
+    "candidate_mib_s_median": 1670.07,
+    "decision": "reject and remove the flat ring-commit candidate"
+  },
+  "structural_followup": {
+    "commit": "400543ef",
+    "change": "Extract short-distance resolution, delta arithmetic, and recent-ring push into src/br/decoder/distance_history.zig.",
+    "executable_sha256": "de7ecc1a120c13502005912599c264ec949b9844ac4c350920e1a95cae1e2e01",
+    "production_sections": {
+      ".text": "cc681cc1abd6c7d525e9c105b3f2e8247a925a3078ce267f4e6f7ff1ce233a5a",
+      ".rodata": "10724170eef4c80330c8f791f414bc33dc549910c45dbd0c1459d51bef938cb7",
+      ".vort_br_large_window": "806e9f0f3c46d65c56d16fd165fd845d7e4c184cb5904bad644cb36615e111c9",
+      ".vort_br_paired_literal": "5d53c123b4cf71d1048340ffbae4ca0d088e81684b65524d29f5741f3dc14e9c",
+      ".vort_br_wide_lookup10_aux": "a1086846b339492e1da22fc66e401ff4a70e84ffae56650f63e25d4a92458bba",
+      ".vort_br_wide_lookup9": "aac30c0ab1524d98b5ff6146a5e6c5a96e451e0f35fa7ae9375473bc46b3879e"
+    },
+    "production_sections_byte_identical_to_baseline": true,
+    "resolver_address": "0x10e6840",
+    "resolver_bytes": 128
+  },
+  "profiling": {
+    "perf_record": "unavailable: kernel.perf_event_paranoid=4; no system setting was changed"
+  },
+  "validation": {
+    "focused_release_fast": [
+      "distance history module test",
+      "short distance resolver",
+      "direct cached distance context",
+      "multi-tree zero-insert command progress"
+    ],
+    "direct_brotli_release_fast": "passed",
+    "aarch64_release_fast_compile": "passed",
+    "reference_gate": "13/13 rows; libbrotli version 1002000",
+    "reference_path_smoke": "3 valid and 5 invalid paths passed",
+    "upstream_multiblock_differential": "passed",
+    "real_corpus_differential_and_driver_smoke": "passed; 7 driver tests",
+    "project_release_fast_test": "passed",
+    "build_check_j1": "passed",
+    "cli_help": "passed"
+  }
+}
