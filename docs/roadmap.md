@@ -17670,3 +17670,14 @@ reuse, so production keeps the simpler independently owned plans.
   system `xz` differential contributes a real four-block stream. BCJ/Delta
   filter chains and compressed LZMA encoding remain follow-up work. See
   `docs/formats/xz.md`.
+
+- Added dependency-free LZMA-Alone decoding with strict 13-byte property header
+  parsing, known and end-marker-sized streams, explicit dictionary and output
+  limits, caller-owned output, allocating decode, and decoded-size APIs. The
+  same adapter now decodes ZIP method 14's versioned raw-LZMA payload through
+  allocator-bearing ZIP extraction while retaining the no-allocation
+  stored/Deflate path. Python `lzma` covers presets 0/1/3/6/9, empty, text,
+  long-run, binary, random, known-size, truncated, corrupt, and limit cases;
+  Python `zipfile` supplies method-14 interoperability coverage. LZMA-Alone has
+  no intrinsic content checksum, so XZ or ZIP remains preferable when integrity
+  verification is required. See `docs/formats/lzma.md`.

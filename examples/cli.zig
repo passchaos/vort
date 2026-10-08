@@ -182,6 +182,30 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.bzip2DecodedSize(init.gpa, compressed);
         try stdout.print("bzip2_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "decode-lzma-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = (try parseOptionalLimit(args.next())) orelse std.math.maxInt(usize);
+        const max_dictionary_size = (try parseOptionalLimit(args.next())) orelse std.math.maxInt(usize);
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded = try vort.decodeLzmaAllocWithOptions(init.gpa, compressed, .{
+            .max_output_len = max_output_len,
+            .max_dictionary_size = max_dictionary_size,
+        });
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("lzma_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "size-lzma-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded_len = if (max_output_len) |limit|
+            try vort.lzmaDecodedSizeLimited(init.gpa, compressed, limit)
+        else
+            try vort.lzmaDecodedSize(init.gpa, compressed);
+        try stdout.print("lzma_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
     } else if (std.mem.eql(u8, command, "encode-xz-stored-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -259,6 +283,7 @@ pub fn main(init: std.process.Init) !void {
                 .stored => "stored",
                 .deflate => "deflate",
                 .bzip2 => "bzip2",
+                .lzma => "lzma",
                 else => "unsupported",
             };
             try stdout.print("index={d} method={s} compressed={d} uncompressed={d} crc32={d} directory={} name={s}\n", .{
@@ -1798,6 +1823,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode concatenated Bzip2 streams
         \\  size-bzip2-file <path> [max_output]
         \\                              Preflight a Bzip2 stream's decoded size
+        \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]
+        \\                              Decode an LZMA-Alone stream with explicit limits
+        \\  size-lzma-file <path> [max_output]
+        \\                              Decode and report an LZMA-Alone stream's size
         \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size]
         \\                              Encode deterministic XZ with uncompressed LZMA2 chunks
         \\  decode-xz-file <in> <out> [max_output]

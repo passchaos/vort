@@ -13,6 +13,8 @@ Supported entry methods:
 - raw Deflate (`method 8`) through the same decoder used by Vort's public raw,
   zlib, and gzip APIs;
 - Bzip2 (`method 12`) through Vort's dependency-free Bzip2 codec.
+- LZMA (`method 14`) through Vort's LZMA decoder and the ZIP-specific
+  properties prefix.
 
 The decoder validates local/central method and filename agreement, ordered
 ZIP64 `0x0001` extra fields, exact compressed and uncompressed sizes, complete
@@ -72,10 +74,11 @@ returned as borrowed archive bytes. Vort never automatically joins an entry
 name to a filesystem path; callers therefore retain explicit control over
 Zip-Slip/path-traversal policy.
 
-Bzip2 inverse BWT needs temporary allocation. The allocating ZIP extraction
-APIs already use the supplied allocator. For caller-owned output, use
-`zipExtractEntryIntoWithAllocator`; the original no-allocator
-`zipExtractEntryInto` returns `ZipEntryRequiresAllocator` for method 12.
+Bzip2 inverse BWT and LZMA dictionaries need temporary allocation. The
+allocating ZIP extraction APIs already use the supplied allocator. For
+caller-owned output, use `zipExtractEntryIntoWithAllocator`; the original
+no-allocator `zipExtractEntryInto` returns `ZipEntryRequiresAllocator` for
+methods 12 and 14.
 
 CLI validation surfaces:
 
@@ -89,7 +92,7 @@ The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
 than stored/Deflate/Bzip2. The reader deliberately rejects encrypted entries,
 multi-disk archives, malformed/duplicate ZIP64 extra fields, and compression
-methods other than stored/Deflate/Bzip2 with specific errors. Addressable entry and
+methods other than stored/Deflate/Bzip2/LZMA with specific errors. Addressable entry and
 archive sizes remain bounded by the target's `usize` and the caller's available
 memory. Encryption, split archives, and additional entry compression methods
 remain explicit future compatibility increments.
