@@ -84,6 +84,7 @@ pub const XzError = xz.Error;
 pub const XzCheck = xz.Check;
 pub const XzStreamInfo = xz.StreamInfo;
 pub const XzEncodeOptions = xz.EncodeOptions;
+pub const XzFilter = xz.Filter;
 pub const encodeXzStoredAlloc = xz.encodeStoredAlloc;
 pub const encodeXzStoredAppend = xz.encodeStoredAppend;
 pub const encodeXzStoredInto = xz.encodeStoredInto;

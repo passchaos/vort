@@ -5,6 +5,7 @@ pub const Error = container.Error || writer.Error;
 pub const Check = container.Check;
 pub const StreamInfo = container.StreamInfo;
 pub const EncodeOptions = writer.EncodeOptions;
+pub const Filter = writer.Filter;
 pub const encodeStoredAlloc = writer.encodeStoredAlloc;
 pub const encodeStoredAppend = writer.encodeStoredAppend;
 pub const encodeStoredInto = writer.encodeStoredInto;

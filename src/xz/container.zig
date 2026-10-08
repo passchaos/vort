@@ -23,7 +23,13 @@ pub const StreamInfo = struct {
     uncompressed_size: usize,
     max_dictionary_size: u64,
     delta_filter_blocks: usize,
+    bcj_filter_blocks: usize,
     x86_filter_blocks: usize,
+    powerpc_filter_blocks: usize,
+    ia64_filter_blocks: usize,
+    arm_filter_blocks: usize,
+    arm_thumb_filter_blocks: usize,
+    sparc_filter_blocks: usize,
 };
 
 const stream_magic = [_]u8{ 0xfd, '7', 'z', 'X', 'Z', 0x00 };
@@ -168,7 +174,13 @@ fn decodeOneWithInfo(
     defer records.deinit(allocator);
     var max_dictionary_size: u64 = 0;
     var delta_filter_blocks: usize = 0;
+    var bcj_filter_blocks: usize = 0;
     var x86_filter_blocks: usize = 0;
+    var powerpc_filter_blocks: usize = 0;
+    var ia64_filter_blocks: usize = 0;
+    var arm_filter_blocks: usize = 0;
+    var arm_thumb_filter_blocks: usize = 0;
+    var sparc_filter_blocks: usize = 0;
     var offset: usize = 12;
     while (true) {
         if (offset >= input.len) return error.TruncatedFrame;
@@ -206,7 +218,30 @@ fn decodeOneWithInfo(
         });
         for (header.filters[0..header.filter_count]) |filter| switch (filter.kind) {
             .delta => delta_filter_blocks += 1,
-            .x86 => x86_filter_blocks += 1,
+            .x86 => {
+                bcj_filter_blocks += 1;
+                x86_filter_blocks += 1;
+            },
+            .powerpc => {
+                bcj_filter_blocks += 1;
+                powerpc_filter_blocks += 1;
+            },
+            .ia64 => {
+                bcj_filter_blocks += 1;
+                ia64_filter_blocks += 1;
+            },
+            .arm => {
+                bcj_filter_blocks += 1;
+                arm_filter_blocks += 1;
+            },
+            .arm_thumb => {
+                bcj_filter_blocks += 1;
+                arm_thumb_filter_blocks += 1;
+            },
+            .sparc => {
+                bcj_filter_blocks += 1;
+                sparc_filter_blocks += 1;
+            },
         };
         offset = check_end;
     }
@@ -249,7 +284,13 @@ fn decodeOneWithInfo(
             .uncompressed_size = produced,
             .max_dictionary_size = max_dictionary_size,
             .delta_filter_blocks = delta_filter_blocks,
+            .bcj_filter_blocks = bcj_filter_blocks,
             .x86_filter_blocks = x86_filter_blocks,
+            .powerpc_filter_blocks = powerpc_filter_blocks,
+            .ia64_filter_blocks = ia64_filter_blocks,
+            .arm_filter_blocks = arm_filter_blocks,
+            .arm_thumb_filter_blocks = arm_thumb_filter_blocks,
+            .sparc_filter_blocks = sparc_filter_blocks,
         },
     };
 }
@@ -477,7 +518,13 @@ test "XZ decoder validates and decodes a CRC64 LZMA2 stream" {
     try std.testing.expectEqual(expected.len, info.uncompressed_size);
     try std.testing.expectEqual(@as(u64, 256 * 1024), info.max_dictionary_size);
     try std.testing.expectEqual(@as(usize, 0), info.delta_filter_blocks);
+    try std.testing.expectEqual(@as(usize, 0), info.bcj_filter_blocks);
     try std.testing.expectEqual(@as(usize, 0), info.x86_filter_blocks);
+    try std.testing.expectEqual(@as(usize, 0), info.powerpc_filter_blocks);
+    try std.testing.expectEqual(@as(usize, 0), info.ia64_filter_blocks);
+    try std.testing.expectEqual(@as(usize, 0), info.arm_filter_blocks);
+    try std.testing.expectEqual(@as(usize, 0), info.arm_thumb_filter_blocks);
+    try std.testing.expectEqual(@as(usize, 0), info.sparc_filter_blocks);
 
     var output: [expected.len]u8 = undefined;
     try std.testing.expectEqual(expected.len, try decodeInto(std.testing.allocator, &encoded, &output));

@@ -1,12 +1,15 @@
 const std = @import("std");
 const container = @import("container.zig");
+const filters = @import("filters.zig");
 
 pub const Error = container.Error;
 pub const Check = container.Check;
+pub const Filter = filters.Filter;
 
 pub const EncodeOptions = struct {
     check: Check = .crc64,
     block_size: usize = 1024 * 1024,
+    filters: []const Filter = &.{},
 };
 
 const stream_magic = [_]u8{ 0xfd, '7', 'z', 'X', 'Z', 0x00 };
@@ -47,6 +50,7 @@ pub fn encodeStoredAppend(
     options: EncodeOptions,
 ) !usize {
     if (options.block_size == 0) return error.InvalidBlockPlan;
+    try filters.validateChain(options.filters);
     const check_size = try checkSize(options.check);
 
     var encoded: std.ArrayList(u8) = .empty;
@@ -63,12 +67,22 @@ pub fn encodeStoredAppend(
         const block_len = @min(options.block_size, input.len - input_offset);
         const block = input[input_offset..][0..block_len];
         const block_start = encoded.items.len;
-        try appendBlockHeader(allocator, &encoded);
-        const packed_size = try appendStoredLzma2(allocator, &encoded, block);
-        const padding_len = (4 - ((8 + packed_size) % 4)) % 4;
+        const header_size = try appendBlockHeader(allocator, &encoded, options.filters);
+        var filtered_storage: ?[]u8 = null;
+        defer if (filtered_storage) |bytes| allocator.free(bytes);
+        const filtered = if (options.filters.len == 0)
+            block
+        else blk: {
+            const bytes = try allocator.dupe(u8, block);
+            filtered_storage = bytes;
+            filters.encodeChain(bytes, options.filters);
+            break :blk bytes;
+        };
+        const packed_size = try appendStoredLzma2(allocator, &encoded, filtered);
+        const padding_len = (4 - ((header_size + packed_size) % 4)) % 4;
         try encoded.appendNTimes(allocator, 0, padding_len);
         try appendCheck(allocator, &encoded, options.check, block);
-        const unpadded_size = std.math.add(u64, 12 + @as(u64, @intCast(packed_size)), check_size) catch
+        const unpadded_size = std.math.add(u64, @as(u64, @intCast(header_size + packed_size)), check_size) catch
             return error.IntegerOverflow;
         try records.append(allocator, .{
             .unpadded_size = unpadded_size,
@@ -103,10 +117,34 @@ pub fn encodeStoredAppend(
     return encoded.items.len;
 }
 
-fn appendBlockHeader(allocator: std.mem.Allocator, output: *std.ArrayList(u8)) !void {
-    var header = [_]u8{ 2, 0, 0x21, 1, 0, 0, 0, 0 };
-    try output.appendSlice(allocator, &header);
-    try appendU32(allocator, output, std.hash.Crc32.hash(&header));
+fn appendBlockHeader(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    filter_chain: []const Filter,
+) !usize {
+    var header: std.ArrayList(u8) = .empty;
+    defer header.deinit(allocator);
+    try header.append(allocator, 0);
+    try header.append(allocator, @intCast(filter_chain.len));
+    for (filter_chain) |filter| {
+        try appendVli(allocator, &header, filters.id(filter));
+        const properties_len = filters.propertiesSize(filter);
+        try appendVli(allocator, &header, properties_len);
+        if (properties_len != 0) {
+            var properties: [4]u8 = undefined;
+            filters.writeProperties(filter, properties[0..properties_len]);
+            try header.appendSlice(allocator, properties[0..properties_len]);
+        }
+    }
+    try appendVli(allocator, &header, 0x21);
+    try appendVli(allocator, &header, 1);
+    try header.append(allocator, 0);
+    while (header.items.len % 4 != 0) try header.append(allocator, 0);
+    if (header.items.len / 4 > std.math.maxInt(u8)) return error.IntegerOverflow;
+    header.items[0] = @intCast(header.items.len / 4);
+    try output.appendSlice(allocator, header.items);
+    try appendU32(allocator, output, std.hash.Crc32.hash(header.items));
+    return header.items.len + 4;
 }
 
 fn appendStoredLzma2(allocator: std.mem.Allocator, output: *std.ArrayList(u8), input: []const u8) !usize {
@@ -228,4 +266,25 @@ test "XZ stored writer caller-owned and append APIs are transactional" {
         encodeStoredAppend(allocator, &appended, input, .{ .block_size = 0 }),
     );
     try std.testing.expectEqualSlices(u8, before, appended.items);
+}
+
+test "XZ stored writer round trips x86 and delta filter chain" {
+    const allocator = std.testing.allocator;
+    const input = "\x90\xe8\x10\x00\x00\x00\x90\xe9\xf0\xff\xff\xff" ** 128;
+    const filter_chain = [_]Filter{
+        Filter.x86(4096),
+        try Filter.delta(4),
+    };
+    const encoded = try encodeStoredAlloc(allocator, input, .{
+        .block_size = 1024,
+        .filters = &filter_chain,
+    });
+    defer allocator.free(encoded);
+    const decoded = try container.decodeAlloc(allocator, encoded);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+    const info = try container.inspect(allocator, encoded);
+    try std.testing.expect(info.block_count > 1);
+    try std.testing.expectEqual(info.block_count, info.delta_filter_blocks);
+    try std.testing.expectEqual(info.block_count, info.x86_filter_blocks);
 }
