@@ -1968,8 +1968,8 @@ reuse, so production keeps the simpler independently owned plans.
   cover every length `0...8192`, sixteen offsets, and split updates, while
   generic AArch64, x86_64 baseline, and wasm32-wasi compile checks preserve the
   fallback. Five CPU-0 ReleaseFast checksum samples measured median
-  `crc32-best` throughput of 18,323 MiB/s versus 3,920 MiB/s for slice-by-32
-  (`4.67x`) with identical digests.
+  `crc32-best` throughput of 18,103 MiB/s versus 3,926 MiB/s for slice-by-32
+  (`4.61x`) with identical digests.
 
 - Made the focused PNG scanline reconstruction gate repeat-aware. The benchmark
   now accepts `--repeat`, records a `repeat` CSV column, and reports the median

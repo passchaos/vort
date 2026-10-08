@@ -1016,9 +1016,9 @@ by doubling. Raw decoding stays strict by default, while zlib/gzip wrappers opt
 into exact-prefix completion so they can offer the remaining input in one batch
 without surrendering their footer. A CPU-0 `netz` integration A/B over a 4 KiB
 payload and 80-byte gzip representation (five ReleaseFast runs of 50,000
-iterations) reduced median incremental decode latency from 85,330 ns to 3,841
-ns (`22.22x`, 95.50% lower). The whole-body caller-buffer median also moved from
-2,850 ns to 2,152 ns after enabling the validated ARM CRC32 path; this is an
+iterations) reduced median incremental decode latency from 85,330 ns to 3,959
+ns (`21.55x`, 95.36% lower). The whole-body caller-buffer median also moved from
+2,850 ns to 2,092 ns after enabling the validated ARM CRC32 path; this is an
 incremental-core and checksum-dispatch result,
 not a one-shot regression claim.
 
@@ -1029,19 +1029,19 @@ iterations per row against zlib 1.3 produced these median nanoseconds per decode
 
 | case | Vort full | zlib full | Vort 7x31 | zlib 7x31 |
 | --- | ---: | ---: | ---: | ---: |
-| HTTP 4 KiB | 3,949 | 3,602 | 7,200 | 14,115 |
-| JSON 32 KiB | 14,575 | 12,912 | 40,913 | 102,891 |
-| binary 64 KiB | 4,745 | 15,755 | 255,494 | 289,597 |
+| HTTP 4 KiB | 3,937 | 3,606 | 7,229 | 14,083 |
+| JSON 32 KiB | 14,623 | 12,909 | 41,280 | 102,604 |
+| binary 64 KiB | 4,738 | 15,744 | 274,454 | 289,084 |
 
-The geometric-mean Vort/zlib latency ratio is `0.720x` for full buffers and
-`0.564x` for fragmented buffers. Vort is therefore ahead in aggregate for both
+The geometric-mean Vort/zlib latency ratio is `0.719x` for full buffers and
+`0.581x` for fragmented buffers. Vort is therefore ahead in aggregate for both
 shapes; system zlib remains individually faster on the two full-buffer dynamic
 streams. The benchmark gate checks all twelve rows,
 matching output/checksum values, the exact fragmentation shape, and a
 conservative 4x per-row regression bound. The binary full-buffer gain came from
 copying aligned stored payloads directly into caller output and committing the
 history suffix in spans, while the validated ARM CRC32 update removes the former
-checksum ceiling. Its latency is now 4,745 ns versus zlib's 15,755 ns, rather
+checksum ceiling. Its latency is now 4,738 ns versus zlib's 15,744 ns, rather
 than the earlier byte-at-a-time 443,403 ns smoke.
 
 The Huffman table now stores bit-length bucket offsets/counts for active canonical

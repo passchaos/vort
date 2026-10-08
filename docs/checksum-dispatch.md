@@ -40,8 +40,8 @@ Required gates before enabling an architecture-specific IEEE path:
 The AArch64 path was enabled after exhaustive differential coverage over every
 length `0...8192`, sixteen starting offsets, and split incremental updates. Five
 CPU-0 ReleaseFast checksum samples over a repeatedly perturbed 1 MiB input put
-`crc32-best` at a median 18,323 MiB/s versus 3,920 MiB/s for slice-by-32, a
-`4.67x` improvement with identical digest mixes.
+`crc32-best` at a median 18,103 MiB/s versus 3,926 MiB/s for slice-by-32, a
+`4.61x` improvement with identical digest mixes.
 
 ## Block checksum composition
 
