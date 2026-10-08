@@ -220,6 +220,40 @@ and measured 0.9863x median / 0.9889x geometric mean with 2/15 wins. Even one
 extra long-lived pointer recreates the register-pressure cost seen in the
 earlier four-pointer cache; the retained implementation caches only the index.
 
+## Identity transform dispatch follow-up
+
+The current stream uses 4,255 static-dictionary commands, including 3,749
+transform-zero identities. Upstream libbrotli handles its identity transform
+without entering the complete transform routine. A focused Vort candidate
+therefore inlined only the checked transform-zero address resolution in the
+flat multi-tree executor; the other 506 commands retained the canonical
+121-transform dispatcher. This is narrower than the previously rejected full
+transform inline and direct-output candidates.
+
+GDB proved the frozen workload entered the changed `anon_51097` instance, and
+disassembly showed identity success constructing the borrowed dictionary slice
+without calling `static_dictionary.transform`. The complete transform function
+remained `0x28b` bytes, but the hot executor grew `0x10d5 -> 0x1184` (+175 B),
+while the other three flat instances and all Brotli custom-section sizes stayed
+unchanged.
+
+Seven clean, alternating, pre-encoded CPU-2 pairs rejected the candidate:
+
+| Metric | Result |
+| --- | ---: |
+| paired median | 0.98815x |
+| paired geometric mean | 0.98835x |
+| wins | 0/7 |
+| range | 0.98678x--0.99145x |
+
+Every pair decoded 500 frames with identical checksums. A preceding complete
+15-pair campaign was discarded without inspection after its 20-millisecond
+monitor observed an external Zig process. The clean screen is decisive: saving
+the identity call does not repay the larger executor, so the source was fully
+restored. Exact nanoseconds, executable/fixture/CSV hashes, monitoring data,
+and shape evidence are in
+[brotli-flat-identity-fast-x86-20261008.json](data/brotli-flat-identity-fast-x86-20261008.json).
+
 ## Correctness evidence
 
 The focused lookup test checks zero-insert copy-extra decoding and exact

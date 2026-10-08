@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-08",
+  "host": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": 2,
+    "threads": 1,
+    "arch": "x86_64",
+    "os": "linux",
+    "abi": "gnu",
+    "zig_version": "0.16.0",
+    "optimize": "ReleaseFast"
+  },
+  "baseline": {
+    "vort_commit": "53c874f07f70fa5700c474eaf2407a494a86714c",
+    "executable_sha256": "30d6c2f7100ff288cb41ab887bf9de25a91a51339efb3804d349ee51261ce56c",
+    "target_instance_bytes": 4309
+  },
+  "rejected_candidate": {
+    "executable_sha256": "94dab7a1d5588cc2b1ba5ef39330c5c2a5ccb3a9b64ec916b9135196734c3da7",
+    "change": "Inline a transform-zero-only dictionary address resolver in the flat multi-tree executor and retain the canonical transform dispatcher as the non-identity fallback.",
+    "target_instance_bytes": 4484,
+    "target_instance_growth_bytes": 175,
+    "ordinary_text_growth_bytes": 176,
+    "other_flat_instance_sizes_unchanged": true,
+    "custom_section_sizes_unchanged": true
+  },
+  "shape": {
+    "static_dictionary_copies": 4255,
+    "identity_transform_copies": 3749,
+    "non_identity_transform_copies": 506,
+    "full_transform_function_bytes": 651
+  },
+  "fixture": {
+    "input_bytes": 1048576,
+    "input_sha256": "d9644e1c8c6e6b29bb8f00a10cf36accb5d592afd7458e94bbd278fe0c32558f",
+    "encoded_bytes": 52622,
+    "encoded_sha256": "828aab9db9c321e35db5f4777c97da2d4123db113d648fc5d4c4ac1187b77718"
+  },
+  "command": "taskset -c 2 env LD_LIBRARY_PATH=/tmp/vort-brotli-upstream-build BINARY --input FROZEN/clustered_q8.raw --encoded-input FROZEN/clustered_q8.br --name clustered_q8 --iterations 500 --vort-only --csv OUT",
+  "cleanliness": {
+    "pre_sample_window_seconds": 60,
+    "pre_sample_poll_interval_ms": 20,
+    "pre_sample_observations": 2015,
+    "batch_poll_interval_ms": 20,
+    "zig_observed": false,
+    "discarded_campaigns": [
+      "one complete 15-pair campaign overlapped external Zig PID 1909481 and was not inspected"
+    ]
+  },
+  "pairs": [
+    {
+      "pair": 1,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 295044693,
+      "candidate_ns": 298582903,
+      "speedup": 0.988149991294,
+      "baseline_mib_s": 1694.66,
+      "candidate_mib_s": 1674.58,
+      "checksum": 524346000
+    },
+    {
+      "pair": 2,
+      "launch_order": [
+        "candidate",
+        "baseline"
+      ],
+      "baseline_ns": 295124141,
+      "candidate_ns": 298879515,
+      "speedup": 0.987435157609,
+      "baseline_mib_s": 1694.2,
+      "candidate_mib_s": 1672.91,
+      "checksum": 524346000
+    },
+    {
+      "pair": 3,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 295652652,
+      "candidate_ns": 298203170,
+      "speedup": 0.991447045985,
+      "baseline_mib_s": 1691.17,
+      "candidate_mib_s": 1676.71,
+      "checksum": 524346000
+    },
+    {
+      "pair": 4,
+      "launch_order": [
+        "candidate",
+        "baseline"
+      ],
+      "baseline_ns": 295435730,
+      "candidate_ns": 298975063,
+      "speedup": 0.988161778563,
+      "baseline_mib_s": 1692.42,
+      "candidate_mib_s": 1672.38,
+      "checksum": 524346000
+    },
+    {
+      "pair": 5,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 294907707,
+      "candidate_ns": 298118708,
+      "speedup": 0.989229119428,
+      "baseline_mib_s": 1695.45,
+      "candidate_mib_s": 1677.18,
+      "checksum": 524346000
+    },
+    {
+      "pair": 6,
+      "launch_order": [
+        "candidate",
+        "baseline"
+      ],
+      "baseline_ns": 294934625,
+      "candidate_ns": 298885061,
+      "speedup": 0.986782758607,
+      "baseline_mib_s": 1695.29,
+      "candidate_mib_s": 1672.88,
+      "checksum": 524346000
+    },
+    {
+      "pair": 7,
+      "launch_order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline_ns": 295364138,
+      "candidate_ns": 299184450,
+      "speedup": 0.987230913906,
+      "baseline_mib_s": 1692.83,
+      "candidate_mib_s": 1671.21,
+      "checksum": 524346000
+    }
+  ],
+  "csv_sha256": [
+    {
+      "pair": 1,
+      "binary": "baseline",
+      "sha256": "27a66472d7d2939f23097c61eb28571e5430a6cee414fe09e93a965dc6e3eaba"
+    },
+    {
+      "pair": 1,
+      "binary": "candidate",
+      "sha256": "cf38fb7b2a97fc10a9e199d60880c2e2afedf13c58f24dd145b2f731e7590dc6"
+    },
+    {
+      "pair": 2,
+      "binary": "baseline",
+      "sha256": "6024218bea2fe099ba776f6a98f662c96286cff890d323b3a3b33a68ccc83e26"
+    },
+    {
+      "pair": 2,
+      "binary": "candidate",
+      "sha256": "091a8e1b3652f338dc1a6365bfb520178f20e197af208b6db81ab6437f5a44fb"
+    },
+    {
+      "pair": 3,
+      "binary": "baseline",
+      "sha256": "6cfbbfd42b6406d0bc2741eded0fffa0501764a8923234caf9a6443b99f99b25"
+    },
+    {
+      "pair": 3,
+      "binary": "candidate",
+      "sha256": "2fbdbd98491753baa1b7a10bf644fb5f3376db7b3be7d6cf12182b011523dd9d"
+    },
+    {
+      "pair": 4,
+      "binary": "baseline",
+      "sha256": "502062bd6658c5f7b72409982329d4bf818cdb1a55b25e611907eaf076d632d5"
+    },
+    {
+      "pair": 4,
+      "binary": "candidate",
+      "sha256": "15084e82c3c8feb690e53332625329dd6dd841aeafa39a7ae6357f44f89256e8"
+    },
+    {
+      "pair": 5,
+      "binary": "baseline",
+      "sha256": "61fade9c4b2d4664b4945a1988cef1abfce294cfe53c0fee1588bd94cd4504a2"
+    },
+    {
+      "pair": 5,
+      "binary": "candidate",
+      "sha256": "d3654be6b6961003766c45e9cb4efbff24b060185372c4c0e44aaefabfd6bf66"
+    },
+    {
+      "pair": 6,
+      "binary": "baseline",
+      "sha256": "0c9c32a2f76afea76c7202d00e55e89d9522ef1345a14729912fded7d1e0bae8"
+    },
+    {
+      "pair": 6,
+      "binary": "candidate",
+      "sha256": "d7fc80a5f82ee2e8cde9effb5d0fa97db93e4b44b8578a79f6c2ba33c4ce6251"
+    },
+    {
+      "pair": 7,
+      "binary": "baseline",
+      "sha256": "2978a9586fdd69480ede6a0d0936350fe3559b4218ce06e8cdc404575f6719e4"
+    },
+    {
+      "pair": 7,
+      "binary": "candidate",
+      "sha256": "3fdc662080a11ccf5d34a7bf1dde6eaa486747af1f8ec8b244085db6bdced43f"
+    }
+  ],
+  "summary": {
+    "pairs": 7,
+    "wins": 0,
+    "median": 0.988149991294,
+    "geometric_mean": 0.988347027519,
+    "minimum": 0.986782758607,
+    "maximum": 0.991447045985,
+    "baseline_mib_s_median": 1694.2,
+    "candidate_mib_s_median": 1672.91,
+    "decision": "reject after decisive clean screen; do not advance to 15 pairs"
+  },
+  "mechanism_evidence": {
+    "gdb_route": "clustered_q8 entered processTailLookupCompressedPayload anon_51097 through tryProcessMultiTreeZeroInsertMetaBlock",
+    "machine_code": "identity success constructs a borrowed dictionary slice inline; only non-identity reaches br.static_dictionary.transform"
+  },
+  "validation": {
+    "static_dictionary_release_fast": "7/7 passed with candidate",
+    "active_window_distance_oracle": "passed with candidate",
+    "smoke_checksum": 1048692,
+    "production_after_rejection": "source restored exactly to commit 53c874f0"
+  }
+}

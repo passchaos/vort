@@ -17572,3 +17572,13 @@ reuse, so production keeps the simpler independently owned plans.
   `docs/performance/brotli-head-clean-matrix-x86.md`,
   `docs/performance/brotli-flat-ring-commit-followup-x86.md`, and their JSON
   companions.
+
+- A subsequent flat Brotli dictionary-dispatch experiment was also rejected.
+  Although transform zero covers 3,749/4,255 `clustered_q8` dictionary commands,
+  resolving those identity words inline grew the selected executor
+  `0x10d5 -> 0x1184`. Seven clean pre-encoded pairs lost 7/7 at `0.9881x`
+  median / `0.9883x` geometric throughput with identical checksums. The
+  canonical borrowed-word implementation remains; further clustered work
+  should stop adding local dictionary/distance branches and instead reduce the
+  command loop's overall execution model or working set. Evidence is in
+  `docs/performance/data/brotli-flat-identity-fast-x86-20261008.json`.
