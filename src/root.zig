@@ -23,6 +23,7 @@ pub const zip = @import("zip.zig");
 pub const bzip2 = @import("bzip2.zig");
 pub const xz = @import("xz.zig");
 pub const lzma = @import("lzma.zig");
+pub const tar = @import("tar.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -110,6 +111,29 @@ pub const decodeLzmaAllocLimited = lzma.decodeAllocLimited;
 pub const decodeLzmaAllocWithOptions = lzma.decodeAllocWithOptions;
 pub const lzmaDecodedSize = lzma.decodedSize;
 pub const lzmaDecodedSizeLimited = lzma.decodedSizeLimited;
+
+pub const TarError = tar.Error;
+pub const TarKind = tar.Kind;
+pub const TarPath = tar.Path;
+pub const TarEntry = tar.Entry;
+pub const TarArchive = tar.Archive;
+pub const TarIterator = tar.Iterator;
+pub const TarEncodeEntry = tar.EncodeEntry;
+pub const TarCompression = tar.Compression;
+pub const TarCompressedEncodeOptions = tar.CompressedEncodeOptions;
+pub const TarOwnedArchive = tar.OwnedArchive;
+pub const parseTarArchive = tar.parse;
+pub const encodeTarAlloc = tar.encodeAlloc;
+pub const encodeTarAppend = tar.encodeAppend;
+pub const tarExtractEntryInto = tar.extractEntryInto;
+pub const tarExtractEntryAlloc = tar.extractEntryAlloc;
+pub const tarExtractByNameAlloc = tar.extractByNameAlloc;
+pub const tarExtractByNameAllocLimited = tar.extractByNameAllocLimited;
+pub const detectTarCompression = tar.detectCompression;
+pub const encodeCompressedTarAlloc = tar.encodeCompressedAlloc;
+pub const encodeCompressedTarAppend = tar.encodeCompressedAppend;
+pub const decodeCompressedTarAlloc = tar.decodeCompressedAlloc;
+pub const decodeTarAutoAlloc = tar.decodeAutoAlloc;
 
 pub const BrotliError = br.Error;
 pub const BrotliDecodeOptions = br.DecodeOptions;
@@ -2257,6 +2281,7 @@ test {
     _ = bzip2;
     _ = xz;
     _ = lzma;
+    _ = tar;
 }
 
 test "root exports lz4 and zstd codec helpers" {
