@@ -12,9 +12,10 @@ const lzma_decoder = @import("../lzma/decoder.zig");
 const xz_container = @import("../xz/container.zig");
 const xz_filters = @import("../xz/filters.zig");
 const bcj2 = @import("bcj2.zig");
+const ppmd7 = @import("ppmd7.zig");
 
 pub const Error = core.Error || number.Error || streams_mod.Error || files_mod.Error || aes.Error ||
-    deflate.Error || bzip2.Error || lzma_decoder.Error || xz_container.Error || error{
+    deflate.Error || bzip2.Error || lzma_decoder.Error || xz_container.Error || ppmd7.Error || error{
     Invalid7zArchive,
     Unsupported7zFeature,
     EntryNotFound,
@@ -428,7 +429,7 @@ fn decodeFolderAlloc(
                 owned = next;
                 current = next;
             },
-            .copy, .deflate, .bzip2, .lzma, .lzma2 => {
+            .copy, .deflate, .bzip2, .lzma, .lzma2, .ppmd7 => {
                 const next = try decodePrimaryAlloc(
                     allocator,
                     current,
@@ -498,6 +499,13 @@ fn decodePrimaryAlloc(
             allocator,
             packed_bytes,
             primary.propertyBytes()[0],
+            expected_size,
+            max_dictionary_size,
+        ),
+        .ppmd7 => try ppmd7.decodeAllocLimited(
+            allocator,
+            packed_bytes,
+            primary.propertyBytes(),
             expected_size,
             max_dictionary_size,
         ),

@@ -2,9 +2,10 @@ const std = @import("std");
 const core = @import("../core.zig");
 const aes = @import("aes.zig");
 const number = @import("number.zig");
+const ppmd7 = @import("ppmd7.zig");
 const types = @import("types.zig");
 
-pub const Error = core.Error || number.Error || error{
+pub const Error = core.Error || number.Error || ppmd7.Error || error{
     Invalid7zArchive,
     Unsupported7zFeature,
 };
@@ -384,6 +385,8 @@ fn parseCoder(reader: *number.Reader) !Coder {
         .lzma
     else if (std.mem.eql(u8, id, &.{0x21}))
         .lzma2
+    else if (std.mem.eql(u8, id, &.{ 0x03, 0x04, 0x01 }))
+        .ppmd7
     else if (std.mem.eql(u8, id, &.{0x03}))
         .delta
     else if (std.mem.eql(u8, id, &.{ 0x03, 0x03, 0x01, 0x03 }))
@@ -411,6 +414,7 @@ fn parseCoder(reader: *number.Reader) !Coder {
     if (((method == .copy or method == .deflate or method == .bzip2) and properties.len != 0) or
         (method == .lzma and properties.len != 5) or
         (method == .lzma2 and properties.len != 1) or
+        (method == .ppmd7 and properties.len != 5) or
         (method == .delta and properties.len != 1) or
         (isBcj(method) and properties.len != 0 and properties.len != 4) or
         (method == .bcj2 and (input_count != 4 or output_count != 1 or
@@ -419,6 +423,8 @@ fn parseCoder(reader: *number.Reader) !Coder {
         return error.Invalid7zArchive;
     if (method == .aes256_sha256)
         _ = aes.parseProperties(properties) catch return error.Invalid7zArchive;
+    if (method == .ppmd7)
+        _ = ppmd7.parseProperties(properties) catch return error.Invalid7zArchive;
 
     var coder = Coder{
         .method = method,
@@ -457,7 +463,7 @@ fn isCoderInputBound(
 
 fn isCompression(method: types.Method) bool {
     return switch (method) {
-        .copy, .deflate, .bzip2, .lzma, .lzma2 => true,
+        .copy, .deflate, .bzip2, .lzma, .lzma2, .ppmd7 => true,
         else => false,
     };
 }

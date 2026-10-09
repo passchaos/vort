@@ -23,6 +23,7 @@ pub const Method = enum {
     bzip2,
     lzma,
     lzma2,
+    ppmd7,
     delta,
     x86,
     powerpc,

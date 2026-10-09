@@ -455,6 +455,21 @@ def main() -> None:
                 "bzip2-plain": ["-m0=bzip2", "-mx=5", "-mhc=off", "-ms=off"],
                 "lzma-plain": ["-m0=lzma", "-mx=5", "-mhc=off", "-ms=off"],
                 "lzma2-plain": ["-m0=lzma2", "-mx=5", "-mhc=off", "-ms=off"],
+                "ppmd-order2-plain": [
+                    "-m0=PPMd:o=2:mem=64k",
+                    "-mhc=off",
+                    "-ms=off",
+                ],
+                "ppmd-order6-solid": [
+                    "-m0=PPMd:o=6:mem=256k",
+                    "-mhc=on",
+                    "-ms=on",
+                ],
+                "ppmd-order16-plain": [
+                    "-m0=PPMd:o=16:mem=1m",
+                    "-mhc=off",
+                    "-ms=off",
+                ],
                 "lzma-solid-encoded": ["-m0=lzma", "-mx=5", "-mhc=on", "-ms=on"],
                 "lzma2-solid-encoded": ["-m0=lzma2", "-mx=5", "-mhc=on", "-ms=on"],
                 "lzma2-bcj2-solid": [
@@ -481,6 +496,28 @@ def main() -> None:
                         ("access", "attributes"),
                     )
             external_variants += len(variants)
+
+            ppmd_tree = temp / "ppmd-tree"
+            ppmd_tree.mkdir()
+            ppmd_stress_payload = (
+                (b"PPMd context restart and allocator pressure\n" * 4096)
+                + (bytes(range(256)) * 1024)
+                + (b"suffix-model-0123456789-abcdefghijklmnopqrstuvwxyz\n" * 4096)
+            )
+            ppmd_stress_archive = temp / "ppmd-order16-small-memory.7z"
+            create_reference_payload(
+                seven_zip_tool,
+                ppmd_tree,
+                ppmd_stress_archive,
+                ppmd_stress_payload,
+                ["-m0=PPMd:o=16:mem=64k", "-mhc=off", "-ms=off"],
+            )
+            verify_with_vort(
+                args.cli,
+                ppmd_stress_archive,
+                {"payload.bin": ppmd_stress_payload},
+            )
+            external_variants += 1
 
             filter_tree = temp / "filter-tree"
             filter_tree.mkdir()
@@ -520,7 +557,12 @@ def main() -> None:
                     ("delta:4", "lzma2"),
                     bytes(range(256)) * 16,
                 ),
+                "delta4-ppmd": (
+                    ("delta:4", "PPMd:o=6:mem=64k"),
+                    bytes(range(256)) * 16,
+                ),
                 "bcj-lzma": (("bcj", "lzma"), x86_payload),
+                "bcj-ppmd": (("bcj", "PPMd:o=6:mem=64k"), x86_payload),
                 "bcj2-lzma2": (("bcj2", "lzma2"), x86_payload),
                 "bcj2-lzma": (("bcj2", "lzma"), x86_payload),
                 "bcj-delta4-lzma2": (
@@ -589,6 +631,12 @@ def main() -> None:
                     "-mx=5",
                     "-mhc=on",
                     "-mhe=on",
+                    "-pseven-zip-password",
+                ],
+                "aes-ppmd": [
+                    "-m0=PPMd:o=6:mem=64k",
+                    "-mhc=off",
+                    "-mhe=off",
                     "-pseven-zip-password",
                 ],
             }

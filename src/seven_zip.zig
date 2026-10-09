@@ -44,6 +44,7 @@ test {
     _ = @import("seven_zip/aes.zig");
     _ = @import("seven_zip/bcj2.zig");
     _ = @import("seven_zip/number.zig");
+    _ = @import("seven_zip/ppmd7.zig");
     _ = writer;
 }
 
@@ -573,6 +574,43 @@ test "7z reader decodes real data-only and header-encrypted AES archives" {
     );
     defer allocator.free(header_decoded);
     try std.testing.expectEqualSlices(u8, expected, header_decoded);
+}
+
+test "7z reader decodes a real PPMd7 folder with bounded model memory" {
+    const allocator = std.testing.allocator;
+    const encoded_hex = std.mem.trim(
+        u8,
+        @embedFile("seven_zip/testdata/7zip-ppmd7.7z.hex"),
+        "\r\n \t",
+    );
+    const encoded = try allocator.alloc(u8, encoded_hex.len / 2);
+    defer allocator.free(encoded);
+    _ = try std.fmt.hexToBytes(encoded, encoded_hex);
+
+    const parsed = try parseAlloc(allocator, encoded);
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(usize, 1), parsed.entries.len);
+    try std.testing.expectEqualStrings(".gitattributes", parsed.entries[0].name);
+    try std.testing.expectEqual(@import("seven_zip/types.zig").Method.ppmd7, parsed.entries[0].method.?);
+    const decoded = try parsed.extractEntryAlloc(allocator, parsed.entries[0]);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "src/br/dictionary.bin binary\n", decoded);
+
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        parsed.decodeEntryAllocWithOptions(allocator, parsed.entries[0], .{
+            .max_dictionary_size = 64 * 1024 - 1,
+        }),
+    );
+    var corrupt = try allocator.dupe(u8, encoded);
+    defer allocator.free(corrupt);
+    corrupt[32] ^= 1;
+    const corrupt_archive = try parseAlloc(allocator, corrupt);
+    defer corrupt_archive.deinit();
+    try std.testing.expectError(
+        error.InvalidPpmdData,
+        corrupt_archive.extractEntryAlloc(allocator, corrupt_archive.entries[0]),
+    );
 }
 
 test "7z reader decodes a real LZMA2 BCJ2 folder" {

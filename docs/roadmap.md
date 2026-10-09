@@ -17860,8 +17860,8 @@ reuse, so production keeps the simpler independently owned plans.
   external-metadata modes through 7-Zip.
   Common linear 7zAES/SHA-256 folders are now supported in both directions.
   The reader accepts AES-only encoded headers and AES followed by
-  Copy/Deflate/Bzip2/LZMA/LZMA2 plus classic filters, converts UTF-8 passwords
-  to UTF-16LE, implements the standard counter-based SHA-256 KDF and direct-key
+  Copy/Deflate/Bzip2/LZMA/LZMA2/PPMd7 plus classic filters, converts UTF-8
+  passwords to UTF-16LE, implements the standard counter-based SHA-256 KDF and direct-key
   mode, decrypts zero-padded AES-256-CBC, and bounds KDF power before work. The
   writer requires caller-supplied base IV material, derives a distinct IV for
   each data/external-metadata/header folder, and can hide the complete encoded
@@ -17874,6 +17874,17 @@ reuse, so production keeps the simpler independently owned plans.
   per-architecture XZ inspection counts. Branch-heavy reader/writer variants
   pass 7-Zip 26.02; the existing 21.07 differential remains for BCJ2 because
   the newer Linux package does not expose that decoder.
+  The reader now also supports PPMd7 without a C/Rust binding. A shared packed
+  model implements checked 32-bit offsets, the 12-byte-unit suballocator,
+  free-list glue/restart, successor construction, frequency rescaling, binary
+  summaries, and escape estimation; the 7z range decoder requires a valid
+  five-byte initialization, exact declared output, zero final code, and exact
+  packed-input consumption. Order 2...64 and model memory are validated before
+  allocation and remain subject to the public dictionary/model-memory limit.
+  Embedded real-archive coverage plus 7-Zip 21.07 differentials exercise
+  independent and solid order-2/order-6/order-16 folders, a small-memory stress
+  stream, Delta/x86 chains, and AES composition. PPMd7 writing is the next codec
+  increment and will reuse the same model.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
   comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.
