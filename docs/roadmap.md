@@ -17821,21 +17821,22 @@ reuse, so production keeps the simpler independently owned plans.
   writing. The reader validates signature/start/next-header CRCs, variable
   integers, packed stream bounds, folder and substream sizes and CRCs, UTF-16LE
   names, empty files, and directories. It decodes single-coder Copy, Deflate,
-  Bzip2, LZMA, and LZMA2 folders, including compressed Next Headers and solid
-  archives, with independent limits for metadata, dictionaries, selected
+  Bzip2, LZMA, LZMA2, and PPMd7 folders, including compressed Next Headers and
+  solid archives, with independent limits for metadata, dictionaries, selected
   output, and decoded solid folders. Bounded linear coder graphs additionally
-  support Delta and x86, PowerPC, IA64, ARM, ARM-Thumb, SPARC, ARM64, and RISC-V BCJ filters
-  after the primary decompressor. The writer emits reproducible unencoded
+  support Delta and x86, PowerPC, IA64, ARM, ARM-Thumb, SPARC, ARM64, and RISC-V
+  BCJ filters after the primary decompressor. The writer emits reproducible unencoded
   headers and one independently extractable folder per non-empty file using
-  Copy, compressed Deflate/Bzip2/LZMA1, or greedy match-producing LZMA2 with a
-  stored fallback, optionally preceded by the same Delta/classic BCJ filters.
+  Copy, compressed Deflate/Bzip2/LZMA1, greedy match-producing LZMA2 with a
+  stored fallback, or PPMd7, optionally preceded by the same Delta/classic BCJ
+  filters.
   Opt-in solid writing concatenates non-empty files into one folder, emits
   `NumUnpackStream`, per-substream sizes and CRCs, and preserves empty files and
   directories as metadata-only records. The same filters operate across
   substream boundaries. A 7-Zip differential covers the base methods, solid
-  Copy/Deflate/Bzip2/LZMA/LZMA2 output, and real filter chains in both
-  directions. Optional encoded Next Headers reuse all six writer codecs with an
-  exact packed-data offset and no recursive filters; system 7-Zip validates
+  Copy/Deflate/Bzip2/LZMA/LZMA2/PPMd7 output, and real filter chains in both
+  directions. Optional encoded Next Headers reuse all seven writer codecs with
+  an exact packed-data offset and no recursive filters; system 7-Zip validates
   each mode combined with a solid LZMA2 main stream. The reader additionally
   accepts the standard BCJ2 branch graph: an LZMA/LZMA2 main stream plus raw
   CALL, JUMP, and range-code packed streams. Its scalar decoder validates
@@ -17844,19 +17845,19 @@ reuse, so production keeps the simpler independently owned plans.
   differential evidence. The deterministic BCJ2 writer emits the same standard
   graph with any existing main compression method and range-codes valid
   no-conversion decisions, leaving target extraction as a future ratio
-  optimization rather than a compatibility gap. System 7-Zip validates all six
+  optimization rather than a compatibility gap. System 7-Zip validates all seven
   main methods, solid substreams, branch-heavy input, and non-zero start IP.
   The reader now decodes bounded `AdditionalStreamsInfo` folders and resolves
   external folder definitions plus UTF-16LE name properties with strict index,
   consumption, CRC, and cumulative output checks. The deterministic writer can
-  place names in a separate auxiliary stream using any of the six writer
+  place names in a separate auxiliary stream using any of the seven writer
   codecs, including with solid data and an encoded Next Header; system 7-Zip
   validates every name-stream codec.
   The public entry model now preserves optional creation/access/modification
   FILETIME ticks and raw 32-bit platform attributes. Inline and external
   property vectors support partial defined-item bitmaps, strict external index
-  and consumption checks, and all six auxiliary-stream codecs. The differential
-  pins a system-generated mtime plus Unix attributes and validates all six Vort
+  and consumption checks, and all seven auxiliary-stream codecs. The
+  differential pins a system-generated mtime plus Unix attributes and validates all seven Vort
   external-metadata modes through 7-Zip.
   Common linear 7zAES/SHA-256 folders are now supported in both directions.
   The reader accepts AES-only encoded headers and AES followed by
@@ -17865,7 +17866,7 @@ reuse, so production keeps the simpler independently owned plans.
   mode, decrypts zero-padded AES-256-CBC, and bounds KDF power before work. The
   writer requires caller-supplied base IV material, derives a distinct IV for
   each data/external-metadata/header folder, and can hide the complete encoded
-  header. Differential coverage includes all six Vort main codecs, encrypted
+  header. Differential coverage includes all seven Vort main codecs, encrypted
   names/metadata, an x86 filter chain, wrong passwords, and system 7-Zip's
   default-power data-only and header-encrypted archives. BCJ2+AES remains a
   separate branching-graph extension.
@@ -17883,8 +17884,10 @@ reuse, so production keeps the simpler independently owned plans.
   allocation and remain subject to the public dictionary/model-memory limit.
   Embedded real-archive coverage plus 7-Zip 21.07 differentials exercise
   independent and solid order-2/order-6/order-16 folders, a small-memory stress
-  stream, Delta/x86 chains, and AES composition. PPMd7 writing is the next codec
-  increment and will reuse the same model.
+  stream, Delta/x86 chains, and AES composition. The pure Zig writer now reuses
+  that model with a 7z range encoder and no end marker; a raw fixture is
+  bit-exact with 7-Zip, and system 7-Zip validates independent/solid data,
+  encoded headers, external names/metadata, AES, BCJ2, and classic filters.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
   comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.

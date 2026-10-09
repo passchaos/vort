@@ -6,8 +6,9 @@ const lzma_encoder = @import("../lzma/encoder.zig");
 const lzma2_writer = @import("../xz/lzma2_writer.zig");
 const filters = @import("../xz/filters.zig");
 const number = @import("number.zig");
+const ppmd7 = @import("ppmd7.zig");
 
-pub const Error = bzip2.Error || lzma_encoder.Error || aes.Error || error{Invalid7zOptions};
+pub const Error = bzip2.Error || lzma_encoder.Error || aes.Error || ppmd7.Error || error{Invalid7zOptions};
 pub const Filter = filters.Filter;
 pub const EncryptionOptions = aes.Options;
 
@@ -18,6 +19,7 @@ pub const Compression = enum {
     lzma,
     lzma2,
     lzma2_stored,
+    ppmd7,
 };
 
 pub const Options = struct {
@@ -36,6 +38,8 @@ pub const Options = struct {
     bzip2_block_size_100k: u4 = 9,
     lzma_properties: lzma_encoder.Properties = .{},
     lzma_dictionary_size: u32 = 32 * 1024,
+    ppmd_order: u8 = 6,
+    ppmd_memory_size: u32 = 16 * 1024 * 1024,
 };
 
 pub fn validate(options: Options) Error!void {
@@ -59,6 +63,11 @@ pub fn validate(options: Options) Error!void {
             options.lzma_dictionary_size > std.math.maxInt(u16))
             return error.Invalid7zOptions;
     }
+    if (options.compression == .ppmd7)
+        ppmd7.validateProperties(.{
+            .order = options.ppmd_order,
+            .memory_size = options.ppmd_memory_size,
+        }) catch return error.Invalid7zOptions;
 }
 
 pub fn coderCount(options: Options) usize {
@@ -186,6 +195,10 @@ fn appendCompressedPayload(
         }),
         .lzma2 => lzma2_writer.appendCompressedPayload(allocator, output, input),
         .lzma2_stored => lzma2_writer.appendStoredPayload(allocator, output, input),
+        .ppmd7 => ppmd7.encodeAppend(allocator, output, input, .{
+            .order = options.ppmd_order,
+            .memory_size = options.ppmd_memory_size,
+        }),
     };
 }
 
@@ -224,6 +237,12 @@ fn writeCompressionCoder(
             try output.appendSlice(allocator, &properties);
         },
         .lzma2, .lzma2_stored => try output.appendSlice(allocator, &.{ 0x21, 0x21, 1, lzma2_writer.dictionary_property }),
+        .ppmd7 => {
+            try output.appendSlice(allocator, &.{ 0x23, 0x03, 0x04, 0x01, 5, options.ppmd_order });
+            var memory_size: [4]u8 = undefined;
+            std.mem.writeInt(u32, &memory_size, options.ppmd_memory_size, .little);
+            try output.appendSlice(allocator, &memory_size);
+        },
     }
 }
 
@@ -286,6 +305,29 @@ test "7z coder writer reverses encoding filters into decoder order" {
     }, encoded.items);
 }
 
+test "7z coder writer serializes PPMd7 order and model memory" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try writeFolder(std.testing.allocator, &encoded, .{
+        .compression = .ppmd7,
+        .ppmd_order = 12,
+        .ppmd_memory_size = 1024 * 1024,
+    });
+    try std.testing.expectEqualSlices(u8, &.{
+        1,
+        0x23,
+        0x03,
+        0x04,
+        0x01,
+        5,
+        12,
+        0x00,
+        0x00,
+        0x10,
+        0x00,
+    }, encoded.items);
+}
+
 test "7z coder writer validates method-specific options" {
     try std.testing.expectError(error.Invalid7zOptions, validate(.{
         .compression = .deflate,
@@ -298,6 +340,14 @@ test "7z coder writer validates method-specific options" {
     try std.testing.expectError(error.Invalid7zOptions, validate(.{
         .compression = .lzma,
         .lzma_dictionary_size = 1024,
+    }));
+    try std.testing.expectError(error.Invalid7zOptions, validate(.{
+        .compression = .ppmd7,
+        .ppmd_order = 1,
+    }));
+    try std.testing.expectError(error.Invalid7zOptions, validate(.{
+        .compression = .ppmd7,
+        .ppmd_memory_size = 1024,
     }));
     const filters_too_long = [_]Filter{
         Filter.x86(0),

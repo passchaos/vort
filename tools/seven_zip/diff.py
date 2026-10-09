@@ -193,13 +193,13 @@ def main() -> None:
 
         if seven_zip_tool is not None:
             verify_with_seven_zip(seven_zip_tool, first, expected_vort)
-            for compression in ("deflate", "bzip2", "lzma", "lzma2"):
+            for compression in ("deflate", "bzip2", "lzma", "lzma2", "ppmd7"):
                 archive = temp / f"vort-{compression}-multi.7z"
                 run(args.writer, str(archive), compression)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
-            vort_writer_variants += 3
+            vort_writer_variants += 5
 
-            for compression in ("copy", "deflate", "bzip2", "lzma", "lzma2"):
+            for compression in ("copy", "deflate", "bzip2", "lzma", "lzma2", "ppmd7"):
                 archive = temp / f"vort-{compression}-solid.7z"
                 duplicate = temp / f"vort-{compression}-solid-repeat.7z"
                 run(args.writer, str(archive), compression, "solid")
@@ -208,7 +208,7 @@ def main() -> None:
                     raise AssertionError(f"Vort solid {compression} output is not deterministic")
                 verify_with_vort(args.cli, archive, expected_vort)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
-            vort_writer_variants += 5
+            vort_writer_variants += 6
 
             for header_compression in (
                 "copy",
@@ -217,6 +217,7 @@ def main() -> None:
                 "lzma",
                 "lzma2",
                 "lzma2-stored",
+                "ppmd7",
             ):
                 archive = temp / f"vort-header-{header_compression}.7z"
                 duplicate = temp / f"vort-header-{header_compression}-repeat.7z"
@@ -228,7 +229,7 @@ def main() -> None:
                     )
                 verify_with_vort(args.cli, archive, expected_vort)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
-            vort_writer_variants += 6
+            vort_writer_variants += 7
 
             encryption_password = "vort-password-密码"
             for compression in (
@@ -238,6 +239,7 @@ def main() -> None:
                 "lzma",
                 "lzma2",
                 "lzma2-stored",
+                "ppmd7",
             ):
                 archive = temp / f"vort-aes-{compression}.7z"
                 duplicate = temp / f"vort-aes-{compression}-repeat.7z"
@@ -270,7 +272,7 @@ def main() -> None:
                     expected_vort,
                     encryption_password,
                 )
-            vort_writer_variants += 6
+            vort_writer_variants += 7
 
             standard_kdf_archive = temp / "vort-aes-standard-kdf.7z"
             run(
@@ -335,6 +337,7 @@ def main() -> None:
                 "lzma",
                 "lzma2",
                 "lzma2-stored",
+                "ppmd7",
             ):
                 archive = temp / f"vort-external-names-{name_compression}.7z"
                 duplicate = temp / f"vort-external-names-{name_compression}-repeat.7z"
@@ -354,7 +357,7 @@ def main() -> None:
                     )
                 verify_with_vort(args.cli, archive, expected_vort)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
-            vort_writer_variants += 6
+            vort_writer_variants += 7
 
             for metadata_compression in (
                 "copy",
@@ -363,6 +366,7 @@ def main() -> None:
                 "lzma",
                 "lzma2",
                 "lzma2-stored",
+                "ppmd7",
             ):
                 archive = temp / f"vort-external-metadata-{metadata_compression}.7z"
                 duplicate = temp / (
@@ -397,7 +401,7 @@ def main() -> None:
                     },
                 )
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
-            vort_writer_variants += 6
+            vort_writer_variants += 7
 
             for compression in (
                 "copy",
@@ -406,6 +410,7 @@ def main() -> None:
                 "lzma",
                 "lzma2",
                 "lzma2-stored",
+                "ppmd7",
             ):
                 archive = temp / f"vort-bcj2-{compression}.7z"
                 duplicate = temp / f"vort-bcj2-{compression}-repeat.7z"
@@ -431,7 +436,7 @@ def main() -> None:
                     raise AssertionError(f"Vort BCJ2 {compression} output is not deterministic")
                 verify_with_vort(args.cli, archive, expected_vort)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
-            vort_writer_variants += 6
+            vort_writer_variants += 7
 
             tree = temp / "tree"
             tree.mkdir()
@@ -714,9 +719,16 @@ def main() -> None:
                     "none",
                     b"multi-chunk literal LZMA2 payload\n" * 4096,
                 ),
+                "ppmd7-large": (
+                    "ppmd7",
+                    "none",
+                    b"PPMd7 large writer payload\n" * 8192,
+                ),
                 "bcj-deflate": ("deflate", "x86", x86_payload),
                 "bcj-lzma": ("lzma", "x86", x86_payload),
+                "bcj-ppmd7": ("ppmd7", "x86", x86_payload),
                 "delta4-bzip2": ("bzip2", "delta:4", bytes(range(256)) * 16),
+                "delta4-ppmd7": ("ppmd7", "delta:4", bytes(range(256)) * 16),
                 "bcj-lzma2": ("lzma2", "x86", x86_payload),
                 "delta4-lzma2-stored": (
                     "lzma2-stored",

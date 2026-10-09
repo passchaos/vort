@@ -95,7 +95,7 @@ test "7z stored writer round trips files directories and UTF-8 names" {
 test "7z writer round trips compression methods" {
     const payload = "Vort common 7z writer payload\n" ** 128;
     const entries = [_]EncodeEntry{.{ .name = "payload.txt", .data = payload }};
-    inline for (.{ Compression.copy, Compression.deflate, Compression.bzip2, Compression.lzma, Compression.lzma2, Compression.lzma2_stored }) |compression| {
+    inline for (.{ Compression.copy, Compression.deflate, Compression.bzip2, Compression.lzma, Compression.lzma2, Compression.lzma2_stored, Compression.ppmd7 }) |compression| {
         const encoded = try encodeAlloc(std.testing.allocator, &entries, .{ .compression = compression });
         defer std.testing.allocator.free(encoded);
         const repeated = try encodeAlloc(std.testing.allocator, &entries, .{ .compression = compression });
@@ -107,7 +107,7 @@ test "7z writer round trips compression methods" {
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, payload, decoded);
         if (compression == .deflate or compression == .bzip2 or
-            compression == .lzma or compression == .lzma2)
+            compression == .lzma or compression == .lzma2 or compression == .ppmd7)
             try std.testing.expect(encoded.len < payload.len);
     }
 }
@@ -130,6 +130,7 @@ test "7z solid writer shares one folder across files" {
         Compression.lzma,
         Compression.lzma2,
         Compression.lzma2_stored,
+        Compression.ppmd7,
     }) |compression| {
         const options = EncodeOptions{ .compression = compression, .solid = true };
         const encoded = try encodeAlloc(std.testing.allocator, &entries, options);
@@ -205,6 +206,7 @@ test "7z writer emits encoded Next Headers with every compression method" {
         Compression.lzma,
         Compression.lzma2,
         Compression.lzma2_stored,
+        Compression.ppmd7,
     }) |header_compression| {
         const options = EncodeOptions{
             .compression = .lzma2,
@@ -361,6 +363,7 @@ test "7z writer and reader preserve inline and external file metadata" {
         Compression.lzma,
         Compression.lzma2,
         Compression.lzma2_stored,
+        Compression.ppmd7,
     }) |metadata_compression| {
         const options = EncodeOptions{
             .compression = .lzma2,
@@ -428,6 +431,7 @@ test "7z writer and reader round trip encrypted data and headers" {
         Compression.lzma,
         Compression.lzma2,
         Compression.lzma2_stored,
+        Compression.ppmd7,
     }) |compression| {
         const options = EncodeOptions{
             .compression = compression,
@@ -665,6 +669,7 @@ test "7z BCJ2 writer round trips every primary compression method" {
         Compression.lzma,
         Compression.lzma2,
         Compression.lzma2_stored,
+        Compression.ppmd7,
     }) |compression| {
         const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
             .compression = compression,

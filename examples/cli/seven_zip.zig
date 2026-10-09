@@ -270,5 +270,6 @@ fn parseCompression(text: ?[]const u8) !vort.SevenZipCompression {
     if (std.mem.eql(u8, value, "lzma")) return .lzma;
     if (std.mem.eql(u8, value, "lzma2")) return .lzma2;
     if (std.mem.eql(u8, value, "lzma2-stored")) return .lzma2_stored;
+    if (std.mem.eql(u8, value, "ppmd7") or std.mem.eql(u8, value, "ppmd")) return .ppmd7;
     return error.Unsupported7zFeature;
 }

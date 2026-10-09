@@ -33,6 +33,8 @@ pub fn main(init: std.process.Init) !void {
         .lzma2
     else if (std.mem.eql(u8, compression_name, "lzma2-stored"))
         .lzma2_stored
+    else if (std.mem.eql(u8, compression_name, "ppmd7"))
+        .ppmd7
     else
         return error.UnsupportedCompression;
     const header_compression: ?vort.SevenZipCompression = if (header_name) |name|
@@ -50,6 +52,8 @@ pub fn main(init: std.process.Init) !void {
             .lzma2
         else if (std.mem.eql(u8, name, "lzma2-stored"))
             .lzma2_stored
+        else if (std.mem.eql(u8, name, "ppmd7"))
+            .ppmd7
         else
             return error.UnsupportedCompression
     else
@@ -67,6 +71,8 @@ pub fn main(init: std.process.Init) !void {
             .lzma2
         else if (std.mem.eql(u8, name, "external-lzma2-stored"))
             .lzma2_stored
+        else if (std.mem.eql(u8, name, "external-ppmd7"))
+            .ppmd7
         else if (std.mem.eql(u8, name, "inline-names"))
             null
         else
@@ -86,6 +92,8 @@ pub fn main(init: std.process.Init) !void {
             .lzma2
         else if (std.mem.eql(u8, name, "external-metadata-lzma2-stored"))
             .lzma2_stored
+        else if (std.mem.eql(u8, name, "external-metadata-ppmd7"))
+            .ppmd7
         else if (std.mem.eql(u8, name, "inline-metadata"))
             null
         else

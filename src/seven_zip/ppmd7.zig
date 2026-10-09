@@ -1,5 +1,6 @@
 const std = @import("std");
 const decoder = @import("ppmd7/decoder.zig");
+const encoder = @import("ppmd7/encoder.zig");
 const model = @import("ppmd7/model.zig");
 
 pub const Error = decoder.Error || error{
@@ -12,15 +13,19 @@ pub const Properties = struct {
     memory_size: u32,
 };
 
+pub fn validateProperties(properties: Properties) Error!void {
+    if (properties.order < model.min_order or properties.order > model.max_order or
+        properties.memory_size < model.min_memory_size or properties.memory_size > model.max_memory_size)
+        return error.InvalidPpmdProperties;
+}
+
 pub fn parseProperties(encoded: []const u8) Error!Properties {
     if (encoded.len != 5) return error.InvalidPpmdProperties;
     const result = Properties{
         .order = encoded[0],
         .memory_size = std.mem.readInt(u32, encoded[1..5], .little),
     };
-    if (result.order < model.min_order or result.order > model.max_order or
-        result.memory_size < model.min_memory_size or result.memory_size > model.max_memory_size)
-        return error.InvalidPpmdProperties;
+    try validateProperties(result);
     return result;
 }
 
@@ -45,6 +50,22 @@ pub fn decodeAllocLimited(
     return output;
 }
 
+pub fn encodeAppend(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    properties: Properties,
+) Error!usize {
+    try validateProperties(properties);
+    return encoder.encodeAppend(
+        allocator,
+        output,
+        input,
+        properties.order,
+        properties.memory_size,
+    );
+}
+
 test "PPMd7 properties enforce wire and resource limits" {
     const encoded = [_]u8{ 6, 0, 0, 1, 0 };
     const properties = try parseProperties(&encoded);
@@ -67,5 +88,6 @@ test "PPMd7 properties enforce wire and resource limits" {
 
 test {
     _ = decoder;
+    _ = encoder;
     _ = model;
 }
