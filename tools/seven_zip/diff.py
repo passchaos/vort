@@ -148,6 +148,40 @@ def main() -> None:
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
             vort_writer_variants += 6
 
+            for compression in (
+                "copy",
+                "deflate",
+                "bzip2",
+                "lzma",
+                "lzma2",
+                "lzma2-stored",
+            ):
+                archive = temp / f"vort-bcj2-{compression}.7z"
+                duplicate = temp / f"vort-bcj2-{compression}-repeat.7z"
+                run(
+                    args.writer,
+                    str(archive),
+                    compression,
+                    "solid",
+                    "plain",
+                    "bcj2",
+                    "4096",
+                )
+                run(
+                    args.writer,
+                    str(duplicate),
+                    compression,
+                    "solid",
+                    "plain",
+                    "bcj2",
+                    "4096",
+                )
+                if archive.read_bytes() != duplicate.read_bytes():
+                    raise AssertionError(f"Vort BCJ2 {compression} output is not deterministic")
+                verify_with_vort(args.cli, archive, expected_vort)
+                verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+            vort_writer_variants += 6
+
             tree = temp / "tree"
             tree.mkdir()
             (tree / "folder").mkdir()
@@ -187,6 +221,33 @@ def main() -> None:
             x86_payload = (
                 b"\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90" * 256
             )
+            bcj2_input = filter_tree / "bcj2-writer.bin"
+            bcj2_input.write_bytes(x86_payload)
+            bcj2_archive = temp / "vort-bcj2-markers.7z"
+            run(
+                args.cli,
+                "create-7z-file",
+                str(bcj2_archive),
+                "bcj2-writer.bin",
+                str(bcj2_input),
+                "lzma2",
+                "none",
+                "non-solid",
+                "plain",
+                "bcj2",
+                "4096",
+            )
+            verify_with_vort(
+                args.cli,
+                bcj2_archive,
+                {"bcj2-writer.bin": x86_payload},
+            )
+            verify_with_seven_zip(
+                seven_zip_tool,
+                bcj2_archive,
+                {"bcj2-writer.bin": x86_payload},
+            )
+            vort_writer_variants += 1
             filter_variants = {
                 "bcj-lzma2": (("bcj", "lzma2"), x86_payload),
                 "delta4-lzma2": (

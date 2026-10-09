@@ -274,6 +274,48 @@ test "7z reader decodes a real LZMA2 BCJ2 folder" {
     );
 }
 
+test "7z BCJ2 writer round trips every primary compression method" {
+    const entries = [_]EncodeEntry{
+        .{ .name = "code.bin", .data = "\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90" ** 256 },
+        .{ .name = "conditional.bin", .data = "\x0f\x85\x08\x00\x00\x00tail" ** 193 },
+    };
+    inline for (.{
+        Compression.copy,
+        Compression.deflate,
+        Compression.bzip2,
+        Compression.lzma,
+        Compression.lzma2,
+        Compression.lzma2_stored,
+    }) |compression| {
+        const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+            .compression = compression,
+            .solid = true,
+            .bcj2 = true,
+            .bcj2_start_ip = 0x1000,
+        });
+        defer std.testing.allocator.free(encoded);
+        const repeated = try encodeAlloc(std.testing.allocator, &entries, .{
+            .compression = compression,
+            .solid = true,
+            .bcj2 = true,
+            .bcj2_start_ip = 0x1000,
+        });
+        defer std.testing.allocator.free(repeated);
+        try std.testing.expectEqualSlices(u8, encoded, repeated);
+
+        const parsed = try parseAlloc(std.testing.allocator, encoded);
+        defer parsed.deinit();
+        try std.testing.expectEqual(@as(usize, 1), parsed.streams.folders.len);
+        try std.testing.expectEqual(@as(u4, 4), parsed.streams.folders[0].pack_stream_count);
+        try std.testing.expect(parsed.streams.folders[0].bcj2_coder_index != null);
+        for (entries) |entry| {
+            const decoded = try parsed.extractByNameAlloc(std.testing.allocator, entry.name);
+            defer std.testing.allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, entry.data, decoded);
+        }
+    }
+}
+
 test "7z writer round trips an LZMA2 Delta and BCJ chain" {
     const branch_bytes = "\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90" ** 256;
     const entries = [_]EncodeEntry{.{ .name = "code.bin", .data = branch_bytes }};

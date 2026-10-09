@@ -22,6 +22,8 @@ pub const Options = struct {
     compression: Compression = .copy,
     solid: bool = false,
     header_compression: ?Compression = null,
+    bcj2: bool = false,
+    bcj2_start_ip: u32 = 0,
     filters: []const Filter = &.{},
     deflate_level: u4 = 6,
     bzip2_block_size_100k: u4 = 9,
@@ -31,6 +33,8 @@ pub const Options = struct {
 
 pub fn validate(options: Options) Error!void {
     filters.validateChain(options.filters) catch return error.Invalid7zOptions;
+    if (options.bcj2 and options.filters.len != 0) return error.Invalid7zOptions;
+    if (!options.bcj2 and options.bcj2_start_ip != 0) return error.Invalid7zOptions;
     if (options.compression == .deflate and options.deflate_level > 9)
         return error.Invalid7zOptions;
     if (options.compression == .bzip2 and
@@ -46,7 +50,7 @@ pub fn validate(options: Options) Error!void {
 }
 
 pub fn coderCount(options: Options) usize {
-    return 1 + options.filters.len;
+    return if (options.bcj2) 2 else 1 + options.filters.len;
 }
 
 pub fn appendPayload(
@@ -88,6 +92,7 @@ pub fn writeFolder(
     options: Options,
 ) !void {
     try validate(options);
+    if (options.bcj2) return writeBcj2Folder(allocator, output, options);
     const coder_count = coderCount(options);
     try number.append(allocator, output, coder_count);
     try writeCompressionCoder(allocator, output, options);
@@ -101,6 +106,27 @@ pub fn writeFolder(
         try number.append(allocator, output, output_index + 1);
         try number.append(allocator, output, output_index);
     }
+}
+
+fn writeBcj2Folder(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    options: Options,
+) !void {
+    try number.append(allocator, output, 2);
+    try writeCompressionCoder(allocator, output, options);
+    if (options.bcj2_start_ip == 0) {
+        try output.appendSlice(allocator, &.{ 0x14, 0x03, 0x03, 0x01, 0x1b, 4, 1 });
+    } else {
+        try output.appendSlice(allocator, &.{ 0x34, 0x03, 0x03, 0x01, 0x1b, 4, 1, 4 });
+        var property: [4]u8 = undefined;
+        std.mem.writeInt(u32, &property, options.bcj2_start_ip, .little);
+        try output.appendSlice(allocator, &property);
+    }
+    try number.append(allocator, output, 1);
+    try number.append(allocator, output, 0);
+    for ([_]u8{ 0, 2, 3, 4 }) |input_index|
+        try number.append(allocator, output, input_index);
 }
 
 fn appendCopy(allocator: std.mem.Allocator, output: *std.ArrayList(u8), input: []const u8) !usize {
@@ -205,4 +231,11 @@ test "7z coder writer validates method-specific options" {
         try Filter.delta(3),
     };
     try std.testing.expectError(error.Invalid7zOptions, validate(.{ .filters = &filters_too_long }));
+    try std.testing.expectError(error.Invalid7zOptions, validate(.{
+        .bcj2 = true,
+        .filters = filters_too_long[0..1],
+    }));
+    try std.testing.expectError(error.Invalid7zOptions, validate(.{
+        .bcj2_start_ip = 1,
+    }));
 }

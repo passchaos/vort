@@ -12,6 +12,11 @@ pub fn main(init: std.process.Init) !void {
     else
         false;
     const header_name = args.next();
+    const bcj2 = if (args.next()) |mode| std.mem.eql(u8, mode, "bcj2") else false;
+    const bcj2_start_ip = if (args.next()) |value|
+        try std.fmt.parseInt(u32, value, 10)
+    else
+        0;
     const compression: vort.SevenZipCompression = if (std.mem.eql(u8, compression_name, "copy"))
         .copy
     else if (std.mem.eql(u8, compression_name, "deflate"))
@@ -56,6 +61,8 @@ pub fn main(init: std.process.Init) !void {
         .compression = compression,
         .solid = solid,
         .header_compression = header_compression,
+        .bcj2 = bcj2,
+        .bcj2_start_ip = bcj2_start_ip,
     });
     defer init.gpa.free(bytes);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = bytes });

@@ -2,6 +2,7 @@ const std = @import("std");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const coders = @import("coders.zig");
+const bcj2 = @import("bcj2.zig");
 const number = @import("number.zig");
 const types = @import("types.zig");
 
@@ -36,7 +37,8 @@ const Nid = struct {
 };
 
 const EncodedFolder = struct {
-    packed_size: u64,
+    packed_sizes: [4]u64 = @splat(0),
+    pack_stream_count: u3 = 1,
     unpacked_size: u64,
     crc32: u32,
     first_substream: usize,
@@ -96,7 +98,6 @@ pub fn encodeAppend(
         var solid_data: std.ArrayList(u8) = .empty;
         defer solid_data.deinit(allocator);
         var stream_index: usize = 0;
-        var total_size: usize = 0;
         for (entries) |entry| {
             if (!hasStream(entry)) continue;
             try solid_data.appendSlice(allocator, entry.data);
@@ -105,39 +106,31 @@ pub fn encodeAppend(
                     return error.IntegerOverflow,
                 .crc32 = checksum.crc32Best(entry.data),
             };
-            total_size = std.math.add(usize, total_size, entry.data.len) catch
-                return error.IntegerOverflow;
             stream_index += 1;
         }
-        const packed_size = try coders.appendPayload(
+        folders[0] = try appendFolderPayload(
             allocator,
             &packed_data,
             solid_data.items,
             options,
+            0,
+            stream_count,
         );
-        folders[0] = .{
-            .packed_size = std.math.cast(u64, packed_size) orelse return error.IntegerOverflow,
-            .unpacked_size = std.math.cast(u64, total_size) orelse return error.IntegerOverflow,
-            .crc32 = checksum.crc32Best(solid_data.items),
-            .first_substream = 0,
-            .substream_count = stream_count,
-        };
     } else {
         var stream_index: usize = 0;
         for (entries) |entry| {
             if (!hasStream(entry)) continue;
-            const packed_size = try coders.appendPayload(allocator, &packed_data, entry.data, options);
             const unpacked_size = std.math.cast(u64, entry.data.len) orelse
                 return error.IntegerOverflow;
             const crc32 = checksum.crc32Best(entry.data);
-            folders[stream_index] = .{
-                .packed_size = std.math.cast(u64, packed_size) orelse
-                    return error.IntegerOverflow,
-                .unpacked_size = unpacked_size,
-                .crc32 = crc32,
-                .first_substream = stream_index,
-                .substream_count = 1,
-            };
+            folders[stream_index] = try appendFolderPayload(
+                allocator,
+                &packed_data,
+                entry.data,
+                options,
+                stream_index,
+                1,
+            );
             substreams[stream_index] = .{
                 .unpacked_size = unpacked_size,
                 .crc32 = crc32,
@@ -155,6 +148,8 @@ pub fn encodeAppend(
         header_options.compression = header_compression;
         header_options.solid = false;
         header_options.header_compression = null;
+        header_options.bcj2 = false;
+        header_options.bcj2_start_ip = 0;
         header_options.filters = &.{};
         const packed_size = try coders.appendPayload(
             allocator,
@@ -163,8 +158,12 @@ pub fn encodeAppend(
             header_options,
         );
         const header_folders = [_]EncodedFolder{.{
-            .packed_size = std.math.cast(u64, packed_size) orelse
-                return error.IntegerOverflow,
+            .packed_sizes = .{
+                std.math.cast(u64, packed_size) orelse return error.IntegerOverflow,
+                0,
+                0,
+                0,
+            },
             .unpacked_size = std.math.cast(u64, header.items.len) orelse
                 return error.IntegerOverflow,
             .crc32 = checksum.crc32Best(header.items),
@@ -253,6 +252,51 @@ fn hasStream(entry: EncodeEntry) bool {
     return entry.kind == .file and entry.data.len != 0;
 }
 
+fn appendFolderPayload(
+    allocator: std.mem.Allocator,
+    packed_data: *std.ArrayList(u8),
+    input: []const u8,
+    options: EncodeOptions,
+    first_substream: usize,
+    substream_count: usize,
+) !EncodedFolder {
+    var folder = EncodedFolder{
+        .unpacked_size = std.math.cast(u64, input.len) orelse
+            return error.IntegerOverflow,
+        .crc32 = checksum.crc32Best(input),
+        .first_substream = first_substream,
+        .substream_count = substream_count,
+    };
+    if (!options.bcj2) {
+        const packed_size = try coders.appendPayload(allocator, packed_data, input, options);
+        folder.packed_sizes[0] = std.math.cast(u64, packed_size) orelse
+            return error.IntegerOverflow;
+        return folder;
+    }
+
+    const range_stream = try bcj2.encodeNoConversionAlloc(allocator, input);
+    defer allocator.free(range_stream);
+    var primary_options = options;
+    primary_options.bcj2 = false;
+    primary_options.bcj2_start_ip = 0;
+    primary_options.filters = &.{};
+    const main_size = try coders.appendPayload(
+        allocator,
+        packed_data,
+        input,
+        primary_options,
+    );
+    try packed_data.appendSlice(allocator, range_stream);
+    folder.pack_stream_count = 4;
+    folder.packed_sizes = .{
+        std.math.cast(u64, main_size) orelse return error.IntegerOverflow,
+        0,
+        0,
+        std.math.cast(u64, range_stream.len) orelse return error.IntegerOverflow,
+    };
+    return folder;
+}
+
 fn writeNextHeader(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
@@ -289,9 +333,15 @@ fn writeStreamsBody(
 ) !void {
     try output.append(allocator, Nid.pack_info);
     try number.append(allocator, output, pack_position);
-    try number.append(allocator, output, folders.len);
+    var pack_stream_count: usize = 0;
+    for (folders) |folder|
+        pack_stream_count = std.math.add(usize, pack_stream_count, folder.pack_stream_count) catch
+            return error.IntegerOverflow;
+    try number.append(allocator, output, pack_stream_count);
     try output.append(allocator, Nid.size);
-    for (folders) |folder| try number.append(allocator, output, folder.packed_size);
+    for (folders) |folder|
+        for (folder.packed_sizes[0..folder.pack_stream_count]) |packed_size|
+            try number.append(allocator, output, packed_size);
     try output.append(allocator, Nid.end);
 
     try output.append(allocator, Nid.unpack_info);

@@ -17841,6 +17841,11 @@ reuse, so production keeps the simpler independently owned plans.
   CALL, JUMP, and range-code packed streams. Its scalar decoder validates
   stream-size identities, range initialization, packed indices, CRCs, and
   exact consumption; real single-file and solid 7-Zip variants provide
-  differential evidence. Deeper LZMA parsing, BCJ2 writing, other branching or
-  multi-packed-stream graphs, encryption, and external metadata streams remain
-  follow-up work. See `docs/formats/7z.md`.
+  differential evidence. The deterministic BCJ2 writer emits the same standard
+  graph with any existing main compression method and range-codes valid
+  no-conversion decisions, leaving target extraction as a future ratio
+  optimization rather than a compatibility gap. System 7-Zip validates all six
+  main methods, solid substreams, branch-heavy input, and non-zero start IP.
+  Deeper LZMA parsing, other branching or multi-packed-stream graphs,
+  encryption, and external metadata streams remain follow-up work. See
+  `docs/formats/7z.md`.

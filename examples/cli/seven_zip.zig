@@ -17,6 +17,8 @@ pub fn createFile(
     const filters = try filters_cli.parse(args.next(), &filter_storage);
     const solid = try parseSolid(args.next());
     const header_compression = try parseHeaderCompression(args.next());
+    const bcj2 = try parseBcj2(args.next());
+    const bcj2_start_ip = try parseStartIp(args.next());
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.SevenZipEncodeEntry{.{ .name = entry_name, .data = input }};
@@ -24,14 +26,17 @@ pub fn createFile(
         .compression = compression,
         .solid = solid,
         .header_compression = header_compression,
+        .bcj2 = bcj2,
+        .bcj2_start_ip = bcj2_start_ip,
         .filters = filters,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("seven_zip_entries=1 compression={s} solid={} header={s} filters={d} input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("seven_zip_entries=1 compression={s} solid={} header={s} bcj2={} filters={d} input_bytes={d} archive_bytes={d} path={s}\n", .{
         @tagName(compression),
         solid,
         if (header_compression) |method| @tagName(method) else "plain",
+        bcj2,
         filters.len,
         input.len,
         encoded.len,
@@ -52,6 +57,17 @@ fn parseHeaderCompression(text: ?[]const u8) !?vort.SevenZipCompression {
     const value = text orelse return null;
     if (std.mem.eql(u8, value, "plain") or std.mem.eql(u8, value, "none")) return null;
     return try parseCompression(value);
+}
+
+fn parseBcj2(text: ?[]const u8) !bool {
+    const value = text orelse return false;
+    if (std.mem.eql(u8, value, "bcj2") or std.mem.eql(u8, value, "true")) return true;
+    if (std.mem.eql(u8, value, "classic") or std.mem.eql(u8, value, "false")) return false;
+    return error.Invalid7zOptions;
+}
+
+fn parseStartIp(text: ?[]const u8) !u32 {
+    return if (text) |value| try std.fmt.parseInt(u32, value, 10) else 0;
 }
 
 pub fn listFile(
