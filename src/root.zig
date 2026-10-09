@@ -92,6 +92,9 @@ pub const XzCheck = xz.Check;
 pub const XzStreamInfo = xz.StreamInfo;
 pub const XzEncodeOptions = xz.EncodeOptions;
 pub const XzFilter = xz.Filter;
+pub const encodeXzAlloc = xz.encodeAlloc;
+pub const encodeXzAppend = xz.encodeAppend;
+pub const encodeXzInto = xz.encodeInto;
 pub const encodeXzStoredAlloc = xz.encodeStoredAlloc;
 pub const encodeXzStoredAppend = xz.encodeStoredAppend;
 pub const encodeXzStoredInto = xz.encodeStoredInto;
@@ -2389,6 +2392,16 @@ test "root 7z exports compressed archive writing" {
     });
     defer std.testing.allocator.free(encoded);
     const decoded = try sevenZipExtractByNameAlloc(std.testing.allocator, encoded, "payload.txt");
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "root XZ exports compressed LZMA2 writing" {
+    const payload = "root XZ compressed writer\n" ** 256;
+    const encoded = try encodeXzAlloc(std.testing.allocator, payload, .{ .check = .crc32 });
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len < payload.len);
+    const decoded = try decodeXzAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }

@@ -13,6 +13,7 @@ pub const Compression = enum {
     deflate,
     bzip2,
     lzma2,
+    lzma2_stored,
 };
 
 pub const Options = struct {
@@ -59,7 +60,8 @@ pub fn appendPayload(
         .bzip2 => bzip2.encodeAppend(allocator, output, payload, .{
             .block_size_100k = options.bzip2_block_size_100k,
         }),
-        .lzma2 => lzma2_writer.appendStoredPayload(allocator, output, payload),
+        .lzma2 => lzma2_writer.appendCompressedPayload(allocator, output, payload),
+        .lzma2_stored => lzma2_writer.appendStoredPayload(allocator, output, payload),
     };
 }
 
@@ -98,7 +100,7 @@ fn writeCompressionCoder(
         .copy => try output.appendSlice(allocator, &.{ 1, 0 }),
         .deflate => try output.appendSlice(allocator, &.{ 3, 0x04, 0x01, 0x08 }),
         .bzip2 => try output.appendSlice(allocator, &.{ 3, 0x04, 0x02, 0x02 }),
-        .lzma2 => try output.appendSlice(allocator, &.{ 0x21, 0x21, 1, 0 }),
+        .lzma2, .lzma2_stored => try output.appendSlice(allocator, &.{ 0x21, 0x21, 1, lzma2_writer.dictionary_property }),
     }
 }
 

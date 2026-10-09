@@ -90,7 +90,7 @@ test "7z stored writer round trips files directories and UTF-8 names" {
 test "7z writer round trips compression methods" {
     const payload = "Vort common 7z writer payload\n" ** 128;
     const entries = [_]EncodeEntry{.{ .name = "payload.txt", .data = payload }};
-    inline for (.{ Compression.copy, Compression.deflate, Compression.bzip2, Compression.lzma2 }) |compression| {
+    inline for (.{ Compression.copy, Compression.deflate, Compression.bzip2, Compression.lzma2, Compression.lzma2_stored }) |compression| {
         const encoded = try encodeAlloc(std.testing.allocator, &entries, .{ .compression = compression });
         defer std.testing.allocator.free(encoded);
         const repeated = try encodeAlloc(std.testing.allocator, &entries, .{ .compression = compression });
@@ -101,7 +101,7 @@ test "7z writer round trips compression methods" {
         const decoded = try parsed.extractByNameAlloc(std.testing.allocator, entries[0].name);
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, payload, decoded);
-        if (compression == .deflate or compression == .bzip2)
+        if (compression == .deflate or compression == .bzip2 or compression == .lzma2)
             try std.testing.expect(encoded.len < payload.len);
     }
 }

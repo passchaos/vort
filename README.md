@@ -97,7 +97,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   classic BCJ filters, strict stream/block/index/footer validation,
   none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream
   handling, bounded APIs and metadata inspection, plus deterministic
-  filter-aware XZ writing with uncompressed LZMA2 chunks;
+  filter-aware XZ writing with literal-coded compressed chunks and a stored
+  fallback;
 - dependency-free LZMA-Alone decoding with known/unknown-size headers,
   caller-selected output/dictionary limits, caller-owned output, and ZIP
   method-14 extraction through the same LZMA core;
@@ -111,7 +112,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   writing, including Adler-32/CRC-32 header and block checks, legacy delta
   filters, concatenated streams, and bounded output/block APIs;
 - pure Zig 7z parsing and deterministic independent-folder writing, with
-  Copy/Deflate/Bzip2/LZMA/LZMA2 decode, Copy/Deflate/Bzip2/LZMA2-stored encode,
+  Copy/Deflate/Bzip2/LZMA/LZMA2 decode and Copy/Deflate/Bzip2/LZMA2 encode,
   bounded linear Delta and classic BCJ filter chains in both directions,
   compressed Next Headers, solid substreams, CRC validation, UTF-16LE names,
   directories, empty files, and bounded extraction;
@@ -199,6 +200,7 @@ zig build run -- decode-bzip2-file /tmp/archive.bz2 /tmp/archive.out 67108864
 zig build run -- decode-bzip2-concat-file /tmp/members.bz2 /tmp/members.out 67108864
 zig build run -- size-bzip2-file /tmp/archive.bz2 67108864
 zig build run-bzip2-diff
+zig build run -- encode-xz-file README.md /tmp/readme-compressed.xz crc64 1048576 delta:4
 zig build run -- encode-xz-stored-file README.md /tmp/readme.xz crc64 1048576 delta:4
 zig build run -- decode-xz-file /tmp/readme.xz /tmp/readme.out 67108864
 zig build run -- inspect-xz-file /tmp/readme.xz

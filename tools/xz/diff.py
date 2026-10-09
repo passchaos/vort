@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Differential tests for Vort's XZ/LZMA2 decoder."""
+"""Differential tests for Vort's XZ/LZMA2 implementation."""
 
 from __future__ import annotations
 
@@ -69,41 +69,55 @@ def main() -> None:
                 raise AssertionError(f"Vort XZ inspection mismatch for {name}: {inspect_output}")
 
             source_path = temp / f"{name}.source"
-            vort_path = temp / f"{name}.vort.xz"
             source_path.write_bytes(payload)
-            block_size = 32768
-            run(
-                args.cli,
-                "encode-xz-stored-file",
-                str(source_path),
-                str(vort_path),
-                check_names[check],
-                str(block_size),
-            )
-            vort_encoded = vort_path.read_bytes()
-            if lzma.decompress(vort_encoded, format=lzma.FORMAT_XZ) != payload:
-                raise AssertionError(f"Python could not decode Vort XZ output for {name}")
-            if xz_tool is not None:
-                subprocess.run([xz_tool, "--test", str(vort_path)], check=True)
-            vort_inspect = run(args.cli, "inspect-xz-file", str(vort_path)).stdout
-            expected_vort_blocks = 0 if len(payload) == 0 else (len(payload) + block_size - 1) // block_size
-            if (
-                f"xz_check={check_names[check]}" not in vort_inspect
-                or f"blocks={expected_vort_blocks}" not in vort_inspect
+            block_size = 131072 if name == "runs" else 32768
+            writer_sizes: dict[str, int] = {}
+            for writer_mode, command in (
+                ("stored", "encode-xz-stored-file"),
+                ("compressed", "encode-xz-file"),
             ):
-                raise AssertionError(f"Vort encoded XZ metadata mismatch for {name}: {vort_inspect}")
-            if name == "text":
-                repeat_path = temp / "text-repeat.vort.xz"
+                vort_path = temp / f"{name}.{writer_mode}.vort.xz"
                 run(
                     args.cli,
-                    "encode-xz-stored-file",
+                    command,
                     str(source_path),
-                    str(repeat_path),
+                    str(vort_path),
                     check_names[check],
                     str(block_size),
                 )
-                if repeat_path.read_bytes() != vort_encoded:
-                    raise AssertionError("Vort XZ output is not deterministic")
+                vort_encoded = vort_path.read_bytes()
+                writer_sizes[writer_mode] = len(vort_encoded)
+                if lzma.decompress(vort_encoded, format=lzma.FORMAT_XZ) != payload:
+                    raise AssertionError(
+                        f"Python could not decode Vort {writer_mode} XZ output for {name}"
+                    )
+                if xz_tool is not None:
+                    subprocess.run([xz_tool, "--test", str(vort_path)], check=True)
+                vort_inspect = run(args.cli, "inspect-xz-file", str(vort_path)).stdout
+                expected_vort_blocks = (
+                    0 if len(payload) == 0 else (len(payload) + block_size - 1) // block_size
+                )
+                if (
+                    f"xz_check={check_names[check]}" not in vort_inspect
+                    or f"blocks={expected_vort_blocks}" not in vort_inspect
+                ):
+                    raise AssertionError(
+                        f"Vort {writer_mode} XZ metadata mismatch for {name}: {vort_inspect}"
+                    )
+                if name == "text":
+                    repeat_path = temp / f"text-repeat.{writer_mode}.vort.xz"
+                    run(
+                        args.cli,
+                        command,
+                        str(source_path),
+                        str(repeat_path),
+                        check_names[check],
+                        str(block_size),
+                    )
+                    if repeat_path.read_bytes() != vort_encoded:
+                        raise AssertionError(f"Vort {writer_mode} XZ output is not deterministic")
+            if name in ("text", "runs") and writer_sizes["compressed"] >= writer_sizes["stored"]:
+                raise AssertionError(f"Vort compressed XZ did not reduce {name}")
 
         first = lzma.compress(b"first XZ member\n" * 97, check=lzma.CHECK_CRC32)
         second_payload = bytes(range(251)) * 313
@@ -248,19 +262,25 @@ def main() -> None:
                     raise AssertionError(f"Vort {name} filter metadata mismatch: {inspect_output}")
 
             source_path = temp / f"{name}-filter.source"
-            vort_filtered_path = temp / f"{name}-filter.vort.xz"
             source_path.write_bytes(payload)
-            run(
-                args.cli,
-                "encode-xz-stored-file",
-                str(source_path),
-                str(vort_filtered_path),
-                "crc64",
-                "1048576",
-                writer_filter,
-            )
-            if lzma.decompress(vort_filtered_path.read_bytes()) != payload:
-                raise AssertionError(f"Python could not decode Vort {name} filter output")
+            for writer_mode, command in (
+                ("stored", "encode-xz-stored-file"),
+                ("compressed", "encode-xz-file"),
+            ):
+                vort_filtered_path = temp / f"{name}-filter.{writer_mode}.vort.xz"
+                run(
+                    args.cli,
+                    command,
+                    str(source_path),
+                    str(vort_filtered_path),
+                    "crc64",
+                    "1048576",
+                    writer_filter,
+                )
+                if lzma.decompress(vort_filtered_path.read_bytes()) != payload:
+                    raise AssertionError(
+                        f"Python could not decode Vort {name} {writer_mode} filter output"
+                    )
 
         multiblock_count = 0
         if xz_tool is not None:
@@ -286,7 +306,7 @@ def main() -> None:
     print(
         f"xz_diff=ok directions=2 cases={len(cases)} compressed_bytes={compressed_total} "
         f"decoded_bytes={decoded_total} concatenated_bytes={len(expected_concatenated)} "
-        f"filter_cases={len(filter_cases)} multiblock_count={multiblock_count}"
+        f"filter_cases={len(filter_cases)} writer_modes=2 multiblock_count={multiblock_count}"
     )
 
 

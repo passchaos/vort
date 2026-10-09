@@ -2,8 +2,10 @@
 
 Vort provides dependency-free XZ decoding for LZMA2 streams with optional
 Delta and x86, PowerPC, IA-64, ARM, ARM-Thumb, or SPARC BCJ preprocessing
-filters. Its deterministic baseline writer stores payload bytes in
-uncompressed LZMA2 chunks and can apply the same filter chains.
+filters. Its deterministic writer emits compressed literal-coded LZMA2 chunks
+when profitable and falls back to uncompressed chunks otherwise. The explicit
+stored writer remains available, and both paths can apply the same filter
+chains.
 
 The container implementation validates:
 
@@ -32,7 +34,7 @@ const filter_chain = [_]vort.XzFilter{
     vort.XzFilter.x86(0),
     try vort.XzFilter.delta(4),
 };
-const encoded = try vort.encodeXzStoredAlloc(allocator, input, .{
+const encoded = try vort.encodeXzAlloc(allocator, input, .{
     .check = .crc64,
     .block_size = 1024 * 1024,
     .filters = &filter_chain,
@@ -42,11 +44,13 @@ defer allocator.free(encoded);
 
 Available decoding forms include caller-owned output, bounded allocation,
 validated decoded-size preflight, and explicit concatenated-stream variants.
-The writer provides alloc, transactional append, and caller-owned output APIs.
+The compressed and stored writers provide alloc, transactional append, and
+caller-owned output APIs.
 
 CLI validation surfaces:
 
 ```sh
+zig build run -- encode-xz-file input.bin output.xz crc64 1048576 x86,delta:4
 zig build run -- encode-xz-stored-file input.bin output.xz crc64 1048576 x86,delta:4
 zig build run -- decode-xz-file input.xz output.bin 268435456
 zig build run -- decode-xz-concat-file streams.xz output.bin 268435456
@@ -57,5 +61,6 @@ zig build run-xz-diff
 
 The reader and writer support Delta plus all six classic XZ BCJ filters. Filter
 chains may contain up to three preprocessing filters followed by LZMA2, and
-BCJ start offsets are checked for their architecture's alignment. Compressed
-LZMA encoding remains later functionality and performance work.
+BCJ start offsets are checked for their architecture's alignment. The current
+compressor range-codes literals and resets each bounded chunk independently;
+match-producing LZMA parsing remains later ratio and performance work.

@@ -22,6 +22,37 @@ const BlockRecord = struct {
     uncompressed_size: u64,
 };
 
+const PayloadEncoding = enum { stored, compressed };
+
+pub fn encodeAlloc(allocator: std.mem.Allocator, input: []const u8, options: EncodeOptions) ![]u8 {
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    _ = try encodeAppend(allocator, &output, input, options);
+    return output.toOwnedSlice(allocator);
+}
+
+pub fn encodeInto(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output: []u8,
+    options: EncodeOptions,
+) !usize {
+    const encoded = try encodeAlloc(allocator, input, options);
+    defer allocator.free(encoded);
+    if (output.len < encoded.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
+}
+
+pub fn encodeAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: EncodeOptions,
+) !usize {
+    return encodeWithPayload(allocator, out, input, options, .compressed);
+}
+
 pub fn encodeStoredAlloc(allocator: std.mem.Allocator, input: []const u8, options: EncodeOptions) ![]u8 {
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
@@ -48,6 +79,16 @@ pub fn encodeStoredAppend(
     out: *std.ArrayList(u8),
     input: []const u8,
     options: EncodeOptions,
+) !usize {
+    return encodeWithPayload(allocator, out, input, options, .stored);
+}
+
+fn encodeWithPayload(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: EncodeOptions,
+    payload_encoding: PayloadEncoding,
 ) !usize {
     if (options.block_size == 0) return error.InvalidBlockPlan;
     try filters.validateChain(options.filters);
@@ -78,7 +119,10 @@ pub fn encodeStoredAppend(
             filters.encodeChain(bytes, options.filters);
             break :blk bytes;
         };
-        const packed_size = try lzma2_writer.appendStoredPayload(allocator, &encoded, filtered);
+        const packed_size = switch (payload_encoding) {
+            .stored => try lzma2_writer.appendStoredPayload(allocator, &encoded, filtered),
+            .compressed => try lzma2_writer.appendCompressedPayload(allocator, &encoded, filtered),
+        };
         const padding_len = (4 - ((header_size + packed_size) % 4)) % 4;
         try encoded.appendNTimes(allocator, 0, padding_len);
         try appendCheck(allocator, &encoded, options.check, block);
@@ -217,6 +261,50 @@ test "XZ stored writer round trips checks and multiple blocks" {
         try std.testing.expectEqual(check, info.check);
         try std.testing.expectEqual(@as(usize, (input.len + 1023) / 1024), info.block_count);
     }
+}
+
+test "XZ compressed writer selects literal coding and round trips filters" {
+    const allocator = std.testing.allocator;
+    const input = "XZ literal-coded LZMA2 payload\n" ** 512;
+    const chain = [_]Filter{ Filter.x86(0), try Filter.delta(4) };
+    const encoded = try encodeAlloc(allocator, input, .{
+        .check = .crc32,
+        .block_size = 8192,
+        .filters = &chain,
+    });
+    defer allocator.free(encoded);
+    try std.testing.expect(encoded.len < input.len);
+    const repeated = try encodeAlloc(allocator, input, .{
+        .check = .crc32,
+        .block_size = 8192,
+        .filters = &chain,
+    });
+    defer allocator.free(repeated);
+    try std.testing.expectEqualSlices(u8, encoded, repeated);
+    const decoded = try container.decodeAlloc(allocator, encoded);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+
+    const output = try allocator.alloc(u8, encoded.len);
+    defer allocator.free(output);
+    try std.testing.expectEqual(encoded.len, try encodeInto(allocator, input, output, .{
+        .check = .crc32,
+        .block_size = 8192,
+        .filters = &chain,
+    }));
+    try std.testing.expectEqualSlices(u8, encoded, output);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const prefix_len = appended.items.len;
+    try std.testing.expectEqual(encoded.len, try encodeAppend(allocator, &appended, input, .{
+        .check = .crc32,
+        .block_size = 8192,
+        .filters = &chain,
+    }));
+    try std.testing.expectEqualSlices(u8, "prefix:", appended.items[0..prefix_len]);
+    try std.testing.expectEqualSlices(u8, encoded, appended.items[prefix_len..]);
 }
 
 test "XZ stored writer caller-owned and append APIs are transactional" {

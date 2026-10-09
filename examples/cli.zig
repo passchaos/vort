@@ -237,28 +237,10 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.lzmaDecodedSize(init.gpa, compressed);
         try stdout.print("lzma_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "encode-xz-file")) {
+        try encodeXzFile(init, &args, stdout, false);
     } else if (std.mem.eql(u8, command, "encode-xz-stored-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const check = try parseXzCheck(args.next());
-        const block_size = try parseBlockLen(args.next(), 1024 * 1024);
-        var filter_storage: [3]vort.XzFilter = undefined;
-        const xz_filters = try filters_cli.parse(args.next(), &filter_storage);
-        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
-        defer init.gpa.free(input);
-        const encoded = try vort.encodeXzStoredAlloc(init.gpa, input, .{
-            .check = check,
-            .block_size = block_size,
-            .filters = xz_filters,
-        });
-        defer init.gpa.free(encoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-        try stdout.print("xz_input_bytes={d} compressed_bytes={d} blocks={d} path={s}\n", .{
-            input.len,
-            encoded.len,
-            if (input.len == 0) 0 else 1 + (input.len - 1) / block_size,
-            output_path,
-        });
+        try encodeXzFile(init, &args, stdout, true);
     } else if (std.mem.eql(u8, command, "decode-xz-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1947,7 +1929,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-lzop-file <path> [max_output] [max_block]
         \\                              Decode and report a verified LZOP stream's size
         \\  inspect-lzop-file <path>    Parse and print structural LZOP metadata
-        \\  create-7z-file <out> <entry> <in> [copy|deflate|bzip2|lzma2-stored] [filters]
+        \\  create-7z-file <out> <entry> <in> [copy|deflate|bzip2|lzma2|lzma2-stored] [filters]
         \\                              Create a deterministic 7z archive; filters are comma-separated
         \\  list-7z-file <path>         List entries in a supported 7z archive
         \\  extract-7z-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder]
@@ -1958,6 +1940,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode and report an LZMA-Alone stream's size
         \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters]
         \\                              Encode deterministic XZ with uncompressed LZMA2 chunks
+        \\  encode-xz-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters]
+        \\                              Encode deterministic XZ with compressed-or-stored LZMA2 chunks
         \\  decode-xz-file <in> <out> [max_output]
         \\                              Decode one XZ/LZMA2 stream with check validation
         \\  decode-xz-concat-file <in> <out> [max_output]
@@ -2909,6 +2893,40 @@ fn parseBlockLen(text: ?[]const u8, default: usize) !usize {
     const parsed = try std.fmt.parseInt(usize, value, 10);
     if (parsed == 0) return error.InvalidBlockPlan;
     return parsed;
+}
+
+fn encodeXzFile(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+    stored_only: bool,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const check = try parseXzCheck(args.next());
+    const block_size = try parseBlockLen(args.next(), 1024 * 1024);
+    var filter_storage: [3]vort.XzFilter = undefined;
+    const xz_filters = try filters_cli.parse(args.next(), &filter_storage);
+    const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+    defer init.gpa.free(input);
+    const options = vort.XzEncodeOptions{
+        .check = check,
+        .block_size = block_size,
+        .filters = xz_filters,
+    };
+    const encoded = if (stored_only)
+        try vort.encodeXzStoredAlloc(init.gpa, input, options)
+    else
+        try vort.encodeXzAlloc(init.gpa, input, options);
+    defer init.gpa.free(encoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+    try stdout.print("xz_mode={s} input_bytes={d} compressed_bytes={d} blocks={d} path={s}\n", .{
+        if (stored_only) "stored" else "compressed",
+        input.len,
+        encoded.len,
+        if (input.len == 0) 0 else 1 + (input.len - 1) / block_size,
+        output_path,
+    });
 }
 
 fn parseXzCheck(text: ?[]const u8) !vort.XzCheck {

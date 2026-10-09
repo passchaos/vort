@@ -17680,14 +17680,15 @@ reuse, so production keeps the simpler independently owned plans.
   backward size, and none/CRC-32/CRC-64/SHA-256 block checks are validated.
   The public surface includes caller-owned, bounded allocation, decoded-size,
   metadata inspection, and concatenated-stream APIs. A deterministic baseline
-  writer emits multi-block XZ streams using uncompressed LZMA2 chunks and all
-  four supported checks. Python `lzma` validates both directions, while the
-  system `xz` differential contributes a real four-block stream. Reading and
+  writer emits multi-block XZ streams using literal range-coded LZMA2 chunks
+  with deterministic stored fallback and all four supported checks. Python
+  `lzma` validates both writer modes and decoding, while the system `xz`
+  differential contributes a real four-block stream. Reading and
   writing now apply Delta plus x86, PowerPC, IA-64, ARM, ARM-Thumb, and SPARC
   BCJ preprocessing filters, including a three-stage x86+Delta+LZMA2 chain in
   the required direction, and expose aggregate and per-filter block counts in
-  stream metadata. Compressed LZMA encoding remains follow-up work. See
-  `docs/formats/xz.md`.
+  stream metadata. Match-producing LZMA encoding remains follow-up ratio and
+  performance work. See `docs/formats/xz.md`.
 
 - Added dependency-free LZMA-Alone decoding with strict 13-byte property header
   parsing, known and end-marker-sized streams, explicit dictionary and output
@@ -17754,9 +17755,9 @@ reuse, so production keeps the simpler independently owned plans.
   support Delta and x86, PowerPC, IA64, ARM, ARM-Thumb, and SPARC BCJ filters
   after the primary decompressor. The writer emits reproducible unencoded
   headers and one independently extractable folder per non-empty file using
-  Copy, compressed Deflate/Bzip2, or wire-compatible uncompressed LZMA2 chunks,
+  Copy, compressed Deflate/Bzip2, or literal-coded LZMA2 with a stored fallback,
   optionally preceded by the same Delta/classic BCJ filters. A 7-Zip
   differential covers the base methods and real filter chains in both
-  directions. Native LZMA/LZMA2 compression, solid writing, BCJ2, branching or
-  multi-packed-stream graphs, encryption, and external metadata streams remain
-  follow-up work. See `docs/formats/7z.md`.
+  directions. Match-producing LZMA/LZMA2 encoding, solid writing, BCJ2,
+  branching or multi-packed-stream graphs, encryption, and external metadata
+  streams remain follow-up work. See `docs/formats/7z.md`.

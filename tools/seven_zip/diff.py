@@ -190,41 +190,46 @@ def main() -> None:
             external_variants += len(filter_variants)
 
             writer_variants = {
+                "lzma2-multichunk": (
+                    "lzma2",
+                    "none",
+                    b"multi-chunk literal LZMA2 payload\n" * 4096,
+                ),
                 "bcj-deflate": ("deflate", "x86", x86_payload),
                 "delta4-bzip2": ("bzip2", "delta:4", bytes(range(256)) * 16),
-                "bcj-lzma2-stored": ("lzma2-stored", "x86", x86_payload),
+                "bcj-lzma2": ("lzma2", "x86", x86_payload),
                 "delta4-lzma2-stored": (
                     "lzma2-stored",
                     "delta:4",
                     bytes(range(256)) * 16,
                 ),
-                "bcj-delta4-lzma2-stored": (
-                    "lzma2-stored",
+                "bcj-delta4-lzma2": (
+                    "lzma2",
                     "x86,delta:4",
                     x86_payload,
                 ),
-                "ppc-lzma2-stored": (
-                    "lzma2-stored",
+                "ppc-lzma2": (
+                    "lzma2",
                     "powerpc",
                     b"\x48\x00\x00\x01\x4b\xff\xff\xfd" * 256,
                 ),
-                "ia64-lzma2-stored": (
-                    "lzma2-stored",
+                "ia64-lzma2": (
+                    "lzma2",
                     "ia64",
                     b"\x16\x00\x00\x00\x00\xa0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" * 256,
                 ),
-                "arm-lzma2-stored": (
-                    "lzma2-stored",
+                "arm-lzma2": (
+                    "lzma2",
                     "arm",
                     b"\x04\x00\x00\xeb\xfc\xff\xff\xeb" * 256,
                 ),
-                "arm-thumb-lzma2-stored": (
-                    "lzma2-stored",
+                "arm-thumb-lzma2": (
+                    "lzma2",
                     "arm-thumb",
                     b"\x00\xf0\x00\xf8\xff\xf7\xff\xff" * 256,
                 ),
-                "sparc-lzma2-stored": (
-                    "lzma2-stored",
+                "sparc-lzma2": (
+                    "lzma2",
                     "sparc",
                     b"\x40\x00\x00\x00\x7f\xff\xff\xff" * 256,
                 ),
