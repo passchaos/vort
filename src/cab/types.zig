@@ -8,6 +8,21 @@ pub const Compression = enum(u4) {
     _,
 };
 
+pub const Continuation = enum {
+    none,
+    from_previous,
+    to_next,
+    from_previous_and_next,
+
+    pub fn startsBefore(self: Continuation) bool {
+        return self == .from_previous or self == .from_previous_and_next;
+    }
+
+    pub fn continuesAfter(self: Continuation) bool {
+        return self == .to_next or self == .from_previous_and_next;
+    }
+};
+
 pub const Entry = struct {
     name: []const u8,
     size: usize,
@@ -17,6 +32,7 @@ pub const Entry = struct {
     time: u16,
     attributes: u16,
     record_offset: usize,
+    continuation: Continuation = .none,
 
     pub fn isUtf8(self: Entry) bool {
         return self.attributes & 0x0080 != 0;

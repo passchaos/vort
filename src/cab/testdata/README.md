@@ -21,7 +21,13 @@ cabextract fixtures from libmspack commit
   `2e6f57d26e12f3f1c0f1f968d7ebb92e77ea7720ea6f9e18f11eb00ef0e845ad`;
 - `libmspack/test/test_files/cabd/cve-2018-18584-qtm-max-size-block.cab`,
   SHA-256
-  `3ba0c719d8fb12dc531e2a7790c2d15c12d8840de8e4ddc60572c4145181fbf4`.
+  `3ba0c719d8fb12dc531e2a7790c2d15c12d8840de8e4ddc60572c4145181fbf4`;
+- `cabextract/test/cabs/split-{1,2,3,4,5}.cab`, SHA-256 respectively
+  `802de38233dbdeb5ff006c14e62c504740320385f16f1db63bcef4811c768413`,
+  `e364408c0549b8845d929e1d5b85cd8ae53dc7216382fd935f8adad9a1e5f55f`,
+  `567fff7f7029129643072f62b9ef1256dbfd1e45f8707936cd30f8b735571a71`,
+  `a3589cdf11e420c39b3e32162d7b59135bb0863dab54eb19a2abb987a7c1f266`,
+  and `fc9ed6b84b2d766019cc8b314ce0199d06f907225fe3604fbfbfafafdb449447`.
 
 They validate Stored, MSZIP, LZX, and Quantum extraction. The 26 KiB outer
 `large-files-cab` fixture covers a 21-bit LZX window, aligned blocks, 449
@@ -30,3 +36,7 @@ CFDATA records, and 32 KiB frame transitions. Its 14,689,228-byte extracted
 verified with libmspack's `cabd_md5` utility. The five `bugs` fixtures pin
 bounded rejection of malformed LZX trees/matches and Quantum frame, match, and
 archive-size cases previously associated with infinite loops or overflows.
+The five split fixtures cover linked header names, indices, reserve bytes,
+continued-file markers, and CFDATA fragments crossing four cabinet boundaries.
+Their six extracted files are checked against the MD5 values published by
+libmspack's own regression test.

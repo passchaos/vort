@@ -4,7 +4,8 @@ Vort provides dependency-free deterministic writing, parsing, and bounded
 extraction for Microsoft Cabinet archives. The reader supports uncompressed,
 MSZIP, LZX, and Quantum folders, including multiple folders, multiple
 CFDATA blocks, files that cross block boundaries, and compression history
-retained between blocks.
+retained between blocks. Explicitly ordered `CabinetSet` values additionally
+join folders and files split across multiple cabinets without filesystem lookup.
 
 ```zig
 const cabinet = try vort.parseCabArchive(bytes);
@@ -20,6 +21,18 @@ const decoded = try vort.cabExtractAllocWithOptions(
     },
 );
 defer allocator.free(decoded);
+
+const parsed_cabinets = [_]vort.CabArchive{
+    try vort.parseCabArchive(part1_bytes),
+    try vort.parseCabArchive(part2_bytes),
+};
+const set = try vort.initCabinetSet(&parsed_cabinets);
+const split_file = try set.extractByNameAllocLimited(
+    allocator,
+    "large.bin",
+    256 * 1024 * 1024,
+);
+defer allocator.free(split_file);
 
 const entries = [_]vort.CabEncodeEntry{
     .{ .name = "folder\\payload.bin", .data = payload },
@@ -38,11 +51,13 @@ The parser validates:
 - the `MSCF` signature, reserved fields, exact cabinet size, and version 1.3;
 - folder/file table offsets, counts, ordering, and non-overlapping data ranges;
 - optional CFHEADER, CFFOLDER, and CFDATA reserve areas;
+- previous/next cabinet names, disk labels, set IDs, and cabinet indices;
 - NUL-terminated names through the format's 256-byte limit and UTF-8 names
   carrying `_A_NAME_IS_UTF`;
 - file ranges against the complete uncompressed folder size;
 - CFDATA lengths, the 32 KiB uncompressed block limit, and non-zero Cabinet
-  checksums using Microsoft's longitudinal XOR algorithm;
+  checksums using Microsoft's longitudinal XOR algorithm while excluding
+  reserved CFDATA bytes as required by the format;
 - MSZIP's mandatory `CK` marker, exact raw-Deflate consumption, exact decoded
   block sizes, and cross-block history;
 - LZX 15–21 bit windows, verbatim/aligned/uncompressed blocks, delta-coded
@@ -59,6 +74,15 @@ folder decode APIs also retain explicit allocator and limit control. Entry
 names remain borrowed bytes; `CabEntry.isSafeRelative` recognizes both slash
 styles and rejects absolute, drive-prefixed, empty-component, `.` and `..`
 paths. Vort never materializes archive paths automatically.
+
+`CabinetSet.init` requires a complete caller-ordered sequence beginning at
+cabinet index zero. It validates set IDs, indices, previous/next flags,
+continued-file metadata, folder compression settings, fragment placement, and
+per-fragment checksums. Split `cbUncomp=0` CFDATA payloads are concatenated only
+until the next fragment supplies the logical block size; Quantum trailers are
+inserted once per completed logical block. Missing, reordered, or mismatched
+cabinets fail explicitly. Standalone files in a linked cabinet remain directly
+extractable, while continued entries require a `CabinetSet`.
 
 The writer emits one deterministic solid folder containing entries in caller
 order. Stored, MSZIP, LZX, and Quantum modes are available, with optional
@@ -85,6 +109,7 @@ zig build run -- create-cab-file archive.cab path\\file.bin input.bin lzx 32768 
 zig build run -- create-cab-file archive.cab path\\file.bin input.bin quantum 32768 18 3
 zig build run -- list-cab-file archive.cab
 zig build run -- extract-cab-file archive.cab path\\file.bin output.bin 67108864 268435456
+zig build run -- extract-cab-set path\\file.bin output.bin part1.cab part2.cab part3.cab
 zig build run-cab-diff
 ```
 
@@ -95,8 +120,10 @@ CFDATA blocks and expands to a 14,689,228-byte nested CAB. The latter output's
 MD5 is checked against libmspack's independent decoder. The normal Quantum
 payload is checked byte-for-byte, while three historical libmspack Quantum
 regressions pin bounded rejection of frame overshoot, invalid history, and
-inconsistent archive sizes. Split CFDATA blocks and multi-cabinet continuation
-remain explicit unsupported errors. Vort-written Stored/MSZIP/LZX cabinets are
+inconsistent archive sizes. A five-cabinet libmspack set covers linked header
+metadata, three cross-cabinet MSZIP folders, split CFDATA, files continued in
+both directions, reserve bytes, and six independently hashed outputs.
+Vort-written Stored/MSZIP/LZX cabinets are
 decoded byte-exactly by libarchive, including multi-frame LZX output with an
 odd final block. Cabextract/libmspack independently decodes Vort's multi-frame
 Quantum output. Entropy-coded LZX blocks and Quantum match encoding remain

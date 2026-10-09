@@ -8,12 +8,15 @@ pub const Error = core.Error || error{
     UnsupportedCabinetFeature,
     UnsupportedCabinetCompression,
     CabinetEntryNotFound,
+    IncompleteCabinetSet,
+    CabinetSetMismatch,
 };
 
 pub const Compression = types.Compression;
 pub const Entry = types.Entry;
 pub const Folder = types.Folder;
 pub const DataBlock = types.DataBlock;
+pub const Continuation = types.Continuation;
 
 const fixed_header_len: usize = 36;
 const folder_record_len: usize = 8;
@@ -38,6 +41,18 @@ pub const Archive = struct {
     file_table_offset: usize,
     folder_reserve_size: usize,
     data_reserve_size: usize,
+    previous_cabinet_name: ?[]const u8,
+    previous_disk_name: ?[]const u8,
+    next_cabinet_name: ?[]const u8,
+    next_disk_name: ?[]const u8,
+
+    pub fn hasPrevious(self: Archive) bool {
+        return self.flags & flag_prev_cabinet != 0;
+    }
+
+    pub fn hasNext(self: Archive) bool {
+        return self.flags & flag_next_cabinet != 0;
+    }
 
     pub fn iterator(self: Archive) Iterator {
         return .{
@@ -92,7 +107,12 @@ pub const Archive = struct {
         while (try blocks.next()) |block| {
             decoded_size = try checkedAdd(decoded_size, block.uncompressed_size);
             if (decoded_size > max_folder_decoded_size) return error.InvalidCabinet;
-            if (compression == .none and block.compressed.len != block.uncompressed_size)
+            if (block.uncompressed_size == 0 and
+                (blocks.remaining != 0 or !self.hasNext() or index + 1 != self.folder_count))
+                return error.InvalidCabinet;
+            if (compression == .none and
+                block.uncompressed_size != 0 and
+                block.compressed.len != block.uncompressed_size)
                 return error.InvalidCabinet;
         }
         return .{
@@ -151,13 +171,15 @@ pub const DataBlockIterator = struct {
         const expected_checksum = try readU32(self.archive.bytes, self.offset);
         const compressed_size: usize = try readU16(self.archive.bytes, self.offset + 4);
         const uncompressed_size: usize = try readU16(self.archive.bytes, self.offset + 6);
-        if (uncompressed_size == 0 or uncompressed_size > 32 * 1024)
-            return error.UnsupportedCabinetFeature;
+        if (uncompressed_size > 32 * 1024) return error.UnsupportedCabinetFeature;
         const reserve_end = try checkedEnd(header_end, self.archive.data_reserve_size, self.archive.bytes.len);
         const data_end = try checkedEnd(reserve_end, compressed_size, self.archive.bytes.len);
-        if (expected_checksum != 0 and
-            checksum.compute(self.archive.bytes[self.offset + 4 .. data_end]) != expected_checksum)
-            return error.ChecksumMismatch;
+        if (expected_checksum != 0) {
+            const actual_checksum =
+                checksum.compute(self.archive.bytes[self.offset + 4 .. header_end]) ^
+                checksum.compute(self.archive.bytes[reserve_end..data_end]);
+            if (actual_checksum != expected_checksum) return error.ChecksumMismatch;
+        }
         const result = DataBlock{
             .checksum = expected_checksum,
             .compressed = self.archive.bytes[reserve_end..data_end],
@@ -186,10 +208,9 @@ pub fn parse(bytes: []const u8) Error!Archive {
     const folder_count: usize = try readU16(bytes, 26);
     const file_count: usize = try readU16(bytes, 28);
     const flags = try readU16(bytes, 30);
-    if (flags & (flag_prev_cabinet | flag_next_cabinet) != 0)
-        return error.UnsupportedCabinetFeature;
+    if (flags & ~(flag_prev_cabinet | flag_next_cabinet | flag_reserve_present) != 0)
+        return error.InvalidCabinet;
     const cabinet_index = try readU16(bytes, 34);
-    if (cabinet_index != 0) return error.UnsupportedCabinetFeature;
 
     var folder_table_offset = fixed_header_len;
     var folder_reserve_size: usize = 0;
@@ -200,6 +221,18 @@ pub fn parse(bytes: []const u8) Error!Archive {
         folder_reserve_size = bytes[folder_table_offset + 2];
         data_reserve_size = bytes[folder_table_offset + 3];
         folder_table_offset = try checkedEnd(folder_table_offset + 4, header_reserve_size, bytes.len);
+    }
+    var previous_cabinet_name: ?[]const u8 = null;
+    var previous_disk_name: ?[]const u8 = null;
+    var next_cabinet_name: ?[]const u8 = null;
+    var next_disk_name: ?[]const u8 = null;
+    if (flags & flag_prev_cabinet != 0) {
+        previous_cabinet_name = try readHeaderString(bytes, &folder_table_offset);
+        previous_disk_name = try readHeaderString(bytes, &folder_table_offset);
+    }
+    if (flags & flag_next_cabinet != 0) {
+        next_cabinet_name = try readHeaderString(bytes, &folder_table_offset);
+        next_disk_name = try readHeaderString(bytes, &folder_table_offset);
     }
     const folders_len = try checkedMul(folder_count, folder_record_len + folder_reserve_size);
     const folder_table_end = try checkedEnd(folder_table_offset, folders_len, bytes.len);
@@ -217,6 +250,10 @@ pub fn parse(bytes: []const u8) Error!Archive {
         .file_table_offset = file_table_offset,
         .folder_reserve_size = folder_reserve_size,
         .data_reserve_size = data_reserve_size,
+        .previous_cabinet_name = previous_cabinet_name,
+        .previous_disk_name = previous_disk_name,
+        .next_cabinet_name = next_cabinet_name,
+        .next_disk_name = next_disk_name,
     };
 
     var iterator_value = result.iterator();
@@ -249,10 +286,12 @@ pub fn parse(bytes: []const u8) Error!Archive {
     }
     var verify_entries = result.iterator();
     while (try verify_entries.next()) |entry| {
-        const folder = try result.folderAt(entry.folder_index);
-        if (entry.size > folder.decoded_size -| entry.folder_offset or
-            entry.folder_offset > folder.decoded_size)
-            return error.InvalidCabinet;
+        if (entry.continuation == .none) {
+            const folder = try result.folderAt(entry.folder_index);
+            if (entry.size > folder.decoded_size -| entry.folder_offset or
+                entry.folder_offset > folder.decoded_size)
+                return error.InvalidCabinet;
+        }
     }
     return result;
 }
@@ -262,12 +301,25 @@ fn parseEntryAt(archive: Archive, offset: usize) Error!ParsedEntry {
     const size = try u32ToUsize(try readU32(archive.bytes, offset));
     const folder_offset = try u32ToUsize(try readU32(archive.bytes, offset + 4));
     const raw_folder = try readU16(archive.bytes, offset + 8);
-    if (raw_folder == continued_from_previous or
-        raw_folder == continued_to_next or
-        raw_folder == continued_previous_and_next)
-        return error.UnsupportedCabinetFeature;
-    const folder_index: usize = raw_folder;
+    const continuation: Continuation = switch (raw_folder) {
+        continued_from_previous => .from_previous,
+        continued_to_next => .to_next,
+        continued_previous_and_next => .from_previous_and_next,
+        else => .none,
+    };
+    if (archive.folder_count == 0 and continuation != .none) return error.InvalidCabinet;
+    const folder_index: usize = switch (continuation) {
+        .none => raw_folder,
+        .from_previous => 0,
+        .to_next => archive.folder_count - 1,
+        .from_previous_and_next => blk: {
+            if (archive.folder_count != 1) return error.InvalidCabinet;
+            break :blk 0;
+        },
+    };
     if (folder_index >= archive.folder_count) return error.InvalidCabinet;
+    if (continuation.startsBefore() and !archive.hasPrevious()) return error.InvalidCabinet;
+    if (continuation.continuesAfter() and !archive.hasNext()) return error.InvalidCabinet;
     const name_limit = @min(archive.bytes.len, try checkedAdd(fixed_end, 257));
     const relative_end = std.mem.indexOfScalar(u8, archive.bytes[fixed_end..name_limit], 0) orelse
         return error.InvalidCabinet;
@@ -286,6 +338,7 @@ fn parseEntryAt(archive: Archive, offset: usize) Error!ParsedEntry {
             .time = try readU16(archive.bytes, offset + 12),
             .attributes = attributes,
             .record_offset = offset,
+            .continuation = continuation,
         },
         .next_offset = fixed_end + relative_end + 1,
     };
@@ -299,7 +352,18 @@ fn entryEqual(a: Entry, b: Entry) bool {
         a.time == b.time and
         a.attributes == b.attributes and
         a.record_offset == b.record_offset and
+        a.continuation == b.continuation and
         std.mem.eql(u8, a.name, b.name);
+}
+
+fn readHeaderString(bytes: []const u8, offset: *usize) Error![]const u8 {
+    const limit = @min(bytes.len, try checkedAdd(offset.*, 257));
+    const relative_end = std.mem.indexOfScalar(u8, bytes[offset.*..limit], 0) orelse
+        return error.InvalidCabinet;
+    if (relative_end == 0 or relative_end > 256) return error.InvalidCabinet;
+    const value = bytes[offset.* .. offset.* + relative_end];
+    offset.* += relative_end + 1;
+    return value;
 }
 
 fn readU16(bytes: []const u8, offset: usize) Error!u16 {

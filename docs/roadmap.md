@@ -17752,8 +17752,11 @@ reuse, so production keeps the simpler independently owned plans.
   provide required black-box extraction evidence, while synthetic reserved
   MSZIP tests exercise a match that requires previous-block history. The normal
   Quantum fixture is decoded byte-exactly, and three historical malformed
-  Quantum cases pin bounded failure. Split blocks and multi-cabinet
-  continuation remain explicit future functionality. The writer emits one
+  Quantum cases pin bounded failure. Explicit `CabinetSet` values validate and
+  decode caller-ordered multi-cabinet sequences, continued file records, and
+  split CFDATA blocks without implicit filesystem access. A public five-part
+  libmspack fixture covers three spanning MSZIP folders, reserve bytes, and six
+  independently hashed files. The writer emits one
   deterministic solid folder in caller entry order, supports
   Stored/MSZIP/LZX/Quantum, optional checksums, UTF-8 attributes, set IDs, and
   alloc/transactional append/caller-buffer APIs. Stored/MSZIP use configurable

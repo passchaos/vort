@@ -4,6 +4,7 @@ const checksum = @import("cab/checksum.zig");
 const decoder = @import("cab/decoder.zig");
 const lzx = @import("cab/lzx.zig");
 const quantum = @import("cab/quantum.zig");
+const cabinet_set = @import("cab/set.zig");
 const deflate = @import("deflate.zig");
 const types = @import("cab/types.zig");
 const writer = @import("cab/writer.zig");
@@ -13,13 +14,17 @@ pub const Compression = types.Compression;
 pub const Entry = types.Entry;
 pub const Folder = types.Folder;
 pub const DataBlock = types.DataBlock;
+pub const Continuation = types.Continuation;
 pub const Archive = archive.Archive;
+pub const CabinetSet = cabinet_set.CabinetSet;
+pub const SetEntry = cabinet_set.SetEntry;
 pub const Iterator = archive.Iterator;
 pub const DataBlockIterator = archive.DataBlockIterator;
 pub const ExtractOptions = decoder.ExtractOptions;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const parse = archive.parse;
+pub const initSet = CabinetSet.init;
 pub const decodeFolderAllocLimited = decoder.decodeFolderAllocLimited;
 pub const extractAlloc = decoder.extractAlloc;
 pub const extractAllocLimited = decoder.extractAllocLimited;
@@ -37,6 +42,7 @@ test {
     _ = decoder;
     _ = lzx;
     _ = quantum;
+    _ = cabinet_set;
     _ = types;
     _ = writer;
 }
@@ -192,6 +198,75 @@ test "CAB Quantum rejects libmspack malformed frame and match fixtures" {
     try std.testing.expectError(error.InvalidCabinet, parse(infinite_loop_bytes));
 }
 
+test "CAB set extracts libmspack split CFDATA across five cabinets" {
+    const allocator = std.testing.allocator;
+    const fixtures = .{
+        @embedFile("cab/testdata/libmspack-split-1.cab.hex"),
+        @embedFile("cab/testdata/libmspack-split-2.cab.hex"),
+        @embedFile("cab/testdata/libmspack-split-3.cab.hex"),
+        @embedFile("cab/testdata/libmspack-split-4.cab.hex"),
+        @embedFile("cab/testdata/libmspack-split-5.cab.hex"),
+    };
+    var owned: [fixtures.len][]u8 = undefined;
+    var archives: [fixtures.len]Archive = undefined;
+    var initialized: usize = 0;
+    defer for (owned[0..initialized]) |bytes| allocator.free(bytes);
+    inline for (fixtures, 0..) |fixture, index| {
+        owned[index] = try fixtureAlloc(allocator, fixture);
+        initialized += 1;
+        archives[index] = try parse(owned[index]);
+        try std.testing.expectEqual(@as(u16, @intCast(index)), archives[index].cabinet_index);
+        try std.testing.expectEqual(@as(u16, 5988), archives[index].set_id);
+    }
+    try std.testing.expectEqualStrings("Split-2.CAB", archives[0].next_cabinet_name.?);
+    try std.testing.expectEqualStrings("Split-4.CAB", archives[4].previous_cabinet_name.?);
+
+    const standalone = (try archives[0].find("small1.bin")).?;
+    try std.testing.expectEqual(Continuation.none, standalone.continuation);
+    const standalone_output = try extractAlloc(allocator, archives[0], standalone);
+    defer allocator.free(standalone_output);
+    try expectMd5(standalone_output, "2ad5ba0f497f1e597ab187a2dfaa2e29");
+    const continued = (try archives[0].find("small2.bin")).?;
+    try std.testing.expectEqual(Continuation.to_next, continued.continuation);
+    try std.testing.expectError(
+        error.IncompleteCabinetSet,
+        extractAlloc(allocator, archives[0], continued),
+    );
+
+    const set = try initSet(&archives);
+    const expected = .{
+        .{ "small1.bin", "2ad5ba0f497f1e597ab187a2dfaa2e29" },
+        .{ "small2.bin", "1f862f9e36a32a74202c1120b9f06af7" },
+        .{ "medium1.bin", "0a7bd124a4c03a30329bd9ff06f71df7" },
+        .{ "medium2.bin", "b4b0a02ad6a1170d4b3db18cec616fcc" },
+        .{ "small3.bin", "bbaecacfeba976165e9d77bbecb0cbde" },
+        .{ "medium3.bin", "b98fe17e8afbcf05aefc5b2c4badbc28" },
+    };
+    inline for (expected) |item| {
+        const output = try set.extractByNameAlloc(allocator, item[0]);
+        defer allocator.free(output);
+        try expectMd5(output, item[1]);
+    }
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        set.extractByNameAllocLimited(allocator, "medium2.bin", 49_999),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        set.extractByNameAllocWithOptions(allocator, "small2.bin", .{
+            .max_file_size = 8_000,
+            .max_folder_size = 47_999,
+        }),
+    );
+    try std.testing.expectError(error.IncompleteCabinetSet, initSet(archives[0..4]));
+    var reordered = archives;
+    std.mem.swap(Archive, &reordered[1], &reordered[2]);
+    try std.testing.expectError(error.CabinetSetMismatch, initSet(&reordered));
+    var wrong_set = archives;
+    wrong_set[3].set_id +%= 1;
+    try std.testing.expectError(error.CabinetSetMismatch, initSet(&wrong_set));
+}
+
 test "CAB MSZIP retains history across reserved CFDATA blocks" {
     const allocator = std.testing.allocator;
     const fixture = try buildMultiBlockMszipFixture(allocator);
@@ -260,7 +335,7 @@ test "CAB MSZIP retains history across reserved CFDATA blocks" {
     );
 }
 
-test "CAB rejects linked cabinets and unsafe paths" {
+test "CAB rejects malformed linked metadata and unsafe paths" {
     const allocator = std.testing.allocator;
     const fixture = try buildMultiBlockMszipFixture(allocator);
     defer allocator.free(fixture.bytes);
@@ -269,7 +344,7 @@ test "CAB rejects linked cabinets and unsafe paths" {
     var linked = try allocator.dupe(u8, fixture.bytes);
     defer allocator.free(linked);
     std.mem.writeInt(u16, linked[30..32], 1, .little);
-    try std.testing.expectError(error.UnsupportedCabinetFeature, parse(linked));
+    try std.testing.expectError(error.TruncatedFrame, parse(linked));
 
     const parsed = try parse(fixture.bytes);
     var unsafe = (try parsed.find("tail.bin")).?;
@@ -317,7 +392,7 @@ test "CAB parser rejects malformed headers tables names and split blocks" {
     var continued_file = try allocator.dupe(u8, bytes);
     defer allocator.free(continued_file);
     std.mem.writeInt(u16, continued_file[first_entry.record_offset + 8 ..][0..2], 0xfffe, .little);
-    try std.testing.expectError(error.UnsupportedCabinetFeature, parse(continued_file));
+    try std.testing.expectError(error.InvalidCabinet, parse(continued_file));
 
     var bad_utf8 = try allocator.dupe(u8, bytes);
     defer allocator.free(bad_utf8);
@@ -327,8 +402,16 @@ test "CAB parser rejects malformed headers tables names and split blocks" {
 
     var split_block = try allocator.dupe(u8, bytes);
     defer allocator.free(split_block);
+    std.mem.writeInt(u32, split_block[folder.data_offset..][0..4], 0, .little);
     std.mem.writeInt(u16, split_block[folder.data_offset + 6 ..][0..2], 0, .little);
-    try std.testing.expectError(error.UnsupportedCabinetFeature, parse(split_block));
+    try std.testing.expectError(error.InvalidCabinet, parse(split_block));
+}
+
+fn expectMd5(bytes: []const u8, expected_hex: []const u8) !void {
+    const digest = std.crypto.hash.Md5.hashResult(bytes);
+    var expected: [16]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expected, expected_hex);
+    try std.testing.expectEqual(expected, digest);
 }
 
 const BuiltFixture = struct {
@@ -431,7 +514,10 @@ fn appendTestDataBlock(
     try appendU16(allocator, out, @intCast(decoded_len));
     try out.appendSlice(allocator, reserve);
     try out.appendSlice(allocator, payload);
-    std.mem.writeInt(u32, out.items[start..][0..4], checksum.compute(out.items[start + 4 ..]), .little);
+    const header_end = start + 8;
+    const checksum_value = checksum.compute(out.items[start + 4 .. header_end]) ^
+        checksum.compute(payload);
+    std.mem.writeInt(u32, out.items[start..][0..4], checksum_value, .little);
 }
 
 fn appendU16(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: u16) !void {

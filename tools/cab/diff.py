@@ -126,6 +126,23 @@ EXPECTED = {
     },
 }
 
+SPLIT_CAB_SHA256 = (
+    "802de38233dbdeb5ff006c14e62c504740320385f16f1db63bcef4811c768413",
+    "e364408c0549b8845d929e1d5b85cd8ae53dc7216382fd935f8adad9a1e5f55f",
+    "567fff7f7029129643072f62b9ef1256dbfd1e45f8707936cd30f8b735571a71",
+    "a3589cdf11e420c39b3e32162d7b59135bb0863dab54eb19a2abb987a7c1f266",
+    "fc9ed6b84b2d766019cc8b314ce0199d06f907225fe3604fbfbfafafdb449447",
+)
+
+SPLIT_FILES = {
+    "small1.bin": (2_000, "2ad5ba0f497f1e597ab187a2dfaa2e29"),
+    "small2.bin": (8_000, "1f862f9e36a32a74202c1120b9f06af7"),
+    "medium1.bin": (40_000, "0a7bd124a4c03a30329bd9ff06f71df7"),
+    "medium2.bin": (50_000, "b4b0a02ad6a1170d4b3db18cec616fcc"),
+    "small3.bin": (128, "bbaecacfeba976165e9d77bbecb0cbde"),
+    "medium3.bin": (40_000, "b98fe17e8afbcf05aefc5b2c4badbc28"),
+}
+
 
 def run(cli: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -232,6 +249,36 @@ def main() -> None:
                     raise AssertionError("aligned multi-frame LZX extraction mismatch")
                 extracted += 1
 
+        split_paths: list[Path] = []
+        for index, expected_sha256 in enumerate(SPLIT_CAB_SHA256, 1):
+            encoded = (args.fixtures / f"libmspack-split-{index}.cab.hex").read_text(
+                encoding="ascii"
+            )
+            data = bytes.fromhex(encoded)
+            digest = hashlib.sha256(data).hexdigest()
+            if digest != expected_sha256:
+                raise AssertionError(f"split CAB {index} digest mismatch: {digest}")
+            path = temp / f"split-{index}.cab"
+            path.write_bytes(data)
+            listing = run(args.cli, "list-cab-file", str(path)).stdout
+            if f"cabinet_index={index - 1}" not in listing:
+                raise AssertionError(f"split CAB listing mismatch: {listing}")
+            split_paths.append(path)
+
+        for name, (expected_size, expected_md5) in SPLIT_FILES.items():
+            output = temp / f"split-{name}"
+            run(
+                args.cli,
+                "extract-cab-set",
+                name,
+                str(output),
+                *(str(path) for path in split_paths),
+            )
+            data = output.read_bytes()
+            if len(data) != expected_size or hashlib.md5(data).hexdigest() != expected_md5:
+                raise AssertionError(f"split CAB extraction mismatch for {name!r}")
+            extracted += 1
+
         rng = random.Random(0xCAB5EED)
         prefix = bytes(rng.randrange(256) for _ in range(32 * 1024))
         payload = prefix * 3 + b"CAB writer differential tail\n"
@@ -289,10 +336,10 @@ def main() -> None:
             writer_cases += 1
 
     print(
-        f"cab_diff=ok fixtures=8 extracted={extracted} writer_cases={writer_cases} "
+        f"cab_diff=ok fixtures=13 extracted={extracted} writer_cases={writer_cases} "
         "libarchive=ok malformed_lzx=2 malformed_quantum=3 lzx_writer=ok "
         f"quantum_writer=ok cabextract_quantum={quantum_external} "
-        "lzx_aligned_frames=449 quantum=ok"
+        "lzx_aligned_frames=449 split_cabinets=5 quantum=ok"
     )
 
 

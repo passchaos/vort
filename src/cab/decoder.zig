@@ -22,6 +22,9 @@ pub fn decodeFolderAllocLimited(
 ) ![]u8 {
     const folder = try archive.folderAt(folder_index);
     if (folder.decoded_size > max_output_len) return error.OutputLimitExceeded;
+    var complete_blocks = archive.dataBlockIterator(folder);
+    while (try complete_blocks.next()) |block|
+        if (block.uncompressed_size == 0) return error.IncompleteCabinetSet;
     switch (folder.compression) {
         .none, .mszip, .quantum, .lzx => {},
         else => return error.UnsupportedCabinetCompression,
@@ -87,6 +90,7 @@ pub fn extractAllocWithOptions(
     options: ExtractOptions,
 ) ![]u8 {
     const entry = try archive.canonicalEntry(supplied_entry);
+    if (entry.continuation != .none) return error.IncompleteCabinetSet;
     if (entry.size > options.max_file_size) return error.OutputLimitExceeded;
     const folder = try decodeFolderAllocLimited(
         allocator,

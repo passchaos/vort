@@ -456,6 +456,48 @@ pub fn main(init: std.process.Init) !void {
             entry_name,
             output_path,
         });
+    } else if (std.mem.eql(u8, command, "extract-cab-set")) {
+        const entry_name = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        var owned: std.ArrayList([]u8) = .empty;
+        defer {
+            for (owned.items) |bytes| init.gpa.free(bytes);
+            owned.deinit(init.gpa);
+        }
+        var archives: std.ArrayList(vort.CabArchive) = .empty;
+        defer archives.deinit(init.gpa);
+        while (args.next()) |input_path| {
+            const bytes = try std.Io.Dir.cwd().readFileAlloc(
+                init.io,
+                input_path,
+                init.gpa,
+                .limited(512 * 1024 * 1024),
+            );
+            const parsed = vort.parseCabArchive(bytes) catch |err| {
+                init.gpa.free(bytes);
+                return err;
+            };
+            owned.append(init.gpa, bytes) catch |err| {
+                init.gpa.free(bytes);
+                return err;
+            };
+            try archives.append(init.gpa, parsed);
+        }
+        if (archives.items.len == 0) return error.MissingCorpusPath;
+        const set = try vort.initCabinetSet(archives.items);
+        const decoded = try set.extractByNameAllocLimited(
+            init.gpa,
+            entry_name,
+            512 * 1024 * 1024,
+        );
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("cabinet_count={d} decoded_bytes={d} entry={s} path={s}\n", .{
+            archives.items.len,
+            decoded.len,
+            entry_name,
+            output_path,
+        });
     } else if (std.mem.eql(u8, command, "list-zip-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
@@ -2068,6 +2110,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-cab-file <path>        List single-cabinet Stored/MSZIP/LZX/Quantum metadata
         \\  extract-cab-file <cab> <entry> <out> [max_file] [max_folder]
         \\                              Extract a Stored/MSZIP/LZX/Quantum CAB entry with explicit limits
+        \\  extract-cab-set <entry> <out> <cab1> <cab2> [...]
+        \\                              Extract an entry across an explicitly ordered cabinet set
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
         \\  extract-zip-file <zip> <entry> <out> [max_output]
         \\                              Extract a supported ZIP entry with CRC validation
