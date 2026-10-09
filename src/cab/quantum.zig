@@ -227,6 +227,68 @@ const ArithmeticDecoder = struct {
     }
 };
 
+/// Functionality-first Quantum encoder. It emits literal-only arithmetic
+/// frames while preserving the adaptive models across calls. CAB writers add
+/// the per-CFDATA 0xff sentinel after each returned payload.
+pub const LiteralEncoder = struct {
+    literal_models: [4]Model,
+    selector_model: Model,
+
+    pub fn init() LiteralEncoder {
+        return .{
+            .literal_models = .{
+                Model.init(0, 64),
+                Model.init(64, 64),
+                Model.init(128, 64),
+                Model.init(192, 64),
+            },
+            .selector_model = Model.init(0, 7),
+        };
+    }
+
+    pub fn encodeFrameAlloc(
+        self: *LiteralEncoder,
+        allocator: std.mem.Allocator,
+        input: []const u8,
+    ) ![]u8 {
+        if (input.len == 0 or input.len > frame_size) return error.InvalidBlockPlan;
+
+        var verify_literals = self.literal_models;
+        var verify_selector = self.selector_model;
+        var writer = MsbBitWriter{};
+        errdefer writer.bytes.deinit(allocator);
+        var arithmetic = ArithmeticEncoder{ .writer = &writer };
+        arithmetic.startFrame();
+        for (input) |byte| {
+            const selector = byte >> 6;
+            try arithmetic.encodeSymbol(allocator, &self.selector_model, selector);
+            try arithmetic.encodeSymbol(allocator, &self.literal_models[selector], byte);
+        }
+        try arithmetic.finishFrame(allocator);
+        try writer.alignToByte(allocator);
+        try writer.bytes.appendNTimes(allocator, 0, 4);
+
+        if (input.len == frame_size) {
+            // Keep only bytes the arithmetic decoder consumes, then append the
+            // format's maximum legal null padding before CAB injects 0xff.
+            var verifier = ArithmeticDecoder{ .reader = .{ .input = writer.bytes.items } };
+            try verifier.startFrame();
+            for (input) |expected| {
+                const selector = try verifier.decodeSymbol(&verify_selector);
+                if (selector >= verify_literals.len) return error.InvalidQuantumStream;
+                const literal = try verifier.decodeSymbol(&verify_literals[selector]);
+                if (literal != expected) return error.InvalidQuantumStream;
+            }
+            verifier.reader.alignToByte();
+            if (verifier.reader.byte_offset > writer.bytes.items.len)
+                return error.InvalidQuantumStream;
+            writer.bytes.shrinkRetainingCapacity(verifier.reader.byte_offset);
+            try writer.bytes.appendNTimes(allocator, 0, 4);
+        }
+        return writer.bytes.toOwnedSlice(allocator);
+    }
+};
+
 const Decoder = struct {
     arithmetic: ArithmeticDecoder,
     output: []u8,
@@ -351,9 +413,9 @@ test "Quantum decodes the libmspack fixed-match stream" {
 
 test "Quantum decodes fixed and variable match selectors" {
     const allocator = std.testing.allocator;
-    var writer = TestBitWriter{};
+    var writer = MsbBitWriter{};
     defer writer.bytes.deinit(allocator);
-    var encoder = TestArithmeticEncoder{ .writer = &writer };
+    var encoder = ArithmeticEncoder{ .writer = &writer };
     var selector_model = Model.init(0, 7);
     var literal_models = [4]Model{
         Model.init(0, 64),
@@ -403,12 +465,24 @@ test "Quantum retains adaptive models across frames for all window sizes" {
     defer allocator.free(expected);
     for (expected, 0..) |*byte, index| byte.* = @truncate(index *% 73 +% index / 11);
 
-    var encoded = try testEncodeLiterals(allocator, expected, 4);
+    var encoder = LiteralEncoder.init();
+    var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
+    var offset: usize = 0;
+    var first_trailer_offset: ?usize = null;
+    while (offset < expected.len) {
+        const end = @min(expected.len, offset + frame_size);
+        const frame = try encoder.encodeFrameAlloc(allocator, expected[offset..end]);
+        defer allocator.free(frame);
+        try encoded.appendSlice(allocator, frame);
+        if (first_trailer_offset == null) first_trailer_offset = encoded.items.len;
+        try encoded.append(allocator, 0xff);
+        offset = end;
+    }
     for (min_window_bits..max_window_bits + 1) |window_bits| {
         const decoded = try decodeAlloc(
             allocator,
-            encoded.bytes,
+            encoded.items,
             expected.len,
             @intCast(window_bits),
         );
@@ -416,22 +490,12 @@ test "Quantum retains adaptive models across frames for all window sizes" {
         try std.testing.expectEqualSlices(u8, expected, decoded);
     }
 
-    encoded.bytes[encoded.first_trailer_offset] = 0xfe;
+    encoded.items[first_trailer_offset.?] = 0xfe;
     try std.testing.expectError(
         error.InvalidQuantumStream,
-        decodeAlloc(allocator, encoded.bytes, expected.len, 18),
+        decodeAlloc(allocator, encoded.items, expected.len, 18),
     );
 }
-
-const TestEncoded = struct {
-    bytes: []u8,
-    first_trailer_offset: usize,
-
-    fn deinit(self: *TestEncoded, allocator: std.mem.Allocator) void {
-        allocator.free(self.bytes);
-        self.* = undefined;
-    }
-};
 
 fn testAppendMatch(
     allocator: std.mem.Allocator,
@@ -443,78 +507,20 @@ fn testAppendMatch(
         try output.append(allocator, output.items[output.items.len - offset]);
 }
 
-fn testEncodeLiterals(
-    allocator: std.mem.Allocator,
-    input: []const u8,
-    full_frame_padding: usize,
-) !TestEncoded {
-    std.debug.assert(full_frame_padding <= 4);
-    var writer = TestBitWriter{};
-    defer writer.bytes.deinit(allocator);
-    var encoder = TestArithmeticEncoder{ .writer = &writer };
-    var selector_model = Model.init(0, 7);
-    var literal_models = [4]Model{
-        Model.init(0, 64),
-        Model.init(64, 64),
-        Model.init(128, 64),
-        Model.init(192, 64),
-    };
-    var offset: usize = 0;
-    var first_trailer_offset: ?usize = null;
-    while (offset < input.len) {
-        encoder.startFrame();
-        const end = @min(input.len, offset + frame_size);
-        for (input[offset..end]) |byte| {
-            const selector = byte >> 6;
-            try encoder.encodeSymbol(allocator, &selector_model, selector);
-            try encoder.encodeSymbol(allocator, &literal_models[selector], byte);
-        }
-        try encoder.finishFrame(allocator);
-        try writer.alignToByte(allocator);
-        if (end - offset == frame_size) {
-            // Arithmetic termination can leave whole unused bytes. CAB Quantum
-            // stores only the bytes consumed by the completed frame, followed
-            // by 0..4 alignment bytes and the injected CFDATA sentinel.
-            if (offset != 0) return error.InvalidQuantumStream;
-            try writer.bytes.appendNTimes(allocator, 0, 4);
-            const verified = try allocator.alloc(u8, frame_size);
-            defer allocator.free(verified);
-            var verifier = Decoder.init(writer.bytes.items, verified, 18);
-            try verifier.arithmetic.startFrame();
-            while (verifier.written < verified.len)
-                try verifier.decodeItem(verified.len);
-            try std.testing.expectEqualSlices(u8, input[0..frame_size], verified);
-            verifier.arithmetic.reader.alignToByte();
-            writer.bytes.shrinkRetainingCapacity(verifier.arithmetic.reader.byte_offset);
-
-            try writer.bytes.appendNTimes(allocator, 0, full_frame_padding);
-            if (first_trailer_offset == null) first_trailer_offset = writer.bytes.items.len;
-            try writer.bytes.append(allocator, 0xff);
-        } else {
-            try writer.bytes.appendNTimes(allocator, 0, 4);
-        }
-        offset = end;
-    }
-    return .{
-        .bytes = try writer.bytes.toOwnedSlice(allocator),
-        .first_trailer_offset = first_trailer_offset.?,
-    };
-}
-
-const TestArithmeticEncoder = struct {
-    writer: *TestBitWriter,
+const ArithmeticEncoder = struct {
+    writer: *MsbBitWriter,
     low: u32 = 0,
     high: u32 = 0xffff,
     pending_bits: usize = 0,
 
-    fn startFrame(self: *TestArithmeticEncoder) void {
+    fn startFrame(self: *ArithmeticEncoder) void {
         self.low = 0;
         self.high = 0xffff;
         self.pending_bits = 0;
     }
 
     fn encodeSymbol(
-        self: *TestArithmeticEncoder,
+        self: *ArithmeticEncoder,
         allocator: std.mem.Allocator,
         model: *Model,
         symbol: usize,
@@ -547,13 +553,13 @@ const TestArithmeticEncoder = struct {
         }
     }
 
-    fn finishFrame(self: *TestArithmeticEncoder, allocator: std.mem.Allocator) !void {
+    fn finishFrame(self: *ArithmeticEncoder, allocator: std.mem.Allocator) !void {
         self.pending_bits += 1;
         try self.writeBitAndPending(allocator, @intFromBool(self.low >= 0x4000));
     }
 
     fn writeBitAndPending(
-        self: *TestArithmeticEncoder,
+        self: *ArithmeticEncoder,
         allocator: std.mem.Allocator,
         bit: u1,
     ) !void {
@@ -563,12 +569,12 @@ const TestArithmeticEncoder = struct {
     }
 };
 
-const TestBitWriter = struct {
+const MsbBitWriter = struct {
     bytes: std.ArrayList(u8) = .empty,
     byte: u8 = 0,
     bits_used: u4 = 0,
 
-    fn writeBit(self: *TestBitWriter, allocator: std.mem.Allocator, bit: u1) !void {
+    fn writeBit(self: *MsbBitWriter, allocator: std.mem.Allocator, bit: u1) !void {
         self.byte |= @as(u8, bit) << @intCast(7 - self.bits_used);
         self.bits_used += 1;
         if (self.bits_used == 8) {
@@ -578,7 +584,7 @@ const TestBitWriter = struct {
         }
     }
 
-    fn alignToByte(self: *TestBitWriter, allocator: std.mem.Allocator) !void {
+    fn alignToByte(self: *MsbBitWriter, allocator: std.mem.Allocator) !void {
         if (self.bits_used == 0) return;
         try self.bytes.append(allocator, self.byte);
         self.byte = 0;

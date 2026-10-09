@@ -8,6 +8,7 @@ import ctypes
 import ctypes.util
 import hashlib
 import random
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -236,7 +237,9 @@ def main() -> None:
         payload = prefix * 3 + b"CAB writer differential tail\n"
         source = temp / "writer-input.bin"
         source.write_bytes(payload)
-        for mode in ("stored", "mszip", "lzx"):
+        cabextract = shutil.which("cabextract")
+        quantum_external = "skipped"
+        for mode in ("stored", "mszip", "lzx", "quantum"):
             first = temp / f"vort-{mode}-first.cab"
             second = temp / f"vort-{mode}-second.cab"
             entry_name = "folder/payload.bin"
@@ -260,14 +263,35 @@ def main() -> None:
             )
             if vort_output.read_bytes() != payload:
                 raise AssertionError(f"Vort could not read its {mode} CAB")
-            external = libarchive_extract(first)
-            if external.get(entry_name) != payload:
-                raise AssertionError(f"libarchive could not read Vort {mode} CAB")
+            if mode == "quantum":
+                if cabextract is not None:
+                    destination = temp / "cabextract-quantum"
+                    destination.mkdir()
+                    result = subprocess.run(
+                        [cabextract, "-q", "-d", str(destination), str(first)],
+                        check=False,
+                        text=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                    external_path = destination / entry_name
+                    if result.returncode != 0 or not external_path.is_file():
+                        raise AssertionError(
+                            f"cabextract could not read Vort Quantum CAB: {result.stderr}"
+                        )
+                    if external_path.read_bytes() != payload:
+                        raise AssertionError("cabextract Quantum extraction mismatch")
+                    quantum_external = "ok"
+            else:
+                external = libarchive_extract(first)
+                if external.get(entry_name) != payload:
+                    raise AssertionError(f"libarchive could not read Vort {mode} CAB")
             writer_cases += 1
 
     print(
         f"cab_diff=ok fixtures=8 extracted={extracted} writer_cases={writer_cases} "
         "libarchive=ok malformed_lzx=2 malformed_quantum=3 lzx_writer=ok "
+        f"quantum_writer=ok cabextract_quantum={quantum_external} "
         "lzx_aligned_frames=449 quantum=ok"
     )
 

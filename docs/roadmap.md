@@ -17754,14 +17754,19 @@ reuse, so production keeps the simpler independently owned plans.
   Quantum fixture is decoded byte-exactly, and three historical malformed
   Quantum cases pin bounded failure. Split blocks and multi-cabinet
   continuation remain explicit future functionality. The writer emits one
-  deterministic solid folder in caller entry order, supports Stored/MSZIP/LZX,
-  optional checksums, UTF-8 attributes, set IDs, and alloc/transactional
-  append/caller-buffer APIs. Stored/MSZIP use configurable 1–32 KiB blocks;
+  deterministic solid folder in caller entry order, supports
+  Stored/MSZIP/LZX/Quantum, optional checksums, UTF-8 attributes, set IDs, and
+  alloc/transactional append/caller-buffer APIs. Stored/MSZIP use configurable
+  1–32 KiB blocks;
   each MSZIP block chooses fixed-Huffman or stored Deflate and carries prior
   folder history. The reference LZX writer emits standard uncompressed blocks,
   all 15–21 bit window declarations, 32 KiB non-final CFDATA records, restored
-  recent offsets, and odd-block padding. Libarchive independently validates all
-  three writer modes. Entropy-coded LZX and Quantum writing remain future work.
+  recent offsets, and odd-block padding. Libarchive independently validates
+  these first three writer modes. The reference Quantum writer emits persistent
+  adaptive literal arithmetic models across 32 KiB frames, supports all 10–21
+  bit window declarations and levels 1–7, and bounds frame padding/trailers.
+  Cabextract/libmspack independently validates its multi-frame output.
+  Entropy-coded LZX blocks and Quantum match encoding remain future ratio work.
   The generic raw-byte fuzz target includes both CAB parsing and bounded folder
   decompression with its format-error set.
   See `docs/formats/cab.md`.

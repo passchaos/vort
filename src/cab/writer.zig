@@ -5,9 +5,10 @@ const core = @import("../core.zig");
 const deflate = @import("../deflate.zig");
 const decoder = @import("decoder.zig");
 const lzx_encoder = @import("lzx/encoder.zig");
+const quantum = @import("quantum.zig");
 const types = @import("types.zig");
 
-pub const Error = core.Error || archive_format.Error || deflate.Error || lzx_encoder.Error || error{
+pub const Error = core.Error || archive_format.Error || deflate.Error || lzx_encoder.Error || quantum.Error || error{
     InvalidCabinetEntryName,
     InvalidCabinetOptions,
     CabinetLimitExceeded,
@@ -29,6 +30,8 @@ pub const EncodeOptions = struct {
     checksum: bool = true,
     set_id: u16 = 0,
     lzx_window_bits: u5 = 15,
+    quantum_window_bits: u5 = 18,
+    quantum_level: u4 = 1,
 };
 
 const fixed_header_len: usize = 36;
@@ -38,6 +41,7 @@ const max_cabinet_size: usize = 0x7fff_ffff;
 
 test {
     _ = lzx_encoder;
+    _ = quantum;
 }
 
 pub fn encodeAlloc(
@@ -72,6 +76,7 @@ pub fn encodeAlloc(
         1 + (folder_data.items.len - 1) / options.block_size;
     if (block_count > std.math.maxInt(u16)) return error.CabinetLimitExceeded;
     var data_start: usize = 0;
+    var quantum_encoder = quantum.LiteralEncoder.init();
     while (data_start < folder_data.items.len) {
         const data_end = @min(folder_data.items.len, data_start + options.block_size);
         const block = folder_data.items[data_start..data_end];
@@ -108,6 +113,11 @@ pub fn encodeAlloc(
                 defer allocator.free(encoded);
                 try appendDataBlock(allocator, &out, encoded, block.len, options.checksum);
             },
+            .quantum => {
+                const encoded = try quantum_encoder.encodeFrameAlloc(allocator, block);
+                defer allocator.free(encoded);
+                try appendDataBlock(allocator, &out, encoded, block.len, options.checksum);
+            },
             else => return error.UnsupportedCabinetCompression,
         }
         data_start = data_end;
@@ -125,11 +135,12 @@ pub fn encodeAlloc(
     if (has_folder) {
         std.mem.writeInt(u32, out.items[folder_record_offset..][0..4], @intCast(data_offset), .little);
         std.mem.writeInt(u16, out.items[folder_record_offset + 4 ..][0..2], @intCast(block_count), .little);
-        const type_compress = @as(u16, @intFromEnum(options.compression)) |
-            if (options.compression == .lzx)
-                @as(u16, options.lzx_window_bits) << 8
-            else
-                0;
+        const type_compress = @as(u16, @intFromEnum(options.compression)) | switch (options.compression) {
+            .lzx => @as(u16, options.lzx_window_bits) << 8,
+            .quantum => (@as(u16, options.quantum_window_bits) << 8) |
+                (@as(u16, options.quantum_level) << 4),
+            else => 0,
+        };
         std.mem.writeInt(u16, out.items[folder_record_offset + 6 ..][0..2], type_compress, .little);
     }
     return out.toOwnedSlice(allocator);
@@ -164,10 +175,17 @@ pub fn encodeInto(
 fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!usize {
     if (options.compression != .none and
         options.compression != .mszip and
+        options.compression != .quantum and
         options.compression != .lzx)
         return error.UnsupportedCabinetCompression;
     if (options.compression == .lzx and
         (options.lzx_window_bits < 15 or options.lzx_window_bits > 21))
+        return error.InvalidCabinetOptions;
+    if (options.compression == .quantum and
+        (options.quantum_window_bits < 10 or
+            options.quantum_window_bits > 21 or
+            options.quantum_level < 1 or
+            options.quantum_level > 7))
         return error.InvalidCabinetOptions;
     if (options.block_size == 0 or options.block_size > 32 * 1024)
         return error.InvalidCabinetOptions;
@@ -184,7 +202,7 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!us
             return error.CabinetLimitExceeded;
         if (folder_size > max_folder_size) return error.CabinetLimitExceeded;
     }
-    if (options.compression == .lzx and
+    if ((options.compression == .lzx or options.compression == .quantum) and
         folder_size > options.block_size and
         options.block_size != 32 * 1024)
         return error.InvalidCabinetOptions;
@@ -247,17 +265,20 @@ fn appendU32(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: u32) 
     try out.appendSlice(allocator, &bytes);
 }
 
-test "CAB writer deterministically round trips Stored MSZIP and LZX entries" {
+test "CAB writer deterministically round trips all supported methods" {
     const allocator = std.testing.allocator;
     const entries = [_]EncodeEntry{
         .{ .name = "plain.txt", .data = "plain CAB payload\n" },
         .{ .name = "目录\\数据.txt", .data = "repeated CAB payload\n" ** 512 },
         .{ .name = "empty.bin", .data = "" },
     };
-    inline for (.{ Compression.none, .mszip, .lzx }) |compression| {
+    inline for (.{ Compression.none, .mszip, .quantum, .lzx }) |compression| {
         const options = EncodeOptions{
             .compression = compression,
-            .block_size = if (compression == .lzx) 32 * 1024 else 4096,
+            .block_size = if (compression == .lzx or compression == .quantum)
+                32 * 1024
+            else
+                4096,
             .set_id = 0x1234,
         };
         const first = try encodeAlloc(allocator, &entries, options);
@@ -273,6 +294,8 @@ test "CAB writer deterministically round trips Stored MSZIP and LZX entries" {
         try std.testing.expectEqual(compression, folder.compression);
         if (compression == .lzx)
             try std.testing.expectEqual(@as(u16, 0x0f03), folder.type_compress);
+        if (compression == .quantum)
+            try std.testing.expectEqual(@as(u16, 0x1212), folder.type_compress);
         var blocks = parsed.dataBlockIterator(folder);
         while (try blocks.next()) |block| try std.testing.expect(block.checksum != 0);
 
@@ -357,6 +380,36 @@ test "CAB LZX writer supports every window and odd final CFDATA alignment" {
     try std.testing.expectEqualStrings("final-block", tiny_decoded);
 }
 
+test "CAB Quantum writer retains models across frames and supports all windows" {
+    const allocator = std.testing.allocator;
+    const payload = try allocator.alloc(u8, 32 * 1024 + 257);
+    defer allocator.free(payload);
+    for (payload, 0..) |*byte, index| byte.* = @truncate(index *% 73 +% index / 11);
+    const entries = [_]EncodeEntry{.{ .name = "quantum.bin", .data = payload }};
+
+    for (10..22) |window_bits| {
+        const level: u4 = @intCast(1 + (window_bits - 10) % 7);
+        const encoded = try encodeAlloc(allocator, &entries, .{
+            .compression = .quantum,
+            .quantum_window_bits = @intCast(window_bits),
+            .quantum_level = level,
+        });
+        defer allocator.free(encoded);
+        const parsed = try archive_format.parse(encoded);
+        const folder = try parsed.folderAt(0);
+        try std.testing.expectEqual(
+            @as(u16, 2) |
+                (@as(u16, @intCast(window_bits)) << 8) |
+                (@as(u16, level) << 4),
+            folder.type_compress,
+        );
+        try std.testing.expectEqual(@as(usize, 2), folder.data_block_count);
+        const decoded = try decoder.extractByNameAlloc(allocator, parsed, "quantum.bin");
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
 test "CAB writer append and caller output are transactional" {
     const allocator = std.testing.allocator;
     const entries = [_]EncodeEntry{.{ .name = "payload", .data = "transactional CAB" ** 32 }};
@@ -390,7 +443,7 @@ test "CAB writer append and caller output are transactional" {
     try std.testing.expectEqualSlices(u8, before, appended.items);
     try std.testing.expectError(
         error.UnsupportedCabinetCompression,
-        encodeAlloc(allocator, &entries, .{ .compression = .quantum }),
+        encodeAlloc(allocator, &entries, .{ .compression = @enumFromInt(15) }),
     );
     try std.testing.expectError(
         error.InvalidCabinetOptions,
@@ -403,6 +456,27 @@ test "CAB writer append and caller output are transactional" {
         error.InvalidCabinetOptions,
         encodeAlloc(allocator, &entries, .{
             .compression = .lzx,
+            .block_size = 16,
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidCabinetOptions,
+        encodeAlloc(allocator, &entries, .{
+            .compression = .quantum,
+            .quantum_window_bits = 9,
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidCabinetOptions,
+        encodeAlloc(allocator, &entries, .{
+            .compression = .quantum,
+            .quantum_level = 0,
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidCabinetOptions,
+        encodeAlloc(allocator, &entries, .{
+            .compression = .quantum,
             .block_size = 16,
         }),
     );

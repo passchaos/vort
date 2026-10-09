@@ -381,7 +381,8 @@ pub fn main(init: std.process.Init) !void {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const compression = try parseCabCompression(args.next());
         const block_size = try parseBlockLen(args.next(), 32 * 1024);
-        const lzx_window_bits = try parseCabLzxWindowBits(args.next());
+        const window_bits = try parseCabWindowBits(args.next(), compression);
+        const quantum_level = try parseCabQuantumLevel(args.next());
         if (block_size > 32 * 1024) return error.InvalidCabinetOptions;
         const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(input);
@@ -389,7 +390,9 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeCabAlloc(init.gpa, &entries, .{
             .compression = compression,
             .block_size = @intCast(block_size),
-            .lzx_window_bits = lzx_window_bits,
+            .lzx_window_bits = window_bits,
+            .quantum_window_bits = window_bits,
+            .quantum_level = quantum_level,
         });
         defer init.gpa.free(encoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
@@ -2060,7 +2063,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              List common compressed tarball formats
         \\  extract-tar-file <tar> <entry> <out> [max_tar_size]
         \\                              Extract one named regular file without path traversal
-        \\  create-cab-file <out> <entry> <in> [stored|mszip|lzx] [block_size] [lzx_window_bits]
+        \\  create-cab-file <out> <entry> <in> [stored|mszip|quantum|lzx] [block_size] [window_bits] [quantum_level]
         \\                              Create a deterministic one-folder CAB archive
         \\  list-cab-file <path>        List single-cabinet Stored/MSZIP/LZX/Quantum metadata
         \\  extract-cab-file <cab> <entry> <out> [max_file] [max_folder]
@@ -3075,15 +3078,24 @@ fn parseCabCompression(text: ?[]const u8) !vort.CabCompression {
     const value = text orelse return .mszip;
     if (std.mem.eql(u8, value, "stored") or std.mem.eql(u8, value, "none")) return .none;
     if (std.mem.eql(u8, value, "mszip")) return .mszip;
+    if (std.mem.eql(u8, value, "quantum") or std.mem.eql(u8, value, "qtm")) return .quantum;
     if (std.mem.eql(u8, value, "lzx")) return .lzx;
     return error.UnsupportedCabinetCompression;
 }
 
-fn parseCabLzxWindowBits(text: ?[]const u8) !u5 {
-    const value = text orelse return 15;
+fn parseCabWindowBits(text: ?[]const u8, compression: vort.CabCompression) !u5 {
+    const value = text orelse return if (compression == .quantum) 18 else 15;
     const window_bits = try std.fmt.parseInt(u5, value, 10);
-    if (window_bits < 15 or window_bits > 21) return error.InvalidCabinetOptions;
+    const minimum: u5 = if (compression == .quantum) 10 else 15;
+    if (window_bits < minimum or window_bits > 21) return error.InvalidCabinetOptions;
     return window_bits;
+}
+
+fn parseCabQuantumLevel(text: ?[]const u8) !u4 {
+    const value = text orelse return 1;
+    const level = try std.fmt.parseInt(u4, value, 10);
+    if (level < 1 or level > 7) return error.InvalidCabinetOptions;
+    return level;
 }
 
 fn parseSeekabilityTier(text: ?[]const u8) !vort.SeekabilityTier {

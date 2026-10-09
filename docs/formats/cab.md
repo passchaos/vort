@@ -26,8 +26,9 @@ const entries = [_]vort.CabEncodeEntry{
     .{ .name = "empty.bin", .data = "" },
 };
 const encoded = try vort.encodeCabAlloc(allocator, &entries, .{
-    .compression = .lzx,
-    .lzx_window_bits = 18,
+    .compression = .quantum,
+    .quantum_window_bits = 18,
+    .quantum_level = 3,
 });
 defer allocator.free(encoded);
 ```
@@ -60,22 +61,28 @@ styles and rejects absolute, drive-prefixed, empty-component, `.` and `..`
 paths. Vort never materializes archive paths automatically.
 
 The writer emits one deterministic solid folder containing entries in caller
-order. Stored, MSZIP, and LZX modes are available, with optional non-zero
-CFDATA checksums, deterministic DOS dates, automatic UTF-8 attributes, and a
-caller-selected set ID. Stored/MSZIP permit configurable 1–32 KiB CFDATA
+order. Stored, MSZIP, LZX, and Quantum modes are available, with optional
+non-zero CFDATA checksums, deterministic DOS dates, automatic UTF-8 attributes,
+and a caller-selected set ID. Stored/MSZIP permit configurable 1–32 KiB CFDATA
 blocks. MSZIP independently chooses fixed-Huffman or stored Deflate for each
 block while retaining the prior 32 KiB folder tail as its dictionary. The
 reference LZX writer emits interoperable uncompressed LZX blocks, selectable
 15–21 bit windows, mandatory 32 KiB non-final CFDATA records, restored recent
 offsets, word alignment, and odd final-block padding. Entropy-coded LZX writing
-is a later ratio optimization, not a distinct compatibility surface. Owned,
-transactional append, and caller-buffer APIs share the same wire implementation.
+is a later ratio optimization, not a distinct compatibility surface.
+The reference Quantum writer emits literal-only adaptive arithmetic frames,
+persists selector/literal models across 32 KiB CFDATA records, supports 10–21
+bit windows and declared levels 1–7, and writes bounded null padding before the
+CAB-injected frame sentinel. Quantum match selection is likewise a later ratio
+optimization. Owned, transactional append, and caller-buffer APIs share the
+same wire implementation.
 
 CLI validation surfaces:
 
 ```sh
 zig build run -- create-cab-file archive.cab path\\file.bin input.bin mszip 32768
 zig build run -- create-cab-file archive.cab path\\file.bin input.bin lzx 32768 18
+zig build run -- create-cab-file archive.cab path\\file.bin input.bin quantum 32768 18 3
 zig build run -- list-cab-file archive.cab
 zig build run -- extract-cab-file archive.cab path\\file.bin output.bin 67108864 268435456
 zig build run-cab-diff
@@ -91,5 +98,6 @@ regressions pin bounded rejection of frame overshoot, invalid history, and
 inconsistent archive sizes. Split CFDATA blocks and multi-cabinet continuation
 remain explicit unsupported errors. Vort-written Stored/MSZIP/LZX cabinets are
 decoded byte-exactly by libarchive, including multi-frame LZX output with an
-odd final block. Entropy-coded LZX blocks and Quantum writing remain future
-work.
+odd final block. Cabextract/libmspack independently decodes Vort's multi-frame
+Quantum output. Entropy-coded LZX blocks and Quantum match encoding remain
+future ratio work.
