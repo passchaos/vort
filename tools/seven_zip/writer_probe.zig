@@ -7,6 +7,10 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     const output_path = args.next() orelse return error.MissingOutputPath;
     const compression_name = args.next() orelse "copy";
+    const solid = if (args.next()) |mode|
+        std.mem.eql(u8, mode, "solid")
+    else
+        false;
     const compression: vort.SevenZipCompression = if (std.mem.eql(u8, compression_name, "copy"))
         .copy
     else if (std.mem.eql(u8, compression_name, "deflate"))
@@ -28,7 +32,10 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "folder", .kind = .directory },
         .{ .name = "utf8-目录/数据.txt", .data = "Vort 7z UTF-8\n" },
     };
-    const bytes = try vort.encodeSevenZipAlloc(init.gpa, &entries, .{ .compression = compression });
+    const bytes = try vort.encodeSevenZipAlloc(init.gpa, &entries, .{
+        .compression = compression,
+        .solid = solid,
+    });
     defer init.gpa.free(bytes);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = bytes });
 }

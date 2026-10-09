@@ -28,13 +28,21 @@ const Nid = struct {
     const crc: u8 = 0x0a;
     const folder: u8 = 0x0b;
     const coders_unpack_size: u8 = 0x0c;
+    const num_unpack_stream: u8 = 0x0d;
     const empty_stream: u8 = 0x0e;
     const empty_file: u8 = 0x0f;
     const name: u8 = 0x11;
 };
 
-const EncodedStream = struct {
+const EncodedFolder = struct {
     packed_size: u64,
+    unpacked_size: u64,
+    crc32: u32,
+    first_substream: usize,
+    substream_count: usize,
+};
+
+const EncodedSubstream = struct {
     unpacked_size: u64,
     crc32: u32,
 };
@@ -78,21 +86,65 @@ pub fn encodeAppend(
 
     var stream_count: usize = 0;
     for (entries) |entry| stream_count += @intFromBool(hasStream(entry));
-    const streams = try allocator.alloc(EncodedStream, stream_count);
-    defer allocator.free(streams);
-    var stream_index: usize = 0;
-    for (entries) |entry| {
-        if (!hasStream(entry)) continue;
-        const packed_size = try coders.appendPayload(allocator, &packed_data, entry.data, options);
-        streams[stream_index] = .{
+    const folder_count = if (options.solid and stream_count != 0) 1 else stream_count;
+    const folders = try allocator.alloc(EncodedFolder, folder_count);
+    defer allocator.free(folders);
+    const substreams = try allocator.alloc(EncodedSubstream, stream_count);
+    defer allocator.free(substreams);
+    if (options.solid and stream_count != 0) {
+        var solid_data: std.ArrayList(u8) = .empty;
+        defer solid_data.deinit(allocator);
+        var stream_index: usize = 0;
+        var total_size: usize = 0;
+        for (entries) |entry| {
+            if (!hasStream(entry)) continue;
+            try solid_data.appendSlice(allocator, entry.data);
+            substreams[stream_index] = .{
+                .unpacked_size = std.math.cast(u64, entry.data.len) orelse
+                    return error.IntegerOverflow,
+                .crc32 = checksum.crc32Best(entry.data),
+            };
+            total_size = std.math.add(usize, total_size, entry.data.len) catch
+                return error.IntegerOverflow;
+            stream_index += 1;
+        }
+        const packed_size = try coders.appendPayload(
+            allocator,
+            &packed_data,
+            solid_data.items,
+            options,
+        );
+        folders[0] = .{
             .packed_size = std.math.cast(u64, packed_size) orelse return error.IntegerOverflow,
-            .unpacked_size = std.math.cast(u64, entry.data.len) orelse return error.IntegerOverflow,
-            .crc32 = checksum.crc32Best(entry.data),
+            .unpacked_size = std.math.cast(u64, total_size) orelse return error.IntegerOverflow,
+            .crc32 = checksum.crc32Best(solid_data.items),
+            .first_substream = 0,
+            .substream_count = stream_count,
         };
-        stream_index += 1;
+    } else {
+        var stream_index: usize = 0;
+        for (entries) |entry| {
+            if (!hasStream(entry)) continue;
+            const packed_size = try coders.appendPayload(allocator, &packed_data, entry.data, options);
+            const unpacked_size = std.math.cast(u64, entry.data.len) orelse
+                return error.IntegerOverflow;
+            const crc32 = checksum.crc32Best(entry.data);
+            folders[stream_index] = .{
+                .packed_size = std.math.cast(u64, packed_size) orelse
+                    return error.IntegerOverflow,
+                .unpacked_size = unpacked_size,
+                .crc32 = crc32,
+                .first_substream = stream_index,
+                .substream_count = 1,
+            };
+            substreams[stream_index] = .{
+                .unpacked_size = unpacked_size,
+                .crc32 = crc32,
+            };
+            stream_index += 1;
+        }
     }
-    std.debug.assert(stream_index == streams.len);
-    try writeNextHeader(allocator, &header, entries, streams, options);
+    try writeNextHeader(allocator, &header, entries, folders, substreams, options);
 
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
@@ -163,11 +215,13 @@ fn writeNextHeader(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     entries: []const EncodeEntry,
-    streams: []const EncodedStream,
+    folders: []const EncodedFolder,
+    substreams: []const EncodedSubstream,
     options: EncodeOptions,
 ) !void {
     try output.append(allocator, Nid.header);
-    if (streams.len != 0) try writeStreamsInfo(allocator, output, streams, options);
+    if (folders.len != 0)
+        try writeStreamsInfo(allocator, output, folders, substreams, options);
     try writeFilesInfo(allocator, output, entries);
     try output.append(allocator, Nid.end);
 }
@@ -175,31 +229,51 @@ fn writeNextHeader(
 fn writeStreamsInfo(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
-    streams: []const EncodedStream,
+    folders: []const EncodedFolder,
+    substreams: []const EncodedSubstream,
     options: EncodeOptions,
 ) !void {
     try output.append(allocator, Nid.main_streams);
     try output.append(allocator, Nid.pack_info);
     try number.append(allocator, output, 0);
-    try number.append(allocator, output, streams.len);
+    try number.append(allocator, output, folders.len);
     try output.append(allocator, Nid.size);
-    for (streams) |stream| try number.append(allocator, output, stream.packed_size);
+    for (folders) |folder| try number.append(allocator, output, folder.packed_size);
     try output.append(allocator, Nid.end);
 
     try output.append(allocator, Nid.unpack_info);
     try output.append(allocator, Nid.folder);
-    try number.append(allocator, output, streams.len);
+    try number.append(allocator, output, folders.len);
     try output.append(allocator, 0);
-    for (streams) |_| try coders.writeFolder(allocator, output, options);
+    for (folders) |_| try coders.writeFolder(allocator, output, options);
     try output.append(allocator, Nid.coders_unpack_size);
-    for (streams) |stream|
-        for (0..coders.coderCount(options)) |_| try number.append(allocator, output, stream.unpacked_size);
+    for (folders) |folder|
+        for (0..coders.coderCount(options)) |_| try number.append(allocator, output, folder.unpacked_size);
     try output.append(allocator, Nid.crc);
     try output.append(allocator, 1);
-    for (streams) |stream| try appendU32(allocator, output, stream.crc32);
+    for (folders) |folder| try appendU32(allocator, output, folder.crc32);
     try output.append(allocator, Nid.end);
 
     try output.append(allocator, Nid.substreams_info);
+    var has_multiple = false;
+    for (folders) |folder| has_multiple = has_multiple or folder.substream_count != 1;
+    if (has_multiple) {
+        try output.append(allocator, Nid.num_unpack_stream);
+        for (folders) |folder| try number.append(allocator, output, folder.substream_count);
+        try output.append(allocator, Nid.size);
+        for (folders) |folder| {
+            const folder_substreams = substreams[folder.first_substream..][0..folder.substream_count];
+            for (folder_substreams[0 .. folder_substreams.len - 1]) |substream|
+                try number.append(allocator, output, substream.unpacked_size);
+        }
+        try output.append(allocator, Nid.crc);
+        try output.append(allocator, 1);
+        for (folders) |folder| {
+            const folder_substreams = substreams[folder.first_substream..][0..folder.substream_count];
+            for (folder_substreams) |substream|
+                try appendU32(allocator, output, substream.crc32);
+        }
+    }
     try output.append(allocator, Nid.end);
     try output.append(allocator, Nid.end);
 }

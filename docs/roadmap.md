@@ -17817,7 +17817,7 @@ reuse, so production keeps the simpler independently owned plans.
   and concatenation against lzop 1.04 when available. See
   `docs/formats/lzop.md`.
 
-- Added pure Zig reading for common 7z archives and deterministic Copy-method
+- Added pure Zig reading for common 7z archives and deterministic common-codec
   writing. The reader validates signature/start/next-header CRCs, variable
   integers, packed stream bounds, folder and substream sizes and CRCs, UTF-16LE
   names, empty files, and directories. It decodes single-coder Copy, Deflate,
@@ -17829,7 +17829,11 @@ reuse, so production keeps the simpler independently owned plans.
   headers and one independently extractable folder per non-empty file using
   Copy, compressed Deflate/Bzip2/LZMA1, or greedy match-producing LZMA2 with a
   stored fallback, optionally preceded by the same Delta/classic BCJ filters.
-  A 7-Zip differential covers the base methods and real filter chains in both
-  directions. Deeper LZMA parsing, solid writing, BCJ2, branching or
-  multi-packed-stream graphs, encryption, and external metadata streams remain
-  follow-up work. See `docs/formats/7z.md`.
+  Opt-in solid writing concatenates non-empty files into one folder, emits
+  `NumUnpackStream`, per-substream sizes and CRCs, and preserves empty files and
+  directories as metadata-only records. The same filters operate across
+  substream boundaries. A 7-Zip differential covers the base methods, solid
+  Copy/Deflate/Bzip2/LZMA/LZMA2 output, and real filter chains in both
+  directions. Deeper LZMA parsing, BCJ2, branching or multi-packed-stream
+  graphs, encryption, and external metadata streams remain follow-up work. See
+  `docs/formats/7z.md`.

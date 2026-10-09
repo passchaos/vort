@@ -20,6 +20,7 @@ pub const Compression = enum {
 
 pub const Options = struct {
     compression: Compression = .copy,
+    solid: bool = false,
     filters: []const Filter = &.{},
     deflate_level: u4 = 6,
     bzip2_block_size_100k: u4 = 9,

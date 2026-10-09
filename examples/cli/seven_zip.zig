@@ -15,22 +15,34 @@ pub fn createFile(
     const compression = try parseCompression(args.next());
     var filter_storage: [3]vort.SevenZipFilter = undefined;
     const filters = try filters_cli.parse(args.next(), &filter_storage);
+    const solid = try parseSolid(args.next());
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.SevenZipEncodeEntry{.{ .name = entry_name, .data = input }};
     const encoded = try vort.encodeSevenZipAlloc(init.gpa, &entries, .{
         .compression = compression,
+        .solid = solid,
         .filters = filters,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("seven_zip_entries=1 compression={s} filters={d} input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("seven_zip_entries=1 compression={s} solid={} filters={d} input_bytes={d} archive_bytes={d} path={s}\n", .{
         @tagName(compression),
+        solid,
         filters.len,
         input.len,
         encoded.len,
         output_path,
     });
+}
+
+fn parseSolid(text: ?[]const u8) !bool {
+    const value = text orelse return false;
+    if (std.mem.eql(u8, value, "solid") or std.mem.eql(u8, value, "true")) return true;
+    if (std.mem.eql(u8, value, "non-solid") or
+        std.mem.eql(u8, value, "nonsolid") or
+        std.mem.eql(u8, value, "false")) return false;
+    return error.Invalid7zOptions;
 }
 
 pub fn listFile(

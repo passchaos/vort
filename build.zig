@@ -1069,6 +1069,7 @@ pub fn build(b: *std.Build) void {
     seven_zip_diff.addArtifactArg(cli_exe);
     seven_zip_diff.addArg("--writer");
     seven_zip_diff.addArtifactArg(seven_zip_writer_probe_exe);
+    if (b.args) |args| seven_zip_diff.addArgs(args);
     const seven_zip_diff_step = b.step("run-seven-zip-diff", "Validate common 7z codecs and linear filters against 7-Zip");
     seven_zip_diff_step.dependOn(&seven_zip_diff.step);
 

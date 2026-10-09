@@ -117,6 +117,17 @@ def main() -> None:
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
             vort_writer_variants += 3
 
+            for compression in ("copy", "deflate", "bzip2", "lzma", "lzma2"):
+                archive = temp / f"vort-{compression}-solid.7z"
+                duplicate = temp / f"vort-{compression}-solid-repeat.7z"
+                run(args.writer, str(archive), compression, "solid")
+                run(args.writer, str(duplicate), compression, "solid")
+                if archive.read_bytes() != duplicate.read_bytes():
+                    raise AssertionError(f"Vort solid {compression} output is not deterministic")
+                verify_with_vort(args.cli, archive, expected_vort)
+                verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+            vort_writer_variants += 5
+
             tree = temp / "tree"
             tree.mkdir()
             (tree / "folder").mkdir()

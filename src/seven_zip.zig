@@ -107,6 +107,86 @@ test "7z writer round trips compression methods" {
     }
 }
 
+test "7z solid writer shares one folder across files" {
+    const entries = [_]EncodeEntry{
+        .{ .name = "first.txt", .data = "first solid payload\n" ** 64 },
+        .{ .name = "empty.txt" },
+        .{ .name = "folder", .kind = .directory },
+        .{ .name = "folder/second.txt", .data = "second solid payload\n" ** 97 },
+        .{ .name = "third.bin", .data = "\x90\xe8\x10\x00\x00\x00tail" ** 128 },
+    };
+    var total_size: usize = 0;
+    for (entries) |entry| total_size += entry.data.len;
+
+    inline for (.{
+        Compression.copy,
+        Compression.deflate,
+        Compression.bzip2,
+        Compression.lzma,
+        Compression.lzma2,
+        Compression.lzma2_stored,
+    }) |compression| {
+        const options = EncodeOptions{ .compression = compression, .solid = true };
+        const encoded = try encodeAlloc(std.testing.allocator, &entries, options);
+        defer std.testing.allocator.free(encoded);
+        const repeated = try encodeAlloc(std.testing.allocator, &entries, options);
+        defer std.testing.allocator.free(repeated);
+        try std.testing.expectEqualSlices(u8, encoded, repeated);
+
+        const parsed = try parseAlloc(std.testing.allocator, encoded);
+        defer parsed.deinit();
+        try std.testing.expectEqual(@as(usize, 1), parsed.streams.folders.len);
+        try std.testing.expectEqual(@as(usize, 3), parsed.streams.substream_sizes.len);
+        try std.testing.expectEqual(@as(usize, 3), parsed.streams.folders[0].substream_count);
+        var expected_offset: u64 = 0;
+        for (entries, parsed.entries) |expected, actual| {
+            if (expected.data.len == 0) {
+                try std.testing.expectEqual(@as(?usize, null), actual.folder_index);
+                continue;
+            }
+            try std.testing.expectEqual(@as(?usize, 0), actual.folder_index);
+            try std.testing.expectEqual(expected_offset, actual.offset_in_folder);
+            expected_offset += expected.data.len;
+            const decoded = try parsed.extractEntryAlloc(std.testing.allocator, actual);
+            defer std.testing.allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, expected.data, decoded);
+        }
+        try std.testing.expectEqual(@as(u64, @intCast(total_size)), expected_offset);
+        try std.testing.expectError(
+            error.OutputLimitExceeded,
+            parsed.decodeEntryAllocWithOptions(
+                std.testing.allocator,
+                parsed.entries[0],
+                .{
+                    .max_output_len = entries[0].data.len,
+                    .max_folder_output_len = total_size - 1,
+                },
+            ),
+        );
+    }
+}
+
+test "7z solid writer preserves filters across substream boundaries" {
+    const entries = [_]EncodeEntry{
+        .{ .name = "first.bin", .data = "\x90\xe8\x10\x00\x00\x00" ** 128 },
+        .{ .name = "second.bin", .data = "\xe9\xf0\xff\xff\xff\x90" ** 129 },
+    };
+    const filters = [_]Filter{ Filter.x86(0), try Filter.delta(4) };
+    const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+        .compression = .lzma2,
+        .solid = true,
+        .filters = &filters,
+    });
+    defer std.testing.allocator.free(encoded);
+    const parsed = try parseAlloc(std.testing.allocator, encoded);
+    defer parsed.deinit();
+    for (entries) |entry| {
+        const decoded = try parsed.extractByNameAlloc(std.testing.allocator, entry.name);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, entry.data, decoded);
+    }
+}
+
 test "7z writer round trips an LZMA2 Delta and BCJ chain" {
     const branch_bytes = "\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90" ** 256;
     const entries = [_]EncodeEntry{.{ .name = "code.bin", .data = branch_bytes }};
