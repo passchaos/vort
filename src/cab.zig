@@ -3,6 +3,7 @@ const archive = @import("cab/archive.zig");
 const checksum = @import("cab/checksum.zig");
 const decoder = @import("cab/decoder.zig");
 const lzx = @import("cab/lzx.zig");
+const quantum = @import("cab/quantum.zig");
 const deflate = @import("deflate.zig");
 const types = @import("cab/types.zig");
 const writer = @import("cab/writer.zig");
@@ -35,6 +36,7 @@ test {
     _ = checksum;
     _ = decoder;
     _ = lzx;
+    _ = quantum;
     _ = types;
     _ = writer;
 }
@@ -62,7 +64,7 @@ test "CAB extracts Microsoft specification stored fixture" {
     );
 }
 
-test "CAB extracts libmspack MSZIP folder and rejects unsupported folders" {
+test "CAB extracts libmspack MSZIP, LZX, and Quantum folders" {
     const allocator = std.testing.allocator;
     const bytes = try fixtureAlloc(allocator, @embedFile("cab/testdata/libmspack-mixed.cab.hex"));
     defer allocator.free(bytes);
@@ -87,10 +89,11 @@ test "CAB extracts libmspack MSZIP folder and rejects unsupported folders" {
             "-----------------------------------------------------------------\n",
         lzx_output,
     );
-    const quantum = (try parsed.find("qtm.txt")).?;
-    try std.testing.expectError(
-        error.UnsupportedCabinetCompression,
-        extractAlloc(allocator, parsed, quantum),
+    const quantum_output = try extractByNameAlloc(allocator, parsed, "qtm.txt");
+    defer allocator.free(quantum_output);
+    try std.testing.expectEqualStrings(
+        "If you can read this, the Quantum decompressor is working!\n",
+        quantum_output,
     );
 }
 
@@ -147,6 +150,46 @@ test "CAB LZX rejects libmspack malformed tree and match fixtures" {
             else => return err,
         }
     }
+}
+
+test "CAB Quantum rejects libmspack malformed frame and match fixtures" {
+    const allocator = std.testing.allocator;
+
+    const flush_bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("cab/testdata/libmspack-qtm-flush.cab.hex"),
+    );
+    defer allocator.free(flush_bytes);
+    const flush_archive = try parse(flush_bytes);
+    const flush_entry = try flush_archive.entryAt(0);
+    try std.testing.expectEqual(Compression.quantum, (try flush_archive.folderAt(0)).compression);
+    try std.testing.expectError(
+        error.InvalidQuantumStream,
+        extractAlloc(allocator, flush_archive, flush_entry),
+    );
+
+    const max_block_bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("cab/testdata/libmspack-qtm-max-size-block.cab.hex"),
+    );
+    defer allocator.free(max_block_bytes);
+    const max_block_archive = try parse(max_block_bytes);
+    const max_block_entry = try max_block_archive.entryAt(0);
+    try std.testing.expectEqual(
+        Compression.quantum,
+        (try max_block_archive.folderAt(0)).compression,
+    );
+    try std.testing.expectError(
+        error.InvalidMatch,
+        extractAlloc(allocator, max_block_archive, max_block_entry),
+    );
+
+    const infinite_loop_bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("cab/testdata/libmspack-qtm-infinite-loop.cab.hex"),
+    );
+    defer allocator.free(infinite_loop_bytes);
+    try std.testing.expectError(error.InvalidCabinet, parse(infinite_loop_bytes));
 }
 
 test "CAB MSZIP retains history across reserved CFDATA blocks" {

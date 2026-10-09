@@ -2,9 +2,10 @@ const std = @import("std");
 const archive_format = @import("archive.zig");
 const deflate = @import("../deflate.zig");
 const lzx = @import("lzx.zig");
+const quantum = @import("quantum.zig");
 const types = @import("types.zig");
 
-pub const Error = archive_format.Error || deflate.Error || lzx.Error;
+pub const Error = archive_format.Error || deflate.Error || lzx.Error || quantum.Error;
 pub const Archive = archive_format.Archive;
 pub const Entry = types.Entry;
 
@@ -22,25 +23,36 @@ pub fn decodeFolderAllocLimited(
     const folder = try archive.folderAt(folder_index);
     if (folder.decoded_size > max_output_len) return error.OutputLimitExceeded;
     switch (folder.compression) {
-        .none, .mszip, .lzx => {},
+        .none, .mszip, .quantum, .lzx => {},
         else => return error.UnsupportedCabinetCompression,
     }
     if ((folder.compression == .none or folder.compression == .mszip) and folder.type_compress & 0xfff0 != 0)
         return error.UnsupportedCabinetFeature;
 
-    if (folder.compression == .lzx) {
+    if (folder.compression == .lzx or folder.compression == .quantum) {
         const window_bits: u5 = @intCast((folder.type_compress >> 8) & 0x1f);
         var compressed: std.ArrayList(u8) = .empty;
         defer compressed.deinit(allocator);
         var blocks = archive.dataBlockIterator(folder);
-        while (try blocks.next()) |block|
+        while (try blocks.next()) |block| {
             try compressed.appendSlice(allocator, block.compressed);
-        return lzx.decodeAlloc(
-            allocator,
-            compressed.items,
-            folder.decoded_size,
-            window_bits,
-        );
+            if (folder.compression == .quantum) try compressed.append(allocator, 0xff);
+        }
+        return switch (folder.compression) {
+            .lzx => lzx.decodeAlloc(
+                allocator,
+                compressed.items,
+                folder.decoded_size,
+                window_bits,
+            ),
+            .quantum => quantum.decodeAlloc(
+                allocator,
+                compressed.items,
+                folder.decoded_size,
+                window_bits,
+            ),
+            else => unreachable,
+        };
     }
 
     var output: std.ArrayList(u8) = .empty;

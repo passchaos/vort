@@ -1,8 +1,8 @@
 # Microsoft CAB support
 
 Vort provides dependency-free deterministic writing, parsing, and bounded
-extraction for single-file Microsoft Cabinet archives. The reader supports
-uncompressed and MSZIP/LZX folders, including multiple folders, multiple
+extraction for Microsoft Cabinet archives. The reader supports uncompressed,
+MSZIP, LZX, and Quantum folders, including multiple folders, multiple
 CFDATA blocks, files that cross block boundaries, and compression history
 retained between blocks.
 
@@ -45,7 +45,10 @@ The parser validates:
   block sizes, and cross-block history;
 - LZX 15–21 bit windows, verbatim/aligned/uncompressed blocks, delta-coded
   canonical Huffman trees, repeated offsets, 32 KiB frames, and Intel E8
-  postprocessing.
+  postprocessing;
+- Quantum 10–21 bit windows, adaptive arithmetic models, literal and all three
+  match selectors, 32 KiB arithmetic-state resets, persistent cross-frame
+  models/history, and bounded CFDATA trailer scanning.
 
 CAB folders are solid streams, so extracting one file can require decoding the
 whole containing folder. `CabExtractOptions` therefore separates
@@ -76,8 +79,9 @@ The required differential uses byte-exact public fixtures from libmspack. It
 covers Microsoft's Stored example, an archive mixing MSZIP/LZX/Quantum
 folders, and a 26 KiB outer CAB whose 21-bit aligned LZX stream spans 449
 CFDATA blocks and expands to a 14,689,228-byte nested CAB. The latter output's
-MD5 is checked against libmspack's independent decoder. Supported files extract
-successfully even when another folder uses Quantum. Quantum, split CFDATA
-blocks, and multi-cabinet continuation currently return explicit unsupported
-errors instead of being guessed. Vort-written Stored/MSZIP cabinets are decoded
-byte-exactly by libarchive; LZX/Quantum writing is future functionality.
+MD5 is checked against libmspack's independent decoder. The normal Quantum
+payload is checked byte-for-byte, while three historical libmspack Quantum
+regressions pin bounded rejection of frame overshoot, invalid history, and
+inconsistent archive sizes. Split CFDATA blocks and multi-cabinet continuation
+remain explicit unsupported errors. Vort-written Stored/MSZIP cabinets are
+decoded byte-exactly by libarchive; LZX/Quantum writing is future functionality.

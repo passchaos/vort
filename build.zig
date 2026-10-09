@@ -1090,7 +1090,7 @@ pub fn build(b: *std.Build) void {
 
     const cab_diff = b.addSystemCommand(&.{ "python3", "tools/cab/diff.py", "--cli" });
     cab_diff.addArtifactArg(cli_exe);
-    const cab_diff_step = b.step("run-cab-diff", "Validate CAB Stored/MSZIP writing with libarchive and extraction against libmspack fixtures");
+    const cab_diff_step = b.step("run-cab-diff", "Validate CAB writing with libarchive and Stored/MSZIP/LZX/Quantum extraction against libmspack fixtures");
     cab_diff_step.dependOn(&cab_diff.step);
 
     const br_stored_cli_diff = b.addSystemCommand(&.{ "python3", "tools/br_stored_cli_diff.py" });

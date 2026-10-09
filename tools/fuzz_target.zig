@@ -41,6 +41,7 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
                 error.UnsupportedCabinetCompression,
                 error.InvalidCabinet,
                 error.InvalidLzxStream,
+                error.InvalidQuantumStream,
                 error.InvalidMatch,
                 error.InvalidDeflateBlockType,
                 error.StoredLengthMismatch,

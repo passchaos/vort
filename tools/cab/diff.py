@@ -84,6 +84,7 @@ EXPECTED = {
                 b"If you can read this, the LZX decompressor is working!\n"
                 b"-----------------------------------------------------------------\n"
             ),
+            "qtm.txt": b"If you can read this, the Quantum decompressor is working!\n",
         },
     },
     "large-files-cab": {
@@ -104,6 +105,23 @@ EXPECTED = {
         "sha256": "09f25f73b76058196f27486dbb3ca4ff8f57d5cba5f548db727844155b911244",
         "files": {},
         "malformed_entry": "file.txt",
+    },
+    "qtm-flush": {
+        "sha256": "78bb4c9540e36d3d4228e22cdff0a5677f9c2dddc4239c322277d0b9125d8364",
+        "files": {},
+        "malformed_entry": "zeroes",
+        "malformed_errors": ("InvalidQuantumStream",),
+    },
+    "qtm-infinite-loop": {
+        "sha256": "2e6f57d26e12f3f1c0f1f968d7ebb92e77ea7720ea6f9e18f11eb00ef0e845ad",
+        "files": {},
+        "malformed_archive": "InvalidCabinet",
+    },
+    "qtm-max-size-block": {
+        "sha256": "3ba0c719d8fb12dc531e2a7790c2d15c12d8840de8e4ddc60572c4145181fbf4",
+        "files": {},
+        "malformed_entry": "test1.bin",
+        "malformed_errors": ("InvalidMatch",),
     },
 }
 
@@ -144,6 +162,16 @@ def main() -> None:
         for fixture_name, expected in EXPECTED.items():
             cab_path = temp / f"{fixture_name}.cab"
             cab_path.write_bytes(fixture(args.fixtures, fixture_name))
+            if "malformed_archive" in expected:
+                malformed = run(args.cli, "list-cab-file", str(cab_path), check=False)
+                if (
+                    malformed.returncode == 0
+                    or expected["malformed_archive"] not in malformed.stderr
+                ):
+                    raise AssertionError(
+                        f"malformed CAB fixture was not rejected: {malformed.stderr}"
+                    )
+                continue
             listing = run(args.cli, "list-cab-file", str(cab_path)).stdout
             if "malformed_entry" in expected:
                 name = expected["malformed_entry"]
@@ -155,12 +183,15 @@ def main() -> None:
                     str(temp / f"{fixture_name}.out"),
                     check=False,
                 )
+                malformed_errors = expected.get(
+                    "malformed_errors",
+                    ("InvalidLzxStream", "InvalidMatch"),
+                )
                 if malformed.returncode == 0 or not any(
-                    error in malformed.stderr
-                    for error in ("InvalidLzxStream", "InvalidMatch")
+                    error in malformed.stderr for error in malformed_errors
                 ):
                     raise AssertionError(
-                        f"malformed LZX fixture was not rejected: {malformed.stderr}"
+                        f"malformed CAB fixture was not rejected: {malformed.stderr}"
                     )
                 continue
             for name in expected["files"]:
@@ -200,18 +231,6 @@ def main() -> None:
                     raise AssertionError("aligned multi-frame LZX extraction mismatch")
                 extracted += 1
 
-        mixed_path = temp / "mixed.cab"
-        unsupported = run(
-            args.cli,
-            "extract-cab-file",
-            str(mixed_path),
-            "qtm.txt",
-            str(temp / "qtm.out"),
-            check=False,
-        )
-        if unsupported.returncode == 0 or "UnsupportedCabinetCompression" not in unsupported.stderr:
-            raise AssertionError(f"Quantum CAB entry did not fail explicitly: {unsupported.stderr}")
-
         rng = random.Random(0xCAB5EED)
         prefix = bytes(rng.randrange(256) for _ in range(32 * 1024))
         payload = prefix * 3 + b"CAB writer differential tail\n"
@@ -247,8 +266,9 @@ def main() -> None:
             writer_cases += 1
 
     print(
-        f"cab_diff=ok fixtures=5 extracted={extracted} writer_cases={writer_cases} "
-        "libarchive=ok malformed_lzx=2 lzx_aligned_frames=449 unsupported_quantum=ok"
+        f"cab_diff=ok fixtures=8 extracted={extracted} writer_cases={writer_cases} "
+        "libarchive=ok malformed_lzx=2 malformed_quantum=3 "
+        "lzx_aligned_frames=449 quantum=ok"
     )
 
 

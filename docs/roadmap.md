@@ -17743,20 +17743,24 @@ reuse, so production keeps the simpler independently owned plans.
   adds 15–21 bit windows, word-swapped MSB bit input, verbatim/aligned/
   uncompressed blocks, canonical pretree/main/length/aligned alphabets,
   repeated offsets, 32 KiB frame alignment, and Intel E8 postprocessing.
+  The Quantum path adds 10–21 bit windows, MSB-first byte input, persistent
+  adaptive arithmetic models, literal/fixed/variable match selectors, bounded
+  32 KiB frame realignment, and CFDATA-injected trailers.
   Separate file and solid-folder limits bound extraction; borrowed entries
   expose safe path classification without filesystem writes. Public libmspack
   Stored, mixed MSZIP/LZX/Quantum, and 21-bit aligned 449-block LZX fixtures
   provide required black-box extraction evidence, while synthetic reserved
-  MSZIP tests exercise a match that requires previous-block history. Quantum,
-  split blocks, and multi-cabinet continuation remain explicit future
-  functionality. The writer emits one deterministic solid folder in caller
-  entry order, supports Stored/MSZIP, configurable 1–32 KiB blocks, optional
-  checksums, UTF-8 attributes, set IDs, and alloc/transactional append/
-  caller-buffer APIs. Each MSZIP block chooses fixed-Huffman or stored Deflate
-  and carries prior folder history; libarchive independently validates both
-  writer modes. LZX/Quantum writing remains future work. The generic raw-byte
-  fuzz target now includes both CAB parsing and bounded folder decompression
-  with its format-error set.
+  MSZIP tests exercise a match that requires previous-block history. The normal
+  Quantum fixture is decoded byte-exactly, and three historical malformed
+  Quantum cases pin bounded failure. Split blocks and multi-cabinet
+  continuation remain explicit future functionality. The writer emits one
+  deterministic solid folder in caller entry order, supports Stored/MSZIP,
+  configurable 1–32 KiB blocks, optional checksums, UTF-8 attributes, set IDs,
+  and alloc/transactional append/caller-buffer APIs. Each MSZIP block chooses
+  fixed-Huffman or stored Deflate and carries prior folder history; libarchive
+  independently validates both writer modes. LZX/Quantum writing remains
+  future work. The generic raw-byte fuzz target now includes both CAB parsing
+  and bounded folder decompression with its format-error set.
   See `docs/formats/cab.md`.
 
 - Added pure Zig Unix `compress` (`.Z`) encoding and decoding. The codec

@@ -13,12 +13,20 @@ cabextract fixtures from libmspack commit
 - `cabextract/test/bugs/lzx-main-tree-no-lengths.cab`, SHA-256
   `fd0ce6a326f735e4ad4bad8704f515a9eea9a0317e2a3b3c535ae3a15ca7d434`;
 - `cabextract/test/bugs/lzx-premature-matches.cab`, SHA-256
-  `09f25f73b76058196f27486dbb3ca4ff8f57d5cba5f548db727844155b911244`.
+  `09f25f73b76058196f27486dbb3ca4ff8f57d5cba5f548db727844155b911244`;
+- `cabextract/test/bugs/cve-2010-2801-qtm-flush.cab`, SHA-256
+  `78bb4c9540e36d3d4228e22cdff0a5677f9c2dddc4239c322277d0b9125d8364`;
+- `libmspack/test/test_files/cabd/cve-2014-9556-qtm-infinite-loop.cab`,
+  SHA-256
+  `2e6f57d26e12f3f1c0f1f968d7ebb92e77ea7720ea6f9e18f11eb00ef0e845ad`;
+- `libmspack/test/test_files/cabd/cve-2018-18584-qtm-max-size-block.cab`,
+  SHA-256
+  `3ba0c719d8fb12dc531e2a7790c2d15c12d8840de8e4ddc60572c4145181fbf4`.
 
-They are used to validate stored CAB extraction and MSZIP extraction from a
-cabinet that also contains LZX and Quantum folders. The 26 KiB outer
+They validate Stored, MSZIP, LZX, and Quantum extraction. The 26 KiB outer
 `large-files-cab` fixture covers a 21-bit LZX window, aligned blocks, 449
 CFDATA records, and 32 KiB frame transitions. Its 14,689,228-byte extracted
 `large-files.cab` has MD5 `ac923e14971324651015ba44ceb59b36`, independently
-verified with libmspack's `cabd_md5` utility. The two small `bugs` fixtures pin
-rejection of an empty main tree and a match sequence that overruns its block.
+verified with libmspack's `cabd_md5` utility. The five `bugs` fixtures pin
+bounded rejection of malformed LZX trees/matches and Quantum frame, match, and
+archive-size cases previously associated with infinite loops or overflows.
