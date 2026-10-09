@@ -9,6 +9,8 @@ pub const Archive = archive.Archive;
 pub const DecodeOptions = archive.DecodeOptions;
 pub const ParseOptions = archive.ParseOptions;
 pub const EncodeEntry = writer.EncodeEntry;
+pub const Compression = writer.Compression;
+pub const Filter = writer.Filter;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const parseAlloc = archive.parseAlloc;
 pub const parseAllocWithOptions = archive.parseAllocWithOptions;
@@ -28,6 +30,9 @@ pub fn extractByNameAllocLimited(
     defer parsed.deinit();
     return parsed.extractByNameAllocLimited(allocator, name, max_output_len);
 }
+pub const encodeAlloc = writer.encodeAlloc;
+pub const encodeAppend = writer.encodeAppend;
+pub const encodeInto = writer.encodeInto;
 pub const encodeStoredAlloc = writer.encodeStoredAlloc;
 pub const encodeStoredAppend = writer.encodeStoredAppend;
 pub const encodeStoredInto = writer.encodeStoredInto;
@@ -80,4 +85,40 @@ test "7z stored writer round trips files directories and UTF-8 names" {
     defer std.testing.allocator.free(bad_header_crc);
     bad_header_crc[28] ^= 1;
     try std.testing.expectError(error.ChecksumMismatch, parseAlloc(std.testing.allocator, bad_header_crc));
+}
+
+test "7z writer round trips compression methods" {
+    const payload = "Vort common 7z writer payload\n" ** 128;
+    const entries = [_]EncodeEntry{.{ .name = "payload.txt", .data = payload }};
+    inline for (.{ Compression.copy, Compression.deflate, Compression.bzip2, Compression.lzma2 }) |compression| {
+        const encoded = try encodeAlloc(std.testing.allocator, &entries, .{ .compression = compression });
+        defer std.testing.allocator.free(encoded);
+        const repeated = try encodeAlloc(std.testing.allocator, &entries, .{ .compression = compression });
+        defer std.testing.allocator.free(repeated);
+        try std.testing.expectEqualSlices(u8, encoded, repeated);
+        const parsed = try parseAlloc(std.testing.allocator, encoded);
+        defer parsed.deinit();
+        const decoded = try parsed.extractByNameAlloc(std.testing.allocator, entries[0].name);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+        if (compression == .deflate or compression == .bzip2)
+            try std.testing.expect(encoded.len < payload.len);
+    }
+}
+
+test "7z writer round trips an LZMA2 Delta and BCJ chain" {
+    const branch_bytes = "\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90" ** 256;
+    const entries = [_]EncodeEntry{.{ .name = "code.bin", .data = branch_bytes }};
+    const filter_chain = [_]Filter{ Filter.x86(0), try Filter.delta(4) };
+    const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+        .compression = .lzma2,
+        .filters = &filter_chain,
+    });
+    defer std.testing.allocator.free(encoded);
+    const parsed = try parseAlloc(std.testing.allocator, encoded);
+    defer parsed.deinit();
+    try std.testing.expectEqual(@import("seven_zip/types.zig").Method.lzma2, parsed.entries[0].method.?);
+    const decoded = try parsed.extractByNameAlloc(std.testing.allocator, entries[0].name);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, branch_bytes, decoded);
 }

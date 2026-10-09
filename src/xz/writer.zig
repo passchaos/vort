@@ -1,6 +1,7 @@
 const std = @import("std");
 const container = @import("container.zig");
 const filters = @import("filters.zig");
+const lzma2_writer = @import("lzma2_writer.zig");
 
 pub const Error = container.Error;
 pub const Check = container.Check;
@@ -14,7 +15,6 @@ pub const EncodeOptions = struct {
 
 const stream_magic = [_]u8{ 0xfd, '7', 'z', 'X', 'Z', 0x00 };
 const stream_footer_magic = [_]u8{ 'Y', 'Z' };
-const max_lzma2_uncompressed_chunk: usize = 65_536;
 const max_vli: u64 = (@as(u64, 1) << 63) - 1;
 
 const BlockRecord = struct {
@@ -78,7 +78,7 @@ pub fn encodeStoredAppend(
             filters.encodeChain(bytes, options.filters);
             break :blk bytes;
         };
-        const packed_size = try appendStoredLzma2(allocator, &encoded, filtered);
+        const packed_size = try lzma2_writer.appendStoredPayload(allocator, &encoded, filtered);
         const padding_len = (4 - ((header_size + packed_size) % 4)) % 4;
         try encoded.appendNTimes(allocator, 0, padding_len);
         try appendCheck(allocator, &encoded, options.check, block);
@@ -147,20 +147,6 @@ fn appendBlockHeader(
     return header.items.len + 4;
 }
 
-fn appendStoredLzma2(allocator: std.mem.Allocator, output: *std.ArrayList(u8), input: []const u8) !usize {
-    const start = output.items.len;
-    var offset: usize = 0;
-    while (offset < input.len) {
-        const chunk_len = @min(max_lzma2_uncompressed_chunk, input.len - offset);
-        try output.append(allocator, if (offset == 0) 1 else 2);
-        try appendU16Big(allocator, output, @intCast(chunk_len - 1));
-        try output.appendSlice(allocator, input[offset..][0..chunk_len]);
-        offset += chunk_len;
-    }
-    try output.append(allocator, 0);
-    return output.items.len - start;
-}
-
 fn appendCheck(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
@@ -204,12 +190,6 @@ fn usizeToVli(value: usize) Error!u64 {
     const converted = std.math.cast(u64, value) orelse return error.IntegerOverflow;
     if (converted > max_vli) return error.IntegerOverflow;
     return converted;
-}
-
-fn appendU16Big(allocator: std.mem.Allocator, output: *std.ArrayList(u8), value: u16) !void {
-    var bytes: [2]u8 = undefined;
-    std.mem.writeInt(u16, &bytes, value, .big);
-    try output.appendSlice(allocator, &bytes);
 }
 
 fn appendU32(allocator: std.mem.Allocator, output: *std.ArrayList(u8), value: u32) !void {

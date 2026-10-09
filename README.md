@@ -110,8 +110,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - pure Zig LZO1X decoding plus LZOP parsing and deterministic stored-block
   writing, including Adler-32/CRC-32 header and block checks, legacy delta
   filters, concatenated streams, and bounded output/block APIs;
-- pure Zig 7z parsing and deterministic Copy-method writing, with Copy/Deflate/
-  Bzip2/LZMA/LZMA2 decode, bounded linear Delta and classic BCJ filter chains,
+- pure Zig 7z parsing and deterministic independent-folder writing, with
+  Copy/Deflate/Bzip2/LZMA/LZMA2 decode, Copy/Deflate/Bzip2/LZMA2-stored encode,
+  bounded linear Delta and classic BCJ filter chains in both directions,
   compressed Next Headers, solid substreams, CRC validation, UTF-16LE names,
   directories, empty files, and bounded extraction;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,

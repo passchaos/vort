@@ -32,6 +32,18 @@ def seven_zip_extract(tool: str, archive: Path, name: str) -> bytes:
     ).stdout
 
 
+def verify_with_seven_zip(tool: str, archive: Path, payloads: dict[str, bytes]) -> None:
+    subprocess.run(
+        [tool, "t", "-bd", str(archive)],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    for name, payload in payloads.items():
+        if seven_zip_extract(tool, archive, name) != payload:
+            raise AssertionError(f"7-Zip could not extract Vort entry {name!r}")
+
+
 def create_reference(tool: str, tree: Path, archive: Path, options: list[str]) -> None:
     names = ["hello.txt", "second.txt", "empty.txt", "folder", "数据.txt"]
     subprocess.run(
@@ -80,6 +92,7 @@ def main() -> None:
         else shutil.which("7zz") or shutil.which("7z")
     )
     external_variants = 0
+    vort_writer_variants = 1
 
     with tempfile.TemporaryDirectory(prefix="vort-seven-zip-diff-") as temp_text:
         temp = Path(temp_text)
@@ -97,15 +110,12 @@ def main() -> None:
         verify_with_vort(args.cli, first, expected_vort)
 
         if seven_zip_tool is not None:
-            subprocess.run(
-                [seven_zip_tool, "t", "-bd", str(first)],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            for name, payload in expected_vort.items():
-                if seven_zip_extract(seven_zip_tool, first, name) != payload:
-                    raise AssertionError(f"7-Zip could not extract Vort entry {name!r}")
+            verify_with_seven_zip(seven_zip_tool, first, expected_vort)
+            for compression in ("deflate", "bzip2", "lzma2"):
+                archive = temp / f"vort-{compression}-multi.7z"
+                run(args.writer, str(archive), compression)
+                verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+            vort_writer_variants += 3
 
             tree = temp / "tree"
             tree.mkdir()
@@ -179,6 +189,66 @@ def main() -> None:
                 verify_with_vort(args.cli, archive, {"payload.bin": payload})
             external_variants += len(filter_variants)
 
+            writer_variants = {
+                "bcj-deflate": ("deflate", "x86", x86_payload),
+                "delta4-bzip2": ("bzip2", "delta:4", bytes(range(256)) * 16),
+                "bcj-lzma2-stored": ("lzma2-stored", "x86", x86_payload),
+                "delta4-lzma2-stored": (
+                    "lzma2-stored",
+                    "delta:4",
+                    bytes(range(256)) * 16,
+                ),
+                "bcj-delta4-lzma2-stored": (
+                    "lzma2-stored",
+                    "x86,delta:4",
+                    x86_payload,
+                ),
+                "ppc-lzma2-stored": (
+                    "lzma2-stored",
+                    "powerpc",
+                    b"\x48\x00\x00\x01\x4b\xff\xff\xfd" * 256,
+                ),
+                "ia64-lzma2-stored": (
+                    "lzma2-stored",
+                    "ia64",
+                    b"\x16\x00\x00\x00\x00\xa0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" * 256,
+                ),
+                "arm-lzma2-stored": (
+                    "lzma2-stored",
+                    "arm",
+                    b"\x04\x00\x00\xeb\xfc\xff\xff\xeb" * 256,
+                ),
+                "arm-thumb-lzma2-stored": (
+                    "lzma2-stored",
+                    "arm-thumb",
+                    b"\x00\xf0\x00\xf8\xff\xf7\xff\xff" * 256,
+                ),
+                "sparc-lzma2-stored": (
+                    "lzma2-stored",
+                    "sparc",
+                    b"\x40\x00\x00\x00\x7f\xff\xff\xff" * 256,
+                ),
+            }
+            for variant, (compression, filter_spec, payload) in writer_variants.items():
+                input_path = filter_tree / "payload.bin"
+                input_path.write_bytes(payload)
+                archive = temp / f"vort-{variant}.7z"
+                run(
+                    args.cli,
+                    "create-7z-file",
+                    str(archive),
+                    "payload.bin",
+                    str(input_path),
+                    compression,
+                    filter_spec,
+                )
+                verify_with_seven_zip(
+                    seven_zip_tool,
+                    archive,
+                    {"payload.bin": payload},
+                )
+            vort_writer_variants += len(writer_variants)
+
             corrupt = bytearray((temp / "copy-plain.7z").read_bytes())
             corrupt[8] ^= 1
             corrupt_path = temp / "corrupt-start-header.7z"
@@ -202,6 +272,7 @@ def main() -> None:
     print(
         f"seven_zip_diff=ok writer_entries={len(expected_vort) + 1} "
         f"external_variants={external_variants} "
+        f"vort_writer_variants={vort_writer_variants} "
         f"system_7zip={seven_zip_tool is not None}"
     )
 

@@ -17753,7 +17753,10 @@ reuse, so production keeps the simpler independently owned plans.
   output, and decoded solid folders. Bounded linear coder graphs additionally
   support Delta and x86, PowerPC, IA64, ARM, ARM-Thumb, and SPARC BCJ filters
   after the primary decompressor. The writer emits reproducible unencoded
-  headers and one Copy folder per non-empty file. A 7-Zip differential covers
-  the base methods plus real LZMA/LZMA2 filter chains across both directions.
-  BCJ2, branching or multi-packed-stream graphs, encryption, and external
-  metadata streams remain follow-up work. See `docs/formats/7z.md`.
+  headers and one independently extractable folder per non-empty file using
+  Copy, compressed Deflate/Bzip2, or wire-compatible uncompressed LZMA2 chunks,
+  optionally preceded by the same Delta/classic BCJ filters. A 7-Zip
+  differential covers the base methods and real filter chains in both
+  directions. Native LZMA/LZMA2 compression, solid writing, BCJ2, branching or
+  multi-packed-stream graphs, encryption, and external metadata streams remain
+  follow-up work. See `docs/formats/7z.md`.

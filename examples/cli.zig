@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const compress_z_cli = @import("cli/compress_z.zig");
+const filters_cli = @import("cli/filters.zig");
 const lzip_cli = @import("cli/lzip.zig");
 const lzop_cli = @import("cli/lzop.zig");
 const seven_zip_cli = @import("cli/seven_zip.zig");
@@ -242,7 +243,7 @@ pub fn main(init: std.process.Init) !void {
         const check = try parseXzCheck(args.next());
         const block_size = try parseBlockLen(args.next(), 1024 * 1024);
         var filter_storage: [3]vort.XzFilter = undefined;
-        const xz_filters = try parseXzFilters(args.next(), &filter_storage);
+        const xz_filters = try filters_cli.parse(args.next(), &filter_storage);
         const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(input);
         const encoded = try vort.encodeXzStoredAlloc(init.gpa, input, .{
@@ -1946,8 +1947,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-lzop-file <path> [max_output] [max_block]
         \\                              Decode and report a verified LZOP stream's size
         \\  inspect-lzop-file <path>    Parse and print structural LZOP metadata
-        \\  create-7z-file <out> <entry> <in>
-        \\                              Create a deterministic Copy-method 7z archive
+        \\  create-7z-file <out> <entry> <in> [copy|deflate|bzip2|lzma2-stored] [filters]
+        \\                              Create a deterministic 7z archive; filters are comma-separated
         \\  list-7z-file <path>         List entries in a supported 7z archive
         \\  extract-7z-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder]
         \\                              Extract a common-codec, Delta, or classic-BCJ 7z entry
@@ -2917,40 +2918,6 @@ fn parseXzCheck(text: ?[]const u8) !vort.XzCheck {
     if (std.mem.eql(u8, value, "crc64")) return .crc64;
     if (std.mem.eql(u8, value, "sha256")) return .sha256;
     return error.InvalidChecksumMode;
-}
-
-fn parseXzFilters(text: ?[]const u8, storage: *[3]vort.XzFilter) ![]const vort.XzFilter {
-    const value = text orelse return storage[0..0];
-    if (std.mem.eql(u8, value, "none")) return storage[0..0];
-    var parts = std.mem.splitScalar(u8, value, ',');
-    var count: usize = 0;
-    while (parts.next()) |part| {
-        if (count == storage.len) return error.UnsupportedXzFeature;
-        const separator = std.mem.indexOfScalar(u8, part, ':');
-        const name = if (separator) |index| part[0..index] else part;
-        const parameter = if (separator) |index|
-            try std.fmt.parseInt(u32, part[index + 1 ..], 10)
-        else
-            0;
-        storage[count] = if (std.mem.eql(u8, name, "delta"))
-            try vort.XzFilter.delta(if (separator == null) 1 else parameter)
-        else if (std.mem.eql(u8, name, "x86"))
-            vort.XzFilter.x86(parameter)
-        else if (std.mem.eql(u8, name, "powerpc"))
-            try vort.XzFilter.powerpc(parameter)
-        else if (std.mem.eql(u8, name, "ia64"))
-            try vort.XzFilter.ia64(parameter)
-        else if (std.mem.eql(u8, name, "arm"))
-            try vort.XzFilter.arm(parameter)
-        else if (std.mem.eql(u8, name, "armthumb") or std.mem.eql(u8, name, "arm-thumb"))
-            try vort.XzFilter.armThumb(parameter)
-        else if (std.mem.eql(u8, name, "sparc"))
-            try vort.XzFilter.sparc(parameter)
-        else
-            return error.UnsupportedXzFeature;
-        count += 1;
-    }
-    return storage[0..count];
 }
 
 fn parseTarCompression(text: ?[]const u8) !vort.TarCompression {

@@ -197,11 +197,16 @@ pub const SevenZipArchive = seven_zip.Archive;
 pub const SevenZipDecodeOptions = seven_zip.DecodeOptions;
 pub const SevenZipParseOptions = seven_zip.ParseOptions;
 pub const SevenZipEncodeEntry = seven_zip.EncodeEntry;
+pub const SevenZipCompression = seven_zip.Compression;
+pub const SevenZipFilter = seven_zip.Filter;
 pub const SevenZipEncodeOptions = seven_zip.EncodeOptions;
 pub const parseSevenZipArchiveAlloc = seven_zip.parseAlloc;
 pub const parseSevenZipArchiveAllocWithOptions = seven_zip.parseAllocWithOptions;
 pub const sevenZipExtractByNameAlloc = seven_zip.extractByNameAlloc;
 pub const sevenZipExtractByNameAllocLimited = seven_zip.extractByNameAllocLimited;
+pub const encodeSevenZipAlloc = seven_zip.encodeAlloc;
+pub const encodeSevenZipAppend = seven_zip.encodeAppend;
+pub const encodeSevenZipInto = seven_zip.encodeInto;
 pub const encodeSevenZipStoredAlloc = seven_zip.encodeStoredAlloc;
 pub const encodeSevenZipStoredAppend = seven_zip.encodeStoredAppend;
 pub const encodeSevenZipStoredInto = seven_zip.encodeStoredInto;
@@ -2373,6 +2378,19 @@ test "root 7z exports create list and extract Copy archives" {
     const decoded = try sevenZipExtractByNameAlloc(std.testing.allocator, encoded, "hello.txt");
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, entries[0].data, decoded);
+}
+
+test "root 7z exports compressed archive writing" {
+    const payload = "root 7z compressed writer" ** 64;
+    const entries = [_]SevenZipEncodeEntry{.{ .name = "payload.txt", .data = payload }};
+    const encoded = try encodeSevenZipAlloc(std.testing.allocator, &entries, .{
+        .compression = .deflate,
+        .deflate_level = 6,
+    });
+    defer std.testing.allocator.free(encoded);
+    const decoded = try sevenZipExtractByNameAlloc(std.testing.allocator, encoded, "payload.txt");
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "root Unix compress exports round trip .Z streams" {

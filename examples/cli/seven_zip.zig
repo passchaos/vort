@@ -1,5 +1,6 @@
 const std = @import("std");
 const vort = @import("vort");
+const filters_cli = @import("filters.zig");
 
 const max_archive_size = 512 * 1024 * 1024;
 
@@ -11,13 +12,21 @@ pub fn createFile(
     const output_path = args.next() orelse return error.MissingCorpusPath;
     const entry_name = args.next() orelse return error.MissingCorpusPath;
     const input_path = args.next() orelse return error.MissingCorpusPath;
+    const compression = try parseCompression(args.next());
+    var filter_storage: [3]vort.SevenZipFilter = undefined;
+    const filters = try filters_cli.parse(args.next(), &filter_storage);
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.SevenZipEncodeEntry{.{ .name = entry_name, .data = input }};
-    const encoded = try vort.encodeSevenZipStoredAlloc(init.gpa, &entries, .{});
+    const encoded = try vort.encodeSevenZipAlloc(init.gpa, &entries, .{
+        .compression = compression,
+        .filters = filters,
+    });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("seven_zip_entries=1 input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("seven_zip_entries=1 compression={s} filters={d} input_bytes={d} archive_bytes={d} path={s}\n", .{
+        @tagName(compression),
+        filters.len,
         input.len,
         encoded.len,
         output_path,
@@ -84,4 +93,13 @@ fn readFile(init: std.process.Init, path: []const u8) ![]u8 {
 
 fn parseLimit(value: ?[]const u8, default: usize) !usize {
     return if (value) |text| try std.fmt.parseInt(usize, text, 10) else default;
+}
+
+fn parseCompression(text: ?[]const u8) !vort.SevenZipCompression {
+    const value = text orelse return .copy;
+    if (std.mem.eql(u8, value, "copy")) return .copy;
+    if (std.mem.eql(u8, value, "deflate")) return .deflate;
+    if (std.mem.eql(u8, value, "bzip2")) return .bzip2;
+    if (std.mem.eql(u8, value, "lzma2") or std.mem.eql(u8, value, "lzma2-stored")) return .lzma2;
+    return error.Unsupported7zFeature;
 }
