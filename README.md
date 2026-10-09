@@ -117,7 +117,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   bounded output/block APIs;
 - pure Zig 7z parsing and deterministic independent-folder writing, with
   Copy/Deflate/Bzip2/LZMA/LZMA2 decode and encode,
-  bounded linear Delta and classic BCJ filter chains in both directions,
+  bounded linear Delta/classic BCJ filter chains in both directions and BCJ2
+  four-stream decoding,
   compressed Next Header reading and writing, solid substream reading and
   writing, CRC validation, UTF-16LE names, directories, empty files, and
   bounded extraction;

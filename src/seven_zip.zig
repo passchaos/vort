@@ -39,6 +39,7 @@ pub const encodeStoredInto = writer.encodeStoredInto;
 
 test {
     _ = archive;
+    _ = @import("seven_zip/bcj2.zig");
     _ = @import("seven_zip/number.zig");
     _ = writer;
 }
@@ -231,6 +232,46 @@ test "7z writer emits encoded Next Headers with every compression method" {
             }),
         );
     }
+}
+
+test "7z reader decodes a real LZMA2 BCJ2 folder" {
+    const allocator = std.testing.allocator;
+    const encoded_hex = @embedFile("seven_zip/testdata/7zip-bcj2.7z.hex");
+    const encoded = try allocator.alloc(u8, encoded_hex.len / 2);
+    defer allocator.free(encoded);
+    _ = try std.fmt.hexToBytes(encoded, std.mem.trim(u8, encoded_hex, "\r\n \t"));
+
+    const parsed = try parseAlloc(allocator, encoded);
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(usize, 1), parsed.entries.len);
+    try std.testing.expectEqualStrings("code.bin", parsed.entries[0].name);
+    try std.testing.expectEqual(@as(u64, 9216), parsed.entries[0].size);
+    try std.testing.expect(parsed.streams.folders[0].bcj2_coder_index != null);
+    try std.testing.expectEqual(@as(u4, 4), parsed.streams.folders[0].pack_stream_count);
+    const decoded = try parsed.extractEntryAlloc(allocator, parsed.entries[0]);
+    defer allocator.free(decoded);
+    const digest = std.crypto.hash.Md5.hashResult(decoded);
+    var expected_digest: [16]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expected_digest, "2f299cef81f2f837cbcd62726befc2e2");
+    try std.testing.expectEqual(expected_digest, digest);
+
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        parseAllocWithOptions(allocator, encoded, .{ .max_streams = 3 }),
+    );
+
+    var corrupt = try allocator.dupe(u8, encoded);
+    defer allocator.free(corrupt);
+    const streams = parsed.streams;
+    var range_start: usize = 32 + @as(usize, @intCast(streams.pack_position));
+    for (streams.pack_sizes[0..3]) |size| range_start += @intCast(size);
+    corrupt[range_start] = 1;
+    const corrupt_archive = try parseAlloc(allocator, corrupt);
+    defer corrupt_archive.deinit();
+    try std.testing.expectError(
+        error.Invalid7zArchive,
+        corrupt_archive.extractEntryAlloc(allocator, corrupt_archive.entries[0]),
+    );
 }
 
 test "7z writer round trips an LZMA2 Delta and BCJ chain" {

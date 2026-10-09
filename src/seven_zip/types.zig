@@ -22,6 +22,7 @@ pub const Method = enum {
     arm,
     arm_thumb,
     sparc,
+    bcj2,
 };
 
 pub const Entry = struct {

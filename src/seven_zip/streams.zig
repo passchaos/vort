@@ -21,11 +21,16 @@ pub const Nid = struct {
 };
 
 pub const max_coders: usize = 4;
+pub const max_streams_per_folder: usize = 8;
 
 pub const Coder = struct {
     method: types.Method,
     properties: [5]u8 = @splat(0),
     properties_len: u3 = 0,
+    input_count: u3 = 1,
+    output_count: u3 = 1,
+    input_start: u4 = 0,
+    output_start: u3 = 0,
 
     pub fn propertyBytes(self: *const Coder) []const u8 {
         return self.properties[0..self.properties_len];
@@ -38,6 +43,9 @@ pub const Folder = struct {
     decode_order: [max_coders]u3 = @splat(0),
     coder_unpack_sizes: [max_coders]u64 = @splat(0),
     pack_index: usize,
+    packed_inputs: [max_streams_per_folder]u4 = @splat(0),
+    pack_stream_count: u4 = 1,
+    bcj2_coder_index: ?u3 = null,
     unpack_size: u64 = 0,
     crc32: ?u32 = null,
     first_substream: usize = 0,
@@ -94,7 +102,11 @@ pub fn parse(allocator: std.mem.Allocator, reader: *number.Reader, max_streams: 
     };
 
     if (have_pack_info != have_unpack_info) return error.Invalid7zArchive;
-    if (result.pack_sizes.len != result.folders.len) return error.Unsupported7zFeature;
+    var expected_pack_streams: usize = 0;
+    for (result.folders) |folder|
+        expected_pack_streams = std.math.add(usize, expected_pack_streams, folder.pack_stream_count) catch
+            return error.IntegerOverflow;
+    if (result.pack_sizes.len != expected_pack_streams) return error.Invalid7zArchive;
     if (have_unpack_info and !have_substreams_info)
         try buildDefaultSubstreams(allocator, &result);
     return result;
@@ -142,7 +154,7 @@ fn parseUnpackInfo(
     var next_pack_index: usize = 0;
     for (result.folders) |*folder| {
         folder.* = try parseFolder(reader, next_pack_index);
-        next_pack_index += 1;
+        next_pack_index += folder.pack_stream_count;
     }
     if (next_pack_index != result.pack_sizes.len) return error.Invalid7zArchive;
 
@@ -151,10 +163,11 @@ fn parseUnpackInfo(
         for (0..folder.coder_count) |index|
             folder.coder_unpack_sizes[index] = try reader.readNumber();
         folder.unpack_size = folder.coder_unpack_sizes[folder.decode_order[folder.coder_count - 1]];
-        for (folder.coder_unpack_sizes[0..folder.coder_count]) |coder_size| {
-            if (coder_size != folder.unpack_size)
-                return error.Invalid7zArchive;
-        }
+        if (folder.bcj2_coder_index == null)
+            for (folder.coder_unpack_sizes[0..folder.coder_count]) |coder_size| {
+                if (coder_size != folder.unpack_size)
+                    return error.Invalid7zArchive;
+            };
     }
 
     const next = try reader.readByte();
@@ -171,30 +184,108 @@ fn parseFolder(reader: *number.Reader, pack_index: usize) !Folder {
     const coder_count = try reader.readSize();
     if (coder_count == 0 or coder_count > max_coders) return error.Unsupported7zFeature;
     var folder = Folder{ .coder_count = @intCast(coder_count), .pack_index = pack_index };
-    for (folder.coders[0..coder_count]) |*coder| coder.* = try parseCoder(reader);
+    var total_inputs: usize = 0;
+    var total_outputs: usize = 0;
+    for (folder.coders[0..coder_count]) |*coder| {
+        coder.* = try parseCoder(reader);
+        coder.input_start = @intCast(total_inputs);
+        coder.output_start = @intCast(total_outputs);
+        total_inputs += coder.input_count;
+        total_outputs += coder.output_count;
+    }
+    if (total_inputs > max_streams_per_folder or total_outputs > max_coders)
+        return error.Unsupported7zFeature;
 
-    var bound_inputs: [max_coders]bool = @splat(false);
+    var bound_inputs: [max_streams_per_folder]bool = @splat(false);
     var bound_outputs: [max_coders]bool = @splat(false);
+    var bind_inputs: [max_coders]u4 = @splat(0);
+    var bind_outputs: [max_coders]u3 = @splat(0);
     var next_coder: [max_coders]?u3 = @splat(null);
-    for (0..coder_count - 1) |_| {
+    const bind_count = total_outputs - 1;
+    for (0..bind_count) |bind_index| {
         const input_index = try reader.readSize();
         const output_index = try reader.readSize();
-        if (input_index >= coder_count or output_index >= coder_count or
+        if (input_index >= total_inputs or output_index >= total_outputs or
             bound_inputs[input_index] or bound_outputs[output_index])
             return error.Invalid7zArchive;
         bound_inputs[input_index] = true;
         bound_outputs[output_index] = true;
-        next_coder[output_index] = @intCast(input_index);
+        bind_inputs[bind_index] = @intCast(input_index);
+        bind_outputs[bind_index] = @intCast(output_index);
+    }
+
+    const packed_count = total_inputs - bind_count;
+    if (packed_count == 0 or packed_count > max_streams_per_folder)
+        return error.Invalid7zArchive;
+    folder.pack_stream_count = @intCast(packed_count);
+    if (packed_count == 1) {
+        for (bound_inputs[0..total_inputs], 0..) |bound, input_index| if (!bound) {
+            folder.packed_inputs[0] = @intCast(input_index);
+            break;
+        };
+    } else {
+        var seen_packed: [max_streams_per_folder]bool = @splat(false);
+        for (folder.packed_inputs[0..packed_count]) |*input_index| {
+            const value = try reader.readSize();
+            if (value >= total_inputs or bound_inputs[value] or seen_packed[value])
+                return error.Invalid7zArchive;
+            input_index.* = @intCast(value);
+            seen_packed[value] = true;
+        }
+        for (bound_inputs[0..total_inputs], seen_packed[0..total_inputs]) |bound, is_packed|
+            if (!bound and !is_packed) return error.Invalid7zArchive;
+    }
+
+    var bcj2_index: ?usize = null;
+    for (folder.coders[0..coder_count], 0..) |coder, index|
+        if (coder.method == .bcj2) {
+            if (bcj2_index != null) return error.Unsupported7zFeature;
+            bcj2_index = index;
+        };
+    if (bcj2_index) |bcj_index| {
+        if (coder_count != 2 or packed_count != 4) return error.Unsupported7zFeature;
+        const primary_index: usize = 1 - bcj_index;
+        const primary = folder.coders[primary_index];
+        const bcj = folder.coders[bcj_index];
+        if (!isCompression(primary.method) or primary.input_count != 1 or
+            primary.output_count != 1 or bcj.input_count != 4 or bcj.output_count != 1)
+            return error.Unsupported7zFeature;
+        if (bind_count != 1 or bind_outputs[0] != primary.output_start or
+            bind_inputs[0] != bcj.input_start)
+            return error.Unsupported7zFeature;
+        const expected_inputs = [_]usize{
+            primary.input_start,
+            bcj.input_start + 1,
+            bcj.input_start + 2,
+            bcj.input_start + 3,
+        };
+        for (folder.packed_inputs[0..4], expected_inputs) |actual, expected|
+            if (actual != expected) return error.Unsupported7zFeature;
+        folder.decode_order[0] = @intCast(primary_index);
+        folder.decode_order[1] = @intCast(bcj_index);
+        folder.bcj2_coder_index = @intCast(bcj_index);
+        return folder;
+    }
+
+    for (folder.coders[0..coder_count]) |coder|
+        if (coder.input_count != 1 or coder.output_count != 1)
+            return error.Unsupported7zFeature;
+    for (bind_inputs[0..bind_count], bind_outputs[0..bind_count]) |input_index, output_index| {
+        const input_coder = coderForInput(&folder, input_index) orelse
+            return error.Invalid7zArchive;
+        const output_coder = coderForOutput(&folder, output_index) orelse
+            return error.Invalid7zArchive;
+        next_coder[output_coder] = @intCast(input_coder);
     }
 
     var start: ?usize = null;
     var finish: ?usize = null;
     for (0..coder_count) |index| {
-        if (!bound_inputs[index]) {
+        if (!isCoderInputBound(&folder, bound_inputs, index)) {
             if (start != null) return error.Unsupported7zFeature;
             start = index;
         }
-        if (!bound_outputs[index]) {
+        if (!bound_outputs[folder.coders[index].output_start]) {
             if (finish != null) return error.Unsupported7zFeature;
             finish = index;
         }
@@ -228,7 +319,9 @@ fn parseCoder(reader: *number.Reader) !Coder {
     const id = try reader.take(id_len);
     const input_count = if (flags & 0x10 != 0) try reader.readNumber() else 1;
     const output_count = if (flags & 0x10 != 0) try reader.readNumber() else 1;
-    if (input_count != 1 or output_count != 1) return error.Unsupported7zFeature;
+    if (input_count == 0 or input_count > max_streams_per_folder or
+        output_count == 0 or output_count > max_coders)
+        return error.Unsupported7zFeature;
     const properties = if (flags & 0x20 != 0)
         try reader.take(try reader.readSize())
     else
@@ -259,19 +352,52 @@ fn parseCoder(reader: *number.Reader) !Coder {
         .arm_thumb
     else if (std.mem.eql(u8, id, &.{ 0x03, 0x03, 0x08, 0x05 }))
         .sparc
+    else if (std.mem.eql(u8, id, &.{ 0x03, 0x03, 0x01, 0x1b }))
+        .bcj2
     else
         return error.Unsupported7zFeature;
     if (((method == .copy or method == .deflate or method == .bzip2) and properties.len != 0) or
         (method == .lzma and properties.len != 5) or
         (method == .lzma2 and properties.len != 1) or
         (method == .delta and properties.len != 1) or
-        (isBcj(method) and properties.len != 0 and properties.len != 4))
+        (isBcj(method) and properties.len != 0 and properties.len != 4) or
+        (method == .bcj2 and (input_count != 4 or output_count != 1 or
+            (properties.len != 0 and properties.len != 4))))
         return error.Invalid7zArchive;
 
-    var coder = Coder{ .method = method };
+    var coder = Coder{
+        .method = method,
+        .input_count = @intCast(input_count),
+        .output_count = @intCast(output_count),
+    };
     coder.properties_len = @intCast(properties.len);
     @memcpy(coder.properties[0..properties.len], properties);
     return coder;
+}
+
+fn coderForInput(folder: *const Folder, input_index: usize) ?usize {
+    for (folder.coders[0..folder.coder_count], 0..) |coder, index|
+        if (input_index >= coder.input_start and input_index < coder.input_start + coder.input_count)
+            return index;
+    return null;
+}
+
+fn coderForOutput(folder: *const Folder, output_index: usize) ?usize {
+    for (folder.coders[0..folder.coder_count], 0..) |coder, index|
+        if (output_index >= coder.output_start and output_index < coder.output_start + coder.output_count)
+            return index;
+    return null;
+}
+
+fn isCoderInputBound(
+    folder: *const Folder,
+    bound_inputs: [max_streams_per_folder]bool,
+    coder_index: usize,
+) bool {
+    const coder = folder.coders[coder_index];
+    for (bound_inputs[coder.input_start..][0..coder.input_count]) |bound|
+        if (bound) return true;
+    return false;
 }
 
 fn isCompression(method: types.Method) bool {
@@ -510,7 +636,7 @@ test "7z Folder rejects a second compression coder" {
     try std.testing.expectError(error.Unsupported7zFeature, parseFolder(&reader, 0));
 }
 
-test "7z Folder rejects multi-input BCJ2 coder" {
+test "7z Folder rejects truncated standalone BCJ2 graph" {
     const encoded = [_]u8{
         1,
         0x14,
@@ -522,7 +648,7 @@ test "7z Folder rejects multi-input BCJ2 coder" {
         1,
     };
     var reader = number.Reader.init(&encoded);
-    try std.testing.expectError(error.Unsupported7zFeature, parseFolder(&reader, 0));
+    try std.testing.expectError(error.TruncatedFrame, parseFolder(&reader, 0));
 }
 
 test "7z StreamsInfo rejects size-changing classic filter chain" {

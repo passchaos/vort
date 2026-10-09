@@ -17836,6 +17836,11 @@ reuse, so production keeps the simpler independently owned plans.
   Copy/Deflate/Bzip2/LZMA/LZMA2 output, and real filter chains in both
   directions. Optional encoded Next Headers reuse all six writer codecs with an
   exact packed-data offset and no recursive filters; system 7-Zip validates
-  each mode combined with a solid LZMA2 main stream. Deeper LZMA parsing, BCJ2,
-  branching or multi-packed-stream graphs, encryption, and external metadata
-  streams remain follow-up work. See `docs/formats/7z.md`.
+  each mode combined with a solid LZMA2 main stream. The reader additionally
+  accepts the standard BCJ2 branch graph: an LZMA/LZMA2 main stream plus raw
+  CALL, JUMP, and range-code packed streams. Its scalar decoder validates
+  stream-size identities, range initialization, packed indices, CRCs, and
+  exact consumption; real single-file and solid 7-Zip variants provide
+  differential evidence. Deeper LZMA parsing, BCJ2 writing, other branching or
+  multi-packed-stream graphs, encryption, and external metadata streams remain
+  follow-up work. See `docs/formats/7z.md`.

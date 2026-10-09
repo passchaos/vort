@@ -168,6 +168,13 @@ def main() -> None:
                 "lzma2-plain": ["-m0=lzma2", "-mx=5", "-mhc=off", "-ms=off"],
                 "lzma-solid-encoded": ["-m0=lzma", "-mx=5", "-mhc=on", "-ms=on"],
                 "lzma2-solid-encoded": ["-m0=lzma2", "-mx=5", "-mhc=on", "-ms=on"],
+                "lzma2-bcj2-solid": [
+                    "-m0=bcj2",
+                    "-m1=lzma2",
+                    "-mx=5",
+                    "-mhc=off",
+                    "-ms=on",
+                ],
             }
             for variant, options in variants.items():
                 archive = temp / f"{variant}.7z"
@@ -187,6 +194,8 @@ def main() -> None:
                     bytes(range(256)) * 16,
                 ),
                 "bcj-lzma": (("bcj", "lzma"), x86_payload),
+                "bcj2-lzma2": (("bcj2", "lzma2"), x86_payload),
+                "bcj2-lzma": (("bcj2", "lzma"), x86_payload),
                 "bcj-delta4-lzma2": (
                     ("bcj", "delta:4", "lzma2"),
                     x86_payload,

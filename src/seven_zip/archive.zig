@@ -10,6 +10,7 @@ const bzip2 = @import("../bzip2.zig");
 const lzma_decoder = @import("../lzma/decoder.zig");
 const xz_container = @import("../xz/container.zig");
 const xz_filters = @import("../xz/filters.zig");
+const bcj2 = @import("bcj2.zig");
 
 pub const Error = core.Error || number.Error || streams_mod.Error || files_mod.Error ||
     deflate.Error || bzip2.Error || lzma_decoder.Error || xz_container.Error || error{
@@ -262,31 +263,71 @@ fn decodeFolderAlloc(
 ) ![]u8 {
     if (folder_index >= streams.folders.len) return error.Invalid7zArchive;
     const folder = streams.folders[folder_index];
+    if (folder.bcj2_coder_index) |bcj2_index| {
+        if (folder.pack_stream_count != 4 or folder.coder_count != 2)
+            return error.Invalid7zArchive;
+        var packed_streams: [4][]const u8 = undefined;
+        for (&packed_streams, 0..) |*packed_stream, index| {
+            packed_stream.* = try packBytes(input, packed_limit, streams, folder.pack_index + index);
+            if (streams.pack_crcs[folder.pack_index + index]) |expected|
+                if (checksum.crc32Best(packed_stream.*) != expected) return error.ChecksumMismatch;
+        }
+        const primary_index = folder.decode_order[0];
+        const primary = folder.coders[primary_index];
+        const main_size = std.math.cast(
+            usize,
+            folder.coder_unpack_sizes[primary_index],
+        ) orelse return error.OutputLimitExceeded;
+        const side_size = std.math.add(
+            usize,
+            packed_streams[1].len,
+            packed_streams[2].len,
+        ) catch return error.IntegerOverflow;
+        const calculated_size = std.math.add(usize, main_size, side_size) catch
+            return error.IntegerOverflow;
+        if (main_size > expected_size or side_size > expected_size or
+            calculated_size != expected_size)
+            return error.Invalid7zArchive;
+        const main = try decodePrimaryAlloc(
+            allocator,
+            packed_streams[0],
+            primary,
+            main_size,
+            max_dictionary_size,
+        );
+        defer allocator.free(main);
+        const bcj_coder = folder.coders[bcj2_index];
+        const start_ip = if (bcj_coder.properties_len == 4)
+            std.mem.readInt(u32, bcj_coder.propertyBytes()[0..4], .little)
+        else
+            0;
+        const decoded = try bcj2.decodeAlloc(
+            allocator,
+            main,
+            packed_streams[1],
+            packed_streams[2],
+            packed_streams[3],
+            expected_size,
+            start_ip,
+        );
+        errdefer allocator.free(decoded);
+        if (folder.crc32) |expected|
+            if (checksum.crc32Best(decoded) != expected) return error.ChecksumMismatch;
+        return decoded;
+    }
+
     const packed_bytes = try packBytes(input, packed_limit, streams, folder.pack_index);
     if (streams.pack_crcs[folder.pack_index]) |expected|
         if (checksum.crc32Best(packed_bytes) != expected) return error.ChecksumMismatch;
 
     const primary = folder.coders[folder.decode_order[0]];
-    const decoded = switch (primary.method) {
-        .copy => try allocator.dupe(u8, packed_bytes),
-        .deflate => try deflate.decodeRawAutoAllocExactSize(allocator, packed_bytes, expected_size),
-        .bzip2 => try bzip2.decodeAllocLimited(allocator, packed_bytes, expected_size),
-        .lzma => try lzma_decoder.decode7zPayloadAllocLimited(
-            allocator,
-            packed_bytes,
-            primary.propertyBytes(),
-            expected_size,
-            max_dictionary_size,
-        ),
-        .lzma2 => try xz_container.decode7zPayloadAllocLimited(
-            allocator,
-            packed_bytes,
-            primary.propertyBytes()[0],
-            expected_size,
-            max_dictionary_size,
-        ),
-        else => return error.Unsupported7zFeature,
-    };
+    const decoded = try decodePrimaryAlloc(
+        allocator,
+        packed_bytes,
+        primary,
+        expected_size,
+        max_dictionary_size,
+    );
     errdefer allocator.free(decoded);
     for (folder.decode_order[1..folder.coder_count]) |coder_index| {
         const coder = folder.coders[coder_index];
@@ -310,6 +351,35 @@ fn decodeFolderAlloc(
     if (folder.crc32) |expected|
         if (checksum.crc32Best(decoded) != expected) return error.ChecksumMismatch;
     return decoded;
+}
+
+fn decodePrimaryAlloc(
+    allocator: std.mem.Allocator,
+    packed_bytes: []const u8,
+    primary: streams_mod.Coder,
+    expected_size: usize,
+    max_dictionary_size: usize,
+) ![]u8 {
+    return switch (primary.method) {
+        .copy => try allocator.dupe(u8, packed_bytes),
+        .deflate => try deflate.decodeRawAutoAllocExactSize(allocator, packed_bytes, expected_size),
+        .bzip2 => try bzip2.decodeAllocLimited(allocator, packed_bytes, expected_size),
+        .lzma => try lzma_decoder.decode7zPayloadAllocLimited(
+            allocator,
+            packed_bytes,
+            primary.propertyBytes(),
+            expected_size,
+            max_dictionary_size,
+        ),
+        .lzma2 => try xz_container.decode7zPayloadAllocLimited(
+            allocator,
+            packed_bytes,
+            primary.propertyBytes()[0],
+            expected_size,
+            max_dictionary_size,
+        ),
+        else => return error.Unsupported7zFeature,
+    };
 }
 
 fn packBytes(
