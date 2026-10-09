@@ -236,7 +236,7 @@ def main() -> None:
         payload = prefix * 3 + b"CAB writer differential tail\n"
         source = temp / "writer-input.bin"
         source.write_bytes(payload)
-        for mode in ("stored", "mszip"):
+        for mode in ("stored", "mszip", "lzx"):
             first = temp / f"vort-{mode}-first.cab"
             second = temp / f"vort-{mode}-second.cab"
             entry_name = "folder/payload.bin"
@@ -245,7 +245,7 @@ def main() -> None:
             if first.read_bytes() != second.read_bytes():
                 raise AssertionError(f"Vort {mode} CAB output is not deterministic")
             listing = run(args.cli, "list-cab-file", str(first)).stdout
-            expected_method = "stored" if mode == "stored" else "mszip"
+            expected_method = mode
             if f"method={expected_method}" not in listing or f"name={entry_name}" not in listing:
                 raise AssertionError(f"unexpected Vort CAB listing: {listing}")
             vort_output = temp / f"vort-{mode}.out"
@@ -267,7 +267,7 @@ def main() -> None:
 
     print(
         f"cab_diff=ok fixtures=8 extracted={extracted} writer_cases={writer_cases} "
-        "libarchive=ok malformed_lzx=2 malformed_quantum=3 "
+        "libarchive=ok malformed_lzx=2 malformed_quantum=3 lzx_writer=ok "
         "lzx_aligned_frames=449 quantum=ok"
     )
 

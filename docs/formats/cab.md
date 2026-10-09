@@ -26,7 +26,8 @@ const entries = [_]vort.CabEncodeEntry{
     .{ .name = "empty.bin", .data = "" },
 };
 const encoded = try vort.encodeCabAlloc(allocator, &entries, .{
-    .compression = .mszip,
+    .compression = .lzx,
+    .lzx_window_bits = 18,
 });
 defer allocator.free(encoded);
 ```
@@ -59,17 +60,22 @@ styles and rejects absolute, drive-prefixed, empty-component, `.` and `..`
 paths. Vort never materializes archive paths automatically.
 
 The writer emits one deterministic solid folder containing entries in caller
-order. Stored and MSZIP modes are available, with a configurable 1–32 KiB
-CFDATA block size, optional non-zero CFDATA checksums, deterministic DOS dates,
-automatic UTF-8 attributes, and a caller-selected set ID. MSZIP independently
-chooses fixed-Huffman or stored Deflate for each block while retaining the
-prior 32 KiB folder tail as its dictionary. Owned, transactional append, and
-caller-buffer APIs share the same wire implementation.
+order. Stored, MSZIP, and LZX modes are available, with optional non-zero
+CFDATA checksums, deterministic DOS dates, automatic UTF-8 attributes, and a
+caller-selected set ID. Stored/MSZIP permit configurable 1–32 KiB CFDATA
+blocks. MSZIP independently chooses fixed-Huffman or stored Deflate for each
+block while retaining the prior 32 KiB folder tail as its dictionary. The
+reference LZX writer emits interoperable uncompressed LZX blocks, selectable
+15–21 bit windows, mandatory 32 KiB non-final CFDATA records, restored recent
+offsets, word alignment, and odd final-block padding. Entropy-coded LZX writing
+is a later ratio optimization, not a distinct compatibility surface. Owned,
+transactional append, and caller-buffer APIs share the same wire implementation.
 
 CLI validation surfaces:
 
 ```sh
 zig build run -- create-cab-file archive.cab path\\file.bin input.bin mszip 32768
+zig build run -- create-cab-file archive.cab path\\file.bin input.bin lzx 32768 18
 zig build run -- list-cab-file archive.cab
 zig build run -- extract-cab-file archive.cab path\\file.bin output.bin 67108864 268435456
 zig build run-cab-diff
@@ -83,5 +89,7 @@ MD5 is checked against libmspack's independent decoder. The normal Quantum
 payload is checked byte-for-byte, while three historical libmspack Quantum
 regressions pin bounded rejection of frame overshoot, invalid history, and
 inconsistent archive sizes. Split CFDATA blocks and multi-cabinet continuation
-remain explicit unsupported errors. Vort-written Stored/MSZIP cabinets are
-decoded byte-exactly by libarchive; LZX/Quantum writing is future functionality.
+remain explicit unsupported errors. Vort-written Stored/MSZIP/LZX cabinets are
+decoded byte-exactly by libarchive, including multi-frame LZX output with an
+odd final block. Entropy-coded LZX blocks and Quantum writing remain future
+work.

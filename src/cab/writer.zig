@@ -4,9 +4,10 @@ const checksum = @import("checksum.zig");
 const core = @import("../core.zig");
 const deflate = @import("../deflate.zig");
 const decoder = @import("decoder.zig");
+const lzx_encoder = @import("lzx/encoder.zig");
 const types = @import("types.zig");
 
-pub const Error = core.Error || archive_format.Error || deflate.Error || error{
+pub const Error = core.Error || archive_format.Error || deflate.Error || lzx_encoder.Error || error{
     InvalidCabinetEntryName,
     InvalidCabinetOptions,
     CabinetLimitExceeded,
@@ -27,12 +28,17 @@ pub const EncodeOptions = struct {
     block_size: u16 = 32 * 1024,
     checksum: bool = true,
     set_id: u16 = 0,
+    lzx_window_bits: u5 = 15,
 };
 
 const fixed_header_len: usize = 36;
 const folder_record_len: usize = 8;
 const max_folder_size: usize = 0x7fff_8000;
 const max_cabinet_size: usize = 0x7fff_ffff;
+
+test {
+    _ = lzx_encoder;
+}
 
 pub fn encodeAlloc(
     allocator: std.mem.Allocator,
@@ -93,6 +99,15 @@ pub fn encodeAlloc(
                     return error.CabinetLimitExceeded;
                 try appendDataBlock(allocator, &out, payload.items, block.len, options.checksum);
             },
+            .lzx => {
+                const encoded = try lzx_encoder.encodeUncompressedBlockAlloc(
+                    allocator,
+                    block,
+                    data_start == 0,
+                );
+                defer allocator.free(encoded);
+                try appendDataBlock(allocator, &out, encoded, block.len, options.checksum);
+            },
             else => return error.UnsupportedCabinetCompression,
         }
         data_start = data_end;
@@ -110,7 +125,12 @@ pub fn encodeAlloc(
     if (has_folder) {
         std.mem.writeInt(u32, out.items[folder_record_offset..][0..4], @intCast(data_offset), .little);
         std.mem.writeInt(u16, out.items[folder_record_offset + 4 ..][0..2], @intCast(block_count), .little);
-        std.mem.writeInt(u16, out.items[folder_record_offset + 6 ..][0..2], @intFromEnum(options.compression), .little);
+        const type_compress = @as(u16, @intFromEnum(options.compression)) |
+            if (options.compression == .lzx)
+                @as(u16, options.lzx_window_bits) << 8
+            else
+                0;
+        std.mem.writeInt(u16, out.items[folder_record_offset + 6 ..][0..2], type_compress, .little);
     }
     return out.toOwnedSlice(allocator);
 }
@@ -142,8 +162,13 @@ pub fn encodeInto(
 }
 
 fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!usize {
-    if (options.compression != .none and options.compression != .mszip)
+    if (options.compression != .none and
+        options.compression != .mszip and
+        options.compression != .lzx)
         return error.UnsupportedCabinetCompression;
+    if (options.compression == .lzx and
+        (options.lzx_window_bits < 15 or options.lzx_window_bits > 21))
+        return error.InvalidCabinetOptions;
     if (options.block_size == 0 or options.block_size > 32 * 1024)
         return error.InvalidCabinetOptions;
     if (entries.len > std.math.maxInt(u16)) return error.CabinetLimitExceeded;
@@ -159,6 +184,10 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!us
             return error.CabinetLimitExceeded;
         if (folder_size > max_folder_size) return error.CabinetLimitExceeded;
     }
+    if (options.compression == .lzx and
+        folder_size > options.block_size and
+        options.block_size != 32 * 1024)
+        return error.InvalidCabinetOptions;
     return folder_size;
 }
 
@@ -218,17 +247,17 @@ fn appendU32(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: u32) 
     try out.appendSlice(allocator, &bytes);
 }
 
-test "CAB writer deterministically round trips Stored and MSZIP entries" {
+test "CAB writer deterministically round trips Stored MSZIP and LZX entries" {
     const allocator = std.testing.allocator;
     const entries = [_]EncodeEntry{
         .{ .name = "plain.txt", .data = "plain CAB payload\n" },
         .{ .name = "目录\\数据.txt", .data = "repeated CAB payload\n" ** 512 },
         .{ .name = "empty.bin", .data = "" },
     };
-    inline for (.{ Compression.none, .mszip }) |compression| {
+    inline for (.{ Compression.none, .mszip, .lzx }) |compression| {
         const options = EncodeOptions{
             .compression = compression,
-            .block_size = 4096,
+            .block_size = if (compression == .lzx) 32 * 1024 else 4096,
             .set_id = 0x1234,
         };
         const first = try encodeAlloc(allocator, &entries, options);
@@ -242,6 +271,8 @@ test "CAB writer deterministically round trips Stored and MSZIP entries" {
         try std.testing.expectEqual(@as(u16, 0x1234), parsed.set_id);
         const folder = try parsed.folderAt(0);
         try std.testing.expectEqual(compression, folder.compression);
+        if (compression == .lzx)
+            try std.testing.expectEqual(@as(u16, 0x0f03), folder.type_compress);
         var blocks = parsed.dataBlockIterator(folder);
         while (try blocks.next()) |block| try std.testing.expect(block.checksum != 0);
 
@@ -283,6 +314,49 @@ test "CAB MSZIP writer uses prior block history" {
     try std.testing.expectEqualSlices(u8, &payload, decoded);
 }
 
+test "CAB LZX writer supports every window and odd final CFDATA alignment" {
+    const allocator = std.testing.allocator;
+    const payload = try allocator.alloc(u8, 40 * 1024 + 37);
+    defer allocator.free(payload);
+    for (payload, 0..) |*byte, index| byte.* = @truncate(index *% 29 +% index / 17);
+    const entries = [_]EncodeEntry{.{ .name = "odd-blocks.bin", .data = payload }};
+
+    for (15..22) |window_bits| {
+        const encoded = try encodeAlloc(allocator, &entries, .{
+            .compression = .lzx,
+            .lzx_window_bits = @intCast(window_bits),
+        });
+        defer allocator.free(encoded);
+        const parsed = try archive_format.parse(encoded);
+        const folder = try parsed.folderAt(0);
+        try std.testing.expectEqual(
+            @as(u16, 3) | (@as(u16, @intCast(window_bits)) << 8),
+            folder.type_compress,
+        );
+        try std.testing.expectEqual(@as(usize, 2), folder.data_block_count);
+        var blocks = parsed.dataBlockIterator(folder);
+        _ = (try blocks.next()).?;
+        const second = (try blocks.next()).?;
+        try std.testing.expectEqual(@as(u8, 0), second.compressed[second.compressed.len - 1]);
+
+        const decoded = try decoder.extractByNameAlloc(allocator, parsed, "odd-blocks.bin");
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+
+    const tiny_entries = [_]EncodeEntry{.{ .name = "tiny", .data = "final-block" }};
+    const tiny = try encodeAlloc(allocator, &tiny_entries, .{
+        .compression = .lzx,
+        .block_size = 16,
+    });
+    defer allocator.free(tiny);
+    const tiny_archive = try archive_format.parse(tiny);
+    try std.testing.expectEqual(@as(usize, 1), (try tiny_archive.folderAt(0)).data_block_count);
+    const tiny_decoded = try decoder.extractByNameAlloc(allocator, tiny_archive, "tiny");
+    defer allocator.free(tiny_decoded);
+    try std.testing.expectEqualStrings("final-block", tiny_decoded);
+}
+
 test "CAB writer append and caller output are transactional" {
     const allocator = std.testing.allocator;
     const entries = [_]EncodeEntry{.{ .name = "payload", .data = "transactional CAB" ** 32 }};
@@ -316,7 +390,21 @@ test "CAB writer append and caller output are transactional" {
     try std.testing.expectEqualSlices(u8, before, appended.items);
     try std.testing.expectError(
         error.UnsupportedCabinetCompression,
-        encodeAlloc(allocator, &entries, .{ .compression = .lzx }),
+        encodeAlloc(allocator, &entries, .{ .compression = .quantum }),
+    );
+    try std.testing.expectError(
+        error.InvalidCabinetOptions,
+        encodeAlloc(allocator, &entries, .{
+            .compression = .lzx,
+            .lzx_window_bits = 14,
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidCabinetOptions,
+        encodeAlloc(allocator, &entries, .{
+            .compression = .lzx,
+            .block_size = 16,
+        }),
     );
     const bad_name = [_]EncodeEntry{.{ .name = "", .data = "x" }};
     try std.testing.expectError(
