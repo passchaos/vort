@@ -17648,7 +17648,7 @@ reuse, so production keeps the simpler independently owned plans.
   data descriptors; it iterates and finds entries without allocation, extracts
   stored, raw-Deflate, Bzip2, LZMA, and Zstandard members into caller buffers or
   bounded allocations where their scratch requirements allow, and encodes
-  multi-entry stored/Deflate/Bzip2/Zstandard archives through owned or
+  multi-entry stored/Deflate/Bzip2/LZMA/Zstandard archives through owned or
   transactional append APIs. Writer `.auto`/`.always`/`.never` policy handles
   count, size, and offset transitions; UTF-8 flags, per-entry/archive comments,
   caller-selected Deflate policy, fixed timestamps, and self-extracting
@@ -17691,16 +17691,18 @@ reuse, so production keeps the simpler independently owned plans.
   stream metadata. Deeper parsing and cross-chunk dictionary reuse remain
   follow-up ratio and performance work. See `docs/formats/xz.md`.
 
-- Added dependency-free LZMA-Alone decoding with strict 13-byte property header
-  parsing, known and end-marker-sized streams, explicit dictionary and output
-  limits, caller-owned output, allocating decode, and decoded-size APIs. The
-  same adapter now decodes ZIP method 14's versioned raw-LZMA payload through
+- Added dependency-free LZMA-Alone encoding and decoding with strict 13-byte
+  property headers, known-size and end-marker streams, explicit dictionary and
+  output limits, caller-owned output, allocating/transactional encode and
+  decode, and decoded-size APIs. The same decoder handles ZIP method 14's
+  versioned raw-LZMA payload through
   allocator-bearing ZIP extraction while retaining the no-allocation
   stored/Deflate path. Python `lzma` covers presets 0/1/3/6/9, empty, text,
-  long-run, binary, random, known-size, truncated, corrupt, and limit cases;
-  Python `zipfile` supplies method-14 interoperability coverage. LZMA-Alone has
-  no intrinsic content checksum, so XZ or ZIP remains preferable when integrity
-  verification is required. See `docs/formats/lzma.md`.
+  long-run, binary, random, known-size, truncated, corrupt, and limit cases,
+  while Python `lzma` and system `xz` decode both Vort size modes. Python
+  `zipfile` supplies method-14 read/write interoperability coverage.
+  LZMA-Alone has no intrinsic content checksum, so XZ or ZIP remains preferable
+  when integrity verification is required. See `docs/formats/lzma.md`.
 
 - Added deterministic TAR archive reading and writing. The reader validates
   header checksums, octal and positive base-256 sizes, payload padding, USTAR
@@ -17756,9 +17758,9 @@ reuse, so production keeps the simpler independently owned plans.
   support Delta and x86, PowerPC, IA64, ARM, ARM-Thumb, and SPARC BCJ filters
   after the primary decompressor. The writer emits reproducible unencoded
   headers and one independently extractable folder per non-empty file using
-  Copy, compressed Deflate/Bzip2, or greedy match-producing LZMA2 with a stored
-  fallback, optionally preceded by the same Delta/classic BCJ filters. A 7-Zip
-  differential covers the base methods and real filter chains in both
-  directions. Deeper LZMA parsing, LZMA1 writing, solid writing, BCJ2, branching
-  or multi-packed-stream graphs, encryption, and external metadata streams
-  remain follow-up work. See `docs/formats/7z.md`.
+  Copy, compressed Deflate/Bzip2/LZMA1, or greedy match-producing LZMA2 with a
+  stored fallback, optionally preceded by the same Delta/classic BCJ filters.
+  A 7-Zip differential covers the base methods and real filter chains in both
+  directions. Deeper LZMA parsing, solid writing, BCJ2, branching or
+  multi-packed-stream graphs, encryption, and external metadata streams remain
+  follow-up work. See `docs/formats/7z.md`.

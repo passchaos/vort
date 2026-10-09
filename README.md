@@ -84,8 +84,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free ZIP32/ZIP64 archive reading and deterministic writing with
   EOCD/ZIP64-locator/central-directory iteration, exact entry lookup, stored,
-  raw-deflate, Bzip2-method-12, LZMA-method-14 decode, and
-  Zstandard-method-93 multi-entry encoding/extraction,
+  raw-deflate, Bzip2-method-12, LZMA-method-14, and Zstandard-method-93
+  multi-entry encoding/extraction,
   transactional prefix append, 32-/64-bit data descriptors, archive/entry
   comments, CRC-32/size validation, UTF-8 flags, and explicit
   encrypted/multi-disk/unknown-method errors;
@@ -99,9 +99,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   handling, bounded APIs and metadata inspection, plus deterministic
   filter-aware XZ writing with greedy LZMA matches, repeat distances, and a
   stored fallback;
-- dependency-free LZMA-Alone decoding with known/unknown-size headers,
-  caller-selected output/dictionary limits, caller-owned output, and ZIP
-  method-14 extraction through the same LZMA core;
+- dependency-free LZMA-Alone encoding and decoding with known-size or
+  end-marker streams, caller-selected output/dictionary limits, caller-owned
+  output, and ZIP method-14 writing/extraction through the same LZMA core;
 - pure Zig Unix `compress` (`.Z`) LZW encoding and decoding with 9..16-bit
   variable-width LSB-first codes, block-mode dictionary clears, non-block
   dictionary freeze, caller-owned/bounded APIs, and decoded-size preflight;
@@ -112,7 +112,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   writing, including Adler-32/CRC-32 header and block checks, legacy delta
   filters, concatenated streams, and bounded output/block APIs;
 - pure Zig 7z parsing and deterministic independent-folder writing, with
-  Copy/Deflate/Bzip2/LZMA/LZMA2 decode and Copy/Deflate/Bzip2/LZMA2 encode,
+  Copy/Deflate/Bzip2/LZMA/LZMA2 decode and encode,
   bounded linear Delta and classic BCJ filter chains in both directions,
   compressed Next Headers, solid substreams, CRC validation, UTF-16LE names,
   directories, empty files, and bounded extraction;

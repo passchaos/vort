@@ -1,9 +1,11 @@
 # LZMA-Alone support
 
-Vort provides dependency-free decoding for the legacy `.lzma` / LZMA-Alone
-format. It parses the 13-byte properties header, validates `lc`/`lp`/`pb`,
-normalizes the minimum dictionary size, and supports both declared and
-unknown (`0xffffffffffffffff`) uncompressed sizes.
+Vort provides dependency-free encoding and decoding for the legacy `.lzma` /
+LZMA-Alone format. It parses and emits the 13-byte properties header, validates
+`lc`/`lp`/`pb`, normalizes the minimum dictionary size, and supports both
+declared and unknown (`0xffffffffffffffff`) uncompressed sizes. The encoder
+uses bounded greedy match finding, new/repeated distance coding, and the normal
+LZMA range-coded literal contexts.
 
 ```zig
 const header = try vort.parseLzmaHeader(compressed);
@@ -12,6 +14,12 @@ const decoded = try vort.decodeLzmaAllocWithOptions(allocator, compressed, .{
     .max_dictionary_size = 64 * 1024 * 1024,
 });
 defer allocator.free(decoded);
+
+const encoded = try vort.encodeLzmaAlloc(allocator, input, .{
+    .dictionary_size = 32 * 1024,
+    .size_mode = .end_marker,
+});
+defer allocator.free(encoded);
 ```
 
 Available APIs:
@@ -20,16 +28,22 @@ Available APIs:
 - `decodeLzmaInto`;
 - `decodeLzmaAlloc` and `decodeLzmaAllocLimited`;
 - `decodeLzmaAllocWithOptions` for independent output and dictionary limits;
-- `lzmaDecodedSize` and `lzmaDecodedSizeLimited`.
+- `lzmaDecodedSize` and `lzmaDecodedSizeLimited`;
+- `encodeLzmaAlloc`, `encodeLzmaInto`, and transactional `encodeLzmaAppend`;
+- known-size and end-marker writer modes with configurable LZMA properties and
+  a bounded dictionary.
 
 ZIP method 14 uses a related raw LZMA payload with a ZIP-specific properties
-prefix. Vort recognizes those entries through the ZIP reader. Allocating ZIP
-extraction APIs work directly; caller-owned extraction must use
+prefix and mandatory end marker. Vort reads and writes those entries through
+the ZIP APIs; `ZipEncodeOptions.lzma_options` selects the properties,
+dictionary size, and parser mode. Allocating ZIP extraction APIs work directly;
+caller-owned extraction must use
 `zipExtractEntryIntoWithAllocator` so dictionary scratch remains explicit.
 
 CLI validation surfaces:
 
 ```sh
+zig build run -- encode-lzma-file input.bin output.lzma end-marker
 zig build run -- decode-lzma-file input.lzma output.bin 268435456 67108864
 zig build run -- size-lzma-file input.lzma 268435456
 zig build run-lzma-diff
@@ -39,5 +53,5 @@ zig build run-zip-diff
 LZMA-Alone does not carry an integrity checksum. Known-size streams are checked
 against their declared output size, while unknown-size streams require the
 range-coder end marker. Applications that require corruption detection should
-use XZ or a checksummed container such as ZIP. LZMA-Alone encoding is not yet
-implemented.
+use XZ or a checksummed container such as ZIP. The current encoder uses a
+bounded greedy parser; deeper parsing remains future ratio work.

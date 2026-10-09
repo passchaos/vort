@@ -12,9 +12,9 @@ Supported entry methods:
 - stored (`method 0`);
 - raw Deflate (`method 8`) through the same decoder used by Vort's public raw,
   zlib, and gzip APIs;
-- Bzip2 (`method 12`) through Vort's dependency-free Bzip2 codec.
+- Bzip2 (`method 12`) through Vort's dependency-free Bzip2 codec;
 - LZMA (`method 14`) through Vort's LZMA decoder and the ZIP-specific
-  properties prefix.
+  properties prefix;
 - Zstandard (`method 93`) as a complete standard Zstandard frame.
 
 The decoder validates local/central method and filename agreement, ordered
@@ -24,11 +24,13 @@ descriptors with or without a descriptor signature because extraction
 boundaries come from the central directory.
 
 The writer accepts multiple borrowed entries and emits stored, raw-Deflate,
-Bzip2, or Zstandard members. It records CRC-32, sizes, entry comments, an
-archive comment, and the UTF-8 general-purpose flag. Its fixed DOS timestamp is
-`1980-01-01 00:00:00`, so identical inputs and options produce identical bytes.
-Data descriptors are optional and include the standard descriptor signature
-when enabled.
+Bzip2, LZMA, or Zstandard members. LZMA entries carry the standard four-byte
+ZIP properties prefix, a five-byte LZMA property record, an end marker, general
+purpose flag bit 1, and version-needed 6.3. It records CRC-32, sizes, entry
+comments, an archive comment, and the UTF-8 general-purpose flag. Its fixed DOS
+timestamp is `1980-01-01 00:00:00`, so identical inputs and options produce
+identical bytes. Data descriptors are optional and include the standard
+descriptor signature when enabled.
 `EncodeOptions.zip64` controls archive selection:
 
 - `.auto` emits ZIP32 until an entry count, size, or offset needs ZIP64;
@@ -40,6 +42,7 @@ const entries = [_]vort.ZipEncodeEntry{
     .{ .name = "plain.bin", .data = plain, .method = .stored },
     .{ .name = "folder/data.txt", .data = text, .method = .deflate },
     .{ .name = "folder/archive.txt", .data = archive_text, .method = .bzip2 },
+    .{ .name = "folder/model.bin", .data = model_data, .method = .lzma },
     .{ .name = "folder/frame.bin", .data = frame_data, .method = .zstandard },
 };
 const zip_bytes = try vort.zipEncodeAlloc(allocator, &entries, .{
@@ -92,9 +95,10 @@ zig build run-zip-diff
 
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
-than stored/Deflate/Bzip2/Zstandard. The reader deliberately rejects encrypted entries,
-multi-disk archives, malformed/duplicate ZIP64 extra fields, and compression
-methods other than stored/Deflate/Bzip2/LZMA/Zstandard with specific errors.
+than stored/Deflate/Bzip2/LZMA/Zstandard. The reader deliberately rejects
+encrypted entries, multi-disk archives, malformed/duplicate ZIP64 extra fields,
+and compression methods other than stored/Deflate/Bzip2/LZMA/Zstandard with
+specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. Encryption, split archives, and additional entry
 compression methods remain explicit future compatibility increments.

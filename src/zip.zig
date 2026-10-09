@@ -516,9 +516,11 @@ test "ZIP rejects unsupported archive and entry features" {
 test "ZIP writer deterministically round trips multiple stored and deflate entries" {
     const allocator = std.testing.allocator;
     const deflated_payload = "deterministic ZIP writer payload\n" ** 64;
+    const lzma_payload = "deterministic ZIP LZMA payload\n" ** 64;
     const entries = [_]EncodeEntry{
         .{ .name = "plain.bin", .data = "\x00stored\xff", .method = .stored, .comment = "stored entry" },
         .{ .name = "utf8-目录/data.txt", .data = deflated_payload, .method = .deflate },
+        .{ .name = "lzma.txt", .data = lzma_payload, .method = .lzma },
         .{ .name = "empty/", .data = "", .method = .stored },
     };
     const options = EncodeOptions{
@@ -541,6 +543,10 @@ test "ZIP writer deterministically round trips multiple stored and deflate entri
         try std.testing.expectEqual(entries[index].method, entry.method);
         try std.testing.expect(entry.flags & 0x0008 != 0);
         try std.testing.expect(entry.flags & 0x0800 != 0);
+        if (entry.method == .lzma) {
+            try std.testing.expect(entry.flags & 0x0002 != 0);
+            try std.testing.expectEqual(@as(u16, 63), try readU16(first, entry.local_header_offset + 4));
+        }
         try std.testing.expectEqual(@as(u16, 0), try readU16(first, entry.local_header_offset + 10));
         try std.testing.expectEqual(@as(u16, 0x0021), try readU16(first, entry.local_header_offset + 12));
         const decoded = try archive.extractAlloc(allocator, entry);
@@ -687,6 +693,30 @@ test "ZIP method 12 round trips through the allocating Bzip2 extraction path" {
     const allocated = try archive.extractAlloc(allocator, entry);
     defer allocator.free(allocated);
     try std.testing.expectEqualSlices(u8, payload, allocated);
+}
+
+test "ZIP method 14 writer round trips through the allocating LZMA path" {
+    const allocator = std.testing.allocator;
+    const payload = "LZMA-compressed ZIP entry " ** 128;
+    const entries = [_]EncodeEntry{.{
+        .name = "compressed-with-lzma.txt",
+        .data = payload,
+        .method = .lzma,
+    }};
+    const bytes = try encodeAlloc(allocator, &entries, .{ .data_descriptor = true });
+    defer allocator.free(bytes);
+
+    const archive = try parse(bytes);
+    const entry = try archive.entryAt(0);
+    try std.testing.expectEqual(CompressionMethod.lzma, entry.method);
+    try std.testing.expect(entry.flags & 0x0002 != 0);
+    try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.local_header_offset + 4));
+    try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.central_header_offset + 6));
+
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectError(error.ZipEntryRequiresAllocator, archive.extractInto(entry, &output));
+    try std.testing.expectEqual(payload.len, try archive.extractIntoWithAllocator(allocator, entry, &output));
+    try std.testing.expectEqualSlices(u8, payload, &output);
 }
 
 test "ZIP method 93 round trips through the caller-owned Zstandard path" {

@@ -1,17 +1,19 @@
 const std = @import("std");
 const bzip2 = @import("../bzip2.zig");
 const deflate = @import("../deflate.zig");
+const lzma_encoder = @import("../lzma/encoder.zig");
 const lzma2_writer = @import("../xz/lzma2_writer.zig");
 const filters = @import("../xz/filters.zig");
 const number = @import("number.zig");
 
-pub const Error = bzip2.Error || error{Invalid7zOptions};
+pub const Error = bzip2.Error || lzma_encoder.Error || error{Invalid7zOptions};
 pub const Filter = filters.Filter;
 
 pub const Compression = enum {
     copy,
     deflate,
     bzip2,
+    lzma,
     lzma2,
     lzma2_stored,
 };
@@ -21,6 +23,8 @@ pub const Options = struct {
     filters: []const Filter = &.{},
     deflate_level: u4 = 6,
     bzip2_block_size_100k: u4 = 9,
+    lzma_properties: lzma_encoder.Properties = .{},
+    lzma_dictionary_size: u32 = 32 * 1024,
 };
 
 pub fn validate(options: Options) Error!void {
@@ -30,6 +34,13 @@ pub fn validate(options: Options) Error!void {
     if (options.compression == .bzip2 and
         (options.bzip2_block_size_100k < 1 or options.bzip2_block_size_100k > 9))
         return error.Invalid7zOptions;
+    if (options.compression == .lzma) {
+        _ = lzma_encoder.propertyByte(options.lzma_properties) catch
+            return error.Invalid7zOptions;
+        if (options.lzma_dictionary_size < 4096 or
+            options.lzma_dictionary_size > std.math.maxInt(u16))
+            return error.Invalid7zOptions;
+    }
 }
 
 pub fn coderCount(options: Options) usize {
@@ -60,6 +71,10 @@ pub fn appendPayload(
         .bzip2 => bzip2.encodeAppend(allocator, output, payload, .{
             .block_size_100k = options.bzip2_block_size_100k,
         }),
+        .lzma => lzma_encoder.encodeChunkAppend(allocator, output, payload, .{
+            .properties = options.lzma_properties,
+            .dictionary_size = options.lzma_dictionary_size,
+        }),
         .lzma2 => lzma2_writer.appendCompressedPayload(allocator, output, payload),
         .lzma2_stored => lzma2_writer.appendStoredPayload(allocator, output, payload),
     };
@@ -73,7 +88,7 @@ pub fn writeFolder(
     try validate(options);
     const coder_count = coderCount(options);
     try number.append(allocator, output, coder_count);
-    try writeCompressionCoder(allocator, output, options.compression);
+    try writeCompressionCoder(allocator, output, options);
 
     var filter_index = options.filters.len;
     while (filter_index != 0) {
@@ -94,12 +109,19 @@ fn appendCopy(allocator: std.mem.Allocator, output: *std.ArrayList(u8), input: [
 fn writeCompressionCoder(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
-    compression: Compression,
+    options: Options,
 ) !void {
-    switch (compression) {
+    switch (options.compression) {
         .copy => try output.appendSlice(allocator, &.{ 1, 0 }),
         .deflate => try output.appendSlice(allocator, &.{ 3, 0x04, 0x01, 0x08 }),
         .bzip2 => try output.appendSlice(allocator, &.{ 3, 0x04, 0x02, 0x02 }),
+        .lzma => {
+            try output.appendSlice(allocator, &.{ 0x23, 0x03, 0x01, 0x01, 5 });
+            var properties: [5]u8 = undefined;
+            properties[0] = try lzma_encoder.propertyByte(options.lzma_properties);
+            std.mem.writeInt(u32, properties[1..5], options.lzma_dictionary_size, .little);
+            try output.appendSlice(allocator, &properties);
+        },
         .lzma2, .lzma2_stored => try output.appendSlice(allocator, &.{ 0x21, 0x21, 1, lzma2_writer.dictionary_property }),
     }
 }
@@ -169,6 +191,10 @@ test "7z coder writer validates method-specific options" {
     try std.testing.expectError(error.Invalid7zOptions, validate(.{
         .compression = .bzip2,
         .bzip2_block_size_100k = 0,
+    }));
+    try std.testing.expectError(error.Invalid7zOptions, validate(.{
+        .compression = .lzma,
+        .lzma_dictionary_size = 1024,
     }));
     const filters_too_long = [_]Filter{
         Filter.x86(0),

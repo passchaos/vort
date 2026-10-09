@@ -111,7 +111,7 @@ def main() -> None:
 
         if seven_zip_tool is not None:
             verify_with_seven_zip(seven_zip_tool, first, expected_vort)
-            for compression in ("deflate", "bzip2", "lzma2"):
+            for compression in ("deflate", "bzip2", "lzma", "lzma2"):
                 archive = temp / f"vort-{compression}-multi.7z"
                 run(args.writer, str(archive), compression)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
@@ -196,6 +196,7 @@ def main() -> None:
                     b"multi-chunk literal LZMA2 payload\n" * 4096,
                 ),
                 "bcj-deflate": ("deflate", "x86", x86_payload),
+                "bcj-lzma": ("lzma", "x86", x86_payload),
                 "delta4-bzip2": ("bzip2", "delta:4", bytes(range(256)) * 16),
                 "bcj-lzma2": ("lzma2", "x86", x86_payload),
                 "delta4-lzma2-stored": (

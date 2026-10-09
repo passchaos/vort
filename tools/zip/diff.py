@@ -183,6 +183,7 @@ def validate_vort_archive_with_python(
         "stored.bin": bytes([0, 1, 2, 255]) + b"stored by Vort",
         "folder/deflated.txt": b"Vort ZIP writer differential.\n" * 128,
         "folder/bzip2.txt": b"Vort ZIP Bzip2 method 12.\n" * 96,
+        "folder/lzma.txt": b"Vort ZIP LZMA method 14.\n" * 96,
         "folder/zstd.txt": b"Vort ZIP Zstandard method 93.\n" * 96,
         "utf8-目录/数据.txt": "ZIP UTF-8 文件名\n".encode() * 17,
         "empty/": b"",
@@ -212,6 +213,7 @@ def validate_vort_archive_with_python(
             "stored.bin": zipfile.ZIP_STORED,
             "folder/deflated.txt": zipfile.ZIP_DEFLATED,
             "folder/bzip2.txt": zipfile.ZIP_BZIP2,
+            "folder/lzma.txt": zipfile.ZIP_LZMA,
             "folder/zstd.txt": 93,
             "utf8-目录/数据.txt": zipfile.ZIP_DEFLATED,
             "empty/": zipfile.ZIP_STORED,
@@ -298,7 +300,7 @@ def main() -> None:
 
     print(
         "zip_diff=ok directions=2 "
-        f"python_entries=7 vort_entries=6 python_bytes={python_bytes} "
+        f"python_entries=7 vort_entries=7 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes}"
     )
 

@@ -13,6 +13,8 @@ pub fn main(init: std.process.Init) !void {
         .deflate
     else if (std.mem.eql(u8, compression_name, "bzip2"))
         .bzip2
+    else if (std.mem.eql(u8, compression_name, "lzma"))
+        .lzma
     else if (std.mem.eql(u8, compression_name, "lzma2"))
         .lzma2
     else if (std.mem.eql(u8, compression_name, "lzma2-stored"))
