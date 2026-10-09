@@ -1,7 +1,15 @@
 const std = @import("std");
 const core = @import("core.zig");
+const encoder = @import("lzo1x/encoder.zig");
 
-pub const Error = core.Error || error{InvalidLzoStream};
+pub const Error = core.Error || encoder.Error || error{InvalidLzoStream};
+pub const EncodeOptions = encoder.EncodeOptions;
+pub const EncodeMode = encoder.Mode;
+pub const EncodeStats = encoder.EncodeStats;
+pub const encodeAlloc = encoder.encodeAlloc;
+pub const encodeAppend = encoder.encodeAppend;
+pub const encodeAppendWithStats = encoder.encodeAppendWithStats;
+pub const encodeInto = encoder.encodeInto;
 
 const m2_max_offset: usize = 0x0800;
 const m3_max_offset: usize = 0x4000;
@@ -214,4 +222,58 @@ test "LZO1X decoder rejects truncation lookbehind and trailing bytes" {
     try std.testing.expectError(error.TruncatedFrame, decodeInto(&.{ 22, 'h' }, &output));
     try std.testing.expectError(error.InvalidLzoStream, decodeInto(&.{ 18, 'a', 4, 0, 17, 0, 0 }, &output));
     try std.testing.expectError(error.TrailingData, decodeInto(&.{ 17, 0, 0, 1 }, &output));
+}
+
+test "LZO1X writer emits greedy short and long-distance matches" {
+    const short_input = "abcabcabcabcabcabcabcabc" ** 64;
+    var short_encoded: std.ArrayList(u8) = .empty;
+    defer short_encoded.deinit(std.testing.allocator);
+    const short_stats = try encodeAppendWithStats(std.testing.allocator, &short_encoded, short_input, .{});
+    try std.testing.expect(short_stats.matches != 0);
+    try std.testing.expect(short_encoded.items.len < short_input.len);
+
+    var decoded_short: [short_input.len]u8 = undefined;
+    try std.testing.expectEqual(short_input.len, try decodeInto(short_encoded.items, &decoded_short));
+    try std.testing.expectEqualSlices(u8, short_input, &decoded_short);
+
+    var long_input: [40_009]u8 = undefined;
+    var prng = std.Random.DefaultPrng.init(0x4c5a_4f31_585f_4d34);
+    prng.random().bytes(long_input[0..20_000]);
+    @memcpy(long_input[20_009..], long_input[0..20_000]);
+    @memcpy(long_input[20_000..20_009], "separator");
+    var long_encoded: std.ArrayList(u8) = .empty;
+    defer long_encoded.deinit(std.testing.allocator);
+    const long_stats = try encodeAppendWithStats(std.testing.allocator, &long_encoded, &long_input, .{});
+    try std.testing.expect(long_stats.long_distance_matches != 0);
+    var decoded_long: [long_input.len]u8 = undefined;
+    try std.testing.expectEqual(long_input.len, try decodeInto(long_encoded.items, &decoded_long));
+    try std.testing.expectEqualSlices(u8, &long_input, &decoded_long);
+}
+
+test "LZO1X writer round trips literal length boundaries and varied inputs" {
+    var input: [768]u8 = undefined;
+    var prng = std.Random.DefaultPrng.init(0x4c5a_4f31_585f_5254);
+    prng.random().bytes(&input);
+    const literal_lengths = [_]usize{ 0, 1, 3, 4, 18, 19, 238, 239, 273, 274, input.len };
+    for (literal_lengths) |len| {
+        const encoded = try encodeAlloc(std.testing.allocator, input[0..len], .{ .mode = .literal_only });
+        defer std.testing.allocator.free(encoded);
+        var decoded: [input.len]u8 = undefined;
+        try std.testing.expectEqual(len, try decodeInto(encoded, decoded[0..len]));
+        try std.testing.expectEqualSlices(u8, input[0..len], decoded[0..len]);
+    }
+
+    const greedy_lengths = [_]usize{ 3, 17, 64, 255, 512, input.len };
+    for (greedy_lengths) |len| {
+        if (len >= 64) std.mem.copyBackwards(u8, input[len - 32 .. len], input[8..40]);
+        const encoded = try encodeAlloc(std.testing.allocator, input[0..len], .{});
+        defer std.testing.allocator.free(encoded);
+        var decoded: [input.len]u8 = undefined;
+        try std.testing.expectEqual(len, try decodeInto(encoded, decoded[0..len]));
+        try std.testing.expectEqualSlices(u8, input[0..len], decoded[0..len]);
+    }
+}
+
+test {
+    _ = encoder;
 }
