@@ -1,10 +1,11 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const file_properties = @import("file_properties.zig");
 const number = @import("number.zig");
 const streams_mod = @import("streams.zig");
 const types = @import("types.zig");
 
-pub const Error = core.Error || number.Error || error{
+pub const Error = core.Error || number.Error || file_properties.Error || error{
     Invalid7zArchive,
     Unsupported7zFeature,
 };
@@ -60,6 +61,7 @@ pub fn parse(
     defer if (empty_files) |values| allocator.free(values);
     var names_seen = false;
     var empty_streams_seen = false;
+    var metadata_seen: [file_properties.kind_count]bool = @splat(false);
 
     while (true) {
         const property = try reader.readByte();
@@ -112,7 +114,20 @@ pub fn parse(
                 for (data.bytes) |byte| if (byte != 0) return error.Invalid7zArchive;
                 data.offset = data.bytes.len;
             },
-            else => data.offset = data.bytes.len,
+            else => {
+                if (file_properties.kindFromId(property)) |kind| {
+                    try file_properties.parse(
+                        allocator,
+                        kind,
+                        &data,
+                        external_streams,
+                        entries,
+                        &metadata_seen,
+                    );
+                } else {
+                    data.offset = data.bytes.len;
+                }
+            },
         }
         if (data.remaining() != 0) return error.Invalid7zArchive;
     }
@@ -190,4 +205,98 @@ fn readName(allocator: std.mem.Allocator, reader: *number.Reader) ![]u8 {
         error.OutOfMemory => error.OutOfMemory,
         else => error.Invalid7zArchive,
     };
+}
+
+test "7z file properties reject malformed definitions and external values" {
+    const empty_streams = streams_mod.Streams{ .allocator = std.testing.allocator };
+
+    const bad_definition = [_]u8{
+        0,
+        file_properties.id(.creation_time),
+        2,
+        2,
+        0,
+        Nid.end,
+    };
+    var bad_definition_reader = number.Reader.init(&bad_definition);
+    try std.testing.expectError(
+        error.Invalid7zArchive,
+        parse(std.testing.allocator, &bad_definition_reader, &empty_streams, &.{}, 8),
+    );
+
+    const duplicate_property = [_]u8{
+        0,
+        file_properties.id(.access_time),
+        2,
+        1,
+        0,
+        file_properties.id(.access_time),
+        2,
+        1,
+        0,
+        Nid.end,
+    };
+    var duplicate_property_reader = number.Reader.init(&duplicate_property);
+    try std.testing.expectError(
+        error.Invalid7zArchive,
+        parse(std.testing.allocator, &duplicate_property_reader, &empty_streams, &.{}, 8),
+    );
+
+    const external_property = [_]u8{
+        1,
+        Nid.empty_stream,
+        1,
+        0x80,
+        Nid.empty_file,
+        1,
+        0x80,
+        file_properties.id(.modification_time),
+        3,
+        1,
+        1,
+        0,
+        Nid.end,
+    };
+    var missing_external_reader = number.Reader.init(&external_property);
+    try std.testing.expectError(
+        error.Invalid7zArchive,
+        parse(std.testing.allocator, &missing_external_reader, &empty_streams, &.{}, 8),
+    );
+
+    var trailing_values = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    const external_values = [_][]u8{trailing_values[0..]};
+    var trailing_external_reader = number.Reader.init(&external_property);
+    try std.testing.expectError(
+        error.Invalid7zArchive,
+        parse(
+            std.testing.allocator,
+            &trailing_external_reader,
+            &empty_streams,
+            &external_values,
+            8,
+        ),
+    );
+
+    const truncated_inline = [_]u8{
+        1,
+        Nid.empty_stream,
+        1,
+        0x80,
+        Nid.empty_file,
+        1,
+        0x80,
+        file_properties.id(.attributes),
+        5,
+        1,
+        0,
+        1,
+        2,
+        3,
+        Nid.end,
+    };
+    var truncated_inline_reader = number.Reader.init(&truncated_inline);
+    try std.testing.expectError(
+        error.TruncatedFrame,
+        parse(std.testing.allocator, &truncated_inline_reader, &empty_streams, &.{}, 8),
+    );
 }

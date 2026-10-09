@@ -23,6 +23,7 @@ pub const Options = struct {
     solid: bool = false,
     header_compression: ?Compression = null,
     external_names: ?Compression = null,
+    external_metadata: ?Compression = null,
     bcj2: bool = false,
     bcj2_start_ip: u32 = 0,
     filters: []const Filter = &.{},

@@ -20,25 +20,39 @@ pub fn createFile(
     const bcj2 = try parseBcj2(args.next());
     const bcj2_start_ip = try parseStartIp(args.next());
     const external_names = try parseExternalNames(args.next());
+    const external_metadata = try parseExternalMetadata(args.next());
+    const creation_time = try parseOptionalU64(args.next());
+    const access_time = try parseOptionalU64(args.next());
+    const modification_time = try parseOptionalU64(args.next());
+    const attributes = try parseOptionalU32(args.next());
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
-    const entries = [_]vort.SevenZipEncodeEntry{.{ .name = entry_name, .data = input }};
+    const entries = [_]vort.SevenZipEncodeEntry{.{
+        .name = entry_name,
+        .data = input,
+        .creation_time = creation_time,
+        .access_time = access_time,
+        .modification_time = modification_time,
+        .attributes = attributes,
+    }};
     const encoded = try vort.encodeSevenZipAlloc(init.gpa, &entries, .{
         .compression = compression,
         .solid = solid,
         .header_compression = header_compression,
         .external_names = external_names,
+        .external_metadata = external_metadata,
         .bcj2 = bcj2,
         .bcj2_start_ip = bcj2_start_ip,
         .filters = filters,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("seven_zip_entries=1 compression={s} solid={} header={s} external_names={s} bcj2={} filters={d} input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("seven_zip_entries=1 compression={s} solid={} header={s} external_names={s} external_metadata={s} bcj2={} filters={d} input_bytes={d} archive_bytes={d} path={s}\n", .{
         @tagName(compression),
         solid,
         if (header_compression) |method| @tagName(method) else "plain",
         if (external_names) |method| @tagName(method) else "inline",
+        if (external_metadata) |method| @tagName(method) else "inline",
         bcj2,
         filters.len,
         input.len,
@@ -85,6 +99,28 @@ fn parseExternalNames(text: ?[]const u8) !?vort.SevenZipCompression {
     return error.Invalid7zOptions;
 }
 
+fn parseExternalMetadata(text: ?[]const u8) !?vort.SevenZipCompression {
+    const value = text orelse return null;
+    if (std.mem.eql(u8, value, "external-metadata")) return .copy;
+    if (std.mem.eql(u8, value, "inline-metadata")) return null;
+    const prefix = "external-metadata-";
+    if (std.mem.startsWith(u8, value, prefix))
+        return try parseCompression(value[prefix.len..]);
+    return error.Invalid7zOptions;
+}
+
+fn parseOptionalU64(text: ?[]const u8) !?u64 {
+    const value = text orelse return null;
+    if (std.mem.eql(u8, value, "-") or std.mem.eql(u8, value, "none")) return null;
+    return try std.fmt.parseInt(u64, value, 10);
+}
+
+fn parseOptionalU32(text: ?[]const u8) !?u32 {
+    const value = text orelse return null;
+    if (std.mem.eql(u8, value, "-") or std.mem.eql(u8, value, "none")) return null;
+    return try std.fmt.parseInt(u32, value, 10);
+}
+
 pub fn listFile(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
@@ -97,11 +133,19 @@ pub fn listFile(
     defer archive.deinit();
     try stdout.print("seven_zip_entries={d}\n", .{archive.entries.len});
     for (archive.entries, 0..) |entry, index|
-        try stdout.print("index={d} kind={s} method={s} size={d} name={s}\n", .{
+        try stdout.print("index={d} kind={s} method={s} size={d} creation_defined={} creation={d} access_defined={} access={d} modification_defined={} modification={d} attributes_defined={} attributes={d} name={s}\n", .{
             index,
             @tagName(entry.kind),
             if (entry.method) |method| @tagName(method) else "none",
             entry.size,
+            entry.creation_time != null,
+            entry.creation_time orelse 0,
+            entry.access_time != null,
+            entry.access_time orelse 0,
+            entry.modification_time != null,
+            entry.modification_time orelse 0,
+            entry.attributes != null,
+            entry.attributes orelse 0,
             entry.name,
         });
 }

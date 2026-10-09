@@ -17852,6 +17852,12 @@ reuse, so production keeps the simpler independently owned plans.
   place names in a separate auxiliary stream using any of the six writer
   codecs, including with solid data and an encoded Next Header; system 7-Zip
   validates every name-stream codec.
+  The public entry model now preserves optional creation/access/modification
+  FILETIME ticks and raw 32-bit platform attributes. Inline and external
+  property vectors support partial defined-item bitmaps, strict external index
+  and consumption checks, and all six auxiliary-stream codecs. The differential
+  pins a system-generated mtime plus Unix attributes and validates all six Vort
+  external-metadata modes through 7-Zip.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
-  encryption, and richer file properties remain follow-up work. See
+  encryption, comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.

@@ -18,6 +18,7 @@ pub fn main(init: std.process.Init) !void {
     else
         0;
     const external_names_name = args.next();
+    const external_metadata_name = args.next();
     const compression: vort.SevenZipCompression = if (std.mem.eql(u8, compression_name, "copy"))
         .copy
     else if (std.mem.eql(u8, compression_name, "deflate"))
@@ -70,18 +71,61 @@ pub fn main(init: std.process.Init) !void {
             return error.UnsupportedCompression
     else
         null;
+    const external_metadata: ?vort.SevenZipCompression = if (external_metadata_name) |name|
+        if (std.mem.eql(u8, name, "external-metadata") or std.mem.eql(u8, name, "external-metadata-copy"))
+            .copy
+        else if (std.mem.eql(u8, name, "external-metadata-deflate"))
+            .deflate
+        else if (std.mem.eql(u8, name, "external-metadata-bzip2"))
+            .bzip2
+        else if (std.mem.eql(u8, name, "external-metadata-lzma"))
+            .lzma
+        else if (std.mem.eql(u8, name, "external-metadata-lzma2"))
+            .lzma2
+        else if (std.mem.eql(u8, name, "external-metadata-lzma2-stored"))
+            .lzma2_stored
+        else if (std.mem.eql(u8, name, "inline-metadata"))
+            null
+        else
+            return error.UnsupportedCompression
+    else
+        null;
 
+    const filetime_epoch: u64 = 116_444_736_000_000_000;
     const entries = [_]vort.SevenZipEncodeEntry{
-        .{ .name = "plain.txt", .data = "Vort 7z payload\n" },
-        .{ .name = "empty.txt" },
-        .{ .name = "folder", .kind = .directory },
-        .{ .name = "utf8-目录/数据.txt", .data = "Vort 7z UTF-8\n" },
+        .{
+            .name = "plain.txt",
+            .data = "Vort 7z payload\n",
+            .creation_time = filetime_epoch + 10_000_000,
+            .access_time = filetime_epoch + 20_000_000,
+            .modification_time = filetime_epoch + 30_000_000,
+            .attributes = 0x81a4_0020,
+        },
+        .{
+            .name = "empty.txt",
+            .modification_time = filetime_epoch + 40_000_000,
+            .attributes = 0x81a4_0020,
+        },
+        .{
+            .name = "folder",
+            .kind = .directory,
+            .creation_time = filetime_epoch + 50_000_000,
+            .attributes = 0x41ed_0010,
+        },
+        .{
+            .name = "utf8-目录/数据.txt",
+            .data = "Vort 7z UTF-8\n",
+            .access_time = filetime_epoch + 60_000_000,
+            .modification_time = filetime_epoch + 70_000_000,
+            .attributes = 0x81a4_0020,
+        },
     };
     const bytes = try vort.encodeSevenZipAlloc(init.gpa, &entries, .{
         .compression = compression,
         .solid = solid,
         .header_compression = header_compression,
         .external_names = external_names,
+        .external_metadata = external_metadata,
         .bcj2 = bcj2,
         .bcj2_start_ip = bcj2_start_ip,
     });

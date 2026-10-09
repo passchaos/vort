@@ -3,6 +3,7 @@ const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const coders = @import("coders.zig");
 const bcj2 = @import("bcj2.zig");
+const file_properties = @import("file_properties.zig");
 const number = @import("number.zig");
 const types = @import("types.zig");
 
@@ -51,11 +52,16 @@ const EncodedSubstream = struct {
     crc32: u32,
 };
 
-const EncodedExternalNames = struct {
-    pack_position: usize,
-    folder: EncodedFolder,
-    substream: EncodedSubstream,
-    options: EncodeOptions,
+const max_external_streams: usize = 1 + file_properties.kind_count;
+
+const EncodedExternalStreams = struct {
+    pack_position: usize = 0,
+    folders: [max_external_streams]EncodedFolder = undefined,
+    substreams: [max_external_streams]EncodedSubstream = undefined,
+    options: [max_external_streams]EncodeOptions = undefined,
+    count: usize = 0,
+    name_index: ?usize = null,
+    metadata_indices: file_properties.Indices = @splat(null),
 };
 
 pub fn encodeAlloc(
@@ -149,46 +155,34 @@ pub fn encodeAppend(
     var names: std.ArrayList(u8) = .empty;
     defer names.deinit(allocator);
     try appendNames(allocator, &names, entries);
-    var external_names: ?EncodedExternalNames = null;
+    var external_streams = EncodedExternalStreams{};
     if (options.external_names) |compression| {
-        var name_options = options;
-        name_options.compression = compression;
-        name_options.solid = false;
-        name_options.header_compression = null;
-        name_options.external_names = null;
-        name_options.bcj2 = false;
-        name_options.bcj2_start_ip = 0;
-        name_options.filters = &.{};
-        const pack_position = packed_data.items.len;
-        const packed_size = try coders.appendPayload(
+        external_streams.name_index = try appendExternalPayload(
             allocator,
             &packed_data,
+            &external_streams,
             names.items,
-            name_options,
+            options,
+            compression,
         );
-        const unpacked_size = std.math.cast(u64, names.items.len) orelse
-            return error.IntegerOverflow;
-        const names_crc = checksum.crc32Best(names.items);
-        external_names = .{
-            .pack_position = pack_position,
-            .folder = .{
-                .packed_sizes = .{
-                    std.math.cast(u64, packed_size) orelse return error.IntegerOverflow,
-                    0,
-                    0,
-                    0,
-                },
-                .unpacked_size = unpacked_size,
-                .crc32 = names_crc,
-                .first_substream = 0,
-                .substream_count = 1,
-            },
-            .substream = .{
-                .unpacked_size = unpacked_size,
-                .crc32 = names_crc,
-            },
-            .options = name_options,
-        };
+    }
+    if (options.external_metadata) |compression| {
+        var metadata_values: std.ArrayList(u8) = .empty;
+        defer metadata_values.deinit(allocator);
+
+        inline for (std.meta.tags(file_properties.Kind)) |kind| {
+            metadata_values.clearRetainingCapacity();
+            try file_properties.appendValues(allocator, &metadata_values, entries, kind);
+            if (metadata_values.items.len != 0)
+                external_streams.metadata_indices[@intFromEnum(kind)] = try appendExternalPayload(
+                    allocator,
+                    &packed_data,
+                    &external_streams,
+                    metadata_values.items,
+                    options,
+                    compression,
+                );
+        }
     }
     try writeNextHeader(
         allocator,
@@ -198,7 +192,7 @@ pub fn encodeAppend(
         substreams,
         options,
         names.items,
-        external_names,
+        &external_streams,
     );
 
     var next_header: std.ArrayList(u8) = .empty;
@@ -210,6 +204,7 @@ pub fn encodeAppend(
         header_options.solid = false;
         header_options.header_compression = null;
         header_options.external_names = null;
+        header_options.external_metadata = null;
         header_options.bcj2 = false;
         header_options.bcj2_start_ip = 0;
         header_options.filters = &.{};
@@ -359,6 +354,51 @@ fn appendFolderPayload(
     return folder;
 }
 
+fn appendExternalPayload(
+    allocator: std.mem.Allocator,
+    packed_data: *std.ArrayList(u8),
+    external: *EncodedExternalStreams,
+    input: []const u8,
+    base_options: EncodeOptions,
+    compression: Compression,
+) !usize {
+    std.debug.assert(external.count < max_external_streams);
+    if (external.count == 0) external.pack_position = packed_data.items.len;
+    var options = base_options;
+    options.compression = compression;
+    options.solid = false;
+    options.header_compression = null;
+    options.external_names = null;
+    options.external_metadata = null;
+    options.bcj2 = false;
+    options.bcj2_start_ip = 0;
+    options.filters = &.{};
+    const packed_size = try coders.appendPayload(allocator, packed_data, input, options);
+    const unpacked_size = std.math.cast(u64, input.len) orelse
+        return error.IntegerOverflow;
+    const crc32 = checksum.crc32Best(input);
+    const index = external.count;
+    external.folders[index] = .{
+        .packed_sizes = .{
+            std.math.cast(u64, packed_size) orelse return error.IntegerOverflow,
+            0,
+            0,
+            0,
+        },
+        .unpacked_size = unpacked_size,
+        .crc32 = crc32,
+        .first_substream = index,
+        .substream_count = 1,
+    };
+    external.substreams[index] = .{
+        .unpacked_size = unpacked_size,
+        .crc32 = crc32,
+    };
+    external.options[index] = options;
+    external.count += 1;
+    return index;
+}
+
 fn writeNextHeader(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
@@ -367,25 +407,24 @@ fn writeNextHeader(
     substreams: []const EncodedSubstream,
     options: EncodeOptions,
     names: []const u8,
-    external_names: ?EncodedExternalNames,
+    external_streams: *const EncodedExternalStreams,
 ) !void {
     try output.append(allocator, Nid.header);
-    if (external_names) |external| {
-        const additional_folders = [_]EncodedFolder{external.folder};
-        const additional_substreams = [_]EncodedSubstream{external.substream};
+    if (external_streams.count != 0) {
         try output.append(allocator, Nid.additional_streams);
-        try writeStreamsBody(
+        try writeStreamsBodyConfigured(
             allocator,
             output,
-            &additional_folders,
-            &additional_substreams,
-            external.options,
-            external.pack_position,
+            external_streams.folders[0..external_streams.count],
+            external_streams.substreams[0..external_streams.count],
+            external_streams.options[0],
+            external_streams.options[0..external_streams.count],
+            external_streams.pack_position,
         );
     }
     if (folders.len != 0)
         try writeStreamsInfo(allocator, output, folders, substreams, options);
-    try writeFilesInfo(allocator, output, entries, names, external_names != null);
+    try writeFilesInfo(allocator, output, entries, names, external_streams);
     try output.append(allocator, Nid.end);
 }
 
@@ -408,6 +447,28 @@ fn writeStreamsBody(
     options: EncodeOptions,
     pack_position: usize,
 ) !void {
+    return writeStreamsBodyConfigured(
+        allocator,
+        output,
+        folders,
+        substreams,
+        options,
+        null,
+        pack_position,
+    );
+}
+
+fn writeStreamsBodyConfigured(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    folders: []const EncodedFolder,
+    substreams: []const EncodedSubstream,
+    default_options: EncodeOptions,
+    configured_options: ?[]const EncodeOptions,
+    pack_position: usize,
+) !void {
+    if (configured_options) |folder_options|
+        std.debug.assert(folder_options.len == folders.len);
     try output.append(allocator, Nid.pack_info);
     try number.append(allocator, output, pack_position);
     var pack_stream_count: usize = 0;
@@ -425,10 +486,21 @@ fn writeStreamsBody(
     try output.append(allocator, Nid.folder);
     try number.append(allocator, output, folders.len);
     try output.append(allocator, 0);
-    for (folders) |_| try coders.writeFolder(allocator, output, options);
+    for (folders, 0..) |_, index| {
+        const options = if (configured_options) |folder_options|
+            folder_options[index]
+        else
+            default_options;
+        try coders.writeFolder(allocator, output, options);
+    }
     try output.append(allocator, Nid.coders_unpack_size);
-    for (folders) |folder|
+    for (folders, 0..) |folder, index| {
+        const options = if (configured_options) |folder_options|
+            folder_options[index]
+        else
+            default_options;
         for (0..coders.coderCount(options)) |_| try number.append(allocator, output, folder.unpacked_size);
+    }
     try output.append(allocator, Nid.crc);
     try output.append(allocator, 1);
     for (folders) |folder| try appendU32(allocator, output, folder.crc32);
@@ -463,7 +535,7 @@ fn writeFilesInfo(
     output: *std.ArrayList(u8),
     entries: []const EncodeEntry,
     names: []const u8,
-    external_names: bool,
+    external_streams: *const EncodedExternalStreams,
 ) !void {
     try output.append(allocator, Nid.files);
     try number.append(allocator, output, entries.len);
@@ -490,9 +562,13 @@ fn writeFilesInfo(
     }
 
     try output.append(allocator, Nid.name);
-    if (external_names) {
-        try number.append(allocator, output, 2);
-        try output.appendSlice(allocator, &.{ 1, 0 });
+    if (external_streams.name_index) |index| {
+        var property: std.ArrayList(u8) = .empty;
+        defer property.deinit(allocator);
+        try property.append(allocator, 1);
+        try number.append(allocator, &property, index);
+        try number.append(allocator, output, property.items.len);
+        try output.appendSlice(allocator, property.items);
     } else {
         const property_size = std.math.add(usize, names.len, 1) catch
             return error.IntegerOverflow;
@@ -500,6 +576,12 @@ fn writeFilesInfo(
         try output.append(allocator, 0);
         try output.appendSlice(allocator, names);
     }
+    try file_properties.write(
+        allocator,
+        output,
+        entries,
+        external_streams.metadata_indices,
+    );
     try output.append(allocator, Nid.end);
 }
 

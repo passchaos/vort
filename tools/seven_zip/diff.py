@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import tempfile
@@ -47,7 +48,18 @@ def verify_with_seven_zip(tool: str, archive: Path, payloads: dict[str, bytes]) 
 def create_reference(tool: str, tree: Path, archive: Path, options: list[str]) -> None:
     names = ["hello.txt", "second.txt", "empty.txt", "folder", "数据.txt"]
     subprocess.run(
-        [tool, "a", "-bd", "-y", "-t7z", *options, str(archive), *names],
+        [
+            tool,
+            "a",
+            "-bd",
+            "-y",
+            "-t7z",
+            "-mtm=on",
+            "-mta=on",
+            *options,
+            str(archive),
+            *names,
+        ],
         check=True,
         cwd=tree,
         stdout=subprocess.PIPE,
@@ -80,6 +92,26 @@ def verify_with_vort(cli: Path, archive: Path, payloads: dict[str, bytes]) -> No
             raise AssertionError(f"Vort 7z extraction mismatch for {name!r}")
 
 
+def verify_vort_metadata(
+    cli: Path,
+    archive: Path,
+    name: str,
+    expected: dict[str, int],
+    defined: tuple[str, ...] = (),
+) -> None:
+    listing = run(cli, "list-7z-file", str(archive)).stdout
+    line = next((item for item in listing.splitlines() if f"name={name}" in item), None)
+    if line is None:
+        raise AssertionError(f"7z listing omitted metadata entry {name!r}: {listing}")
+    for field, value in expected.items():
+        marker = f"{field}_defined=true {field}={value}"
+        if marker not in line:
+            raise AssertionError(f"7z metadata mismatch for {name!r}: {marker}: {line}")
+    for field in defined:
+        if f"{field}_defined=true" not in line:
+            raise AssertionError(f"7z metadata omitted {field} for {name!r}: {line}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
@@ -108,6 +140,18 @@ def main() -> None:
             "utf8-目录/数据.txt": "Vort 7z UTF-8\n".encode(),
         }
         verify_with_vort(args.cli, first, expected_vort)
+        filetime_epoch = 116_444_736_000_000_000
+        verify_vort_metadata(
+            args.cli,
+            first,
+            "plain.txt",
+            {
+                "creation": filetime_epoch + 10_000_000,
+                "access": filetime_epoch + 20_000_000,
+                "modification": filetime_epoch + 30_000_000,
+                "attributes": 0x81A4_0020,
+            },
+        )
 
         if seven_zip_tool is not None:
             verify_with_seven_zip(seven_zip_tool, first, expected_vort)
@@ -176,6 +220,49 @@ def main() -> None:
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
             vort_writer_variants += 6
 
+            for metadata_compression in (
+                "copy",
+                "deflate",
+                "bzip2",
+                "lzma",
+                "lzma2",
+                "lzma2-stored",
+            ):
+                archive = temp / f"vort-external-metadata-{metadata_compression}.7z"
+                duplicate = temp / (
+                    f"vort-external-metadata-{metadata_compression}-repeat.7z"
+                )
+                writer_args = (
+                    "lzma2",
+                    "solid",
+                    "lzma2",
+                    "classic",
+                    "0",
+                    "external-lzma2",
+                    f"external-metadata-{metadata_compression}",
+                )
+                run(args.writer, str(archive), *writer_args)
+                run(args.writer, str(duplicate), *writer_args)
+                if archive.read_bytes() != duplicate.read_bytes():
+                    raise AssertionError(
+                        "Vort external-metadata "
+                        f"{metadata_compression} output is not deterministic"
+                    )
+                verify_with_vort(args.cli, archive, expected_vort)
+                verify_vort_metadata(
+                    args.cli,
+                    archive,
+                    "plain.txt",
+                    {
+                        "creation": filetime_epoch + 10_000_000,
+                        "access": filetime_epoch + 20_000_000,
+                        "modification": filetime_epoch + 30_000_000,
+                        "attributes": 0x81A4_0020,
+                    },
+                )
+                verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+            vort_writer_variants += 6
+
             for compression in (
                 "copy",
                 "deflate",
@@ -221,6 +308,10 @@ def main() -> None:
             }
             for name, payload in payloads.items():
                 (tree / name).write_bytes(payload)
+            modified_seconds = 1_577_934_245
+            access_seconds = 1_612_325_106
+            for path in (*((tree / name) for name in payloads), tree / "folder"):
+                os.utime(path, (access_seconds, modified_seconds))
 
             variants = {
                 "copy-plain": ["-mx=0", "-mhc=off", "-ms=off"],
@@ -242,6 +333,17 @@ def main() -> None:
                 archive = temp / f"{variant}.7z"
                 create_reference(seven_zip_tool, tree, archive, options)
                 verify_with_vort(args.cli, archive, payloads)
+                if variant == "copy-plain":
+                    verify_vort_metadata(
+                        args.cli,
+                        archive,
+                        "hello.txt",
+                        {
+                            "modification": filetime_epoch
+                            + modified_seconds * 10_000_000,
+                        },
+                        ("access", "attributes"),
+                    )
             external_variants += len(variants)
 
             filter_tree = temp / "filter-tree"

@@ -307,6 +307,104 @@ test "7z writer and reader support external name streams" {
     );
 }
 
+test "7z writer and reader preserve inline and external file metadata" {
+    const filetime_epoch: u64 = 116_444_736_000_000_000;
+    const entries = [_]EncodeEntry{
+        .{
+            .name = "first.txt",
+            .data = "metadata payload one\n" ** 32,
+            .creation_time = filetime_epoch + 10_000_000,
+            .access_time = filetime_epoch + 20_000_000,
+            .modification_time = filetime_epoch + 30_000_000,
+            .attributes = 0x81a4_0020,
+        },
+        .{
+            .name = "empty.txt",
+            .modification_time = filetime_epoch + 40_000_000,
+        },
+        .{
+            .name = "目录",
+            .kind = .directory,
+            .creation_time = filetime_epoch + 50_000_000,
+            .attributes = 0x41ed_0010,
+        },
+        .{
+            .name = "目录/second.txt",
+            .data = "metadata payload two\n" ** 47,
+            .access_time = filetime_epoch + 60_000_000,
+            .modification_time = filetime_epoch + 70_000_000,
+            .attributes = 0x81a4_0020,
+        },
+    };
+
+    const inline_encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+        .compression = .lzma2,
+        .solid = true,
+    });
+    defer std.testing.allocator.free(inline_encoded);
+    const inline_parsed = try parseAlloc(std.testing.allocator, inline_encoded);
+    defer inline_parsed.deinit();
+    for (entries, inline_parsed.entries) |expected, actual| {
+        try std.testing.expectEqual(expected.creation_time, actual.creation_time);
+        try std.testing.expectEqual(expected.access_time, actual.access_time);
+        try std.testing.expectEqual(expected.modification_time, actual.modification_time);
+        try std.testing.expectEqual(expected.attributes, actual.attributes);
+    }
+
+    inline for (.{
+        Compression.copy,
+        Compression.deflate,
+        Compression.bzip2,
+        Compression.lzma,
+        Compression.lzma2,
+        Compression.lzma2_stored,
+    }) |metadata_compression| {
+        const options = EncodeOptions{
+            .compression = .lzma2,
+            .solid = true,
+            .header_compression = .lzma2,
+            .external_names = .lzma2,
+            .external_metadata = metadata_compression,
+        };
+        const encoded = try encodeAlloc(std.testing.allocator, &entries, options);
+        defer std.testing.allocator.free(encoded);
+        const repeated = try encodeAlloc(std.testing.allocator, &entries, options);
+        defer std.testing.allocator.free(repeated);
+        try std.testing.expectEqualSlices(u8, encoded, repeated);
+
+        const parsed = try parseAlloc(std.testing.allocator, encoded);
+        defer parsed.deinit();
+        for (entries, parsed.entries) |expected, actual| {
+            try std.testing.expectEqual(expected.creation_time, actual.creation_time);
+            try std.testing.expectEqual(expected.access_time, actual.access_time);
+            try std.testing.expectEqual(expected.modification_time, actual.modification_time);
+            try std.testing.expectEqual(expected.attributes, actual.attributes);
+        }
+        try std.testing.expectError(
+            error.OutputLimitExceeded,
+            parseAllocWithOptions(std.testing.allocator, encoded, .{
+                .max_streams = 4,
+            }),
+        );
+    }
+
+    const corrupt_entries = [_]EncodeEntry{.{
+        .name = "metadata.txt",
+        .modification_time = filetime_epoch + 80_000_000,
+    }};
+    const valid_external = try encodeAlloc(std.testing.allocator, &corrupt_entries, .{
+        .external_metadata = .copy,
+    });
+    defer std.testing.allocator.free(valid_external);
+    var corrupt_external = try std.testing.allocator.dupe(u8, valid_external);
+    defer std.testing.allocator.free(corrupt_external);
+    corrupt_external[32] ^= 1;
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        parseAlloc(std.testing.allocator, corrupt_external),
+    );
+}
+
 test "7z reader decodes a real LZMA2 BCJ2 folder" {
     const allocator = std.testing.allocator;
     const encoded_hex = @embedFile("seven_zip/testdata/7zip-bcj2.7z.hex");

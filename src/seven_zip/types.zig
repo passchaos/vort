@@ -7,6 +7,14 @@ pub const EncodeEntry = struct {
     name: []const u8,
     data: []const u8 = "",
     kind: Kind = .file,
+    /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
+    creation_time: ?u64 = null,
+    /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
+    access_time: ?u64 = null,
+    /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
+    modification_time: ?u64 = null,
+    /// Raw 7z WinAttributes value, including encoded POSIX mode bits when present.
+    attributes: ?u32 = null,
 };
 
 pub const Method = enum {
@@ -33,4 +41,12 @@ pub const Entry = struct {
     crc32: ?u32,
     folder_index: ?usize,
     offset_in_folder: u64,
+    /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
+    creation_time: ?u64 = null,
+    /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
+    access_time: ?u64 = null,
+    /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
+    modification_time: ?u64 = null,
+    /// Raw 7z WinAttributes value, including encoded POSIX mode bits when present.
+    attributes: ?u32 = null,
 };
