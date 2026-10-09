@@ -5,6 +5,7 @@ const decoder = @import("cab/decoder.zig");
 const lzx = @import("cab/lzx.zig");
 const quantum = @import("cab/quantum.zig");
 const cabinet_set = @import("cab/set.zig");
+const set_writer = @import("cab/set_writer.zig");
 const deflate = @import("deflate.zig");
 const types = @import("cab/types.zig");
 const writer = @import("cab/writer.zig");
@@ -23,6 +24,9 @@ pub const DataBlockIterator = archive.DataBlockIterator;
 pub const ExtractOptions = decoder.ExtractOptions;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
+pub const SetEncodeOptions = set_writer.SetEncodeOptions;
+pub const EncodedSet = set_writer.EncodedSet;
+pub const EncodedPart = set_writer.EncodedPart;
 pub const parse = archive.parse;
 pub const initSet = CabinetSet.init;
 pub const decodeFolderAllocLimited = decoder.decodeFolderAllocLimited;
@@ -35,6 +39,7 @@ pub const extractByNameAllocLimited = decoder.extractByNameAllocLimited;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
 pub const encodeInto = writer.encodeInto;
+pub const encodeSetAlloc = set_writer.encodeSetAlloc;
 
 test {
     _ = archive;
@@ -43,6 +48,7 @@ test {
     _ = lzx;
     _ = quantum;
     _ = cabinet_set;
+    _ = set_writer;
     _ = types;
     _ = writer;
 }

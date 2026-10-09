@@ -434,6 +434,43 @@ pub fn main(init: std.process.Init) !void {
                 entry.name,
             });
         }
+    } else if (std.mem.eql(u8, command, "create-cab-set")) {
+        const output_dir = args.next() orelse return error.MissingCorpusPath;
+        const entry_name = args.next() orelse return error.MissingCorpusPath;
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const max_cabinet_size = try parseBlockLen(args.next(), 64 * 1024 * 1024);
+        const compression = try parseCabCompression(args.next());
+        const window_bits = try parseCabWindowBits(args.next(), compression);
+        const quantum_level = try parseCabQuantumLevel(args.next());
+        const input = try std.Io.Dir.cwd().readFileAlloc(
+            init.io,
+            input_path,
+            init.gpa,
+            .limited(512 * 1024 * 1024),
+        );
+        defer init.gpa.free(input);
+        const entries = [_]vort.CabEncodeEntry{.{ .name = entry_name, .data = input }};
+        var encoded = try vort.encodeCabinetSetAlloc(init.gpa, &entries, .{
+            .cabinet = .{
+                .compression = compression,
+                .lzx_window_bits = window_bits,
+                .quantum_window_bits = window_bits,
+                .quantum_level = quantum_level,
+            },
+            .max_cabinet_size = max_cabinet_size,
+        });
+        defer encoded.deinit(init.gpa);
+        try std.Io.Dir.cwd().createDirPath(init.io, output_dir);
+        var destination = try std.Io.Dir.cwd().openDir(init.io, output_dir, .{});
+        defer destination.close(init.io);
+        for (encoded.parts) |part|
+            try destination.writeFile(init.io, .{ .sub_path = part.name, .data = part.bytes });
+        try stdout.print("cabinet_count={d} input_bytes={d} compression={s} directory={s}\n", .{
+            encoded.parts.len,
+            input.len,
+            @tagName(compression),
+            output_dir,
+        });
     } else if (std.mem.eql(u8, command, "extract-cab-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const entry_name = args.next() orelse return error.MissingCorpusPath;
@@ -2108,6 +2145,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  create-cab-file <out> <entry> <in> [stored|mszip|quantum|lzx] [block_size] [window_bits] [quantum_level]
         \\                              Create a deterministic one-folder CAB archive
         \\  list-cab-file <path>        List single-cabinet Stored/MSZIP/LZX/Quantum metadata
+        \\  create-cab-set <dir> <entry> <in> [max_cabinet] [stored|mszip|quantum|lzx] [window_bits] [quantum_level]
+        \\                              Create a deterministic linked cabinet set
         \\  extract-cab-file <cab> <entry> <out> [max_file] [max_folder]
         \\                              Extract a Stored/MSZIP/LZX/Quantum CAB entry with explicit limits
         \\  extract-cab-set <entry> <out> <cab1> <cab2> [...]

@@ -44,6 +44,13 @@ const encoded = try vort.encodeCabAlloc(allocator, &entries, .{
     .quantum_level = 3,
 });
 defer allocator.free(encoded);
+
+var encoded_set = try vort.encodeCabinetSetAlloc(allocator, &entries, .{
+    .cabinet = .{ .compression = .mszip, .set_id = 42 },
+    .max_cabinet_size = 30_000,
+    .name_prefix = "payload-",
+});
+defer encoded_set.deinit(allocator);
 ```
 
 The parser validates:
@@ -84,6 +91,16 @@ inserted once per completed logical block. Missing, reordered, or mismatched
 cabinets fail explicitly. Standalone files in a linked cabinet remain directly
 extractable, while continued entries require a `CabinetSet`.
 
+`encodeCabinetSetAlloc` first produces the same logical solid folder as the
+single-cabinet writer, then deterministically partitions compressed CFDATA
+payloads under the requested total cabinet-size bound. Every non-final cabinet
+ends in a `cbUncomp=0` fragment, each following cabinet closes that logical
+block, and file records carry the appropriate forward/backward continuation
+marker. Generated fixed-width names are linked through the CAB header; the
+returned `EncodedCabinetSet` owns both names and bytes. Stored, MSZIP, LZX, and
+Quantum use this common partitioner, so codec history and frame state remain
+identical to the single-cabinet stream.
+
 The writer emits one deterministic solid folder containing entries in caller
 order. Stored, MSZIP, LZX, and Quantum modes are available, with optional
 non-zero CFDATA checksums, deterministic DOS dates, automatic UTF-8 attributes,
@@ -107,6 +124,7 @@ CLI validation surfaces:
 zig build run -- create-cab-file archive.cab path\\file.bin input.bin mszip 32768
 zig build run -- create-cab-file archive.cab path\\file.bin input.bin lzx 32768 18
 zig build run -- create-cab-file archive.cab path\\file.bin input.bin quantum 32768 18 3
+zig build run -- create-cab-set parts path\\file.bin input.bin 30000 mszip
 zig build run -- list-cab-file archive.cab
 zig build run -- extract-cab-file archive.cab path\\file.bin output.bin 67108864 268435456
 zig build run -- extract-cab-set path\\file.bin output.bin part1.cab part2.cab part3.cab
@@ -126,5 +144,5 @@ both directions, reserve bytes, and six independently hashed outputs.
 Vort-written Stored/MSZIP/LZX cabinets are
 decoded byte-exactly by libarchive, including multi-frame LZX output with an
 odd final block. Cabextract/libmspack independently decodes Vort's multi-frame
-Quantum output. Entropy-coded LZX blocks and Quantum match encoding remain
-future ratio work.
+Quantum output and all four Vort-written linked cabinet-set modes. Entropy-coded
+LZX blocks and Quantum match encoding remain future ratio work.

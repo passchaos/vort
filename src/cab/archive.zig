@@ -104,7 +104,8 @@ pub const Archive = struct {
             .remaining = block_count,
         };
         var decoded_size: usize = 0;
-        while (try blocks.next()) |block| {
+        var block_index: usize = 0;
+        while (try blocks.next()) |block| : (block_index += 1) {
             decoded_size = try checkedAdd(decoded_size, block.uncompressed_size);
             if (decoded_size > max_folder_decoded_size) return error.InvalidCabinet;
             if (block.uncompressed_size == 0 and
@@ -112,7 +113,9 @@ pub const Archive = struct {
                 return error.InvalidCabinet;
             if (compression == .none and
                 block.uncompressed_size != 0 and
-                block.compressed.len != block.uncompressed_size)
+                block.compressed.len != block.uncompressed_size and
+                !(self.hasPrevious() and index == 0 and block_index == 0 and
+                    block.compressed.len < block.uncompressed_size))
                 return error.InvalidCabinet;
         }
         return .{

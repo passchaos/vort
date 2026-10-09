@@ -69,6 +69,9 @@ pub const CabDataBlockIterator = cab.DataBlockIterator;
 pub const CabExtractOptions = cab.ExtractOptions;
 pub const CabEncodeEntry = cab.EncodeEntry;
 pub const CabEncodeOptions = cab.EncodeOptions;
+pub const CabSetEncodeOptions = cab.SetEncodeOptions;
+pub const EncodedCabinetSet = cab.EncodedSet;
+pub const EncodedCabinetPart = cab.EncodedPart;
 pub const parseCabArchive = cab.parse;
 pub const initCabinetSet = cab.initSet;
 pub const decodeCabFolderAllocLimited = cab.decodeFolderAllocLimited;
@@ -81,6 +84,7 @@ pub const cabExtractByNameAllocLimited = cab.extractByNameAllocLimited;
 pub const encodeCabAlloc = cab.encodeAlloc;
 pub const encodeCabAppend = cab.encodeAppend;
 pub const encodeCabInto = cab.encodeInto;
+pub const encodeCabinetSetAlloc = cab.encodeSetAlloc;
 
 pub const ZipError = zip.Error;
 pub const ZipArchive = zip.Archive;

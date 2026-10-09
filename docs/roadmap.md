@@ -17756,7 +17756,12 @@ reuse, so production keeps the simpler independently owned plans.
   decode caller-ordered multi-cabinet sequences, continued file records, and
   split CFDATA blocks without implicit filesystem access. A public five-part
   libmspack fixture covers three spanning MSZIP folders, reserve bytes, and six
-  independently hashed files. The writer emits one
+  independently hashed files. The set writer deterministically partitions the
+  same Stored/MSZIP/LZX/Quantum solid streams under a total per-cabinet size
+  bound, emits linked fixed-width names and bidirectional continued-file
+  records, and forces each non-final cabinet to end in a split logical CFDATA
+  block. Cabextract independently validates all four generated set modes. The
+  single-cabinet writer emits one
   deterministic solid folder in caller entry order, supports
   Stored/MSZIP/LZX/Quantum, optional checksums, UTF-8 attributes, set IDs, and
   alloc/transactional append/caller-buffer APIs. Stored/MSZIP use configurable

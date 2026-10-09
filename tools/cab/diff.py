@@ -175,6 +175,7 @@ def main() -> None:
 
     extracted = 0
     writer_cases = 0
+    set_writer_cases = 0
     with tempfile.TemporaryDirectory(prefix="vort-cab-diff-") as temp_text:
         temp = Path(temp_text)
         for fixture_name, expected in EXPECTED.items():
@@ -335,8 +336,70 @@ def main() -> None:
                     raise AssertionError(f"libarchive could not read Vort {mode} CAB")
             writer_cases += 1
 
+        for mode in ("stored", "mszip", "lzx", "quantum"):
+            first_dir = temp / f"vort-set-{mode}-first"
+            second_dir = temp / f"vort-set-{mode}-second"
+            entry_name = "folder/payload.bin"
+            run(
+                args.cli,
+                "create-cab-set",
+                str(first_dir),
+                entry_name,
+                str(source),
+                "30000",
+                mode,
+            )
+            run(
+                args.cli,
+                "create-cab-set",
+                str(second_dir),
+                entry_name,
+                str(source),
+                "30000",
+                mode,
+            )
+            first_parts = sorted(first_dir.glob("*.cab"))
+            second_parts = sorted(second_dir.glob("*.cab"))
+            if len(first_parts) < 2 or len(first_parts) != len(second_parts):
+                raise AssertionError(f"unexpected Vort {mode} cabinet set size")
+            for first_part, second_part in zip(first_parts, second_parts):
+                first_bytes = first_part.read_bytes()
+                if len(first_bytes) > 30_000 or first_bytes != second_part.read_bytes():
+                    raise AssertionError(f"Vort {mode} cabinet set is not deterministic or bounded")
+
+            vort_output = temp / f"vort-set-{mode}.out"
+            run(
+                args.cli,
+                "extract-cab-set",
+                entry_name,
+                str(vort_output),
+                *(str(path) for path in first_parts),
+            )
+            if vort_output.read_bytes() != payload:
+                raise AssertionError(f"Vort could not read its {mode} cabinet set")
+
+            if cabextract is not None:
+                destination = temp / f"cabextract-set-{mode}"
+                destination.mkdir()
+                result = subprocess.run(
+                    [cabextract, "-q", "-d", str(destination), str(first_parts[0])],
+                    check=False,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                external_path = destination / entry_name
+                if result.returncode != 0 or not external_path.is_file():
+                    raise AssertionError(
+                        f"cabextract could not read Vort {mode} cabinet set: {result.stderr}"
+                    )
+                if external_path.read_bytes() != payload:
+                    raise AssertionError(f"cabextract {mode} cabinet set mismatch")
+            set_writer_cases += 1
+
     print(
         f"cab_diff=ok fixtures=13 extracted={extracted} writer_cases={writer_cases} "
+        f"set_writer_cases={set_writer_cases} "
         "libarchive=ok malformed_lzx=2 malformed_quantum=3 lzx_writer=ok "
         f"quantum_writer=ok cabextract_quantum={quantum_external} "
         "lzx_aligned_frames=449 split_cabinets=5 quantum=ok"
