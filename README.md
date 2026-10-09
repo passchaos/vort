@@ -122,8 +122,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   compressed Next Header reading and writing, solid substream reading and
   writing, bounded AdditionalStreamsInfo decoding, external folder/name
   references, inline/external FILETIME and platform attributes, optional
-  six-codec external name/metadata writing, CRC validation, UTF-16LE names,
-  directories, empty files, and bounded extraction;
+  six-codec external name/metadata writing, 7zAES/SHA-256 data and encoded
+  header reading/writing with explicit password/KDF limits and caller-supplied
+  IV material, CRC validation, UTF-16LE names, directories, empty files, and
+  bounded extraction;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
   safe-path classification, borrowed entry views, and automatic raw/gzip/
   Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/Zstandard/LZOP tarball composition;

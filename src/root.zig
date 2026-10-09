@@ -261,6 +261,7 @@ pub const SevenZipParseOptions = seven_zip.ParseOptions;
 pub const SevenZipEncodeEntry = seven_zip.EncodeEntry;
 pub const SevenZipCompression = seven_zip.Compression;
 pub const SevenZipFilter = seven_zip.Filter;
+pub const SevenZipEncryptionOptions = seven_zip.EncryptionOptions;
 pub const SevenZipEncodeOptions = seven_zip.EncodeOptions;
 pub const parseSevenZipArchiveAlloc = seven_zip.parseAlloc;
 pub const parseSevenZipArchiveAllocWithOptions = seven_zip.parseAllocWithOptions;

@@ -17858,6 +17858,17 @@ reuse, so production keeps the simpler independently owned plans.
   and consumption checks, and all six auxiliary-stream codecs. The differential
   pins a system-generated mtime plus Unix attributes and validates all six Vort
   external-metadata modes through 7-Zip.
+  Common linear 7zAES/SHA-256 folders are now supported in both directions.
+  The reader accepts AES-only encoded headers and AES followed by
+  Copy/Deflate/Bzip2/LZMA/LZMA2 plus classic filters, converts UTF-8 passwords
+  to UTF-16LE, implements the standard counter-based SHA-256 KDF and direct-key
+  mode, decrypts zero-padded AES-256-CBC, and bounds KDF power before work. The
+  writer requires caller-supplied base IV material, derives a distinct IV for
+  each data/external-metadata/header folder, and can hide the complete encoded
+  header. Differential coverage includes all six Vort main codecs, encrypted
+  names/metadata, an x86 filter chain, wrong passwords, and system 7-Zip's
+  default-power data-only and header-encrypted archives. BCJ2+AES remains a
+  separate branching-graph extension.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
-  encryption, comments, and start-position properties remain follow-up work. See
+  comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.

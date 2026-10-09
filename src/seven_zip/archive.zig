@@ -1,4 +1,5 @@
 const std = @import("std");
+const aes = @import("aes.zig");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const number = @import("number.zig");
@@ -12,7 +13,7 @@ const xz_container = @import("../xz/container.zig");
 const xz_filters = @import("../xz/filters.zig");
 const bcj2 = @import("bcj2.zig");
 
-pub const Error = core.Error || number.Error || streams_mod.Error || files_mod.Error ||
+pub const Error = core.Error || number.Error || streams_mod.Error || files_mod.Error || aes.Error ||
     deflate.Error || bzip2.Error || lzma_decoder.Error || xz_container.Error || error{
     Invalid7zArchive,
     Unsupported7zFeature,
@@ -26,6 +27,8 @@ pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_dictionary_size: usize = 512 * 1024 * 1024,
     max_folder_output_len: usize = 512 * 1024 * 1024,
+    max_kdf_cycles_power: u6 = aes.max_cycles_power,
+    password: ?[]const u8 = null,
 };
 
 pub const ParseOptions = struct {
@@ -34,6 +37,8 @@ pub const ParseOptions = struct {
     max_dictionary_size: usize = 64 * 1024 * 1024,
     max_entries: usize = 1_000_000,
     max_streams: usize = 1_000_000,
+    max_kdf_cycles_power: u6 = aes.max_cycles_power,
+    password: ?[]const u8 = null,
 };
 
 const signature = [_]u8{ '7', 'z', 0xbc, 0xaf, 0x27, 0x1c };
@@ -123,6 +128,8 @@ pub const Archive = struct {
             folder_index,
             folder_size,
             options.max_dictionary_size,
+            options.password,
+            options.max_kdf_cycles_power,
         );
         errdefer allocator.free(decoded);
         const entry_start = std.math.cast(usize, entry.offset_in_folder) orelse
@@ -212,6 +219,8 @@ pub fn parseAllocWithOptions(
             0,
             unpack_size,
             options.max_dictionary_size,
+            options.password,
+            options.max_kdf_cycles_power,
         );
         header_bytes = owned_header.?;
     }
@@ -242,6 +251,8 @@ pub fn parseAllocWithOptions(
                 &additional,
                 options.max_dictionary_size,
                 options.max_external_metadata_size,
+                options.password,
+                options.max_kdf_cycles_power,
             );
         },
         Nid.main_streams => {
@@ -287,6 +298,8 @@ fn decodeExternalStreamsAlloc(
     streams: *const streams_mod.Streams,
     max_dictionary_size: usize,
     max_output_size: usize,
+    password: ?[]const u8,
+    max_kdf_cycles_power: u6,
 ) ![][]u8 {
     const items = try allocator.alloc([]u8, streams.folders.len);
     var initialized: usize = 0;
@@ -309,6 +322,8 @@ fn decodeExternalStreamsAlloc(
             index,
             size,
             max_dictionary_size,
+            password,
+            max_kdf_cycles_power,
         );
         initialized += 1;
     }
@@ -328,6 +343,8 @@ fn decodeFolderAlloc(
     folder_index: usize,
     expected_size: usize,
     max_dictionary_size: usize,
+    password: ?[]const u8,
+    max_kdf_cycles_power: u6,
 ) ![]u8 {
     if (folder_index >= streams.folders.len) return error.Invalid7zArchive;
     const folder = streams.folders[folder_index];
@@ -388,37 +405,73 @@ fn decodeFolderAlloc(
     if (streams.pack_crcs[folder.pack_index]) |expected|
         if (checksum.crc32Best(packed_bytes) != expected) return error.ChecksumMismatch;
 
-    const primary = folder.coders[folder.decode_order[0]];
-    const decoded = try decodePrimaryAlloc(
-        allocator,
-        packed_bytes,
-        primary,
-        expected_size,
-        max_dictionary_size,
-    );
-    errdefer allocator.free(decoded);
-    for (folder.decode_order[1..folder.coder_count]) |coder_index| {
+    var current: []const u8 = packed_bytes;
+    var owned: ?[]u8 = null;
+    errdefer if (owned) |bytes| allocator.free(bytes);
+    for (folder.decode_order[0..folder.coder_count]) |coder_index| {
         const coder = folder.coders[coder_index];
-        const filter_id: u64 = switch (coder.method) {
-            .delta => 0x03,
-            .x86 => 0x04,
-            .powerpc => 0x05,
-            .ia64 => 0x06,
-            .arm => 0x07,
-            .arm_thumb => 0x08,
-            .sparc => 0x09,
+        const coder_size = std.math.cast(usize, folder.coder_unpack_sizes[coder_index]) orelse
+            return error.OutputLimitExceeded;
+        switch (coder.method) {
+            .aes256_sha256 => {
+                const properties = aes.parseProperties(coder.propertyBytes()) catch
+                    return error.Invalid7zArchive;
+                const next = try aes.decryptAlloc(
+                    allocator,
+                    current,
+                    coder_size,
+                    password,
+                    properties,
+                    max_kdf_cycles_power,
+                );
+                if (owned) |bytes| allocator.free(bytes);
+                owned = next;
+                current = next;
+            },
+            .copy, .deflate, .bzip2, .lzma, .lzma2 => {
+                const next = try decodePrimaryAlloc(
+                    allocator,
+                    current,
+                    coder,
+                    coder_size,
+                    max_dictionary_size,
+                );
+                if (owned) |bytes| allocator.free(bytes);
+                owned = next;
+                current = next;
+            },
+            .delta, .x86, .powerpc, .ia64, .arm, .arm_thumb, .sparc => {
+                if (current.len != coder_size) return error.SizeMismatch;
+                const mutable = owned orelse return error.Invalid7zArchive;
+                try decodeFilter(mutable, coder);
+            },
             else => return error.Unsupported7zFeature,
-        };
-        const filter = xz_filters.parse(filter_id, coder.propertyBytes()) catch |err| switch (err) {
-            error.InvalidXzHeader => return error.Invalid7zArchive,
-            error.UnsupportedXzFeature => return error.Unsupported7zFeature,
-        };
-        xz_filters.decodeChain(decoded, &.{filter});
+        }
     }
+    const decoded = owned orelse return error.Invalid7zArchive;
     if (decoded.len != expected_size) return error.SizeMismatch;
     if (folder.crc32) |expected|
         if (checksum.crc32Best(decoded) != expected) return error.ChecksumMismatch;
+    owned = null;
     return decoded;
+}
+
+fn decodeFilter(decoded: []u8, coder: streams_mod.Coder) Error!void {
+    const filter_id: u64 = switch (coder.method) {
+        .delta => 0x03,
+        .x86 => 0x04,
+        .powerpc => 0x05,
+        .ia64 => 0x06,
+        .arm => 0x07,
+        .arm_thumb => 0x08,
+        .sparc => 0x09,
+        else => return error.Unsupported7zFeature,
+    };
+    const filter = xz_filters.parse(filter_id, coder.propertyBytes()) catch |err| switch (err) {
+        error.InvalidXzHeader => return error.Invalid7zArchive,
+        error.UnsupportedXzFeature => return error.Unsupported7zFeature,
+    };
+    xz_filters.decodeChain(decoded, &.{filter});
 }
 
 fn decodePrimaryAlloc(

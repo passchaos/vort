@@ -1,4 +1,5 @@
 const std = @import("std");
+const aes = @import("aes.zig");
 const bzip2 = @import("../bzip2.zig");
 const deflate = @import("../deflate.zig");
 const lzma_encoder = @import("../lzma/encoder.zig");
@@ -6,8 +7,9 @@ const lzma2_writer = @import("../xz/lzma2_writer.zig");
 const filters = @import("../xz/filters.zig");
 const number = @import("number.zig");
 
-pub const Error = bzip2.Error || lzma_encoder.Error || error{Invalid7zOptions};
+pub const Error = bzip2.Error || lzma_encoder.Error || aes.Error || error{Invalid7zOptions};
 pub const Filter = filters.Filter;
+pub const EncryptionOptions = aes.Options;
 
 pub const Compression = enum {
     copy,
@@ -24,6 +26,9 @@ pub const Options = struct {
     header_compression: ?Compression = null,
     external_names: ?Compression = null,
     external_metadata: ?Compression = null,
+    encryption: ?EncryptionOptions = null,
+    encrypt_header: bool = false,
+    encryption_stream_index: u64 = 0,
     bcj2: bool = false,
     bcj2_start_ip: u32 = 0,
     filters: []const Filter = &.{},
@@ -36,7 +41,12 @@ pub const Options = struct {
 pub fn validate(options: Options) Error!void {
     filters.validateChain(options.filters) catch return error.Invalid7zOptions;
     if (options.bcj2 and options.filters.len != 0) return error.Invalid7zOptions;
+    if (options.bcj2 and options.encryption != null) return error.Invalid7zOptions;
+    if (options.encrypt_header and options.encryption == null) return error.Invalid7zOptions;
     if (!options.bcj2 and options.bcj2_start_ip != 0) return error.Invalid7zOptions;
+    if (options.encryption) |encryption|
+        _ = aes.propertiesForStream(encryption, options.encryption_stream_index) catch
+            return error.Invalid7zOptions;
     if (options.compression == .deflate and options.deflate_level > 9)
         return error.Invalid7zOptions;
     if (options.compression == .bzip2 and
@@ -52,7 +62,10 @@ pub fn validate(options: Options) Error!void {
 }
 
 pub fn coderCount(options: Options) usize {
-    return if (options.bcj2) 2 else 1 + options.filters.len;
+    return if (options.bcj2)
+        2
+    else
+        1 + options.filters.len + @intFromBool(options.encryption != null);
 }
 
 pub fn appendPayload(
@@ -61,6 +74,20 @@ pub fn appendPayload(
     input: []const u8,
     options: Options,
 ) !usize {
+    return (try appendPayloadDetailed(allocator, output, input, options)).packed_size;
+}
+
+pub const PayloadResult = struct {
+    packed_size: usize,
+    aes_unpack_size: ?usize = null,
+};
+
+pub fn appendPayloadDetailed(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    options: Options,
+) !PayloadResult {
     try validate(options);
     var filtered_storage: ?[]u8 = null;
     defer if (filtered_storage) |bytes| allocator.free(bytes);
@@ -73,19 +100,23 @@ pub fn appendPayload(
         break :payload bytes;
     };
 
-    return switch (options.compression) {
-        .copy => appendCopy(allocator, output, payload),
-        .deflate => deflate.encodeRawLevelAppend(allocator, output, payload, options.deflate_level),
-        .bzip2 => bzip2.encodeAppend(allocator, output, payload, .{
-            .block_size_100k = options.bzip2_block_size_100k,
-        }),
-        .lzma => lzma_encoder.encodeChunkAppend(allocator, output, payload, .{
-            .properties = options.lzma_properties,
-            .dictionary_size = options.lzma_dictionary_size,
-        }),
-        .lzma2 => lzma2_writer.appendCompressedPayload(allocator, output, payload),
-        .lzma2_stored => lzma2_writer.appendStoredPayload(allocator, output, payload),
-    };
+    if (options.encryption) |encryption| {
+        var compressed: std.ArrayList(u8) = .empty;
+        defer compressed.deinit(allocator);
+        _ = try appendCompressedPayload(allocator, &compressed, payload, options);
+        const packed_size = try aes.encryptAppend(
+            allocator,
+            output,
+            compressed.items,
+            encryption,
+            options.encryption_stream_index,
+        );
+        return .{
+            .packed_size = packed_size,
+            .aes_unpack_size = compressed.items.len,
+        };
+    }
+    return .{ .packed_size = try appendCompressedPayload(allocator, output, payload, options) };
 }
 
 pub fn writeFolder(
@@ -97,6 +128,7 @@ pub fn writeFolder(
     if (options.bcj2) return writeBcj2Folder(allocator, output, options);
     const coder_count = coderCount(options);
     try number.append(allocator, output, coder_count);
+    if (options.encryption != null) try writeAesCoder(allocator, output, options);
     try writeCompressionCoder(allocator, output, options);
 
     var filter_index = options.filters.len;
@@ -134,6 +166,45 @@ fn writeBcj2Folder(
 fn appendCopy(allocator: std.mem.Allocator, output: *std.ArrayList(u8), input: []const u8) !usize {
     try output.appendSlice(allocator, input);
     return input.len;
+}
+
+fn appendCompressedPayload(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    options: Options,
+) !usize {
+    return switch (options.compression) {
+        .copy => appendCopy(allocator, output, input),
+        .deflate => deflate.encodeRawLevelAppend(allocator, output, input, options.deflate_level),
+        .bzip2 => bzip2.encodeAppend(allocator, output, input, .{
+            .block_size_100k = options.bzip2_block_size_100k,
+        }),
+        .lzma => lzma_encoder.encodeChunkAppend(allocator, output, input, .{
+            .properties = options.lzma_properties,
+            .dictionary_size = options.lzma_dictionary_size,
+        }),
+        .lzma2 => lzma2_writer.appendCompressedPayload(allocator, output, input),
+        .lzma2_stored => lzma2_writer.appendStoredPayload(allocator, output, input),
+    };
+}
+
+fn writeAesCoder(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    options: Options,
+) !void {
+    const encryption = options.encryption orelse return error.Invalid7zOptions;
+    const properties = try aes.propertiesForStream(
+        encryption,
+        options.encryption_stream_index,
+    );
+    var property_bytes: std.ArrayList(u8) = .empty;
+    defer property_bytes.deinit(allocator);
+    try aes.appendProperties(allocator, &property_bytes, properties);
+    try output.appendSlice(allocator, &.{ 0x24, 0x06, 0xf1, 0x07, 0x01 });
+    try number.append(allocator, output, property_bytes.items.len);
+    try output.appendSlice(allocator, property_bytes.items);
 }
 
 fn writeCompressionCoder(
@@ -239,5 +310,22 @@ test "7z coder writer validates method-specific options" {
     }));
     try std.testing.expectError(error.Invalid7zOptions, validate(.{
         .bcj2_start_ip = 1,
+    }));
+    try std.testing.expectError(error.Invalid7zOptions, validate(.{
+        .encrypt_header = true,
+    }));
+    const encryption = EncryptionOptions{
+        .password = "password",
+        .iv = [_]u8{0x42} ** 16,
+        .num_cycles_power = aes.direct_key_power,
+    };
+    try std.testing.expectError(error.Invalid7zOptions, validate(.{
+        .bcj2 = true,
+        .encryption = encryption,
+    }));
+    var invalid_encryption = encryption;
+    invalid_encryption.salt_len = 17;
+    try std.testing.expectError(error.Invalid7zOptions, validate(.{
+        .encryption = invalid_encryption,
     }));
 }

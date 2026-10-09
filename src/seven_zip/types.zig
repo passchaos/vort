@@ -31,6 +31,7 @@ pub const Method = enum {
     arm_thumb,
     sparc,
     bcj2,
+    aes256_sha256,
 };
 
 pub const Entry = struct {

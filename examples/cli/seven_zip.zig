@@ -25,6 +25,13 @@ pub fn createFile(
     const access_time = try parseOptionalU64(args.next());
     const modification_time = try parseOptionalU64(args.next());
     const attributes = try parseOptionalU32(args.next());
+    const encryption = try parseEncryption(
+        args.next(),
+        args.next(),
+        args.next(),
+        args.next(),
+    );
+    const encrypt_header = try parseHeaderEncryption(args.next());
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.SevenZipEncodeEntry{.{
@@ -41,18 +48,22 @@ pub fn createFile(
         .header_compression = header_compression,
         .external_names = external_names,
         .external_metadata = external_metadata,
+        .encryption = encryption,
+        .encrypt_header = encrypt_header,
         .bcj2 = bcj2,
         .bcj2_start_ip = bcj2_start_ip,
         .filters = filters,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("seven_zip_entries=1 compression={s} solid={} header={s} external_names={s} external_metadata={s} bcj2={} filters={d} input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("seven_zip_entries=1 compression={s} solid={} header={s} external_names={s} external_metadata={s} encrypted={} encrypted_header={} bcj2={} filters={d} input_bytes={d} archive_bytes={d} path={s}\n", .{
         @tagName(compression),
         solid,
         if (header_compression) |method| @tagName(method) else "plain",
         if (external_names) |method| @tagName(method) else "inline",
         if (external_metadata) |method| @tagName(method) else "inline",
+        encryption != null,
+        encrypt_header,
         bcj2,
         filters.len,
         input.len,
@@ -121,15 +132,66 @@ fn parseOptionalU32(text: ?[]const u8) !?u32 {
     return try std.fmt.parseInt(u32, value, 10);
 }
 
+fn parseEncryption(
+    password_text: ?[]const u8,
+    iv_text: ?[]const u8,
+    salt_text: ?[]const u8,
+    cycles_text: ?[]const u8,
+) !?vort.SevenZipEncryptionOptions {
+    const password = parseOptionalPassword(password_text) orelse {
+        if (iv_text != null or salt_text != null or cycles_text != null)
+            return error.Invalid7zOptions;
+        return null;
+    };
+    const iv_hex = iv_text orelse return error.Invalid7zOptions;
+    if (iv_hex.len != 32) return error.Invalid7zOptions;
+    var iv: [16]u8 = undefined;
+    _ = std.fmt.hexToBytes(&iv, iv_hex) catch return error.Invalid7zOptions;
+
+    var salt: [16]u8 = @splat(0);
+    var salt_len: u5 = 0;
+    if (salt_text) |salt_hex| if (!std.mem.eql(u8, salt_hex, "-") and
+        !std.mem.eql(u8, salt_hex, "none"))
+    {
+        if (salt_hex.len > 32 or salt_hex.len & 1 != 0) return error.Invalid7zOptions;
+        salt_len = @intCast(salt_hex.len / 2);
+        _ = std.fmt.hexToBytes(salt[0..salt_len], salt_hex) catch
+            return error.Invalid7zOptions;
+    };
+    const cycles = if (cycles_text) |text|
+        try std.fmt.parseInt(u6, text, 10)
+    else
+        19;
+    return .{
+        .password = password,
+        .iv = iv,
+        .salt = salt,
+        .salt_len = salt_len,
+        .num_cycles_power = cycles,
+    };
+}
+
+fn parseHeaderEncryption(text: ?[]const u8) !bool {
+    const value = text orelse return false;
+    if (std.mem.eql(u8, value, "encrypted-header") or std.mem.eql(u8, value, "true"))
+        return true;
+    if (std.mem.eql(u8, value, "plain-header") or std.mem.eql(u8, value, "false"))
+        return false;
+    return error.Invalid7zOptions;
+}
+
 pub fn listFile(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
     stdout: *std.Io.Writer,
 ) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
+    const password = parseOptionalPassword(args.next());
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
-    const archive = try vort.parseSevenZipArchiveAlloc(init.gpa, bytes);
+    const archive = try vort.parseSevenZipArchiveAllocWithOptions(init.gpa, bytes, .{
+        .password = password,
+    });
     defer archive.deinit();
     try stdout.print("seven_zip_entries={d}\n", .{archive.entries.len});
     for (archive.entries, 0..) |entry, index|
@@ -161,10 +223,12 @@ pub fn extractFile(
     const max_output_len = try parseLimit(args.next(), std.math.maxInt(usize));
     const max_dictionary_size = try parseLimit(args.next(), 512 * 1024 * 1024);
     const max_folder_output_len = try parseLimit(args.next(), 512 * 1024 * 1024);
+    const password = parseOptionalPassword(args.next());
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
     const archive = try vort.parseSevenZipArchiveAllocWithOptions(init.gpa, bytes, .{
         .max_dictionary_size = max_dictionary_size,
+        .password = password,
     });
     defer archive.deinit();
     const entry = archive.find(entry_name) orelse return error.EntryNotFound;
@@ -172,6 +236,7 @@ pub fn extractFile(
         .max_output_len = max_output_len,
         .max_dictionary_size = max_dictionary_size,
         .max_folder_output_len = max_folder_output_len,
+        .password = password,
     });
     defer init.gpa.free(decoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
@@ -189,6 +254,12 @@ fn readFile(init: std.process.Init, path: []const u8) ![]u8 {
 
 fn parseLimit(value: ?[]const u8, default: usize) !usize {
     return if (value) |text| try std.fmt.parseInt(usize, text, 10) else default;
+}
+
+fn parseOptionalPassword(value: ?[]const u8) ?[]const u8 {
+    const password = value orelse return null;
+    if (std.mem.eql(u8, password, "-") or std.mem.eql(u8, password, "none")) return null;
+    return password;
 }
 
 fn parseCompression(text: ?[]const u8) !vort.SevenZipCompression {

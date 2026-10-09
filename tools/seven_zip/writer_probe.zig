@@ -19,6 +19,8 @@ pub fn main(init: std.process.Init) !void {
         0;
     const external_names_name = args.next();
     const external_metadata_name = args.next();
+    const encryption_name = args.next();
+    const header_encryption_name = args.next();
     const compression: vort.SevenZipCompression = if (std.mem.eql(u8, compression_name, "copy"))
         .copy
     else if (std.mem.eql(u8, compression_name, "deflate"))
@@ -90,6 +92,30 @@ pub fn main(init: std.process.Init) !void {
             return error.UnsupportedCompression
     else
         null;
+    const encryption: ?vort.SevenZipEncryptionOptions = if (encryption_name) |name|
+        if (std.mem.eql(u8, name, "encrypted") or std.mem.eql(u8, name, "encrypted-standard"))
+            .{
+                .password = "vort-password-密码",
+                .iv = [_]u8{0x42} ** 16,
+                .salt = [_]u8{0x24} ** 16,
+                .salt_len = 8,
+                .num_cycles_power = if (std.mem.eql(u8, name, "encrypted-standard")) 19 else 0x3f,
+            }
+        else if (std.mem.eql(u8, name, "unencrypted"))
+            null
+        else
+            return error.UnsupportedEncryption
+    else
+        null;
+    const encrypt_header = if (header_encryption_name) |name|
+        if (std.mem.eql(u8, name, "encrypted-header"))
+            true
+        else if (std.mem.eql(u8, name, "plain-header"))
+            false
+        else
+            return error.UnsupportedEncryption
+    else
+        false;
 
     const filetime_epoch: u64 = 116_444_736_000_000_000;
     const entries = [_]vort.SevenZipEncodeEntry{
@@ -126,6 +152,8 @@ pub fn main(init: std.process.Init) !void {
         .header_compression = header_compression,
         .external_names = external_names,
         .external_metadata = external_metadata,
+        .encryption = encryption,
+        .encrypt_header = encrypt_header,
         .bcj2 = bcj2,
         .bcj2_start_ip = bcj2_start_ip,
     });

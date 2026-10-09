@@ -14,6 +14,7 @@ pub const Error = core.Error || number.Error || coders.Error || error{
 pub const EncodeEntry = types.EncodeEntry;
 pub const Compression = coders.Compression;
 pub const Filter = coders.Filter;
+pub const EncryptionOptions = coders.EncryptionOptions;
 pub const EncodeOptions = coders.Options;
 
 const signature = [_]u8{ '7', 'z', 0xbc, 0xaf, 0x27, 0x1c };
@@ -42,6 +43,7 @@ const EncodedFolder = struct {
     packed_sizes: [4]u64 = @splat(0),
     pack_stream_count: u3 = 1,
     unpacked_size: u64,
+    aes_unpack_size: ?u64 = null,
     crc32: u32,
     first_substream: usize,
     substream_count: usize,
@@ -106,8 +108,11 @@ pub fn encodeAppend(
     const folder_count = if (options.solid and stream_count != 0) 1 else stream_count;
     const folders = try allocator.alloc(EncodedFolder, folder_count);
     defer allocator.free(folders);
+    const folder_options = try allocator.alloc(EncodeOptions, folder_count);
+    defer allocator.free(folder_options);
     const substreams = try allocator.alloc(EncodedSubstream, stream_count);
     defer allocator.free(substreams);
+    var next_encryption_stream_index = options.encryption_stream_index;
     if (options.solid and stream_count != 0) {
         var solid_data: std.ArrayList(u8) = .empty;
         defer solid_data.deinit(allocator);
@@ -122,11 +127,15 @@ pub fn encodeAppend(
             };
             stream_index += 1;
         }
+        folder_options[0] = try optionsForNextEncryptedStream(
+            options,
+            &next_encryption_stream_index,
+        );
         folders[0] = try appendFolderPayload(
             allocator,
             &packed_data,
             solid_data.items,
-            options,
+            folder_options[0],
             0,
             stream_count,
         );
@@ -137,11 +146,15 @@ pub fn encodeAppend(
             const unpacked_size = std.math.cast(u64, entry.data.len) orelse
                 return error.IntegerOverflow;
             const crc32 = checksum.crc32Best(entry.data);
+            folder_options[stream_index] = try optionsForNextEncryptedStream(
+                options,
+                &next_encryption_stream_index,
+            );
             folders[stream_index] = try appendFolderPayload(
                 allocator,
                 &packed_data,
                 entry.data,
-                options,
+                folder_options[stream_index],
                 stream_index,
                 1,
             );
@@ -164,6 +177,7 @@ pub fn encodeAppend(
             names.items,
             options,
             compression,
+            &next_encryption_stream_index,
         );
     }
     if (options.external_metadata) |compression| {
@@ -181,6 +195,7 @@ pub fn encodeAppend(
                     metadata_values.items,
                     options,
                     compression,
+                    &next_encryption_stream_index,
                 );
         }
     }
@@ -189,6 +204,7 @@ pub fn encodeAppend(
         &header,
         entries,
         folders,
+        folder_options,
         substreams,
         options,
         names.items,
@@ -197,18 +213,24 @@ pub fn encodeAppend(
 
     var next_header: std.ArrayList(u8) = .empty;
     defer next_header.deinit(allocator);
-    if (options.header_compression) |header_compression| {
+    if (options.header_compression != null or options.encrypt_header) {
         const pack_position = packed_data.items.len;
         var header_options = options;
-        header_options.compression = header_compression;
+        header_options.compression = options.header_compression orelse .copy;
         header_options.solid = false;
         header_options.header_compression = null;
         header_options.external_names = null;
         header_options.external_metadata = null;
+        header_options.encrypt_header = false;
+        if (!options.encrypt_header) header_options.encryption = null;
         header_options.bcj2 = false;
         header_options.bcj2_start_ip = 0;
         header_options.filters = &.{};
-        const packed_size = try coders.appendPayload(
+        header_options = try optionsForNextEncryptedStream(
+            header_options,
+            &next_encryption_stream_index,
+        );
+        const payload = try coders.appendPayloadDetailed(
             allocator,
             &packed_data,
             header.items,
@@ -216,13 +238,17 @@ pub fn encodeAppend(
         );
         const header_folders = [_]EncodedFolder{.{
             .packed_sizes = .{
-                std.math.cast(u64, packed_size) orelse return error.IntegerOverflow,
+                std.math.cast(u64, payload.packed_size) orelse return error.IntegerOverflow,
                 0,
                 0,
                 0,
             },
             .unpacked_size = std.math.cast(u64, header.items.len) orelse
                 return error.IntegerOverflow,
+            .aes_unpack_size = if (payload.aes_unpack_size) |size|
+                std.math.cast(u64, size) orelse return error.IntegerOverflow
+            else
+                null,
             .crc32 = checksum.crc32Best(header.items),
             .first_substream = 0,
             .substream_count = 1,
@@ -309,6 +335,18 @@ fn hasStream(entry: EncodeEntry) bool {
     return entry.kind == .file and entry.data.len != 0;
 }
 
+fn optionsForNextEncryptedStream(
+    base: EncodeOptions,
+    next_stream_index: *u64,
+) !EncodeOptions {
+    if (base.encryption == null) return base;
+    var options = base;
+    options.encryption_stream_index = next_stream_index.*;
+    next_stream_index.* = std.math.add(u64, next_stream_index.*, 1) catch
+        return error.IntegerOverflow;
+    return options;
+}
+
 fn appendFolderPayload(
     allocator: std.mem.Allocator,
     packed_data: *std.ArrayList(u8),
@@ -325,9 +363,13 @@ fn appendFolderPayload(
         .substream_count = substream_count,
     };
     if (!options.bcj2) {
-        const packed_size = try coders.appendPayload(allocator, packed_data, input, options);
-        folder.packed_sizes[0] = std.math.cast(u64, packed_size) orelse
+        const payload = try coders.appendPayloadDetailed(allocator, packed_data, input, options);
+        folder.packed_sizes[0] = std.math.cast(u64, payload.packed_size) orelse
             return error.IntegerOverflow;
+        folder.aes_unpack_size = if (payload.aes_unpack_size) |size|
+            std.math.cast(u64, size) orelse return error.IntegerOverflow
+        else
+            null;
         return folder;
     }
 
@@ -361,6 +403,7 @@ fn appendExternalPayload(
     input: []const u8,
     base_options: EncodeOptions,
     compression: Compression,
+    next_encryption_stream_index: *u64,
 ) !usize {
     std.debug.assert(external.count < max_external_streams);
     if (external.count == 0) external.pack_position = packed_data.items.len;
@@ -373,19 +416,24 @@ fn appendExternalPayload(
     options.bcj2 = false;
     options.bcj2_start_ip = 0;
     options.filters = &.{};
-    const packed_size = try coders.appendPayload(allocator, packed_data, input, options);
+    options = try optionsForNextEncryptedStream(options, next_encryption_stream_index);
+    const payload = try coders.appendPayloadDetailed(allocator, packed_data, input, options);
     const unpacked_size = std.math.cast(u64, input.len) orelse
         return error.IntegerOverflow;
     const crc32 = checksum.crc32Best(input);
     const index = external.count;
     external.folders[index] = .{
         .packed_sizes = .{
-            std.math.cast(u64, packed_size) orelse return error.IntegerOverflow,
+            std.math.cast(u64, payload.packed_size) orelse return error.IntegerOverflow,
             0,
             0,
             0,
         },
         .unpacked_size = unpacked_size,
+        .aes_unpack_size = if (payload.aes_unpack_size) |size|
+            std.math.cast(u64, size) orelse return error.IntegerOverflow
+        else
+            null,
         .crc32 = crc32,
         .first_substream = index,
         .substream_count = 1,
@@ -404,6 +452,7 @@ fn writeNextHeader(
     output: *std.ArrayList(u8),
     entries: []const EncodeEntry,
     folders: []const EncodedFolder,
+    folder_options: []const EncodeOptions,
     substreams: []const EncodedSubstream,
     options: EncodeOptions,
     names: []const u8,
@@ -423,7 +472,7 @@ fn writeNextHeader(
         );
     }
     if (folders.len != 0)
-        try writeStreamsInfo(allocator, output, folders, substreams, options);
+        try writeStreamsInfo(allocator, output, folders, folder_options, substreams, options);
     try writeFilesInfo(allocator, output, entries, names, external_streams);
     try output.append(allocator, Nid.end);
 }
@@ -432,11 +481,20 @@ fn writeStreamsInfo(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     folders: []const EncodedFolder,
+    folder_options: []const EncodeOptions,
     substreams: []const EncodedSubstream,
     options: EncodeOptions,
 ) !void {
     try output.append(allocator, Nid.main_streams);
-    try writeStreamsBody(allocator, output, folders, substreams, options, 0);
+    try writeStreamsBodyConfigured(
+        allocator,
+        output,
+        folders,
+        substreams,
+        options,
+        folder_options,
+        0,
+    );
 }
 
 fn writeStreamsBody(
@@ -499,7 +557,13 @@ fn writeStreamsBodyConfigured(
             folder_options[index]
         else
             default_options;
-        for (0..coders.coderCount(options)) |_| try number.append(allocator, output, folder.unpacked_size);
+        for (0..coders.coderCount(options)) |coder_index| {
+            const unpack_size = if (coder_index == 0 and options.encryption != null)
+                folder.aes_unpack_size orelse return error.Invalid7zOptions
+            else
+                folder.unpacked_size;
+            try number.append(allocator, output, unpack_size);
+        }
     }
     try output.append(allocator, Nid.crc);
     try output.append(allocator, 1);

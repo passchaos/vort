@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const aes = @import("aes.zig");
 const number = @import("number.zig");
 const types = @import("types.zig");
 
@@ -20,13 +21,14 @@ pub const Nid = struct {
     pub const num_unpack_stream: u8 = 0x0d;
 };
 
-pub const max_coders: usize = 4;
+pub const max_coders: usize = 5;
 pub const max_streams_per_folder: usize = 8;
+pub const max_coder_properties: usize = 34;
 
 pub const Coder = struct {
     method: types.Method,
-    properties: [5]u8 = @splat(0),
-    properties_len: u3 = 0,
+    properties: [max_coder_properties]u8 = @splat(0),
+    properties_len: u6 = 0,
     input_count: u3 = 1,
     output_count: u3 = 1,
     input_start: u4 = 0,
@@ -46,13 +48,18 @@ pub const Folder = struct {
     packed_inputs: [max_streams_per_folder]u4 = @splat(0),
     pack_stream_count: u4 = 1,
     bcj2_coder_index: ?u3 = null,
+    aes_coder_index: ?u3 = null,
     unpack_size: u64 = 0,
     crc32: ?u32 = null,
     first_substream: usize = 0,
     substream_count: usize = 1,
 
     pub fn primaryMethod(self: *const Folder) types.Method {
-        return self.coders[self.decode_order[0]].method;
+        for (self.decode_order[0..self.coder_count]) |coder_index| {
+            const method = self.coders[coder_index].method;
+            if (isCompression(method)) return method;
+        }
+        return .copy;
     }
 };
 
@@ -184,11 +191,14 @@ fn parseUnpackInfo(
         for (0..folder.coder_count) |index|
             folder.coder_unpack_sizes[index] = try reader.readNumber();
         folder.unpack_size = folder.coder_unpack_sizes[folder.decode_order[folder.coder_count - 1]];
-        if (folder.bcj2_coder_index == null)
-            for (folder.coder_unpack_sizes[0..folder.coder_count]) |coder_size| {
+        if (folder.bcj2_coder_index == null) {
+            const first_sized_order: usize = @intFromBool(folder.aes_coder_index != null);
+            for (folder.decode_order[first_sized_order..folder.coder_count]) |coder_index| {
+                const coder_size = folder.coder_unpack_sizes[coder_index];
                 if (coder_size != folder.unpack_size)
                     return error.Invalid7zArchive;
-            };
+            }
+        }
     }
 
     const next = try reader.readByte();
@@ -258,12 +268,19 @@ fn parseFolder(reader: *number.Reader, pack_index: usize) !Folder {
     }
 
     var bcj2_index: ?usize = null;
-    for (folder.coders[0..coder_count], 0..) |coder, index|
+    var aes_index: ?usize = null;
+    for (folder.coders[0..coder_count], 0..) |coder, index| {
         if (coder.method == .bcj2) {
             if (bcj2_index != null) return error.Unsupported7zFeature;
             bcj2_index = index;
-        };
+        }
+        if (coder.method == .aes256_sha256) {
+            if (aes_index != null) return error.Unsupported7zFeature;
+            aes_index = index;
+        }
+    }
     if (bcj2_index) |bcj_index| {
+        if (aes_index != null) return error.Unsupported7zFeature;
         if (coder_count != 2 or packed_count != 4) return error.Unsupported7zFeature;
         const primary_index: usize = 1 - bcj_index;
         const primary = folder.coders[primary_index];
@@ -326,9 +343,17 @@ fn parseFolder(reader: *number.Reader, pack_index: usize) !Folder {
             current = next_coder[current] orelse return error.Unsupported7zFeature;
         }
     }
-    if (!isCompression(folder.coders[folder.decode_order[0]].method))
+    var compression_order: usize = 0;
+    if (folder.coders[folder.decode_order[0]].method == .aes256_sha256) {
+        folder.aes_coder_index = folder.decode_order[0];
+        compression_order = 1;
+    } else if (aes_index != null) {
         return error.Unsupported7zFeature;
-    for (folder.decode_order[1..coder_count]) |coder_index|
+    }
+    if (compression_order == coder_count) return folder;
+    if (!isCompression(folder.coders[folder.decode_order[compression_order]].method))
+        return error.Unsupported7zFeature;
+    for (folder.decode_order[compression_order + 1 .. coder_count]) |coder_index|
         if (!isFilter(folder.coders[coder_index].method)) return error.Unsupported7zFeature;
     return folder;
 }
@@ -347,7 +372,7 @@ fn parseCoder(reader: *number.Reader) !Coder {
         try reader.take(try reader.readSize())
     else
         &.{};
-    if (properties.len > 5) return error.Unsupported7zFeature;
+    if (properties.len > max_coder_properties) return error.Unsupported7zFeature;
 
     const method: types.Method = if (std.mem.eql(u8, id, &.{0}))
         .copy
@@ -375,6 +400,8 @@ fn parseCoder(reader: *number.Reader) !Coder {
         .sparc
     else if (std.mem.eql(u8, id, &.{ 0x03, 0x03, 0x01, 0x1b }))
         .bcj2
+    else if (std.mem.eql(u8, id, &.{ 0x06, 0xf1, 0x07, 0x01 }))
+        .aes256_sha256
     else
         return error.Unsupported7zFeature;
     if (((method == .copy or method == .deflate or method == .bzip2) and properties.len != 0) or
@@ -383,8 +410,11 @@ fn parseCoder(reader: *number.Reader) !Coder {
         (method == .delta and properties.len != 1) or
         (isBcj(method) and properties.len != 0 and properties.len != 4) or
         (method == .bcj2 and (input_count != 4 or output_count != 1 or
-            (properties.len != 0 and properties.len != 4))))
+            (properties.len != 0 and properties.len != 4))) or
+        (method == .aes256_sha256 and (input_count != 1 or output_count != 1)))
         return error.Invalid7zArchive;
+    if (method == .aes256_sha256)
+        _ = aes.parseProperties(properties) catch return error.Invalid7zArchive;
 
     var coder = Coder{
         .method = method,
@@ -642,6 +672,29 @@ test "7z Folder parses Delta filter properties" {
 
     try std.testing.expectEqual(types.Method.delta, delta.method);
     try std.testing.expectEqualSlices(u8, &.{3}, delta.propertyBytes());
+    try std.testing.expectEqual(@as(usize, encoded.len), reader.offset);
+}
+
+test "7z Folder orders AES before Copy decoding" {
+    const encoded = [_]u8{
+        2,
+        0x24,
+        0x06,
+        0xf1,
+        0x07,
+        0x01,
+        1,
+        aes.direct_key_power,
+        1,
+        0,
+        1,
+        0,
+    };
+    var reader = number.Reader.init(&encoded);
+    const folder = try parseFolder(&reader, 3);
+    try std.testing.expectEqual(@as(?u3, 0), folder.aes_coder_index);
+    try std.testing.expectEqual(types.Method.aes256_sha256, folder.coders[folder.decode_order[0]].method);
+    try std.testing.expectEqual(types.Method.copy, folder.primaryMethod());
     try std.testing.expectEqual(@as(usize, encoded.len), reader.offset);
 }
 

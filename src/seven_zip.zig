@@ -12,6 +12,7 @@ pub const ParseOptions = archive.ParseOptions;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const Compression = writer.Compression;
 pub const Filter = writer.Filter;
+pub const EncryptionOptions = writer.EncryptionOptions;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const parseAlloc = archive.parseAlloc;
 pub const parseAllocWithOptions = archive.parseAllocWithOptions;
@@ -40,6 +41,7 @@ pub const encodeStoredInto = writer.encodeStoredInto;
 
 test {
     _ = archive;
+    _ = @import("seven_zip/aes.zig");
     _ = @import("seven_zip/bcj2.zig");
     _ = @import("seven_zip/number.zig");
     _ = writer;
@@ -403,6 +405,174 @@ test "7z writer and reader preserve inline and external file metadata" {
         error.ChecksumMismatch,
         parseAlloc(std.testing.allocator, corrupt_external),
     );
+}
+
+test "7z writer and reader round trip encrypted data and headers" {
+    const entries = [_]EncodeEntry{
+        .{ .name = "first.txt", .data = "encrypted payload one\n" ** 37 },
+        .{ .name = "empty.txt" },
+        .{ .name = "second.bin", .data = "\x00\xff encrypted payload two\n" ** 41 },
+    };
+    const encryption = EncryptionOptions{
+        .password = "correct horse 密码",
+        .iv = [_]u8{0x42} ** 16,
+        .salt = [_]u8{0x24} ** 16,
+        .salt_len = 8,
+        .num_cycles_power = @import("seven_zip/aes.zig").direct_key_power,
+    };
+    inline for (.{
+        Compression.copy,
+        Compression.deflate,
+        Compression.bzip2,
+        Compression.lzma,
+        Compression.lzma2,
+        Compression.lzma2_stored,
+    }) |compression| {
+        const options = EncodeOptions{
+            .compression = compression,
+            .solid = true,
+            .header_compression = .copy,
+            .encryption = encryption,
+            .encrypt_header = true,
+        };
+        const encoded = try encodeAlloc(std.testing.allocator, &entries, options);
+        defer std.testing.allocator.free(encoded);
+        const repeated = try encodeAlloc(std.testing.allocator, &entries, options);
+        defer std.testing.allocator.free(repeated);
+        try std.testing.expectEqualSlices(u8, encoded, repeated);
+
+        const parsed = try parseAllocWithOptions(std.testing.allocator, encoded, .{
+            .password = encryption.password,
+        });
+        defer parsed.deinit();
+        for (entries) |entry| {
+            if (entry.data.len == 0) continue;
+            const actual = parsed.find(entry.name) orelse return error.EntryNotFound;
+            const decoded = try parsed.decodeEntryAllocWithOptions(
+                std.testing.allocator,
+                actual,
+                .{ .password = encryption.password },
+            );
+            defer std.testing.allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, entry.data, decoded);
+        }
+        try std.testing.expectError(
+            error.PasswordRequired,
+            parseAlloc(std.testing.allocator, encoded),
+        );
+        try std.testing.expectError(
+            error.ChecksumMismatch,
+            parseAllocWithOptions(std.testing.allocator, encoded, .{
+                .password = "wrong password",
+            }),
+        );
+    }
+
+    const data_only = try encodeAlloc(std.testing.allocator, &entries, .{
+        .compression = .lzma2,
+        .solid = false,
+        .encryption = encryption,
+    });
+    defer std.testing.allocator.free(data_only);
+    const parsed_without_password = try parseAlloc(std.testing.allocator, data_only);
+    defer parsed_without_password.deinit();
+    try std.testing.expectError(
+        error.PasswordRequired,
+        parsed_without_password.decodeEntryAllocWithOptions(
+            std.testing.allocator,
+            parsed_without_password.entries[0],
+            .{},
+        ),
+    );
+    const first_aes = parsed_without_password.streams.folders[0].aes_coder_index.?;
+    const second_aes = parsed_without_password.streams.folders[1].aes_coder_index.?;
+    const aes_module = @import("seven_zip/aes.zig");
+    const first_properties = try aes_module.parseProperties(
+        parsed_without_password.streams.folders[0].coders[first_aes].propertyBytes(),
+    );
+    const second_properties = try aes_module.parseProperties(
+        parsed_without_password.streams.folders[1].coders[second_aes].propertyBytes(),
+    );
+    try std.testing.expect(!std.mem.eql(u8, first_properties.ivBytes(), second_properties.ivBytes()));
+}
+
+test "7z reader decodes real data-only and header-encrypted AES archives" {
+    const allocator = std.testing.allocator;
+    const password = "seven-zip-password";
+    const expected = "Vort 7z AES fixture\n";
+
+    const data_hex = std.mem.trim(
+        u8,
+        @embedFile("seven_zip/testdata/7zip-aes-data.7z.hex"),
+        "\r\n \t",
+    );
+    const data_archive = try allocator.alloc(u8, data_hex.len / 2);
+    defer allocator.free(data_archive);
+    _ = try std.fmt.hexToBytes(data_archive, data_hex);
+    const data_parsed = try parseAlloc(allocator, data_archive);
+    defer data_parsed.deinit();
+    try std.testing.expectEqualStrings("aes.txt", data_parsed.entries[0].name);
+    try std.testing.expectError(
+        error.PasswordRequired,
+        data_parsed.extractEntryAlloc(allocator, data_parsed.entries[0]),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        data_parsed.decodeEntryAllocWithOptions(allocator, data_parsed.entries[0], .{
+            .password = password,
+            .max_kdf_cycles_power = 18,
+        }),
+    );
+    const data_decoded = try data_parsed.decodeEntryAllocWithOptions(
+        allocator,
+        data_parsed.entries[0],
+        .{ .password = password },
+    );
+    defer allocator.free(data_decoded);
+    try std.testing.expectEqualSlices(u8, expected, data_decoded);
+
+    var corrupt_data = try allocator.dupe(u8, data_archive);
+    defer allocator.free(corrupt_data);
+    corrupt_data[32] ^= 1;
+    const corrupt_parsed = try parseAlloc(allocator, corrupt_data);
+    defer corrupt_parsed.deinit();
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        corrupt_parsed.decodeEntryAllocWithOptions(allocator, corrupt_parsed.entries[0], .{
+            .password = password,
+        }),
+    );
+
+    const header_hex = std.mem.trim(
+        u8,
+        @embedFile("seven_zip/testdata/7zip-aes-header.7z.hex"),
+        "\r\n \t",
+    );
+    const header_archive = try allocator.alloc(u8, header_hex.len / 2);
+    defer allocator.free(header_archive);
+    _ = try std.fmt.hexToBytes(header_archive, header_hex);
+    try std.testing.expectError(
+        error.PasswordRequired,
+        parseAlloc(allocator, header_archive),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        parseAllocWithOptions(allocator, header_archive, .{
+            .password = password,
+            .max_kdf_cycles_power = 18,
+        }),
+    );
+    const header_parsed = try parseAllocWithOptions(allocator, header_archive, .{
+        .password = password,
+    });
+    defer header_parsed.deinit();
+    const header_decoded = try header_parsed.decodeEntryAllocWithOptions(
+        allocator,
+        header_parsed.entries[0],
+        .{ .password = password },
+    );
+    defer allocator.free(header_decoded);
+    try std.testing.expectEqualSlices(u8, expected, header_decoded);
 }
 
 test "7z reader decodes a real LZMA2 BCJ2 folder" {

@@ -24,24 +24,33 @@ def run(
     )
 
 
-def seven_zip_extract(tool: str, archive: Path, name: str) -> bytes:
+def seven_zip_extract(
+    tool: str, archive: Path, name: str, password: str | None = None
+) -> bytes:
+    password_args = [f"-p{password}"] if password is not None else []
     return subprocess.run(
-        [tool, "x", "-so", "-bd", str(archive), name],
+        [tool, "x", "-so", "-bd", *password_args, str(archive), name],
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     ).stdout
 
 
-def verify_with_seven_zip(tool: str, archive: Path, payloads: dict[str, bytes]) -> None:
+def verify_with_seven_zip(
+    tool: str,
+    archive: Path,
+    payloads: dict[str, bytes],
+    password: str | None = None,
+) -> None:
+    password_args = [f"-p{password}"] if password is not None else []
     subprocess.run(
-        [tool, "t", "-bd", str(archive)],
+        [tool, "t", "-bd", *password_args, str(archive)],
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
     for name, payload in payloads.items():
-        if seven_zip_extract(tool, archive, name) != payload:
+        if seven_zip_extract(tool, archive, name, password) != payload:
             raise AssertionError(f"7-Zip could not extract Vort entry {name!r}")
 
 
@@ -80,14 +89,29 @@ def create_reference_payload(
     )
 
 
-def verify_with_vort(cli: Path, archive: Path, payloads: dict[str, bytes]) -> None:
-    listing = run(cli, "list-7z-file", str(archive)).stdout
+def verify_with_vort(
+    cli: Path,
+    archive: Path,
+    payloads: dict[str, bytes],
+    password: str | None = None,
+) -> None:
+    list_args = (str(archive), password) if password is not None else (str(archive),)
+    listing = run(cli, "list-7z-file", *list_args).stdout
     for name in payloads:
         if f"name={name}" not in listing:
             raise AssertionError(f"7z listing omitted {name!r}: {listing}")
     for index, (name, payload) in enumerate(payloads.items()):
         output = archive.with_name(f"{archive.stem}-{index}.out")
-        run(cli, "extract-7z-file", str(archive), name, str(output), str(len(payload)))
+        extract_args = [
+            "extract-7z-file",
+            str(archive),
+            name,
+            str(output),
+            str(len(payload)),
+        ]
+        if password is not None:
+            extract_args.extend(("536870912", "536870912", password))
+        run(cli, *extract_args)
         if output.read_bytes() != payload:
             raise AssertionError(f"Vort 7z extraction mismatch for {name!r}")
 
@@ -191,6 +215,104 @@ def main() -> None:
                 verify_with_vort(args.cli, archive, expected_vort)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
             vort_writer_variants += 6
+
+            encryption_password = "vort-password-密码"
+            for compression in (
+                "copy",
+                "deflate",
+                "bzip2",
+                "lzma",
+                "lzma2",
+                "lzma2-stored",
+            ):
+                archive = temp / f"vort-aes-{compression}.7z"
+                duplicate = temp / f"vort-aes-{compression}-repeat.7z"
+                writer_args = (
+                    compression,
+                    "solid",
+                    "copy",
+                    "classic",
+                    "0",
+                    "inline-names",
+                    "inline-metadata",
+                    "encrypted",
+                    "encrypted-header",
+                )
+                run(args.writer, str(archive), *writer_args)
+                run(args.writer, str(duplicate), *writer_args)
+                if archive.read_bytes() != duplicate.read_bytes():
+                    raise AssertionError(
+                        f"Vort AES {compression} output is not deterministic"
+                    )
+                verify_with_vort(
+                    args.cli,
+                    archive,
+                    expected_vort,
+                    encryption_password,
+                )
+                verify_with_seven_zip(
+                    seven_zip_tool,
+                    archive,
+                    expected_vort,
+                    encryption_password,
+                )
+            vort_writer_variants += 6
+
+            standard_kdf_archive = temp / "vort-aes-standard-kdf.7z"
+            run(
+                args.writer,
+                str(standard_kdf_archive),
+                "lzma2",
+                "solid",
+                "copy",
+                "classic",
+                "0",
+                "inline-names",
+                "inline-metadata",
+                "encrypted-standard",
+                "encrypted-header",
+            )
+            verify_with_vort(
+                args.cli,
+                standard_kdf_archive,
+                expected_vort,
+                encryption_password,
+            )
+            verify_with_seven_zip(
+                seven_zip_tool,
+                standard_kdf_archive,
+                expected_vort,
+                encryption_password,
+            )
+            vort_writer_variants += 1
+
+            combined_encrypted = temp / "vort-aes-external-metadata.7z"
+            run(
+                args.writer,
+                str(combined_encrypted),
+                "lzma2",
+                "solid",
+                "copy",
+                "classic",
+                "0",
+                "external-lzma2",
+                "external-metadata-copy",
+                "encrypted",
+                "encrypted-header",
+            )
+            verify_with_vort(
+                args.cli,
+                combined_encrypted,
+                expected_vort,
+                encryption_password,
+            )
+            verify_with_seven_zip(
+                seven_zip_tool,
+                combined_encrypted,
+                expected_vort,
+                encryption_password,
+            )
+            vort_writer_variants += 1
 
             for name_compression in (
                 "copy",
@@ -419,6 +541,91 @@ def main() -> None:
                 create_reference_payload(seven_zip_tool, filter_tree, archive, payload, options)
                 verify_with_vort(args.cli, archive, {"payload.bin": payload})
             external_variants += len(filter_variants)
+
+            encrypted_payload = b"7-Zip AES reference payload\n" * 37
+            encrypted_references = {
+                "aes-data": [
+                    "-m0=lzma2",
+                    "-mx=5",
+                    "-mhc=off",
+                    "-mhe=off",
+                    "-pseven-zip-password",
+                ],
+                "aes-header": [
+                    "-m0=lzma2",
+                    "-mx=5",
+                    "-mhc=on",
+                    "-mhe=on",
+                    "-pseven-zip-password",
+                ],
+            }
+            for variant, options in encrypted_references.items():
+                archive = temp / f"{variant}.7z"
+                create_reference_payload(
+                    seven_zip_tool,
+                    filter_tree,
+                    archive,
+                    encrypted_payload,
+                    options,
+                )
+                verify_with_vort(
+                    args.cli,
+                    archive,
+                    {"payload.bin": encrypted_payload},
+                    "seven-zip-password",
+                )
+            external_variants += len(encrypted_references)
+
+            wrong_password = run(
+                args.cli,
+                "list-7z-file",
+                str(temp / "aes-header.7z"),
+                "wrong-password",
+                check=False,
+            )
+            if wrong_password.returncode == 0:
+                raise AssertionError("7z encrypted header accepted a wrong password")
+
+            encrypted_filter_input = filter_tree / "payload.bin"
+            encrypted_filter_input.write_bytes(x86_payload)
+            encrypted_filter_archive = temp / "vort-aes-x86.7z"
+            run(
+                args.cli,
+                "create-7z-file",
+                str(encrypted_filter_archive),
+                "payload.bin",
+                str(encrypted_filter_input),
+                "lzma2",
+                "x86",
+                "non-solid",
+                "plain",
+                "classic",
+                "0",
+                "inline-names",
+                "inline-metadata",
+                "-",
+                "-",
+                "-",
+                "-",
+                encryption_password,
+                "42424242424242424242424242424242",
+                "2424242424242424",
+                "63",
+                "plain-header",
+            )
+            verify_with_vort(
+                args.cli,
+                encrypted_filter_archive,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
+            verify_with_seven_zip(
+                seven_zip_tool,
+                encrypted_filter_archive,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
+            vort_writer_variants += 1
 
             writer_variants = {
                 "lzma2-multichunk": (
