@@ -17714,12 +17714,12 @@ reuse, so production keeps the simpler independently owned plans.
   cross-platform safe-relative-path predicate without writing archive paths to
   disk. The writer emits regular files, directories, symbolic/hard links, and
   deterministic PAX long paths. A compositional layer automatically detects,
-  decodes, and writes raw TAR, tar.gz, tar.bz2, tar.xz, tar.lz, tar.zst, and
-  tar.lzo through existing Vort codecs. XZ now uses compressed LZMA2 planning
-  instead of the diagnostic stored-only path, while LZOP selects compressed or
-  stored blocks independently. Python `tarfile`, GNU tar, xz, lzip, lzop, and
-  system zstd validate raw/PAX/GNU metadata and compressed tarballs. See
-  `docs/formats/tar.md`.
+  decodes, and writes raw TAR, tar.gz, tar.bz2, tar.Z, tar.xz, tar.lz4, tar.lz,
+  tar.zst, and tar.lzo through existing Vort codecs. XZ now uses compressed
+  LZMA2 planning instead of the diagnostic stored-only path, while LZ4 and LZOP
+  select compressed or stored blocks independently. Python `tarfile`, GNU tar,
+  uncompress, xz, lz4, lzip, lzop, and system zstd validate raw/PAX/GNU metadata
+  and compressed tarballs. See `docs/formats/tar.md`.
 
 - Added pure Zig Unix `compress` (`.Z`) encoding and decoding. The codec
   validates the `1f 9d` header and reserved flags, supports 9 through 16 maximum

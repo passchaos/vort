@@ -2,13 +2,15 @@ const std = @import("std");
 const archive = @import("archive.zig");
 const writer = @import("writer.zig");
 const bzip2 = @import("../bzip2.zig");
+const compress_z = @import("../compress_z.zig");
 const deflate = @import("../deflate.zig");
+const lz4 = @import("../lz4.zig");
 const lzip = @import("../lzip.zig");
 const lzop = @import("../lzop.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = archive.Error || writer.Error || bzip2.Error || lzip.Error || lzop.Error || xz.Error || zstd.Error || deflate.Error || error{
+pub const Error = archive.Error || writer.Error || bzip2.Error || compress_z.Error || lz4.Error || lzip.Error || lzop.Error || xz.Error || zstd.Error || deflate.Error || error{
     UnknownTarCompression,
 };
 
@@ -16,7 +18,9 @@ pub const Compression = enum {
     none,
     gzip,
     bzip2,
+    compress_z,
     xz,
+    lz4,
     lzip,
     zstandard,
     lzop,
@@ -26,7 +30,10 @@ pub const EncodeOptions = struct {
     compression: Compression = .none,
     gzip_options: deflate.CompressionOptions = deflate.optionsForLevel(.default),
     bzip2_options: bzip2.EncodeOptions = .{},
+    compress_z_options: compress_z.EncodeOptions = .{},
     xz_options: xz.EncodeOptions = .{},
+    lz4_level: c_int = lz4.default_compression_level,
+    lz4_options: lz4.FrameOptions = .{},
     lzip_options: lzip.EncodeOptions = .{},
     zstd_level: c_int = zstd.default_compression_level,
     zstd_options: zstd.FrameOptions = .{},
@@ -44,8 +51,10 @@ pub const OwnedArchive = struct {
 
 pub fn detect(input: []const u8) Compression {
     if (input.len >= 2 and input[0] == 0x1f and input[1] == 0x8b) return .gzip;
+    if (input.len >= 2 and input[0] == 0x1f and input[1] == 0x9d) return .compress_z;
     if (input.len >= 3 and std.mem.eql(u8, input[0..3], "BZh")) return .bzip2;
     if (input.len >= 6 and std.mem.eql(u8, input[0..6], &.{ 0xfd, '7', 'z', 'X', 'Z', 0 })) return .xz;
+    if (input.len >= 4 and std.mem.readInt(u32, input[0..4], .little) == 0x184d_2204) return .lz4;
     if (input.len >= 4 and std.mem.eql(u8, input[0..4], "LZIP")) return .lzip;
     if (input.len >= 4 and std.mem.readInt(u32, input[0..4], .little) == 0xfd2f_b528) return .zstandard;
     if (input.len >= 9 and std.mem.eql(u8, input[0..9], &lzop.header_magic)) return .lzop;
@@ -64,7 +73,14 @@ pub fn encodeAlloc(
         .none => unreachable,
         .gzip => deflate.encodeGzipBestAlloc(allocator, tar_bytes, options.gzip_options),
         .bzip2 => bzip2.encodeAlloc(allocator, tar_bytes, options.bzip2_options),
+        .compress_z => compress_z.encodeAlloc(allocator, tar_bytes, options.compress_z_options),
         .xz => xz.encodeAlloc(allocator, tar_bytes, options.xz_options),
+        .lz4 => lz4.encodeFrameWithLevelAndOptionsAlloc(
+            allocator,
+            tar_bytes,
+            options.lz4_level,
+            options.lz4_options,
+        ),
         .lzip => lzip.encodeAlloc(allocator, tar_bytes, options.lzip_options),
         .zstandard => zstd.encodeFrameWithLevelAndOptionsAlloc(
             allocator,
@@ -110,7 +126,9 @@ pub fn decodeAlloc(
         },
         .gzip => try deflate.decodeGzipAllocLimited(allocator, input, max_tar_size),
         .bzip2 => try bzip2.decodeAllocLimited(allocator, input, max_tar_size),
+        .compress_z => try compress_z.decodeAllocLimited(allocator, input, max_tar_size),
         .xz => try xz.decodeAllocLimited(allocator, input, max_tar_size),
+        .lz4 => try lz4.decodeFrameAllocLimited(allocator, input, max_tar_size),
         .lzip => try lzip.decodeAllocLimited(allocator, input, max_tar_size),
         .zstandard => try zstd.decodeFrameAllocLimited(allocator, input, max_tar_size),
         .lzop => try lzop.decodeAllocLimited(allocator, input, max_tar_size),
@@ -125,7 +143,7 @@ test "compressed TAR wrappers round trip every available encoder" {
         .{ .name = "folder/", .kind = .directory },
         .{ .name = "folder/data.txt", .data = "tarball payload " ** 64 },
     };
-    inline for (.{ Compression.none, .gzip, .bzip2, .xz, .lzip, .zstandard, .lzop }) |compression| {
+    inline for (.{ Compression.none, .gzip, .bzip2, .compress_z, .xz, .lz4, .lzip, .zstandard, .lzop }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{ .compression = compression });
         defer allocator.free(encoded);
         try std.testing.expectEqual(compression, detect(encoded));
