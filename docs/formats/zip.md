@@ -27,7 +27,9 @@ descriptors with or without a descriptor signature because extraction
 boundaries come from the central directory.
 
 The writer accepts multiple borrowed entries and emits stored, raw-Deflate,
-Bzip2, LZMA, Zstandard, or XZ members. LZMA entries carry the standard four-byte
+Deflate64, Bzip2, LZMA, Zstandard, or XZ members. Deflate64 uses a greedy
+fixed-Huffman-or-stored baseline with extended 64 KiB distances and records
+version-needed 2.1. LZMA entries carry the standard four-byte
 ZIP properties prefix, a five-byte LZMA property record, an end marker, general
 purpose flag bit 1, and version-needed 6.3. It records CRC-32, sizes, entry
 comments, an archive comment, and the UTF-8 general-purpose flag. Its fixed DOS
@@ -44,6 +46,7 @@ descriptor signature when enabled.
 const entries = [_]vort.ZipEncodeEntry{
     .{ .name = "plain.bin", .data = plain, .method = .stored },
     .{ .name = "folder/data.txt", .data = text, .method = .deflate },
+    .{ .name = "folder/large.bin", .data = large_data, .method = .deflate64 },
     .{ .name = "folder/archive.txt", .data = archive_text, .method = .bzip2 },
     .{ .name = "folder/model.bin", .data = model_data, .method = .lzma },
     .{ .name = "folder/archive.xz", .data = xz_data, .method = .xz },
@@ -99,14 +102,14 @@ zig build run-zip-diff
 
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
-than stored/Deflate/Bzip2/LZMA/Zstandard/XZ. Deflate64 writing is not currently
-exposed. The reader deliberately rejects
-encrypted entries, multi-disk archives, malformed/duplicate ZIP64 extra fields,
+than stored/Deflate/Deflate64/Bzip2/LZMA/Zstandard/XZ. The reader deliberately
+rejects encrypted entries, multi-disk archives, malformed/duplicate ZIP64
+extra fields,
 and compression methods other than stored/Deflate/Deflate64/Bzip2/LZMA/
 Zstandard/XZ with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. Encryption, split archives, and additional entry
 compression methods remain explicit future compatibility increments.
 
-The Deflate64 decoder and its raw APIs are described in
+The Deflate64 codec and its raw APIs are described in
 [`deflate64.md`](deflate64.md).

@@ -3,12 +3,13 @@ const bzip2 = @import("../bzip2.zig");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const deflate = @import("../deflate.zig");
+const deflate64 = @import("../deflate64.zig");
 const lzma_writer = @import("../lzma/writer.zig");
 const types = @import("types.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = core.Error || bzip2.Error || lzma_writer.Error || xz.Error || zstd.Error || error{
+pub const Error = core.Error || bzip2.Error || deflate64.Error || lzma_writer.Error || xz.Error || zstd.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -36,6 +37,7 @@ pub const EncodeOptions = struct {
     utf8: bool = true,
     zip64: Zip64Mode = .auto,
     deflate_options: deflate.CompressionOptions = deflate.optionsForLevel(.default),
+    deflate64_options: deflate64.EncodeOptions = .{},
     bzip2_options: bzip2.EncodeOptions = .{},
     lzma_options: lzma_writer.ZipEncodeOptions = .{},
     xz_options: xz.EncodeOptions = .{},
@@ -51,6 +53,7 @@ const zip64_end_of_central_signature: u32 = 0x0606_4b50;
 const zip64_end_of_central_locator_signature: u32 = 0x0706_4b50;
 const zip64_extra_id: u16 = 0x0001;
 const version_20: u16 = 20;
+const version_21: u16 = 21;
 const version_45: u16 = 45;
 const deterministic_dos_time: u16 = 0;
 const deterministic_dos_date: u16 = 0x0021;
@@ -114,6 +117,11 @@ pub fn encodeAppend(
             .stored => entry.data,
             .deflate => blk: {
                 const bytes = try deflate.encodeRawBestAlloc(allocator, entry.data, options.deflate_options);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
+            .deflate64 => blk: {
+                const bytes = try deflate64.encodeAlloc(allocator, entry.data, options.deflate64_options);
                 owned_compressed = bytes;
                 break :blk bytes;
             },
@@ -234,7 +242,7 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
         if (options.zip64 == .never and entry.data.len >= std.math.maxInt(u32))
             return error.Zip32LimitExceeded;
         switch (entry.method) {
-            .stored, .deflate, .bzip2, .xz, .zstandard => {},
+            .stored, .deflate, .deflate64, .bzip2, .xz, .zstandard => {},
             .lzma => try lzma_writer.validateZipOptions(options.lzma_options),
             else => return error.UnsupportedZipCompressionMethod,
         }
@@ -369,6 +377,7 @@ fn anyZip64Entry(entries: []const EncodedEntry) bool {
 }
 
 fn requiredVersion(method: CompressionMethod, zip64: bool) u16 {
+    if (method == .deflate64) return if (zip64) version_45 else version_21;
     if (method == .bzip2) return 46;
     if (method == .lzma or method == .xz or method == .zstandard) return 63;
     return if (zip64) version_45 else version_20;

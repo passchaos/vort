@@ -198,6 +198,7 @@ def validate_vort_archive_with_python(
     payloads = {
         "stored.bin": bytes([0, 1, 2, 255]) + b"stored by Vort",
         "folder/deflated.txt": b"Vort ZIP writer differential.\n" * 128,
+        "folder/deflate64.txt": b"Vort ZIP Deflate64 method 9.\n" * 128,
         "folder/bzip2.txt": b"Vort ZIP Bzip2 method 12.\n" * 96,
         "folder/lzma.txt": b"Vort ZIP LZMA method 14.\n" * 96,
         "folder/xz.txt": b"Vort ZIP XZ method 95.\n" * 96,
@@ -229,6 +230,7 @@ def validate_vort_archive_with_python(
         expected_methods = {
             "stored.bin": zipfile.ZIP_STORED,
             "folder/deflated.txt": zipfile.ZIP_DEFLATED,
+            "folder/deflate64.txt": 9,
             "folder/bzip2.txt": zipfile.ZIP_BZIP2,
             "folder/lzma.txt": zipfile.ZIP_LZMA,
             "folder/xz.txt": 95,
@@ -250,6 +252,18 @@ def validate_vort_archive_with_python(
                     check=True,
                     stdout=subprocess.PIPE,
                 ).stdout
+            elif info.compress_type == 9:
+                if seven_zip_tool is None:
+                    # The Vort self-extraction pass below still validates the
+                    # entry when no independent Deflate64 tool is installed.
+                    actual = expected
+                else:
+                    actual = subprocess.run(
+                        [seven_zip_tool, "x", "-so", "-bd", str(first), name],
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    ).stdout
             elif info.compress_type == 95:
                 actual = lzma.decompress(
                     raw[data_offset : data_offset + info.compress_size],
@@ -269,6 +283,8 @@ def validate_vort_archive_with_python(
                 raise AssertionError(f"compression method mismatch for {name!r}")
             if info.compress_type == 95 and info.extract_version != 63:
                 raise AssertionError("XZ method omitted ZIP 6.3 version-needed")
+            if info.compress_type == 9 and not force_zip64 and info.extract_version != 21:
+                raise AssertionError("Deflate64 method omitted ZIP 2.1 version-needed")
             if force_zip64 and info.extract_version < 45:
                 raise AssertionError(f"ZIP64 version-needed omitted for {name!r}")
 
@@ -400,7 +416,7 @@ def main() -> None:
 
     print(
         "zip_diff=ok directions=2 "
-        f"python_entries=7 vort_entries=8 python_bytes={python_bytes} "
+        f"python_entries=7 vort_entries=9 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"system_7zip={seven_zip_tool is not None} deflate64_cases={deflate64_cases}"
     )

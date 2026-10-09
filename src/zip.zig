@@ -606,14 +606,6 @@ test "ZIP writer appends a valid archive after a prefix and rejects inputs trans
     }};
     try std.testing.expectError(error.UnsupportedZipCompressionMethod, encodeAppend(allocator, &out, &unsupported, .{}));
     try std.testing.expectEqualSlices(u8, before, out.items);
-
-    const decode_only = [_]EncodeEntry{.{
-        .name = "deflate64.bin",
-        .data = "unsupported writer method",
-        .method = .deflate64,
-    }};
-    try std.testing.expectError(error.UnsupportedZipCompressionMethod, encodeAppend(allocator, &out, &decode_only, .{}));
-    try std.testing.expectEqualSlices(u8, before, out.items);
 }
 
 test "ZIP writer emits and parses an empty archive" {
@@ -749,6 +741,29 @@ test "ZIP method 9 extracts a 7-Zip Deflate64 reference entry" {
     try std.testing.expectEqual(CompressionMethod.deflate64, parsed.method);
     var output: [payload.len]u8 = undefined;
     try std.testing.expectEqual(payload.len, try archive.extractInto(parsed, &output));
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "ZIP method 9 writer emits Deflate64 and round trips without extraction scratch" {
+    const allocator = std.testing.allocator;
+    const payload = "Deflate64-compressed ZIP entry " ** 128;
+    const entries = [_]EncodeEntry{.{
+        .name = "compressed-with-deflate64.txt",
+        .data = payload,
+        .method = .deflate64,
+    }};
+    const bytes = try encodeAlloc(allocator, &entries, .{ .data_descriptor = true });
+    defer allocator.free(bytes);
+
+    const archive = try parse(bytes);
+    const entry = try archive.entryAt(0);
+    try std.testing.expectEqual(CompressionMethod.deflate64, entry.method);
+    try std.testing.expectEqual(@as(u16, 21), try readU16(bytes, entry.local_header_offset + 4));
+    try std.testing.expectEqual(@as(u16, 21), try readU16(bytes, entry.central_header_offset + 6));
+    try std.testing.expect(entry.compressed_size < entry.uncompressed_size);
+
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try archive.extractInto(entry, &output));
     try std.testing.expectEqualSlices(u8, payload, &output);
 }
 

@@ -17648,19 +17648,20 @@ reuse, so production keeps the simpler independently owned plans.
   data descriptors; it iterates and finds entries without allocation, extracts
   stored, raw-Deflate, Deflate64, Bzip2, LZMA, Zstandard, and XZ members into caller
   buffers or bounded allocations where their scratch requirements allow, and encodes
-  multi-entry stored/Deflate/Bzip2/LZMA/Zstandard/XZ archives through owned or
+  multi-entry stored/Deflate/Deflate64/Bzip2/LZMA/Zstandard/XZ archives through owned or
   transactional append APIs. Writer `.auto`/`.always`/`.never` policy handles
   count, size, and offset transitions; UTF-8 flags, per-entry/archive comments,
   caller-selected Deflate policy, fixed timestamps, and self-extracting
   prefixes remain deterministic. Encrypted, multi-disk, malformed ZIP64, and
   unsupported-method inputs fail explicitly. Method 9 uses a dedicated
-  Deflate64 decoder with the 64 KiB window, 32 distance symbols, and extended
-  code-285 lengths. ZIP methods 12, 14, 93, and 95 reuse the standalone Bzip2,
+  Deflate64 codec with the 64 KiB window, 32 distance symbols, extended
+  code-285 lengths, and a functionality-first greedy fixed-Huffman-or-stored
+  encoder. ZIP methods 12, 14, 93, and 95 reuse the standalone Bzip2,
   LZMA, Zstandard, and XZ codecs. A bidirectional
   Python `zipfile` differential covers Python `force_zip64`, fully forced Vort ZIP64 archives,
   descriptors, UTF-8 names, directories, comments, deterministic output,
   prefixed archives, XZ payloads, and CLI extraction; 7-Zip additionally
-  validates method-95 archives in both directions and supplies real method-9
+  validates methods 9 and 95 in both directions and supplies real method-9
   dynamic and long-distance fixtures. Usage and limitations are
   documented in `docs/formats/zip.md`.
 

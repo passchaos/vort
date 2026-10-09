@@ -13,6 +13,7 @@ pub fn main(init: std.process.Init) !void {
 
     const stored = [_]u8{ 0, 1, 2, 0xff } ++ "stored by Vort".*;
     const deflated = "Vort ZIP writer differential.\n" ** 128;
+    const deflate64_payload = "Vort ZIP Deflate64 method 9.\n" ** 128;
     const bzip2_payload = "Vort ZIP Bzip2 method 12.\n" ** 96;
     const lzma_payload = "Vort ZIP LZMA method 14.\n" ** 96;
     const xz_payload = "Vort ZIP XZ method 95.\n" ** 96;
@@ -21,6 +22,7 @@ pub fn main(init: std.process.Init) !void {
     const entries = [_]vort.ZipEncodeEntry{
         .{ .name = "stored.bin", .data = &stored, .method = .stored, .comment = "stored entry" },
         .{ .name = "folder/deflated.txt", .data = deflated, .method = .deflate, .comment = "deflated entry" },
+        .{ .name = "folder/deflate64.txt", .data = deflate64_payload, .method = .deflate64, .comment = "deflate64 entry" },
         .{ .name = "folder/bzip2.txt", .data = bzip2_payload, .method = .bzip2, .comment = "bzip2 entry" },
         .{ .name = "folder/lzma.txt", .data = lzma_payload, .method = .lzma, .comment = "lzma entry" },
         .{ .name = "folder/xz.txt", .data = xz_payload, .method = .xz, .comment = "xz entry" },
