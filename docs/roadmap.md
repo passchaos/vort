@@ -17834,6 +17834,8 @@ reuse, so production keeps the simpler independently owned plans.
   directories as metadata-only records. The same filters operate across
   substream boundaries. A 7-Zip differential covers the base methods, solid
   Copy/Deflate/Bzip2/LZMA/LZMA2 output, and real filter chains in both
-  directions. Deeper LZMA parsing, BCJ2, branching or multi-packed-stream
-  graphs, encryption, and external metadata streams remain follow-up work. See
-  `docs/formats/7z.md`.
+  directions. Optional encoded Next Headers reuse all six writer codecs with an
+  exact packed-data offset and no recursive filters; system 7-Zip validates
+  each mode combined with a solid LZMA2 main stream. Deeper LZMA parsing, BCJ2,
+  branching or multi-packed-stream graphs, encryption, and external metadata
+  streams remain follow-up work. See `docs/formats/7z.md`.

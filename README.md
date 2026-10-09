@@ -118,8 +118,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - pure Zig 7z parsing and deterministic independent-folder writing, with
   Copy/Deflate/Bzip2/LZMA/LZMA2 decode and encode,
   bounded linear Delta and classic BCJ filter chains in both directions,
-  compressed Next Headers, solid substream reading and writing, CRC validation,
-  UTF-16LE names, directories, empty files, and bounded extraction;
+  compressed Next Header reading and writing, solid substream reading and
+  writing, CRC validation, UTF-16LE names, directories, empty files, and
+  bounded extraction;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
   safe-path classification, borrowed entry views, and automatic raw/gzip/
   Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/Zstandard/LZOP tarball composition;

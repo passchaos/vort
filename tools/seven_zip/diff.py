@@ -128,6 +128,26 @@ def main() -> None:
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
             vort_writer_variants += 5
 
+            for header_compression in (
+                "copy",
+                "deflate",
+                "bzip2",
+                "lzma",
+                "lzma2",
+                "lzma2-stored",
+            ):
+                archive = temp / f"vort-header-{header_compression}.7z"
+                duplicate = temp / f"vort-header-{header_compression}-repeat.7z"
+                run(args.writer, str(archive), "lzma2", "solid", header_compression)
+                run(args.writer, str(duplicate), "lzma2", "solid", header_compression)
+                if archive.read_bytes() != duplicate.read_bytes():
+                    raise AssertionError(
+                        f"Vort encoded-header {header_compression} output is not deterministic"
+                    )
+                verify_with_vort(args.cli, archive, expected_vort)
+                verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+            vort_writer_variants += 6
+
             tree = temp / "tree"
             tree.mkdir()
             (tree / "folder").mkdir()

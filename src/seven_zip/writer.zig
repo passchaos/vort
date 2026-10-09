@@ -32,6 +32,7 @@ const Nid = struct {
     const empty_stream: u8 = 0x0e;
     const empty_file: u8 = 0x0f;
     const name: u8 = 0x11;
+    const encoded_header: u8 = 0x17;
 };
 
 const EncodedFolder = struct {
@@ -146,18 +147,59 @@ pub fn encodeAppend(
     }
     try writeNextHeader(allocator, &header, entries, folders, substreams, options);
 
+    var next_header: std.ArrayList(u8) = .empty;
+    defer next_header.deinit(allocator);
+    if (options.header_compression) |header_compression| {
+        const pack_position = packed_data.items.len;
+        var header_options = options;
+        header_options.compression = header_compression;
+        header_options.solid = false;
+        header_options.header_compression = null;
+        header_options.filters = &.{};
+        const packed_size = try coders.appendPayload(
+            allocator,
+            &packed_data,
+            header.items,
+            header_options,
+        );
+        const header_folders = [_]EncodedFolder{.{
+            .packed_size = std.math.cast(u64, packed_size) orelse
+                return error.IntegerOverflow,
+            .unpacked_size = std.math.cast(u64, header.items.len) orelse
+                return error.IntegerOverflow,
+            .crc32 = checksum.crc32Best(header.items),
+            .first_substream = 0,
+            .substream_count = 1,
+        }};
+        const header_substreams = [_]EncodedSubstream{.{
+            .unpacked_size = header_folders[0].unpacked_size,
+            .crc32 = header_folders[0].crc32,
+        }};
+        try next_header.append(allocator, Nid.encoded_header);
+        try writeStreamsBody(
+            allocator,
+            &next_header,
+            &header_folders,
+            &header_substreams,
+            header_options,
+            pack_position,
+        );
+    } else {
+        try next_header.appendSlice(allocator, header.items);
+    }
+
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
     try encoded.appendSlice(allocator, &signature);
     try encoded.appendSlice(allocator, &.{ 0, 4 });
     var start_header: [20]u8 = undefined;
     std.mem.writeInt(u64, start_header[0..8], packed_data.items.len, .little);
-    std.mem.writeInt(u64, start_header[8..16], header.items.len, .little);
-    std.mem.writeInt(u32, start_header[16..20], checksum.crc32Best(header.items), .little);
+    std.mem.writeInt(u64, start_header[8..16], next_header.items.len, .little);
+    std.mem.writeInt(u32, start_header[16..20], checksum.crc32Best(next_header.items), .little);
     try appendU32(allocator, &encoded, checksum.crc32Best(&start_header));
     try encoded.appendSlice(allocator, &start_header);
     try encoded.appendSlice(allocator, packed_data.items);
-    try encoded.appendSlice(allocator, header.items);
+    try encoded.appendSlice(allocator, next_header.items);
 
     try out.ensureUnusedCapacity(allocator, encoded.items.len);
     out.appendSliceAssumeCapacity(encoded.items);
@@ -234,8 +276,19 @@ fn writeStreamsInfo(
     options: EncodeOptions,
 ) !void {
     try output.append(allocator, Nid.main_streams);
+    try writeStreamsBody(allocator, output, folders, substreams, options, 0);
+}
+
+fn writeStreamsBody(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    folders: []const EncodedFolder,
+    substreams: []const EncodedSubstream,
+    options: EncodeOptions,
+    pack_position: usize,
+) !void {
     try output.append(allocator, Nid.pack_info);
-    try number.append(allocator, output, 0);
+    try number.append(allocator, output, pack_position);
     try number.append(allocator, output, folders.len);
     try output.append(allocator, Nid.size);
     for (folders) |folder| try number.append(allocator, output, folder.packed_size);

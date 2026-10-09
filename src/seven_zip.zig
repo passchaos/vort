@@ -187,6 +187,52 @@ test "7z solid writer preserves filters across substream boundaries" {
     }
 }
 
+test "7z writer emits encoded Next Headers with every compression method" {
+    const entries = [_]EncodeEntry{
+        .{ .name = "first.txt", .data = "encoded header payload one\n" ** 32 },
+        .{ .name = "empty.txt" },
+        .{ .name = "second.txt", .data = "encoded header payload two\n" ** 47 },
+    };
+    inline for (.{
+        Compression.copy,
+        Compression.deflate,
+        Compression.bzip2,
+        Compression.lzma,
+        Compression.lzma2,
+        Compression.lzma2_stored,
+    }) |header_compression| {
+        const options = EncodeOptions{
+            .compression = .lzma2,
+            .solid = true,
+            .header_compression = header_compression,
+        };
+        const encoded = try encodeAlloc(std.testing.allocator, &entries, options);
+        defer std.testing.allocator.free(encoded);
+        const repeated = try encodeAlloc(std.testing.allocator, &entries, options);
+        defer std.testing.allocator.free(repeated);
+        try std.testing.expectEqualSlices(u8, encoded, repeated);
+
+        const next_offset = std.mem.readInt(u64, encoded[12..20], .little);
+        const next_start = std.math.cast(usize, 32 + next_offset) orelse
+            return error.IntegerOverflow;
+        try std.testing.expectEqual(@as(u8, 0x17), encoded[next_start]);
+        const parsed = try parseAlloc(std.testing.allocator, encoded);
+        defer parsed.deinit();
+        for (entries) |entry| {
+            if (entry.data.len == 0) continue;
+            const decoded = try parsed.extractByNameAlloc(std.testing.allocator, entry.name);
+            defer std.testing.allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, entry.data, decoded);
+        }
+        try std.testing.expectError(
+            error.OutputLimitExceeded,
+            parseAllocWithOptions(std.testing.allocator, encoded, .{
+                .max_encoded_header_size = 1,
+            }),
+        );
+    }
+}
+
 test "7z writer round trips an LZMA2 Delta and BCJ chain" {
     const branch_bytes = "\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90" ** 256;
     const entries = [_]EncodeEntry{.{ .name = "code.bin", .data = branch_bytes }};

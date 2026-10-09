@@ -11,6 +11,7 @@ pub fn main(init: std.process.Init) !void {
         std.mem.eql(u8, mode, "solid")
     else
         false;
+    const header_name = args.next();
     const compression: vort.SevenZipCompression = if (std.mem.eql(u8, compression_name, "copy"))
         .copy
     else if (std.mem.eql(u8, compression_name, "deflate"))
@@ -25,6 +26,25 @@ pub fn main(init: std.process.Init) !void {
         .lzma2_stored
     else
         return error.UnsupportedCompression;
+    const header_compression: ?vort.SevenZipCompression = if (header_name) |name|
+        if (std.mem.eql(u8, name, "plain") or std.mem.eql(u8, name, "none"))
+            null
+        else if (std.mem.eql(u8, name, "copy"))
+            .copy
+        else if (std.mem.eql(u8, name, "deflate"))
+            .deflate
+        else if (std.mem.eql(u8, name, "bzip2"))
+            .bzip2
+        else if (std.mem.eql(u8, name, "lzma"))
+            .lzma
+        else if (std.mem.eql(u8, name, "lzma2"))
+            .lzma2
+        else if (std.mem.eql(u8, name, "lzma2-stored"))
+            .lzma2_stored
+        else
+            return error.UnsupportedCompression
+    else
+        null;
 
     const entries = [_]vort.SevenZipEncodeEntry{
         .{ .name = "plain.txt", .data = "Vort 7z payload\n" },
@@ -35,6 +55,7 @@ pub fn main(init: std.process.Init) !void {
     const bytes = try vort.encodeSevenZipAlloc(init.gpa, &entries, .{
         .compression = compression,
         .solid = solid,
+        .header_compression = header_compression,
     });
     defer init.gpa.free(bytes);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = bytes });
