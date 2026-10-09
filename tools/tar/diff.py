@@ -70,9 +70,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
+    parser.add_argument("--lzip", type=Path)
     parser.add_argument("--lzop", type=Path)
     args = parser.parse_args()
-    compressions = ("none", "gzip", "bzip2", "xz", "zstd", "lzop")
+    compressions = ("none", "gzip", "bzip2", "xz", "lzip", "zstd", "lzop")
 
     with tempfile.TemporaryDirectory(prefix="vort-tar-diff-") as temp_text:
         temp = Path(temp_text)
@@ -101,6 +102,7 @@ def main() -> None:
         source = temp / "payload.bin"
         source.write_bytes(payload)
         zstd_tool = shutil.which("zstd")
+        lzip_tool = str(args.lzip) if args.lzip else shutil.which("lzip")
         lzop_tool = str(args.lzop) if args.lzop else shutil.which("lzop")
         for compression in compressions:
             archive_path = temp / f"vort.tar.{compression}"
@@ -120,16 +122,17 @@ def main() -> None:
                 with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
                     if archive.extractfile("payload.bin").read() != payload:
                         raise AssertionError("Python could not read Vort tar.zst")
-            elif compression == "lzop":
-                if lzop_tool is not None:
+            elif compression in {"lzip", "lzop"}:
+                tool = lzip_tool if compression == "lzip" else lzop_tool
+                if tool is not None:
                     raw = subprocess.run(
-                        [lzop_tool, "-dc", str(archive_path)],
+                        [tool, "-dc", str(archive_path)],
                         check=True,
                         stdout=subprocess.PIPE,
                     ).stdout
                     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
                         if archive.extractfile("payload.bin").read() != payload:
-                            raise AssertionError("Python could not read Vort tar.lzo")
+                            raise AssertionError(f"Python could not read Vort tar.{compression}")
             else:
                 mode = "r:" if compression == "none" else {"gzip": "r:gz", "bzip2": "r:bz2", "xz": "r:xz"}[compression]
                 with tarfile.open(archive_path, mode=mode) as archive:
@@ -146,6 +149,10 @@ def main() -> None:
         if zstd_tool is not None:
             compressed_inputs["zstd"] = subprocess.run(
                 [zstd_tool, "-q", "-c"], input=python_tar, check=True, stdout=subprocess.PIPE
+            ).stdout
+        if lzip_tool is not None:
+            compressed_inputs["lzip"] = subprocess.run(
+                [lzip_tool, "-c"], input=python_tar, check=True, stdout=subprocess.PIPE
             ).stdout
         if lzop_tool is not None:
             compressed_inputs["lzop"] = subprocess.run(

@@ -32,10 +32,11 @@ const decoded = try owned.archive.extractByNameAllocLimited(
 defer allocator.free(decoded);
 ```
 
-`TarCompression` supports raw TAR, gzip, Bzip2, XZ, Zstandard, and LZOP
-(`.tar.lzo`/`.tzo`). LZOP output selects compressed LZO1X or stored
-representation independently for each block. Detection is based on the outer
-stream magic. `TarOwnedArchive` owns the decompressed TAR bytes so all borrowed
+`TarCompression` supports raw TAR, gzip, Bzip2, XZ, lzip, Zstandard, and LZOP.
+This includes `.tar.xz`, `.tar.lz`, `.tar.lzo`, and `.tzo`; detection is based
+on the outer stream magic. XZ and lzip use their compressed LZMA writers, while
+LZOP output selects compressed LZO1X or stored representation independently for
+each block. `TarOwnedArchive` owns the decompressed TAR bytes so all borrowed
 entry paths, link targets, and payloads remain valid until `deinit`.
 
 The writer emits reproducible USTAR headers with zero timestamps by default.

@@ -17702,7 +17702,10 @@ reuse, so production keeps the simpler independently owned plans.
   while Python `lzma` and system `xz` decode both Vort size modes. Python
   `zipfile` supplies method-14 read/write interoperability coverage.
   LZMA-Alone has no intrinsic content checksum, so XZ or ZIP remains preferable
-  when integrity verification is required. See `docs/formats/lzma.md`.
+  when integrity verification is required. The decoder now owns a bounded
+  circular dictionary adapter around Zig's range/state core, preserving strict
+  lookbehind validation while allowing decoded output to wrap past the declared
+  dictionary size. See `docs/formats/lzma.md`.
 
 - Added deterministic TAR archive reading and writing. The reader validates
   header checksums, octal and positive base-256 sizes, payload padding, USTAR
@@ -17710,9 +17713,11 @@ reuse, so production keeps the simpler independently owned plans.
   records. It exposes zero-copy iteration, lookup, bounded extraction, and a
   cross-platform safe-relative-path predicate without writing archive paths to
   disk. The writer emits regular files, directories, symbolic/hard links, and
-  deterministic PAX long paths. A compositional layer automatically detects
-  and decodes raw TAR, tar.gz, tar.bz2, tar.xz, and tar.zst and writes the same
-  five variants through existing Vort codecs. Python `tarfile`, GNU tar, and
+  deterministic PAX long paths. A compositional layer automatically detects,
+  decodes, and writes raw TAR, tar.gz, tar.bz2, tar.xz, tar.lz, tar.zst, and
+  tar.lzo through existing Vort codecs. XZ now uses compressed LZMA2 planning
+  instead of the diagnostic stored-only path, while LZOP selects compressed or
+  stored blocks independently. Python `tarfile`, GNU tar, xz, lzip, lzop, and
   system zstd validate raw/PAX/GNU metadata and compressed tarballs. See
   `docs/formats/tar.md`.
 

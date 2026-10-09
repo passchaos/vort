@@ -3,11 +3,12 @@ const archive = @import("archive.zig");
 const writer = @import("writer.zig");
 const bzip2 = @import("../bzip2.zig");
 const deflate = @import("../deflate.zig");
+const lzip = @import("../lzip.zig");
+const lzop = @import("../lzop.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
-const lzop = @import("../lzop.zig");
 
-pub const Error = archive.Error || writer.Error || bzip2.Error || xz.Error || zstd.Error || lzop.Error || deflate.Error || error{
+pub const Error = archive.Error || writer.Error || bzip2.Error || lzip.Error || lzop.Error || xz.Error || zstd.Error || deflate.Error || error{
     UnknownTarCompression,
 };
 
@@ -16,6 +17,7 @@ pub const Compression = enum {
     gzip,
     bzip2,
     xz,
+    lzip,
     zstandard,
     lzop,
 };
@@ -25,6 +27,7 @@ pub const EncodeOptions = struct {
     gzip_options: deflate.CompressionOptions = deflate.optionsForLevel(.default),
     bzip2_options: bzip2.EncodeOptions = .{},
     xz_options: xz.EncodeOptions = .{},
+    lzip_options: lzip.EncodeOptions = .{},
     zstd_level: c_int = zstd.default_compression_level,
     zstd_options: zstd.FrameOptions = .{},
     lzop_options: lzop.EncodeOptions = .{},
@@ -43,6 +46,7 @@ pub fn detect(input: []const u8) Compression {
     if (input.len >= 2 and input[0] == 0x1f and input[1] == 0x8b) return .gzip;
     if (input.len >= 3 and std.mem.eql(u8, input[0..3], "BZh")) return .bzip2;
     if (input.len >= 6 and std.mem.eql(u8, input[0..6], &.{ 0xfd, '7', 'z', 'X', 'Z', 0 })) return .xz;
+    if (input.len >= 4 and std.mem.eql(u8, input[0..4], "LZIP")) return .lzip;
     if (input.len >= 4 and std.mem.readInt(u32, input[0..4], .little) == 0xfd2f_b528) return .zstandard;
     if (input.len >= 9 and std.mem.eql(u8, input[0..9], &lzop.header_magic)) return .lzop;
     return .none;
@@ -60,7 +64,8 @@ pub fn encodeAlloc(
         .none => unreachable,
         .gzip => deflate.encodeGzipBestAlloc(allocator, tar_bytes, options.gzip_options),
         .bzip2 => bzip2.encodeAlloc(allocator, tar_bytes, options.bzip2_options),
-        .xz => xz.encodeStoredAlloc(allocator, tar_bytes, options.xz_options),
+        .xz => xz.encodeAlloc(allocator, tar_bytes, options.xz_options),
+        .lzip => lzip.encodeAlloc(allocator, tar_bytes, options.lzip_options),
         .zstandard => zstd.encodeFrameWithLevelAndOptionsAlloc(
             allocator,
             tar_bytes,
@@ -106,6 +111,7 @@ pub fn decodeAlloc(
         .gzip => try deflate.decodeGzipAllocLimited(allocator, input, max_tar_size),
         .bzip2 => try bzip2.decodeAllocLimited(allocator, input, max_tar_size),
         .xz => try xz.decodeAllocLimited(allocator, input, max_tar_size),
+        .lzip => try lzip.decodeAllocLimited(allocator, input, max_tar_size),
         .zstandard => try zstd.decodeFrameAllocLimited(allocator, input, max_tar_size),
         .lzop => try lzop.decodeAllocLimited(allocator, input, max_tar_size),
     };
@@ -119,12 +125,21 @@ test "compressed TAR wrappers round trip every available encoder" {
         .{ .name = "folder/", .kind = .directory },
         .{ .name = "folder/data.txt", .data = "tarball payload " ** 64 },
     };
-    inline for (.{ Compression.none, .gzip, .bzip2, .xz, .zstandard, .lzop }) |compression| {
+    inline for (.{ Compression.none, .gzip, .bzip2, .xz, .lzip, .zstandard, .lzop }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{ .compression = compression });
         defer allocator.free(encoded);
         try std.testing.expectEqual(compression, detect(encoded));
         if (compression == .lzop)
             try std.testing.expect((try lzop.inspect(encoded)).compressed_block_count != 0);
+        if (compression == .lzip)
+            try std.testing.expectEqual(@as(usize, 1), (try lzip.inspect(allocator, encoded)).member_count);
+        if (compression == .xz) {
+            const tar_bytes = try writer.encodeAlloc(allocator, &entries);
+            defer allocator.free(tar_bytes);
+            const stored = try xz.encodeStoredAlloc(allocator, tar_bytes, .{});
+            defer allocator.free(stored);
+            try std.testing.expect(encoded.len < stored.len);
+        }
         const decoded = try decodeAutoAlloc(allocator, encoded, 1024 * 1024);
         defer decoded.deinit(allocator);
         try std.testing.expectEqual(@as(usize, 2), decoded.archive.entry_count);
