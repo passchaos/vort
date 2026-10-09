@@ -9,6 +9,7 @@ const deflate = @import("../deflate.zig");
 const bzip2 = @import("../bzip2.zig");
 const lzma_decoder = @import("../lzma/decoder.zig");
 const xz_container = @import("../xz/container.zig");
+const xz_filters = @import("../xz/filters.zig");
 
 pub const Error = core.Error || number.Error || streams_mod.Error || files_mod.Error ||
     deflate.Error || bzip2.Error || lzma_decoder.Error || xz_container.Error || error{
@@ -265,26 +266,46 @@ fn decodeFolderAlloc(
     if (streams.pack_crcs[folder.pack_index]) |expected|
         if (checksum.crc32Best(packed_bytes) != expected) return error.ChecksumMismatch;
 
-    const decoded = switch (folder.method) {
+    const primary = folder.coders[folder.decode_order[0]];
+    const decoded = switch (primary.method) {
         .copy => try allocator.dupe(u8, packed_bytes),
         .deflate => try deflate.decodeRawAutoAllocExactSize(allocator, packed_bytes, expected_size),
         .bzip2 => try bzip2.decodeAllocLimited(allocator, packed_bytes, expected_size),
         .lzma => try lzma_decoder.decode7zPayloadAllocLimited(
             allocator,
             packed_bytes,
-            folder.propertyBytes(),
+            primary.propertyBytes(),
             expected_size,
             max_dictionary_size,
         ),
         .lzma2 => try xz_container.decode7zPayloadAllocLimited(
             allocator,
             packed_bytes,
-            folder.propertyBytes()[0],
+            primary.propertyBytes()[0],
             expected_size,
             max_dictionary_size,
         ),
+        else => return error.Unsupported7zFeature,
     };
     errdefer allocator.free(decoded);
+    for (folder.decode_order[1..folder.coder_count]) |coder_index| {
+        const coder = folder.coders[coder_index];
+        const filter_id: u64 = switch (coder.method) {
+            .delta => 0x03,
+            .x86 => 0x04,
+            .powerpc => 0x05,
+            .ia64 => 0x06,
+            .arm => 0x07,
+            .arm_thumb => 0x08,
+            .sparc => 0x09,
+            else => return error.Unsupported7zFeature,
+        };
+        const filter = xz_filters.parse(filter_id, coder.propertyBytes()) catch |err| switch (err) {
+            error.InvalidXzHeader => return error.Invalid7zArchive,
+            error.UnsupportedXzFeature => return error.Unsupported7zFeature,
+        };
+        xz_filters.decodeChain(decoded, &.{filter});
+    }
     if (decoded.len != expected_size) return error.SizeMismatch;
     if (folder.crc32) |expected|
         if (checksum.crc32Best(decoded) != expected) return error.ChecksumMismatch;

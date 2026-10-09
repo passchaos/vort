@@ -17750,8 +17750,10 @@ reuse, so production keeps the simpler independently owned plans.
   names, empty files, and directories. It decodes single-coder Copy, Deflate,
   Bzip2, LZMA, and LZMA2 folders, including compressed Next Headers and solid
   archives, with independent limits for metadata, dictionaries, selected
-  output, and decoded solid folders. The writer emits reproducible unencoded
+  output, and decoded solid folders. Bounded linear coder graphs additionally
+  support Delta and x86, PowerPC, IA64, ARM, ARM-Thumb, and SPARC BCJ filters
+  after the primary decompressor. The writer emits reproducible unencoded
   headers and one Copy folder per non-empty file. A 7-Zip differential covers
-  seven method/header/solid combinations across both directions. Multi-coder
-  filters, BCJ2, encryption, and external metadata streams remain follow-up
-  work. See `docs/formats/7z.md`.
+  the base methods plus real LZMA/LZMA2 filter chains across both directions.
+  BCJ2, branching or multi-packed-stream graphs, encryption, and external
+  metadata streams remain follow-up work. See `docs/formats/7z.md`.

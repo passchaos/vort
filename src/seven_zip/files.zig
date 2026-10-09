@@ -139,7 +139,7 @@ pub fn parse(
         entry.size = streams.substream_sizes[substream_index];
         entry.crc32 = streams.substream_crcs[substream_index];
         entry.folder_index = folder_index;
-        entry.method = streams.folders[folder_index].method;
+        entry.method = streams.folders[folder_index].primaryMethod();
         entry.offset_in_folder = offset_in_folder;
         offset_in_folder = std.math.add(u64, offset_in_folder, entry.size) catch
             return error.IntegerOverflow;

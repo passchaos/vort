@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bidirectional checks for Vort's initial 7z implementation."""
+"""Bidirectional checks for Vort's common 7z implementation."""
 
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ import tempfile
 from pathlib import Path
 
 
-def run(program: Path, *args: str, check: bool = True, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def run(
+    program: Path, *args: str, check: bool = True, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [str(program), *args],
         check=check,
@@ -41,6 +43,19 @@ def create_reference(tool: str, tree: Path, archive: Path, options: list[str]) -
     )
 
 
+def create_reference_payload(
+    tool: str, tree: Path, archive: Path, payload: bytes, options: list[str]
+) -> None:
+    (tree / "payload.bin").write_bytes(payload)
+    subprocess.run(
+        [tool, "a", "-bd", "-y", "-t7z", *options, str(archive), "payload.bin"],
+        check=True,
+        cwd=tree,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
 def verify_with_vort(cli: Path, archive: Path, payloads: dict[str, bytes]) -> None:
     listing = run(cli, "list-7z-file", str(archive)).stdout
     for name in payloads:
@@ -59,7 +74,12 @@ def main() -> None:
     parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--seven-zip", type=Path)
     args = parser.parse_args()
-    seven_zip_tool = str(args.seven_zip) if args.seven_zip else shutil.which("7zz") or shutil.which("7z")
+    seven_zip_tool = (
+        str(args.seven_zip)
+        if args.seven_zip
+        else shutil.which("7zz") or shutil.which("7z")
+    )
+    external_variants = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-seven-zip-diff-") as temp_text:
         temp = Path(temp_text)
@@ -112,6 +132,52 @@ def main() -> None:
                 archive = temp / f"{variant}.7z"
                 create_reference(seven_zip_tool, tree, archive, options)
                 verify_with_vort(args.cli, archive, payloads)
+            external_variants += len(variants)
+
+            filter_tree = temp / "filter-tree"
+            filter_tree.mkdir()
+            x86_payload = (
+                b"\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90" * 256
+            )
+            filter_variants = {
+                "bcj-lzma2": (("bcj", "lzma2"), x86_payload),
+                "delta4-lzma2": (
+                    ("delta:4", "lzma2"),
+                    bytes(range(256)) * 16,
+                ),
+                "bcj-lzma": (("bcj", "lzma"), x86_payload),
+                "bcj-delta4-lzma2": (
+                    ("bcj", "delta:4", "lzma2"),
+                    x86_payload,
+                ),
+                "ppc-lzma2": (
+                    ("ppc", "lzma2"),
+                    b"\x48\x00\x00\x01\x4b\xff\xff\xfd" * 256,
+                ),
+                "ia64-lzma2": (
+                    ("ia64", "lzma2"),
+                    b"\x16\x00\x00\x00\x00\xa0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" * 256,
+                ),
+                "arm-lzma2": (
+                    ("arm", "lzma2"),
+                    b"\x04\x00\x00\xeb\xfc\xff\xff\xeb" * 256,
+                ),
+                "arm-thumb-lzma2": (
+                    ("armt", "lzma2"),
+                    b"\x00\xf0\x00\xf8\xff\xf7\xff\xff" * 256,
+                ),
+                "sparc-lzma2": (
+                    ("sparc", "lzma2"),
+                    b"\x40\x00\x00\x00\x7f\xff\xff\xff" * 256,
+                ),
+            }
+            for variant, (methods, payload) in filter_variants.items():
+                archive = temp / f"{variant}.7z"
+                options = [f"-m{index}={method}" for index, method in enumerate(methods)]
+                options.extend(("-mx=5", "-mhc=off", "-ms=off"))
+                create_reference_payload(seven_zip_tool, filter_tree, archive, payload, options)
+                verify_with_vort(args.cli, archive, {"payload.bin": payload})
+            external_variants += len(filter_variants)
 
             corrupt = bytearray((temp / "copy-plain.7z").read_bytes())
             corrupt[8] ^= 1
@@ -135,7 +201,7 @@ def main() -> None:
 
     print(
         f"seven_zip_diff=ok writer_entries={len(expected_vort) + 1} "
-        f"external_variants={7 if seven_zip_tool is not None else 0} "
+        f"external_variants={external_variants} "
         f"system_7zip={seven_zip_tool is not None}"
     )
 

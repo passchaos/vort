@@ -1069,7 +1069,7 @@ pub fn build(b: *std.Build) void {
     seven_zip_diff.addArtifactArg(cli_exe);
     seven_zip_diff.addArg("--writer");
     seven_zip_diff.addArtifactArg(seven_zip_writer_probe_exe);
-    const seven_zip_diff_step = b.step("run-seven-zip-diff", "Validate Copy/Deflate/Bzip2/LZMA/LZMA2 7z archives against 7-Zip");
+    const seven_zip_diff_step = b.step("run-seven-zip-diff", "Validate common 7z codecs and linear filters against 7-Zip");
     seven_zip_diff_step.dependOn(&seven_zip_diff.step);
 
     const tar_writer_probe_exe = b.addExecutable(.{

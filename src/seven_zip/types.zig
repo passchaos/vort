@@ -15,6 +15,13 @@ pub const Method = enum {
     bzip2,
     lzma,
     lzma2,
+    delta,
+    x86,
+    powerpc,
+    ia64,
+    arm,
+    arm_thumb,
+    sparc,
 };
 
 pub const Entry = struct {

@@ -1950,7 +1950,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Create a deterministic Copy-method 7z archive
         \\  list-7z-file <path>         List entries in a supported 7z archive
         \\  extract-7z-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder]
-        \\                              Extract a Copy/Deflate/Bzip2/LZMA/LZMA2 7z entry
+        \\                              Extract a common-codec, Delta, or classic-BCJ 7z entry
         \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]
         \\                              Decode an LZMA-Alone stream with explicit limits
         \\  size-lzma-file <path> [max_output]
