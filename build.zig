@@ -1088,6 +1088,11 @@ pub fn build(b: *std.Build) void {
     const tar_diff_step = b.step("run-tar-diff", "Validate TAR and common compressed tarballs against Python tarfile, Brotli, and lzma");
     tar_diff_step.dependOn(&tar_diff.step);
 
+    const cab_diff = b.addSystemCommand(&.{ "python3", "tools/cab/diff.py", "--cli" });
+    cab_diff.addArtifactArg(cli_exe);
+    const cab_diff_step = b.step("run-cab-diff", "Validate Stored/MSZIP CAB extraction against public libmspack fixtures");
+    cab_diff_step.dependOn(&cab_diff.step);
+
     const br_stored_cli_diff = b.addSystemCommand(&.{ "python3", "tools/br_stored_cli_diff.py" });
     br_stored_cli_diff.addArtifactArg(cli_exe);
     const br_stored_cli_diff_step = b.step("run-br-stored-cli-diff", "Run black-box smoke for dependency-free Brotli stored streams against Node Brotli");
@@ -4623,6 +4628,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(lzop_diff_step);
     ci_smoke_step.dependOn(seven_zip_diff_step);
     ci_smoke_step.dependOn(tar_diff_step);
+    ci_smoke_step.dependOn(cab_diff_step);
     ci_smoke_step.dependOn(br_stored_cli_diff_step);
     ci_smoke_step.dependOn(br_literal_cli_diff_step);
     ci_smoke_step.dependOn(br_stored_corpus_step);

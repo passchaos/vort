@@ -17733,6 +17733,22 @@ reuse, so production keeps the simpler independently owned plans.
   uncompress, libbrotli, xz, lz4, lzip, lzop, and system zstd validate
   raw/PAX/GNU metadata and compressed tarballs. See `docs/formats/tar.md`.
 
+- Added dependency-free Microsoft CAB parsing and bounded extraction for
+  Stored and MSZIP folders. The parser validates the `MSCF` header, version,
+  exact cabinet size, folder/file tables, optional reserve areas, name bounds,
+  UTF-8 flags, file ordering/ranges, non-overlapping folder data, 32 KiB CFDATA
+  limits, and Microsoft's optional longitudinal XOR checksums. MSZIP reuses the
+  raw Deflate decoder with an exact-size contract, mandatory `CK` signature,
+  and the prior folder tail as its cross-block 32 KiB dictionary. Separate file
+  and solid-folder limits bound extraction; borrowed entries expose safe path
+  classification without filesystem writes. Public libmspack stored and mixed
+  MSZIP/LZX/Quantum fixtures provide required black-box extraction evidence,
+  while synthetic reserved multi-block tests exercise a match that requires
+  previous-block history. LZX, Quantum, split blocks, multi-cabinet
+  continuation, and writing remain explicit future functionality. The generic
+  raw-byte fuzz target now includes the CAB parser and its bounded error set.
+  See `docs/formats/cab.md`.
+
 - Added pure Zig Unix `compress` (`.Z`) encoding and decoding. The codec
   validates the `1f 9d` header and reserved flags, supports 9 through 16 maximum
   code bits, block and non-block dictionaries, LSB-first packing, ncompress's

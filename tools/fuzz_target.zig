@@ -31,6 +31,18 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    _ = vort.parseCabArchive(data) catch |err| switch (err) {
+        error.InvalidMagic,
+        error.SizeMismatch,
+        error.UnsupportedVersion,
+        error.UnsupportedCabinetFeature,
+        error.InvalidCabinet,
+        error.ChecksumMismatch,
+        error.TruncatedFrame,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    };
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -40,6 +52,7 @@ pub fn main(init: std.process.Init) !void {
         &.{ 0x01, 0x00, 0x00, 0xff, 0xff },
         &.{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 },
         &.{ 'V', 'S', 'K', 'P', 1, 0, 0, 0, 'x' },
+        &.{ 'M', 'S', 'C', 'F', 0, 0, 0, 0 },
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
 

@@ -375,6 +375,60 @@ pub fn main(init: std.process.Init) !void {
             entry_name,
             output_path,
         });
+    } else if (std.mem.eql(u8, command, "list-cab-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(bytes);
+        const archive = try vort.parseCabArchive(bytes);
+        try stdout.print("cab_files={d} folders={d} set_id={d} cabinet_index={d}\n", .{
+            archive.file_count,
+            archive.folder_count,
+            archive.set_id,
+            archive.cabinet_index,
+        });
+        var iterator_value = archive.iterator();
+        var index: usize = 0;
+        while (try iterator_value.next()) |entry| : (index += 1) {
+            const compression = (try archive.folderAt(entry.folder_index)).compression;
+            const compression_name: []const u8 = switch (compression) {
+                .none => "stored",
+                .mszip => "mszip",
+                .quantum => "quantum",
+                .lzx => "lzx",
+                else => "unknown",
+            };
+            try stdout.print("index={d} folder={d} method={s} size={d} utf8={} safe={} name={s}\n", .{
+                index,
+                entry.folder_index,
+                compression_name,
+                entry.size,
+                entry.isUtf8(),
+                entry.isSafeRelative(),
+                entry.name,
+            });
+        }
+    } else if (std.mem.eql(u8, command, "extract-cab-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const entry_name = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_file_size = (try parseOptionalLimit(args.next())) orelse 512 * 1024 * 1024;
+        const max_folder_size = (try parseOptionalLimit(args.next())) orelse 512 * 1024 * 1024;
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(bytes);
+        const archive = try vort.parseCabArchive(bytes);
+        const entry = (try archive.find(entry_name)) orelse return error.CabinetEntryNotFound;
+        const decoded = try vort.cabExtractAllocWithOptions(init.gpa, archive, entry, .{
+            .max_file_size = max_file_size,
+            .max_folder_size = max_folder_size,
+        });
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("cab_bytes={d} decoded_bytes={d} entry={s} path={s}\n", .{
+            bytes.len,
+            decoded.len,
+            entry_name,
+            output_path,
+        });
     } else if (std.mem.eql(u8, command, "list-zip-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
@@ -1982,6 +2036,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              List common compressed tarball formats
         \\  extract-tar-file <tar> <entry> <out> [max_tar_size]
         \\                              Extract one named regular file without path traversal
+        \\  list-cab-file <path>        List single-cabinet Stored/MSZIP/LZX/Quantum metadata
+        \\  extract-cab-file <cab> <entry> <out> [max_file] [max_folder]
+        \\                              Extract a Stored/MSZIP CAB entry with explicit limits
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
         \\  extract-zip-file <zip> <entry> <out> [max_output]
         \\                              Extract a supported ZIP entry with CRC validation
