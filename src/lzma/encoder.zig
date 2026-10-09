@@ -1,0 +1,343 @@
+const std = @import("std");
+const lz77 = @import("../lz77.zig");
+const range_encoder = @import("range_encoder.zig");
+
+pub const Error = lz77.Error || error{InvalidLzmaOptions};
+
+pub const Properties = struct {
+    lc: u4 = 3,
+    lp: u3 = 0,
+    pb: u3 = 2,
+};
+
+pub const Mode = enum {
+    literal_only,
+    greedy,
+};
+
+pub const EncodeOptions = struct {
+    properties: Properties = .{},
+    dictionary_size: usize = 4096,
+    mode: Mode = .greedy,
+};
+
+pub const EncodeStats = struct {
+    input_bytes: usize,
+    output_bytes: usize,
+    literals: usize,
+    matches: usize,
+    matched_bytes: usize,
+    repeat_matches: usize,
+    new_distance_matches: usize,
+};
+
+const max_states: usize = 12;
+const max_position_states: usize = 16;
+const max_literal_contexts: usize = 16;
+const literal_tree_size: usize = 0x300;
+
+const LengthEncoder = struct {
+    choice: u16 = 0x400,
+    choice2: u16 = 0x400,
+    low: [max_position_states][8]u16 = @splat(@splat(0x400)),
+    mid: [max_position_states][8]u16 = @splat(@splat(0x400)),
+    high: [256]u16 = @splat(0x400),
+
+    fn encode(
+        self: *LengthEncoder,
+        range: *range_encoder.Encoder,
+        symbol: usize,
+        position_state: usize,
+    ) !void {
+        if (symbol < 8) {
+            try range.encodeBit(&self.choice, false);
+            try range.encodeBitTree(&self.low[position_state], symbol, 3);
+        } else if (symbol < 16) {
+            try range.encodeBit(&self.choice, true);
+            try range.encodeBit(&self.choice2, false);
+            try range.encodeBitTree(&self.mid[position_state], symbol - 8, 3);
+        } else {
+            if (symbol >= 272) return error.InvalidMatch;
+            try range.encodeBit(&self.choice, true);
+            try range.encodeBit(&self.choice2, true);
+            try range.encodeBitTree(&self.high, symbol - 16, 8);
+        }
+    }
+};
+
+const Model = struct {
+    properties: Properties,
+    dictionary_size: usize,
+    literal_probabilities: [max_literal_contexts][literal_tree_size]u16 = @splat(@splat(0x400)),
+    position_slots: [4][64]u16 = @splat(@splat(0x400)),
+    alignment: [16]u16 = @splat(0x400),
+    positions: [115]u16 = @splat(0x400),
+    is_match: [max_states * max_position_states]u16 = @splat(0x400),
+    is_rep: [max_states]u16 = @splat(0x400),
+    is_rep_g0: [max_states]u16 = @splat(0x400),
+    is_rep_g1: [max_states]u16 = @splat(0x400),
+    is_rep_g2: [max_states]u16 = @splat(0x400),
+    is_rep_0long: [max_states * max_position_states]u16 = @splat(0x400),
+    state: usize = 0,
+    reps: [4]usize = @splat(0),
+    length: LengthEncoder = .{},
+    rep_length: LengthEncoder = .{},
+
+    fn encodeTokens(
+        self: *Model,
+        range: *range_encoder.Encoder,
+        input: []const u8,
+        tokens: []const lz77.Token,
+        stats: *EncodeStats,
+    ) !void {
+        var position: usize = 0;
+        for (tokens) |token| switch (token) {
+            .literal => |byte| {
+                if (position >= input.len or input[position] != byte) return error.InvalidMatch;
+                try self.encodeLiteral(range, input, position, byte);
+                position += 1;
+            },
+            .match => |match| {
+                const length: usize = match.length;
+                const distance: usize = match.distance;
+                const end = std.math.add(usize, position, length) catch return error.InvalidMatch;
+                if (length < 2 or length > 273 or distance == 0 or
+                    distance > position or distance > self.dictionary_size or end > input.len)
+                    return error.InvalidMatch;
+                for (0..length) |index|
+                    if (input[position + index] != input[position + index - distance])
+                        return error.InvalidMatch;
+                try self.encodeMatch(range, position, length, distance, stats);
+                position = end;
+            },
+        };
+        if (position != input.len) return error.InvalidMatch;
+    }
+
+    fn encodeLiteral(
+        self: *Model,
+        range: *range_encoder.Encoder,
+        input: []const u8,
+        position: usize,
+        byte: u8,
+    ) !void {
+        const position_state = position & ((@as(usize, 1) << self.properties.pb) - 1);
+        try range.encodeBit(&self.is_match[(self.state << 4) + position_state], false);
+        const previous: usize = if (position == 0) 0 else input[position - 1];
+        const literal_context = ((position & ((@as(usize, 1) << self.properties.lp) - 1)) << self.properties.lc) +
+            (previous >> (8 - self.properties.lc));
+        const probabilities = &self.literal_probabilities[literal_context];
+        var tree_index: usize = 1;
+        var remaining_bits: u4 = 8;
+
+        if (self.state >= 7) {
+            const distance = self.reps[0] + 1;
+            if (distance > position) return error.InvalidMatch;
+            var match_byte: usize = input[position - distance];
+            while (tree_index < 0x100) {
+                remaining_bits -= 1;
+                const match_bit = match_byte >> 7 & 1;
+                match_byte <<= 1;
+                const bit = @as(usize, byte) >> @intCast(remaining_bits) & 1;
+                try range.encodeBit(&probabilities[((1 + match_bit) << 8) + tree_index], bit != 0);
+                tree_index = (tree_index << 1) | bit;
+                if (match_bit != bit) break;
+            }
+        }
+        while (tree_index < 0x100) {
+            remaining_bits -= 1;
+            const bit = @as(usize, byte) >> @intCast(remaining_bits) & 1;
+            try range.encodeBit(&probabilities[tree_index], bit != 0);
+            tree_index = (tree_index << 1) | bit;
+        }
+        self.state = if (self.state < 4)
+            0
+        else if (self.state < 10)
+            self.state - 3
+        else
+            self.state - 6;
+    }
+
+    fn encodeMatch(
+        self: *Model,
+        range: *range_encoder.Encoder,
+        position: usize,
+        match_length: usize,
+        distance: usize,
+        stats: *EncodeStats,
+    ) !void {
+        const position_state = position & ((@as(usize, 1) << self.properties.pb) - 1);
+        try range.encodeBit(&self.is_match[(self.state << 4) + position_state], true);
+        const distance_minus_one = distance - 1;
+        const rep_index = findRep(self.reps, distance_minus_one);
+        if (rep_index) |index| {
+            stats.repeat_matches += 1;
+            try range.encodeBit(&self.is_rep[self.state], true);
+            if (index == 0) {
+                try range.encodeBit(&self.is_rep_g0[self.state], false);
+                try range.encodeBit(&self.is_rep_0long[(self.state << 4) + position_state], true);
+            } else {
+                try range.encodeBit(&self.is_rep_g0[self.state], true);
+                if (index == 1) {
+                    try range.encodeBit(&self.is_rep_g1[self.state], false);
+                } else {
+                    try range.encodeBit(&self.is_rep_g1[self.state], true);
+                    try range.encodeBit(&self.is_rep_g2[self.state], index == 3);
+                }
+                const selected = self.reps[index];
+                var current = index;
+                while (current != 0) : (current -= 1) self.reps[current] = self.reps[current - 1];
+                self.reps[0] = selected;
+            }
+            try self.rep_length.encode(range, match_length - 2, position_state);
+            self.state = if (self.state < 7) 8 else 11;
+            return;
+        }
+
+        stats.new_distance_matches += 1;
+        try range.encodeBit(&self.is_rep[self.state], false);
+        self.reps[3] = self.reps[2];
+        self.reps[2] = self.reps[1];
+        self.reps[1] = self.reps[0];
+        self.reps[0] = distance_minus_one;
+        try self.length.encode(range, match_length - 2, position_state);
+        self.state = if (self.state < 7) 7 else 10;
+        try self.encodeDistance(range, match_length - 2, distance_minus_one);
+    }
+
+    fn encodeDistance(
+        self: *Model,
+        range: *range_encoder.Encoder,
+        length_symbol: usize,
+        distance: usize,
+    ) !void {
+        const length_state = @min(length_symbol, 3);
+        const slot = distanceSlot(distance);
+        try range.encodeBitTree(&self.position_slots[length_state], slot, 6);
+        if (slot < 4) return;
+
+        const direct_bits = (slot >> 1) - 1;
+        const base = (2 | (slot & 1)) << @intCast(direct_bits);
+        const remainder = distance - base;
+        if (slot < 14) {
+            try range.encodeReverseBitTree(&self.positions, base - slot, remainder, direct_bits);
+        } else {
+            try range.encodeDirectBits(remainder >> 4, direct_bits - 4);
+            try range.encodeReverseBitTree(&self.alignment, 0, remainder & 0x0f, 4);
+        }
+    }
+};
+
+pub fn encodeChunkAppend(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    options: EncodeOptions,
+) !usize {
+    return (try encodeChunkAppendWithStats(allocator, output, input, options)).output_bytes;
+}
+
+pub fn encodeChunkAppendWithStats(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    options: EncodeOptions,
+) !EncodeStats {
+    try validateOptions(options);
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    var range = range_encoder.Encoder.init(allocator, &encoded);
+    var model = Model{
+        .properties = options.properties,
+        .dictionary_size = options.dictionary_size,
+    };
+    var stats = EncodeStats{
+        .input_bytes = input.len,
+        .output_bytes = 0,
+        .literals = 0,
+        .matches = 0,
+        .matched_bytes = 0,
+        .repeat_matches = 0,
+        .new_distance_matches = 0,
+    };
+
+    switch (options.mode) {
+        .literal_only => {
+            var position: usize = 0;
+            while (position < input.len) : (position += 1)
+                try model.encodeLiteral(&range, input, position, input[position]);
+            stats.literals = input.len;
+        },
+        .greedy => {
+            const plan = try lz77.hashGreedyPlanAlloc(allocator, input, .{
+                .window_len = options.dictionary_size,
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 4,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            });
+            defer plan.deinit(allocator);
+            stats.literals = plan.stats.literals;
+            stats.matches = plan.stats.matches;
+            stats.matched_bytes = plan.stats.matched_bytes;
+            try model.encodeTokens(&range, input, plan.tokens, &stats);
+        },
+    }
+    try range.finish();
+
+    try output.ensureUnusedCapacity(allocator, encoded.items.len);
+    output.appendSliceAssumeCapacity(encoded.items);
+    stats.output_bytes = encoded.items.len;
+    return stats;
+}
+
+fn validateOptions(options: EncodeOptions) Error!void {
+    if (options.properties.lc > 8 or options.properties.lp > 4 or
+        options.properties.pb > 4 or options.properties.lc + options.properties.lp > 4 or
+        options.dictionary_size == 0 or options.dictionary_size > std.math.maxInt(u16))
+        return error.InvalidLzmaOptions;
+}
+
+fn findRep(reps: [4]usize, distance: usize) ?usize {
+    for (reps, 0..) |rep, index| if (rep == distance) return index;
+    return null;
+}
+
+fn distanceSlot(distance: usize) usize {
+    if (distance < 4) return distance;
+    const highest_bit = @bitSizeOf(usize) - 1 - @clz(distance);
+    return (highest_bit << 1) | (distance >> @intCast(highest_bit - 1) & 1);
+}
+
+test "LZMA distance slots cover low and modeled distance ranges" {
+    const expected = [_]usize{ 0, 1, 2, 3, 4, 4, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7 };
+    for (expected, 0..) |slot, distance|
+        try std.testing.expectEqual(slot, distanceSlot(distance));
+    try std.testing.expectEqual(@as(usize, 23), distanceSlot(4095));
+}
+
+test "LZMA greedy chunk emits new-distance and repeat matches" {
+    var input: [1200]u8 = undefined;
+    var state: u32 = 0x243f_6a88;
+    for (input[0..300]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[300..600], input[0..300]);
+    @memcpy(input[600..900], input[0..300]);
+    @memcpy(input[900..1200], input[0..300]);
+
+    var greedy: std.ArrayList(u8) = .empty;
+    defer greedy.deinit(std.testing.allocator);
+    const stats = try encodeChunkAppendWithStats(std.testing.allocator, &greedy, &input, .{});
+    try std.testing.expect(stats.matches != 0);
+    try std.testing.expect(stats.new_distance_matches != 0);
+    try std.testing.expect(stats.repeat_matches != 0);
+    try std.testing.expectEqual(stats.matches, stats.new_distance_matches + stats.repeat_matches);
+
+    var literals: std.ArrayList(u8) = .empty;
+    defer literals.deinit(std.testing.allocator);
+    _ = try encodeChunkAppend(std.testing.allocator, &literals, &input, .{ .mode = .literal_only });
+    try std.testing.expect(greedy.items.len < literals.items.len);
+}

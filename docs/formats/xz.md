@@ -2,10 +2,10 @@
 
 Vort provides dependency-free XZ decoding for LZMA2 streams with optional
 Delta and x86, PowerPC, IA-64, ARM, ARM-Thumb, or SPARC BCJ preprocessing
-filters. Its deterministic writer emits compressed literal-coded LZMA2 chunks
-when profitable and falls back to uncompressed chunks otherwise. The explicit
-stored writer remains available, and both paths can apply the same filter
-chains.
+filters. Its deterministic writer emits LZMA2 chunks with greedy LZ77 matches,
+repeat-distance coding, literal context coding, and a stored fallback. The
+explicit stored writer remains available, and both paths can apply the same
+filter chains.
 
 The container implementation validates:
 
@@ -62,5 +62,6 @@ zig build run-xz-diff
 The reader and writer support Delta plus all six classic XZ BCJ filters. Filter
 chains may contain up to three preprocessing filters followed by LZMA2, and
 BCJ start offsets are checked for their architecture's alignment. The current
-compressor range-codes literals and resets each bounded chunk independently;
-match-producing LZMA parsing remains later ratio and performance work.
+compressor uses bounded greedy match finding and resets each chunk
+independently; deeper parsing and cross-chunk dictionary reuse remain later
+ratio and performance work.

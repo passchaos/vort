@@ -263,7 +263,7 @@ test "XZ stored writer round trips checks and multiple blocks" {
     }
 }
 
-test "XZ compressed writer selects literal coding and round trips filters" {
+test "XZ compressed writer selects match coding and round trips filters" {
     const allocator = std.testing.allocator;
     const input = "XZ literal-coded LZMA2 payload\n" ** 512;
     const chain = [_]Filter{ Filter.x86(0), try Filter.delta(4) };

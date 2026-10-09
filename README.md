@@ -97,8 +97,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   classic BCJ filters, strict stream/block/index/footer validation,
   none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream
   handling, bounded APIs and metadata inspection, plus deterministic
-  filter-aware XZ writing with literal-coded compressed chunks and a stored
-  fallback;
+  filter-aware XZ writing with greedy LZMA matches, repeat distances, and a
+  stored fallback;
 - dependency-free LZMA-Alone decoding with known/unknown-size headers,
   caller-selected output/dictionary limits, caller-owned output, and ZIP
   method-14 extraction through the same LZMA core;

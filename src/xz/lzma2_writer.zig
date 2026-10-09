@@ -1,10 +1,8 @@
 const std = @import("std");
 const core = @import("../core.zig");
-const range_encoder = @import("../lzma/range_encoder.zig");
+const lzma_encoder = @import("../lzma/encoder.zig");
 
 pub const max_uncompressed_chunk: usize = 65_536;
-const literal_context_bits: u4 = 3;
-const position_bits: u4 = 2;
 const lzma_property: u8 = 0x5d;
 pub const dictionary_property: u8 = 0;
 
@@ -59,7 +57,7 @@ pub fn appendCompressedPayload(
         const chunk_len = @min(max_uncompressed_chunk, input.len - offset);
         const chunk = input[offset..][0..chunk_len];
         candidate.clearRetainingCapacity();
-        try encodeLiteralChunk(allocator, &candidate, chunk);
+        _ = try lzma_encoder.encodeChunkAppend(allocator, &candidate, chunk, .{});
         if (candidate.items.len <= max_uncompressed_chunk and candidate.items.len + 3 < chunk.len) {
             try encoded.append(allocator, 0xe0);
             try appendU16Big(allocator, &encoded, @intCast(chunk.len - 1));
@@ -76,31 +74,6 @@ pub fn appendCompressedPayload(
     try out.ensureUnusedCapacity(allocator, encoded.items.len);
     out.appendSliceAssumeCapacity(encoded.items);
     return encoded.items.len;
-}
-
-fn encodeLiteralChunk(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    input: []const u8,
-) !void {
-    var is_match: [1 << position_bits]u16 = @splat(0x400);
-    var literal_probabilities: [1 << literal_context_bits][0x300]u16 = @splat(@splat(0x400));
-    var encoder = range_encoder.Encoder.init(allocator, output);
-    var previous: u8 = 0;
-    for (input, 0..) |byte, position| {
-        try encoder.encodeBit(&is_match[position & (is_match.len - 1)], false);
-        const context = previous >> (8 - literal_context_bits);
-        var tree_index: usize = 1;
-        var bit_index: u4 = 8;
-        while (bit_index != 0) {
-            bit_index -= 1;
-            const bit = byte >> @intCast(bit_index) & 1 != 0;
-            try encoder.encodeBit(&literal_probabilities[context][tree_index], bit);
-            tree_index = (tree_index << 1) | @intFromBool(bit);
-        }
-        previous = byte;
-    }
-    try encoder.finish();
 }
 
 fn appendStoredChunk(
@@ -146,7 +119,7 @@ test "raw LZMA2 empty stored payload is only an end marker" {
     try std.testing.expectEqualSlices(u8, &.{0}, encoded.items);
 }
 
-test "raw LZMA2 literal compression round trips and falls back for noise" {
+test "raw LZMA2 match compression round trips and falls back for noise" {
     const container = @import("container.zig");
     const repetitive = "literal LZMA2 compression\n" ** 4096;
     var compressed: std.ArrayList(u8) = .empty;

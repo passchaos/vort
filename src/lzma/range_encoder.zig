@@ -28,6 +28,50 @@ pub const Encoder = struct {
         }
     }
 
+    pub fn encodeDirectBits(self: *Encoder, value: usize, bit_count: usize) !void {
+        var remaining = bit_count;
+        while (remaining != 0) {
+            remaining -= 1;
+            self.range >>= 1;
+            if (value >> @intCast(remaining) & 1 != 0) self.low += self.range;
+            if (self.range < 0x0100_0000) {
+                self.range <<= 8;
+                try self.shiftLow();
+            }
+        }
+    }
+
+    pub fn encodeBitTree(
+        self: *Encoder,
+        probabilities: []u16,
+        symbol: usize,
+        bit_count: usize,
+    ) !void {
+        var tree_index: usize = 1;
+        var remaining = bit_count;
+        while (remaining != 0) {
+            remaining -= 1;
+            const bit = symbol >> @intCast(remaining) & 1 != 0;
+            try self.encodeBit(&probabilities[tree_index], bit);
+            tree_index = (tree_index << 1) | @intFromBool(bit);
+        }
+    }
+
+    pub fn encodeReverseBitTree(
+        self: *Encoder,
+        probabilities: []u16,
+        offset: usize,
+        symbol: usize,
+        bit_count: usize,
+    ) !void {
+        var tree_index: usize = 1;
+        for (0..bit_count) |bit_index| {
+            const bit = symbol >> @intCast(bit_index) & 1 != 0;
+            try self.encodeBit(&probabilities[offset + tree_index], bit);
+            tree_index = (tree_index << 1) | @intFromBool(bit);
+        }
+    }
+
     pub fn finish(self: *Encoder) !void {
         for (0..5) |_| try self.shiftLow();
     }
