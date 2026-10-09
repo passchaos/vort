@@ -2038,7 +2038,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Extract one named regular file without path traversal
         \\  list-cab-file <path>        List single-cabinet Stored/MSZIP/LZX/Quantum metadata
         \\  extract-cab-file <cab> <entry> <out> [max_file] [max_folder]
-        \\                              Extract a Stored/MSZIP CAB entry with explicit limits
+        \\                              Extract a Stored/MSZIP/LZX CAB entry with explicit limits
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
         \\  extract-zip-file <zip> <entry> <out> [max_output]
         \\                              Extract a supported ZIP entry with CRC validation

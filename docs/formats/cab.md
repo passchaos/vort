@@ -2,9 +2,8 @@
 
 Vort provides dependency-free parsing and bounded extraction for single-file
 Microsoft Cabinet archives. The reader supports uncompressed folders and
-MSZIP folders, including multiple folders, multiple CFDATA blocks, files that
-cross block boundaries, and the 32 KiB Deflate history retained between MSZIP
-blocks.
+MSZIP/LZX folders, including multiple folders, multiple CFDATA blocks, files
+that cross block boundaries, and compression history retained between blocks.
 
 ```zig
 const cabinet = try vort.parseCabArchive(bytes);
@@ -34,6 +33,9 @@ The parser validates:
   checksums using Microsoft's longitudinal XOR algorithm;
 - MSZIP's mandatory `CK` marker, exact raw-Deflate consumption, exact decoded
   block sizes, and cross-block history.
+- LZX 15–21 bit windows, verbatim/aligned/uncompressed blocks, delta-coded
+  canonical Huffman trees, repeated offsets, 32 KiB frames, and Intel E8
+  postprocessing.
 
 CAB folders are solid streams, so extracting one file can require decoding the
 whole containing folder. `CabExtractOptions` therefore separates
@@ -51,9 +53,11 @@ zig build run -- extract-cab-file archive.cab path\\file.bin output.bin 67108864
 zig build run-cab-diff
 ```
 
-The required differential uses byte-exact public fixtures from libmspack and
-covers both Microsoft's specification example and an archive mixing MSZIP,
-LZX, and Quantum folders. Supported MSZIP content extracts successfully even
-when other folders use unsupported algorithms. LZX, Quantum, split CFDATA
+The required differential uses byte-exact public fixtures from libmspack. It
+covers Microsoft's Stored example, an archive mixing MSZIP/LZX/Quantum
+folders, and a 26 KiB outer CAB whose 21-bit aligned LZX stream spans 449
+CFDATA blocks and expands to a 14,689,228-byte nested CAB. The latter output's
+MD5 is checked against libmspack's independent decoder. Supported files extract
+successfully even when another folder uses Quantum. Quantum, split CFDATA
 blocks, and multi-cabinet continuation currently return explicit unsupported
 errors instead of being guessed. CAB writing is a future functionality slice.

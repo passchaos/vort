@@ -2,6 +2,7 @@ const std = @import("std");
 const archive = @import("cab/archive.zig");
 const checksum = @import("cab/checksum.zig");
 const decoder = @import("cab/decoder.zig");
+const lzx = @import("cab/lzx.zig");
 const deflate = @import("deflate.zig");
 const types = @import("cab/types.zig");
 
@@ -27,6 +28,7 @@ test {
     _ = archive;
     _ = checksum;
     _ = decoder;
+    _ = lzx;
     _ = types;
 }
 
@@ -70,16 +72,74 @@ test "CAB extracts libmspack MSZIP folder and rejects unsupported folders" {
         "If you can read this, the MSZIP decompressor is working!\n",
         mszip,
     );
-    const lzx = (try parsed.find("lzx.txt")).?;
-    try std.testing.expectError(
-        error.UnsupportedCabinetCompression,
-        extractAlloc(allocator, parsed, lzx),
+    const lzx_output = try extractByNameAlloc(allocator, parsed, "lzx.txt");
+    defer allocator.free(lzx_output);
+    try std.testing.expectEqualStrings(
+        "-----------------------------------------------------------------\n" ++
+            "If you can read this, the LZX decompressor is working!\n" ++
+            "-----------------------------------------------------------------\n",
+        lzx_output,
     );
     const quantum = (try parsed.find("qtm.txt")).?;
     try std.testing.expectError(
         error.UnsupportedCabinetCompression,
         extractAlloc(allocator, parsed, quantum),
     );
+}
+
+test "CAB LZX decodes aligned multi-frame libmspack fixture" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("cab/testdata/libmspack-large-files-cab.cab.hex"),
+    );
+    defer allocator.free(bytes);
+    const parsed = try parse(bytes);
+    try std.testing.expectEqual(@as(usize, 1), parsed.file_count);
+    const entry = try parsed.entryAt(0);
+    try std.testing.expectEqualStrings("large-files.cab", entry.name);
+    try std.testing.expectEqual(@as(usize, 14_689_228), entry.size);
+    const folder = try parsed.folderAt(0);
+    try std.testing.expectEqual(Compression.lzx, folder.compression);
+    try std.testing.expectEqual(@as(u16, 0x1503), folder.type_compress);
+    try std.testing.expectEqual(@as(usize, 449), folder.data_block_count);
+
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        extractAllocWithOptions(allocator, parsed, entry, .{
+            .max_file_size = entry.size,
+            .max_folder_size = entry.size - 1,
+        }),
+    );
+    const decoded = try extractAllocWithOptions(allocator, parsed, entry, .{
+        .max_file_size = entry.size,
+        .max_folder_size = entry.size,
+    });
+    defer allocator.free(decoded);
+    const digest = std.crypto.hash.Md5.hashResult(decoded);
+    var expected_digest: [16]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expected_digest, "ac923e14971324651015ba44ceb59b36");
+    try std.testing.expectEqual(expected_digest, digest);
+}
+
+test "CAB LZX rejects libmspack malformed tree and match fixtures" {
+    const allocator = std.testing.allocator;
+    inline for (.{
+        @embedFile("cab/testdata/libmspack-lzx-main-tree-no-lengths.cab.hex"),
+        @embedFile("cab/testdata/libmspack-lzx-premature-matches.cab.hex"),
+    }) |fixture| {
+        const bytes = try fixtureAlloc(allocator, fixture);
+        defer allocator.free(bytes);
+        const parsed = try parse(bytes);
+        const entry = try parsed.entryAt(0);
+        if (extractAlloc(allocator, parsed, entry)) |decoded| {
+            allocator.free(decoded);
+            return error.UnexpectedValidFrame;
+        } else |err| switch (err) {
+            error.InvalidLzxStream, error.InvalidMatch => {},
+            else => return err,
+        }
+    }
 }
 
 test "CAB MSZIP retains history across reserved CFDATA blocks" {

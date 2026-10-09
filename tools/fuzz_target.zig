@@ -31,7 +31,30 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
-    _ = vort.parseCabArchive(data) catch |err| switch (err) {
+    if (vort.parseCabArchive(data)) |cabinet| {
+        for (0..cabinet.folder_count) |folder_index| {
+            if (vort.decodeCabFolderAllocLimited(allocator, cabinet, folder_index, 1 << 20)) |decoded| {
+                allocator.free(decoded);
+            } else |err| switch (err) {
+                error.OutputLimitExceeded,
+                error.UnsupportedCabinetFeature,
+                error.UnsupportedCabinetCompression,
+                error.InvalidCabinet,
+                error.InvalidLzxStream,
+                error.InvalidMatch,
+                error.InvalidDeflateBlockType,
+                error.StoredLengthMismatch,
+                error.InvalidHuffmanCode,
+                error.InvalidDynamicBlockHeader,
+                error.TruncatedFrame,
+                error.TrailingData,
+                error.SizeMismatch,
+                error.IntegerOverflow,
+                => {},
+                else => return err,
+            }
+        }
+    } else |err| switch (err) {
         error.InvalidMagic,
         error.SizeMismatch,
         error.UnsupportedVersion,
@@ -42,7 +65,7 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         error.IntegerOverflow,
         => {},
         else => return err,
-    };
+    }
 }
 
 pub fn main(init: std.process.Init) !void {
