@@ -168,6 +168,9 @@ pub const LzipError = lzip.Error;
 pub const LzipHeader = lzip.Header;
 pub const LzipFileInfo = lzip.FileInfo;
 pub const LzipDecodeOptions = lzip.DecodeOptions;
+pub const LzipEncodeOptions = lzip.EncodeOptions;
+pub const LzipEncodeMember = lzip.EncodeMember;
+pub const LzipEncodeMode = lzip.EncodeMode;
 pub const parseLzipHeader = lzip.parseHeader;
 pub const inspectLzip = lzip.inspect;
 pub const decodeLzipInto = lzip.decodeInto;
@@ -177,6 +180,12 @@ pub const decodeLzipAllocWithOptions = lzip.decodeAllocWithOptions;
 pub const lzipDecodedSize = lzip.decodedSize;
 pub const lzipDecodedSizeLimited = lzip.decodedSizeLimited;
 pub const lzipDecodedSizeWithOptions = lzip.decodedSizeWithOptions;
+pub const encodeLzipAlloc = lzip.encodeAlloc;
+pub const encodeLzipAppend = lzip.encodeAppend;
+pub const encodeLzipInto = lzip.encodeInto;
+pub const encodeLzipMembersAlloc = lzip.encodeMembersAlloc;
+pub const encodeLzipMembersAppend = lzip.encodeMembersAppend;
+pub const encodeLzipMembersInto = lzip.encodeMembersInto;
 
 pub const Lzo1xError = lzo1x.Error;
 pub const decodeLzo1xInto = lzo1x.decodeInto;
@@ -2438,7 +2447,7 @@ test "root Unix compress exports round trip .Z streams" {
     try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
-test "root lzip exports decode reference members" {
+test "root lzip exports encode and decode members" {
     const encoded_hex = "4c5a4950010c00341949ee8de9148a6a3e85eb7b90eba1fffffbfde0003a319d3216000000000000003100000000000000";
     var encoded: [encoded_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&encoded, encoded_hex);
@@ -2447,6 +2456,12 @@ test "root lzip exports decode reference members" {
     const decoded = try decodeLzipAlloc(std.testing.allocator, &encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "hello lzip\nhello lzip\n", decoded);
+
+    const written = try encodeLzipAlloc(std.testing.allocator, decoded, .{});
+    defer std.testing.allocator.free(written);
+    const round_trip = try decodeLzipAlloc(std.testing.allocator, written);
+    defer std.testing.allocator.free(round_trip);
+    try std.testing.expectEqualSlices(u8, decoded, round_trip);
 }
 
 test "root LZOP exports round trip stored blocks" {

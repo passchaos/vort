@@ -2,6 +2,7 @@ const std = @import("std");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const lzma_decoder = @import("../lzma/decoder.zig");
+const dictionary = @import("dictionary.zig");
 
 pub const Error = core.Error || lzma_decoder.Error || error{
     InvalidLzipHeader,
@@ -37,8 +38,6 @@ pub const DecodeOptions = struct {
 const header_size: usize = 6;
 const trailer_size: usize = 20;
 const min_member_size: usize = 36;
-const min_dictionary_bits: u5 = 12;
-const max_dictionary_bits: u5 = 29;
 
 const Index = struct {
     members: []MemberInfo,
@@ -55,17 +54,7 @@ pub fn parseHeader(input: []const u8) Error!Header {
     if (input[4] != 1) return error.UnsupportedVersion;
 
     const coded = input[5];
-    const base_bits: u5 = @intCast(coded & 0x1f);
-    if (base_bits < min_dictionary_bits or base_bits > max_dictionary_bits)
-        return error.InvalidLzipHeader;
-    const base_size = @as(u32, 1) << base_bits;
-    const fraction: u32 = if (base_size > 4096)
-        (base_size / 16) * @as(u32, coded >> 5)
-    else
-        0;
-    const dictionary_size = base_size - fraction;
-    if (dictionary_size < 4096 or dictionary_size > 512 * 1024 * 1024)
-        return error.InvalidLzipHeader;
+    const dictionary_size = dictionary.decode(coded) orelse return error.InvalidLzipHeader;
     return .{
         .version = 1,
         .coded_dictionary_size = coded,
@@ -236,6 +225,10 @@ test "lzip header decodes canonical and fractional dictionary sizes" {
     try std.testing.expectError(error.UnsupportedVersion, parseHeader("LZIP\x02\x0c"));
     try std.testing.expectError(error.InvalidLzipHeader, parseHeader("LZIP\x01\x0b"));
     try std.testing.expectError(error.InvalidLzipHeader, parseHeader("LZIP\x01\x1e"));
+}
+
+test {
+    _ = dictionary;
 }
 
 test "lzip decoder validates reference members and concatenation" {
