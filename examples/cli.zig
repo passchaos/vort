@@ -213,6 +213,21 @@ pub fn main(init: std.process.Init) !void {
         try seven_zip_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-7z-file")) {
         try seven_zip_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-lzma-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const size_mode = try parseLzmaSizeMode(args.next());
+        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(input);
+        const encoded = try vort.encodeLzmaAlloc(init.gpa, input, .{ .size_mode = size_mode });
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("lzma_size_mode={s} input_bytes={d} compressed_bytes={d} path={s}\n", .{
+            @tagName(size_mode),
+            input.len,
+            encoded.len,
+            output_path,
+        });
     } else if (std.mem.eql(u8, command, "decode-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1929,11 +1944,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-lzop-file <path> [max_output] [max_block]
         \\                              Decode and report a verified LZOP stream's size
         \\  inspect-lzop-file <path>    Parse and print structural LZOP metadata
-        \\  create-7z-file <out> <entry> <in> [copy|deflate|bzip2|lzma2|lzma2-stored] [filters]
+        \\  create-7z-file <out> <entry> <in> [copy|deflate|bzip2|lzma|lzma2|lzma2-stored] [filters]
         \\                              Create a deterministic 7z archive; filters are comma-separated
         \\  list-7z-file <path>         List entries in a supported 7z archive
         \\  extract-7z-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder]
         \\                              Extract a common-codec, Delta, or classic-BCJ 7z entry
+        \\  encode-lzma-file <in> <out> [end-marker|known]
+        \\                              Encode deterministic LZMA-Alone data
         \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]
         \\                              Decode an LZMA-Alone stream with explicit limits
         \\  size-lzma-file <path> [max_output]
@@ -2936,6 +2953,13 @@ fn parseXzCheck(text: ?[]const u8) !vort.XzCheck {
     if (std.mem.eql(u8, value, "crc64")) return .crc64;
     if (std.mem.eql(u8, value, "sha256")) return .sha256;
     return error.InvalidChecksumMode;
+}
+
+fn parseLzmaSizeMode(text: ?[]const u8) !vort.LzmaSizeMode {
+    const value = text orelse return .end_marker;
+    if (std.mem.eql(u8, value, "end-marker") or std.mem.eql(u8, value, "unknown")) return .end_marker;
+    if (std.mem.eql(u8, value, "known")) return .known;
+    return error.InvalidLzmaSizeMode;
 }
 
 fn parseTarCompression(text: ?[]const u8) !vort.TarCompression {

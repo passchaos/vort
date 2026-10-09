@@ -19,6 +19,7 @@ pub const EncodeOptions = struct {
     properties: Properties = .{},
     dictionary_size: usize = 4096,
     mode: Mode = .greedy,
+    end_marker: bool = false,
 };
 
 pub const EncodeStats = struct {
@@ -226,6 +227,15 @@ const Model = struct {
             try range.encodeReverseBitTree(&self.alignment, 0, remainder & 0x0f, 4);
         }
     }
+
+    fn encodeEndMarker(self: *Model, range: *range_encoder.Encoder, position: usize) !void {
+        const position_state = position & ((@as(usize, 1) << self.properties.pb) - 1);
+        try range.encodeBit(&self.is_match[(self.state << 4) + position_state], true);
+        try range.encodeBit(&self.is_rep[self.state], false);
+        try self.length.encode(range, 0, position_state);
+        self.state = if (self.state < 7) 7 else 10;
+        try self.encodeDistance(range, 0, std.math.maxInt(u32));
+    }
 };
 
 pub fn encodeChunkAppend(
@@ -284,6 +294,7 @@ pub fn encodeChunkAppendWithStats(
             try model.encodeTokens(&range, input, plan.tokens, &stats);
         },
     }
+    if (options.end_marker) try model.encodeEndMarker(&range, input.len);
     try range.finish();
 
     try output.ensureUnusedCapacity(allocator, encoded.items.len);
@@ -293,10 +304,16 @@ pub fn encodeChunkAppendWithStats(
 }
 
 fn validateOptions(options: EncodeOptions) Error!void {
-    if (options.properties.lc > 8 or options.properties.lp > 4 or
-        options.properties.pb > 4 or options.properties.lc + options.properties.lp > 4 or
-        options.dictionary_size == 0 or options.dictionary_size > std.math.maxInt(u16))
+    _ = try propertyByte(options.properties);
+    if (options.dictionary_size == 0 or options.dictionary_size > std.math.maxInt(u16))
         return error.InvalidLzmaOptions;
+}
+
+pub fn propertyByte(properties: Properties) Error!u8 {
+    if (properties.lc > 8 or properties.lp > 4 or properties.pb > 4 or
+        properties.lc + properties.lp > 4)
+        return error.InvalidLzmaOptions;
+    return @intCast((@as(u16, properties.pb) * 5 + properties.lp) * 9 + properties.lc);
 }
 
 fn findRep(reps: [4]usize, distance: usize) ?usize {

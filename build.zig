@@ -1038,7 +1038,7 @@ pub fn build(b: *std.Build) void {
 
     const lzma_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/diff.py", "--cli" });
     lzma_diff.addArtifactArg(cli_exe);
-    const lzma_diff_step = b.step("run-lzma-diff", "Validate dependency-free LZMA-Alone decoding against Python lzma");
+    const lzma_diff_step = b.step("run-lzma-diff", "Validate dependency-free LZMA-Alone encoding and decoding against Python lzma and xz");
     lzma_diff_step.dependOn(&lzma_diff.step);
 
     const compress_z_diff = b.addSystemCommand(&.{ "python3", "tools/compress_z/diff.py", "--cli" });

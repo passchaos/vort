@@ -113,6 +113,10 @@ pub const xzDecodedSizeConcatenatedLimited = xz.decodedSizeConcatenatedLimited;
 pub const LzmaError = lzma.Error;
 pub const LzmaHeader = lzma.Header;
 pub const LzmaDecodeOptions = lzma.DecodeOptions;
+pub const LzmaEncodeOptions = lzma.EncodeOptions;
+pub const LzmaProperties = lzma.Properties;
+pub const LzmaEncodeMode = lzma.EncodeMode;
+pub const LzmaSizeMode = lzma.SizeMode;
 pub const parseLzmaHeader = lzma.parseHeader;
 pub const decodeLzmaInto = lzma.decodeInto;
 pub const decodeLzmaAlloc = lzma.decodeAlloc;
@@ -120,6 +124,9 @@ pub const decodeLzmaAllocLimited = lzma.decodeAllocLimited;
 pub const decodeLzmaAllocWithOptions = lzma.decodeAllocWithOptions;
 pub const lzmaDecodedSize = lzma.decodedSize;
 pub const lzmaDecodedSizeLimited = lzma.decodedSizeLimited;
+pub const encodeLzmaAlloc = lzma.encodeAlloc;
+pub const encodeLzmaAppend = lzma.encodeAppend;
+pub const encodeLzmaInto = lzma.encodeInto;
 
 pub const TarError = tar.Error;
 pub const TarKind = tar.Kind;
@@ -2402,6 +2409,16 @@ test "root XZ exports compressed LZMA2 writing" {
     defer std.testing.allocator.free(encoded);
     try std.testing.expect(encoded.len < payload.len);
     const decoded = try decodeXzAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "root LZMA-Alone exports compressed writing" {
+    const payload = "root LZMA-Alone writer\n" ** 256;
+    const encoded = try encodeLzmaAlloc(std.testing.allocator, payload, .{});
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len < payload.len);
+    const decoded = try decodeLzmaAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }

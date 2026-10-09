@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Differential tests for Vort's LZMA-Alone decoder."""
+"""Bidirectional differential tests for Vort's LZMA-Alone implementation."""
 
 from __future__ import annotations
 
 import argparse
 import lzma
 import random
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -25,6 +26,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     args = parser.parse_args()
+    xz_tool = shutil.which("xz")
 
     rng = random.Random(0x1A2B3C)
     cases = {
@@ -63,6 +65,45 @@ def main() -> None:
             if known_output.read_bytes() != payload:
                 raise AssertionError(f"Vort known-size LZMA mismatch for {name}")
 
+            source_path = temp / f"{name}.source"
+            source_path.write_bytes(payload)
+            for size_mode in ("end-marker", "known"):
+                vort_path = temp / f"{name}.{size_mode}.vort.lzma"
+                run(
+                    args.cli,
+                    "encode-lzma-file",
+                    str(source_path),
+                    str(vort_path),
+                    size_mode,
+                )
+                vort_encoded = vort_path.read_bytes()
+                if lzma.decompress(vort_encoded, format=lzma.FORMAT_ALONE) != payload:
+                    raise AssertionError(
+                        f"Python could not decode Vort {size_mode} LZMA output for {name}"
+                    )
+                if xz_tool is not None:
+                    subprocess.run(
+                        [xz_tool, "--format=lzma", "--test", str(vort_path)],
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                if name == "text":
+                    repeat_path = temp / f"text-repeat.{size_mode}.vort.lzma"
+                    run(
+                        args.cli,
+                        "encode-lzma-file",
+                        str(source_path),
+                        str(repeat_path),
+                        size_mode,
+                    )
+                    if repeat_path.read_bytes() != vort_encoded:
+                        raise AssertionError(
+                            f"Vort {size_mode} LZMA output is not deterministic"
+                        )
+            if name in ("text", "runs") and len(vort_encoded) >= len(payload):
+                raise AssertionError(f"Vort LZMA output did not reduce {name}")
+
         text_payload = cases["text"][0]
         limited = run(
             args.cli,
@@ -97,7 +138,7 @@ def main() -> None:
 
     print(
         f"lzma_diff=ok cases={len(cases)} compressed_bytes={compressed_total} "
-        f"decoded_bytes={decoded_total}"
+        f"decoded_bytes={decoded_total} writer_modes=2 system_xz={xz_tool is not None}"
     )
 
 
