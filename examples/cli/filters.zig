@@ -28,6 +28,10 @@ pub fn parse(text: ?[]const u8, storage: *[3]vort.XzFilter) ![]const vort.XzFilt
             try vort.XzFilter.armThumb(parameter)
         else if (std.mem.eql(u8, name, "sparc"))
             try vort.XzFilter.sparc(parameter)
+        else if (std.mem.eql(u8, name, "arm64"))
+            try vort.XzFilter.arm64(parameter)
+        else if (std.mem.eql(u8, name, "riscv") or std.mem.eql(u8, name, "risc-v"))
+            try vort.XzFilter.riscv(parameter)
         else
             return error.UnsupportedXzFeature;
         count += 1;

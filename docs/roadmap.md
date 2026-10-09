@@ -17691,8 +17691,8 @@ reuse, so production keeps the simpler independently owned plans.
   supported checks. Python
   `lzma` validates both writer modes and decoding, while the system `xz`
   differential contributes a real four-block stream. Reading and
-  writing now apply Delta plus x86, PowerPC, IA-64, ARM, ARM-Thumb, and SPARC
-  BCJ preprocessing filters, including a three-stage x86+Delta+LZMA2 chain in
+  writing now apply Delta plus x86, PowerPC, IA-64, ARM, ARM-Thumb, SPARC,
+  ARM64, and RISC-V BCJ preprocessing filters, including a three-stage x86+Delta+LZMA2 chain in
   the required direction, and expose aggregate and per-filter block counts in
   stream metadata. Deeper parsing and cross-chunk dictionary reuse remain
   follow-up ratio and performance work. See `docs/formats/xz.md`.
@@ -17824,7 +17824,7 @@ reuse, so production keeps the simpler independently owned plans.
   Bzip2, LZMA, and LZMA2 folders, including compressed Next Headers and solid
   archives, with independent limits for metadata, dictionaries, selected
   output, and decoded solid folders. Bounded linear coder graphs additionally
-  support Delta and x86, PowerPC, IA64, ARM, ARM-Thumb, and SPARC BCJ filters
+  support Delta and x86, PowerPC, IA64, ARM, ARM-Thumb, SPARC, ARM64, and RISC-V BCJ filters
   after the primary decompressor. The writer emits reproducible unencoded
   headers and one independently extractable folder per non-empty file using
   Copy, compressed Deflate/Bzip2/LZMA1, or greedy match-producing LZMA2 with a
@@ -17869,6 +17869,11 @@ reuse, so production keeps the simpler independently owned plans.
   names/metadata, an x86 filter chain, wrong passwords, and system 7-Zip's
   default-power data-only and header-encrypted archives. BCJ2+AES remains a
   separate branching-graph extension.
+  Modern ARM64 BL/ADRP and RISC-V JAL/AUIPC branch filters are now shared by
+  XZ and 7z in both directions, with aligned start-offset validation and
+  per-architecture XZ inspection counts. Branch-heavy reader/writer variants
+  pass 7-Zip 26.02; the existing 21.07 differential remains for BCJ2 because
+  the newer Linux package does not expose that decoder.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
   comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.

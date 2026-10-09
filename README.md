@@ -95,8 +95,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   selector/inverse move-to-front, RUNA/RUNB, inverse BWT, first-stage RLE,
   multi-block and explicit concatenated-stream support, caller-owned/bounded
   allocation APIs, decoded-size preflight, and block/combined CRC validation;
-- dependency-free XZ decoding for LZMA2 streams with optional Delta and all six
-  classic BCJ filters, strict stream/block/index/footer validation,
+- dependency-free XZ decoding for LZMA2 streams with optional Delta and all
+  eight BCJ filters including ARM64/RISC-V, strict stream/block/index/footer validation,
   none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream
   handling, bounded APIs and metadata inspection, plus deterministic
   filter-aware XZ writing with greedy LZMA matches, repeat distances, and a
@@ -117,7 +117,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   bounded output/block APIs;
 - pure Zig 7z parsing and deterministic independent-folder writing, with
   Copy/Deflate/Bzip2/LZMA/LZMA2 decode and encode,
-  bounded linear Delta/classic BCJ filter chains and BCJ2 four-stream graphs in
+  bounded linear Delta/BCJ filter chains including ARM64/RISC-V and BCJ2 four-stream graphs in
   both directions,
   compressed Next Header reading and writing, solid substream reading and
   writing, bounded AdditionalStreamsInfo decoding, external folder/name

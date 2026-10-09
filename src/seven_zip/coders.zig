@@ -240,6 +240,8 @@ fn writeFilterCoder(
         .arm => &.{ 0x03, 0x03, 0x05, 0x01 },
         .arm_thumb => &.{ 0x03, 0x03, 0x07, 0x01 },
         .sparc => &.{ 0x03, 0x03, 0x08, 0x05 },
+        .arm64 => &.{0x0a},
+        .riscv => &.{0x0b},
     };
     const properties_len = filters.propertiesSize(filter);
     const properties_flag: usize = if (properties_len == 0) 0 else 0x20;

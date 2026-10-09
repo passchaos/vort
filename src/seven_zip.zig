@@ -673,3 +673,37 @@ test "7z writer round trips an LZMA2 Delta and BCJ chain" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, branch_bytes, decoded);
 }
+
+test "7z writer round trips ARM64 and RISC-V branch filters" {
+    const cases = [_]struct {
+        filter: Filter,
+        payload: []const u8,
+        method: @import("seven_zip/types.zig").Method,
+    }{
+        .{
+            .filter = try Filter.arm64(4096),
+            .payload = "\x00\x00\x00\x94\x00\x00\x00\x90" ** 1024,
+            .method = .arm64,
+        },
+        .{
+            .filter = try Filter.riscv(4096),
+            .payload = "\xef\x00\x00\x00\x13\x00\x00\x00\x97\x01\x00\x00\xe7\x80\x01\x00" ** 512,
+            .method = .riscv,
+        },
+    };
+    for (cases) |case| {
+        const entries = [_]EncodeEntry{.{ .name = "code.bin", .data = case.payload }};
+        const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+            .compression = .lzma2,
+            .filters = &.{case.filter},
+        });
+        defer std.testing.allocator.free(encoded);
+        const parsed = try parseAlloc(std.testing.allocator, encoded);
+        defer parsed.deinit();
+        const folder = parsed.streams.folders[0];
+        try std.testing.expectEqual(case.method, folder.coders[folder.decode_order[1]].method);
+        const decoded = try parsed.extractEntryAlloc(std.testing.allocator, parsed.entries[0]);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, case.payload, decoded);
+    }
+}

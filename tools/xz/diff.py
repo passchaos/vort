@@ -25,6 +25,7 @@ def run(cli: Path, *args: str, check: bool = True) -> subprocess.CompletedProces
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
+    parser.add_argument("--modern-seven-zip", type=Path)
     args = parser.parse_args()
 
     rng = random.Random(0x585A)
@@ -42,6 +43,9 @@ def main() -> None:
         lzma.CHECK_SHA256: "sha256",
     }
     xz_tool = shutil.which("xz")
+    modern_seven_zip_tool = (
+        str(args.modern_seven_zip) if args.modern_seven_zip else None
+    )
 
     with tempfile.TemporaryDirectory(prefix="vort-xz-diff-") as temp_text:
         temp = Path(temp_text)
@@ -282,6 +286,63 @@ def main() -> None:
                         f"Python could not decode Vort {name} {writer_mode} filter output"
                     )
 
+        modern_filter_cases = {
+            "arm64": (
+                b"\x00\x00\x00\x94\x00\x00\x00\x90" * 4096,
+                "arm64:4096",
+                "arm64_blocks=1",
+            ),
+            "riscv": (
+                b"\xef\x00\x00\x00\x13\x00\x00\x00\x97\x01\x00\x00\xe7\x80\x01\x00"
+                * 2048,
+                "riscv:4096",
+                "riscv_blocks=1",
+            ),
+        }
+        for name, (payload, writer_filter, expected_counter) in modern_filter_cases.items():
+            source_path = temp / f"{name}-modern.source"
+            source_path.write_bytes(payload)
+            for writer_mode, command in (
+                ("stored", "encode-xz-stored-file"),
+                ("compressed", "encode-xz-file"),
+            ):
+                archive = temp / f"{name}-modern.{writer_mode}.xz"
+                output = temp / f"{name}-modern.{writer_mode}.out"
+                run(
+                    args.cli,
+                    command,
+                    str(source_path),
+                    str(archive),
+                    "crc64",
+                    "1048576",
+                    writer_filter,
+                )
+                run(args.cli, "decode-xz-file", str(archive), str(output))
+                if output.read_bytes() != payload:
+                    raise AssertionError(f"Vort {name} XZ self-decode mismatch")
+                inspect_output = run(args.cli, "inspect-xz-file", str(archive)).stdout
+                if expected_counter not in inspect_output:
+                    raise AssertionError(
+                        f"Vort {name} XZ metadata mismatch: {inspect_output}"
+                    )
+                if modern_seven_zip_tool is not None:
+                    subprocess.run(
+                        [modern_seven_zip_tool, "t", "-bd", str(archive)],
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                    extracted = subprocess.run(
+                        [modern_seven_zip_tool, "x", "-so", "-bd", str(archive)],
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    ).stdout
+                    if extracted != payload:
+                        raise AssertionError(
+                            f"7-Zip could not decode Vort {name} XZ output"
+                        )
+
         multiblock_count = 0
         if xz_tool is not None:
             multiblock_payload = bytes(range(251)) * 1000
@@ -307,6 +368,8 @@ def main() -> None:
         f"xz_diff=ok directions=2 cases={len(cases)} compressed_bytes={compressed_total} "
         f"decoded_bytes={decoded_total} concatenated_bytes={len(expected_concatenated)} "
         f"filter_cases={len(filter_cases)} writer_modes=2 multiblock_count={multiblock_count}"
+        f" modern_filter_cases={len(modern_filter_cases)}"
+        f" modern_7zip={modern_seven_zip_tool is not None}"
     )
 
 

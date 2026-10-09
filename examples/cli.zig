@@ -301,7 +301,7 @@ pub fn main(init: std.process.Init) !void {
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(compressed);
         const info = try vort.inspectXz(init.gpa, compressed);
-        try stdout.print("xz_check={s} blocks={d} compressed_bytes={d} decoded_bytes={d} max_dictionary={d} delta_blocks={d} bcj_blocks={d} x86_blocks={d} powerpc_blocks={d} ia64_blocks={d} arm_blocks={d} arm_thumb_blocks={d} sparc_blocks={d}\n", .{
+        try stdout.print("xz_check={s} blocks={d} compressed_bytes={d} decoded_bytes={d} max_dictionary={d} delta_blocks={d} bcj_blocks={d} x86_blocks={d} powerpc_blocks={d} ia64_blocks={d} arm_blocks={d} arm_thumb_blocks={d} sparc_blocks={d} arm64_blocks={d} riscv_blocks={d}\n", .{
             @tagName(info.check),
             info.block_count,
             info.compressed_size,
@@ -315,6 +315,8 @@ pub fn main(init: std.process.Init) !void {
             info.arm_filter_blocks,
             info.arm_thumb_filter_blocks,
             info.sparc_filter_blocks,
+            info.arm64_filter_blocks,
+            info.riscv_filter_blocks,
         });
     } else if (std.mem.eql(u8, command, "create-tar-file")) {
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -2119,7 +2121,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-7z-file <path> [password|-]
         \\                              List entries in a supported 7z archive
         \\  extract-7z-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
-        \\                              Extract a common-codec, Delta, or classic-BCJ 7z entry
+        \\                              Extract a common-codec, Delta, or BCJ-filtered 7z entry
         \\  encode-lzma-file <in> <out> [end-marker|known]
         \\                              Encode deterministic LZMA-Alone data
         \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]

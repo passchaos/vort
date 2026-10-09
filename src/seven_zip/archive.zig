@@ -440,7 +440,7 @@ fn decodeFolderAlloc(
                 owned = next;
                 current = next;
             },
-            .delta, .x86, .powerpc, .ia64, .arm, .arm_thumb, .sparc => {
+            .delta, .x86, .powerpc, .ia64, .arm, .arm_thumb, .sparc, .arm64, .riscv => {
                 if (current.len != coder_size) return error.SizeMismatch;
                 const mutable = owned orelse return error.Invalid7zArchive;
                 try decodeFilter(mutable, coder);
@@ -465,6 +465,8 @@ fn decodeFilter(decoded: []u8, coder: streams_mod.Coder) Error!void {
         .arm => 0x07,
         .arm_thumb => 0x08,
         .sparc => 0x09,
+        .arm64 => 0x0a,
+        .riscv => 0x0b,
         else => return error.Unsupported7zFeature,
     };
     const filter = xz_filters.parse(filter_id, coder.propertyBytes()) catch |err| switch (err) {

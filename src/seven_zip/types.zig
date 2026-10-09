@@ -32,6 +32,8 @@ pub const Method = enum {
     sparc,
     bcj2,
     aes256_sha256,
+    arm64,
+    riscv,
 };
 
 pub const Entry = struct {

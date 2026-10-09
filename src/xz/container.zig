@@ -30,6 +30,8 @@ pub const StreamInfo = struct {
     arm_filter_blocks: usize,
     arm_thumb_filter_blocks: usize,
     sparc_filter_blocks: usize,
+    arm64_filter_blocks: usize,
+    riscv_filter_blocks: usize,
 };
 
 const stream_magic = [_]u8{ 0xfd, '7', 'z', 'X', 'Z', 0x00 };
@@ -181,6 +183,8 @@ fn decodeOneWithInfo(
     var arm_filter_blocks: usize = 0;
     var arm_thumb_filter_blocks: usize = 0;
     var sparc_filter_blocks: usize = 0;
+    var arm64_filter_blocks: usize = 0;
+    var riscv_filter_blocks: usize = 0;
     var offset: usize = 12;
     while (true) {
         if (offset >= input.len) return error.TruncatedFrame;
@@ -242,6 +246,14 @@ fn decodeOneWithInfo(
                 bcj_filter_blocks += 1;
                 sparc_filter_blocks += 1;
             },
+            .arm64 => {
+                bcj_filter_blocks += 1;
+                arm64_filter_blocks += 1;
+            },
+            .riscv => {
+                bcj_filter_blocks += 1;
+                riscv_filter_blocks += 1;
+            },
         };
         offset = check_end;
     }
@@ -291,6 +303,8 @@ fn decodeOneWithInfo(
             .arm_filter_blocks = arm_filter_blocks,
             .arm_thumb_filter_blocks = arm_thumb_filter_blocks,
             .sparc_filter_blocks = sparc_filter_blocks,
+            .arm64_filter_blocks = arm64_filter_blocks,
+            .riscv_filter_blocks = riscv_filter_blocks,
         },
     };
 }

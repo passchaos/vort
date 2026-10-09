@@ -13,6 +13,8 @@ pub const Kind = enum {
     arm,
     arm_thumb,
     sparc,
+    arm64,
+    riscv,
 };
 
 pub const Filter = struct {
@@ -48,6 +50,14 @@ pub const Filter = struct {
         return aligned(.sparc, start_offset, 4);
     }
 
+    pub fn arm64(start_offset: u32) Error!Filter {
+        return aligned(.arm64, start_offset, 4);
+    }
+
+    pub fn riscv(start_offset: u32) Error!Filter {
+        return aligned(.riscv, start_offset, 2);
+    }
+
     fn aligned(kind: Kind, start_offset: u32, alignment: u32) Error!Filter {
         if (start_offset & (alignment - 1) != 0) return error.InvalidXzHeader;
         return .{ .kind = kind, .parameter = start_offset };
@@ -66,6 +76,8 @@ pub fn parse(filter_id: u64, properties: []const u8) Error!Filter {
         0x07 => parseBcj(.arm, properties, 4),
         0x08 => parseBcj(.arm_thumb, properties, 2),
         0x09 => parseBcj(.sparc, properties, 4),
+        0x0a => parseBcj(.arm64, properties, 4),
+        0x0b => parseBcj(.riscv, properties, 2),
         else => error.UnsupportedXzFeature,
     };
 }
@@ -82,9 +94,9 @@ pub fn validateChain(chain: []const Filter) Error!void {
     for (chain) |filter| switch (filter.kind) {
         .delta => if (filter.parameter == 0 or filter.parameter > 256) return error.InvalidXzHeader,
         .x86 => {},
-        .powerpc, .arm, .sparc => if (filter.parameter & 3 != 0) return error.InvalidXzHeader,
+        .powerpc, .arm, .sparc, .arm64 => if (filter.parameter & 3 != 0) return error.InvalidXzHeader,
         .ia64 => if (filter.parameter & 15 != 0) return error.InvalidXzHeader,
-        .arm_thumb => if (filter.parameter & 1 != 0) return error.InvalidXzHeader,
+        .arm_thumb, .riscv => if (filter.parameter & 1 != 0) return error.InvalidXzHeader,
     };
 }
 
@@ -110,6 +122,8 @@ pub fn id(filter: Filter) u64 {
         .arm => 0x07,
         .arm_thumb => 0x08,
         .sparc => 0x09,
+        .arm64 => 0x0a,
+        .riscv => 0x0b,
     };
 }
 
@@ -136,6 +150,8 @@ fn apply(bytes: []u8, filter: Filter, encode: bool) void {
         .arm => transformArm(bytes, filter.parameter, encode),
         .arm_thumb => transformArmThumb(bytes, filter.parameter, encode),
         .sparc => transformSparc(bytes, filter.parameter, encode),
+        .arm64 => transformArm64(bytes, filter.parameter, encode),
+        .riscv => transformRiscV(bytes, filter.parameter, encode),
     }
 }
 
@@ -347,6 +363,168 @@ fn transformSparc(bytes: []u8, start_offset: u32, encode: bool) void {
     }
 }
 
+fn transformArm64(bytes: []u8, start_offset: u32, encode: bool) void {
+    const flag: u32 = 1 << 20;
+    const mask: u32 = (1 << 24) - (flag << 1);
+    const size = bytes.len & ~@as(usize, 3);
+    var position: usize = 0;
+    while (position < size) : (position += 4) {
+        var value = std.mem.readInt(u32, bytes[position..][0..4], .little);
+        const absolute_position = start_offset +% @as(u32, @truncate(position));
+        if ((value -% 0x9400_0000) & 0xfc00_0000 == 0) {
+            const pc = absolute_position >> 2;
+            value = if (encode) value +% pc else value -% pc;
+            value = (value & 0x03ff_ffff) | 0x9400_0000;
+            std.mem.writeInt(u32, bytes[position..][0..4], value, .little);
+            continue;
+        }
+
+        value -%= 0x9000_0000;
+        if (value & 0x9f00_0000 != 0) continue;
+        value +%= flag;
+        if (value & mask != 0) continue;
+        var transformed = (value & 0xffff_ffe0) | (value >> 26);
+        const pc = (absolute_position >> 9) & ~@as(u32, 7);
+        transformed = if (encode) transformed +% pc else transformed -% pc;
+        value = (value & 0x1f) | 0x9000_0000;
+        value |= transformed << 26;
+        value |= 0x00ff_ffe0 & ((transformed & ((flag << 1) - 1)) -% flag);
+        std.mem.writeInt(u32, bytes[position..][0..4], value, .little);
+    }
+}
+
+fn transformRiscV(bytes: []u8, start_offset: u32, encode: bool) void {
+    const aligned_size = bytes.len & ~@as(usize, 1);
+    if (aligned_size <= 6) return;
+    const limit = aligned_size - 6;
+    var position: usize = 0;
+    while (position < limit) {
+        var candidate = (@as(u32, readU16Le(bytes, position)) ^ 0x10) +% 1;
+        if (candidate & 0x77 != 0) {
+            position += 2;
+            continue;
+        }
+        const pc = start_offset +% @as(u32, @truncate(position));
+        if (encode) {
+            var instruction = readU32Le(bytes, position);
+            if (candidate & 8 == 0) {
+                if ((candidate -% 0x100) & 0xd80 != 0) {
+                    position += 2;
+                    continue;
+                }
+                var value = ((instruction & (@as(u32, 1) << 31)) >> 11) |
+                    ((instruction & (0x3ff << 21)) >> 20) |
+                    ((instruction & (1 << 20)) >> 9) |
+                    (instruction & (0xff << 12));
+                value +%= pc;
+                bytes[position + 1] = @truncate(((value >> 13) & 0xf0) | ((instruction >> 8) & 0x0f));
+                bytes[position + 2] = @truncate(value >> 9);
+                bytes[position + 3] = @truncate(value >> 1);
+                position += 4;
+                continue;
+            }
+
+            if (candidate & 0xe80 != 0) {
+                const following = readU32Le(bytes, position + 4);
+                if (riscVCheck1(candidate, following)) {
+                    writeU32Le(bytes, position, (following << 12) | 0x117);
+                    instruction &= 0xffff_f000;
+                    const signed_following: i32 = @bitCast(following);
+                    instruction +%= @as(u32, @bitCast(signed_following >> 20));
+                    instruction +%= pc;
+                    std.mem.writeInt(u32, bytes[position + 4 ..][0..4], instruction, .big);
+                    position += 8;
+                } else {
+                    position += 6;
+                }
+            } else {
+                var register = instruction >> 27;
+                if (riscVCheck2(candidate, register)) {
+                    const following = readU32Le(bytes, position + 4);
+                    register = (register << 7) +% 0x17 +% (following & 0xffff_f000);
+                    instruction = (instruction >> 12) | (following << 20);
+                    writeU32Le(bytes, position, register);
+                    writeU32Le(bytes, position + 4, instruction);
+                    position += 8;
+                } else {
+                    position += 4;
+                }
+            }
+            continue;
+        }
+
+        if (candidate & 8 == 0) {
+            candidate -%= 0x81;
+            if (candidate & 0xd80 != 0) {
+                position += 2;
+                continue;
+            }
+            const instruction_low = (candidate +% 0x70) & 0xfff;
+            var value = (@as(u32, bytes[position + 3]) << 1) |
+                (@as(u32, bytes[position + 2]) << 9) |
+                ((candidate & 0xf000) << 5);
+            value -%= pc;
+            const instruction = instruction_low |
+                ((value << 11) & (@as(u32, 1) << 31)) |
+                ((value << 20) & (0x3ff << 21)) |
+                ((value << 9) & (1 << 20)) |
+                (value & (0xff << 12));
+            writeU32Le(bytes, position, instruction);
+            position += 4;
+            continue;
+        }
+
+        var instruction = readU32Le(bytes, position);
+        if (candidate & 0xe80 == 0) {
+            const register = instruction >> 27;
+            if (riscVCheck2(candidate, register)) {
+                var value = std.mem.readInt(u32, bytes[position + 4 ..][0..4], .big);
+                candidate = instruction >> 12;
+                value -%= pc;
+                instruction = (register << 7) +% 0x17;
+                instruction +%= (value +% 0x800) & 0xffff_f000;
+                candidate |= value << 20;
+                writeU32Le(bytes, position, instruction);
+                writeU32Le(bytes, position + 4, candidate);
+                position += 8;
+            } else {
+                position += 4;
+            }
+        } else {
+            const following = readU32Le(bytes, position + 4);
+            if (!riscVCheck1(candidate, following)) {
+                position += 6;
+            } else {
+                candidate = (instruction & 0xffff_f000) | (following >> 20);
+                instruction = (following << 12) | 0x117;
+                writeU32Le(bytes, position, instruction);
+                writeU32Le(bytes, position + 4, candidate);
+                position += 8;
+            }
+        }
+    }
+}
+
+fn riscVCheck1(value: u32, following: u32) bool {
+    return (((following -% 3) ^ (value << 8)) & 0x000f_8003) == 0;
+}
+
+fn riscVCheck2(value: u32, register: u32) bool {
+    return ((value -% 0x3108) << 18) < (register & 0x1d);
+}
+
+fn readU16Le(bytes: []const u8, offset: usize) u16 {
+    return std.mem.readInt(u16, bytes[offset..][0..2], .little);
+}
+
+fn readU32Le(bytes: []const u8, offset: usize) u32 {
+    return std.mem.readInt(u32, bytes[offset..][0..4], .little);
+}
+
+fn writeU32Le(bytes: []u8, offset: usize, value: u32) void {
+    std.mem.writeInt(u32, bytes[offset..][0..4], value, .little);
+}
+
 fn testX86MsByte(byte: u8) bool {
     return byte == 0 or byte == 0xff;
 }
@@ -361,6 +539,19 @@ test "XZ delta inverse handles distance one and four" {
     try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3, 4, 5, 6, 7, 8 }, &distance_four);
 }
 
+test "XZ modern BCJ filters validate aligned start offsets" {
+    try std.testing.expectError(error.InvalidXzHeader, Filter.arm64(2));
+    try std.testing.expectError(error.InvalidXzHeader, Filter.riscv(1));
+    try std.testing.expectError(
+        error.InvalidXzHeader,
+        parse(0x0a, &.{ 2, 0, 0, 0 }),
+    );
+    try std.testing.expectError(
+        error.InvalidXzHeader,
+        parse(0x0b, &.{ 1, 0, 0, 0 }),
+    );
+}
+
 test "XZ preprocessing filters round trip representative instruction bytes" {
     const cases = [_]struct { filter: Filter, bytes: []const u8 }{
         .{ .filter = Filter.x86(0x1000), .bytes = "\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90" },
@@ -369,6 +560,8 @@ test "XZ preprocessing filters round trip representative instruction bytes" {
         .{ .filter = try Filter.arm(0x1000), .bytes = "\x04\x00\x00\xeb\xfc\xff\xff\xeb" },
         .{ .filter = try Filter.armThumb(0x1000), .bytes = "\x00\xf0\x00\xf8\xff\xf7\xff\xff" },
         .{ .filter = try Filter.sparc(0x1000), .bytes = "\x40\x00\x00\x00\x7f\xff\xff\xff" },
+        .{ .filter = try Filter.arm64(0x1000), .bytes = "\x00\x00\x00\x94\x00\x00\x00\x90" },
+        .{ .filter = try Filter.riscv(0x1000), .bytes = "\xef\x00\x00\x00\x13\x00\x00\x00\x97\x01\x00\x00\xe7\x80\x01\x00" },
     };
     for (cases) |case| {
         const original = try std.testing.allocator.dupe(u8, case.bytes);
@@ -376,6 +569,8 @@ test "XZ preprocessing filters round trip representative instruction bytes" {
         const transformed = try std.testing.allocator.dupe(u8, case.bytes);
         defer std.testing.allocator.free(transformed);
         encodeChain(transformed, &.{case.filter});
+        if (case.filter.kind == .arm64 or case.filter.kind == .riscv)
+            try std.testing.expect(!std.mem.eql(u8, original, transformed));
         decodeChain(transformed, &.{case.filter});
         try std.testing.expectEqualSlices(u8, original, transformed);
     }

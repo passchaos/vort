@@ -356,3 +356,40 @@ test "XZ stored writer round trips x86 and delta filter chain" {
     try std.testing.expectEqual(info.block_count, info.delta_filter_blocks);
     try std.testing.expectEqual(info.block_count, info.x86_filter_blocks);
 }
+
+test "XZ writer round trips ARM64 and RISC-V branch filters" {
+    const allocator = std.testing.allocator;
+    const cases = [_]struct {
+        filter: Filter,
+        payload: []const u8,
+        kind: filters.Kind,
+    }{
+        .{
+            .filter = try Filter.arm64(4096),
+            .payload = "\x00\x00\x00\x94\x00\x00\x00\x90" ** 1024,
+            .kind = .arm64,
+        },
+        .{
+            .filter = try Filter.riscv(4096),
+            .payload = "\xef\x00\x00\x00\x13\x00\x00\x00\x97\x01\x00\x00\xe7\x80\x01\x00" ** 512,
+            .kind = .riscv,
+        },
+    };
+    for (cases) |case| {
+        const encoded = try encodeAlloc(allocator, case.payload, .{
+            .check = .crc64,
+            .block_size = 16 * 1024,
+            .filters = &.{case.filter},
+        });
+        defer allocator.free(encoded);
+        const decoded = try container.decodeAlloc(allocator, encoded);
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, case.payload, decoded);
+        const info = try container.inspect(allocator, encoded);
+        switch (case.kind) {
+            .arm64 => try std.testing.expectEqual(@as(usize, 1), info.arm64_filter_blocks),
+            .riscv => try std.testing.expectEqual(@as(usize, 1), info.riscv_filter_blocks),
+            else => unreachable,
+        }
+    }
+}

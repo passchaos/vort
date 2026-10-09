@@ -141,12 +141,26 @@ def main() -> None:
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--seven-zip", type=Path)
+    parser.add_argument("--modern-seven-zip", type=Path)
     args = parser.parse_args()
     seven_zip_tool = (
         str(args.seven_zip)
         if args.seven_zip
         else shutil.which("7zz") or shutil.which("7z")
     )
+    modern_seven_zip_tool = (
+        str(args.modern_seven_zip) if args.modern_seven_zip else None
+    )
+    modern_branch_filters = False
+    if modern_seven_zip_tool is not None:
+        methods_output = subprocess.run(
+            [modern_seven_zip_tool, "i"],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).stdout
+        modern_branch_filters = "ARM64" in methods_output and "RISCV" in methods_output
     external_variants = 0
     vort_writer_variants = 1
 
@@ -534,11 +548,30 @@ def main() -> None:
                     b"\x40\x00\x00\x00\x7f\xff\xff\xff" * 256,
                 ),
             }
+            if modern_branch_filters:
+                filter_variants.update(
+                    {
+                        "arm64-lzma2": (
+                            ("arm64", "lzma2"),
+                            b"\x00\x00\x00\x94\x00\x00\x00\x90" * 256,
+                        ),
+                        "riscv-lzma2": (
+                            ("riscv", "lzma2"),
+                            b"\xef\x00\x00\x00\x13\x00\x00\x00\x97\x01\x00\x00\xe7\x80\x01\x00"
+                            * 128,
+                        ),
+                    }
+                )
             for variant, (methods, payload) in filter_variants.items():
                 archive = temp / f"{variant}.7z"
                 options = [f"-m{index}={method}" for index, method in enumerate(methods)]
                 options.extend(("-mx=5", "-mhc=off", "-ms=off"))
-                create_reference_payload(seven_zip_tool, filter_tree, archive, payload, options)
+                reference_tool = (
+                    modern_seven_zip_tool
+                    if variant in ("arm64-lzma2", "riscv-lzma2")
+                    else seven_zip_tool
+                )
+                create_reference_payload(reference_tool, filter_tree, archive, payload, options)
                 verify_with_vort(args.cli, archive, {"payload.bin": payload})
             external_variants += len(filter_variants)
 
@@ -673,6 +706,22 @@ def main() -> None:
                     b"\x40\x00\x00\x00\x7f\xff\xff\xff" * 256,
                 ),
             }
+            if modern_branch_filters:
+                writer_variants.update(
+                    {
+                        "arm64-lzma2": (
+                            "lzma2",
+                            "arm64",
+                            b"\x00\x00\x00\x94\x00\x00\x00\x90" * 256,
+                        ),
+                        "riscv-lzma2": (
+                            "lzma2",
+                            "riscv",
+                            b"\xef\x00\x00\x00\x13\x00\x00\x00\x97\x01\x00\x00\xe7\x80\x01\x00"
+                            * 128,
+                        ),
+                    }
+                )
             for variant, (compression, filter_spec, payload) in writer_variants.items():
                 input_path = filter_tree / "payload.bin"
                 input_path.write_bytes(payload)
@@ -686,8 +735,13 @@ def main() -> None:
                     compression,
                     filter_spec,
                 )
+                verification_tool = (
+                    modern_seven_zip_tool
+                    if variant in ("arm64-lzma2", "riscv-lzma2")
+                    else seven_zip_tool
+                )
                 verify_with_seven_zip(
-                    seven_zip_tool,
+                    verification_tool,
                     archive,
                     {"payload.bin": payload},
                 )
@@ -717,7 +771,9 @@ def main() -> None:
         f"seven_zip_diff=ok writer_entries={len(expected_vort) + 1} "
         f"external_variants={external_variants} "
         f"vort_writer_variants={vort_writer_variants} "
-        f"system_7zip={seven_zip_tool is not None}"
+        f"system_7zip={seven_zip_tool is not None} "
+        f"modern_7zip={modern_seven_zip_tool is not None} "
+        f"modern_branch_filters={modern_branch_filters}"
     )
 
 

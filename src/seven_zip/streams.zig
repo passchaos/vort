@@ -402,6 +402,10 @@ fn parseCoder(reader: *number.Reader) !Coder {
         .bcj2
     else if (std.mem.eql(u8, id, &.{ 0x06, 0xf1, 0x07, 0x01 }))
         .aes256_sha256
+    else if (std.mem.eql(u8, id, &.{0x0a}))
+        .arm64
+    else if (std.mem.eql(u8, id, &.{0x0b}))
+        .riscv
     else
         return error.Unsupported7zFeature;
     if (((method == .copy or method == .deflate or method == .bzip2) and properties.len != 0) or
@@ -460,14 +464,14 @@ fn isCompression(method: types.Method) bool {
 
 fn isFilter(method: types.Method) bool {
     return switch (method) {
-        .delta, .x86, .powerpc, .ia64, .arm, .arm_thumb, .sparc => true,
+        .delta, .x86, .powerpc, .ia64, .arm, .arm_thumb, .sparc, .arm64, .riscv => true,
         else => false,
     };
 }
 
 fn isBcj(method: types.Method) bool {
     return switch (method) {
-        .x86, .powerpc, .ia64, .arm, .arm_thumb, .sparc => true,
+        .x86, .powerpc, .ia64, .arm, .arm_thumb, .sparc, .arm64, .riscv => true,
         else => false,
     };
 }
