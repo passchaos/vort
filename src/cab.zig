@@ -5,8 +5,9 @@ const decoder = @import("cab/decoder.zig");
 const lzx = @import("cab/lzx.zig");
 const deflate = @import("deflate.zig");
 const types = @import("cab/types.zig");
+const writer = @import("cab/writer.zig");
 
-pub const Error = archive.Error || decoder.Error;
+pub const Error = archive.Error || decoder.Error || writer.Error;
 pub const Compression = types.Compression;
 pub const Entry = types.Entry;
 pub const Folder = types.Folder;
@@ -15,6 +16,8 @@ pub const Archive = archive.Archive;
 pub const Iterator = archive.Iterator;
 pub const DataBlockIterator = archive.DataBlockIterator;
 pub const ExtractOptions = decoder.ExtractOptions;
+pub const EncodeEntry = writer.EncodeEntry;
+pub const EncodeOptions = writer.EncodeOptions;
 pub const parse = archive.parse;
 pub const decodeFolderAllocLimited = decoder.decodeFolderAllocLimited;
 pub const extractAlloc = decoder.extractAlloc;
@@ -23,6 +26,9 @@ pub const extractAllocWithOptions = decoder.extractAllocWithOptions;
 pub const extractInto = decoder.extractInto;
 pub const extractByNameAlloc = decoder.extractByNameAlloc;
 pub const extractByNameAllocLimited = decoder.extractByNameAllocLimited;
+pub const encodeAlloc = writer.encodeAlloc;
+pub const encodeAppend = writer.encodeAppend;
+pub const encodeInto = writer.encodeInto;
 
 test {
     _ = archive;
@@ -30,6 +36,7 @@ test {
     _ = decoder;
     _ = lzx;
     _ = types;
+    _ = writer;
 }
 
 test "CAB extracts Microsoft specification stored fixture" {

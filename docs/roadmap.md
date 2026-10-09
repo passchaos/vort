@@ -17733,9 +17733,9 @@ reuse, so production keeps the simpler independently owned plans.
   uncompress, libbrotli, xz, lz4, lzip, lzop, and system zstd validate
   raw/PAX/GNU metadata and compressed tarballs. See `docs/formats/tar.md`.
 
-- Added dependency-free Microsoft CAB parsing and bounded extraction for
-  Stored, MSZIP, and LZX folders. The parser validates the `MSCF` header, version,
-  exact cabinet size, folder/file tables, optional reserve areas, name bounds,
+- Added dependency-free deterministic Microsoft CAB writing plus parsing and
+  bounded extraction for Stored, MSZIP, and LZX folders. The parser validates
+  the `MSCF` header, version, exact cabinet size, folder/file tables, optional reserve areas, name bounds,
   UTF-8 flags, file ordering/ranges, non-overlapping folder data, 32 KiB CFDATA
   limits, and Microsoft's optional longitudinal XOR checksums. MSZIP reuses the
   raw Deflate decoder with an exact-size contract, mandatory `CK` signature,
@@ -17748,9 +17748,15 @@ reuse, so production keeps the simpler independently owned plans.
   Stored, mixed MSZIP/LZX/Quantum, and 21-bit aligned 449-block LZX fixtures
   provide required black-box extraction evidence, while synthetic reserved
   MSZIP tests exercise a match that requires previous-block history. Quantum,
-  split blocks, multi-cabinet continuation, and writing remain explicit future
-  functionality. The generic raw-byte fuzz target now includes both CAB
-  parsing and bounded folder decompression with its format-error set.
+  split blocks, and multi-cabinet continuation remain explicit future
+  functionality. The writer emits one deterministic solid folder in caller
+  entry order, supports Stored/MSZIP, configurable 1–32 KiB blocks, optional
+  checksums, UTF-8 attributes, set IDs, and alloc/transactional append/
+  caller-buffer APIs. Each MSZIP block chooses fixed-Huffman or stored Deflate
+  and carries prior folder history; libarchive independently validates both
+  writer modes. LZX/Quantum writing remains future work. The generic raw-byte
+  fuzz target now includes both CAB parsing and bounded folder decompression
+  with its format-error set.
   See `docs/formats/cab.md`.
 
 - Added pure Zig Unix `compress` (`.Z`) encoding and decoding. The codec

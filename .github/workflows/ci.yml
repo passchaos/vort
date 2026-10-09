@@ -27,7 +27,7 @@ jobs:
       - name: Install optional CLI competitors
         run: |
           sudo apt-get update
-          sudo apt-get install -y gzip zstd libbrotli-dev liblz4-dev libsnappy-dev git
+          sudo apt-get install -y gzip zstd libarchive-dev libbrotli-dev liblz4-dev libsnappy-dev git
 
       - name: Check formatting
         run: zig fmt --check build.zig build.zig.zon src examples bench tools

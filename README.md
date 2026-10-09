@@ -123,8 +123,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
   safe-path classification, borrowed entry views, and automatic raw/gzip/
   Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/Zstandard/LZOP tarball composition;
-- dependency-free Microsoft CAB parsing and bounded extraction for Stored,
-  MSZIP, and 15–21 bit LZX folders, including reserve areas, checksum
+- dependency-free deterministic Microsoft CAB writing plus parsing and bounded
+  extraction for Stored, MSZIP, and 15–21 bit LZX folders, including reserve areas, checksum
   validation, cross-block history, aligned/verbatim/uncompressed LZX blocks,
   Intel E8 postprocessing, mixed-folder archives, and safe borrowed paths;
 - dependency-free Brotli `br` stored/uncompressed and planner-backed fast encode/decode surfaces, including explicit 10..16-bit one-shot planned windows at every level and the complete 10..24 range at ratio level with distance-bounded matching, exact-wire-selected two-type literal/command/distance entropy splitting for heterogeneous ratio inputs, one-shot planned metadata at every level, opt-in bounded static-dictionary probing for 257-byte through 4 KiB ratio inputs, arbitrarily large ratio inputs encoded as one bounded-memory multi-meta-block stream, a caller-to-caller incremental planned encoder with flush/metadata, compressed-or-stored arbitration, and bounded cross-block LZ77 history, chunked encoding with bounded parser scratch into one mixed compressed/stored multi-meta-block stream plus 10..24-bit window and metadata options, strict-by-default RFC 7932 window bits 10..24 plus explicit opt-in decoding of the Large Window Brotli 10..30-bit extension across one-shot, chunked, summary, buffered-incremental, and byte-progressive copy APIs, metadata meta-block skipping, caller-history stream summaries for large-window preflight without hidden allocation, a bounded split-input general facade that validates on explicit finish, byte-progressive stored-subset encode/decode, and bounded-header byte-progressive decoders for insert-only Huffman literals, single-command RLE, and copy streams with literal/distance context maps, entropy block switching across the complete 256-entry literal/command/distance block-type count range and literal/distance context-tree ranges, caller-owned compressed-header scratch beyond the default 16 KiB bound, dynamic direct/regular/recent distances, transformed static-dictionary references, non-final compressed blocks followed by metadata/stored blocks and a final-empty terminator, plus libbrotli streaming-operation differentials covering PROCESS accumulation, empty/repeated FLUSH, METADATA transitions, and FINISH with pending input; compressed output honors caller backpressure and copy history is caller-owned;
@@ -223,6 +223,7 @@ zig build run -- list-tar-file /tmp/archive.tar.gz 67108864
 zig build run -- extract-tar-file /tmp/archive.tar.gz payload.bin /tmp/payload.out 67108864
 zig build run-tar-diff
 zig build run -- list-cab-file /tmp/archive.cab
+zig build run -- create-cab-file /tmp/archive.cab path\\file.bin README.md mszip 32768
 zig build run -- extract-cab-file /tmp/archive.cab path\\file.bin /tmp/file.out 67108864 268435456
 zig build run-cab-diff
 zig build run -- encode-br-stored-hex "hello vort" 16 metadata

@@ -375,6 +375,28 @@ pub fn main(init: std.process.Init) !void {
             entry_name,
             output_path,
         });
+    } else if (std.mem.eql(u8, command, "create-cab-file")) {
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const entry_name = args.next() orelse return error.MissingCorpusPath;
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const compression = try parseCabCompression(args.next());
+        const block_size = try parseBlockLen(args.next(), 32 * 1024);
+        if (block_size > 32 * 1024) return error.InvalidCabinetOptions;
+        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(input);
+        const entries = [_]vort.CabEncodeEntry{.{ .name = entry_name, .data = input }};
+        const encoded = try vort.encodeCabAlloc(init.gpa, &entries, .{
+            .compression = compression,
+            .block_size = @intCast(block_size),
+        });
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("cab_compression={s} input_bytes={d} cabinet_bytes={d} path={s}\n", .{
+            @tagName(compression),
+            input.len,
+            encoded.len,
+            output_path,
+        });
     } else if (std.mem.eql(u8, command, "list-cab-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
@@ -2036,6 +2058,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              List common compressed tarball formats
         \\  extract-tar-file <tar> <entry> <out> [max_tar_size]
         \\                              Extract one named regular file without path traversal
+        \\  create-cab-file <out> <entry> <in> [stored|mszip] [block_size]
+        \\                              Create a deterministic one-folder CAB archive
         \\  list-cab-file <path>        List single-cabinet Stored/MSZIP/LZX/Quantum metadata
         \\  extract-cab-file <cab> <entry> <out> [max_file] [max_folder]
         \\                              Extract a Stored/MSZIP/LZX CAB entry with explicit limits
@@ -3043,6 +3067,13 @@ fn parseTarCompression(text: ?[]const u8) !vort.TarCompression {
     if (std.mem.eql(u8, value, "zstandard") or std.mem.eql(u8, value, "zstd")) return .zstandard;
     if (std.mem.eql(u8, value, "lzop") or std.mem.eql(u8, value, "lzo") or std.mem.eql(u8, value, "tzo")) return .lzop;
     return error.UnknownTarCompression;
+}
+
+fn parseCabCompression(text: ?[]const u8) !vort.CabCompression {
+    const value = text orelse return .mszip;
+    if (std.mem.eql(u8, value, "stored") or std.mem.eql(u8, value, "none")) return .none;
+    if (std.mem.eql(u8, value, "mszip")) return .mszip;
+    return error.UnsupportedCabinetCompression;
 }
 
 fn parseSeekabilityTier(text: ?[]const u8) !vort.SeekabilityTier {

@@ -4,10 +4,67 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
+import ctypes.util
 import hashlib
+import random
 import subprocess
 import tempfile
 from pathlib import Path
+
+
+def libarchive_extract(path: Path) -> dict[str, bytes]:
+    library_path = ctypes.util.find_library("archive")
+    if library_path is None:
+        raise AssertionError("libarchive is required for CAB writer differential")
+    library = ctypes.CDLL(library_path)
+    library.archive_read_new.restype = ctypes.c_void_p
+    library.archive_read_support_format_cab.argtypes = [ctypes.c_void_p]
+    library.archive_read_open_filename.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]
+    library.archive_read_next_header.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
+    library.archive_entry_pathname_utf8.argtypes = [ctypes.c_void_p]
+    library.archive_entry_pathname_utf8.restype = ctypes.c_char_p
+    library.archive_read_data.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t]
+    library.archive_read_data.restype = ctypes.c_ssize_t
+    library.archive_error_string.argtypes = [ctypes.c_void_p]
+    library.archive_error_string.restype = ctypes.c_char_p
+    library.archive_read_free.argtypes = [ctypes.c_void_p]
+
+    archive = library.archive_read_new()
+    if not archive:
+        raise AssertionError("libarchive allocation failed")
+    try:
+        if library.archive_read_support_format_cab(archive) != 0:
+            raise AssertionError("libarchive CAB support is unavailable")
+        if library.archive_read_open_filename(archive, str(path).encode(), 64 * 1024) != 0:
+            message = library.archive_error_string(archive)
+            raise AssertionError(f"libarchive could not open CAB: {message!r}")
+        files: dict[str, bytes] = {}
+        while True:
+            entry = ctypes.c_void_p()
+            status = library.archive_read_next_header(archive, ctypes.byref(entry))
+            if status == 1:
+                break
+            if status != 0:
+                message = library.archive_error_string(archive)
+                raise AssertionError(f"libarchive CAB header error: {message!r}")
+            raw_name = library.archive_entry_pathname_utf8(entry)
+            if raw_name is None:
+                raise AssertionError("libarchive returned a CAB entry without a name")
+            output = bytearray()
+            buffer = ctypes.create_string_buffer(64 * 1024)
+            while True:
+                count = library.archive_read_data(archive, buffer, len(buffer))
+                if count == 0:
+                    break
+                if count < 0:
+                    message = library.archive_error_string(archive)
+                    raise AssertionError(f"libarchive CAB data error: {message!r}")
+                output.extend(buffer.raw[:count])
+            files[raw_name.decode("utf-8")] = bytes(output)
+        return files
+    finally:
+        library.archive_read_free(archive)
 
 
 EXPECTED = {
@@ -81,6 +138,7 @@ def main() -> None:
     args = parser.parse_args()
 
     extracted = 0
+    writer_cases = 0
     with tempfile.TemporaryDirectory(prefix="vort-cab-diff-") as temp_text:
         temp = Path(temp_text)
         for fixture_name, expected in EXPECTED.items():
@@ -154,9 +212,43 @@ def main() -> None:
         if unsupported.returncode == 0 or "UnsupportedCabinetCompression" not in unsupported.stderr:
             raise AssertionError(f"Quantum CAB entry did not fail explicitly: {unsupported.stderr}")
 
+        rng = random.Random(0xCAB5EED)
+        prefix = bytes(rng.randrange(256) for _ in range(32 * 1024))
+        payload = prefix * 3 + b"CAB writer differential tail\n"
+        source = temp / "writer-input.bin"
+        source.write_bytes(payload)
+        for mode in ("stored", "mszip"):
+            first = temp / f"vort-{mode}-first.cab"
+            second = temp / f"vort-{mode}-second.cab"
+            entry_name = "folder/payload.bin"
+            run(args.cli, "create-cab-file", str(first), entry_name, str(source), mode, "32768")
+            run(args.cli, "create-cab-file", str(second), entry_name, str(source), mode, "32768")
+            if first.read_bytes() != second.read_bytes():
+                raise AssertionError(f"Vort {mode} CAB output is not deterministic")
+            listing = run(args.cli, "list-cab-file", str(first)).stdout
+            expected_method = "stored" if mode == "stored" else "mszip"
+            if f"method={expected_method}" not in listing or f"name={entry_name}" not in listing:
+                raise AssertionError(f"unexpected Vort CAB listing: {listing}")
+            vort_output = temp / f"vort-{mode}.out"
+            run(
+                args.cli,
+                "extract-cab-file",
+                str(first),
+                entry_name,
+                str(vort_output),
+                "200000",
+                "200000",
+            )
+            if vort_output.read_bytes() != payload:
+                raise AssertionError(f"Vort could not read its {mode} CAB")
+            external = libarchive_extract(first)
+            if external.get(entry_name) != payload:
+                raise AssertionError(f"libarchive could not read Vort {mode} CAB")
+            writer_cases += 1
+
     print(
-        f"cab_diff=ok fixtures=5 extracted={extracted} malformed_lzx=2 "
-        "lzx_aligned_frames=449 unsupported_quantum=ok"
+        f"cab_diff=ok fixtures=5 extracted={extracted} writer_cases={writer_cases} "
+        "libarchive=ok malformed_lzx=2 lzx_aligned_frames=449 unsupported_quantum=ok"
     )
 
 
