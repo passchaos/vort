@@ -17726,16 +17726,19 @@ reuse, so production keeps the simpler independently owned plans.
   `uncompress` and also tests ncompress output when `compress` is installed.
   See `docs/formats/compress-z.md`.
 
-- Added pure Zig lzip v1 decoding on the existing LZMA1 range-decoder core.
+- Added pure Zig lzip v1 encoding and decoding on the shared LZMA1 core.
   The container validates coded 4 KiB through 512 MiB dictionaries, mandatory
   LZMA-302eos termination, CRC-32, uncompressed size, member size, trailer
   consistency bounds, and strict coverage of all input bytes. Its reverse
   distributed-index pass supports concatenated members in original order and
-  rejects empty members in multimember files. Public APIs provide structural
-  inspection, caller-owned output, bounded allocation, decoded-size preflight,
-  and independent output/dictionary limits. Python raw-LZMA generation and the
-  optional reference `lzip` tool provide interoperability coverage. See
-  `docs/formats/lzip.md`.
+  rejects empty members in multimember files. The deterministic writer emits
+  canonical dictionary properties, mandatory end markers, and CRC/data/member
+  size trailers through allocating, caller-owned, transactional append, and
+  concatenated-member APIs. Public decode APIs provide structural inspection,
+  caller-owned output, bounded allocation, decoded-size preflight, and
+  independent output/dictionary limits. Python raw-LZMA generation and decoding
+  plus the optional reference `lzip` tool provide bidirectional interoperability
+  coverage. See `docs/formats/lzip.md`.
 
 - Added a pure Zig LZO1X decoder and LZOP container. The implementation parses
   modern and legacy headers, verifies Adler-32 or CRC-32 header/data/compressed

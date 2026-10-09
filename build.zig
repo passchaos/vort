@@ -1048,7 +1048,7 @@ pub fn build(b: *std.Build) void {
 
     const lzip_diff = b.addSystemCommand(&.{ "python3", "tools/lzip/diff.py", "--cli" });
     lzip_diff.addArtifactArg(cli_exe);
-    const lzip_diff_step = b.step("run-lzip-diff", "Validate lzip members against Python lzma and the optional lzip CLI");
+    const lzip_diff_step = b.step("run-lzip-diff", "Validate lzip encoding and decoding against Python lzma and the optional lzip CLI");
     lzip_diff_step.dependOn(&lzip_diff.step);
 
     const lzop_diff = b.addSystemCommand(&.{ "python3", "tools/lzop/diff.py", "--cli" });

@@ -105,9 +105,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - pure Zig Unix `compress` (`.Z`) LZW encoding and decoding with 9..16-bit
   variable-width LSB-first codes, block-mode dictionary clears, non-block
   dictionary freeze, caller-owned/bounded APIs, and decoded-size preflight;
-- pure Zig lzip v1 decoding with LZMA-302eos payloads, coded dictionary sizes,
-  per-member CRC/data/member-size validation, strict multimember handling, and
-  caller-selected output and dictionary limits;
+- pure Zig lzip v1 encoding and decoding with LZMA-302eos payloads, coded
+  dictionary sizes, per-member CRC/data/member-size validation, deterministic
+  concatenated writing, strict multimember handling, and caller-selected output
+  and dictionary limits;
 - pure Zig LZO1X decoding plus LZOP parsing and deterministic stored-block
   writing, including Adler-32/CRC-32 header and block checks, legacy delta
   filters, concatenated streams, and bounded output/block APIs;

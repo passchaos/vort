@@ -193,6 +193,8 @@ pub fn main(init: std.process.Init) !void {
         try compress_z_cli.decodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-compress-z-file")) {
         try compress_z_cli.sizeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-lzip-file")) {
+        try lzip_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzip-file")) {
         try lzip_cli.decodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-lzip-file")) {
@@ -1932,6 +1934,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode a Unix compress (.Z) stream
         \\  size-compress-z-file <path> [max_output]
         \\                              Preflight a Unix compress stream's decoded size
+        \\  encode-lzip-file <in> <out> [dictionary_size]
+        \\                              Encode a deterministic lzip v1 member
         \\  decode-lzip-file <in> <out> [max_output] [max_dictionary]
         \\                              Decode and verify a single- or multi-member lzip file
         \\  size-lzip-file <path> [max_output] [max_dictionary]

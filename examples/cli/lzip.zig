@@ -3,6 +3,33 @@ const vort = @import("vort");
 
 const max_file_size = 512 * 1024 * 1024;
 
+pub fn encodeFile(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const dictionary_size = if (args.next()) |text|
+        try std.fmt.parseInt(u32, text, 10)
+    else
+        32 * 1024;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const encoded = try vort.encodeLzipAlloc(init.gpa, input, .{
+        .dictionary_size = dictionary_size,
+    });
+    defer init.gpa.free(encoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+    const header = try vort.parseLzipHeader(encoded);
+    try stdout.print("lzip_input_bytes={d} compressed_bytes={d} dictionary={d} path={s}\n", .{
+        input.len,
+        encoded.len,
+        header.dictionary_size,
+        output_path,
+    });
+}
+
 pub fn decodeFile(
     init: std.process.Init,
     args: *std.process.Args.Iterator,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Differential checks for Vort's lzip decoder."""
+"""Bidirectional differential checks for Vort's lzip implementation."""
 
 from __future__ import annotations
 
@@ -36,6 +36,14 @@ def code_dictionary_size(size: int) -> int:
         if base - numerator * fraction >= size:
             return bits | (numerator << 5)
     return bits
+
+
+def decode_dictionary_size(code: int) -> int:
+    bits = code & 0x1F
+    if not 12 <= bits <= 29:
+        raise AssertionError(f"invalid lzip dictionary code: {code:#x}")
+    base = 1 << bits
+    return base if base == 4096 else base - (base // 16) * (code >> 5)
 
 
 def make_member(payload: bytes, dictionary_size: int) -> bytes:
@@ -98,7 +106,9 @@ def main() -> None:
         compressed_total = 0
         decoded_total = 0
         external_cases = 0
+        writer_cases = 0
         generated: dict[str, bytes] = {}
+        vort_generated: dict[str, bytes] = {}
         for name, payload, dictionary_size in cases:
             member = make_member(payload, dictionary_size)
             generated[name] = member
@@ -120,10 +130,60 @@ def main() -> None:
             if "lzip_members=1" not in inspect_output or f"decoded_bytes={len(payload)}" not in inspect_output:
                 raise AssertionError(f"Vort lzip inspection mismatch for {name}: {inspect_output}")
 
+            source_path = temp / f"{name}.source"
+            source_path.write_bytes(payload)
+            vort_path = temp / f"{name}.vort.lz"
+            run(
+                args.cli,
+                "encode-lzip-file",
+                str(source_path),
+                str(vort_path),
+                str(dictionary_size),
+            )
+            vort_member = vort_path.read_bytes()
+            vort_generated[name] = vort_member
+            if vort_member[:5] != b"LZIP\x01":
+                raise AssertionError(f"Vort emitted an invalid lzip header for {name}")
+            encoded_dictionary_size = decode_dictionary_size(vort_member[5])
+            crc32, data_size, member_size = struct.unpack("<IQQ", vort_member[-20:])
+            if crc32 != zlib.crc32(payload):
+                raise AssertionError(f"Vort emitted an invalid lzip CRC for {name}")
+            if data_size != len(payload) or member_size != len(vort_member):
+                raise AssertionError(f"Vort emitted invalid lzip trailer sizes for {name}")
+            decoded_vort = lzma.decompress(
+                vort_member[6:-20],
+                format=lzma.FORMAT_RAW,
+                filters=[
+                    {
+                        "id": lzma.FILTER_LZMA1,
+                        "dict_size": encoded_dictionary_size,
+                        "lc": 3,
+                        "lp": 0,
+                        "pb": 2,
+                    }
+                ],
+            )
+            if decoded_vort != payload:
+                raise AssertionError(f"Python could not decode Vort lzip output for {name}")
+            if lzip_tool is not None and lzip_decode(lzip_tool, vort_path) != payload:
+                raise AssertionError(f"lzip could not decode Vort output for {name}")
+            if name == "text":
+                repeated_path = temp / "text-repeat.vort.lz"
+                run(
+                    args.cli,
+                    "encode-lzip-file",
+                    str(source_path),
+                    str(repeated_path),
+                    str(dictionary_size),
+                )
+                if repeated_path.read_bytes() != vort_member:
+                    raise AssertionError("Vort lzip output is not deterministic")
+            if name in ("text", "runs") and len(vort_member) >= len(payload):
+                raise AssertionError(f"Vort lzip output did not reduce {name}")
+            writer_cases += 1
+
             if lzip_tool is not None and name != "empty":
-                source_path = temp / f"{name}.source"
                 reference_path = temp / f"{name}.reference.lz"
-                source_path.write_bytes(payload)
                 reference_path.write_bytes(lzip_encode(lzip_tool, source_path, dictionary_size))
                 run(args.cli, "decode-lzip-file", str(reference_path), str(output_path), str(len(payload)))
                 if output_path.read_bytes() != payload:
@@ -143,6 +203,25 @@ def main() -> None:
             raise AssertionError(f"Vort multimember inspection mismatch: {concat_info}")
         if lzip_tool is not None and lzip_decode(lzip_tool, concat_path) != expected_concat:
             raise AssertionError("lzip could not decode generated multimember file")
+
+        vort_concatenated = (
+            vort_generated["tiny"]
+            + vort_generated["text"]
+            + vort_generated["random"]
+        )
+        vort_concat_path = temp / "vort-concatenated.lz"
+        vort_concat_path.write_bytes(vort_concatenated)
+        run(
+            args.cli,
+            "decode-lzip-file",
+            str(vort_concat_path),
+            str(concat_output),
+            str(len(expected_concat)),
+        )
+        if concat_output.read_bytes() != expected_concat:
+            raise AssertionError("Vort could not decode its concatenated lzip output")
+        if lzip_tool is not None and lzip_decode(lzip_tool, vort_concat_path) != expected_concat:
+            raise AssertionError("lzip could not decode Vort concatenated output")
 
         limited = run(
             args.cli,
@@ -210,7 +289,7 @@ def main() -> None:
     print(
         f"lzip_diff=ok cases={len(cases)} members={len(cases) + 3} compressed_bytes={compressed_total} "
         f"decoded_bytes={decoded_total} system_lzip={lzip_tool is not None} "
-        f"lzip_encoded_cases={external_cases}"
+        f"lzip_encoded_cases={external_cases} vort_writer_cases={writer_cases}"
     )
 
 
