@@ -388,9 +388,12 @@ pub fn main(init: std.process.Init) !void {
             const method_name: []const u8 = switch (entry.method) {
                 .stored => "stored",
                 .deflate => "deflate",
+                .deflate64 => "deflate64",
                 .bzip2 => "bzip2",
                 .lzma => "lzma",
+                .zstandard_legacy => "zstd-legacy",
                 .zstandard => "zstd",
+                .xz => "xz",
                 else => "unsupported",
             };
             try stdout.print("index={d} method={s} compressed={d} uncompressed={d} crc32={d} directory={} name={s}\n", .{

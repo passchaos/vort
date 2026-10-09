@@ -159,7 +159,7 @@ pub const Archive = struct {
                 const written = try xz.decodeInto(scratch_allocator, compressed, target);
                 if (written != target.len) return error.SizeMismatch;
             },
-            .zstandard => {
+            .zstandard_legacy, .zstandard => {
                 const written = try zstd.decodeFrameIntoExactSize(compressed, target, target.len);
                 if (written != target.len) return error.SizeMismatch;
             },
@@ -286,7 +286,8 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     if (values.zip64 and version_needed < 45) return error.InvalidZipArchive;
     if (method == .bzip2 and version_needed < 46) return error.InvalidZipArchive;
     if (method == .lzma and version_needed < 63) return error.InvalidZipArchive;
-    if (method == .zstandard and version_needed < 63) return error.InvalidZipArchive;
+    if (isZstandardMethod(method) and version_needed < 63)
+        return error.InvalidZipArchive;
     if (values.local_header_offset >= archive.central_directory_offset) return error.InvalidZipArchive;
 
     return .{
@@ -330,7 +331,8 @@ fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
         local_version_needed < 45) return error.InvalidZipArchive;
     if (entry.method == .bzip2 and local_version_needed < 46) return error.InvalidZipArchive;
     if (entry.method == .lzma and local_version_needed < 63) return error.InvalidZipArchive;
-    if (entry.method == .zstandard and local_version_needed < 63) return error.InvalidZipArchive;
+    if (isZstandardMethod(entry.method) and local_version_needed < 63)
+        return error.InvalidZipArchive;
     if (local_flags & 0x0008 == 0) {
         const local_sizes = try records.resolveLocalSizes(
             archive.bytes[name_end..data_start],
@@ -348,6 +350,10 @@ fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
 fn readU16(bytes: []const u8, offset: usize) Error!u16 {
     _ = try checkedEnd(offset, 2, bytes.len);
     return std.mem.readInt(u16, bytes[offset..][0..2], .little);
+}
+
+fn isZstandardMethod(method: CompressionMethod) bool {
+    return method == .zstandard_legacy or method == .zstandard;
 }
 
 fn readU32(bytes: []const u8, offset: usize) Error!u32 {
@@ -814,27 +820,44 @@ test "ZIP method 95 writer round trips through the allocating XZ path" {
     try std.testing.expectEqualSlices(u8, payload, &output);
 }
 
-test "ZIP method 93 round trips through the caller-owned Zstandard path" {
+test "ZIP methods 20 and 93 round trip through the caller-owned Zstandard path" {
     const allocator = std.testing.allocator;
     const payload = "Zstandard-compressed ZIP entry " ** 128;
-    const entries = [_]EncodeEntry{.{
-        .name = "compressed-with-zstd.txt",
-        .data = payload,
-        .method = .zstandard,
-    }};
-    const bytes = try encodeAlloc(allocator, &entries, .{
-        .data_descriptor = true,
-        .zstd_level = 3,
-        .zstd_options = .{ .content_checksum = true },
-    });
-    defer allocator.free(bytes);
+    inline for (.{ CompressionMethod.zstandard_legacy, .zstandard }) |method| {
+        const entries = [_]EncodeEntry{.{
+            .name = "compressed-with-zstd.txt",
+            .data = payload,
+            .method = method,
+        }};
+        const bytes = try encodeAlloc(allocator, &entries, .{
+            .data_descriptor = true,
+            .zstd_level = 3,
+            .zstd_options = .{ .content_checksum = true },
+        });
+        defer allocator.free(bytes);
 
-    const archive = try parse(bytes);
-    const entry = try archive.entryAt(0);
-    try std.testing.expectEqual(CompressionMethod.zstandard, entry.method);
-    try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.local_header_offset + 4));
-    try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.central_header_offset + 6));
-    var output: [payload.len]u8 = undefined;
-    try std.testing.expectEqual(payload.len, try archive.extractInto(entry, &output));
-    try std.testing.expectEqualSlices(u8, payload, &output);
+        const archive = try parse(bytes);
+        const entry = try archive.entryAt(0);
+        try std.testing.expectEqual(method, entry.method);
+        try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.local_header_offset + 4));
+        try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.central_header_offset + 6));
+        var output: [payload.len]u8 = undefined;
+        try std.testing.expectEqual(payload.len, try archive.extractInto(entry, &output));
+        try std.testing.expectEqualSlices(u8, payload, &output);
+
+        if (method == .zstandard_legacy) {
+            const bad_central_version = try allocator.dupe(u8, bytes);
+            defer allocator.free(bad_central_version);
+            std.mem.writeInt(u16, bad_central_version[entry.central_header_offset + 6 ..][0..2], 62, .little);
+            const bad_central_archive = try parse(bad_central_version);
+            try std.testing.expectError(error.InvalidZipArchive, bad_central_archive.entryAt(0));
+
+            const bad_local_version = try allocator.dupe(u8, bytes);
+            defer allocator.free(bad_local_version);
+            std.mem.writeInt(u16, bad_local_version[entry.local_header_offset + 4 ..][0..2], 62, .little);
+            const bad_local_archive = try parse(bad_local_version);
+            const bad_local_entry = try bad_local_archive.entryAt(0);
+            try std.testing.expectError(error.InvalidZipArchive, bad_local_archive.extractInto(bad_local_entry, &output));
+        }
+    }
 }

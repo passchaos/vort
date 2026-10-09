@@ -17,7 +17,9 @@ Supported entry methods:
 - Bzip2 (`method 12`) through Vort's dependency-free Bzip2 codec;
 - LZMA (`method 14`) through Vort's LZMA decoder and the ZIP-specific
   properties prefix;
-- Zstandard (`method 93`) as a complete standard Zstandard frame;
+- legacy Zstandard (`method 20`) and its current assignment (`method 93`) as
+  complete standard Zstandard frames. Method 20 is accepted for compatibility
+  with archives produced before APPNOTE 6.3.8;
 - XZ (`method 95`) as a complete XZ stream.
 
 The decoder validates local/central method and filename agreement, ordered
@@ -27,7 +29,9 @@ descriptors with or without a descriptor signature because extraction
 boundaries come from the central directory.
 
 The writer accepts multiple borrowed entries and emits stored, raw-Deflate,
-Deflate64, Bzip2, LZMA, Zstandard, or XZ members. Deflate64 uses a greedy
+Deflate64, Bzip2, LZMA, legacy/current Zstandard, or XZ members. Select
+`.zstandard_legacy` for method 20 and `.zstandard` for method 93; both carry the
+same standard Zstandard frame payload. Deflate64 uses a greedy
 fixed-Huffman-or-stored baseline with extended 64 KiB distances and records
 version-needed 2.1. LZMA entries carry the standard four-byte
 ZIP properties prefix, a five-byte LZMA property record, an end marker, general
@@ -50,6 +54,7 @@ const entries = [_]vort.ZipEncodeEntry{
     .{ .name = "folder/archive.txt", .data = archive_text, .method = .bzip2 },
     .{ .name = "folder/model.bin", .data = model_data, .method = .lzma },
     .{ .name = "folder/archive.xz", .data = xz_data, .method = .xz },
+    .{ .name = "folder/legacy.bin", .data = legacy_data, .method = .zstandard_legacy },
     .{ .name = "folder/frame.bin", .data = frame_data, .method = .zstandard },
 };
 const zip_bytes = try vort.zipEncodeAlloc(allocator, &entries, .{
@@ -102,11 +107,12 @@ zig build run-zip-diff
 
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
-than stored/Deflate/Deflate64/Bzip2/LZMA/Zstandard/XZ. The reader deliberately
+than stored/Deflate/Deflate64/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ. The
+reader deliberately
 rejects encrypted entries, multi-disk archives, malformed/duplicate ZIP64
-extra fields,
-and compression methods other than stored/Deflate/Deflate64/Bzip2/LZMA/
-Zstandard/XZ with specific errors.
+extra fields, and compression methods other than
+stored/Deflate/Deflate64/Bzip2/LZMA/
+Zstandard-20/Zstandard-93/XZ with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. Encryption, split archives, and additional entry
 compression methods remain explicit future compatibility increments.

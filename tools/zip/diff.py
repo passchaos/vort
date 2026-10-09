@@ -152,21 +152,34 @@ def validate_python_archive_with_vort(cli: Path, temp: Path) -> int:
 
     zstd_tool = shutil.which("zstd")
     if zstd_tool is None:
-        raise AssertionError("zstd CLI is required for ZIP method 93 differential")
-    zstd_payload = b"External Zstandard ZIP method 93.\n" * 128
+        raise AssertionError("zstd CLI is required for ZIP methods 20/93 differential")
+    zstd_payload = b"External Zstandard ZIP methods 20 and 93.\n" * 128
     zstd_frame = subprocess.run(
         [zstd_tool, "-q", "-3", "-c"],
         input=zstd_payload,
         check=True,
         stdout=subprocess.PIPE,
     ).stdout
-    zstd_zip = make_single_entry_zip("external-zstd.txt", zstd_payload, zstd_frame, 93)
-    zstd_zip_path = temp / "external-zstd.zip"
-    zstd_output_path = temp / "external-zstd.out"
-    zstd_zip_path.write_bytes(zstd_zip)
-    run(cli, "extract-zip-file", str(zstd_zip_path), "external-zstd.txt", str(zstd_output_path))
-    if zstd_output_path.read_bytes() != zstd_payload:
-        raise AssertionError("Vort ZIP method 93 extraction mismatch")
+    for method in (20, 93):
+        zstd_zip = make_single_entry_zip(
+            f"external-zstd-{method}.txt", zstd_payload, zstd_frame, method
+        )
+        zstd_zip_path = temp / f"external-zstd-{method}.zip"
+        zstd_output_path = temp / f"external-zstd-{method}.out"
+        zstd_zip_path.write_bytes(zstd_zip)
+        listing = run(cli, "list-zip-file", str(zstd_zip_path)).stdout
+        expected_label = "zstd-legacy" if method == 20 else "zstd"
+        if f"method={expected_label}" not in listing:
+            raise AssertionError(f"Vort mislabeled ZIP method {method}: {listing}")
+        run(
+            cli,
+            "extract-zip-file",
+            str(zstd_zip_path),
+            f"external-zstd-{method}.txt",
+            str(zstd_output_path),
+        )
+        if zstd_output_path.read_bytes() != zstd_payload:
+            raise AssertionError(f"Vort ZIP method {method} extraction mismatch")
 
     xz_payload = b"External XZ ZIP method 95.\n" * 128
     xz_frame = lzma.compress(xz_payload, format=lzma.FORMAT_XZ)
@@ -202,6 +215,7 @@ def validate_vort_archive_with_python(
         "folder/bzip2.txt": b"Vort ZIP Bzip2 method 12.\n" * 96,
         "folder/lzma.txt": b"Vort ZIP LZMA method 14.\n" * 96,
         "folder/xz.txt": b"Vort ZIP XZ method 95.\n" * 96,
+        "folder/zstd-legacy.txt": b"Vort ZIP legacy Zstandard method 20.\n" * 96,
         "folder/zstd.txt": b"Vort ZIP Zstandard method 93.\n" * 96,
         "utf8-目录/数据.txt": "ZIP UTF-8 文件名\n".encode() * 17,
         "empty/": b"",
@@ -234,18 +248,19 @@ def validate_vort_archive_with_python(
             "folder/bzip2.txt": zipfile.ZIP_BZIP2,
             "folder/lzma.txt": zipfile.ZIP_LZMA,
             "folder/xz.txt": 95,
+            "folder/zstd-legacy.txt": 20,
             "folder/zstd.txt": 93,
             "utf8-目录/数据.txt": zipfile.ZIP_DEFLATED,
             "empty/": zipfile.ZIP_STORED,
         }
         zstd_tool = shutil.which("zstd")
         if zstd_tool is None:
-            raise AssertionError("zstd CLI is required for ZIP method 93 differential")
+            raise AssertionError("zstd CLI is required for ZIP methods 20/93 differential")
         for name, expected in payloads.items():
             info = archive.getinfo(name)
             name_len, extra_len = struct.unpack_from("<HH", raw, info.header_offset + 26)
             data_offset = info.header_offset + 30 + name_len + extra_len
-            if info.compress_type == 93:
+            if info.compress_type in (20, 93):
                 actual = subprocess.run(
                     [zstd_tool, "-q", "-d", "-c"],
                     input=raw[data_offset : data_offset + info.compress_size],
@@ -281,8 +296,8 @@ def validate_vort_archive_with_python(
                 raise AssertionError(f"UTF-8 flag omitted for {name!r}")
             if info.compress_type != expected_methods[name]:
                 raise AssertionError(f"compression method mismatch for {name!r}")
-            if info.compress_type == 95 and info.extract_version != 63:
-                raise AssertionError("XZ method omitted ZIP 6.3 version-needed")
+            if info.compress_type in (20, 93, 95) and info.extract_version != 63:
+                raise AssertionError(f"method {info.compress_type} omitted ZIP 6.3 version-needed")
             if info.compress_type == 9 and not force_zip64 and info.extract_version != 21:
                 raise AssertionError("Deflate64 method omitted ZIP 2.1 version-needed")
             if force_zip64 and info.extract_version < 45:
@@ -416,7 +431,7 @@ def main() -> None:
 
     print(
         "zip_diff=ok directions=2 "
-        f"python_entries=7 vort_entries=9 python_bytes={python_bytes} "
+        f"python_entries=7 vort_entries=10 zstd_methods=2 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"system_7zip={seven_zip_tool is not None} deflate64_cases={deflate64_cases}"
     )

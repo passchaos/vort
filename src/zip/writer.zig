@@ -140,7 +140,7 @@ pub fn encodeAppend(
                 owned_compressed = bytes;
                 break :blk bytes;
             },
-            .zstandard => blk: {
+            .zstandard_legacy, .zstandard => blk: {
                 const bytes = try zstd.encodeFrameWithLevelAndOptionsAlloc(
                     allocator,
                     entry.data,
@@ -242,7 +242,7 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
         if (options.zip64 == .never and entry.data.len >= std.math.maxInt(u32))
             return error.Zip32LimitExceeded;
         switch (entry.method) {
-            .stored, .deflate, .deflate64, .bzip2, .xz, .zstandard => {},
+            .stored, .deflate, .deflate64, .bzip2, .xz, .zstandard_legacy, .zstandard => {},
             .lzma => try lzma_writer.validateZipOptions(options.lzma_options),
             else => return error.UnsupportedZipCompressionMethod,
         }
@@ -379,8 +379,12 @@ fn anyZip64Entry(entries: []const EncodedEntry) bool {
 fn requiredVersion(method: CompressionMethod, zip64: bool) u16 {
     if (method == .deflate64) return if (zip64) version_45 else version_21;
     if (method == .bzip2) return 46;
-    if (method == .lzma or method == .xz or method == .zstandard) return 63;
+    if (method == .lzma or method == .xz or isZstandardMethod(method)) return 63;
     return if (zip64) version_45 else version_20;
+}
+
+fn isZstandardMethod(method: CompressionMethod) bool {
+    return method == .zstandard_legacy or method == .zstandard;
 }
 
 fn absoluteOffset(base: usize, relative: usize) Error!u64 {
