@@ -109,9 +109,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   dictionary sizes, per-member CRC/data/member-size validation, deterministic
   concatenated writing, strict multimember handling, and caller-selected output
   and dictionary limits;
-- pure Zig LZO1X decoding plus LZOP parsing and deterministic stored-block
-  writing, including Adler-32/CRC-32 header and block checks, legacy delta
-  filters, concatenated streams, and bounded output/block APIs;
+- pure Zig LZO1X encoding/decoding plus LZOP parsing and deterministic
+  compressed-or-stored writing, including Adler-32/CRC-32 header, data, and
+  compressed-block checks, legacy delta filters, concatenated streams, and
+  bounded output/block APIs;
 - pure Zig 7z parsing and deterministic independent-folder writing, with
   Copy/Deflate/Bzip2/LZMA/LZMA2 decode and encode,
   bounded linear Delta and classic BCJ filter chains in both directions,

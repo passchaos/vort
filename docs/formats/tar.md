@@ -33,10 +33,10 @@ defer allocator.free(decoded);
 ```
 
 `TarCompression` supports raw TAR, gzip, Bzip2, XZ, Zstandard, and LZOP
-(`.tar.lzo`/`.tzo`). Detection is based on the outer stream magic.
-`TarOwnedArchive` owns the decompressed TAR
-bytes so all borrowed entry paths, link targets, and payloads remain valid
-until `deinit`.
+(`.tar.lzo`/`.tzo`). LZOP output selects compressed LZO1X or stored
+representation independently for each block. Detection is based on the outer
+stream magic. `TarOwnedArchive` owns the decompressed TAR bytes so all borrowed
+entry paths, link targets, and payloads remain valid until `deinit`.
 
 The writer emits reproducible USTAR headers with zero timestamps by default.
 Names and link targets longer than the classic fields are represented with PAX

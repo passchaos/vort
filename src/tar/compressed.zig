@@ -67,7 +67,7 @@ pub fn encodeAlloc(
             options.zstd_level,
             options.zstd_options,
         ),
-        .lzop => lzop.encodeStoredAlloc(allocator, tar_bytes, options.lzop_options),
+        .lzop => lzop.encodeAlloc(allocator, tar_bytes, options.lzop_options),
     };
 }
 
@@ -123,6 +123,8 @@ test "compressed TAR wrappers round trip every available encoder" {
         const encoded = try encodeAlloc(allocator, &entries, .{ .compression = compression });
         defer allocator.free(encoded);
         try std.testing.expectEqual(compression, detect(encoded));
+        if (compression == .lzop)
+            try std.testing.expect((try lzop.inspect(encoded)).compressed_block_count != 0);
         const decoded = try decodeAutoAlloc(allocator, encoded, 1024 * 1024);
         defer decoded.deinit(allocator);
         try std.testing.expectEqual(@as(usize, 2), decoded.archive.entry_count);

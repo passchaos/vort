@@ -1053,7 +1053,7 @@ pub fn build(b: *std.Build) void {
 
     const lzop_diff = b.addSystemCommand(&.{ "python3", "tools/lzop/diff.py", "--cli" });
     lzop_diff.addArtifactArg(cli_exe);
-    const lzop_diff_step = b.step("run-lzop-diff", "Validate LZOP stored output and optional lzop LZO1X streams");
+    const lzop_diff_step = b.step("run-lzop-diff", "Validate LZO1X/LZOP encoding and decoding against optional lzop");
     lzop_diff_step.dependOn(&lzop_diff.step);
 
     const seven_zip_writer_probe_exe = b.addExecutable(.{

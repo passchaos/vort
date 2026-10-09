@@ -8,6 +8,23 @@ pub fn encodeFile(
     args: *std.process.Args.Iterator,
     stdout: *std.Io.Writer,
 ) !void {
+    return encodeFileWithMode(init, args, stdout, false);
+}
+
+pub fn encodeStoredFile(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    return encodeFileWithMode(init, args, stdout, true);
+}
+
+fn encodeFileWithMode(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+    stored_only: bool,
+) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const output_path = args.next() orelse return error.MissingCorpusPath;
     const block_size = if (args.next()) |value|
@@ -15,19 +32,28 @@ pub fn encodeFile(
     else
         256 * 1024;
     const checksum = try parseChecksum(args.next());
+    const compressed_checksum = try parseCompressedChecksum(args.next());
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
-    const encoded = try vort.encodeLzopStoredAlloc(init.gpa, input, .{
+    const options = vort.LzopEncodeOptions{
         .block_size = block_size,
         .checksum = checksum,
-    });
+        .compressed_checksum = compressed_checksum,
+    };
+    const encoded = if (stored_only)
+        try vort.encodeLzopStoredAlloc(init.gpa, input, options)
+    else
+        try vort.encodeLzopAlloc(init.gpa, input, options);
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("lzop_input_bytes={d} encoded_bytes={d} block_size={d} checksum={s} path={s}\n", .{
+    const info = try vort.inspectLzop(encoded);
+    try stdout.print("lzop_input_bytes={d} encoded_bytes={d} block_size={d} checksum={s} stored_blocks={d} compressed_blocks={d} path={s}\n", .{
         input.len,
         encoded.len,
         block_size,
         @tagName(checksum),
+        info.stored_block_count,
+        info.compressed_block_count,
         output_path,
     });
 }
@@ -89,6 +115,13 @@ fn parseChecksum(value: ?[]const u8) !vort.LzopChecksum {
     const name = value orelse return .adler32;
     if (std.mem.eql(u8, name, "adler32")) return .adler32;
     if (std.mem.eql(u8, name, "crc32")) return .crc32;
+    return error.InvalidChecksum;
+}
+
+fn parseCompressedChecksum(value: ?[]const u8) !bool {
+    const name = value orelse return false;
+    if (std.mem.eql(u8, name, "compressed-checksum")) return true;
+    if (std.mem.eql(u8, name, "no-compressed-checksum")) return false;
     return error.InvalidChecksum;
 }
 

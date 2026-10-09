@@ -188,7 +188,14 @@ pub const encodeLzipMembersAppend = lzip.encodeMembersAppend;
 pub const encodeLzipMembersInto = lzip.encodeMembersInto;
 
 pub const Lzo1xError = lzo1x.Error;
+pub const Lzo1xEncodeOptions = lzo1x.EncodeOptions;
+pub const Lzo1xEncodeMode = lzo1x.EncodeMode;
+pub const Lzo1xEncodeStats = lzo1x.EncodeStats;
 pub const decodeLzo1xInto = lzo1x.decodeInto;
+pub const encodeLzo1xAlloc = lzo1x.encodeAlloc;
+pub const encodeLzo1xAppend = lzo1x.encodeAppend;
+pub const encodeLzo1xAppendWithStats = lzo1x.encodeAppendWithStats;
+pub const encodeLzo1xInto = lzo1x.encodeInto;
 pub const LzopError = lzop.Error;
 pub const LzopHeader = lzop.Header;
 pub const LzopMethod = lzop.Method;
@@ -205,6 +212,9 @@ pub const decodeLzopAllocWithOptions = lzop.decodeAllocWithOptions;
 pub const lzopDecodedSize = lzop.decodedSize;
 pub const lzopDecodedSizeLimited = lzop.decodedSizeLimited;
 pub const lzopDecodedSizeWithOptions = lzop.decodedSizeWithOptions;
+pub const encodeLzopAlloc = lzop.encodeAlloc;
+pub const encodeLzopAppend = lzop.encodeAppend;
+pub const encodeLzopInto = lzop.encodeInto;
 pub const encodeLzopStoredAlloc = lzop.encodeStoredAlloc;
 pub const encodeLzopStoredAppend = lzop.encodeStoredAppend;
 pub const encodeLzopStoredInto = lzop.encodeStoredInto;
@@ -2464,15 +2474,20 @@ test "root lzip exports encode and decode members" {
     try std.testing.expectEqualSlices(u8, decoded, round_trip);
 }
 
-test "root LZOP exports round trip stored blocks" {
+test "root LZOP exports compressed-or-stored and stored-only writing" {
     const input = "Vort LZOP root API" ** 32;
-    const encoded = try encodeLzopStoredAlloc(std.testing.allocator, input, .{ .block_size = 128 });
+    const encoded = try encodeLzopAlloc(std.testing.allocator, input, .{ .block_size = 128 });
     defer std.testing.allocator.free(encoded);
     const info = try inspectLzop(encoded);
     try std.testing.expectEqual(@as(usize, 1), info.stream_count);
+    try std.testing.expect(info.compressed_block_count != 0);
     const decoded = try decodeLzopAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+
+    const stored = try encodeLzopStoredAlloc(std.testing.allocator, input, .{ .block_size = 128 });
+    defer std.testing.allocator.free(stored);
+    try std.testing.expectEqual(@as(usize, 0), (try inspectLzop(stored)).compressed_block_count);
 }
 
 test "root exports lz4 and zstd codec helpers" {

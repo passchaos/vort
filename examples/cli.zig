@@ -201,8 +201,10 @@ pub fn main(init: std.process.Init) !void {
         try lzip_cli.sizeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-lzip-file")) {
         try lzip_cli.inspectFile(init, &args, stdout);
-    } else if (std.mem.eql(u8, command, "encode-lzop-stored-file")) {
+    } else if (std.mem.eql(u8, command, "encode-lzop-file")) {
         try lzop_cli.encodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-lzop-stored-file")) {
+        try lzop_cli.encodeStoredFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzop-file")) {
         try lzop_cli.decodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-lzop-file")) {
@@ -1941,6 +1943,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-lzip-file <path> [max_output] [max_dictionary]
         \\                              Decode and report a verified lzip file's size
         \\  inspect-lzip-file <path>    Parse and print structural lzip member metadata
+        \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
+        \\                              Encode compressed-or-stored LZOP blocks
         \\  encode-lzop-stored-file <in> <out> [block_size] [adler32|crc32]
         \\                              Encode a deterministic stored-block LZOP stream
         \\  decode-lzop-file <in> <out> [max_output] [max_block]

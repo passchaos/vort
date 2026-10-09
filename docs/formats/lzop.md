@@ -1,6 +1,7 @@
 # LZOP and LZO1X support
 
-Vort provides a pure Zig LZO1X decoder and an LZOP container implementation.
+Vort provides a pure Zig LZO1X encoder/decoder and an LZOP container
+implementation.
 The reader accepts LZO1X-1, LZO1X-1(15), and LZO1X-999 blocks, along with raw
 blocks used when compression is not beneficial. Concatenated LZOP streams are
 decoded in order.
@@ -22,21 +23,25 @@ const decoded = try vort.decodeLzopAllocWithOptions(allocator, compressed, .{
 });
 defer allocator.free(decoded);
 
-const stored = try vort.encodeLzopStoredAlloc(allocator, input, .{
+const compressed = try vort.encodeLzopAlloc(allocator, input, .{
     .block_size = 256 * 1024,
     .checksum = .crc32,
+    .compressed_checksum = true,
 });
-defer allocator.free(stored);
+defer allocator.free(compressed);
 ```
 
-Available APIs include standalone `decodeLzo1xInto`, LZOP header parsing and
-inspection, caller-owned and bounded allocating decode, decoded-size preflight,
-and deterministic stored-block alloc/append/into encoding. The writer accepts
-blocks up to 256 KiB so its output is readable by default lzop installations.
+Available APIs include standalone LZO1X alloc/append/into encoding and
+caller-owned decoding, LZOP header parsing and inspection, caller-owned and
+bounded allocating decode, decoded-size preflight, deterministic
+compressed-or-stored alloc/append/into encoding, and explicit stored-only
+writer variants. The writer accepts blocks up to 256 KiB so its output is
+readable by default lzop installations.
 
 CLI validation surfaces:
 
 ```sh
+zig build run -- encode-lzop-file input.bin output.lzo 262144 crc32 compressed-checksum
 zig build run -- encode-lzop-stored-file input.bin output.lzo 262144 crc32
 zig build run -- decode-lzop-file input.lzo output.bin 268435456 67108864
 zig build run -- size-lzop-file input.lzo 268435456 67108864
@@ -44,7 +49,9 @@ zig build run -- inspect-lzop-file input.lzo
 zig build run-lzop-diff
 ```
 
-The current writer deliberately emits uncompressed LZOP blocks. This supplies
-portable deterministic output while full LZO1X compression remains a later
-ratio/performance phase. The TAR composition layer uses the same writer and
-decoder for `.tar.lzo` and `.tzo` archives.
+The writer uses bounded greedy LZO1X matching with the complete 48 KiB match
+distance range, then independently falls back to stored representation for any
+block that would not shrink. Data and optional compressed-payload checksums may
+use Adler-32 or CRC-32. The TAR composition layer uses the same adaptive writer
+and decoder for `.tar.lzo` and `.tzo` archives. Deeper parsing remains future
+ratio work.

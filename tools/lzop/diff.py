@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Differential checks for Vort's LZOP container and LZO1X decoder."""
+"""Bidirectional checks for Vort's LZO1X and LZOP implementation."""
 
 from __future__ import annotations
 
@@ -91,9 +91,11 @@ def main() -> None:
         encoded_total = 0
         decoded_total = 0
         compressed_blocks = 0
+        vort_compressed_cases = 0
         generated: dict[str, bytes] = {}
         for index, (name, payload, level) in enumerate(cases):
             source_path = temp / f"{name}.source"
+            vort_stored_path = temp / f"{name}.vort-stored.lzo"
             vort_path = temp / f"{name}.vort.lzo"
             output_path = temp / f"{name}.out"
             source_path.write_bytes(payload)
@@ -102,30 +104,60 @@ def main() -> None:
                 args.cli,
                 "encode-lzop-stored-file",
                 str(source_path),
-                str(vort_path),
+                str(vort_stored_path),
                 "32768",
                 checksum,
             )
+            vort_stored = vort_stored_path.read_bytes()
+            run(args.cli, "decode-lzop-file", str(vort_stored_path), str(output_path), str(len(payload)))
+            if output_path.read_bytes() != payload:
+                raise AssertionError(f"Vort stored LZOP round-trip mismatch for {name}")
+            if lzop_tool is not None and lzop_decode(lzop_tool, vort_stored_path) != payload:
+                raise AssertionError(f"lzop could not decode Vort stored output for {name}")
+
+            encode_args = [
+                "encode-lzop-file",
+                str(source_path),
+                str(vort_path),
+                "32768",
+                checksum,
+            ]
+            if name in {"text", "runs", "long-distance"}:
+                encode_args.append("compressed-checksum")
+            run(args.cli, *encode_args)
             vort_encoded = vort_path.read_bytes()
             encoded_total += len(vort_encoded)
             decoded_total += len(payload)
             run(args.cli, "decode-lzop-file", str(vort_path), str(output_path), str(len(payload)))
             if output_path.read_bytes() != payload:
-                raise AssertionError(f"Vort stored LZOP round-trip mismatch for {name}")
+                raise AssertionError(f"Vort compressed LZOP round-trip mismatch for {name}")
             if lzop_tool is not None and lzop_decode(lzop_tool, vort_path) != payload:
-                raise AssertionError(f"lzop could not decode Vort stored output for {name}")
+                raise AssertionError(f"lzop could not decode Vort compressed output for {name}")
+
+            inspect_vort = run(args.cli, "inspect-lzop-file", str(vort_path)).stdout
+            if "compressed_blocks=0" not in inspect_vort:
+                vort_compressed_cases += 1
+            if name in {"text", "runs", "binary", "long-distance"} and "compressed_blocks=0" in inspect_vort:
+                raise AssertionError(f"Vort did not compress the expected LZOP case {name}")
 
             repeat_path = temp / f"{name}.repeat.lzo"
+            repeat_args = encode_args.copy()
+            repeat_args[2] = str(repeat_path)
+            run(args.cli, *repeat_args)
+            if repeat_path.read_bytes() != vort_encoded:
+                raise AssertionError(f"Vort LZOP output is not deterministic for {name}")
+
+            stored_repeat_path = temp / f"{name}.stored-repeat.lzo"
             run(
                 args.cli,
                 "encode-lzop-stored-file",
                 str(source_path),
-                str(repeat_path),
+                str(stored_repeat_path),
                 "32768",
                 checksum,
             )
-            if repeat_path.read_bytes() != vort_encoded:
-                raise AssertionError(f"Vort LZOP output is not deterministic for {name}")
+            if stored_repeat_path.read_bytes() != vort_stored:
+                raise AssertionError(f"Vort stored LZOP output is not deterministic for {name}")
 
             if lzop_tool is not None:
                 reference_path = temp / f"{name}.reference.lzo"
@@ -219,7 +251,8 @@ def main() -> None:
     print(
         f"lzop_diff=ok cases={len(cases)} encoded_bytes={encoded_total} "
         f"decoded_bytes={decoded_total} system_lzop={lzop_tool is not None} "
-        f"compressed_cases={compressed_blocks}"
+        f"reference_compressed_cases={compressed_blocks} "
+        f"vort_compressed_cases={vort_compressed_cases}"
     )
 
 

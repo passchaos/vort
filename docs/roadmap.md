@@ -17740,15 +17740,18 @@ reuse, so production keeps the simpler independently owned plans.
   plus the optional reference `lzip` tool provide bidirectional interoperability
   coverage. See `docs/formats/lzip.md`.
 
-- Added a pure Zig LZO1X decoder and LZOP container. The implementation parses
+- Added a pure Zig LZO1X encoder/decoder and LZOP container. The implementation parses
   modern and legacy headers, verifies Adler-32 or CRC-32 header/data/compressed
   checksums, accepts LZO1X-1, LZO1X-1(15), and LZO1X-999 payloads, applies the
   legacy 1..16-byte delta filters, handles stored blocks and concatenated LZOP
   streams, and bounds both decoded output and individual block allocation. A
-  deterministic writer emits standard stored-block streams with selectable
-  checksum and block size. External differential coverage exercises all three
-  LZO1X methods, long-distance matches, compressed checksums, filters, stored
-  output, and concatenation against lzop 1.04 when available. See
+  deterministic writer uses bounded greedy matches across the complete 48 KiB
+  LZO1X window and selects compressed or stored representation per block. It
+  supports selectable data/header/compressed checksums, reproducible metadata,
+  256 KiB blocks, transactional append, and caller-owned output. External
+  differential coverage exercises all three LZO1X methods, Vort compressed
+  output, long-distance matches, compressed checksums, filters, stored output,
+  and concatenation against lzop 1.04 when available. See
   `docs/formats/lzop.md`.
 
 - Added pure Zig reading for common 7z archives and deterministic Copy-method
