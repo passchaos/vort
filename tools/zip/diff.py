@@ -7,6 +7,7 @@ import argparse
 import binascii
 import io
 import lzma
+import random
 import shutil
 import struct
 import subprocess
@@ -338,6 +339,37 @@ def validate_seven_zip_xz_with_vort(cli: Path, tool: str, temp: Path) -> None:
         raise AssertionError("Vort could not decode 7-Zip XZ method 95 output")
 
 
+def validate_seven_zip_deflate64_with_vort(cli: Path, tool: str, temp: Path) -> int:
+    rng = random.Random(0xDEF1A7E64)
+    prefix = bytes(rng.randrange(256) for _ in range(40_000))
+    cases = {
+        "deflate64-text.txt": b"7-Zip Deflate64 reference.\n" * 2048,
+        "deflate64-long-distance.bin": prefix + b"separator" + prefix,
+    }
+    for name, payload in cases.items():
+        source = temp / name
+        archive = temp / f"{name}.zip"
+        output = temp / f"{name}.out"
+        source.write_bytes(payload)
+        subprocess.run(
+            [tool, "a", "-bd", "-y", "-tzip", "-mm=Deflate64", str(archive), source.name],
+            cwd=temp,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        with zipfile.ZipFile(archive) as parsed:
+            info = parsed.getinfo(source.name)
+            if info.compress_type != 9:
+                raise AssertionError("7-Zip did not emit method 9")
+            if name.endswith("long-distance.bin") and info.compress_size >= len(payload) * 3 // 4:
+                raise AssertionError("Deflate64 long-distance fixture did not compress enough")
+        run(cli, "extract-zip-file", str(archive), source.name, str(output))
+        if output.read_bytes() != payload:
+            raise AssertionError(f"Vort could not decode 7-Zip Deflate64 entry {name}")
+    return len(cases)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
@@ -359,14 +391,18 @@ def main() -> None:
         vort_zip64_bytes = validate_vort_archive_with_python(
             args.cli, args.writer, temp, True, seven_zip_tool
         )
+        deflate64_cases = 0
         if seven_zip_tool is not None:
             validate_seven_zip_xz_with_vort(args.cli, seven_zip_tool, temp)
+            deflate64_cases = validate_seven_zip_deflate64_with_vort(
+                args.cli, seven_zip_tool, temp
+            )
 
     print(
         "zip_diff=ok directions=2 "
         f"python_entries=7 vort_entries=8 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
-        f"system_7zip={seven_zip_tool is not None}"
+        f"system_7zip={seven_zip_tool is not None} deflate64_cases={deflate64_cases}"
     )
 
 

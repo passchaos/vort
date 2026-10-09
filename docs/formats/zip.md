@@ -12,6 +12,8 @@ Supported entry methods:
 - stored (`method 0`);
 - raw Deflate (`method 8`) through the same decoder used by Vort's public raw,
   zlib, and gzip APIs;
+- Deflate64 (`method 9`) with its 64 KiB window, 32 distance symbols, and
+  extended code-285 match lengths;
 - Bzip2 (`method 12`) through Vort's dependency-free Bzip2 codec;
 - LZMA (`method 14`) through Vort's LZMA decoder and the ZIP-specific
   properties prefix;
@@ -97,10 +99,14 @@ zig build run-zip-diff
 
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
-than stored/Deflate/Bzip2/LZMA/Zstandard/XZ. The reader deliberately rejects
+than stored/Deflate/Bzip2/LZMA/Zstandard/XZ. Deflate64 writing is not currently
+exposed. The reader deliberately rejects
 encrypted entries, multi-disk archives, malformed/duplicate ZIP64 extra fields,
-and compression methods other than stored/Deflate/Bzip2/LZMA/Zstandard/XZ with
-specific errors.
+and compression methods other than stored/Deflate/Deflate64/Bzip2/LZMA/
+Zstandard/XZ with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. Encryption, split archives, and additional entry
 compression methods remain explicit future compatibility increments.
+
+The Deflate64 decoder and its raw APIs are described in
+[`deflate64.md`](deflate64.md).

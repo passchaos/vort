@@ -3,13 +3,14 @@ const bzip2 = @import("bzip2.zig");
 const core = @import("core.zig");
 const checksum = @import("checksum.zig");
 const deflate = @import("deflate.zig");
+const deflate64 = @import("deflate64.zig");
 const lzma = @import("lzma.zig");
 const xz = @import("xz.zig");
 const zstd = @import("zstd.zig");
 const records = @import("zip/records.zig");
 pub const writer = @import("zip/writer.zig");
 
-pub const Error = writer.Error || bzip2.Error || lzma.Error || xz.Error || zstd.Error || error{
+pub const Error = writer.Error || bzip2.Error || deflate64.Error || lzma.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -128,6 +129,11 @@ pub const Archive = struct {
             },
             .deflate => {
                 const decoded = try deflate.decodeRawAuto(compressed, target);
+                if (decoded.input_read != compressed.len) return error.InvalidZipArchive;
+                if (decoded.output_written != target.len) return error.SizeMismatch;
+            },
+            .deflate64 => {
+                const decoded = try deflate64.decodeInto(compressed, target);
                 if (decoded.input_read != compressed.len) return error.InvalidZipArchive;
                 if (decoded.output_written != target.len) return error.SizeMismatch;
             },
@@ -600,6 +606,14 @@ test "ZIP writer appends a valid archive after a prefix and rejects inputs trans
     }};
     try std.testing.expectError(error.UnsupportedZipCompressionMethod, encodeAppend(allocator, &out, &unsupported, .{}));
     try std.testing.expectEqualSlices(u8, before, out.items);
+
+    const decode_only = [_]EncodeEntry{.{
+        .name = "deflate64.bin",
+        .data = "unsupported writer method",
+        .method = .deflate64,
+    }};
+    try std.testing.expectError(error.UnsupportedZipCompressionMethod, encodeAppend(allocator, &out, &decode_only, .{}));
+    try std.testing.expectEqualSlices(u8, before, out.items);
 }
 
 test "ZIP writer emits and parses an empty archive" {
@@ -699,6 +713,43 @@ test "ZIP method 12 round trips through the allocating Bzip2 extraction path" {
     const allocated = try archive.extractAlloc(allocator, entry);
     defer allocator.free(allocated);
     try std.testing.expectEqualSlices(u8, payload, allocated);
+}
+
+test "ZIP method 9 extracts a 7-Zip Deflate64 reference entry" {
+    const allocator = std.testing.allocator;
+    const payload = "Deflate64 ZIP reference\n" ** 32;
+    const compressed_hex = "e5c8a10d00200c4541cf141d8230010687c611f2aa08a261ff74907ff23a7ef7a7555b635ae004ef50e45ffe353e01";
+    var compressed: [compressed_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&compressed, compressed_hex);
+    var entry = TestEntry{
+        .name = "reference.txt",
+        .payload = payload,
+        .compressed = &compressed,
+        .method = @intFromEnum(CompressionMethod.deflate64),
+        .flags = 0,
+        .local_offset = 0,
+    };
+    var bytes: std.ArrayList(u8) = .empty;
+    defer bytes.deinit(allocator);
+    try appendTestLocal(&bytes, allocator, &entry);
+    const central_offset = bytes.items.len;
+    try appendTestCentral(&bytes, allocator, entry);
+    const central_size = bytes.items.len - central_offset;
+    try appendU32(&bytes, allocator, end_of_central_signature);
+    try appendU16(&bytes, allocator, 0);
+    try appendU16(&bytes, allocator, 0);
+    try appendU16(&bytes, allocator, 1);
+    try appendU16(&bytes, allocator, 1);
+    try appendU32(&bytes, allocator, @intCast(central_size));
+    try appendU32(&bytes, allocator, @intCast(central_offset));
+    try appendU16(&bytes, allocator, 0);
+
+    const archive = try parse(bytes.items);
+    const parsed = try archive.entryAt(0);
+    try std.testing.expectEqual(CompressionMethod.deflate64, parsed.method);
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try archive.extractInto(parsed, &output));
+    try std.testing.expectEqualSlices(u8, payload, &output);
 }
 
 test "ZIP method 14 writer round trips through the allocating LZMA path" {
