@@ -211,37 +211,122 @@ fn decodeRawAlloc(
         null;
     if (declared_size) |size| if (size > max_output_len) return error.OutputLimitExceeded;
 
-    const decode_limit = if (max_output_len == std.math.maxInt(usize)) max_output_len else max_output_len + 1;
     var input: std.Io.Reader = .fixed(payload);
-    const params = std.compress.lzma.Decode.Params{
-        .properties = .{ .lc = header.lc, .lp = header.lp, .pb = header.pb },
-        .dict_size = header.dictionary_size,
-        .unpacked_size = if (declared_size) |size| size else null,
-    };
-    var decompressor = std.compress.lzma.Decompress.initParams(
-        &input,
-        allocator,
-        &.{},
-        params,
-        decode_limit,
-    ) catch |err| return mapInitError(err);
-    defer decompressor.deinit();
+    var range_decoder = std.compress.lzma.RangeDecoder.init(&input) catch |err|
+        return mapInitError(err);
+    var decoder = std.compress.lzma.Decode.init(allocator, .{
+        .lc = header.lc,
+        .lp = header.lp,
+        .pb = header.pb,
+    }) catch |err| return mapInitError(err);
+    defer decoder.deinit(allocator);
+    const decode_output_limit = declared_size orelse max_output_len;
+    var dictionary = CircularBuffer.init(header.dictionary_size, decode_output_limit);
+    defer dictionary.deinit(allocator);
+    var output = std.Io.Writer.Allocating.init(allocator);
+    defer output.deinit();
 
-    const io_limit: std.Io.Limit = if (max_output_len == std.math.maxInt(usize))
-        .unlimited
-    else
-        .limited(decode_limit);
-    const decoded = decompressor.reader.allocRemaining(allocator, io_limit) catch |err| switch (err) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.StreamTooLong => return error.OutputLimitExceeded,
-        error.ReadFailed => return mapDecodeError(decompressor.err),
-    };
+    var saw_end_marker = false;
+    while (true) {
+        if (declared_size) |size| {
+            if (dictionary.len == size) break;
+        }
+        var bytes_read: u64 = 0;
+        switch (decoder.process(
+            &input,
+            &output,
+            &dictionary,
+            &range_decoder,
+            &bytes_read,
+        ) catch |err| switch (err) {
+            error.OutputLimitExceeded => if (declared_size != null)
+                return error.SizeMismatch
+            else
+                return error.OutputLimitExceeded,
+            else => |decode_error| return mapProcessError(decode_error),
+        }) {
+            .more => {},
+            .finished => {
+                saw_end_marker = true;
+                break;
+            },
+        }
+    }
+
+    const decoded = try output.toOwnedSlice();
     errdefer allocator.free(decoded);
     if (decoded.len > max_output_len) return error.OutputLimitExceeded;
     if (declared_size) |size| if (decoded.len != size) return error.SizeMismatch;
+    if (require_end_marker and !saw_end_marker) return error.InvalidLzmaStream;
     if (require_end_marker and input.seek != payload.len) return error.TrailingData;
     return decoded;
 }
+
+const CircularBuffer = struct {
+    bytes: std.ArrayList(u8) = .empty,
+    dictionary_size: usize,
+    output_limit: usize,
+    cursor: usize = 0,
+    len: usize = 0,
+
+    fn init(dictionary_size: usize, output_limit: usize) CircularBuffer {
+        return .{
+            .dictionary_size = dictionary_size,
+            .output_limit = output_limit,
+        };
+    }
+
+    fn deinit(self: *CircularBuffer, allocator: std.mem.Allocator) void {
+        self.bytes.deinit(allocator);
+    }
+
+    pub fn lastOr(self: CircularBuffer, default: u8) u8 {
+        if (self.len == 0) return default;
+        const index = (self.dictionary_size + self.cursor - 1) % self.dictionary_size;
+        return self.bytes.items[index];
+    }
+
+    pub fn lastN(self: CircularBuffer, distance: usize) !u8 {
+        if (distance == 0 or distance > self.dictionary_size or distance > self.len)
+            return error.CorruptInput;
+        const index = (self.dictionary_size + self.cursor - distance) % self.dictionary_size;
+        return self.bytes.items[index];
+    }
+
+    pub fn appendLiteral(
+        self: *CircularBuffer,
+        allocator: std.mem.Allocator,
+        byte: u8,
+        writer: *std.Io.Writer,
+    ) !void {
+        if (self.len >= self.output_limit) return error.OutputLimitExceeded;
+        if (self.cursor < self.bytes.items.len) {
+            self.bytes.items[self.cursor] = byte;
+        } else {
+            try self.bytes.append(allocator, byte);
+        }
+        try writer.writeByte(byte);
+        self.cursor += 1;
+        if (self.cursor == self.dictionary_size) self.cursor = 0;
+        self.len += 1;
+    }
+
+    pub fn appendLz(
+        self: *CircularBuffer,
+        allocator: std.mem.Allocator,
+        length: usize,
+        distance: usize,
+        writer: *std.Io.Writer,
+    ) !void {
+        if (distance == 0 or distance > self.dictionary_size or distance > self.len)
+            return error.CorruptInput;
+        if (length > self.output_limit -| self.len) return error.OutputLimitExceeded;
+        for (0..length) |_| {
+            const byte = try self.lastN(distance);
+            try self.appendLiteral(allocator, byte, writer);
+        }
+    }
+};
 
 const DecodeError = Error || std.mem.Allocator.Error;
 
@@ -254,12 +339,12 @@ fn mapInitError(err: anyerror) DecodeError {
     };
 }
 
-fn mapDecodeError(err: ?std.compress.lzma.Decompress.Error) DecodeError {
-    return switch (err orelse return error.InvalidLzmaStream) {
-        error.OutOfMemory => error.OutOfMemory,
+fn mapProcessError(err: anyerror) DecodeError {
+    return switch (err) {
+        error.OutOfMemory, error.WriteFailed => error.OutOfMemory,
         error.EndOfStream => error.TruncatedFrame,
         error.Overflow => error.IntegerOverflow,
-        error.DecompressedSizeMismatch => error.SizeMismatch,
+        error.OutputLimitExceeded => error.OutputLimitExceeded,
         else => error.InvalidLzmaStream,
     };
 }

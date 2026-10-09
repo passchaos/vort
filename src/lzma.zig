@@ -25,3 +25,28 @@ test {
     _ = decoder;
     _ = writer;
 }
+
+test "LZMA decoder safely wraps output larger than its dictionary" {
+    const std = @import("std");
+    const input = "small dictionary repeated payload\n" ** 512;
+    inline for (.{ SizeMode.known, SizeMode.end_marker }) |size_mode| {
+        const encoded = try encodeAlloc(std.testing.allocator, input, .{
+            .dictionary_size = 4096,
+            .size_mode = size_mode,
+        });
+        defer std.testing.allocator.free(encoded);
+        const decoded = try decodeAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+
+        if (size_mode == .known) {
+            const corrupt = try std.testing.allocator.dupe(u8, encoded);
+            defer std.testing.allocator.free(corrupt);
+            std.mem.writeInt(u64, corrupt[5..13], input.len - 1, .little);
+            try std.testing.expectError(
+                error.SizeMismatch,
+                decodeAlloc(std.testing.allocator, corrupt),
+            );
+        }
+    }
+}

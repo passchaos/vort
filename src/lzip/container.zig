@@ -109,13 +109,17 @@ pub fn decodeAllocWithOptions(
     for (index.members) |member| {
         const payload_start = member.compressed_offset + header_size;
         const payload_end = member.compressed_offset + member.compressed_size - trailer_size;
-        const remaining = options.max_output_len - output.items.len;
-        const decoded = try lzma_decoder.decodeLzipPayloadAllocLimited(
+        const expected_size = std.math.cast(usize, member.uncompressed_size) orelse
+            return error.OutputLimitExceeded;
+        const decoded = lzma_decoder.decodeLzipPayloadAllocLimited(
             allocator,
             input[payload_start..payload_end],
             member.dictionary_size,
-            remaining,
-        );
+            expected_size,
+        ) catch |err| switch (err) {
+            error.OutputLimitExceeded => return error.SizeMismatch,
+            else => |decode_error| return decode_error,
+        };
         defer allocator.free(decoded);
         if (decoded.len != member.uncompressed_size) return error.SizeMismatch;
         if (checksum.crc32Best(decoded) != member.crc32) return error.ChecksumMismatch;
