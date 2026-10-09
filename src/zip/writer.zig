@@ -5,9 +5,10 @@ const core = @import("../core.zig");
 const deflate = @import("../deflate.zig");
 const lzma_writer = @import("../lzma/writer.zig");
 const types = @import("types.zig");
+const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = core.Error || bzip2.Error || lzma_writer.Error || zstd.Error || error{
+pub const Error = core.Error || bzip2.Error || lzma_writer.Error || xz.Error || zstd.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -37,6 +38,7 @@ pub const EncodeOptions = struct {
     deflate_options: deflate.CompressionOptions = deflate.optionsForLevel(.default),
     bzip2_options: bzip2.EncodeOptions = .{},
     lzma_options: lzma_writer.ZipEncodeOptions = .{},
+    xz_options: xz.EncodeOptions = .{},
     zstd_level: c_int = zstd.default_compression_level,
     zstd_options: zstd.FrameOptions = .{},
 };
@@ -122,6 +124,11 @@ pub fn encodeAppend(
             },
             .lzma => blk: {
                 const bytes = try lzma_writer.encodeZipPayloadAlloc(allocator, entry.data, options.lzma_options);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
+            .xz => blk: {
+                const bytes = try xz.encodeAlloc(allocator, entry.data, options.xz_options);
                 owned_compressed = bytes;
                 break :blk bytes;
             },
@@ -227,7 +234,7 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
         if (options.zip64 == .never and entry.data.len >= std.math.maxInt(u32))
             return error.Zip32LimitExceeded;
         switch (entry.method) {
-            .stored, .deflate, .bzip2, .zstandard => {},
+            .stored, .deflate, .bzip2, .xz, .zstandard => {},
             .lzma => try lzma_writer.validateZipOptions(options.lzma_options),
             else => return error.UnsupportedZipCompressionMethod,
         }
@@ -363,7 +370,7 @@ fn anyZip64Entry(entries: []const EncodedEntry) bool {
 
 fn requiredVersion(method: CompressionMethod, zip64: bool) u16 {
     if (method == .bzip2) return 46;
-    if (method == .lzma or method == .zstandard) return 63;
+    if (method == .lzma or method == .xz or method == .zstandard) return 63;
     return if (zip64) version_45 else version_20;
 }
 

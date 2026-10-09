@@ -4,11 +4,12 @@ const core = @import("core.zig");
 const checksum = @import("checksum.zig");
 const deflate = @import("deflate.zig");
 const lzma = @import("lzma.zig");
+const xz = @import("xz.zig");
 const zstd = @import("zstd.zig");
 const records = @import("zip/records.zig");
 pub const writer = @import("zip/writer.zig");
 
-pub const Error = writer.Error || bzip2.Error || lzma.Error || zstd.Error || error{
+pub const Error = writer.Error || bzip2.Error || lzma.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -145,6 +146,11 @@ pub const Archive = struct {
                     std.math.maxInt(usize),
                     canonical.flags & 0x0002 != 0,
                 );
+                if (written != target.len) return error.SizeMismatch;
+            },
+            .xz => {
+                const scratch_allocator = allocator orelse return error.ZipEntryRequiresAllocator;
+                const written = try xz.decodeInto(scratch_allocator, compressed, target);
                 if (written != target.len) return error.SizeMismatch;
             },
             .zstandard => {
@@ -710,6 +716,29 @@ test "ZIP method 14 writer round trips through the allocating LZMA path" {
     const entry = try archive.entryAt(0);
     try std.testing.expectEqual(CompressionMethod.lzma, entry.method);
     try std.testing.expect(entry.flags & 0x0002 != 0);
+    try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.local_header_offset + 4));
+    try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.central_header_offset + 6));
+
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectError(error.ZipEntryRequiresAllocator, archive.extractInto(entry, &output));
+    try std.testing.expectEqual(payload.len, try archive.extractIntoWithAllocator(allocator, entry, &output));
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "ZIP method 95 writer round trips through the allocating XZ path" {
+    const allocator = std.testing.allocator;
+    const payload = "XZ-compressed ZIP entry " ** 128;
+    const entries = [_]EncodeEntry{.{
+        .name = "compressed-with-xz.txt",
+        .data = payload,
+        .method = .xz,
+    }};
+    const bytes = try encodeAlloc(allocator, &entries, .{ .data_descriptor = true });
+    defer allocator.free(bytes);
+
+    const archive = try parse(bytes);
+    const entry = try archive.entryAt(0);
+    try std.testing.expectEqual(CompressionMethod.xz, entry.method);
     try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.local_header_offset + 4));
     try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.central_header_offset + 6));
 

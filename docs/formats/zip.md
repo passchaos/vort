@@ -15,7 +15,8 @@ Supported entry methods:
 - Bzip2 (`method 12`) through Vort's dependency-free Bzip2 codec;
 - LZMA (`method 14`) through Vort's LZMA decoder and the ZIP-specific
   properties prefix;
-- Zstandard (`method 93`) as a complete standard Zstandard frame.
+- Zstandard (`method 93`) as a complete standard Zstandard frame;
+- XZ (`method 95`) as a complete XZ stream.
 
 The decoder validates local/central method and filename agreement, ordered
 ZIP64 `0x0001` extra fields, exact compressed and uncompressed sizes, complete
@@ -24,7 +25,7 @@ descriptors with or without a descriptor signature because extraction
 boundaries come from the central directory.
 
 The writer accepts multiple borrowed entries and emits stored, raw-Deflate,
-Bzip2, LZMA, or Zstandard members. LZMA entries carry the standard four-byte
+Bzip2, LZMA, Zstandard, or XZ members. LZMA entries carry the standard four-byte
 ZIP properties prefix, a five-byte LZMA property record, an end marker, general
 purpose flag bit 1, and version-needed 6.3. It records CRC-32, sizes, entry
 comments, an archive comment, and the UTF-8 general-purpose flag. Its fixed DOS
@@ -43,6 +44,7 @@ const entries = [_]vort.ZipEncodeEntry{
     .{ .name = "folder/data.txt", .data = text, .method = .deflate },
     .{ .name = "folder/archive.txt", .data = archive_text, .method = .bzip2 },
     .{ .name = "folder/model.bin", .data = model_data, .method = .lzma },
+    .{ .name = "folder/archive.xz", .data = xz_data, .method = .xz },
     .{ .name = "folder/frame.bin", .data = frame_data, .method = .zstandard },
 };
 const zip_bytes = try vort.zipEncodeAlloc(allocator, &entries, .{
@@ -79,11 +81,11 @@ returned as borrowed archive bytes. Vort never automatically joins an entry
 name to a filesystem path; callers therefore retain explicit control over
 Zip-Slip/path-traversal policy.
 
-Bzip2 inverse BWT and LZMA dictionaries need temporary allocation. The
-allocating ZIP extraction APIs already use the supplied allocator. For
+Bzip2 inverse BWT, LZMA dictionaries, and XZ blocks need temporary allocation.
+The allocating ZIP extraction APIs already use the supplied allocator. For
 caller-owned output, use `zipExtractEntryIntoWithAllocator`; the original
 no-allocator `zipExtractEntryInto` returns `ZipEntryRequiresAllocator` for
-methods 12 and 14.
+methods 12, 14, and 95.
 
 CLI validation surfaces:
 
@@ -95,9 +97,9 @@ zig build run-zip-diff
 
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
-than stored/Deflate/Bzip2/LZMA/Zstandard. The reader deliberately rejects
+than stored/Deflate/Bzip2/LZMA/Zstandard/XZ. The reader deliberately rejects
 encrypted entries, multi-disk archives, malformed/duplicate ZIP64 extra fields,
-and compression methods other than stored/Deflate/Bzip2/LZMA/Zstandard with
+and compression methods other than stored/Deflate/Bzip2/LZMA/Zstandard/XZ with
 specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. Encryption, split archives, and additional entry

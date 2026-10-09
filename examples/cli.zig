@@ -1982,7 +1982,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Extract one named regular file without path traversal
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
         \\  extract-zip-file <zip> <entry> <out> [max_output]
-        \\                              Extract a stored/deflate ZIP entry with CRC validation
+        \\                              Extract a supported ZIP entry with CRC validation
         \\  size-br-file <path> [max_output]
         \\                              Preflight dependency-free Brotli stored stream decoded size
         \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]

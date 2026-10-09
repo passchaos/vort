@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Bidirectional ZIP32/ZIP64 stored/deflate compatibility with Python zipfile."""
+"""Bidirectional ZIP32/ZIP64 interoperability for Vort's supported methods."""
 
 from __future__ import annotations
 
 import argparse
 import binascii
 import io
+import lzma
 import shutil
 import struct
 import subprocess
@@ -165,6 +166,16 @@ def validate_python_archive_with_vort(cli: Path, temp: Path) -> int:
     run(cli, "extract-zip-file", str(zstd_zip_path), "external-zstd.txt", str(zstd_output_path))
     if zstd_output_path.read_bytes() != zstd_payload:
         raise AssertionError("Vort ZIP method 93 extraction mismatch")
+
+    xz_payload = b"External XZ ZIP method 95.\n" * 128
+    xz_frame = lzma.compress(xz_payload, format=lzma.FORMAT_XZ)
+    xz_zip = make_single_entry_zip("external-xz.txt", xz_payload, xz_frame, 95)
+    xz_zip_path = temp / "external-xz.zip"
+    xz_output_path = temp / "external-xz.out"
+    xz_zip_path.write_bytes(xz_zip)
+    run(cli, "extract-zip-file", str(xz_zip_path), "external-xz.txt", str(xz_output_path))
+    if xz_output_path.read_bytes() != xz_payload:
+        raise AssertionError("Vort ZIP method 95 extraction mismatch")
     local_offset = fixture.index(b"python-force-zip64.bin") - 30
     local_name_len = struct.unpack_from("<H", fixture, local_offset + 26)[0]
     local_extra_len = struct.unpack_from("<H", fixture, local_offset + 28)[0]
@@ -177,13 +188,18 @@ def validate_python_archive_with_vort(cli: Path, temp: Path) -> int:
 
 
 def validate_vort_archive_with_python(
-    cli: Path, writer: Path, temp: Path, force_zip64: bool
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    force_zip64: bool,
+    seven_zip_tool: str | None,
 ) -> int:
     payloads = {
         "stored.bin": bytes([0, 1, 2, 255]) + b"stored by Vort",
         "folder/deflated.txt": b"Vort ZIP writer differential.\n" * 128,
         "folder/bzip2.txt": b"Vort ZIP Bzip2 method 12.\n" * 96,
         "folder/lzma.txt": b"Vort ZIP LZMA method 14.\n" * 96,
+        "folder/xz.txt": b"Vort ZIP XZ method 95.\n" * 96,
         "folder/zstd.txt": b"Vort ZIP Zstandard method 93.\n" * 96,
         "utf8-目录/数据.txt": "ZIP UTF-8 文件名\n".encode() * 17,
         "empty/": b"",
@@ -214,6 +230,7 @@ def validate_vort_archive_with_python(
             "folder/deflated.txt": zipfile.ZIP_DEFLATED,
             "folder/bzip2.txt": zipfile.ZIP_BZIP2,
             "folder/lzma.txt": zipfile.ZIP_LZMA,
+            "folder/xz.txt": 95,
             "folder/zstd.txt": 93,
             "utf8-目录/数据.txt": zipfile.ZIP_DEFLATED,
             "empty/": zipfile.ZIP_STORED,
@@ -232,6 +249,11 @@ def validate_vort_archive_with_python(
                     check=True,
                     stdout=subprocess.PIPE,
                 ).stdout
+            elif info.compress_type == 95:
+                actual = lzma.decompress(
+                    raw[data_offset : data_offset + info.compress_size],
+                    format=lzma.FORMAT_XZ,
+                )
             else:
                 actual = archive.read(info)
             if actual != expected:
@@ -244,6 +266,8 @@ def validate_vort_archive_with_python(
                 raise AssertionError(f"UTF-8 flag omitted for {name!r}")
             if info.compress_type != expected_methods[name]:
                 raise AssertionError(f"compression method mismatch for {name!r}")
+            if info.compress_type == 95 and info.extract_version != 63:
+                raise AssertionError("XZ method omitted ZIP 6.3 version-needed")
             if force_zip64 and info.extract_version < 45:
                 raise AssertionError(f"ZIP64 version-needed omitted for {name!r}")
 
@@ -272,6 +296,16 @@ def validate_vort_archive_with_python(
             ):
                 raise AssertionError(f"descriptor values mismatch for {name!r}")
 
+        if seven_zip_tool is not None:
+            extracted_xz = subprocess.run(
+                [seven_zip_tool, "x", "-so", "-bd", str(first), "folder/xz.txt"],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ).stdout
+            if extracted_xz != payloads["folder/xz.txt"]:
+                raise AssertionError("7-Zip could not extract Vort ZIP XZ entry")
+
     listing = run(cli, "list-zip-file", str(first)).stdout
     if f"zip_entries={len(payloads)}" not in listing:
         raise AssertionError(f"Vort could not list its generated archive: {listing}")
@@ -286,22 +320,53 @@ def validate_vort_archive_with_python(
     return len(raw)
 
 
+def validate_seven_zip_xz_with_vort(cli: Path, tool: str, temp: Path) -> None:
+    payload = b"7-Zip XZ method 95 reference.\n" * 256
+    source = temp / "seven-zip-xz.txt"
+    archive = temp / "seven-zip-xz.zip"
+    output = temp / "seven-zip-xz.out"
+    source.write_bytes(payload)
+    subprocess.run(
+        [tool, "a", "-bd", "-y", "-tzip", "-mm=xz", str(archive), source.name],
+        cwd=temp,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    run(cli, "extract-zip-file", str(archive), source.name, str(output))
+    if output.read_bytes() != payload:
+        raise AssertionError("Vort could not decode 7-Zip XZ method 95 output")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
+    parser.add_argument("--seven-zip", type=Path)
     args = parser.parse_args()
+    seven_zip_tool = (
+        str(args.seven_zip)
+        if args.seven_zip
+        else shutil.which("7zz") or shutil.which("7z")
+    )
 
     with tempfile.TemporaryDirectory(prefix="vort-zip-diff-") as temp_text:
         temp = Path(temp_text)
         python_bytes = validate_python_archive_with_vort(args.cli, temp)
-        vort_zip32_bytes = validate_vort_archive_with_python(args.cli, args.writer, temp, False)
-        vort_zip64_bytes = validate_vort_archive_with_python(args.cli, args.writer, temp, True)
+        vort_zip32_bytes = validate_vort_archive_with_python(
+            args.cli, args.writer, temp, False, seven_zip_tool
+        )
+        vort_zip64_bytes = validate_vort_archive_with_python(
+            args.cli, args.writer, temp, True, seven_zip_tool
+        )
+        if seven_zip_tool is not None:
+            validate_seven_zip_xz_with_vort(args.cli, seven_zip_tool, temp)
 
     print(
         "zip_diff=ok directions=2 "
-        f"python_entries=7 vort_entries=7 python_bytes={python_bytes} "
-        f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes}"
+        f"python_entries=7 vort_entries=8 python_bytes={python_bytes} "
+        f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
+        f"system_7zip={seven_zip_tool is not None}"
     )
 
 

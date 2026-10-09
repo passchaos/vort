@@ -4,5 +4,6 @@ pub const CompressionMethod = enum(u16) {
     bzip2 = 12,
     lzma = 14,
     zstandard = 93,
+    xz = 95,
     _,
 };
