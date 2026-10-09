@@ -338,10 +338,9 @@ pub fn main(init: std.process.Init) !void {
         const max_tar_size = (try parseOptionalLimit(args.next())) orelse 512 * 1024 * 1024;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(bytes);
-        const compression = vort.detectTarCompression(bytes);
         const owned = try vort.decodeTarAutoAlloc(init.gpa, bytes, max_tar_size);
         defer owned.deinit(init.gpa);
-        try stdout.print("tar_entries={d} compression={s}\n", .{ owned.archive.entry_count, @tagName(compression) });
+        try stdout.print("tar_entries={d} compression={s}\n", .{ owned.archive.entry_count, @tagName(owned.compression) });
         var iterator_value = owned.archive.iterator();
         var index: usize = 0;
         while (try iterator_value.next()) |entry| : (index += 1) {
@@ -1977,7 +1976,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-xz-file <path> [max_output]
         \\                              Preflight an XZ stream's decoded size
         \\  inspect-xz-file <path>      Validate and print XZ stream metadata
-        \\  create-tar-file <out> <entry> <in> [none|gzip|bzip2|compress-z|lzma|xz|lz4|lzip|zstd|lzop]
+        \\  create-tar-file <out> <entry> <in> [none|gzip|bzip2|brotli|compress-z|lzma|xz|lz4|lzip|zstd|lzop]
         \\                              Create a deterministic one-entry tarball
         \\  list-tar-file <path> [max_tar_size]
         \\                              List common compressed tarball formats
@@ -2978,6 +2977,7 @@ fn parseTarCompression(text: ?[]const u8) !vort.TarCompression {
     if (std.mem.eql(u8, value, "none") or std.mem.eql(u8, value, "tar")) return .none;
     if (std.mem.eql(u8, value, "gzip") or std.mem.eql(u8, value, "gz")) return .gzip;
     if (std.mem.eql(u8, value, "bzip2") or std.mem.eql(u8, value, "bz2")) return .bzip2;
+    if (std.mem.eql(u8, value, "brotli") or std.mem.eql(u8, value, "br")) return .brotli;
     if (std.mem.eql(u8, value, "compress-z") or std.mem.eql(u8, value, "compress") or std.mem.eql(u8, value, "Z")) return .compress_z;
     if (std.mem.eql(u8, value, "lzma") or std.mem.eql(u8, value, "tlz")) return .lzma;
     if (std.mem.eql(u8, value, "xz")) return .xz;

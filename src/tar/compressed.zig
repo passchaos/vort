@@ -2,6 +2,7 @@ const std = @import("std");
 const archive = @import("archive.zig");
 const writer = @import("writer.zig");
 const bzip2 = @import("../bzip2.zig");
+const br = @import("../br.zig");
 const compress_z = @import("../compress_z.zig");
 const deflate = @import("../deflate.zig");
 const lz4 = @import("../lz4.zig");
@@ -11,7 +12,7 @@ const lzop = @import("../lzop.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = archive.Error || writer.Error || bzip2.Error || compress_z.Error || lz4.Error || lzip.Error || lzma.Error || lzop.Error || xz.Error || zstd.Error || deflate.Error || error{
+pub const Error = archive.Error || writer.Error || bzip2.Error || br.Error || compress_z.Error || lz4.Error || lzip.Error || lzma.Error || lzop.Error || xz.Error || zstd.Error || deflate.Error || error{
     UnknownTarCompression,
 };
 
@@ -19,6 +20,7 @@ pub const Compression = enum {
     none,
     gzip,
     bzip2,
+    brotli,
     compress_z,
     lzma,
     xz,
@@ -46,6 +48,7 @@ pub const EncodeOptions = struct {
 pub const OwnedArchive = struct {
     bytes: []u8,
     archive: archive.Archive,
+    compression: Compression,
 
     pub fn deinit(self: OwnedArchive, allocator: std.mem.Allocator) void {
         allocator.free(self.bytes);
@@ -53,8 +56,10 @@ pub const OwnedArchive = struct {
 };
 
 pub fn detect(input: []const u8) Compression {
-    // LZMA-Alone has no magic. Prefer a structurally valid uncompressed TAR
-    // before examining wrapper signatures or the heuristic LZMA header.
+    // LZMA-Alone and Brotli have no magic. Prefer a structurally valid
+    // uncompressed TAR before examining wrapper signatures or the heuristic
+    // LZMA header. Brotli is deliberately left to decodeAutoAlloc's bounded
+    // decode-and-validate fallback.
     if (archive.parse(input)) |_| return .none else |_| {}
     if (input.len >= 2 and input[0] == 0x1f and input[1] == 0x8b) return .gzip;
     if (input.len >= 2 and input[0] == 0x1f and input[1] == 0x9d) return .compress_z;
@@ -89,6 +94,7 @@ pub fn encodeAlloc(
         .none => unreachable,
         .gzip => deflate.encodeGzipBestAlloc(allocator, tar_bytes, options.gzip_options),
         .bzip2 => bzip2.encodeAlloc(allocator, tar_bytes, options.bzip2_options),
+        .brotli => br.encodeSimpleStreamAlloc(allocator, tar_bytes),
         .compress_z => compress_z.encodeAlloc(allocator, tar_bytes, options.compress_z_options),
         .lzma => lzma.encodeAlloc(allocator, tar_bytes, options.lzma_options),
         .xz => xz.encodeAlloc(allocator, tar_bytes, options.xz_options),
@@ -127,7 +133,20 @@ pub fn decodeAutoAlloc(
     input: []const u8,
     max_tar_size: usize,
 ) !OwnedArchive {
-    return decodeAlloc(allocator, input, detect(input), max_tar_size);
+    const compression = detect(input);
+    if (compression != .none) return decodeAlloc(allocator, input, compression, max_tar_size);
+    if (archive.parse(input)) |_| return decodeAlloc(allocator, input, .none, max_tar_size) else |_| {}
+
+    const bytes = br.decodeStreamAllocLimited(allocator, input, max_tar_size) catch |err| switch (err) {
+        error.OutOfMemory, error.OutputLimitExceeded => return err,
+        else => return error.UnknownTarCompression,
+    };
+    errdefer allocator.free(bytes);
+    return .{
+        .bytes = bytes,
+        .archive = try archive.parse(bytes),
+        .compression = .brotli,
+    };
 }
 
 pub fn decodeAlloc(
@@ -143,6 +162,7 @@ pub fn decodeAlloc(
         },
         .gzip => try deflate.decodeGzipAllocLimited(allocator, input, max_tar_size),
         .bzip2 => try bzip2.decodeAllocLimited(allocator, input, max_tar_size),
+        .brotli => try br.decodeStreamAllocLimited(allocator, input, max_tar_size),
         .compress_z => try compress_z.decodeAllocLimited(allocator, input, max_tar_size),
         .lzma => try lzma.decodeAllocLimited(allocator, input, max_tar_size),
         .xz => try xz.decodeAllocLimited(allocator, input, max_tar_size),
@@ -152,7 +172,11 @@ pub fn decodeAlloc(
         .lzop => try lzop.decodeAllocLimited(allocator, input, max_tar_size),
     };
     errdefer allocator.free(bytes);
-    return .{ .bytes = bytes, .archive = try archive.parse(bytes) };
+    return .{
+        .bytes = bytes,
+        .archive = try archive.parse(bytes),
+        .compression = compression,
+    };
 }
 
 test "compressed TAR wrappers round trip every available encoder" {
@@ -161,10 +185,13 @@ test "compressed TAR wrappers round trip every available encoder" {
         .{ .name = "folder/", .kind = .directory },
         .{ .name = "folder/data.txt", .data = "tarball payload " ** 64 },
     };
-    inline for (.{ Compression.none, .gzip, .bzip2, .compress_z, .lzma, .xz, .lz4, .lzip, .zstandard, .lzop }) |compression| {
+    inline for (.{ Compression.none, .gzip, .bzip2, .brotli, .compress_z, .lzma, .xz, .lz4, .lzip, .zstandard, .lzop }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{ .compression = compression });
         defer allocator.free(encoded);
-        try std.testing.expectEqual(compression, detect(encoded));
+        if (compression == .brotli)
+            try std.testing.expectEqual(Compression.none, detect(encoded))
+        else
+            try std.testing.expectEqual(compression, detect(encoded));
         if (compression == .lzop)
             try std.testing.expect((try lzop.inspect(encoded)).compressed_block_count != 0);
         if (compression == .lzip)
@@ -178,11 +205,41 @@ test "compressed TAR wrappers round trip every available encoder" {
         }
         const decoded = try decodeAutoAlloc(allocator, encoded, 1024 * 1024);
         defer decoded.deinit(allocator);
+        try std.testing.expectEqual(compression, decoded.compression);
         try std.testing.expectEqual(@as(usize, 2), decoded.archive.entry_count);
         const payload = try decoded.archive.extractByNameAlloc(allocator, "folder/data.txt");
         defer allocator.free(payload);
         try std.testing.expectEqualSlices(u8, entries[1].data, payload);
     }
+}
+
+test "TAR Brotli auto decode is bounded and requires a TAR payload" {
+    const allocator = std.testing.allocator;
+    const entries = [_]writer.EncodeEntry{.{ .name = "payload", .data = "bounded tar brotli" ** 32 }};
+    const raw = try writer.encodeAlloc(allocator, &entries);
+    defer allocator.free(raw);
+    const encoded = try br.encodeSimpleStreamAlloc(allocator, raw);
+    defer allocator.free(encoded);
+
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        decodeAutoAlloc(allocator, encoded, raw.len - 1),
+    );
+    const decoded = try decodeAutoAlloc(allocator, encoded, raw.len);
+    defer decoded.deinit(allocator);
+    try std.testing.expectEqual(Compression.brotli, decoded.compression);
+    try std.testing.expectEqualSlices(u8, raw, decoded.bytes);
+
+    const non_tar = try br.encodeStoredStreamAlloc(allocator, "valid Brotli but not TAR");
+    defer allocator.free(non_tar);
+    try std.testing.expectError(
+        error.TruncatedFrame,
+        decodeAutoAlloc(allocator, non_tar, 1024 * 1024),
+    );
+    try std.testing.expectError(
+        error.UnknownTarCompression,
+        decodeAutoAlloc(allocator, "not compressed data", 1024 * 1024),
+    );
 }
 
 test "TAR compression detection distinguishes raw TAR and LZMA-Alone headers" {

@@ -4,12 +4,76 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
+import ctypes.util
 import io
 import shutil
 import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
+
+
+def brotli_compress(data: bytes) -> bytes:
+    try:
+        import brotli
+
+        return brotli.compress(data, quality=5)
+    except ImportError:
+        library_path = ctypes.util.find_library("brotlienc")
+        if library_path is None:
+            raise AssertionError("Python brotli or libbrotlienc is required")
+        library = ctypes.CDLL(library_path)
+        maximum_size = library.BrotliEncoderMaxCompressedSize
+        maximum_size.argtypes = [ctypes.c_size_t]
+        maximum_size.restype = ctypes.c_size_t
+        compress = library.BrotliEncoderCompress
+        compress.argtypes = [
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_size_t,
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_size_t),
+            ctypes.c_void_p,
+        ]
+        compress.restype = ctypes.c_int
+        source = ctypes.create_string_buffer(data, max(1, len(data)))
+        bound = maximum_size(len(data))
+        output = ctypes.create_string_buffer(max(1, bound))
+        output_size = ctypes.c_size_t(bound)
+        if compress(5, 22, 0, len(data), source, ctypes.byref(output_size), output) != 1:
+            raise AssertionError("libbrotli could not compress TAR fixture")
+        return output.raw[: output_size.value]
+
+
+def brotli_decompress(data: bytes, max_output_len: int) -> bytes:
+    try:
+        import brotli
+
+        decoded = brotli.decompress(data)
+        if len(decoded) > max_output_len:
+            raise AssertionError("Brotli TAR fixture exceeded its output limit")
+        return decoded
+    except ImportError:
+        library_path = ctypes.util.find_library("brotlidec")
+        if library_path is None:
+            raise AssertionError("Python brotli or libbrotlidec is required")
+        library = ctypes.CDLL(library_path)
+        decompress = library.BrotliDecoderDecompress
+        decompress.argtypes = [
+            ctypes.c_size_t,
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_size_t),
+            ctypes.c_void_p,
+        ]
+        decompress.restype = ctypes.c_int
+        source = ctypes.create_string_buffer(data, max(1, len(data)))
+        output = ctypes.create_string_buffer(max_output_len)
+        output_size = ctypes.c_size_t(max_output_len)
+        if decompress(len(data), source, ctypes.byref(output_size), output) != 1:
+            raise AssertionError("libbrotli could not decompress TAR fixture")
+        return output.raw[: output_size.value]
 
 
 def run(program: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -77,6 +141,7 @@ def main() -> None:
         "none",
         "gzip",
         "bzip2",
+        "brotli",
         "compress-z",
         "lzma",
         "xz",
@@ -125,7 +190,12 @@ def main() -> None:
             run(args.cli, "extract-tar-file", str(archive_path), "payload.bin", str(output), "1048576")
             if output.read_bytes() != payload:
                 raise AssertionError(f"Vort tarball round trip mismatch for {compression}")
-            if compression == "zstd":
+            if compression == "brotli":
+                raw = brotli_decompress(archive_path.read_bytes(), 16 * 1024 * 1024)
+                with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
+                    if archive.extractfile("payload.bin").read() != payload:
+                        raise AssertionError("Python/libbrotli could not read Vort tar.br")
+            elif compression == "zstd":
                 if zstd_tool is None:
                     raise AssertionError("zstd CLI is required for tar.zst differential")
                 raw = subprocess.run(
@@ -187,6 +257,7 @@ def main() -> None:
             "none": python_tar,
             "gzip": __import__("gzip").compress(python_tar, mtime=0),
             "bzip2": __import__("bz2").compress(python_tar),
+            "brotli": brotli_compress(python_tar),
             "lzma": __import__("lzma").compress(
                 python_tar, format=__import__("lzma").FORMAT_ALONE
             ),
@@ -217,7 +288,10 @@ def main() -> None:
             path.write_bytes(data)
             validate_with_vort(args.cli, path, payloads)
 
-    print(f"tar_diff=ok raw_formats=2 compressions={len(compressions)} entries=5")
+    print(
+        f"tar_diff=ok raw_formats=2 compressions={len(compressions)} "
+        "brotli_directions=2 entries=5"
+    )
 
 
 if __name__ == "__main__":
