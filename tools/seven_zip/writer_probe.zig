@@ -17,6 +17,7 @@ pub fn main(init: std.process.Init) !void {
         try std.fmt.parseInt(u32, value, 10)
     else
         0;
+    const external_names_name = args.next();
     const compression: vort.SevenZipCompression = if (std.mem.eql(u8, compression_name, "copy"))
         .copy
     else if (std.mem.eql(u8, compression_name, "deflate"))
@@ -50,6 +51,25 @@ pub fn main(init: std.process.Init) !void {
             return error.UnsupportedCompression
     else
         null;
+    const external_names: ?vort.SevenZipCompression = if (external_names_name) |name|
+        if (std.mem.eql(u8, name, "external-names") or std.mem.eql(u8, name, "external-copy"))
+            .copy
+        else if (std.mem.eql(u8, name, "external-deflate"))
+            .deflate
+        else if (std.mem.eql(u8, name, "external-bzip2"))
+            .bzip2
+        else if (std.mem.eql(u8, name, "external-lzma"))
+            .lzma
+        else if (std.mem.eql(u8, name, "external-lzma2"))
+            .lzma2
+        else if (std.mem.eql(u8, name, "external-lzma2-stored"))
+            .lzma2_stored
+        else if (std.mem.eql(u8, name, "inline-names"))
+            null
+        else
+            return error.UnsupportedCompression
+    else
+        null;
 
     const entries = [_]vort.SevenZipEncodeEntry{
         .{ .name = "plain.txt", .data = "Vort 7z payload\n" },
@@ -61,6 +81,7 @@ pub fn main(init: std.process.Init) !void {
         .compression = compression,
         .solid = solid,
         .header_compression = header_compression,
+        .external_names = external_names,
         .bcj2 = bcj2,
         .bcj2_start_ip = bcj2_start_ip,
     });

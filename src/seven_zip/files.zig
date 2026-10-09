@@ -32,6 +32,7 @@ pub fn parse(
     allocator: std.mem.Allocator,
     reader: *number.Reader,
     streams: *const streams_mod.Streams,
+    external_streams: []const []u8,
     max_entries: usize,
 ) !Files {
     const file_count = try reader.readSize();
@@ -95,10 +96,16 @@ pub fn parse(
             Nid.name => {
                 if (names_seen) return error.Invalid7zArchive;
                 names_seen = true;
-                if (try data.readByte() != 0) return error.Unsupported7zFeature;
-                for (entries) |*entry| {
-                    entry.name = try readName(allocator, &data);
-                    initialized_names += 1;
+                const external = try data.readByte();
+                if (external == 0) {
+                    try readNames(allocator, &data, entries, &initialized_names);
+                } else {
+                    const index = try data.readSize();
+                    if (data.remaining() != 0 or index >= external_streams.len)
+                        return error.Invalid7zArchive;
+                    var external_reader = number.Reader.init(external_streams[index]);
+                    try readNames(allocator, &external_reader, entries, &initialized_names);
+                    if (external_reader.remaining() != 0) return error.Invalid7zArchive;
                 }
             },
             Nid.dummy => {
@@ -147,6 +154,18 @@ pub fn parse(
     }
     if (substream_index != streams.substream_sizes.len) return error.Invalid7zArchive;
     return .{ .allocator = allocator, .entries = entries };
+}
+
+fn readNames(
+    allocator: std.mem.Allocator,
+    reader: *number.Reader,
+    entries: []types.Entry,
+    initialized_names: *usize,
+) !void {
+    for (entries) |*entry| {
+        entry.name = try readName(allocator, reader);
+        initialized_names.* += 1;
+    }
 }
 
 fn readBitVector(reader: *number.Reader, values: []bool) !void {

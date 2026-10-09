@@ -75,6 +75,15 @@ pub const Streams = struct {
 };
 
 pub fn parse(allocator: std.mem.Allocator, reader: *number.Reader, max_streams: usize) !Streams {
+    return parseWithExternal(allocator, reader, max_streams, &.{});
+}
+
+pub fn parseWithExternal(
+    allocator: std.mem.Allocator,
+    reader: *number.Reader,
+    max_streams: usize,
+    external_streams: []const []u8,
+) !Streams {
     var result = Streams{ .allocator = allocator };
     errdefer result.deinit();
     var have_pack_info = false;
@@ -91,7 +100,7 @@ pub fn parse(allocator: std.mem.Allocator, reader: *number.Reader, max_streams: 
         Nid.unpack_info => {
             if (have_unpack_info) return error.Invalid7zArchive;
             have_unpack_info = true;
-            try parseUnpackInfo(allocator, reader, &result, max_streams);
+            try parseUnpackInfo(allocator, reader, &result, max_streams, external_streams);
         },
         Nid.substreams_info => {
             if (!have_unpack_info or have_substreams_info) return error.Invalid7zArchive;
@@ -145,17 +154,29 @@ fn parseUnpackInfo(
     reader: *number.Reader,
     result: *Streams,
     max_streams: usize,
+    external_streams: []const []u8,
 ) !void {
     if (try reader.readByte() != Nid.folder) return error.Invalid7zArchive;
     const count = try reader.readSize();
     if (count > max_streams) return error.OutputLimitExceeded;
-    if (try reader.readByte() != 0) return error.Unsupported7zFeature;
+    const external = try reader.readByte();
+    var external_reader: number.Reader = undefined;
+    const folder_reader = if (external == 0)
+        reader
+    else external_source: {
+        const index = try reader.readSize();
+        if (index >= external_streams.len) return error.Invalid7zArchive;
+        external_reader = number.Reader.init(external_streams[index]);
+        break :external_source &external_reader;
+    };
     result.folders = try allocator.alloc(Folder, count);
     var next_pack_index: usize = 0;
     for (result.folders) |*folder| {
-        folder.* = try parseFolder(reader, next_pack_index);
+        folder.* = try parseFolder(folder_reader, next_pack_index);
         next_pack_index += folder.pack_stream_count;
     }
+    if (external != 0 and folder_reader.remaining() != 0)
+        return error.Invalid7zArchive;
     if (next_pack_index != result.pack_sizes.len) return error.Invalid7zArchive;
 
     if (try reader.readByte() != Nid.coders_unpack_size) return error.Invalid7zArchive;
@@ -537,6 +558,43 @@ test "7z StreamsInfo parses two Copy folders" {
     try std.testing.expectEqual(@as(u64, 16), parsed.folders[0].unpack_size);
     try std.testing.expectEqual(@as(?u32, 0xfe01_c34e), parsed.folders[0].crc32);
     try std.testing.expectEqual(@as(usize, encoded.len), reader.offset);
+}
+
+test "7z StreamsInfo reads external folder definitions" {
+    const encoded = [_]u8{
+        Nid.pack_info,   0,          1,       Nid.size, 7, Nid.end,
+        Nid.unpack_info, Nid.folder, 1,       1,        0, Nid.coders_unpack_size,
+        7,               Nid.end,    Nid.end,
+    };
+    var external_folder = [_]u8{ 1, 1, 0 };
+    const external_streams = [_][]u8{external_folder[0..]};
+    var reader = number.Reader.init(&encoded);
+    const parsed = try parseWithExternal(
+        std.testing.allocator,
+        &reader,
+        8,
+        &external_streams,
+    );
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(usize, 1), parsed.folders.len);
+    try std.testing.expectEqual(types.Method.copy, parsed.folders[0].primaryMethod());
+    try std.testing.expectEqual(@as(u64, 7), parsed.folders[0].unpack_size);
+
+    var bad_index = encoded;
+    bad_index[10] = 1;
+    var bad_index_reader = number.Reader.init(&bad_index);
+    try std.testing.expectError(
+        error.Invalid7zArchive,
+        parseWithExternal(std.testing.allocator, &bad_index_reader, 8, &external_streams),
+    );
+
+    var trailing_folder = [_]u8{ 1, 1, 0, 0 };
+    const trailing_streams = [_][]u8{trailing_folder[0..]};
+    var trailing_reader = number.Reader.init(&encoded);
+    try std.testing.expectError(
+        error.Invalid7zArchive,
+        parseWithExternal(std.testing.allocator, &trailing_reader, 8, &trailing_streams),
+    );
 }
 
 test "7z Folder orders LZMA2 and x86 BCJ for decoding" {

@@ -1,4 +1,5 @@
 const std = @import("std");
+const checksum = @import("checksum.zig");
 const archive = @import("seven_zip/archive.zig");
 const writer = @import("seven_zip/writer.zig");
 
@@ -232,6 +233,78 @@ test "7z writer emits encoded Next Headers with every compression method" {
             }),
         );
     }
+}
+
+test "7z writer and reader support external name streams" {
+    const entries = [_]EncodeEntry{
+        .{ .name = "first.txt", .data = "external metadata payload\n" ** 64 },
+        .{ .name = "empty.txt" },
+        .{ .name = "目录/数据.txt", .data = "UTF-8 external name\n" ** 31 },
+    };
+    const options = EncodeOptions{
+        .compression = .lzma2,
+        .solid = true,
+        .header_compression = .lzma2,
+        .external_names = .lzma2,
+    };
+    const encoded = try encodeAlloc(std.testing.allocator, &entries, options);
+    defer std.testing.allocator.free(encoded);
+    const repeated = try encodeAlloc(std.testing.allocator, &entries, options);
+    defer std.testing.allocator.free(repeated);
+    try std.testing.expectEqualSlices(u8, encoded, repeated);
+
+    const parsed = try parseAlloc(std.testing.allocator, encoded);
+    defer parsed.deinit();
+    for (entries, parsed.entries) |expected, actual| {
+        try std.testing.expectEqualStrings(expected.name, actual.name);
+        if (expected.data.len == 0) continue;
+        const decoded = try parsed.extractEntryAlloc(std.testing.allocator, actual);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected.data, decoded);
+    }
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        parseAllocWithOptions(std.testing.allocator, encoded, .{
+            .max_external_metadata_size = 1,
+        }),
+    );
+
+    const empty_entries = [_]EncodeEntry{.{ .name = "external.txt" }};
+    const plain = try encodeAlloc(std.testing.allocator, &empty_entries, .{
+        .external_names = .copy,
+    });
+    defer std.testing.allocator.free(plain);
+
+    var corrupt_data = try std.testing.allocator.dupe(u8, plain);
+    defer std.testing.allocator.free(corrupt_data);
+    corrupt_data[32] ^= 1;
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        parseAlloc(std.testing.allocator, corrupt_data),
+    );
+
+    var bad_index = try std.testing.allocator.dupe(u8, plain);
+    defer std.testing.allocator.free(bad_index);
+    const next_offset = std.math.cast(usize, std.mem.readInt(u64, bad_index[12..20], .little)) orelse
+        return error.IntegerOverflow;
+    const next_size = std.math.cast(usize, std.mem.readInt(u64, bad_index[20..28], .little)) orelse
+        return error.IntegerOverflow;
+    const next_start = std.math.add(usize, 32, next_offset) catch
+        return error.IntegerOverflow;
+    const next_end = std.math.add(usize, next_start, next_size) catch
+        return error.IntegerOverflow;
+    const property_offset = std.mem.lastIndexOf(
+        u8,
+        bad_index[next_start..next_end],
+        &.{ 0x11, 2, 1, 0 },
+    ) orelse return error.Invalid7zArchive;
+    bad_index[next_start + property_offset + 3] = 1;
+    std.mem.writeInt(u32, bad_index[28..32], checksum.crc32Best(bad_index[next_start..next_end]), .little);
+    std.mem.writeInt(u32, bad_index[8..12], checksum.crc32Best(bad_index[12..32]), .little);
+    try std.testing.expectError(
+        error.Invalid7zArchive,
+        parseAlloc(std.testing.allocator, bad_index),
+    );
 }
 
 test "7z reader decodes a real LZMA2 BCJ2 folder" {

@@ -30,6 +30,7 @@ pub const DecodeOptions = struct {
 
 pub const ParseOptions = struct {
     max_encoded_header_size: usize = 64 * 1024 * 1024,
+    max_external_metadata_size: usize = 64 * 1024 * 1024,
     max_dictionary_size: usize = 64 * 1024 * 1024,
     max_entries: usize = 1_000_000,
     max_streams: usize = 1_000_000,
@@ -221,20 +222,47 @@ pub fn parseAllocWithOptions(
     var streams = streams_mod.Streams{ .allocator = allocator };
     errdefer streams.deinit();
     var have_streams = false;
+    var external_streams: ?[][]u8 = null;
+    defer if (external_streams) |items| freeExternalStreams(allocator, items);
     var files: ?files_mod.Files = null;
     errdefer if (files) |owned| owned.deinit();
     while (true) switch (try reader.readByte()) {
         Nid.end => break,
         Nid.archive_properties => try skipArchiveProperties(&reader),
-        Nid.additional_streams => return error.Unsupported7zFeature,
+        Nid.additional_streams => {
+            if (external_streams != null or have_streams or files != null)
+                return error.Invalid7zArchive;
+            const additional = try streams_mod.parse(allocator, &reader, options.max_streams);
+            defer additional.deinit();
+            try validatePackedStreams(input, packed_data_limit, &additional);
+            external_streams = try decodeExternalStreamsAlloc(
+                allocator,
+                input,
+                packed_data_limit,
+                &additional,
+                options.max_dictionary_size,
+                options.max_external_metadata_size,
+            );
+        },
         Nid.main_streams => {
             if (have_streams) return error.Invalid7zArchive;
-            streams = try streams_mod.parse(allocator, &reader, options.max_streams);
+            streams = try streams_mod.parseWithExternal(
+                allocator,
+                &reader,
+                options.max_streams,
+                if (external_streams) |items| items else &.{},
+            );
             have_streams = true;
         },
         Nid.files => {
             if (files != null) return error.Invalid7zArchive;
-            files = try files_mod.parse(allocator, &reader, &streams, options.max_entries);
+            files = try files_mod.parse(
+                allocator,
+                &reader,
+                &streams,
+                if (external_streams) |items| items else &.{},
+                options.max_entries,
+            );
         },
         else => return error.Invalid7zArchive,
     };
@@ -250,6 +278,46 @@ pub fn parseAllocWithOptions(
         .next_header_size = next_size,
         .packed_data_limit = packed_data_limit,
     };
+}
+
+fn decodeExternalStreamsAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    packed_limit: usize,
+    streams: *const streams_mod.Streams,
+    max_dictionary_size: usize,
+    max_output_size: usize,
+) ![][]u8 {
+    const items = try allocator.alloc([]u8, streams.folders.len);
+    var initialized: usize = 0;
+    errdefer {
+        for (items[0..initialized]) |bytes| allocator.free(bytes);
+        allocator.free(items);
+    }
+    var total_size: usize = 0;
+    for (streams.folders, 0..) |folder, index| {
+        const size = std.math.cast(usize, folder.unpack_size) orelse
+            return error.OutputLimitExceeded;
+        total_size = std.math.add(usize, total_size, size) catch
+            return error.OutputLimitExceeded;
+        if (total_size > max_output_size) return error.OutputLimitExceeded;
+        items[index] = try decodeFolderAlloc(
+            allocator,
+            input,
+            packed_limit,
+            streams,
+            index,
+            size,
+            max_dictionary_size,
+        );
+        initialized += 1;
+    }
+    return items;
+}
+
+fn freeExternalStreams(allocator: std.mem.Allocator, items: [][]u8) void {
+    for (items) |bytes| allocator.free(bytes);
+    allocator.free(items);
 }
 
 fn decodeFolderAlloc(

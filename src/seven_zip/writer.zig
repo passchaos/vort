@@ -20,6 +20,7 @@ const signature = [_]u8{ '7', 'z', 0xbc, 0xaf, 0x27, 0x1c };
 const Nid = struct {
     const end: u8 = 0x00;
     const header: u8 = 0x01;
+    const additional_streams: u8 = 0x03;
     const main_streams: u8 = 0x04;
     const files: u8 = 0x05;
     const pack_info: u8 = 0x06;
@@ -48,6 +49,13 @@ const EncodedFolder = struct {
 const EncodedSubstream = struct {
     unpacked_size: u64,
     crc32: u32,
+};
+
+const EncodedExternalNames = struct {
+    pack_position: usize,
+    folder: EncodedFolder,
+    substream: EncodedSubstream,
+    options: EncodeOptions,
 };
 
 pub fn encodeAlloc(
@@ -138,7 +146,60 @@ pub fn encodeAppend(
             stream_index += 1;
         }
     }
-    try writeNextHeader(allocator, &header, entries, folders, substreams, options);
+    var names: std.ArrayList(u8) = .empty;
+    defer names.deinit(allocator);
+    try appendNames(allocator, &names, entries);
+    var external_names: ?EncodedExternalNames = null;
+    if (options.external_names) |compression| {
+        var name_options = options;
+        name_options.compression = compression;
+        name_options.solid = false;
+        name_options.header_compression = null;
+        name_options.external_names = null;
+        name_options.bcj2 = false;
+        name_options.bcj2_start_ip = 0;
+        name_options.filters = &.{};
+        const pack_position = packed_data.items.len;
+        const packed_size = try coders.appendPayload(
+            allocator,
+            &packed_data,
+            names.items,
+            name_options,
+        );
+        const unpacked_size = std.math.cast(u64, names.items.len) orelse
+            return error.IntegerOverflow;
+        const names_crc = checksum.crc32Best(names.items);
+        external_names = .{
+            .pack_position = pack_position,
+            .folder = .{
+                .packed_sizes = .{
+                    std.math.cast(u64, packed_size) orelse return error.IntegerOverflow,
+                    0,
+                    0,
+                    0,
+                },
+                .unpacked_size = unpacked_size,
+                .crc32 = names_crc,
+                .first_substream = 0,
+                .substream_count = 1,
+            },
+            .substream = .{
+                .unpacked_size = unpacked_size,
+                .crc32 = names_crc,
+            },
+            .options = name_options,
+        };
+    }
+    try writeNextHeader(
+        allocator,
+        &header,
+        entries,
+        folders,
+        substreams,
+        options,
+        names.items,
+        external_names,
+    );
 
     var next_header: std.ArrayList(u8) = .empty;
     defer next_header.deinit(allocator);
@@ -148,6 +209,7 @@ pub fn encodeAppend(
         header_options.compression = header_compression;
         header_options.solid = false;
         header_options.header_compression = null;
+        header_options.external_names = null;
         header_options.bcj2 = false;
         header_options.bcj2_start_ip = 0;
         header_options.filters = &.{};
@@ -304,11 +366,26 @@ fn writeNextHeader(
     folders: []const EncodedFolder,
     substreams: []const EncodedSubstream,
     options: EncodeOptions,
+    names: []const u8,
+    external_names: ?EncodedExternalNames,
 ) !void {
     try output.append(allocator, Nid.header);
+    if (external_names) |external| {
+        const additional_folders = [_]EncodedFolder{external.folder};
+        const additional_substreams = [_]EncodedSubstream{external.substream};
+        try output.append(allocator, Nid.additional_streams);
+        try writeStreamsBody(
+            allocator,
+            output,
+            &additional_folders,
+            &additional_substreams,
+            external.options,
+            external.pack_position,
+        );
+    }
     if (folders.len != 0)
         try writeStreamsInfo(allocator, output, folders, substreams, options);
-    try writeFilesInfo(allocator, output, entries);
+    try writeFilesInfo(allocator, output, entries, names, external_names != null);
     try output.append(allocator, Nid.end);
 }
 
@@ -381,7 +458,13 @@ fn writeStreamsBody(
     try output.append(allocator, Nid.end);
 }
 
-fn writeFilesInfo(allocator: std.mem.Allocator, output: *std.ArrayList(u8), entries: []const EncodeEntry) !void {
+fn writeFilesInfo(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    entries: []const EncodeEntry,
+    names: []const u8,
+    external_names: bool,
+) !void {
     try output.append(allocator, Nid.files);
     try number.append(allocator, output, entries.len);
 
@@ -406,22 +489,34 @@ fn writeFilesInfo(allocator: std.mem.Allocator, output: *std.ArrayList(u8), entr
         try appendBools(allocator, output, bits.items);
     }
 
-    var names: std.ArrayList(u8) = .empty;
-    defer names.deinit(allocator);
-    try names.append(allocator, 0);
+    try output.append(allocator, Nid.name);
+    if (external_names) {
+        try number.append(allocator, output, 2);
+        try output.appendSlice(allocator, &.{ 1, 0 });
+    } else {
+        const property_size = std.math.add(usize, names.len, 1) catch
+            return error.IntegerOverflow;
+        try number.append(allocator, output, property_size);
+        try output.append(allocator, 0);
+        try output.appendSlice(allocator, names);
+    }
+    try output.append(allocator, Nid.end);
+}
+
+fn appendNames(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    entries: []const EncodeEntry,
+) !void {
     for (entries) |entry| {
         const utf16 = std.unicode.utf8ToUtf16LeAlloc(allocator, entry.name) catch |err| switch (err) {
             error.InvalidUtf8 => return error.Invalid7zEntry,
             error.OutOfMemory => return error.OutOfMemory,
         };
         defer allocator.free(utf16);
-        for (utf16) |unit| try appendU16(allocator, &names, unit);
-        try appendU16(allocator, &names, 0);
+        for (utf16) |unit| try appendU16(allocator, output, unit);
+        try appendU16(allocator, output, 0);
     }
-    try output.append(allocator, Nid.name);
-    try number.append(allocator, output, names.items.len);
-    try output.appendSlice(allocator, names.items);
-    try output.append(allocator, Nid.end);
 }
 
 fn appendBitVector(

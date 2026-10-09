@@ -19,6 +19,7 @@ pub fn createFile(
     const header_compression = try parseHeaderCompression(args.next());
     const bcj2 = try parseBcj2(args.next());
     const bcj2_start_ip = try parseStartIp(args.next());
+    const external_names = try parseExternalNames(args.next());
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.SevenZipEncodeEntry{.{ .name = entry_name, .data = input }};
@@ -26,16 +27,18 @@ pub fn createFile(
         .compression = compression,
         .solid = solid,
         .header_compression = header_compression,
+        .external_names = external_names,
         .bcj2 = bcj2,
         .bcj2_start_ip = bcj2_start_ip,
         .filters = filters,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("seven_zip_entries=1 compression={s} solid={} header={s} bcj2={} filters={d} input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("seven_zip_entries=1 compression={s} solid={} header={s} external_names={s} bcj2={} filters={d} input_bytes={d} archive_bytes={d} path={s}\n", .{
         @tagName(compression),
         solid,
         if (header_compression) |method| @tagName(method) else "plain",
+        if (external_names) |method| @tagName(method) else "inline",
         bcj2,
         filters.len,
         input.len,
@@ -68,6 +71,18 @@ fn parseBcj2(text: ?[]const u8) !bool {
 
 fn parseStartIp(text: ?[]const u8) !u32 {
     return if (text) |value| try std.fmt.parseInt(u32, value, 10) else 0;
+}
+
+fn parseExternalNames(text: ?[]const u8) !?vort.SevenZipCompression {
+    const value = text orelse return null;
+    if (std.mem.eql(u8, value, "external-names") or std.mem.eql(u8, value, "external"))
+        return .copy;
+    if (std.mem.eql(u8, value, "inline-names") or std.mem.eql(u8, value, "inline"))
+        return null;
+    const prefix = "external-";
+    if (std.mem.startsWith(u8, value, prefix))
+        return try parseCompression(value[prefix.len..]);
+    return error.Invalid7zOptions;
 }
 
 pub fn listFile(

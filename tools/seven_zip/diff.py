@@ -148,6 +148,34 @@ def main() -> None:
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
             vort_writer_variants += 6
 
+            for name_compression in (
+                "copy",
+                "deflate",
+                "bzip2",
+                "lzma",
+                "lzma2",
+                "lzma2-stored",
+            ):
+                archive = temp / f"vort-external-names-{name_compression}.7z"
+                duplicate = temp / f"vort-external-names-{name_compression}-repeat.7z"
+                writer_args = (
+                    "lzma2",
+                    "solid",
+                    "lzma2",
+                    "classic",
+                    "0",
+                    f"external-{name_compression}",
+                )
+                run(args.writer, str(archive), *writer_args)
+                run(args.writer, str(duplicate), *writer_args)
+                if archive.read_bytes() != duplicate.read_bytes():
+                    raise AssertionError(
+                        f"Vort external-name {name_compression} output is not deterministic"
+                    )
+                verify_with_vort(args.cli, archive, expected_vort)
+                verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+            vort_writer_variants += 6
+
             for compression in (
                 "copy",
                 "deflate",

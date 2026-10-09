@@ -22,6 +22,7 @@ pub const Options = struct {
     compression: Compression = .copy,
     solid: bool = false,
     header_compression: ?Compression = null,
+    external_names: ?Compression = null,
     bcj2: bool = false,
     bcj2_start_ip: u32 = 0,
     filters: []const Filter = &.{},

@@ -17846,6 +17846,12 @@ reuse, so production keeps the simpler independently owned plans.
   no-conversion decisions, leaving target extraction as a future ratio
   optimization rather than a compatibility gap. System 7-Zip validates all six
   main methods, solid substreams, branch-heavy input, and non-zero start IP.
+  The reader now decodes bounded `AdditionalStreamsInfo` folders and resolves
+  external folder definitions plus UTF-16LE name properties with strict index,
+  consumption, CRC, and cumulative output checks. The deterministic writer can
+  place names in a separate auxiliary stream using any of the six writer
+  codecs, including with solid data and an encoded Next Header; system 7-Zip
+  validates every name-stream codec.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
-  encryption, and external metadata streams remain follow-up work. See
+  encryption, and richer file properties remain follow-up work. See
   `docs/formats/7z.md`.
