@@ -78,6 +78,7 @@ def main() -> None:
         "gzip",
         "bzip2",
         "compress-z",
+        "lzma",
         "xz",
         "lz4",
         "lzip",
@@ -157,6 +158,13 @@ def main() -> None:
                 with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
                     if archive.extractfile("payload.bin").read() != payload:
                         raise AssertionError("Python could not read Vort tar.Z")
+            elif compression == "lzma":
+                raw = __import__("lzma").decompress(
+                    archive_path.read_bytes(), format=__import__("lzma").FORMAT_ALONE
+                )
+                with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
+                    if archive.extractfile("payload.bin").read() != payload:
+                        raise AssertionError("Python could not read Vort tar.lzma")
             elif compression in {"lzip", "lzop"}:
                 tool = lzip_tool if compression == "lzip" else lzop_tool
                 if tool is not None:
@@ -179,6 +187,9 @@ def main() -> None:
             "none": python_tar,
             "gzip": __import__("gzip").compress(python_tar, mtime=0),
             "bzip2": __import__("bz2").compress(python_tar),
+            "lzma": __import__("lzma").compress(
+                python_tar, format=__import__("lzma").FORMAT_ALONE
+            ),
             "xz": __import__("lzma").compress(python_tar),
         }
         if zstd_tool is not None:

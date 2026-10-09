@@ -40,6 +40,12 @@ dictionary size, and parser mode. Allocating ZIP extraction APIs work directly;
 caller-owned extraction must use
 `zipExtractEntryIntoWithAllocator` so dictionary scratch remains explicit.
 
+The TAR composition layer also reads and writes `.tar.lzma` / `.tlz` archives
+through the same LZMA-Alone codec. Automatic detection accounts for the
+format's lack of magic by preferring a structurally valid raw TAR and requiring
+TAR-aligned declared output size (or the unknown-size marker) in the LZMA
+header.
+
 CLI validation surfaces:
 
 ```sh

@@ -17719,9 +17719,12 @@ reuse, so production keeps the simpler independently owned plans.
   cross-platform safe-relative-path predicate without writing archive paths to
   disk. The writer emits regular files, directories, symbolic/hard links, and
   deterministic PAX long paths. A compositional layer automatically detects,
-  decodes, and writes raw TAR, tar.gz, tar.bz2, tar.Z, tar.xz, tar.lz4, tar.lz,
-  tar.zst, and tar.lzo through existing Vort codecs. XZ now uses compressed
-  LZMA2 planning instead of the diagnostic stored-only path, while LZ4 and LZOP
+  decodes, and writes raw TAR, tar.gz, tar.bz2, tar.Z, tar.lzma/tlz, tar.xz,
+  tar.lz4, tar.lz, tar.zst, and tar.lzo through existing Vort codecs. LZMA-Alone
+  detection prefers a structurally valid raw TAR and otherwise requires a
+  sufficiently large, TAR-aligned known output size or the unknown-size marker.
+  XZ now uses compressed LZMA2 planning instead of the diagnostic stored-only
+  path, while LZ4 and LZOP
   select compressed or stored blocks independently. Python `tarfile`, GNU tar,
   uncompress, xz, lz4, lzip, lzop, and system zstd validate raw/PAX/GNU metadata
   and compressed tarballs. See `docs/formats/tar.md`.

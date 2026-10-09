@@ -1974,7 +1974,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-xz-file <path> [max_output]
         \\                              Preflight an XZ stream's decoded size
         \\  inspect-xz-file <path>      Validate and print XZ stream metadata
-        \\  create-tar-file <out> <entry> <in> [none|gzip|bzip2|compress-z|xz|lz4|lzip|zstd|lzop]
+        \\  create-tar-file <out> <entry> <in> [none|gzip|bzip2|compress-z|lzma|xz|lz4|lzip|zstd|lzop]
         \\                              Create a deterministic one-entry tarball
         \\  list-tar-file <path> [max_tar_size]
         \\                              List common compressed tarball formats
@@ -2976,6 +2976,7 @@ fn parseTarCompression(text: ?[]const u8) !vort.TarCompression {
     if (std.mem.eql(u8, value, "gzip") or std.mem.eql(u8, value, "gz")) return .gzip;
     if (std.mem.eql(u8, value, "bzip2") or std.mem.eql(u8, value, "bz2")) return .bzip2;
     if (std.mem.eql(u8, value, "compress-z") or std.mem.eql(u8, value, "compress") or std.mem.eql(u8, value, "Z")) return .compress_z;
+    if (std.mem.eql(u8, value, "lzma") or std.mem.eql(u8, value, "tlz")) return .lzma;
     if (std.mem.eql(u8, value, "xz")) return .xz;
     if (std.mem.eql(u8, value, "lz4")) return .lz4;
     if (std.mem.eql(u8, value, "lzip") or std.mem.eql(u8, value, "lz")) return .lzip;

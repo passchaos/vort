@@ -6,11 +6,12 @@ const compress_z = @import("../compress_z.zig");
 const deflate = @import("../deflate.zig");
 const lz4 = @import("../lz4.zig");
 const lzip = @import("../lzip.zig");
+const lzma = @import("../lzma.zig");
 const lzop = @import("../lzop.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = archive.Error || writer.Error || bzip2.Error || compress_z.Error || lz4.Error || lzip.Error || lzop.Error || xz.Error || zstd.Error || deflate.Error || error{
+pub const Error = archive.Error || writer.Error || bzip2.Error || compress_z.Error || lz4.Error || lzip.Error || lzma.Error || lzop.Error || xz.Error || zstd.Error || deflate.Error || error{
     UnknownTarCompression,
 };
 
@@ -19,6 +20,7 @@ pub const Compression = enum {
     gzip,
     bzip2,
     compress_z,
+    lzma,
     xz,
     lz4,
     lzip,
@@ -31,6 +33,7 @@ pub const EncodeOptions = struct {
     gzip_options: deflate.CompressionOptions = deflate.optionsForLevel(.default),
     bzip2_options: bzip2.EncodeOptions = .{},
     compress_z_options: compress_z.EncodeOptions = .{},
+    lzma_options: lzma.EncodeOptions = .{},
     xz_options: xz.EncodeOptions = .{},
     lz4_level: c_int = lz4.default_compression_level,
     lz4_options: lz4.FrameOptions = .{},
@@ -50,6 +53,9 @@ pub const OwnedArchive = struct {
 };
 
 pub fn detect(input: []const u8) Compression {
+    // LZMA-Alone has no magic. Prefer a structurally valid uncompressed TAR
+    // before examining wrapper signatures or the heuristic LZMA header.
+    if (archive.parse(input)) |_| return .none else |_| {}
     if (input.len >= 2 and input[0] == 0x1f and input[1] == 0x8b) return .gzip;
     if (input.len >= 2 and input[0] == 0x1f and input[1] == 0x9d) return .compress_z;
     if (input.len >= 3 and std.mem.eql(u8, input[0..3], "BZh")) return .bzip2;
@@ -58,7 +64,17 @@ pub fn detect(input: []const u8) Compression {
     if (input.len >= 4 and std.mem.eql(u8, input[0..4], "LZIP")) return .lzip;
     if (input.len >= 4 and std.mem.readInt(u32, input[0..4], .little) == 0xfd2f_b528) return .zstandard;
     if (input.len >= 9 and std.mem.eql(u8, input[0..9], &lzop.header_magic)) return .lzop;
+    if (looksLikeLzmaTar(input)) return .lzma;
     return .none;
+}
+
+fn looksLikeLzmaTar(input: []const u8) bool {
+    const header = lzma.parseHeader(input) catch return false;
+    const size = header.uncompressed_size orelse return true;
+    // Every complete TAR is 512-byte aligned. Requiring at least the standard
+    // two end blocks prevents ordinary short data with a syntactically valid
+    // LZMA property byte from being auto-classified as `.tar.lzma`.
+    return size >= 2 * 512 and size % 512 == 0;
 }
 
 pub fn encodeAlloc(
@@ -74,6 +90,7 @@ pub fn encodeAlloc(
         .gzip => deflate.encodeGzipBestAlloc(allocator, tar_bytes, options.gzip_options),
         .bzip2 => bzip2.encodeAlloc(allocator, tar_bytes, options.bzip2_options),
         .compress_z => compress_z.encodeAlloc(allocator, tar_bytes, options.compress_z_options),
+        .lzma => lzma.encodeAlloc(allocator, tar_bytes, options.lzma_options),
         .xz => xz.encodeAlloc(allocator, tar_bytes, options.xz_options),
         .lz4 => lz4.encodeFrameWithLevelAndOptionsAlloc(
             allocator,
@@ -127,6 +144,7 @@ pub fn decodeAlloc(
         .gzip => try deflate.decodeGzipAllocLimited(allocator, input, max_tar_size),
         .bzip2 => try bzip2.decodeAllocLimited(allocator, input, max_tar_size),
         .compress_z => try compress_z.decodeAllocLimited(allocator, input, max_tar_size),
+        .lzma => try lzma.decodeAllocLimited(allocator, input, max_tar_size),
         .xz => try xz.decodeAllocLimited(allocator, input, max_tar_size),
         .lz4 => try lz4.decodeFrameAllocLimited(allocator, input, max_tar_size),
         .lzip => try lzip.decodeAllocLimited(allocator, input, max_tar_size),
@@ -143,7 +161,7 @@ test "compressed TAR wrappers round trip every available encoder" {
         .{ .name = "folder/", .kind = .directory },
         .{ .name = "folder/data.txt", .data = "tarball payload " ** 64 },
     };
-    inline for (.{ Compression.none, .gzip, .bzip2, .compress_z, .xz, .lz4, .lzip, .zstandard, .lzop }) |compression| {
+    inline for (.{ Compression.none, .gzip, .bzip2, .compress_z, .lzma, .xz, .lz4, .lzip, .zstandard, .lzop }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{ .compression = compression });
         defer allocator.free(encoded);
         try std.testing.expectEqual(compression, detect(encoded));
@@ -165,4 +183,26 @@ test "compressed TAR wrappers round trip every available encoder" {
         defer allocator.free(payload);
         try std.testing.expectEqualSlices(u8, entries[1].data, payload);
     }
+}
+
+test "TAR compression detection distinguishes raw TAR and LZMA-Alone headers" {
+    const allocator = std.testing.allocator;
+    const entries = [_]writer.EncodeEntry{.{ .name = "payload", .data = "tar detection" }};
+    const raw = try writer.encodeAlloc(allocator, &entries);
+    defer allocator.free(raw);
+    try std.testing.expectEqual(Compression.none, detect(raw));
+
+    const unknown_size = try lzma.encodeAlloc(allocator, raw, .{ .size_mode = .end_marker });
+    defer allocator.free(unknown_size);
+    try std.testing.expectEqual(Compression.lzma, detect(unknown_size));
+
+    const known_size = try lzma.encodeAlloc(allocator, raw, .{ .size_mode = .known });
+    defer allocator.free(known_size);
+    try std.testing.expectEqual(Compression.lzma, detect(known_size));
+
+    var false_positive: [13]u8 = @splat(0);
+    false_positive[0] = 0x5d;
+    std.mem.writeInt(u32, false_positive[1..5], 32 * 1024, .little);
+    std.mem.writeInt(u64, false_positive[5..13], 123, .little);
+    try std.testing.expectEqual(Compression.none, detect(&false_positive));
 }

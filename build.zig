@@ -1085,7 +1085,7 @@ pub fn build(b: *std.Build) void {
     tar_diff.addArtifactArg(cli_exe);
     tar_diff.addArg("--writer");
     tar_diff.addArtifactArg(tar_writer_probe_exe);
-    const tar_diff_step = b.step("run-tar-diff", "Validate TAR and common compressed tarballs against Python tarfile");
+    const tar_diff_step = b.step("run-tar-diff", "Validate TAR and common compressed tarballs against Python tarfile and lzma");
     tar_diff_step.dependOn(&tar_diff.step);
 
     const br_stored_cli_diff = b.addSystemCommand(&.{ "python3", "tools/br_stored_cli_diff.py" });
