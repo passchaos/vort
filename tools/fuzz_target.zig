@@ -222,6 +222,7 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
             if (archive.extractAllocWithOptions(allocator, entry, .{
                 .max_output_len = 1 << 20,
                 .max_ppmd_memory = 4 << 20,
+                .max_vm_instructions = 100_000,
             })) |decoded| {
                 allocator.free(decoded);
             } else |err| switch (err) {

@@ -92,6 +92,7 @@ def main() -> None:
     rar20_entries = 0
     rar29_entries = 0
     rar29_ppmd_entries = 0
+    rar29_vm_entries = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-rar-diff-") as temp_text:
         temp = Path(temp_text)
@@ -293,36 +294,55 @@ def main() -> None:
                     "Vort accepted a solid RAR29 PPMd continuation without session state"
                 )
 
-            unsupported_cases = (
-                (
-                    args.legacy_fixtures / "rar300" / "rarvm_x86_e8_rar300.rar",
-                    "UnsupportedRar29Filter",
-                    "filter",
-                ),
-                (
-                    args.legacy_fixtures / "rarvm" / "ppmd_embedded_vm_filter.rar",
-                    "UnsupportedRar29Filter",
-                    "ppmd-filter",
-                ),
+            vm_archives = (
+                args.legacy_fixtures / "rar300" / "rarvm_x86_e8_rar300.rar",
+                args.legacy_fixtures / "rar300" / "rarvm_x86_e8e9_rar300.rar",
+                args.legacy_fixtures / "rar300" / "rarvm_delta_4ch_rar300.rar",
+                args.legacy_fixtures / "rar300" / "rarvm_rgb_gradient_rar300.rar",
+                args.legacy_fixtures / "rar300" / "rarvm_audio_stereo_rar300.rar",
+                args.legacy_fixtures / "rar300" / "rarvm_itanium_synthetic_rar300.rar",
+                args.legacy_fixtures / "rarvm" / "delta_64_channels.rar",
+                args.legacy_fixtures / "rarvm" / "ppmd_embedded_vm_filter.rar",
+                args.legacy_fixtures / "rarvm" / "filter_bsdcat_exe.rar",
+                args.legacy_fixtures / "rarvm" / "vm_encoded_u32_filter.rar",
             )
-            for archive, expected_error, label in unsupported_cases:
-                listing = run(args.cli, "list-rar-file", str(archive)).stdout
-                name = next(
-                    line.split(" name=", 1)[1]
-                    for line in listing.splitlines()
-                    if line.startswith("index=") and "directory=false" in line
-                )
-                failed = run(
+            for index, archive in enumerate(vm_archives):
+                rar29_vm_entries += compare_archive_entries(
                     args.cli,
-                    "extract-rar-file",
-                    str(archive),
-                    name,
-                    str(temp / f"unsupported-{label}.out"),
-                    str(256 * 1024 * 1024),
-                    check=False,
+                    seven_zip,
+                    archive,
+                    temp,
+                    f"rar29-vm-{index}",
+                    method="rar29",
                 )
-                if failed.returncode == 0 or expected_error not in failed.stderr:
-                    raise AssertionError(f"Vort did not explicitly reject RAR29 {label}")
+
+            # This fixture deliberately changes padding so its bytecode no
+            # longer matches a standard-program fingerprint. 7-Zip refuses
+            # that synthetic archive, so compare the generic VM result with
+            # the canonical Itanium fixture carrying the same final payload.
+            generic_vm = args.legacy_fixtures / "rarvm" / "generic_delta_padding_mutation.rar"
+            generic_output = temp / "rar29-vm-generic.out"
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(generic_vm),
+                "itanium_synthetic_bundles.bin",
+                str(generic_output),
+                str(256 * 1024 * 1024),
+            )
+            generic_reference = temp / "rar29-vm-generic-reference"
+            generic_reference.mkdir()
+            run(
+                seven_zip,
+                "x",
+                "-y",
+                f"-o{generic_reference}",
+                str(args.legacy_fixtures / "rar300" / "rarvm_itanium_synthetic_rar300.rar"),
+            )
+            expected_generic = generic_reference / "itanium_synthetic_bundles.bin"
+            if generic_output.read_bytes() != expected_generic.read_bytes():
+                raise AssertionError("Vort generic RAR VM output mismatch")
+            rar29_vm_entries += 1
 
             encrypted = args.legacy_fixtures / "rar154" / "readme_154_password.rar"
             failed = run(
@@ -394,6 +414,7 @@ def main() -> None:
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "
         f"rar20_entries={rar20_entries} rar29_entries={rar29_entries} "
         f"rar29_ppmd_entries={rar29_ppmd_entries} "
+        f"rar29_vm_entries={rar29_vm_entries} "
         f"header_crc=True data_crc=True sfx=True"
     )
 
