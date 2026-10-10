@@ -1,6 +1,7 @@
 const std = @import("std");
 const archive = @import("archive.zig");
 const checksum = @import("../checksum.zig");
+const ppmd_h = @import("ppmd_h.zig");
 const rar29_encoder = @import("rar29_encoder.zig");
 const rar50_encoder = @import("rar50_encoder.zig");
 
@@ -14,7 +15,7 @@ pub const Error = archive.Error || rar29_encoder.Error || rar50_encoder.Error ||
 };
 
 pub const Kind = enum { regular, directory };
-pub const Compression = enum { stored, rar29, rar50 };
+pub const Compression = enum { stored, rar29, rar29_ppmd, rar50 };
 pub const Filter = rar50_encoder.Filter;
 
 pub const EncodeEntry = struct {
@@ -34,6 +35,8 @@ pub const EncodeOptions = struct {
     block_size: usize = 64 * 1024,
     filter: ?Filter = null,
     solid: bool = false,
+    ppmd_order: u8 = 8,
+    ppmd_memory_size: usize = 25 * 1024 * 1024,
 };
 
 pub fn encodeAlloc(
@@ -197,6 +200,15 @@ fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!v
                 .block_size = options.block_size,
             });
         },
+        .rar29_ppmd => {
+            if (options.version != .rar4 or options.filter != null)
+                return error.UnsupportedRarEncodeOptions;
+            _ = try rar29DictionaryFlags(options.dictionary_size);
+            _ = try ppmd_h.validateEncodeOptions(.{
+                .order = options.ppmd_order,
+                .memory_size = options.ppmd_memory_size,
+            });
+        },
         .rar50 => {
             if (options.version != .rar5 or options.block_size == 0 or
                 options.block_size > rar50_encoder.max_block_size)
@@ -237,7 +249,19 @@ fn encodeRar4(
         .block_size = options.block_size,
     });
     defer encoder.deinit();
-    for (entries) |entry| try appendRar4File(allocator, output, entry, options, &encoder);
+    var ppmd_encoder = ppmd_h.Encoder.init(allocator, .{
+        .order = options.ppmd_order,
+        .memory_size = options.ppmd_memory_size,
+    });
+    defer ppmd_encoder.deinit();
+    for (entries) |entry| try appendRar4File(
+        allocator,
+        output,
+        entry,
+        options,
+        &encoder,
+        &ppmd_encoder,
+    );
     try appendRar4ShortHeader(allocator, output, 0x7b, 0x4000);
 }
 
@@ -276,12 +300,23 @@ fn appendRar4File(
     entry: EncodeEntry,
     options: EncodeOptions,
     encoder: *rar29_encoder.Encoder,
+    ppmd_encoder: *ppmd_h.Encoder,
 ) !void {
-    const use_compression = entry.kind == .regular and options.compression == .rar29;
-    if (!use_compression) encoder.reset();
-    const solid_continuation = options.solid and encoder.canContinue();
-    const compressed: ?[]u8 = if (use_compression)
+    const use_lz = entry.kind == .regular and options.compression == .rar29;
+    const use_ppmd = entry.kind == .regular and options.compression == .rar29_ppmd;
+    const use_compression = use_lz or use_ppmd;
+    if (!use_lz) encoder.reset();
+    if (!use_ppmd) ppmd_encoder.reset();
+    const solid_continuation = options.solid and if (use_lz)
+        encoder.canContinue()
+    else if (use_ppmd)
+        ppmd_encoder.canContinue()
+    else
+        false;
+    const compressed: ?[]u8 = if (use_lz)
         try encoder.encodeMemberAlloc(entry.data, solid_continuation)
+    else if (use_ppmd)
+        try ppmd_encoder.encodeMemberAlloc(entry.data, solid_continuation)
     else
         null;
     defer if (compressed) |bytes| allocator.free(bytes);
@@ -735,6 +770,83 @@ test "RAR29 solid writer reuses history across members" {
     defer allocator.free(leading_empty);
     const leading_empty_archive = try archive.parse(leading_empty);
     try std.testing.expect(!(try leading_empty_archive.entryAt(1)).solid);
+}
+
+test "RAR29 PPMd writer emits deterministic ordinary and solid streams" {
+    const allocator = std.testing.allocator;
+    const first_payload = "PPMd Variant H writer text alpha beta gamma\n" ** 256 ++ "\x02";
+    const second_payload = "PPMd Variant H writer text alpha beta delta\n" ** 128 ++ "\x02";
+    const entries = [_]EncodeEntry{
+        .{ .name = "first.txt", .data = first_payload },
+        .{ .name = "second.txt", .data = second_payload },
+    };
+    const options = EncodeOptions{
+        .version = .rar4,
+        .compression = .rar29_ppmd,
+        .ppmd_memory_size = 1024 * 1024,
+        .solid = true,
+    };
+    const encoded = try encodeAlloc(allocator, &entries, options);
+    defer allocator.free(encoded);
+    const duplicate = try encodeAlloc(allocator, &entries, options);
+    defer allocator.free(duplicate);
+    try std.testing.expectEqualSlices(u8, encoded, duplicate);
+
+    const parsed = try archive.parse(encoded);
+    try std.testing.expect(parsed.solid);
+    const first = try parsed.entryAt(0);
+    const second = try parsed.entryAt(1);
+    try std.testing.expectEqual(archive.Method.rar29, first.method);
+    try std.testing.expectEqual(@as(u8, 0x33), first.method_id);
+    try std.testing.expect(encoded[first.data_offset] & 0x80 != 0);
+    try std.testing.expect(!first.solid);
+    try std.testing.expect(second.solid);
+    try std.testing.expect(first.compressed_size < first.uncompressed_size);
+    try std.testing.expectError(
+        error.UnsupportedRarFeature,
+        parsed.extractAlloc(allocator, second),
+    );
+    const decoded = try parsed.extractByNameAllocLimited(
+        allocator,
+        "second.txt",
+        @max(first_payload.len, second_payload.len),
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, second_payload, decoded);
+
+    const broken_entries = [_]EncodeEntry{
+        entries[0],
+        .{ .name = "folder", .kind = .directory },
+        entries[1],
+    };
+    const broken = try encodeAlloc(allocator, &broken_entries, options);
+    defer allocator.free(broken);
+    const broken_archive = try archive.parse(broken);
+    try std.testing.expect(!(try broken_archive.entryAt(2)).solid);
+
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &entries, .{
+            .version = .rar5,
+            .compression = .rar29_ppmd,
+        }),
+    );
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &entries, .{
+            .version = .rar4,
+            .compression = .rar29_ppmd,
+            .filter = .e8,
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidRarPpmdEncodeOptions,
+        encodeAlloc(allocator, &entries, .{
+            .version = .rar4,
+            .compression = .rar29_ppmd,
+            .ppmd_memory_size = 512 * 1024,
+        }),
+    );
 }
 
 test "RAR29 archive extraction detects packed stream corruption" {

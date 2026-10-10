@@ -113,6 +113,8 @@ def main() -> None:
     writer_external = 0
     writer_compressed = 0
     writer_compressed_external = 0
+    writer_ppmd = 0
+    writer_ppmd_external = 0
     writer_filtered = 0
     writer_filtered_external = 0
     writer_solid = 0
@@ -216,6 +218,45 @@ def main() -> None:
                     )
                 writer_compressed_external += 1
 
+        ppmd_first = temp / "vort-rar29-ppmd-first.rar"
+        ppmd_second = temp / "vort-rar29-ppmd-second.rar"
+        ppmd_output = temp / "vort-rar29-ppmd.out"
+        for archive in (ppmd_first, ppmd_second):
+            run(
+                args.cli,
+                "create-rar-file",
+                str(archive),
+                "payload.bin",
+                str(large_source),
+                "rar4",
+                "rar29-ppmd",
+            )
+        if ppmd_first.read_bytes() != ppmd_second.read_bytes():
+            raise AssertionError("Vort RAR29 PPMd output is not deterministic")
+        ppmd_listing = run(args.cli, "list-rar-file", str(ppmd_first)).stdout
+        if "method=rar29" not in ppmd_listing:
+            raise AssertionError(f"Vort mislabeled its RAR29 PPMd output: {ppmd_listing}")
+        run(
+            args.cli,
+            "extract-rar-file",
+            str(ppmd_first),
+            "payload.bin",
+            str(ppmd_output),
+            str(len(large_payload)),
+        )
+        if ppmd_output.read_bytes() != large_payload:
+            raise AssertionError("Vort failed its own RAR29 PPMd output")
+        writer_ppmd += 1
+        if seven_zip is not None:
+            run(seven_zip, "t", str(ppmd_first))
+            if seven_zip_extract(
+                seven_zip,
+                ppmd_first,
+                temp / "7z-vort-rar29-ppmd",
+            ) != large_payload:
+                raise AssertionError("7-Zip rejected Vort RAR29 PPMd output")
+            writer_ppmd_external += 1
+
         if args.writer is not None:
             for version in versions:
                 archive = temp / f"probe-{version}.rar"
@@ -268,6 +309,45 @@ def main() -> None:
                             f"7-Zip rejected Vort solid {compression} output"
                         )
                     writer_solid_external += 1
+
+            ppmd_solid_archive = temp / "vort-rar29-ppmd-solid.rar"
+            ppmd_solid_output = temp / "vort-rar29-ppmd-solid.out"
+            run(args.writer, str(ppmd_solid_archive), "rar4", "ppmd-solid")
+            ppmd_solid_listing = run(
+                args.cli, "list-rar-file", str(ppmd_solid_archive)
+            ).stdout
+            if (
+                "solid=true" not in ppmd_solid_listing
+                or "name=second.txt" not in ppmd_solid_listing
+                or "method=rar29" not in ppmd_solid_listing
+            ):
+                raise AssertionError(
+                    f"Vort RAR29 PPMd solid metadata mismatch: {ppmd_solid_listing}"
+                )
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(ppmd_solid_archive),
+                "second.txt",
+                str(ppmd_solid_output),
+                str(1024 * 1024),
+            )
+            if ppmd_solid_output.read_bytes() != expected_solid:
+                raise AssertionError("Vort failed its own solid RAR29 PPMd output")
+            writer_solid += 1
+            if seven_zip is not None:
+                ppmd_solid_reference = temp / "vort-rar29-ppmd-solid-reference"
+                ppmd_solid_reference.mkdir()
+                run(
+                    seven_zip,
+                    "x",
+                    "-y",
+                    f"-o{ppmd_solid_reference}",
+                    str(ppmd_solid_archive),
+                )
+                if (ppmd_solid_reference / "second.txt").read_bytes() != expected_solid:
+                    raise AssertionError("7-Zip rejected Vort solid RAR29 PPMd output")
+                writer_solid_external += 1
 
             volume_prefix = temp / "vort-rar50-volume"
             volume_output = temp / "vort-rar50-volume.out"
@@ -733,6 +813,8 @@ def main() -> None:
         f"seven_zip={seven_zip is not None} writer_external={writer_external} "
         f"writer_compressed={writer_compressed} "
         f"writer_compressed_external={writer_compressed_external} "
+        f"writer_ppmd={writer_ppmd} "
+        f"writer_ppmd_external={writer_ppmd_external} "
         f"writer_filtered={writer_filtered} "
         f"writer_filtered_external={writer_filtered_external} "
         f"writer_solid={writer_solid} "
