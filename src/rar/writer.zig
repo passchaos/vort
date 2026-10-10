@@ -8,6 +8,7 @@ pub const Error = archive.Error || rar50_encoder.Error || std.mem.Allocator.Erro
     RarFileTooLarge,
     RarHeaderTooLarge,
     UnsupportedRarEncodeOptions,
+    InvalidRarVolumeSize,
 };
 
 pub const Kind = enum { regular, directory };
@@ -74,6 +75,112 @@ pub fn encodeInto(
     if (encoded.len > output.len) return error.OutputTooSmall;
     @memcpy(output[0..encoded.len], encoded);
     return encoded.len;
+}
+
+pub const EncodedVolumes = struct {
+    allocator: std.mem.Allocator,
+    volumes: [][]u8,
+
+    pub fn deinit(self: *EncodedVolumes) void {
+        for (self.volumes) |volume| self.allocator.free(volume);
+        self.allocator.free(self.volumes);
+        self.* = undefined;
+    }
+};
+
+pub fn encodeVolumesAlloc(
+    allocator: std.mem.Allocator,
+    entries: []const EncodeEntry,
+    options: EncodeOptions,
+    max_payload_per_volume: usize,
+) Error!EncodedVolumes {
+    if (options.version != .rar5) return error.UnsupportedRarEncodeOptions;
+    if (max_payload_per_volume == 0) return error.InvalidRarVolumeSize;
+    try validateEntries(entries, options);
+
+    var volumes: std.ArrayList([]u8) = .empty;
+    errdefer {
+        for (volumes.items) |volume| allocator.free(volume);
+        volumes.deinit(allocator);
+    }
+    var current: std.ArrayList(u8) = .empty;
+    defer current.deinit(allocator);
+    var volume_index: usize = 0;
+    var payload_in_volume: usize = 0;
+    try startRar5Volume(allocator, &current, volume_index, options.solid);
+    var encoder = rar50_encoder.Encoder.init(allocator, .{
+        .dictionary_size = options.dictionary_size,
+        .block_size = options.block_size,
+        .filter = options.filter,
+    });
+    defer encoder.deinit();
+
+    for (entries) |entry| {
+        var compressed: ?[]u8 = null;
+        defer if (compressed) |bytes| allocator.free(bytes);
+        const use_compression = entry.kind == .regular and options.compression == .rar50;
+        if (!use_compression) encoder.reset();
+        const solid_continuation = options.solid and encoder.canContinue();
+        if (use_compression)
+            compressed = try encoder.encodeMemberAlloc(entry.data, solid_continuation);
+        const payload = compressed orelse entry.data;
+        const compression_info: u64 = if (use_compression)
+            try rar50CompressionInfo(options.dictionary_size, solid_continuation)
+        else
+            0;
+
+        var offset: usize = 0;
+        var split_before = false;
+        while (offset < payload.len or (!split_before and payload.len == 0)) {
+            if (payload_in_volume == max_payload_per_volume) {
+                try finishRar5Volume(allocator, &current, true);
+                const owned_volume = try current.toOwnedSlice(allocator);
+                volumes.append(allocator, owned_volume) catch |err| {
+                    allocator.free(owned_volume);
+                    return err;
+                };
+                volume_index = std.math.add(usize, volume_index, 1) catch
+                    return error.IntegerOverflow;
+                payload_in_volume = 0;
+                try startRar5Volume(allocator, &current, volume_index, options.solid);
+            }
+            const room = max_payload_per_volume - payload_in_volume;
+            const fragment_len = @min(room, payload.len - offset);
+            const split_after = offset + fragment_len < payload.len;
+            const fragment = payload[offset .. offset + fragment_len];
+            const fragment_crc = if (split_after)
+                checksum.crc32(fragment)
+            else
+                checksum.crc32(entry.data);
+            var general_flags: u64 = 0;
+            if (split_before) general_flags |= 0x0008;
+            if (split_after) general_flags |= 0x0010;
+            try appendRar5FileFragment(
+                allocator,
+                &current,
+                entry,
+                fragment,
+                compression_info,
+                fragment_crc,
+                general_flags,
+            );
+            payload_in_volume += fragment_len;
+            offset += fragment_len;
+            if (!split_after) break;
+            split_before = true;
+        }
+    }
+
+    try finishRar5Volume(allocator, &current, false);
+    const owned_volume = try current.toOwnedSlice(allocator);
+    volumes.append(allocator, owned_volume) catch |err| {
+        allocator.free(owned_volume);
+        return err;
+    };
+    return .{
+        .allocator = allocator,
+        .volumes = try volumes.toOwnedSlice(allocator),
+    };
 }
 
 fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!void {
@@ -209,6 +316,33 @@ fn encodeRar5(
     try appendRar5Block(allocator, output, 5, 0, null, end_specific.items, "", "");
 }
 
+fn startRar5Volume(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    volume_index: usize,
+    solid: bool,
+) !void {
+    try output.appendSlice(allocator, archive.rar5_signature);
+    var specific: std.ArrayList(u8) = .empty;
+    defer specific.deinit(allocator);
+    var archive_flags: u64 = 0x0001 | 0x0002;
+    if (solid) archive_flags |= 0x0004;
+    try appendVint(allocator, &specific, archive_flags);
+    try appendVint(allocator, &specific, volume_index);
+    try appendRar5Block(allocator, output, 1, 0, null, specific.items, "", "");
+}
+
+fn finishRar5Volume(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    has_next_volume: bool,
+) !void {
+    var specific: std.ArrayList(u8) = .empty;
+    defer specific.deinit(allocator);
+    try appendVint(allocator, &specific, @intFromBool(has_next_volume));
+    try appendRar5Block(allocator, output, 5, 0, null, specific.items, "", "");
+}
+
 fn appendRar5File(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
@@ -228,6 +362,26 @@ fn appendRar5File(
         try rar50CompressionInfo(options.dictionary_size, solid_continuation)
     else
         0;
+    try appendRar5FileFragment(
+        allocator,
+        output,
+        entry,
+        payload,
+        compression_info,
+        checksum.crc32(entry.data),
+        0,
+    );
+}
+
+fn appendRar5FileFragment(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    entry: EncodeEntry,
+    payload: []const u8,
+    compression_info: u64,
+    data_crc32: u32,
+    general_flags: u64,
+) !void {
     var specific: std.ArrayList(u8) = .empty;
     defer specific.deinit(allocator);
     var file_flags: u64 = 0x0004;
@@ -238,7 +392,7 @@ fn appendRar5File(
     const default_mode: u64 = if (entry.kind == .directory) 0o040755 else 0o100644;
     try appendVint(allocator, &specific, entry.mode orelse default_mode);
     if (entry.mtime) |mtime| try appendLe32(allocator, &specific, mtime);
-    try appendLe32(allocator, &specific, checksum.crc32(entry.data));
+    try appendLe32(allocator, &specific, data_crc32);
     try appendVint(allocator, &specific, compression_info);
     try appendVint(allocator, &specific, 1); // Unix host.
     try appendVint(allocator, &specific, entry.name.len);
@@ -247,7 +401,7 @@ fn appendRar5File(
         allocator,
         output,
         2,
-        0x0002,
+        0x0002 | general_flags,
         payload.len,
         specific.items,
         "",
@@ -468,6 +622,85 @@ test "RAR50 solid writer reuses history across members" {
             .filter = .e8,
             .solid = true,
         }),
+    );
+}
+
+test "RAR5 volume writer round trips stored compressed and solid entries" {
+    const volume_set = @import("volume_set.zig");
+    const allocator = std.testing.allocator;
+    var random: [64 * 1024]u8 = undefined;
+    var state: u64 = 0x9e37_79b9_7f4a_7c15;
+    for (&random) |*byte| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        byte.* = @truncate(state);
+    }
+
+    const stored_entries = [_]EncodeEntry{.{
+        .name = "stored.bin",
+        .data = random[0..4096],
+    }};
+    var stored_volumes = try encodeVolumesAlloc(
+        allocator,
+        &stored_entries,
+        .{},
+        1500,
+    );
+    defer stored_volumes.deinit();
+    try std.testing.expectEqual(@as(usize, 3), stored_volumes.volumes.len);
+    var stored_set = try volume_set.VolumeSet.parseAlloc(
+        allocator,
+        stored_volumes.volumes,
+    );
+    defer stored_set.deinit();
+    const stored = try stored_set.extractByNameAllocLimited(
+        allocator,
+        "stored.bin",
+        random.len,
+    );
+    defer allocator.free(stored);
+    try std.testing.expectEqualSlices(u8, random[0..4096], stored);
+
+    const solid_entries = [_]EncodeEntry{
+        .{ .name = "first.bin", .data = &random },
+        .{ .name = "second.bin", .data = &random },
+    };
+    var solid_volumes = try encodeVolumesAlloc(
+        allocator,
+        &solid_entries,
+        .{ .compression = .rar50, .solid = true },
+        20 * 1024,
+    );
+    defer solid_volumes.deinit();
+    try std.testing.expect(solid_volumes.volumes.len >= 4);
+    var solid_set = try volume_set.VolumeSet.parseAlloc(
+        allocator,
+        solid_volumes.volumes,
+    );
+    defer solid_set.deinit();
+    try std.testing.expectEqual(@as(usize, 2), solid_set.entries.len);
+    try std.testing.expect(solid_set.entries[1].solid);
+    const solid = try solid_set.extractByNameAllocLimited(
+        allocator,
+        "second.bin",
+        random.len,
+    );
+    defer allocator.free(solid);
+    try std.testing.expectEqualSlices(u8, &random, solid);
+
+    try std.testing.expectError(
+        error.InvalidRarVolumeSize,
+        encodeVolumesAlloc(allocator, &stored_entries, .{}, 0),
+    );
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeVolumesAlloc(
+            allocator,
+            &stored_entries,
+            .{ .version = .rar4 },
+            1500,
+        ),
     );
 }
 

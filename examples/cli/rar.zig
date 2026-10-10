@@ -37,6 +37,54 @@ pub fn createFile(
     });
 }
 
+pub fn createVolumes(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const output_prefix = args.next() orelse return error.MissingCorpusPath;
+    const entry_name = args.next() orelse return error.MissingCorpusPath;
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const max_payload = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const compression = try parseCompression(args.next());
+    const filter = try parseFilter(args.next());
+    const solid = try parseSolid(args.next());
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const entries = [_]vort.RarEncodeEntry{.{ .name = entry_name, .data = input }};
+    var encoded = try vort.encodeRarVolumesAlloc(
+        init.gpa,
+        &entries,
+        .{
+            .version = .rar5,
+            .compression = compression,
+            .filter = filter,
+            .solid = solid,
+        },
+        max_payload,
+    );
+    defer encoded.deinit();
+    var archive_bytes: usize = 0;
+    for (encoded.volumes, 1..) |volume, number| {
+        const path = try std.fmt.allocPrint(init.gpa, "{s}.part{d}.rar", .{
+            output_prefix,
+            number,
+        });
+        defer init.gpa.free(path);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = volume });
+        archive_bytes = std.math.add(usize, archive_bytes, volume.len) catch
+            return error.IntegerOverflow;
+    }
+    try stdout.print(
+        "rar_volumes={d} method={s} input_bytes={d} archive_bytes={d} prefix={s}\n",
+        .{ encoded.volumes.len, @tagName(compression), input.len, archive_bytes, output_prefix },
+    );
+}
+
 pub fn listFile(
     init: std.process.Init,
     args: *std.process.Args.Iterator,

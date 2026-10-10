@@ -248,6 +248,8 @@ pub fn main(init: std.process.Init) !void {
         try cpio_cli.extractFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "create-rar-file")) {
         try rar_cli.createFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-rar-volumes")) {
+        try rar_cli.createVolumes(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-rar-file")) {
         try rar_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-rar-file")) {
@@ -2203,6 +2205,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Extract a regular file or symlink target
         \\  create-rar-file <out> <entry> <in> [rar4|rar5] [stored|rar50] [none|delta:N|e8|e8e9|arm] [solid]
         \\                              Create a deterministic stored/compressed RAR archive
+        \\  create-rar-volumes <prefix> <entry> <in> <payload_size> [stored|rar50] [filter] [solid]
+        \\                              Create an ordered RAR5 volume set
         \\  list-rar-file <path>        List RAR4/RAR5 entries and methods
         \\  extract-rar-file <rar> <entry> <out> [max_output]
         \\                              Extract a supported stored RAR entry
