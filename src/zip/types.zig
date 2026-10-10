@@ -9,5 +9,6 @@ pub const CompressionMethod = enum(u16) {
     zstandard_legacy = 20,
     zstandard = 93,
     xz = 95,
+    ppmd = 98,
     _,
 };

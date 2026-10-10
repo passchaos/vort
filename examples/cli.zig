@@ -555,6 +555,7 @@ pub fn main(init: std.process.Init) !void {
                 .zstandard_legacy => "zstd-legacy",
                 .zstandard => "zstd",
                 .xz => "xz",
+                .ppmd => "ppmd",
                 else => "unsupported",
             };
             try stdout.print("index={d} method={s} compressed={d} uncompressed={d} crc32={d} directory={} name={s}\n", .{
@@ -572,12 +573,13 @@ pub fn main(init: std.process.Init) !void {
         const entry_name = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
+        const max_dictionary_size = (try parseOptionalLimit(args.next())) orelse 64 * 1024 * 1024;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(bytes);
-        const decoded = if (max_output_len) |limit|
-            try vort.zipExtractByNameAllocLimited(init.gpa, bytes, entry_name, limit)
-        else
-            try vort.zipExtractByNameAlloc(init.gpa, bytes, entry_name);
+        const decoded = try vort.zipExtractByNameAllocWithOptions(init.gpa, bytes, entry_name, .{
+            .max_output_len = max_output_len orelse std.math.maxInt(usize),
+            .max_dictionary_size = max_dictionary_size,
+        });
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("zip_bytes={d} decoded_bytes={d} entry={s} path={s}\n", .{ bytes.len, decoded.len, entry_name, output_path });
@@ -2155,7 +2157,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  extract-cab-set <entry> <out> <cab1> <cab2> [...]
         \\                              Extract an entry across an explicitly ordered cabinet set
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
-        \\  extract-zip-file <zip> <entry> <out> [max_output]
+        \\  extract-zip-file <zip> <entry> <out> [max_output] [max_dictionary]
         \\                              Extract a supported ZIP entry with CRC validation
         \\  size-br-file <path> [max_output]
         \\                              Preflight dependency-free Brotli stored stream decoded size

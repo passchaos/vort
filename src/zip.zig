@@ -5,12 +5,13 @@ const checksum = @import("checksum.zig");
 const deflate = @import("deflate.zig");
 const deflate64 = @import("deflate64.zig");
 const lzma = @import("lzma.zig");
+const ppmd8 = @import("ppmd8.zig");
 const xz = @import("xz.zig");
 const zstd = @import("zstd.zig");
 const records = @import("zip/records.zig");
 pub const writer = @import("zip/writer.zig");
 
-pub const Error = writer.Error || bzip2.Error || deflate64.Error || lzma.Error || xz.Error || zstd.Error || error{
+pub const Error = writer.Error || bzip2.Error || deflate64.Error || lzma.Error || ppmd8.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -30,6 +31,11 @@ pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
+
+pub const DecodeOptions = struct {
+    max_output_len: usize = std.math.maxInt(usize),
+    max_dictionary_size: usize = 64 * 1024 * 1024,
+};
 
 pub const Entry = struct {
     name: []const u8,
@@ -94,7 +100,7 @@ pub const Archive = struct {
     }
 
     pub fn extractInto(self: Archive, entry: Entry, output: []u8) Error!usize {
-        return self.extractIntoOptionalAllocator(null, entry, output) catch |err| switch (err) {
+        return self.extractIntoOptionalAllocator(null, entry, output, .{}) catch |err| switch (err) {
             error.OutOfMemory => unreachable,
             else => |zip_error| return zip_error,
         };
@@ -106,7 +112,17 @@ pub const Archive = struct {
         entry: Entry,
         output: []u8,
     ) !usize {
-        return self.extractIntoOptionalAllocator(allocator, entry, output);
+        return self.extractIntoOptionalAllocator(allocator, entry, output, .{});
+    }
+
+    pub fn extractIntoWithOptions(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        output: []u8,
+        options: DecodeOptions,
+    ) !usize {
+        return self.extractIntoOptionalAllocator(allocator, entry, output, options);
     }
 
     fn extractIntoOptionalAllocator(
@@ -114,9 +130,12 @@ pub const Archive = struct {
         allocator: ?std.mem.Allocator,
         entry: Entry,
         output: []u8,
+        options: DecodeOptions,
     ) !usize {
         const parsed = try parseCentralEntry(self, entry.central_header_offset);
         const canonical = parsed.entry;
+        if (canonical.uncompressed_size > options.max_output_len)
+            return error.OutputLimitExceeded;
         if (output.len < canonical.uncompressed_size) return error.OutputTooSmall;
         if (canonical.isEncrypted()) return error.EncryptedZipEntry;
 
@@ -149,7 +168,7 @@ pub const Archive = struct {
                     compressed,
                     target.len,
                     target,
-                    std.math.maxInt(usize),
+                    options.max_dictionary_size,
                     canonical.flags & 0x0002 != 0,
                 );
                 if (written != target.len) return error.SizeMismatch;
@@ -158,6 +177,15 @@ pub const Archive = struct {
                 const scratch_allocator = allocator orelse return error.ZipEntryRequiresAllocator;
                 const written = try xz.decodeInto(scratch_allocator, compressed, target);
                 if (written != target.len) return error.SizeMismatch;
+            },
+            .ppmd => {
+                const scratch_allocator = allocator orelse return error.ZipEntryRequiresAllocator;
+                try ppmd8.decodeZipInto(
+                    scratch_allocator,
+                    compressed,
+                    target,
+                    options.max_dictionary_size,
+                );
             },
             .zstandard_legacy, .zstandard => {
                 const written = try zstd.decodeFrameIntoExactSize(compressed, target, target.len);
@@ -174,10 +202,19 @@ pub const Archive = struct {
     }
 
     pub fn extractAllocLimited(self: Archive, allocator: std.mem.Allocator, entry: Entry, max_output_len: usize) ![]u8 {
-        if (entry.uncompressed_size > max_output_len) return error.OutputLimitExceeded;
+        return self.extractAllocWithOptions(allocator, entry, .{ .max_output_len = max_output_len });
+    }
+
+    pub fn extractAllocWithOptions(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        options: DecodeOptions,
+    ) ![]u8 {
+        if (entry.uncompressed_size > options.max_output_len) return error.OutputLimitExceeded;
         const output = try allocator.alloc(u8, entry.uncompressed_size);
         errdefer allocator.free(output);
-        const written = try self.extractIntoWithAllocator(allocator, entry, output);
+        const written = try self.extractIntoWithOptions(allocator, entry, output, options);
         if (written != output.len) return error.SizeMismatch;
         return output;
     }
@@ -189,6 +226,16 @@ pub const Archive = struct {
     pub fn extractByNameAllocLimited(self: Archive, allocator: std.mem.Allocator, name: []const u8, max_output_len: usize) ![]u8 {
         const entry = (try self.find(name)) orelse return error.ZipEntryNotFound;
         return self.extractAllocLimited(allocator, entry, max_output_len);
+    }
+
+    pub fn extractByNameAllocWithOptions(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        name: []const u8,
+        options: DecodeOptions,
+    ) ![]u8 {
+        const entry = (try self.find(name)) orelse return error.ZipEntryNotFound;
+        return self.extractAllocWithOptions(allocator, entry, options);
     }
 };
 
@@ -233,6 +280,17 @@ pub fn extractEntryIntoWithAllocator(
     return archive.extractIntoWithAllocator(allocator, try archive.entryAt(index), output);
 }
 
+pub fn extractEntryIntoWithOptions(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    index: usize,
+    output: []u8,
+    options: DecodeOptions,
+) !usize {
+    const archive = try parse(bytes);
+    return archive.extractIntoWithOptions(allocator, try archive.entryAt(index), output, options);
+}
+
 pub fn extractEntryAlloc(allocator: std.mem.Allocator, bytes: []const u8, index: usize) ![]u8 {
     const archive = try parse(bytes);
     return archive.extractAlloc(allocator, try archive.entryAt(index));
@@ -243,12 +301,31 @@ pub fn extractEntryAllocLimited(allocator: std.mem.Allocator, bytes: []const u8,
     return archive.extractAllocLimited(allocator, try archive.entryAt(index), max_output_len);
 }
 
+pub fn extractEntryAllocWithOptions(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    index: usize,
+    options: DecodeOptions,
+) ![]u8 {
+    const archive = try parse(bytes);
+    return archive.extractAllocWithOptions(allocator, try archive.entryAt(index), options);
+}
+
 pub fn extractByNameAlloc(allocator: std.mem.Allocator, bytes: []const u8, name: []const u8) ![]u8 {
     return (try parse(bytes)).extractByNameAlloc(allocator, name);
 }
 
 pub fn extractByNameAllocLimited(allocator: std.mem.Allocator, bytes: []const u8, name: []const u8, max_output_len: usize) ![]u8 {
     return (try parse(bytes)).extractByNameAllocLimited(allocator, name, max_output_len);
+}
+
+pub fn extractByNameAllocWithOptions(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    name: []const u8,
+    options: DecodeOptions,
+) ![]u8 {
+    return (try parse(bytes)).extractByNameAllocWithOptions(allocator, name, options);
 }
 
 const ParsedCentralEntry = struct { entry: Entry, next_offset: usize };
@@ -286,6 +363,7 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     if (values.zip64 and version_needed < 45) return error.InvalidZipArchive;
     if (method == .bzip2 and version_needed < 46) return error.InvalidZipArchive;
     if (method == .lzma and version_needed < 63) return error.InvalidZipArchive;
+    if (method == .ppmd and version_needed < 63) return error.InvalidZipArchive;
     if (isZstandardMethod(method) and version_needed < 63)
         return error.InvalidZipArchive;
     if (values.local_header_offset >= archive.central_directory_offset) return error.InvalidZipArchive;
@@ -331,6 +409,7 @@ fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
         local_version_needed < 45) return error.InvalidZipArchive;
     if (entry.method == .bzip2 and local_version_needed < 46) return error.InvalidZipArchive;
     if (entry.method == .lzma and local_version_needed < 63) return error.InvalidZipArchive;
+    if (entry.method == .ppmd and local_version_needed < 63) return error.InvalidZipArchive;
     if (isZstandardMethod(entry.method) and local_version_needed < 63)
         return error.InvalidZipArchive;
     if (local_flags & 0x0008 == 0) {
@@ -795,6 +874,47 @@ test "ZIP method 14 writer round trips through the allocating LZMA path" {
     try std.testing.expectError(error.ZipEntryRequiresAllocator, archive.extractInto(entry, &output));
     try std.testing.expectEqual(payload.len, try archive.extractIntoWithAllocator(allocator, entry, &output));
     try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "ZIP method 98 PPMd writer round trips restore modes and memory limits" {
+    const allocator = std.testing.allocator;
+    const payload = "PPMd8-compressed ZIP entry " ** 256;
+    const entries = [_]EncodeEntry{.{
+        .name = "compressed-with-ppmd.txt",
+        .data = payload,
+        .method = .ppmd,
+    }};
+    inline for (.{ ppmd8.RestoreMethod.restart, .cut_off }) |restore_method| {
+        const bytes = try encodeAlloc(allocator, &entries, .{
+            .data_descriptor = true,
+            .ppmd_options = .{
+                .order = if (restore_method == .restart) 8 else 12,
+                .memory_size = 1024 * 1024,
+                .restore_method = restore_method,
+            },
+        });
+        defer allocator.free(bytes);
+        const archive = try parse(bytes);
+        const entry = try archive.entryAt(0);
+        try std.testing.expectEqual(CompressionMethod.ppmd, entry.method);
+        try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.local_header_offset + 4));
+        try std.testing.expectEqual(@as(u16, 63), try readU16(bytes, entry.central_header_offset + 6));
+        var output: [payload.len]u8 = undefined;
+        try std.testing.expectError(error.ZipEntryRequiresAllocator, archive.extractInto(entry, &output));
+        try std.testing.expectEqual(
+            payload.len,
+            try archive.extractIntoWithOptions(allocator, entry, &output, .{
+                .max_dictionary_size = 1024 * 1024,
+            }),
+        );
+        try std.testing.expectEqualSlices(u8, payload, &output);
+        try std.testing.expectError(
+            error.OutputLimitExceeded,
+            archive.extractIntoWithOptions(allocator, entry, &output, .{
+                .max_dictionary_size = 1024 * 1024 - 1,
+            }),
+        );
+    }
 }
 
 test "ZIP method 95 writer round trips through the allocating XZ path" {

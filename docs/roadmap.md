@@ -17646,10 +17646,10 @@ reuse, so production keeps the simpler independently owned plans.
   single-disk ZIP64 reading and deterministic writing. The library parses EOCD,
   ZIP64 locator/EOCD, ordered `0x0001` central/local extra fields, and 32-/64-bit
   data descriptors; it iterates and finds entries without allocation, extracts
-  stored, raw-Deflate, Deflate64, Bzip2, LZMA, Zstandard methods 20/93, and XZ
+  stored, raw-Deflate, Deflate64, Bzip2, LZMA, Zstandard methods 20/93, XZ, and PPMd
   members into caller buffers or bounded allocations where their scratch
   requirements allow, and encodes multi-entry stored/Deflate/Deflate64/Bzip2/
-  LZMA/Zstandard-20/93/XZ archives through owned or transactional append APIs.
+  LZMA/Zstandard-20/93/XZ/PPMd archives through owned or transactional append APIs.
   Writer `.auto`/`.always`/`.never` policy handles
   count, size, and offset transitions; UTF-8 flags, per-entry/archive comments,
   caller-selected Deflate policy, fixed timestamps, and self-extracting
@@ -17658,12 +17658,17 @@ reuse, so production keeps the simpler independently owned plans.
   Deflate64 codec with the 64 KiB window, 32 distance symbols, extended
   code-285 lengths, and a functionality-first greedy fixed-Huffman-or-stored
   encoder. ZIP methods 12, 14, legacy/current Zstandard 20/93, and 95 reuse the
-  standalone Bzip2, LZMA, Zstandard, and XZ codecs. A bidirectional
+  standalone Bzip2, LZMA, Zstandard, and XZ codecs. Method 98 now uses a pure
+  Zig PPMd8 model with both restart and cut-off restoration, a checked two-byte
+  order/memory/restore prefix, explicit end-marker and range completion, and a
+  caller-selected model-memory limit (64 MiB by default, 256 MiB wire maximum).
+  A bidirectional
   Python `zipfile` differential covers Python `force_zip64`, fully forced Vort ZIP64 archives,
   descriptors, UTF-8 names, directories, comments, deterministic output,
   prefixed archives, XZ payloads, and CLI extraction; 7-Zip additionally
-  validates methods 9 and 95 in both directions and supplies real method-9
-  dynamic and long-distance fixtures. Usage and limitations are
+  validates methods 9, 95, and 98 in both directions, supplies real method-9
+  dynamic and long-distance fixtures, and covers real PPMd restart/cut-off
+  streams. Usage and limitations are
   documented in `docs/formats/zip.md`.
 
 - Added dependency-free Bzip2 encoding and decoding for standard `BZh1` through

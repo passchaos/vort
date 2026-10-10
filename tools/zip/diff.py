@@ -217,6 +217,7 @@ def validate_vort_archive_with_python(
         "folder/xz.txt": b"Vort ZIP XZ method 95.\n" * 96,
         "folder/zstd-legacy.txt": b"Vort ZIP legacy Zstandard method 20.\n" * 96,
         "folder/zstd.txt": b"Vort ZIP Zstandard method 93.\n" * 96,
+        "folder/ppmd.txt": b"Vort ZIP PPMd method 98.\n" * 128,
         "utf8-目录/数据.txt": "ZIP UTF-8 文件名\n".encode() * 17,
         "empty/": b"",
     }
@@ -250,6 +251,7 @@ def validate_vort_archive_with_python(
             "folder/xz.txt": 95,
             "folder/zstd-legacy.txt": 20,
             "folder/zstd.txt": 93,
+            "folder/ppmd.txt": 98,
             "utf8-目录/数据.txt": zipfile.ZIP_DEFLATED,
             "empty/": zipfile.ZIP_STORED,
         }
@@ -267,10 +269,10 @@ def validate_vort_archive_with_python(
                     check=True,
                     stdout=subprocess.PIPE,
                 ).stdout
-            elif info.compress_type == 9:
+            elif info.compress_type in (9, 98):
                 if seven_zip_tool is None:
-                    # The Vort self-extraction pass below still validates the
-                    # entry when no independent Deflate64 tool is installed.
+                    # The Vort self-extraction pass below still validates these
+                    # entries when no independent Deflate64/PPMd tool is installed.
                     actual = expected
                 else:
                     actual = subprocess.run(
@@ -296,7 +298,7 @@ def validate_vort_archive_with_python(
                 raise AssertionError(f"UTF-8 flag omitted for {name!r}")
             if info.compress_type != expected_methods[name]:
                 raise AssertionError(f"compression method mismatch for {name!r}")
-            if info.compress_type in (20, 93, 95) and info.extract_version != 63:
+            if info.compress_type in (20, 93, 95, 98) and info.extract_version != 63:
                 raise AssertionError(f"method {info.compress_type} omitted ZIP 6.3 version-needed")
             if info.compress_type == 9 and not force_zip64 and info.extract_version != 21:
                 raise AssertionError("Deflate64 method omitted ZIP 2.1 version-needed")
@@ -370,6 +372,28 @@ def validate_seven_zip_xz_with_vort(cli: Path, tool: str, temp: Path) -> None:
         raise AssertionError("Vort could not decode 7-Zip XZ method 95 output")
 
 
+def validate_vort_ppmd_cutoff_with_seven_zip(writer: Path, tool: str, temp: Path) -> None:
+    archive = temp / "vort-ppmd-cutoff.zip"
+    run(writer, str(archive), "ppmd-cutoff")
+    expected = b"Vort ZIP PPMd method 98.\n" * 128
+    actual = subprocess.run(
+        [tool, "x", "-so", "-bd", str(archive), "folder/ppmd.txt"],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout
+    if actual != expected:
+        raise AssertionError("7-Zip could not extract Vort ZIP PPMd cut-off entry")
+    with zipfile.ZipFile(archive) as parsed:
+        info = parsed.getinfo("folder/ppmd.txt")
+        raw = archive.read_bytes()
+        name_len, extra_len = struct.unpack_from("<HH", raw, info.header_offset + 26)
+        data_offset = info.header_offset + 30 + name_len + extra_len
+        properties = struct.unpack_from("<H", raw, data_offset)[0]
+        if properties >> 12 != 1:
+            raise AssertionError("Vort ZIP PPMd writer omitted cut-off restore mode")
+
+
 def validate_seven_zip_deflate64_with_vort(cli: Path, tool: str, temp: Path) -> int:
     rng = random.Random(0xDEF1A7E64)
     prefix = bytes(rng.randrange(256) for _ in range(40_000))
@@ -401,6 +425,69 @@ def validate_seven_zip_deflate64_with_vort(cli: Path, tool: str, temp: Path) -> 
     return len(cases)
 
 
+def validate_seven_zip_ppmd_with_vort(cli: Path, tool: str, temp: Path) -> int:
+    cutoff_payload = b"".join(
+        f"{index:08x} PPMd cut-off context {index % 997:03d} payload line\n".encode()
+        for index in range(50_000)
+    )
+    cases = {
+        "ppmd-restart.txt": (
+            b"7-Zip PPMd restart reference.\n" * 2048,
+            ["-mx=5"],
+            0,
+        ),
+        "ppmd-cutoff.txt": (
+            cutoff_payload,
+            ["-mx=9", "-mmem=1m", "-mo=16"],
+            1,
+        ),
+    }
+    for name, (payload, options, expected_restore) in cases.items():
+        source = temp / name
+        archive = temp / f"{name}.zip"
+        output = temp / f"{name}.out"
+        source.write_bytes(payload)
+        subprocess.run(
+            [tool, "a", "-bd", "-y", "-tzip", "-mm=PPMd", *options, str(archive), source.name],
+            cwd=temp,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        with zipfile.ZipFile(archive) as parsed:
+            info = parsed.getinfo(source.name)
+            if info.compress_type != 98:
+                raise AssertionError("7-Zip did not emit ZIP method 98")
+            raw = archive.read_bytes()
+            name_len, extra_len = struct.unpack_from("<HH", raw, info.header_offset + 26)
+            data_offset = info.header_offset + 30 + name_len + extra_len
+            properties = struct.unpack_from("<H", raw, data_offset)[0]
+            if properties >> 12 != expected_restore:
+                raise AssertionError("7-Zip PPMd restore mode did not match the fixture")
+            if name.endswith("cutoff.txt") and ((properties >> 4) & 0xFF) + 1 != 1:
+                raise AssertionError("7-Zip PPMd cut-off fixture did not use a 1 MiB model")
+        run(cli, "extract-zip-file", str(archive), source.name, str(output))
+        if output.read_bytes() != payload:
+            raise AssertionError(f"Vort could not decode 7-Zip PPMd entry {name}")
+        limited = subprocess.run(
+            [
+                str(cli),
+                "extract-zip-file",
+                str(archive),
+                source.name,
+                str(temp / f"{name}.limited"),
+                str(len(payload)),
+                str(1024 * 1024 - 1),
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if limited.returncode == 0:
+            raise AssertionError("Vort accepted ZIP PPMd model memory above the caller limit")
+    return len(cases)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
@@ -423,17 +510,25 @@ def main() -> None:
             args.cli, args.writer, temp, True, seven_zip_tool
         )
         deflate64_cases = 0
+        ppmd_cases = 0
         if seven_zip_tool is not None:
             validate_seven_zip_xz_with_vort(args.cli, seven_zip_tool, temp)
+            validate_vort_ppmd_cutoff_with_seven_zip(
+                args.writer, seven_zip_tool, temp
+            )
             deflate64_cases = validate_seven_zip_deflate64_with_vort(
+                args.cli, seven_zip_tool, temp
+            )
+            ppmd_cases = validate_seven_zip_ppmd_with_vort(
                 args.cli, seven_zip_tool, temp
             )
 
     print(
         "zip_diff=ok directions=2 "
-        f"python_entries=7 vort_entries=10 zstd_methods=2 python_bytes={python_bytes} "
+        f"python_entries=7 vort_entries=11 zstd_methods=2 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
-        f"system_7zip={seven_zip_tool is not None} deflate64_cases={deflate64_cases}"
+        f"system_7zip={seven_zip_tool is not None} deflate64_cases={deflate64_cases} "
+        f"ppmd_cases={ppmd_cases} vort_ppmd_cutoff={seven_zip_tool is not None}"
     )
 
 
