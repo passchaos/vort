@@ -251,6 +251,18 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseRpmPackage(data)) |_| {} else |err| switch (err) {
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.InvalidRpmHeader,
+        error.InvalidRpmTagType,
+        error.InvalidRpmPackage,
+        error.UnsupportedRpmPayload,
+        error.TruncatedFrame,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.parseRarArchive(data)) |archive| {
         var iterator = archive.iterator();
         while (try iterator.next()) |entry| {
@@ -408,6 +420,7 @@ pub fn main(init: std.process.Init) !void {
         "ZOO 2.10 Archive.\x1a\x00\x00\xdc\xa7\xc4\xfd",
         "070701",
         "!<arch>\n",
+        "\xed\xab\xee\xdb\x03\x00",
         "Rar!\x1a\x07\x01\x00",
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);

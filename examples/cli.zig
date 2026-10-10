@@ -6,6 +6,7 @@ const arc_cli = @import("cli/arc.zig");
 const cpio_cli = @import("cli/cpio.zig");
 const deb_cli = @import("cli/deb.zig");
 const rar_cli = @import("cli/rar.zig");
+const rpm_cli = @import("cli/rpm.zig");
 const zoo_cli = @import("cli/zoo.zig");
 const compress_z_cli = @import("cli/compress_z.zig");
 const filters_cli = @import("cli/filters.zig");
@@ -236,6 +237,12 @@ pub fn main(init: std.process.Init) !void {
         try deb_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-deb-file")) {
         try deb_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-rpm-file")) {
+        try rpm_cli.listFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-rpm-file")) {
+        try rpm_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-rpm-payload")) {
+        try rpm_cli.extractPayload(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "create-arj-file")) {
         try arj_cli.createFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-arj-file")) {
@@ -2207,6 +2214,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-deb-file <path>        List Debian control/data archive metadata
         \\  extract-deb-file <deb> <entry> <out> [max_output]
         \\                              Extract a bounded Debian data member
+        \\  list-rpm-file <path>        List RPM metadata and CPIO payload entries
+        \\  extract-rpm-file <rpm> <entry> <out> [max_output]
+        \\                              Extract a bounded RPM payload member
+        \\  extract-rpm-payload <rpm> <out> [max_output]
+        \\                              Decode the raw RPM CPIO payload
         \\  create-arj-file <out> <entry> <in> [stored|method1|method2|method3|method4]
         \\                              Create a deterministic ARJ archive
         \\  list-arj-file <path>        List ARJ entries and methods

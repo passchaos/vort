@@ -29,6 +29,7 @@ pub const tar = @import("tar.zig");
 pub const cpio = @import("cpio.zig");
 pub const ar = @import("ar.zig");
 pub const deb = @import("deb.zig");
+pub const rpm = @import("rpm.zig");
 pub const rar = @import("rar.zig");
 pub const compress_z = @import("compress_z.zig");
 pub const lzip = @import("lzip.zig");
@@ -369,6 +370,15 @@ pub const parseDebPackage = deb.parse;
 pub const encodeDebAlloc = deb.encodeAlloc;
 pub const encodeDebAppend = deb.encodeAppend;
 pub const encodeDebInto = deb.encodeInto;
+
+pub const RpmError = rpm.Error;
+pub const RpmPayloadCompression = rpm.PayloadCompression;
+pub const RpmLead = rpm.Lead;
+pub const RpmHeader = rpm.Header;
+pub const RpmIndex = rpm.Index;
+pub const RpmValueType = rpm.ValueType;
+pub const RpmPackage = rpm.Package;
+pub const parseRpmPackage = rpm.parse;
 
 pub const RarError = rar.Error;
 pub const RarVersion = rar.Version;

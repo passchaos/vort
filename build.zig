@@ -136,6 +136,14 @@ pub fn build(b: *std.Build) void {
     const run_ar_deb_tests = b.addRunArtifact(ar_deb_tests);
     const ar_deb_test_step = b.step("test-ar-deb", "Run focused Unix ar and Debian package tests");
     ar_deb_test_step.dependOn(&run_ar_deb_tests.step);
+    const rpm_tests = b.addTest(.{
+        .name = "vort-rpm-tests",
+        .root_module = tests_mod,
+        .filters = &.{"RPM "},
+    });
+    const run_rpm_tests = b.addRunArtifact(rpm_tests);
+    const rpm_test_step = b.step("test-rpm", "Run focused RPM header and package tests");
+    rpm_test_step.dependOn(&run_rpm_tests.step);
 
     const test_step = b.step("test", "Run vort unit tests");
     test_step.dependOn(&run_tests.step);
@@ -1095,6 +1103,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| deb_diff.addArgs(args);
     const deb_diff_step = b.step("run-deb-diff", "Validate Debian binary package reading and writing against optional dpkg-deb");
     deb_diff_step.dependOn(&deb_diff.step);
+
+    const rpm_diff = b.addSystemCommand(&.{ "python3", "tools/rpm/diff.py", "--cli" });
+    rpm_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| rpm_diff.addArgs(args);
+    const rpm_diff_step = b.step("run-rpm-diff", "Validate RPM header and bounded CPIO payload decoding against optional 7-Zip");
+    rpm_diff_step.dependOn(&rpm_diff.step);
 
     const arj_diff = b.addSystemCommand(&.{ "python3", "tools/arj/diff.py", "--cli" });
     arj_diff.addArtifactArg(cli_exe);
@@ -4722,6 +4736,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(lha_diff_step);
     ci_smoke_step.dependOn(ar_diff_step);
     ci_smoke_step.dependOn(deb_diff_step);
+    ci_smoke_step.dependOn(rpm_diff_step);
     ci_smoke_step.dependOn(arj_diff_step);
     ci_smoke_step.dependOn(arc_diff_step);
     ci_smoke_step.dependOn(cpio_diff_step);
