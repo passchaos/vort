@@ -27,6 +27,7 @@ pub const lz4_legacy = @import("lz4_legacy.zig");
 pub const lzfse = @import("lzfse.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
+pub const squashfs = @import("squashfs.zig");
 pub const cab = @import("cab.zig");
 pub const zip = @import("zip.zig");
 pub const bzip2 = @import("bzip2.zig");
@@ -979,6 +980,17 @@ pub const encodeZchunkInto = zchunk.encodeInto;
 pub const decodeZchunkAllocLimited = zchunk.decodeAllocLimited;
 pub const decodeZchunkStreamAllocLimited = zchunk.decodeStreamAllocLimited;
 pub const decodeZchunkChunkAllocLimited = zchunk.decodeChunkAllocLimited;
+
+pub const SquashfsArchive = squashfs.Archive;
+pub const SquashfsCompression = squashfs.Compression;
+pub const SquashfsDirectory = squashfs.Directory;
+pub const SquashfsDirectoryEntry = squashfs.DirectoryEntry;
+pub const SquashfsFlags = squashfs.Flags;
+pub const SquashfsInode = squashfs.Inode;
+pub const SquashfsInodeKind = squashfs.InodeKind;
+pub const SquashfsSuperblock = squashfs.Superblock;
+pub const parseSquashfs = squashfs.parse;
+pub const parseSquashfsSuperblock = squashfs.parseSuperblock;
 
 pub const Lz4Error = lz4.Error;
 pub const lz4DefaultCompressionLevel = lz4.default_compression_level;

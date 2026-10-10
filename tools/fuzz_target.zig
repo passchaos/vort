@@ -110,6 +110,16 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidSquashfs,
+        error.UnsupportedSquashfsVersion,
+        error.UnsupportedSquashfsCompression,
+        error.TruncatedFrame,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.parseHadoopLzoIndex(data)) |_| {} else |err| switch (err) {
         error.InvalidHadoopLzoIndex,
         => {},
@@ -513,6 +523,7 @@ pub fn main(init: std.process.Init) !void {
         "bvx-\x03\x00\x00\x00abcbvx$",
         "bvxn\x30\x00\x00\x00\x11\x00\x00\x00\xc8\x03abc\xf0\x18\xe1c\x06\x00\x00\x00\x00\x00\x00\x00bvx$",
         "\x00ZCK1\x81",
+        "hsqs\x00\x00\x00\x00",
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
 

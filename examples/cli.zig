@@ -15,6 +15,7 @@ const hadoop_lzo_cli = @import("cli/hadoop_lzo.zig");
 const lz4_legacy_cli = @import("cli/lz4_legacy.zig");
 const lzfse_cli = @import("cli/lzfse.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
+const squashfs_cli = @import("cli/squashfs.zig");
 const lzip_cli = @import("cli/lzip.zig");
 const lzf_cli = @import("cli/lzf.zig");
 const lha_cli = @import("cli/lha.zig");
@@ -137,6 +138,10 @@ pub fn main(init: std.process.Init) !void {
         try zchunk_cli.inspect(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-zchunk-chunk")) {
         try zchunk_cli.extractChunk(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-squashfs-file")) {
+        try squashfs_cli.list(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-squashfs-file")) {
+        try squashfs_cli.extract(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
         try bgzf_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-bgzf-file")) {
@@ -2245,6 +2250,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>
         \\  extract-zchunk-chunk <in> <number> <out> [max_output]
+        \\  list-squashfs-file <path>
+        \\  extract-squashfs-file <image> <entry> <out> [max_output]
         \\  encode-bgzf-file <in> <out> [block_size]
         \\                              Encode deterministic blocked gzip/BGZF
         \\  decode-bgzf-file <in> <out> [max_output]
