@@ -42,6 +42,25 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseXerialSnappy(data)) |_| {} else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidXerialSnappyStream,
+        error.InvalidMatch,
+        error.UnsupportedSnappyFeature,
+        error.TruncatedFrame,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
+    if (vort.parseHadoopSnappy(data)) |_| {} else |err| switch (err) {
+        error.InvalidHadoopSnappyStream,
+        error.InvalidMatch,
+        error.UnsupportedSnappyFeature,
+        error.TruncatedFrame,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.decodeLzfBlockAllocLimited(allocator, data, 1 << 20)) |decoded| {
         allocator.free(decoded);
     } else |err| switch (err) {
@@ -423,6 +442,7 @@ pub fn main(init: std.process.Init) !void {
         &.{ 0x01, 0x00, 0x00, 0xff, 0xff },
         &.{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 },
         &.{ 0x1f, 0x8b, 0x08, 0x04, 0, 0, 0, 0, 0, 0xff },
+        "\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01",
         &.{ 'V', 'S', 'K', 'P', 1, 0, 0, 0, 'x' },
         &.{ 'M', 'S', 'C', 'F', 0, 0, 0, 0 },
         &.{ 'Z', 'V', 0, 0, 1, 'x' },

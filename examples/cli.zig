@@ -16,6 +16,7 @@ const lzf_cli = @import("cli/lzf.zig");
 const lha_cli = @import("cli/lha.zig");
 const lzop_cli = @import("cli/lzop.zig");
 const seven_zip_cli = @import("cli/seven_zip.zig");
+const snappy_framing_cli = @import("cli/snappy_framing.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [2048]u8 = undefined;
@@ -88,6 +89,18 @@ pub fn main(init: std.process.Init) !void {
             std.mem.eql(u8, payload, decoded),
             vort.crc32(decoded),
         });
+    } else if (std.mem.eql(u8, command, "encode-xerial-snappy-file")) {
+        try snappy_framing_cli.encodeXerial(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-xerial-snappy-file")) {
+        try snappy_framing_cli.decodeXerial(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-xerial-snappy-file")) {
+        try snappy_framing_cli.inspectXerial(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-hadoop-snappy-file")) {
+        try snappy_framing_cli.encodeHadoop(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-hadoop-snappy-file")) {
+        try snappy_framing_cli.decodeHadoop(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-hadoop-snappy-file")) {
+        try snappy_framing_cli.inspectHadoop(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
         try bgzf_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-bgzf-file")) {
@@ -2174,6 +2187,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\compatibility formats:
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
+        \\  encode-xerial-snappy-file <in> <out> [block_size]
+        \\  decode-xerial-snappy-file <in> <out> [max_output]
+        \\  inspect-xerial-snappy-file <path>
+        \\  encode-hadoop-snappy-file <in> <out> [block_size] [chunk_size]
+        \\  decode-hadoop-snappy-file <in> <out> [max_output]
+        \\  inspect-hadoop-snappy-file <path>
         \\  encode-bgzf-file <in> <out> [block_size]
         \\                              Encode deterministic blocked gzip/BGZF
         \\  decode-bgzf-file <in> <out> [max_output]

@@ -152,6 +152,14 @@ pub fn build(b: *std.Build) void {
     const run_bgzf_tests = b.addRunArtifact(bgzf_tests);
     const bgzf_test_step = b.step("test-bgzf", "Run focused BGZF block and range tests");
     bgzf_test_step.dependOn(&run_bgzf_tests.step);
+    const snappy_framing_tests = b.addTest(.{
+        .name = "vort-snappy-framing-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "Xerial Snappy", "Hadoop Snappy", "Snappy framing" },
+    });
+    const run_snappy_framing_tests = b.addRunArtifact(snappy_framing_tests);
+    const snappy_framing_test_step = b.step("test-snappy-framing", "Run focused Xerial and Hadoop Snappy tests");
+    snappy_framing_test_step.dependOn(&run_snappy_framing_tests.step);
 
     const test_step = b.step("test", "Run vort unit tests");
     test_step.dependOn(&run_tests.step);
@@ -1039,6 +1047,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| bgzf_diff.addArgs(args);
     const bgzf_diff_step = b.step("run-bgzf-diff", "Validate blocked gzip/BGZF against Python zlib and optional gzip");
     bgzf_diff_step.dependOn(&bgzf_diff.step);
+
+    const snappy_framing_diff = b.addSystemCommand(&.{ "python3", "tools/snappy_framing/diff.py", "--cli" });
+    snappy_framing_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| snappy_framing_diff.addArgs(args);
+    const snappy_framing_diff_step = b.step("run-snappy-framing-diff", "Validate Xerial and Hadoop Snappy framing against optional snappy-java");
+    snappy_framing_diff_step.dependOn(&snappy_framing_diff.step);
 
     const zip_writer_probe_exe = b.addExecutable(.{
         .name = "vort-zip-writer-probe",
@@ -4741,6 +4755,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(bgzf_diff_step);
+    ci_smoke_step.dependOn(snappy_framing_diff_step);
     ci_smoke_step.dependOn(zip_diff_step);
     ci_smoke_step.dependOn(bzip2_diff_step);
     ci_smoke_step.dependOn(xz_diff_step);
