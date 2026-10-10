@@ -252,6 +252,8 @@ pub fn main(init: std.process.Init) !void {
         try rar_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-rar-file")) {
         try rar_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-rar-volumes")) {
+        try rar_cli.extractVolumes(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-file")) {
         try lzop_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-stored-file")) {
@@ -2204,6 +2206,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-rar-file <path>        List RAR4/RAR5 entries and methods
         \\  extract-rar-file <rar> <entry> <out> [max_output]
         \\                              Extract a supported stored RAR entry
+        \\  extract-rar-volumes <entry> <out> <max_output> <vol1> [vol2...]
+        \\                              Extract across an ordered RAR5 volume set
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
         \\                              Encode compressed-or-stored LZOP blocks
         \\  encode-lzop-stored-file <in> <out> [block_size] [adler32|crc32]

@@ -3,9 +3,10 @@ const rar15 = @import("rar/rar15.zig");
 const rar20 = @import("rar/rar20.zig");
 const rar29 = @import("rar/rar29.zig");
 const rar50 = @import("rar/rar50.zig");
+const volume_set = @import("rar/volume_set.zig");
 const writer = @import("rar/writer.zig");
 
-pub const Error = archive.Error || writer.Error;
+pub const Error = archive.Error || writer.Error || volume_set.Error;
 pub const Version = archive.Version;
 pub const DecodeOptions = archive.DecodeOptions;
 pub const Method = archive.Method;
@@ -41,6 +42,12 @@ pub const decodeRar50Into = rar50.decodeInto;
 pub const decodeRar50Alloc = rar50.decodeAlloc;
 pub const Rar50DecodeOptions = rar50.DecodeOptions;
 pub const Rar50Decoder = rar50.Decoder;
+pub const VolumeSet = volume_set.VolumeSet;
+pub const VolumeEntry = volume_set.Entry;
+pub const VolumeIterator = volume_set.Iterator;
+pub const VolumeExtractSession = volume_set.ExtractSession;
+pub const VolumeDecodedEntry = volume_set.DecodedEntry;
+pub const parseVolumeSetAlloc = volume_set.VolumeSet.parseAlloc;
 
 test {
     _ = archive;
@@ -48,5 +55,6 @@ test {
     _ = rar20;
     _ = rar29;
     _ = rar50;
+    _ = volume_set;
     _ = writer;
 }

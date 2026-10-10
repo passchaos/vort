@@ -105,6 +105,8 @@ pub const Archive = struct {
     archive_end: usize,
     trailer_size: usize,
     multi_volume: bool,
+    volume_number: ?u64,
+    has_next_volume: bool,
     solid: bool,
     locked: bool,
 
@@ -501,6 +503,8 @@ fn parseRar4Archive(bytes: []const u8, prefix: usize) Error!Archive {
         .archive_end = archive_end,
         .trailer_size = bytes.len - archive_end,
         .multi_volume = main.flags & rar4_main_volume != 0,
+        .volume_number = null,
+        .has_next_volume = false,
         .solid = main.flags & rar4_main_solid != 0,
         .locked = main.flags & rar4_main_locked != 0,
     };
@@ -514,8 +518,10 @@ fn parseRar5Archive(bytes: []const u8, prefix: usize) Error!Archive {
     if (main.data_size != 0) return error.InvalidRarArchive;
     var cursor = main.type_specific_start;
     const archive_flags = try readVint(bytes, &cursor, main.type_specific_end);
-    if (archive_flags & rar5_main_volume_number != 0)
-        _ = try readVint(bytes, &cursor, main.type_specific_end);
+    const volume_number = if (archive_flags & rar5_main_volume_number != 0)
+        try readVint(bytes, &cursor, main.type_specific_end)
+    else
+        null;
     var offset = main.next_offset;
     var count: usize = 0;
     var end_offset: ?usize = null;
@@ -541,6 +547,8 @@ fn parseRar5Archive(bytes: []const u8, prefix: usize) Error!Archive {
         .archive_end = archive_end,
         .trailer_size = bytes.len - archive_end,
         .multi_volume = archive_flags & rar5_main_volume != 0 or end_flags & 1 != 0,
+        .volume_number = volume_number,
+        .has_next_volume = end_flags & 1 != 0,
         .solid = archive_flags & rar5_main_solid != 0,
         .locked = archive_flags & rar5_main_locked != 0,
     };
@@ -797,7 +805,8 @@ fn parseRar5Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
         .rar50
     else
         .unsupported;
-    if (method == .stored and !encrypted and raw.data_size != unpacked_size)
+    const split = raw.flags & (rar5_header_split_before | rar5_header_split_after) != 0;
+    if (method == .stored and !encrypted and !split and raw.data_size != unpacked_size)
         return error.InvalidRarArchive;
     const dictionary_size = if (method == .rar50)
         try rar5DictionarySize(compression_info, compression_version)

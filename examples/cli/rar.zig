@@ -35,12 +35,14 @@ pub fn listFile(
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
     const archive = try vort.parseRarArchive(bytes);
-    try stdout.print("rar_entries={d} version={s} prefix_bytes={d} trailer_bytes={d} volume={} solid={} locked={}\n", .{
+    try stdout.print("rar_entries={d} version={s} prefix_bytes={d} trailer_bytes={d} volume={} volume_number={?d} next_volume={} solid={} locked={}\n", .{
         archive.entry_count,
         @tagName(archive.version),
         archive.prefix_size,
         archive.trailer_size,
         archive.multi_volume,
+        archive.volume_number,
+        archive.has_next_volume,
         archive.solid,
         archive.locked,
     });
@@ -97,6 +99,46 @@ pub fn extractFile(
         entry_name,
         output_path,
     });
+}
+
+pub fn extractVolumes(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const entry_name = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const max_output_len = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    var volume_bytes: std.ArrayList([]const u8) = .empty;
+    defer {
+        for (volume_bytes.items) |bytes| init.gpa.free(bytes);
+        volume_bytes.deinit(init.gpa);
+    }
+    var archive_bytes: usize = 0;
+    while (args.next()) |path| {
+        const bytes = try readFile(init, path);
+        archive_bytes = std.math.add(usize, archive_bytes, bytes.len) catch
+            return error.IntegerOverflow;
+        try volume_bytes.append(init.gpa, bytes);
+    }
+    if (volume_bytes.items.len == 0) return error.MissingCorpusPath;
+    var set = try vort.parseRarVolumeSetAlloc(init.gpa, volume_bytes.items);
+    defer set.deinit();
+    const decoded = try set.extractByNameAllocLimited(
+        init.gpa,
+        entry_name,
+        max_output_len,
+    );
+    defer init.gpa.free(decoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+    try stdout.print(
+        "rar_volumes={d} archive_bytes={d} decoded_bytes={d} entry={s} path={s}\n",
+        .{ volume_bytes.items.len, archive_bytes, decoded.len, entry_name, output_path },
+    );
 }
 
 fn parseVersion(value: ?[]const u8) !vort.RarVersion {

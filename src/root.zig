@@ -384,6 +384,12 @@ pub const decodeRar50Into = rar.decodeRar50Into;
 pub const decodeRar50Alloc = rar.decodeRar50Alloc;
 pub const Rar50DecodeOptions = rar.Rar50DecodeOptions;
 pub const Rar50Decoder = rar.Rar50Decoder;
+pub const RarVolumeSet = rar.VolumeSet;
+pub const RarVolumeEntry = rar.VolumeEntry;
+pub const RarVolumeIterator = rar.VolumeIterator;
+pub const RarVolumeExtractSession = rar.VolumeExtractSession;
+pub const RarVolumeDecodedEntry = rar.VolumeDecodedEntry;
+pub const parseRarVolumeSetAlloc = rar.parseVolumeSetAlloc;
 
 pub const ZooError = zoo.Error;
 pub const ZooMethod = zoo.Method;
