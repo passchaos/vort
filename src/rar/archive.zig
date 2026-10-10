@@ -21,6 +21,7 @@ pub const Version = enum { rar4, rar5 };
 pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_ppmd_memory: usize = rar29.default_max_ppmd_memory,
+    max_vm_instructions: usize = rar29.default_max_vm_instructions,
 };
 
 pub const Method = enum {
@@ -171,6 +172,7 @@ pub const Archive = struct {
                 try rar29.decodeIntoWithOptions(scratch, data, target, .{
                     .max_output_len = options.max_output_len,
                     .max_ppmd_memory = options.max_ppmd_memory,
+                    .max_vm_instructions = options.max_vm_instructions,
                 })
             else
                 try rar29.decodeInto(data, target),

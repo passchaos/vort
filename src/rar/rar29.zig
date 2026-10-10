@@ -1,18 +1,21 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const ppmd_h = @import("ppmd_h.zig");
+const rar29_vm = @import("rar29_vm.zig");
 
-pub const Error = core.Error || ppmd_h.Error || error{
+pub const Error = core.Error || ppmd_h.Error || rar29_vm.Error || error{
     InvalidRar29Stream,
     UnsupportedRar29Ppmd,
     UnsupportedRar29Filter,
 };
 
 pub const default_max_ppmd_memory: usize = 256 * 1024 * 1024;
+pub const default_max_vm_instructions: usize = rar29_vm.default_max_instructions;
 
 pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_ppmd_memory: usize = default_max_ppmd_memory,
+    max_vm_instructions: usize = default_max_vm_instructions,
 };
 
 pub const InitialMode = enum { lz, ppmd };
@@ -150,10 +153,13 @@ const Decoder = struct {
     block_mode: BlockMode = .lz,
     allocator: ?std.mem.Allocator = null,
     ppmd: ?ppmd_h.Session = null,
+    vm: ?rar29_vm.State = null,
     max_ppmd_memory: usize = 0,
+    max_vm_instructions: usize = 0,
 
     fn deinit(self: *Decoder) void {
         if (self.ppmd) |*session| session.deinit();
+        if (self.vm) |*state| state.deinit();
     }
 
     fn decode(self: *Decoder) Error!void {
@@ -168,6 +174,7 @@ const Decoder = struct {
             }
         }
         try self.finishMember();
+        if (self.vm) |*state| try state.apply(self.output[0..self.output_offset]);
     }
 
     fn readTables(self: *Decoder) Error!void {
@@ -284,7 +291,7 @@ const Decoder = struct {
                     self.in_block = false;
                     if (self.output_offset != self.output.len) return error.SizeMismatch;
                 },
-                3 => return error.UnsupportedRar29Filter,
+                3 => try self.readVmCodePpmd(),
                 4 => {
                     var offset: usize = 0;
                     for (0..3) |_| offset = (offset << 8) | try self.readPpmdByte();
@@ -315,7 +322,7 @@ const Decoder = struct {
             switch (symbol) {
                 0...255 => try self.putByte(@intCast(symbol)),
                 256 => _ = try self.readBlockEnd(),
-                257 => return error.UnsupportedRar29Filter,
+                257 => try self.readVmCode(),
                 258 => if (self.last_length != 0) try self.copy(self.last_length, self.last_offset),
                 259...262 => {
                     const index = symbol - 259;
@@ -419,6 +426,49 @@ const Decoder = struct {
         self.in_block = false;
     }
 
+    fn readVmCode(self: *Decoder) Error!void {
+        const first_byte: u8 = @intCast(try self.bits.read(8));
+        var length = @as(usize, first_byte & 7) + 1;
+        if (length == 7) {
+            length = @as(usize, try self.bits.read(8)) + 7;
+        } else if (length == 8) {
+            length = try self.bits.read(16);
+        }
+        const allocator = self.allocator orelse return error.UnsupportedRar29Filter;
+        const data = try allocator.alloc(u8, length);
+        defer allocator.free(data);
+        for (data) |*byte| byte.* = @intCast(try self.bits.read(8));
+        try self.parseVmCode(first_byte, data, allocator);
+    }
+
+    fn readVmCodePpmd(self: *Decoder) Error!void {
+        const first_byte = try self.readPpmdByte();
+        var length = @as(usize, first_byte & 7) + 1;
+        if (length == 7) {
+            length = @as(usize, try self.readPpmdByte()) + 7;
+        } else if (length == 8) {
+            length = (@as(usize, try self.readPpmdByte()) << 8) |
+                try self.readPpmdByte();
+        }
+        const allocator = self.allocator orelse return error.UnsupportedRar29Filter;
+        const data = try allocator.alloc(u8, length);
+        defer allocator.free(data);
+        for (data) |*byte| byte.* = try self.readPpmdByte();
+        try self.parseVmCode(first_byte, data, allocator);
+    }
+
+    fn parseVmCode(
+        self: *Decoder,
+        first_byte: u8,
+        data: []const u8,
+        allocator: std.mem.Allocator,
+    ) Error!void {
+        if (self.vm == null)
+            self.vm = rar29_vm.State.init(allocator, self.max_vm_instructions);
+        const state = if (self.vm) |*value| value else unreachable;
+        try state.parseRecord(first_byte, data, self.output_offset);
+    }
+
     fn copy(self: *Decoder, length: usize, raw_offset: usize) Error!void {
         if (length > self.output.len - self.output_offset) return error.SizeMismatch;
         const offset = if (raw_offset == 0) 1 else raw_offset;
@@ -468,6 +518,7 @@ pub fn decodeIntoWithOptions(
         .output = output,
         .allocator = allocator,
         .max_ppmd_memory = options.max_ppmd_memory,
+        .max_vm_instructions = options.max_vm_instructions,
     };
     defer decoder.deinit();
     try decoder.decode();
