@@ -13,6 +13,7 @@ const compress_z_cli = @import("cli/compress_z.zig");
 const filters_cli = @import("cli/filters.zig");
 const hadoop_lzo_cli = @import("cli/hadoop_lzo.zig");
 const lz4_legacy_cli = @import("cli/lz4_legacy.zig");
+const lzfse_cli = @import("cli/lzfse.zig");
 const lzip_cli = @import("cli/lzip.zig");
 const lzf_cli = @import("cli/lzf.zig");
 const lha_cli = @import("cli/lha.zig");
@@ -121,6 +122,12 @@ pub fn main(init: std.process.Init) !void {
         try lz4_legacy_cli.decode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-lz4-legacy-file")) {
         try lz4_legacy_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-lzfse-file")) {
+        try lzfse_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-lzfse-file")) {
+        try lzfse_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-lzfse-file")) {
+        try lzfse_cli.inspect(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
         try bgzf_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-bgzf-file")) {
@@ -2222,6 +2229,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-lz4-legacy-file <in> <out> [block_size]
         \\  decode-lz4-legacy-file <in> <out> [max_output]
         \\  inspect-lz4-legacy-file <path> [max_output]
+        \\  encode-lzfse-file <in> <out> [block_size] [lzvn|stored]
+        \\  decode-lzfse-file <in> <out> [max_output]
+        \\  inspect-lzfse-file <path> [max_output]
         \\  encode-bgzf-file <in> <out> [block_size]
         \\                              Encode deterministic blocked gzip/BGZF
         \\  decode-bgzf-file <in> <out> [max_output]

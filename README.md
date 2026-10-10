@@ -85,6 +85,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   blocks up to 8 MiB, zero-allocation metadata iteration, decoded-size preflight,
   bounded/caller-owned decode, system `lz4 -l` interoperability, and automatic
   TAR/CPIO legacy-magic detection;
+- pure Zig Apple LZFSE stream and raw LZVN support with `bvx-`, `bvxn`, `bvx1`,
+  and `bvx2` decoding, compressed frequency-table and four-way literal FSE
+  reconstruction, bounded/caller-owned APIs, deterministic LZVN-or-stored block
+  writing, strict stream termination, and bidirectional Apple reference
+  interoperability;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,

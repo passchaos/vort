@@ -32,6 +32,16 @@ jobs:
       - name: Check formatting
         run: zig fmt --check build.zig build.zig.zon src examples bench tools
 
+      - name: Build pinned Apple LZFSE reference CLI
+        run: |
+          lzfse_reference_dir=$(mktemp -d)
+          git -C "$lzfse_reference_dir" init
+          git -C "$lzfse_reference_dir" remote add origin https://github.com/lzfse/lzfse.git
+          git -C "$lzfse_reference_dir" fetch --depth 1 origin e634ca58b4821d9f3d560cdc6df5dec02ffc93fd
+          git -C "$lzfse_reference_dir" checkout --detach FETCH_HEAD
+          make -C "$lzfse_reference_dir" -j2
+          sudo install "$lzfse_reference_dir/build/bin/lzfse" /usr/local/bin/lzfse
+
       - name: Run CI smoke aggregate
         run: zig build -Doptimize=ReleaseFast ci-smoke
 

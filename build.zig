@@ -176,6 +176,14 @@ pub fn build(b: *std.Build) void {
     const run_lz4_legacy_tests = b.addRunArtifact(lz4_legacy_tests);
     const lz4_legacy_test_step = b.step("test-lz4-legacy", "Run focused LZ4 legacy frame tests");
     lz4_legacy_test_step.dependOn(&run_lz4_legacy_tests.step);
+    const lzfse_tests = b.addTest(.{
+        .name = "vort-lzfse-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "LZFSE", "LZVN" },
+    });
+    const run_lzfse_tests = b.addRunArtifact(lzfse_tests);
+    const lzfse_test_step = b.step("test-lzfse", "Run focused LZFSE and LZVN tests");
+    lzfse_test_step.dependOn(&run_lzfse_tests.step);
     const hadoop_lzo_index_tests = b.addTest(.{
         .name = "vort-hadoop-lzo-index-tests",
         .root_module = tests_mod,
@@ -1088,6 +1096,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lz4_legacy_diff.addArgs(args);
     const lz4_legacy_diff_step = b.step("run-lz4-legacy-diff", "Validate LZ4 legacy frames against the system lz4 CLI");
     lz4_legacy_diff_step.dependOn(&lz4_legacy_diff.step);
+
+    const lzfse_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/diff.py", "--cli" });
+    lzfse_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| lzfse_diff.addArgs(args);
+    const lzfse_diff_step = b.step("run-lzfse-diff", "Validate LZFSE and LZVN streams against the optional Apple reference CLI");
+    lzfse_diff_step.dependOn(&lzfse_diff.step);
 
     const hadoop_lzo_index_diff = b.addSystemCommand(&.{ "python3", "tools/hadoop_lzo_index/diff.py", "--cli" });
     hadoop_lzo_index_diff.addArtifactArg(cli_exe);
@@ -4799,6 +4813,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(snappy_framing_diff_step);
     ci_smoke_step.dependOn(hadoop_lz4_diff_step);
     ci_smoke_step.dependOn(lz4_legacy_diff_step);
+    ci_smoke_step.dependOn(lzfse_diff_step);
     ci_smoke_step.dependOn(hadoop_lzo_index_diff_step);
     ci_smoke_step.dependOn(zip_diff_step);
     ci_smoke_step.dependOn(bzip2_diff_step);
