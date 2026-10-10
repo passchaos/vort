@@ -89,6 +89,11 @@ RAR50 output can additionally select a whole-member Delta, E8, E8E9, or ARM
 filter. The writer applies the forward transform independently to each legal
 filter-sized block, writes native filter records, and uses absolute member
 offsets for executable transforms.
+`.solid = true` keeps LZ history and repeat-distance state across consecutive
+compressed members and writes both the archive and per-file continuation
+flags. A stored file or directory ends the current compression chain, so the
+next compressed member starts non-solid. Filtered solid writing is rejected
+until cross-member transformed-history semantics are exposed explicitly.
 The writers emit standard header/data CRCs, Unix attributes, optional
 generation-native timestamps (DOS date/time for RAR4, Unix seconds for RAR5),
 RAR4 end blocks, and RAR5 end headers.
@@ -97,8 +102,8 @@ RAR4 output accepts safe ASCII names and converts `/` to the traditional `\`
 separator. RAR5 output accepts validated UTF-8 names. Both writers reject NUL,
 absolute, empty-component, dot, and parent-component paths. RAR50 dictionary
 sizes must be power-of-two multiples of 128 KiB. RAR4 compression, encryption,
-solid writing, recovery records, comments, redirections, and volume splitting
-remain future writer work.
+recovery records, comments, redirections, and volume splitting remain future
+writer work.
 
 ## CLI
 
@@ -106,6 +111,7 @@ remain future writer work.
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50 e8e9
+zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50 none solid
 zig build run -- list-rar-file output.rar
 zig build run -- extract-rar-file output.rar payload.bin decoded.bin 1048576
 ```
@@ -113,6 +119,8 @@ zig build run -- extract-rar-file output.rar payload.bin decoded.bin 1048576
 The writer version is `rar4` or `rar5`; `rar5` is the default. Compression is
 `stored` by default and `rar50` when explicitly requested. The optional filter
 is `delta:N`, `e8`, `e8e9`, or `arm`.
+The final optional mode is `solid`; it matters for multi-entry library calls,
+while the single-entry CLI command mainly validates header generation.
 
 ## Differential validation
 
@@ -148,6 +156,6 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 \
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-The next writer stages are solid state and volume splitting, followed by RAR29
-compatibility writing and encrypted payloads. Encryption should be added on top
-of the existing codecs rather than approximated in the stored path.
+The next writer stage is volume splitting, followed by RAR29 compatibility
+writing and encrypted payloads. Encryption should be added on top of the
+existing codecs rather than approximated in the stored path.

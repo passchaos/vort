@@ -171,7 +171,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   redirection/unknown-size and unsupported legacy-solid errors, ordered RAR5
   multi-volume reconstruction for stored/compressed/solid split entries, and
   deterministic RAR50 LZ writing with canonical tables, multiblock output, and
-  Delta/E8/E8E9/ARM filters, plus 7-Zip and rars interoperability;
+  Delta/E8/E8E9/ARM filters plus cross-member solid history, with 7-Zip and
+  rars interoperability;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded
   extraction for Stored, MSZIP, 15–21 bit LZX, and 10–21 bit Quantum folders,
   including Stored/MSZIP, reference uncompressed-block LZX, and literal

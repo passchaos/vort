@@ -115,6 +115,8 @@ def main() -> None:
     writer_compressed_external = 0
     writer_filtered = 0
     writer_filtered_external = 0
+    writer_solid = 0
+    writer_solid_external = 0
     reference_stored = 0
     reference_compressed = 0
     reference_compressed_decoded = 0
@@ -216,6 +218,32 @@ def main() -> None:
                     raise AssertionError(f"Vort RAR5 UTF-8 name mismatch: {listing}")
                 if seven_zip is not None:
                     run(seven_zip, "t", str(archive))
+
+            solid_archive = temp / "vort-rar50-solid.rar"
+            solid_output = temp / "vort-rar50-solid.out"
+            run(args.writer, str(solid_archive), "rar5", "solid")
+            solid_listing = run(args.cli, "list-rar-file", str(solid_archive)).stdout
+            if "solid=true" not in solid_listing or "name=second.txt" not in solid_listing:
+                raise AssertionError(f"Vort solid writer metadata mismatch: {solid_listing}")
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(solid_archive),
+                "second.txt",
+                str(solid_output),
+                str(1024 * 1024),
+            )
+            expected_solid = b"solid history payload alpha beta gamma\n" * 128
+            if solid_output.read_bytes() != expected_solid:
+                raise AssertionError("Vort failed its own solid RAR50 output")
+            writer_solid += 1
+            if seven_zip is not None:
+                solid_reference = temp / "vort-rar50-solid-reference"
+                solid_reference.mkdir()
+                run(seven_zip, "x", "-y", f"-o{solid_reference}", str(solid_archive))
+                if (solid_reference / "second.txt").read_bytes() != expected_solid:
+                    raise AssertionError("7-Zip rejected Vort solid RAR50 output")
+                writer_solid_external += 1
 
         if args.rars is not None:
             for version in versions:
@@ -673,6 +701,8 @@ def main() -> None:
         f"writer_compressed_external={writer_compressed_external} "
         f"writer_filtered={writer_filtered} "
         f"writer_filtered_external={writer_filtered_external} "
+        f"writer_solid={writer_solid} "
+        f"writer_solid_external={writer_solid_external} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "
