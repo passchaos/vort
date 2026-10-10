@@ -1,6 +1,8 @@
 const std = @import("std");
 const archive = @import("archive.zig");
 const crc16 = @import("crc16.zig");
+const larc = @import("larc.zig");
+const lh1 = @import("lh1.zig");
 const lh_new = @import("lh_new.zig");
 
 pub const Error = archive.Error || lh_new.Error || error{
@@ -43,6 +45,11 @@ pub fn encodeAppend(
         defer if (owned_compressed) |bytes| allocator.free(bytes);
         const compressed = switch (entry.method) {
             .stored => entry.data,
+            .lh1 => blk: {
+                const bytes = try lh1.encodeAlloc(allocator, entry.data);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
             .lh5 => blk: {
                 const bytes = try lh_new.encodeAlloc(allocator, entry.data, .lh5);
                 owned_compressed = bytes;
@@ -55,6 +62,16 @@ pub fn encodeAppend(
             },
             .lh7 => blk: {
                 const bytes = try lh_new.encodeAlloc(allocator, entry.data, .lh7);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
+            .lz5 => blk: {
+                const bytes = try larc.encodeAlloc(allocator, entry.data, .lz5);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
+            .lzs => blk: {
+                const bytes = try larc.encodeAlloc(allocator, entry.data, .lzs);
                 owned_compressed = bytes;
                 break :blk bytes;
             },
@@ -117,9 +134,12 @@ fn validateEntries(entries: []const EncodeEntry) Error!void {
 fn methodId(method: archive.Method) []const u8 {
     return switch (method) {
         .stored => "-lh0-",
+        .lh1 => "-lh1-",
         .lh5 => "-lh5-",
         .lh6 => "-lh6-",
         .lh7 => "-lh7-",
+        .lz5 => "-lz5-",
+        .lzs => "-lzs-",
         .directory => "-lhd-",
         .unsupported => unreachable,
     };
@@ -145,14 +165,17 @@ fn appendLe32(
     try output.appendSlice(allocator, &bytes);
 }
 
-test "LHA writer round trips stored LH5 LH6 LH7 and directory entries" {
+test "LHA writer round trips common compressed stored and directory entries" {
     const allocator = std.testing.allocator;
     const payload = "LHA archive payload\n" ** 64;
     const entries = [_]EncodeEntry{
         .{ .name = "stored.bin", .data = &.{ 0, 1, 2, 3 }, .method = .stored },
+        .{ .name = "one.txt", .data = payload, .method = .lh1 },
         .{ .name = "five.txt", .data = payload, .method = .lh5 },
         .{ .name = "six.txt", .data = payload, .method = .lh6 },
         .{ .name = "seven.txt", .data = payload, .method = .lh7 },
+        .{ .name = "lz5.txt", .data = payload, .method = .lz5 },
+        .{ .name = "lzs.txt", .data = payload, .method = .lzs },
         .{ .name = "empty/", .method = .directory },
     };
     const encoded = try encodeAlloc(allocator, &entries);

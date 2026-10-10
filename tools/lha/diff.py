@@ -36,13 +36,16 @@ def make_payload() -> bytes:
     return prefix + b"LHA interoperability\n" * 512 + prefix
 
 
-def fixture_cases(root: Path) -> tuple[tuple[Path, str, int], ...]:
+def fixture_cases(root: Path) -> tuple[tuple[Path, str, int, str, str], ...]:
     return (
-        (root / "explzh_723" / "h0_lh5.lzh", "lh5", 0),
-        (root / "explzh_723" / "h1_lh6.lzh", "lh6", 1),
-        (root / "explzh_723" / "h2_lh7.lzh", "lh7", 2),
-        (root / "explzh_723" / "h1_subdir.lzh", "stored", 1),
-        (root / "explzh_723" / "h2_subdir.lzh", "stored", 2),
+        (root / "explzh_723" / "h0_lh5.lzh", "lh5", 0, "gpl-2", "gpl-2"),
+        (root / "explzh_723" / "h1_lh6.lzh", "lh6", 1, "gpl-2", "gpl-2"),
+        (root / "explzh_723" / "h2_lh7.lzh", "lh7", 2, "gpl-2", "gpl-2"),
+        (root / "explzh_723" / "h1_subdir.lzh", "stored", 1, "subdir/subdir2/hello.txt", "subdir/subdir2/hello.txt"),
+        (root / "explzh_723" / "h2_subdir.lzh", "stored", 2, "subdir/subdir2/hello.txt", "subdir/subdir2/hello.txt"),
+        (root / "lharc113" / "lh1.lzh", "lh1", 0, "GPL-2", "gpl-2"),
+        (root / "lharc_atari_313a" / "lz5.lzh", "lz5", 0, "GPL2", "gpl2"),
+        (root / "generated" / "lzs" / "lzs.lzs", "lzs", 0, "GPL-2", "gpl-2"),
     )
 
 
@@ -61,7 +64,8 @@ def main() -> None:
         temp = Path(temp_text)
         source = temp / "payload.bin"
         source.write_bytes(payload)
-        for method in ("stored", "lh5", "lh6", "lh7"):
+        methods = ("stored", "lh1", "lh5", "lh6", "lh7", "lz5", "lzs")
+        for method in methods:
             first = temp / f"vort-{method}-first.lzh"
             second = temp / f"vort-{method}-second.lzh"
             output = temp / f"vort-{method}.out"
@@ -88,17 +92,12 @@ def main() -> None:
                 writer_external += 1
 
         if args.fixtures is not None:
-            for fixture, method, level in fixture_cases(args.fixtures):
+            for fixture, method, level, name, reference_name in fixture_cases(args.fixtures):
                 if not fixture.is_file():
                     raise AssertionError(f"missing lhasa fixture: {fixture}")
                 listing = run(args.cli, "list-lha-file", str(fixture)).stdout
                 if f"method={method}" not in listing or f"level={level}" not in listing:
                     raise AssertionError(f"Vort misparsed {fixture.name}: {listing}")
-                name = (
-                    "subdir/subdir2/hello.txt"
-                    if fixture.name.endswith("_subdir.lzh")
-                    else "gpl-2"
-                )
                 output = temp / f"fixture-{reader_fixtures}.out"
                 run(
                     args.cli,
@@ -109,13 +108,13 @@ def main() -> None:
                     str(1024 * 1024),
                 )
                 if reference is not None:
-                    expected = lhasa_extract(reference, fixture, name)
+                    expected = lhasa_extract(reference, fixture, reference_name)
                     if output.read_bytes() != expected:
                         raise AssertionError(f"Vort fixture extraction mismatch for {fixture}")
                 reader_fixtures += 1
 
     print(
-        "lha_diff=ok methods=4 self_writer_cases=4 "
+        "lha_diff=ok methods=7 self_writer_cases=7 "
         f"reference={reference is not None} writer_external={writer_external} "
         f"reader_fixtures={reader_fixtures} levels=3"
     )

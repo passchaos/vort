@@ -65,6 +65,8 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
                 error.OutputLimitExceeded,
                 error.UnsupportedLhaMethod,
                 error.InvalidLhaArchive,
+                error.InvalidLegacyLhStream,
+                error.InvalidLh1Stream,
                 error.InvalidLhStream,
                 error.TruncatedFrame,
                 error.TrailingData,

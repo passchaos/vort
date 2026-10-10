@@ -91,9 +91,12 @@ pub fn extractFile(
 fn parseMethod(value: ?[]const u8) !vort.LhaMethod {
     const name = value orelse return .lh5;
     if (std.mem.eql(u8, name, "stored") or std.mem.eql(u8, name, "lh0")) return .stored;
+    if (std.mem.eql(u8, name, "lh1")) return .lh1;
     if (std.mem.eql(u8, name, "lh5")) return .lh5;
     if (std.mem.eql(u8, name, "lh6")) return .lh6;
     if (std.mem.eql(u8, name, "lh7")) return .lh7;
+    if (std.mem.eql(u8, name, "lz5")) return .lz5;
+    if (std.mem.eql(u8, name, "lzs")) return .lzs;
     return error.UnsupportedLhaMethod;
 }
 

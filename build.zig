@@ -1062,7 +1062,7 @@ pub fn build(b: *std.Build) void {
     const lha_diff = b.addSystemCommand(&.{ "python3", "tools/lha/diff.py", "--cli" });
     lha_diff.addArtifactArg(cli_exe);
     if (b.args) |args| lha_diff.addArgs(args);
-    const lha_diff_step = b.step("run-lha-diff", "Validate LHA level 0/1/2 and LH5/LH6/LH7 against optional lhasa");
+    const lha_diff_step = b.step("run-lha-diff", "Validate LHA level 0/1/2 and common LH/LArc methods against optional lhasa");
     lha_diff_step.dependOn(&lha_diff.step);
 
     const lzop_diff = b.addSystemCommand(&.{ "python3", "tools/lzop/diff.py", "--cli" });

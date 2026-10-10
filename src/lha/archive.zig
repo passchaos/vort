@@ -1,9 +1,11 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const crc16 = @import("crc16.zig");
+const larc = @import("larc.zig");
+const lh1 = @import("lh1.zig");
 const lh_new = @import("lh_new.zig");
 
-pub const Error = core.Error || lh_new.Error || error{
+pub const Error = core.Error || larc.Error || lh1.Error || lh_new.Error || error{
     InvalidLhaArchive,
     UnsupportedLhaHeaderLevel,
     UnsupportedLhaMethod,
@@ -12,9 +14,12 @@ pub const Error = core.Error || lh_new.Error || error{
 
 pub const Method = enum {
     stored,
+    lh1,
     lh5,
     lh6,
     lh7,
+    lz5,
+    lzs,
     directory,
     unsupported,
 };
@@ -130,9 +135,12 @@ pub const Archive = struct {
                 if (compressed.len != target.len) return error.SizeMismatch;
                 @memcpy(target, compressed);
             },
+            .lh1 => try lh1.decodeInto(compressed, target),
             .lh5 => try lh_new.decodeInto(compressed, target, .lh5),
             .lh6 => try lh_new.decodeInto(compressed, target, .lh6),
             .lh7 => try lh_new.decodeInto(compressed, target, .lh7),
+            .lz5 => try larc.decodeInto(compressed, target, .lz5),
+            .lzs => try larc.decodeInto(compressed, target, .lzs),
             .directory => if (target.len != 0 or compressed.len != 0)
                 return error.SizeMismatch,
             .unsupported => return error.UnsupportedLhaMethod,
@@ -395,9 +403,12 @@ fn normalizedSeparator(byte: u8) u8 {
 
 fn methodFromId(id: [5]u8) Method {
     if (std.mem.eql(u8, &id, "-lh0-")) return .stored;
+    if (std.mem.eql(u8, &id, "-lh1-")) return .lh1;
     if (std.mem.eql(u8, &id, "-lh5-")) return .lh5;
     if (std.mem.eql(u8, &id, "-lh6-")) return .lh6;
     if (std.mem.eql(u8, &id, "-lh7-")) return .lh7;
+    if (std.mem.eql(u8, &id, "-lz5-")) return .lz5;
+    if (std.mem.eql(u8, &id, "-lzs-")) return .lzs;
     if (std.mem.eql(u8, &id, "-lhd-")) return .directory;
     return .unsupported;
 }
