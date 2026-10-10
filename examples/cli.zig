@@ -2201,8 +2201,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-cpio-file <path>       List newc/CRC/ODC/binary CPIO entries
         \\  extract-cpio-file <cpio> <entry> <out> [max_output]
         \\                              Extract a regular file or symlink target
-        \\  create-rar-file <out> <entry> <in> [rar4|rar5]
-        \\                              Create a deterministic stored RAR archive
+        \\  create-rar-file <out> <entry> <in> [rar4|rar5] [stored|rar50]
+        \\                              Create a deterministic stored/compressed RAR archive
         \\  list-rar-file <path>        List RAR4/RAR5 entries and methods
         \\  extract-rar-file <rar> <entry> <out> [max_output]
         \\                              Extract a supported stored RAR entry

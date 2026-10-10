@@ -1,14 +1,17 @@
 const std = @import("std");
 const archive = @import("archive.zig");
 const checksum = @import("../checksum.zig");
+const rar50_encoder = @import("rar50_encoder.zig");
 
-pub const Error = archive.Error || std.mem.Allocator.Error || error{
+pub const Error = archive.Error || rar50_encoder.Error || std.mem.Allocator.Error || error{
     InvalidRarEntryName,
     RarFileTooLarge,
     RarHeaderTooLarge,
+    UnsupportedRarEncodeOptions,
 };
 
 pub const Kind = enum { regular, directory };
+pub const Compression = enum { stored, rar50 };
 
 pub const EncodeEntry = struct {
     name: []const u8,
@@ -22,6 +25,9 @@ pub const EncodeEntry = struct {
 
 pub const EncodeOptions = struct {
     version: archive.Version = .rar5,
+    compression: Compression = .stored,
+    dictionary_size: usize = 128 * 1024,
+    block_size: usize = 64 * 1024,
 };
 
 pub fn encodeAlloc(
@@ -41,14 +47,14 @@ pub fn encodeAppend(
     entries: []const EncodeEntry,
     options: EncodeOptions,
 ) !usize {
-    try validateEntries(entries, options.version);
+    try validateEntries(entries, options);
     const start = output.items.len;
     errdefer output.items.len = start;
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
     switch (options.version) {
         .rar4 => try encodeRar4(allocator, &encoded, entries),
-        .rar5 => try encodeRar5(allocator, &encoded, entries),
+        .rar5 => try encodeRar5(allocator, &encoded, entries, options),
     }
     try output.appendSlice(allocator, encoded.items);
     return output.items.len - start;
@@ -67,12 +73,18 @@ pub fn encodeInto(
     return encoded.len;
 }
 
-fn validateEntries(entries: []const EncodeEntry, version: archive.Version) Error!void {
+fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!void {
+    if (options.compression == .rar50) {
+        if (options.version != .rar5 or options.block_size == 0 or
+            options.block_size > rar50_encoder.max_block_size)
+            return error.UnsupportedRarEncodeOptions;
+        _ = try rar50CompressionInfo(options.dictionary_size);
+    }
     for (entries) |entry| {
         if (!archive.isSafePath(entry.name) or std.mem.indexOfScalar(u8, entry.name, 0) != null)
             return error.InvalidRarEntryName;
         if (entry.kind == .directory and entry.data.len != 0) return error.UnsupportedRarEntry;
-        if (version == .rar4) {
+        if (options.version == .rar4) {
             for (entry.name) |byte|
                 if (byte >= 0x80) return error.InvalidRarEntryName;
         } else if (!std.unicode.utf8ValidateSlice(entry.name)) {
@@ -157,13 +169,14 @@ fn encodeRar5(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     entries: []const EncodeEntry,
+    options: EncodeOptions,
 ) !void {
     try output.appendSlice(allocator, archive.rar5_signature);
     var main_specific: std.ArrayList(u8) = .empty;
     defer main_specific.deinit(allocator);
     try appendVint(allocator, &main_specific, 0);
     try appendRar5Block(allocator, output, 1, 0, null, main_specific.items, "", "");
-    for (entries) |entry| try appendRar5File(allocator, output, entry);
+    for (entries) |entry| try appendRar5File(allocator, output, entry, options);
     var end_specific: std.ArrayList(u8) = .empty;
     defer end_specific.deinit(allocator);
     try appendVint(allocator, &end_specific, 0);
@@ -174,7 +187,24 @@ fn appendRar5File(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     entry: EncodeEntry,
+    options: EncodeOptions,
 ) !void {
+    var compressed: ?[]u8 = null;
+    defer if (compressed) |bytes| allocator.free(bytes);
+    const use_compression = entry.kind == .regular and options.compression == .rar50;
+    if (use_compression) compressed = try rar50_encoder.encodeAlloc(
+        allocator,
+        entry.data,
+        .{
+            .dictionary_size = options.dictionary_size,
+            .block_size = options.block_size,
+        },
+    );
+    const payload = compressed orelse entry.data;
+    const compression_info: u64 = if (use_compression)
+        try rar50CompressionInfo(options.dictionary_size)
+    else
+        0;
     var specific: std.ArrayList(u8) = .empty;
     defer specific.deinit(allocator);
     var file_flags: u64 = 0x0004;
@@ -186,7 +216,7 @@ fn appendRar5File(
     try appendVint(allocator, &specific, entry.mode orelse default_mode);
     if (entry.mtime) |mtime| try appendLe32(allocator, &specific, mtime);
     try appendLe32(allocator, &specific, checksum.crc32(entry.data));
-    try appendVint(allocator, &specific, 0); // Algorithm v0, stored, 128 KiB dictionary.
+    try appendVint(allocator, &specific, compression_info);
     try appendVint(allocator, &specific, 1); // Unix host.
     try appendVint(allocator, &specific, entry.name.len);
     try specific.appendSlice(allocator, entry.name);
@@ -195,11 +225,21 @@ fn appendRar5File(
         output,
         2,
         0x0002,
-        entry.data.len,
+        payload.len,
         specific.items,
         "",
-        entry.data,
+        payload,
     );
+}
+
+fn rar50CompressionInfo(dictionary_size: usize) Error!u64 {
+    if (dictionary_size < 128 * 1024 or dictionary_size % (128 * 1024) != 0)
+        return error.UnsupportedRarEncodeOptions;
+    const multiple = dictionary_size / (128 * 1024);
+    if (!std.math.isPowerOfTwo(multiple)) return error.UnsupportedRarEncodeOptions;
+    const power = std.math.log2_int(usize, multiple);
+    if (power > 15) return error.UnsupportedRarEncodeOptions;
+    return (@as(u64, 3) << 7) | (@as(u64, power) << 10);
 }
 
 fn appendRar5Block(
@@ -282,6 +322,56 @@ test "RAR4 and RAR5 stored writers round trip files and directories" {
             }
         }
     }
+}
+
+test "RAR50 writer emits deterministic multiblock LZ streams" {
+    const allocator = std.testing.allocator;
+    const pattern = "RAR50 deterministic LZ payload alpha beta gamma\n";
+    const payload = try allocator.alloc(u8, 192 * 1024);
+    defer allocator.free(payload);
+    for (payload, 0..) |*byte, index| byte.* = pattern[index % pattern.len];
+    const entries = [_]EncodeEntry{
+        .{ .name = "payload.txt", .data = payload },
+        .{ .name = "folder", .kind = .directory },
+    };
+    const options = EncodeOptions{ .version = .rar5, .compression = .rar50 };
+    const encoded = try encodeAlloc(allocator, &entries, options);
+    defer allocator.free(encoded);
+    const second = try encodeAlloc(allocator, &entries, options);
+    defer allocator.free(second);
+    try std.testing.expectEqualSlices(u8, encoded, second);
+
+    const parsed = try archive.parse(encoded);
+    const compressed = try parsed.entryAt(0);
+    try std.testing.expectEqual(archive.Method.rar50, compressed.method);
+    try std.testing.expect(compressed.compressed_size < compressed.uncompressed_size);
+    const decoded = try parsed.extractAlloc(allocator, compressed);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    const directory = try parsed.entryAt(1);
+    try std.testing.expect(directory.directory);
+    try std.testing.expectEqual(archive.Method.stored, directory.method);
+
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &entries, .{ .version = .rar4, .compression = .rar50 }),
+    );
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &entries, .{
+            .version = .rar5,
+            .compression = .rar50,
+            .dictionary_size = 192 * 1024,
+        }),
+    );
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &entries, .{
+            .version = .rar5,
+            .compression = .rar50,
+            .block_size = rar50_encoder.max_block_size + 1,
+        }),
+    );
 }
 
 test "RAR parser accepts SFX prefixes and validates header and data CRCs" {

@@ -12,14 +12,19 @@ pub fn createFile(
     const entry_name = args.next() orelse return error.MissingCorpusPath;
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const version = try parseVersion(args.next());
+    const compression = try parseCompression(args.next());
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.RarEncodeEntry{.{ .name = entry_name, .data = input }};
-    const encoded = try vort.encodeRarAlloc(init.gpa, &entries, .{ .version = version });
+    const encoded = try vort.encodeRarAlloc(init.gpa, &entries, .{
+        .version = version,
+        .compression = compression,
+    });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("rar_entries=1 version={s} method=stored input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("rar_entries=1 version={s} method={s} input_bytes={d} archive_bytes={d} path={s}\n", .{
         @tagName(version),
+        @tagName(compression),
         input.len,
         encoded.len,
         output_path,
@@ -146,6 +151,13 @@ fn parseVersion(value: ?[]const u8) !vort.RarVersion {
     if (std.mem.eql(u8, name, "rar4") or std.mem.eql(u8, name, "4")) return .rar4;
     if (std.mem.eql(u8, name, "rar5") or std.mem.eql(u8, name, "5")) return .rar5;
     return error.UnsupportedRarVersion;
+}
+
+fn parseCompression(value: ?[]const u8) !vort.RarEncodeCompression {
+    const name = value orelse return .stored;
+    if (std.mem.eql(u8, name, "stored") or std.mem.eql(u8, name, "store")) return .stored;
+    if (std.mem.eql(u8, name, "rar50") or std.mem.eql(u8, name, "compress")) return .rar50;
+    return error.UnsupportedRarCompression;
 }
 
 fn readFile(init: std.process.Init, path: []const u8) ![]u8 {
