@@ -49,11 +49,12 @@ pub fn listFile(
     while (try iterator.next()) |entry| : (index += 1) {
         const name = try entry.name.alloc(init.gpa);
         defer init.gpa.free(name);
-        try stdout.print("index={d} method={s} method_id={d} compression_version={d} compressed={d} uncompressed={d} crc32={?d} directory={} encrypted={} solid={} split_before={} split_after={} safe_path={} name={s}\n", .{
+        try stdout.print("index={d} method={s} method_id={d} compression_version={d} dictionary={?d} compressed={d} uncompressed={d} crc32={?d} directory={} encrypted={} solid={} split_before={} split_after={} safe_path={} name={s}\n", .{
             index,
             @tagName(entry.method),
             entry.method_id,
             entry.compression_version,
+            entry.dictionary_size,
             entry.compressed_size,
             entry.uncompressed_size,
             entry.crc32,

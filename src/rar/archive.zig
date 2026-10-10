@@ -4,8 +4,9 @@ const core = @import("../core.zig");
 const rar15 = @import("rar15.zig");
 const rar20 = @import("rar20.zig");
 const rar29 = @import("rar29.zig");
+const rar50 = @import("rar50.zig");
 
-pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || error{
+pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || rar50.Error || error{
     InvalidRarArchive,
     UnsupportedRarCompression,
     UnsupportedRarEntry,
@@ -14,6 +15,7 @@ pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || err
     EncryptedRarHeaders,
     SplitRarEntry,
     RarEntryNotFound,
+    RarEntryRequiresAllocator,
 };
 
 pub const Version = enum { rar4, rar5 };
@@ -22,6 +24,7 @@ pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_ppmd_memory: usize = rar29.default_max_ppmd_memory,
     max_vm_instructions: usize = rar29.default_max_vm_instructions,
+    max_rar50_dictionary_size: usize = std.math.maxInt(usize),
 };
 
 pub const Method = enum {
@@ -67,6 +70,7 @@ pub const Entry = struct {
     method: Method,
     method_id: u8,
     compression_version: u8,
+    dictionary_size: ?usize,
     crc32: ?u32,
     compressed_size: usize,
     uncompressed_size: usize,
@@ -176,6 +180,17 @@ pub const Archive = struct {
                 })
             else
                 try rar29.decodeInto(data, target),
+            .rar50 => if (allocator) |scratch|
+                try rar50.decodeInto(
+                    scratch,
+                    data,
+                    target,
+                    canonical.compression_version,
+                    canonical.dictionary_size orelse return error.InvalidRarArchive,
+                    .{ .max_dictionary_size = options.max_rar50_dictionary_size },
+                )
+            else
+                return error.RarEntryRequiresAllocator,
             else => unreachable,
         }
         if (canonical.crc32) |expected|
@@ -213,6 +228,12 @@ pub const Archive = struct {
         const canonical = try self.extractableEntry(entry);
         if (canonical.uncompressed_size > options.max_output_len)
             return error.OutputLimitExceeded;
+        if (canonical.method == .rar50) {
+            const dictionary_size = canonical.dictionary_size orelse
+                return error.InvalidRarArchive;
+            if (dictionary_size > options.max_rar50_dictionary_size)
+                return error.Rar50DictionaryLimitExceeded;
+        }
         const output = try allocator.alloc(u8, canonical.uncompressed_size);
         errdefer allocator.free(output);
         const written = try self.extractIntoWithOptions(allocator, entry, output, options);
@@ -258,7 +279,8 @@ pub const Archive = struct {
         if (canonical.redirection or canonical.unknown_size) return error.UnsupportedRarFeature;
         if (canonical.solid and canonical.method != .stored) return error.UnsupportedRarFeature;
         if (canonical.method != .stored and canonical.method != .rar15 and
-            canonical.method != .rar20 and canonical.method != .rar29)
+            canonical.method != .rar20 and canonical.method != .rar29 and
+            canonical.method != .rar50)
             return error.UnsupportedRarCompression;
         if (canonical.method == .stored and canonical.compressed_size != canonical.uncompressed_size)
             return error.SizeMismatch;
@@ -503,6 +525,7 @@ fn parseRar4Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
             .method = method,
             .method_id = method_id,
             .compression_version = compression_version,
+            .dictionary_size = null,
             .crc32 = readLe32(bytes, offset + 16),
             .compressed_size = packed_size,
             .uncompressed_size = unpacked_size,
@@ -644,6 +667,10 @@ fn parseRar5Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
         .unsupported;
     if (method == .stored and !encrypted and raw.data_size != unpacked_size)
         return error.InvalidRarArchive;
+    const dictionary_size = if (method == .rar50)
+        try rar5DictionarySize(compression_info, compression_version)
+    else
+        null;
     return .{
         .entry = .{
             .name = .{ .bytes = name_bytes },
@@ -651,6 +678,7 @@ fn parseRar5Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
             .method = method,
             .method_id = method_id,
             .compression_version = compression_version,
+            .dictionary_size = dictionary_size,
             .crc32 = data_crc,
             .compressed_size = raw.data_size,
             .uncompressed_size = unpacked_size,
@@ -694,6 +722,22 @@ fn rar5ExtraHasType(
     return false;
 }
 
+fn rar5DictionarySize(compression_info: u64, algorithm_version: u8) Error!usize {
+    const power: u6 = @intCast((compression_info >> 10) & 0x1f);
+    const fraction: u64 = (compression_info >> 15) & 0x1f;
+    const rar5_compat = compression_info & 0x10_0000 != 0;
+    const size: u64 = switch (algorithm_version) {
+        0 => blk: {
+            if (fraction != 0 or rar5_compat or power > 15)
+                return error.InvalidRarArchive;
+            break :blk @as(u64, 128 * 1024) << power;
+        },
+        1 => (fraction + 32) << @intCast(power + 12),
+        else => return error.UnsupportedRarCompression,
+    };
+    return std.math.cast(usize, size) orelse error.IntegerOverflow;
+}
+
 fn readVint(bytes: []const u8, cursor: *usize, limit: usize) Error!u64 {
     var value: u64 = 0;
     var shift: u6 = 0;
@@ -730,6 +774,7 @@ fn safeComponent(component: []const u8) bool {
 fn sameEntry(a: Entry, b: Entry) bool {
     return a.version == b.version and a.method == b.method and a.method_id == b.method_id and
         a.compression_version == b.compression_version and a.crc32 == b.crc32 and
+        a.dictionary_size == b.dictionary_size and
         a.compressed_size == b.compressed_size and a.uncompressed_size == b.uncompressed_size and
         a.header_offset == b.header_offset and a.header_size == b.header_size and
         a.data_offset == b.data_offset and a.next_offset == b.next_offset and
@@ -807,4 +852,17 @@ test "RAR path safety rejects traversal and absolute paths" {
     try std.testing.expect(!isSafePath("../escape"));
     try std.testing.expect(!isSafePath("safe/../escape"));
     try std.testing.expect(!isSafePath("/absolute"));
+}
+
+test "RAR5 dictionary fields decode both algorithm generations" {
+    try std.testing.expectEqual(@as(usize, 128 * 1024), try rar5DictionarySize(0, 0));
+    try std.testing.expectEqual(
+        @as(usize, 256 * 1024),
+        try rar5DictionarySize(@as(u64, 1) << 10, 0),
+    );
+    try std.testing.expectEqual(@as(usize, 128 * 1024), try rar5DictionarySize(1, 1));
+    try std.testing.expectError(
+        error.InvalidRarArchive,
+        rar5DictionarySize(@as(u64, 1) << 15, 0),
+    );
 }

@@ -2,6 +2,7 @@ const archive = @import("rar/archive.zig");
 const rar15 = @import("rar/rar15.zig");
 const rar20 = @import("rar/rar20.zig");
 const rar29 = @import("rar/rar29.zig");
+const rar50 = @import("rar/rar50.zig");
 const writer = @import("rar/writer.zig");
 
 pub const Error = archive.Error || writer.Error;
@@ -34,11 +35,15 @@ pub const decodeRar29IntoWithOptions = rar29.decodeIntoWithOptions;
 pub const Rar29DecodeOptions = rar29.DecodeOptions;
 pub const Rar29InitialMode = rar29.InitialMode;
 pub const inspectRar29InitialMode = rar29.initialMode;
+pub const decodeRar50Into = rar50.decodeInto;
+pub const decodeRar50Alloc = rar50.decodeAlloc;
+pub const Rar50DecodeOptions = rar50.DecodeOptions;
 
 test {
     _ = archive;
     _ = rar15;
     _ = rar20;
     _ = rar29;
+    _ = rar50;
     _ = writer;
 }

@@ -378,6 +378,9 @@ pub const decodeRar29IntoWithOptions = rar.decodeRar29IntoWithOptions;
 pub const Rar29DecodeOptions = rar.Rar29DecodeOptions;
 pub const Rar29InitialMode = rar.Rar29InitialMode;
 pub const inspectRar29InitialMode = rar.inspectRar29InitialMode;
+pub const decodeRar50Into = rar.decodeRar50Into;
+pub const decodeRar50Alloc = rar.decodeRar50Alloc;
+pub const Rar50DecodeOptions = rar.Rar50DecodeOptions;
 
 pub const ZooError = zoo.Error;
 pub const ZooMethod = zoo.Method;
