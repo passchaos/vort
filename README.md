@@ -152,6 +152,12 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
   safe-path classification, borrowed entry views, and automatic raw/gzip/
   Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
+- dependency-free CPIO reading and deterministic writing for SVR4 newc/CRC,
+  POSIX ODC, and little-/big-endian old binary archives, including regular,
+  directory, symlink, and special-file metadata, strict per-format alignment,
+  bounded extraction, CRC byte sums, safe-path classification, GNU cpio
+  bidirectional interoperability, and automatic composition with the same
+  twelve raw/gzip/Bzip2/Brotli/compress/LZMA/XZ/LZ4/lzip/LZF/Zstd/LZOP modes;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded
   extraction for Stored, MSZIP, 15–21 bit LZX, and 10–21 bit Quantum folders,
   including Stored/MSZIP, reference uncompressed-block LZX, and literal

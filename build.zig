@@ -1077,6 +1077,23 @@ pub fn build(b: *std.Build) void {
     const arc_diff_step = b.step("run-arc-diff", "Validate ARC/PAK methods 1-9 against the optional ARC tool");
     arc_diff_step.dependOn(&arc_diff.step);
 
+    const cpio_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-cpio-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/cpio/writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const cpio_diff = b.addSystemCommand(&.{ "python3", "tools/cpio/diff.py", "--cli" });
+    cpio_diff.addArtifactArg(cli_exe);
+    cpio_diff.addArg("--writer");
+    cpio_diff.addArtifactArg(cpio_writer_probe_exe);
+    if (b.args) |args| cpio_diff.addArgs(args);
+    const cpio_diff_step = b.step("run-cpio-diff", "Validate CPIO header formats, metadata, and compression wrappers against optional GNU cpio");
+    cpio_diff_step.dependOn(&cpio_diff.step);
+
     const lzop_diff = b.addSystemCommand(&.{ "python3", "tools/lzop/diff.py", "--cli" });
     lzop_diff.addArtifactArg(cli_exe);
     const lzop_diff_step = b.step("run-lzop-diff", "Validate LZO1X/LZOP encoding and decoding against optional lzop");
@@ -4657,6 +4674,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(lha_diff_step);
     ci_smoke_step.dependOn(arj_diff_step);
     ci_smoke_step.dependOn(arc_diff_step);
+    ci_smoke_step.dependOn(cpio_diff_step);
     ci_smoke_step.dependOn(lzop_diff_step);
     ci_smoke_step.dependOn(seven_zip_diff_step);
     ci_smoke_step.dependOn(tar_diff_step);

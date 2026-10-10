@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 const arj_cli = @import("cli/arj.zig");
 const arc_cli = @import("cli/arc.zig");
+const cpio_cli = @import("cli/cpio.zig");
 const zoo_cli = @import("cli/zoo.zig");
 const compress_z_cli = @import("cli/compress_z.zig");
 const filters_cli = @import("cli/filters.zig");
@@ -238,6 +239,12 @@ pub fn main(init: std.process.Init) !void {
         try zoo_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-zoo-file")) {
         try zoo_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-cpio-file")) {
+        try cpio_cli.createFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-cpio-file")) {
+        try cpio_cli.listFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-cpio-file")) {
+        try cpio_cli.extractFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-file")) {
         try lzop_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-stored-file")) {
@@ -2180,6 +2187,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-zoo-file <path>        List ZOO entries and methods
         \\  extract-zoo-file <zoo> <entry> <out> [max_output]
         \\                              Extract ZOO stored, LZD, or LH5 data
+        \\  create-cpio-file <out> <entry> <in> [newc|crc|odc|bin|bin-be] [none|gzip|bzip2|brotli|compress-z|lzma|xz|lz4|lzip|lzf|zstd|lzop]
+        \\                              Create a deterministic CPIO archive
+        \\  list-cpio-file <path>       List newc/CRC/ODC/binary CPIO entries
+        \\  extract-cpio-file <cpio> <entry> <out> [max_output]
+        \\                              Extract a regular file or symlink target
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
         \\                              Encode compressed-or-stored LZOP blocks
         \\  encode-lzop-stored-file <in> <out> [block_size] [adler32|crc32]

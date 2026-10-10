@@ -186,6 +186,35 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseCpioArchive(data)) |archive| {
+        var iterator = archive.iterator();
+        while (try iterator.next()) |entry| {
+            if (!entry.isExtractable()) continue;
+            if (archive.extractAllocLimited(allocator, entry, 1 << 20)) |decoded| {
+                allocator.free(decoded);
+            } else |err| switch (err) {
+                error.OutputLimitExceeded,
+                error.OutputTooSmall,
+                error.UnsupportedCpioEntry,
+                error.InvalidCpioArchive,
+                error.TruncatedFrame,
+                error.TrailingData,
+                error.SizeMismatch,
+                error.ChecksumMismatch,
+                error.IntegerOverflow,
+                => {},
+                else => return err,
+            }
+        }
+    } else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidCpioArchive,
+        error.TruncatedFrame,
+        error.TrailingData,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.parseCabArchive(data)) |cabinet| {
         for (0..cabinet.folder_count) |folder_index| {
             if (vort.decodeCabFolderAllocLimited(allocator, cabinet, folder_index, 1 << 20)) |decoded| {
@@ -239,6 +268,7 @@ pub fn main(init: std.process.Init) !void {
         &.{ 0x60, 0xea, 0, 0 },
         &.{ 0x1a, 0 },
         "ZOO 2.10 Archive.\x1a\x00\x00\xdc\xa7\xc4\xfd",
+        "070701",
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
 
