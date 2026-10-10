@@ -2,6 +2,7 @@ const std = @import("std");
 const bzip2 = @import("../bzip2.zig");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
+const dcl_implode = @import("dcl_implode.zig");
 const deflate = @import("../deflate.zig");
 const deflate64 = @import("../deflate64.zig");
 const implode = @import("implode.zig");
@@ -13,7 +14,7 @@ const types = @import("types.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = core.Error || bzip2.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
+pub const Error = core.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -42,6 +43,7 @@ pub const EncodeOptions = struct {
     zip64: Zip64Mode = .auto,
     deflate_options: deflate.CompressionOptions = deflate.optionsForLevel(.default),
     deflate64_options: deflate64.EncodeOptions = .{},
+    dcl_implode_options: dcl_implode.Options = .{},
     implode_options: implode.Options = .{},
     bzip2_options: bzip2.EncodeOptions = .{},
     lzma_options: lzma_writer.ZipEncodeOptions = .{},
@@ -150,6 +152,11 @@ pub fn encodeAppend(
             },
             .deflate64 => blk: {
                 const bytes = try deflate64.encodeAlloc(allocator, entry.data, options.deflate64_options);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
+            .dcl_implode => blk: {
+                const bytes = try dcl_implode.encodeAlloc(allocator, entry.data, options.dcl_implode_options);
                 owned_compressed = bytes;
                 break :blk bytes;
             },
@@ -280,6 +287,8 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
                 return error.InvalidReduceOptions,
             .implode => if (options.implode_options.max_chain == 0)
                 return error.InvalidImplodeOptions,
+            .dcl_implode => if (options.dcl_implode_options.max_chain == 0)
+                return error.InvalidDclOptions,
             .lzma => try lzma_writer.validateZipOptions(options.lzma_options),
             .ppmd => try ppmd8.validateZipProperties(options.ppmd_options),
             else => return error.UnsupportedZipCompressionMethod,

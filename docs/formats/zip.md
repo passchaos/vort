@@ -20,6 +20,8 @@ Supported entry methods:
   zlib, and gzip APIs;
 - Deflate64 (`method 9`) with its 64 KiB window, 32 distance symbols, and
   extended code-285 match lengths;
+- DCL/PKWARE Implode (`method 10`) with its payload header, 1/2/4 KiB
+  dictionaries, raw or fixed-Huffman literals, and explicit end marker;
 - Bzip2 (`method 12`) through Vort's dependency-free Bzip2 codec;
 - LZMA (`method 14`) through Vort's LZMA decoder and the ZIP-specific
   properties prefix;
@@ -37,7 +39,7 @@ descriptors with or without a descriptor signature because extraction
 boundaries come from the central directory.
 
 The writer accepts multiple borrowed entries and emits stored, Shrink, all four
-Reduce factors, Implode, raw-Deflate, Deflate64, Bzip2, LZMA,
+Reduce factors, Implode, raw-Deflate, Deflate64, DCL Implode, Bzip2, LZMA,
 legacy/current Zstandard, XZ, or PPMd
 members. Select
 `.zstandard_legacy` for method 20 and `.zstandard` for method 93; both carry the
@@ -64,6 +66,7 @@ const entries = [_]vort.ZipEncodeEntry{
     .{ .name = "folder/imploded.txt", .data = text, .method = .implode },
     .{ .name = "folder/data.txt", .data = text, .method = .deflate },
     .{ .name = "folder/large.bin", .data = large_data, .method = .deflate64 },
+    .{ .name = "folder/dcl.bin", .data = text, .method = .dcl_implode },
     .{ .name = "folder/archive.txt", .data = archive_text, .method = .bzip2 },
     .{ .name = "folder/model.bin", .data = model_data, .method = .lzma },
     .{ .name = "folder/archive.xz", .data = xz_data, .method = .xz },
@@ -101,6 +104,12 @@ Shannon-Fano-coded literals. The writer uses a bounded greedy match search and
 complete fixed 6/8-bit trees; adaptive tree generation is later ratio work.
 The decoder accepts arbitrary complete 1...16-bit tree descriptions, extended
 lengths, overlapping matches, implicit zero history, and all four flag modes.
+`EncodeOptions.dcl_implode_options` independently selects DCL Implode's 1, 2,
+or 4 KiB dictionary and raw or fixed-Huffman literals. Its deterministic writer
+uses a bounded greedy matcher, emits matches through length 518, and terminates
+with the format's reserved length-519 marker. The decoder validates the two-byte
+payload header, fixed tables, backward distances, overlapping copies, exact
+decoded size, end marker, truncation, and compressed-byte consumption.
 
 `zipEncodeAppend` builds the archive transactionally: an error leaves the
 destination length and bytes unchanged. When the destination already contains
@@ -149,11 +158,11 @@ zig build run-zip-diff
 
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
-than stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
+than stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
 reader deliberately
 rejects encrypted entries, multi-disk archives, malformed/duplicate ZIP64
 extra fields, and compression methods other than
-stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/Bzip2/LZMA/
+stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/
 Zstandard-20/Zstandard-93/XZ/PPMd with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. Encryption, split archives, and additional entry
@@ -168,6 +177,18 @@ two-tree and 8 KiB/three-tree endpoints. System 7-Zip extracts Vort output in
 all four modes, including a match at distance 5,001. Its 21.07 build rejects
 descriptor-backed Implode, so those legal entries remain covered by Vort
 self-extraction while the independent mode matrix uses ordinary local sizes.
+The method-10 matrix covers all six DCL literal/dictionary header modes through
+Vort self-extraction, including high-entropy literals and a 3,001-byte match
+that distinguishes the 4 KiB dictionary. When a `blast` executable is supplied
+to `zig build run-zip-diff -- --blast <path>`, it also independently decodes every
+writer payload with zlib's permissively licensed reference implementation;
+the checked implementation was validated against zlib 1.3.1 `contrib/blast`.
+An upstream zlib checkout provides the filter directly:
+
+```sh
+cc -O2 -DTEST path/to/zlib/contrib/blast/blast.c -o /tmp/vort-blast
+zig build run-zip-diff -- --blast /tmp/vort-blast
+```
 
 The Deflate64 codec and its raw APIs are described in
 [`deflate64.md`](deflate64.md).

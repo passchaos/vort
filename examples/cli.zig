@@ -556,6 +556,7 @@ pub fn main(init: std.process.Init) !void {
                 .implode => "implode",
                 .deflate => "deflate",
                 .deflate64 => "deflate64",
+                .dcl_implode => "dcl-implode",
                 .bzip2 => "bzip2",
                 .lzma => "lzma",
                 .zstandard_legacy => "zstd-legacy",

@@ -24,6 +24,9 @@ pub fn main(init: std.process.Init) !void {
     var implode_large = true;
     var implode_literal_tree = true;
     var implode_mode = false;
+    var dcl_dictionary_bits: u3 = 6;
+    var dcl_literal_coded = true;
+    var dcl_mode = false;
     var reduce_mode = false;
     if (mode) |value| {
         if (std.mem.eql(u8, value, "zip64")) {
@@ -45,6 +48,21 @@ pub fn main(init: std.process.Init) !void {
                 return error.InvalidZipMode;
         } else if (std.mem.eql(u8, value, "reduce")) {
             reduce_mode = true;
+        } else if (std.mem.startsWith(u8, value, "dcl-")) {
+            dcl_mode = true;
+            const specification = value["dcl-".len..];
+            if (std.mem.startsWith(u8, specification, "1k-"))
+                dcl_dictionary_bits = 4
+            else if (std.mem.startsWith(u8, specification, "2k-"))
+                dcl_dictionary_bits = 5
+            else if (!std.mem.startsWith(u8, specification, "4k-"))
+                return error.InvalidZipMode;
+            if (std.mem.endsWith(u8, specification, "coded"))
+                dcl_literal_coded = true
+            else if (std.mem.endsWith(u8, specification, "raw"))
+                dcl_literal_coded = false
+            else
+                return error.InvalidZipMode;
         } else {
             return error.InvalidZipMode;
         }
@@ -77,6 +95,8 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(reduce4_payload);
     const deflated = "Vort ZIP writer differential.\n" ** 128;
     const deflate64_payload = "Vort ZIP Deflate64 method 9.\n" ** 128;
+    const dcl_implode_payload = try makeLegacyPayload(init.gpa, 3000, 0xdca1_0010);
+    defer init.gpa.free(dcl_implode_payload);
     const bzip2_payload = "Vort ZIP Bzip2 method 12.\n" ** 96;
     const lzma_payload = "Vort ZIP LZMA method 14.\n" ** 96;
     const xz_payload = "Vort ZIP XZ method 95.\n" ** 96;
@@ -94,6 +114,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "folder/reduce4.txt", .data = reduce4_payload, .method = .reduce_4, .comment = "reduce4 entry" },
         .{ .name = "folder/deflated.txt", .data = deflated, .method = .deflate, .comment = "deflated entry" },
         .{ .name = "folder/deflate64.txt", .data = deflate64_payload, .method = .deflate64, .comment = "deflate64 entry" },
+        .{ .name = "folder/dcl-implode.txt", .data = dcl_implode_payload, .method = .dcl_implode, .comment = "dcl implode entry" },
         .{ .name = "folder/bzip2.txt", .data = bzip2_payload, .method = .bzip2, .comment = "bzip2 entry" },
         .{ .name = "folder/lzma.txt", .data = lzma_payload, .method = .lzma, .comment = "lzma entry" },
         .{ .name = "folder/xz.txt", .data = xz_payload, .method = .xz, .comment = "xz entry" },
@@ -109,11 +130,20 @@ pub fn main(init: std.process.Init) !void {
     try bytes.appendSlice(init.gpa, "MZ-VORT-ZIP-PREFIX\n");
     _ = try vort.zipEncodeAppend(init.gpa, &bytes, &entries, .{
         .archive_comment = "vort zip writer differential",
-        .data_descriptor = !(implode_mode or reduce_mode),
+        .data_descriptor = !(implode_mode or reduce_mode or dcl_mode),
         .zip64 = zip64,
         .implode_options = .{
             .dictionary = if (implode_large) .large_8k else .small_4k,
             .literal_tree = implode_literal_tree,
+        },
+        .dcl_implode_options = .{
+            .literal_coded = dcl_literal_coded,
+            .dictionary = switch (dcl_dictionary_bits) {
+                4 => .size_1k,
+                5 => .size_2k,
+                6 => .size_4k,
+                else => unreachable,
+            },
         },
         .ppmd_options = if (ppmd_cutoff) .{
             .order = 12,

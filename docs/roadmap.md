@@ -17646,7 +17646,7 @@ reuse, so production keeps the simpler independently owned plans.
   single-disk ZIP64 reading and deterministic writing. The library parses EOCD,
   ZIP64 locator/EOCD, ordered `0x0001` central/local extra fields, and 32-/64-bit
   data descriptors; it iterates and finds entries without allocation, extracts
-  stored, Shrink, Reduce factors 1...4, Implode, raw-Deflate, Deflate64, Bzip2, LZMA, Zstandard
+  stored, Shrink, Reduce factors 1...4, Implode, raw-Deflate, Deflate64, DCL Implode, Bzip2, LZMA, Zstandard
   methods 20/93, XZ, and PPMd
   members into caller buffers or bounded allocations where their scratch
   requirements allow, and encodes multi-entry stored/Deflate/Deflate64/Bzip2/
@@ -17658,7 +17658,15 @@ reuse, so production keeps the simpler independently owned plans.
   unsupported-method inputs fail explicitly. Method 9 uses a dedicated
   Deflate64 codec with the 64 KiB window, 32 distance symbols, extended
   code-285 lengths, and a functionality-first greedy fixed-Huffman-or-stored
-  encoder. ZIP methods 12, 14, legacy/current Zstandard 20/93, and 95 reuse the
+  encoder. ZIP method 10 adds dependency-free DCL/PKWARE Implode decoding and
+  deterministic writing across raw/fixed-Huffman literals and 1/2/4 KiB
+  dictionaries. The decoder validates the payload header, fixed canonical
+  tables, length-519 end marker, distances, truncation, exact sizes, and input
+  consumption; the bounded greedy writer emits matches through length 518.
+  All six modes are covered by ZIP self-extraction, including high-entropy
+  literals and a 3,001-byte-distance case, and independently decode with zlib
+  1.3.1 `contrib/blast` when its filter is supplied to the differential.
+  ZIP methods 12, 14, legacy/current Zstandard 20/93, and 95 reuse the
   standalone Bzip2, LZMA, Zstandard, and XZ codecs. Method 98 now uses a pure
   Zig PPMd8 model with both restart and cut-off restoration, a checked two-byte
   order/memory/restore prefix, explicit end-marker and range completion, and a

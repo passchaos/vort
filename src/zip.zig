@@ -2,6 +2,7 @@ const std = @import("std");
 const bzip2 = @import("bzip2.zig");
 const core = @import("core.zig");
 const checksum = @import("checksum.zig");
+const dcl_implode = @import("zip/dcl_implode.zig");
 const deflate = @import("deflate.zig");
 const deflate64 = @import("deflate64.zig");
 const lzma = @import("lzma.zig");
@@ -14,7 +15,7 @@ const reduce = @import("zip/reduce.zig");
 const shrink = @import("zip/shrink.zig");
 pub const writer = @import("zip/writer.zig");
 
-pub const Error = writer.Error || bzip2.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
+pub const Error = writer.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -32,6 +33,8 @@ pub const CompressionMethod = writer.CompressionMethod;
 pub const Zip64Mode = writer.Zip64Mode;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
+pub const DclImplodeDictionary = dcl_implode.Dictionary;
+pub const DclImplodeOptions = dcl_implode.Options;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
 
@@ -166,6 +169,7 @@ pub const Archive = struct {
                 if (decoded.input_read != compressed.len) return error.InvalidZipArchive;
                 if (decoded.output_written != target.len) return error.SizeMismatch;
             },
+            .dcl_implode => try dcl_implode.decodeInto(compressed, target),
             .bzip2 => {
                 const scratch_allocator = allocator orelse return error.ZipEntryRequiresAllocator;
                 const written = try bzip2.decodeInto(scratch_allocator, compressed, target);
@@ -931,6 +935,37 @@ test "ZIP method 6 extracts Apache Commons Compress Implode fixtures" {
         const payload = try archive.extractAlloc(allocator, entry);
         defer allocator.free(payload);
         try std.testing.expectEqual(fixture.size, payload.len);
+    }
+}
+
+test "ZIP method 10 DCL Implode writer round trips all header modes" {
+    const allocator = std.testing.allocator;
+    const payload = ("DCL Imploded ZIP entry with fixed Huffman tables.\n" ** 256) ++
+        ([_]u8{ 0, 1, 2, 3, 4, 5 } ** 128);
+    const entries = [_]EncodeEntry{.{
+        .name = "compressed-with-dcl-implode.txt",
+        .data = payload,
+        .method = .dcl_implode,
+    }};
+    inline for (.{ false, true }) |literal_coded| {
+        inline for (std.meta.tags(dcl_implode.Dictionary)) |dictionary| {
+            const options = EncodeOptions{
+                .data_descriptor = true,
+                .dcl_implode_options = .{
+                    .literal_coded = literal_coded,
+                    .dictionary = dictionary,
+                },
+            };
+            const bytes = try encodeAlloc(allocator, &entries, options);
+            defer allocator.free(bytes);
+            const archive = try parse(bytes);
+            const entry = try archive.entryAt(0);
+            try std.testing.expectEqual(CompressionMethod.dcl_implode, entry.method);
+            try std.testing.expect(entry.compressed_size < entry.uncompressed_size);
+            var output: [payload.len]u8 = undefined;
+            try std.testing.expectEqual(payload.len, try archive.extractInto(entry, &output));
+            try std.testing.expectEqualSlices(u8, payload, &output);
+        }
     }
 }
 

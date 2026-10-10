@@ -8,6 +8,7 @@ pub const CompressionMethod = enum(u16) {
     implode = 6,
     deflate = 8,
     deflate64 = 9,
+    dcl_implode = 10,
     bzip2 = 12,
     lzma = 14,
     /// Deprecated PKWARE assignment retained for archives created before

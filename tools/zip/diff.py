@@ -233,6 +233,7 @@ def validate_vort_archive_with_python(
         "folder/reduce4.txt": make_legacy_payload(3000, 0x40506074),
         "folder/deflated.txt": b"Vort ZIP writer differential.\n" * 128,
         "folder/deflate64.txt": b"Vort ZIP Deflate64 method 9.\n" * 128,
+        "folder/dcl-implode.txt": make_legacy_payload(3000, 0xDCA10010),
         "folder/bzip2.txt": b"Vort ZIP Bzip2 method 12.\n" * 96,
         "folder/lzma.txt": b"Vort ZIP LZMA method 14.\n" * 96,
         "folder/xz.txt": b"Vort ZIP XZ method 95.\n" * 96,
@@ -273,6 +274,7 @@ def validate_vort_archive_with_python(
             "folder/reduce4.txt": 5,
             "folder/deflated.txt": zipfile.ZIP_DEFLATED,
             "folder/deflate64.txt": 9,
+            "folder/dcl-implode.txt": 10,
             "folder/bzip2.txt": zipfile.ZIP_BZIP2,
             "folder/lzma.txt": zipfile.ZIP_LZMA,
             "folder/xz.txt": 95,
@@ -296,11 +298,11 @@ def validate_vort_archive_with_python(
                     check=True,
                     stdout=subprocess.PIPE,
                 ).stdout
-            elif info.compress_type in (2, 3, 4, 5, 6):
-                # 7-Zip 21.07 rejects descriptor-backed Implode entries. The
-                # dedicated no-descriptor mode matrix below validates its
-                # decoder independently; Vort self-extraction validates this
-                # legal descriptor-backed entry.
+            elif info.compress_type in (2, 3, 4, 5, 6, 10):
+                # The dedicated matrices below cover Reduce with Vort,
+                # descriptor-free Implode with 7-Zip, and DCL Implode payloads
+                # with zlib blast. Vort self-extraction covers these legal
+                # descriptor-backed entries in the ordinary archive.
                 actual = expected
             elif info.compress_type in (1, 9, 98):
                 if seven_zip_tool is None:
@@ -477,6 +479,54 @@ def validate_vort_reduce_modes(cli: Path, writer: Path, temp: Path) -> int:
     return len(cases)
 
 
+def validate_vort_dcl_implode_modes(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    blast_tool: Path | None,
+) -> tuple[int, int]:
+    expected = make_legacy_payload(3000, 0xDCA10010)
+    self_cases = 0
+    external_cases = 0
+    sizes: dict[str, int] = {}
+    for dictionary, dictionary_bits in (("1k", 4), ("2k", 5), ("4k", 6)):
+        for literals, literal_mode in (("raw", 0), ("coded", 1)):
+            mode = f"dcl-{dictionary}-{literals}"
+            archive = temp / f"vort-{mode}.zip"
+            output = temp / f"vort-{mode}.out"
+            run(writer, str(archive), mode)
+            run(cli, "extract-zip-file", str(archive), "folder/dcl-implode.txt", str(output))
+            if output.read_bytes() != expected:
+                raise AssertionError(f"Vort could not self-extract ZIP {mode}")
+            raw = archive.read_bytes()
+            with zipfile.ZipFile(archive) as parsed:
+                info = parsed.getinfo("folder/dcl-implode.txt")
+                if info.compress_type != 10:
+                    raise AssertionError("Vort DCL Implode writer used the wrong method ID")
+                name_len, extra_len = struct.unpack_from("<HH", raw, info.header_offset + 26)
+                data_offset = info.header_offset + 30 + name_len + extra_len
+                compressed = raw[data_offset : data_offset + info.compress_size]
+                sizes[mode] = info.compress_size
+            if compressed[:2] != bytes((literal_mode, dictionary_bits)):
+                raise AssertionError(f"Vort ZIP {mode} payload header mismatch")
+            self_cases += 1
+            if blast_tool is not None:
+                actual = subprocess.run(
+                    [str(blast_tool)],
+                    input=compressed,
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                ).stdout
+                if actual != expected:
+                    raise AssertionError(f"zlib blast could not decode Vort ZIP {mode}")
+                external_cases += 1
+    for literals in ("raw", "coded"):
+        if sizes[f"dcl-4k-{literals}"] >= sizes[f"dcl-2k-{literals}"]:
+            raise AssertionError("Vort 4 KiB DCL mode did not use its long-distance match")
+    return self_cases, external_cases
+
+
 def validate_seven_zip_deflate64_with_vort(cli: Path, tool: str, temp: Path) -> int:
     rng = random.Random(0xDEF1A7E64)
     prefix = bytes(rng.randrange(256) for _ in range(40_000))
@@ -576,6 +626,7 @@ def main() -> None:
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--seven-zip", type=Path)
+    parser.add_argument("--blast", type=Path)
     args = parser.parse_args()
     seven_zip_tool = (
         str(args.seven_zip)
@@ -596,6 +647,9 @@ def main() -> None:
         ppmd_cases = 0
         implode_modes = 0
         reduce_methods = validate_vort_reduce_modes(args.cli, args.writer, temp)
+        dcl_self_modes, dcl_blast_modes = validate_vort_dcl_implode_modes(
+            args.cli, args.writer, temp, args.blast
+        )
         if seven_zip_tool is not None:
             validate_seven_zip_xz_with_vort(args.cli, seven_zip_tool, temp)
             validate_vort_ppmd_cutoff_with_seven_zip(
@@ -613,12 +667,13 @@ def main() -> None:
 
     print(
         "zip_diff=ok directions=2 "
-        f"python_entries=7 vort_entries=17 zstd_methods=2 python_bytes={python_bytes} "
+        f"python_entries=7 vort_entries=18 zstd_methods=2 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"system_7zip={seven_zip_tool is not None} deflate64_cases={deflate64_cases} "
         f"ppmd_cases={ppmd_cases} vort_ppmd_cutoff={seven_zip_tool is not None} "
         f"vort_shrink={seven_zip_tool is not None} implode_modes={implode_modes} "
-        f"reduce_self_methods={reduce_methods}"
+        f"reduce_self_methods={reduce_methods} dcl_self_modes={dcl_self_modes} "
+        f"dcl_blast_modes={dcl_blast_modes}"
     )
 
 
