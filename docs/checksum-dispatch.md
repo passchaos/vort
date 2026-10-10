@@ -5,6 +5,10 @@ Validated hardware paths are selected for ARMv8 CRC32 and x86 PCLMULQDQ when
 their target features are available. Generic AArch64, x86 without PCLMUL, and
 other targets retain the portable fallback.
 
+The instruction bodies are compile-time gated by the selected target feature
+set. Baseline cross builds therefore do not instantiate ARM CRC32, x86 PCLMUL,
+or x86 SSE4.2 instructions that their generated objects cannot execute.
+
 Current status:
 
 - Adler-32: scalar zlib-compatible path.

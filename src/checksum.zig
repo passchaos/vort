@@ -563,6 +563,13 @@ pub fn crc32(input: []const u8) u32 {
 pub const Crc32Dispatch = enum { scalar, slice4, slice8, slice16, slice32, hardware };
 pub const Crc32CDispatch = enum { scalar, slice8, slice16, slice32, hardware };
 
+const x86_pclmul_compiled = (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) and
+    std.Target.x86.featureSetHas(builtin.cpu.features, .pclmul);
+const x86_sse42_compiled = (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) and
+    std.Target.x86.featureSetHas(builtin.cpu.features, .sse4_2);
+const arm_crc32_compiled = builtin.cpu.arch == .aarch64 and
+    std.Target.aarch64.featureSetHas(builtin.cpu.features, .crc);
+
 pub const CpuFeatureReport = struct {
     x86_sse42: bool = false,
     x86_pclmul: bool = false,
@@ -575,17 +582,15 @@ pub const CpuFeatureReport = struct {
 pub fn cpuFeatureReport() CpuFeatureReport {
     var report = CpuFeatureReport{};
     if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
-        const x86 = std.Target.x86;
-        report.x86_sse42 = x86.featureSetHas(builtin.cpu.features, .sse4_2);
-        report.x86_pclmul = x86.featureSetHas(builtin.cpu.features, .pclmul);
+        report.x86_sse42 = x86_sse42_compiled;
+        report.x86_pclmul = x86_pclmul_compiled;
         // The PCLMULQDQ folding path is differential-tested across lengths,
         // alignments, and incremental updates before being selected here.
         report.ieee_crc32_pclmul_candidate = report.x86_pclmul;
         report.crc32c_hardware_candidate = report.x86_sse42;
         report.ieee_crc32_uses_hardware = report.x86_pclmul;
     } else if (builtin.cpu.arch == .aarch64) {
-        const aarch64 = std.Target.aarch64;
-        report.arm_crc32 = aarch64.featureSetHas(builtin.cpu.features, .crc);
+        report.arm_crc32 = arm_crc32_compiled;
         report.ieee_crc32_uses_hardware = report.arm_crc32;
     }
     return report;
@@ -724,6 +729,7 @@ pub fn crc32HardwareX86(input: []const u8) u32 {
 }
 
 fn crc32PclmulUpdate(previous: u32, input: []const u8) u32 {
+    if (comptime !x86_pclmul_compiled) return crc32Slice32Update(previous, input);
     if (input.len < 128) return crc32Slice32Update(previous, input);
 
     var index: usize = 0;
@@ -812,7 +818,7 @@ pub fn crc32Hardware(input: []const u8) u32 {
 }
 
 fn crc32ArmUpdate(previous: u32, input: []const u8) u32 {
-    if (builtin.cpu.arch != .aarch64) return crc32Slice32Update(previous, input);
+    if (comptime !arm_crc32_compiled) return crc32Slice32Update(previous, input);
     var crc = ~previous;
     var index: usize = 0;
     while (index + 8 <= input.len) : (index += 8)
@@ -842,8 +848,7 @@ fn crc32Arm8(accumulator: u32, value: u8) u32 {
 }
 
 pub fn crc32cHardwareX86(input: []const u8) u32 {
-    if (!(builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86)) return crc32c(input);
-    if (!cpuFeatureReport().crc32c_hardware_candidate) return crc32c(input);
+    if (comptime !x86_sse42_compiled) return crc32c(input);
     var crc: u64 = 0xffff_ffff;
     var index: usize = 0;
     if (builtin.cpu.arch == .x86_64) {
