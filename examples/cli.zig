@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const ar_cli = @import("cli/ar.zig");
+const bgzf_cli = @import("cli/bgzf.zig");
 const arj_cli = @import("cli/arj.zig");
 const arc_cli = @import("cli/arc.zig");
 const cpio_cli = @import("cli/cpio.zig");
@@ -87,6 +88,14 @@ pub fn main(init: std.process.Init) !void {
             std.mem.eql(u8, payload, decoded),
             vort.crc32(decoded),
         });
+    } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
+        try bgzf_cli.encodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-bgzf-file")) {
+        try bgzf_cli.decodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-bgzf-file")) {
+        try bgzf_cli.inspectFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-bgzf-range")) {
+        try bgzf_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "zlib-fixed-roundtrip")) {
         const payload = args.next() orelse "";
         const encoded = try vort.encodeZlibFixedAlloc(init.gpa, payload);
@@ -2165,6 +2174,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\compatibility formats:
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
+        \\  encode-bgzf-file <in> <out> [block_size]
+        \\                              Encode deterministic blocked gzip/BGZF
+        \\  decode-bgzf-file <in> <out> [max_output]
+        \\                              Decode and validate all BGZF blocks
+        \\  inspect-bgzf-file <path>    List BGZF blocks and virtual offsets
+        \\  decode-bgzf-range <in> <out> <start_virtual> <end_virtual> [max_output]
+        \\                              Decode an indexed BGZF virtual range
         \\  encode-br-stored-hex [text] [window_bits] [metadata]
         \\                              Encode text as dependency-free Brotli stored-stream hex
         \\  decode-br-hex [hex] [max_output]

@@ -144,6 +144,14 @@ pub fn build(b: *std.Build) void {
     const run_rpm_tests = b.addRunArtifact(rpm_tests);
     const rpm_test_step = b.step("test-rpm", "Run focused RPM header and package tests");
     rpm_test_step.dependOn(&run_rpm_tests.step);
+    const bgzf_tests = b.addTest(.{
+        .name = "vort-bgzf-tests",
+        .root_module = tests_mod,
+        .filters = &.{"BGZF "},
+    });
+    const run_bgzf_tests = b.addRunArtifact(bgzf_tests);
+    const bgzf_test_step = b.step("test-bgzf", "Run focused BGZF block and range tests");
+    bgzf_test_step.dependOn(&run_bgzf_tests.step);
 
     const test_step = b.step("test", "Run vort unit tests");
     test_step.dependOn(&run_tests.step);
@@ -1025,6 +1033,12 @@ pub fn build(b: *std.Build) void {
     gzip_cli_diff.addArtifactArg(cli_exe);
     const gzip_cli_diff_step = b.step("run-gzip-cli-diff", "Run black-box differential smoke against system gzip CLI");
     gzip_cli_diff_step.dependOn(&gzip_cli_diff.step);
+
+    const bgzf_diff = b.addSystemCommand(&.{ "python3", "tools/bgzf/diff.py", "--cli" });
+    bgzf_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| bgzf_diff.addArgs(args);
+    const bgzf_diff_step = b.step("run-bgzf-diff", "Validate blocked gzip/BGZF against Python zlib and optional gzip");
+    bgzf_diff_step.dependOn(&bgzf_diff.step);
 
     const zip_writer_probe_exe = b.addExecutable(.{
         .name = "vort-zip-writer-probe",
@@ -4726,6 +4740,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(python_zlib_diff_step);
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
+    ci_smoke_step.dependOn(bgzf_diff_step);
     ci_smoke_step.dependOn(zip_diff_step);
     ci_smoke_step.dependOn(bzip2_diff_step);
     ci_smoke_step.dependOn(xz_diff_step);

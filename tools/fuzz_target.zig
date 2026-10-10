@@ -31,6 +31,17 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseBgzf(data)) |_| {} else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidBgzfStream,
+        error.InvalidBgzfBlock,
+        error.ChecksumMismatch,
+        error.TruncatedFrame,
+        error.TrailingData,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.decodeLzfBlockAllocLimited(allocator, data, 1 << 20)) |decoded| {
         allocator.free(decoded);
     } else |err| switch (err) {
@@ -411,6 +422,7 @@ pub fn main(init: std.process.Init) !void {
         "VORT",
         &.{ 0x01, 0x00, 0x00, 0xff, 0xff },
         &.{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 },
+        &.{ 0x1f, 0x8b, 0x08, 0x04, 0, 0, 0, 0, 0, 0xff },
         &.{ 'V', 'S', 'K', 'P', 1, 0, 0, 0, 'x' },
         &.{ 'M', 'S', 'C', 'F', 0, 0, 0, 0 },
         &.{ 'Z', 'V', 0, 0, 1, 'x' },

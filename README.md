@@ -82,6 +82,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
+- dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
+  validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,
+  canonical EOF markers, 48:16 virtual offsets, and cross-block virtual-range
+  extraction;
 - dependency-free ZIP32/ZIP64 archive reading and deterministic writing with
   EOCD/ZIP64-locator/central-directory iteration, exact entry lookup, stored,
   Shrink-method-1, Reduce-methods-2...5, Implode-method-6, raw-Deflate,
