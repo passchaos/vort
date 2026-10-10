@@ -210,6 +210,7 @@ fn parseVersion(value: ?[]const u8) !vort.RarVersion {
 fn parseCompression(value: ?[]const u8) !vort.RarEncodeCompression {
     const name = value orelse return .stored;
     if (std.mem.eql(u8, name, "stored") or std.mem.eql(u8, name, "store")) return .stored;
+    if (std.mem.eql(u8, name, "rar29")) return .rar29;
     if (std.mem.eql(u8, name, "rar50") or std.mem.eql(u8, name, "compress")) return .rar50;
     return error.UnsupportedRarCompression;
 }

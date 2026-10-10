@@ -162,52 +162,59 @@ def main() -> None:
                     raise AssertionError(f"7-Zip rejected Vort {version}")
                 writer_external += 1
 
-        compressed_first = temp / "vort-rar5-compressed-first.rar"
-        compressed_second = temp / "vort-rar5-compressed-second.rar"
-        compressed_output = temp / "vort-rar5-compressed.out"
-        run(
-            args.cli,
-            "create-rar-file",
-            str(compressed_first),
-            "payload.bin",
-            str(large_source),
-            "rar5",
-            "rar50",
-        )
-        run(
-            args.cli,
-            "create-rar-file",
-            str(compressed_second),
-            "payload.bin",
-            str(large_source),
-            "rar5",
-            "rar50",
-        )
-        if compressed_first.read_bytes() != compressed_second.read_bytes():
-            raise AssertionError("Vort RAR50 compressed output is not deterministic")
-        listing = run(args.cli, "list-rar-file", str(compressed_first)).stdout
-        if "method=rar50" not in listing:
-            raise AssertionError(f"Vort mislabeled its RAR50 output: {listing}")
-        run(
-            args.cli,
-            "extract-rar-file",
-            str(compressed_first),
-            "payload.bin",
-            str(compressed_output),
-            str(len(large_payload)),
-        )
-        if compressed_output.read_bytes() != large_payload:
-            raise AssertionError("Vort failed its own multiblock RAR50 output")
-        writer_compressed += 1
-        if seven_zip is not None:
-            run(seven_zip, "t", str(compressed_first))
-            if seven_zip_extract(
-                seven_zip,
-                compressed_first,
-                temp / "7z-vort-rar50-compressed",
-            ) != large_payload:
-                raise AssertionError("7-Zip rejected Vort RAR50 compressed output")
-            writer_compressed_external += 1
+        for version, compression in (("rar4", "rar29"), ("rar5", "rar50")):
+            compressed_first = temp / f"vort-{compression}-compressed-first.rar"
+            compressed_second = temp / f"vort-{compression}-compressed-second.rar"
+            compressed_output = temp / f"vort-{compression}-compressed.out"
+            run(
+                args.cli,
+                "create-rar-file",
+                str(compressed_first),
+                "payload.bin",
+                str(large_source),
+                version,
+                compression,
+            )
+            run(
+                args.cli,
+                "create-rar-file",
+                str(compressed_second),
+                "payload.bin",
+                str(large_source),
+                version,
+                compression,
+            )
+            if compressed_first.read_bytes() != compressed_second.read_bytes():
+                raise AssertionError(
+                    f"Vort {compression} compressed output is not deterministic"
+                )
+            listing = run(args.cli, "list-rar-file", str(compressed_first)).stdout
+            if f"method={compression}" not in listing:
+                raise AssertionError(f"Vort mislabeled its {compression} output: {listing}")
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(compressed_first),
+                "payload.bin",
+                str(compressed_output),
+                str(len(large_payload)),
+            )
+            if compressed_output.read_bytes() != large_payload:
+                raise AssertionError(
+                    f"Vort failed its own multiblock {compression} output"
+                )
+            writer_compressed += 1
+            if seven_zip is not None:
+                run(seven_zip, "t", str(compressed_first))
+                if seven_zip_extract(
+                    seven_zip,
+                    compressed_first,
+                    temp / f"7z-vort-{compression}-compressed",
+                ) != large_payload:
+                    raise AssertionError(
+                        f"7-Zip rejected Vort {compression} compressed output"
+                    )
+                writer_compressed_external += 1
 
         if args.writer is not None:
             for version in versions:

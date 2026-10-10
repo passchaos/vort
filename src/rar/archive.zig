@@ -658,6 +658,13 @@ fn parseRar4Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
     const method = rar4Method(method_id, compression_version);
     if (method == .stored and raw.flags & rar4_file_password == 0 and packed_size != unpacked_size)
         return error.InvalidRarArchive;
+    const dictionary_size: ?usize = if (directory)
+        null
+    else switch (method) {
+        .rar15, .rar20, .rar29 => @as(usize, 64 * 1024) <<
+            @intCast((raw.flags & rar4_directory_mask) >> 5),
+        else => null,
+    };
     return .{
         .entry = .{
             .name = .{ .bytes = name_bytes },
@@ -665,7 +672,7 @@ fn parseRar4Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
             .method = method,
             .method_id = method_id,
             .compression_version = compression_version,
-            .dictionary_size = null,
+            .dictionary_size = dictionary_size,
             .crc32 = readLe32(bytes, offset + 16),
             .compressed_size = packed_size,
             .uncompressed_size = unpacked_size,

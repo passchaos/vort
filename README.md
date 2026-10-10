@@ -170,7 +170,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   sessions with pre-filter history, bounded extraction, explicit encrypted/
   redirection/unknown-size and unsupported legacy-solid errors, ordered RAR5
   multi-volume reconstruction for stored/compressed/solid split entries, and
-  deterministic RAR50 LZ writing with canonical tables, multiblock output, and
+  deterministic RAR29 compatibility LZ writing with canonical tables,
+  table-length RLE, multiblock output, 64 KiB through 4 MiB declared
+  dictionaries, and 7-Zip interoperability, plus deterministic RAR50 LZ
+  writing with canonical tables, multiblock output, and
   Delta/E8/E8E9/ARM filters plus cross-member solid history and deterministic
   stored/compressed/solid volume splitting, with 7-Zip and rars interoperability;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded

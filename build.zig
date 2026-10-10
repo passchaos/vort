@@ -1108,7 +1108,7 @@ pub fn build(b: *std.Build) void {
     rar_diff.addArg("--writer");
     rar_diff.addArtifactArg(rar_writer_probe_exe);
     if (b.args) |args| rar_diff.addArgs(args);
-    const rar_diff_step = b.step("run-rar-diff", "Validate filtered/solid/multi-volume RAR writing plus RAR15/RAR20/RAR29 and RAR50 decoding against optional 7-Zip and rars");
+    const rar_diff_step = b.step("run-rar-diff", "Validate RAR29/RAR50 writing plus legacy decoding against optional 7-Zip and rars");
     rar_diff_step.dependOn(&rar_diff.step);
 
     const lzop_diff = b.addSystemCommand(&.{ "python3", "tools/lzop/diff.py", "--cli" });

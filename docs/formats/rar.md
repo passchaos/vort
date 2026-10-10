@@ -81,10 +81,14 @@ bytes. Adding an allocator-backed RAR4 Unicode-name view remains future work.
 ## Writer
 
 `encodeRarAlloc`, `encodeRarAppend`, and `encodeRarInto` emit deterministic
-multi-entry RAR4 or RAR5 archives with regular files and directories. RAR5
-regular files can select `.compression = .rar50`; the portable baseline writes
-64 KiB compressed blocks, complete canonical Huffman tables, basic hash-indexed
-LZ matches, and new/repeat/last-distance tokens. Directories remain stored.
+multi-entry RAR4 or RAR5 archives with regular files and directories. RAR4
+regular files can select `.compression = .rar29`; the writer emits real RAR29
+LZ blocks with complete canonical main/distance/low-distance/length tables,
+RAR table-length RLE, hash-indexed matches, and new/repeat/last-distance tokens.
+Blocks default to 64 KiB, and the declared dictionary can be 64 KiB, 128 KiB,
+256 KiB, 512 KiB, 1 MiB, 2 MiB, or 4 MiB. RAR5 regular files can select
+`.compression = .rar50`; its portable baseline uses the corresponding RAR50
+wire format. Directories remain stored in both generations.
 RAR50 output can additionally select a whole-member Delta, E8, E8E9, or ARM
 filter. The writer applies the forward transform independently to each legal
 filter-sized block, writes native filter records, and uses absolute member
@@ -105,14 +109,17 @@ RAR4 end blocks, and RAR5 end headers.
 
 RAR4 output accepts safe ASCII names and converts `/` to the traditional `\`
 separator. RAR5 output accepts validated UTF-8 names. Both writers reject NUL,
-absolute, empty-component, dot, and parent-component paths. RAR50 dictionary
-sizes must be power-of-two multiples of 128 KiB. RAR4 compression, encryption,
-recovery records, comments, and redirections remain future writer work.
+absolute, empty-component, dot, and parent-component paths. RAR29 compression
+is currently non-solid and unfiltered; unsupported combinations are rejected
+instead of being mislabeled. RAR50 dictionary sizes must be power-of-two
+multiples of 128 KiB. Encryption, recovery records, comments, and redirections
+remain future writer work.
 
 ## CLI
 
 ```sh
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5
+zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50 e8e9
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50 none solid
@@ -122,8 +129,9 @@ zig build run -- extract-rar-file output.rar payload.bin decoded.bin 1048576
 ```
 
 The writer version is `rar4` or `rar5`; `rar5` is the default. Compression is
-`stored` by default and `rar50` when explicitly requested. The optional filter
-is `delta:N`, `e8`, `e8e9`, or `arm`.
+`stored` by default, `rar29` for RAR4 compatibility compression, or `rar50` for
+RAR5 compression. The optional filter is `delta:N`, `e8`, `e8e9`, or `arm` and
+currently applies only to RAR50.
 The final optional mode is `solid`; it matters for multi-entry library calls,
 while the single-entry CLI command mainly validates header generation.
 `create-rar-volumes` writes `output.part1.rar`, `output.part2.rar`, and so on;
@@ -131,8 +139,9 @@ its size argument is the packed payload budget per volume.
 
 ## Differential validation
 
-`tools/rar/diff.py` performs deterministic/self round trips, validates both
-writers with 7-Zip, reads stored RAR4/RAR5 output from an optional rars-based
+`tools/rar/diff.py` performs deterministic/self round trips, validates stored,
+multiblock RAR29, and multiblock RAR50 writer output with 7-Zip, reads stored
+RAR4/RAR5 output from an optional rars-based
 reference helper, verifies that real compressed reference entries are
 classified correctly, checks SFX parsing and both CRC layers, exercises RAR2
 and RAR5 split-volume fixtures, and compares RAR15/RAR20 text, multiblock,
@@ -163,6 +172,6 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 \
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-The next writer stages are RAR29 compatibility writing and encrypted payloads.
-Encryption should be added on top of the existing codecs rather than
-approximated in the stored path.
+The next RAR4 writer stages are RAR29 solid state, PPMd encoding, VM filters,
+and encrypted payloads. Encryption should be added on top of the existing
+codecs rather than approximated in the stored path.
