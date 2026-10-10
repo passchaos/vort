@@ -98,9 +98,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free SquashFS v4 reading with compressed metadata, short/long
   inode and directory layouts, nested path lookup, sparse/data/fragment blocks,
   regular-file and symlink extraction, gzip/LZMA/LZO/XZ/LZ4/Zstd codecs,
-  explicit output limits, plus deterministic stored/gzip/Zstd writing for
-  regular files, nested/empty directories, symlinks and packed fragments, with
-  squashfs-tools interoperability;
+  explicit output limits, plus deterministic stored/gzip/LZMA/LZO/XZ/LZ4/Zstd
+  writing for regular files, nested/empty directories, symlinks and packed
+  fragments, with squashfs-tools interoperability;
 - dependency-free EROFS reading with CRC-32C superblock verification,
   compact/extended inodes, flat plain/inline data, sorted directories,
   symlinks, legacy full and modern compact compression indexes, big pclusters,

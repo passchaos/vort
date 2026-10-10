@@ -14,7 +14,7 @@ pub fn create(
     const entry_name = args.next() orelse return error.MissingCorpusPath;
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const mode: vort.SquashfsEncodeMode = if (args.next()) |name|
-        if (std.mem.eql(u8, name, "stored")) .stored else if (std.mem.eql(u8, name, "gzip")) .gzip else if (std.mem.eql(u8, name, "zstd")) .zstandard else return error.InvalidBlockPlan
+        parseMode(name) orelse return error.InvalidBlockPlan
     else
         .gzip;
     const block_size = if (args.next()) |text|
@@ -36,6 +36,17 @@ pub fn create(
         "entry={s} input_bytes={d} squashfs_bytes={d} mode={s} block_size={d} path={s}\n",
         .{ entry_name, input.len, encoded.len, @tagName(mode), block_size, output_path },
     );
+}
+
+fn parseMode(name: []const u8) ?vort.SquashfsEncodeMode {
+    if (std.mem.eql(u8, name, "stored")) return .stored;
+    if (std.mem.eql(u8, name, "gzip")) return .gzip;
+    if (std.mem.eql(u8, name, "lzma")) return .lzma;
+    if (std.mem.eql(u8, name, "lzo")) return .lzo;
+    if (std.mem.eql(u8, name, "xz")) return .xz;
+    if (std.mem.eql(u8, name, "lz4")) return .lz4;
+    if (std.mem.eql(u8, name, "zstd")) return .zstandard;
+    return null;
 }
 
 pub fn list(

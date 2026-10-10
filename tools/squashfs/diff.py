@@ -139,16 +139,32 @@ def main() -> None:
         primary: Path = fixture
 
         writer_large = b"SquashFS writer probe multi-block payload 0123456789\n" * 4096
-        for mode in ("stored", "gzip", "zstd"):
+        state = 0x1234_5678
+        writer_random = bytearray()
+        for _ in range(32_769):
+            state ^= (state << 13) & 0xFFFF_FFFF
+            state ^= state >> 17
+            state ^= (state << 5) & 0xFFFF_FFFF
+            state &= 0xFFFF_FFFF
+            writer_random.append(state & 0xFF)
+        for mode in ("stored", "gzip", "lzma", "lzo", "xz", "lz4", "zstd"):
             image = temp / f"writer-{mode}.sqfs"
             repeated = temp / f"writer-{mode}-repeat.sqfs"
             run(args.writer, image, mode)
             run(args.writer, repeated, mode)
             if image.read_bytes() != repeated.read_bytes():
                 raise AssertionError(f"non-deterministic SquashFS writer output for {mode}")
+            listing = run(args.cli, "list-squashfs-file", image).stdout
+            expected_compression = {
+                "stored": "gzip",
+                "zstd": "zstandard",
+            }.get(mode, mode)
+            if f"compression={expected_compression}".encode() not in listing:
+                raise AssertionError(f"SquashFS writer compression mismatch for {mode}")
             expected_writer = {
                 "etc/config": b"writer probe configuration\n",
                 "large.bin": writer_large,
+                "random.bin": bytes(writer_random),
                 "small": b"fragment payload",
                 "link": b"etc/config",
             }
@@ -172,6 +188,8 @@ def main() -> None:
                     raise AssertionError(f"unsquashfs config mismatch for {mode}")
                 if (extracted / "large.bin").read_bytes() != writer_large:
                     raise AssertionError(f"unsquashfs large mismatch for {mode}")
+                if (extracted / "random.bin").read_bytes() != expected_writer["random.bin"]:
+                    raise AssertionError(f"unsquashfs random mismatch for {mode}")
                 if (extracted / "small").read_bytes() != expected_writer["small"]:
                     raise AssertionError(f"unsquashfs fragment mismatch for {mode}")
                 if (extracted / "link").readlink().as_posix() != "etc/config":

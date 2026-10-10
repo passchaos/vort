@@ -1,22 +1,17 @@
 const std = @import("std");
 const core = @import("../core.zig");
-const deflate = @import("../deflate.zig");
-const zstd = @import("../zstd.zig");
 const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
 const tree_mod = @import("writer_tree.zig");
+const writer_codec = @import("writer_codec.zig");
 
-pub const Error = core.Error || deflate.Error || zstd.Error || tree_mod.Error ||
+pub const Error = core.Error || writer_codec.Error || tree_mod.Error ||
     std.mem.Allocator.Error || error{InvalidSquashfs};
 
 pub const Entry = tree_mod.Entry;
 pub const EntryKind = tree_mod.EntryKind;
 
-pub const Mode = enum {
-    stored,
-    gzip,
-    zstandard,
-};
+pub const Mode = writer_codec.Mode;
 
 pub const Options = struct {
     mode: Mode = .gzip,
@@ -64,6 +59,11 @@ pub fn encodeAppend(
     var tree = try tree_mod.build(allocator, entries);
     defer tree.deinit();
     try output.appendNTimes(allocator, 0, format.superblock_size);
+    if (writer_codec.compressorOptions(options.mode)) |compressor_options| {
+        if (compressor_options.len > 0x7fff) return error.InvalidSquashfs;
+        try appendU16(allocator, output, 0x8000 | @as(u16, @intCast(compressor_options.len)));
+        try output.appendSlice(allocator, compressor_options);
+    }
 
     var fragments: std.ArrayList(Fragment) = .empty;
     defer fragments.deinit(allocator);
@@ -82,7 +82,7 @@ pub fn encodeAppend(
                 allocator,
                 output,
                 block,
-                options.mode,
+                options,
             );
         }
         const tail = node.data[full_blocks * options.block_size ..];
@@ -93,7 +93,7 @@ pub fn encodeAppend(
                     output,
                     &fragment_buffer,
                     &fragments,
-                    options.mode,
+                    options,
                     start,
                 );
             node.fragment = @intCast(fragments.items.len);
@@ -107,7 +107,7 @@ pub fn encodeAppend(
             output,
             &fragment_buffer,
             &fragments,
-            options.mode,
+            options,
             start,
         );
 
@@ -235,9 +235,14 @@ fn appendDataBlock(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     input: []const u8,
-    mode: Mode,
+    options: Options,
 ) Error!u32 {
-    const encoded = try compressAlloc(allocator, input, mode);
+    const encoded = try writer_codec.compressAlloc(
+        allocator,
+        input,
+        options.mode,
+        options.block_size,
+    );
     defer if (encoded) |bytes| allocator.free(bytes);
     if (encoded) |bytes| {
         if (bytes.len < input.len) {
@@ -250,32 +255,16 @@ fn appendDataBlock(
     return 0x0100_0000 | size;
 }
 
-fn compressAlloc(
-    allocator: std.mem.Allocator,
-    input: []const u8,
-    mode: Mode,
-) Error!?[]u8 {
-    return switch (mode) {
-        .stored => null,
-        .gzip => try deflate.encodeZlibBestAlloc(
-            allocator,
-            input,
-            deflate.optionsForLevel(.default),
-        ),
-        .zstandard => try zstd.encodeFrameWithOptionsAlloc(allocator, input, .{}),
-    };
-}
-
 fn flushFragment(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     buffer: *std.ArrayList(u8),
     fragments: *std.ArrayList(Fragment),
-    mode: Mode,
+    options: Options,
     filesystem_start: usize,
 ) Error!void {
     const start = output.items.len - filesystem_start;
-    const size_field = try appendDataBlock(allocator, output, buffer.items, mode);
+    const size_field = try appendDataBlock(allocator, output, buffer.items, options);
     try fragments.append(allocator, .{ .start = start, .size_field = size_field });
     buffer.clearRetainingCapacity();
 }
@@ -438,8 +427,12 @@ fn writeSuperblock(
     std.mem.writeInt(u32, output[8..12], options.modification_time, .little);
     std.mem.writeInt(u32, output[12..16], @intCast(options.block_size), .little);
     std.mem.writeInt(u32, output[16..20], @intCast(fragment_count), .little);
-    const compression: format.Compression = if (options.mode == .zstandard) .zstandard else .gzip;
-    std.mem.writeInt(u16, output[20..22], @intFromEnum(compression), .little);
+    std.mem.writeInt(
+        u16,
+        output[20..22],
+        @intFromEnum(writer_codec.compression(options.mode)),
+        .little,
+    );
     std.mem.writeInt(
         u16,
         output[22..24],
@@ -448,6 +441,7 @@ fn writeSuperblock(
     );
     var flags: u16 = (1 << 0) | (1 << 9) | (1 << 11);
     if (options.mode == .stored) flags |= (1 << 1) | (1 << 3);
+    if (writer_codec.compressorOptions(options.mode) != null) flags |= 1 << 10;
     if (fragment_count == 0) flags |= 1 << 4;
     std.mem.writeInt(u16, output[24..26], flags, .little);
     std.mem.writeInt(u16, output[26..28], 1, .little);
@@ -504,17 +498,29 @@ test {
     _ = tree_mod;
 }
 
-test "SquashFS writer round trips stored gzip and Zstd trees" {
+test "SquashFS writer round trips every codec mode" {
     const allocator = std.testing.allocator;
+    var random: [8193]u8 = undefined;
+    var prng = std.Random.DefaultPrng.init(0x5351_4653_5752_4954);
+    prng.random().bytes(&random);
     const large = "SquashFS writer multi-block payload 0123456789\n" ** 8192;
     const entries = [_]Entry{
         .{ .path = "etc", .kind = .directory },
         .{ .path = "etc/config", .data = "configuration\n" },
         .{ .path = "large.bin", .data = large },
+        .{ .path = "random.bin", .data = &random },
         .{ .path = "small", .data = "fragment" },
         .{ .path = "link", .kind = .symlink, .target = "etc/config" },
     };
-    inline for (.{ Mode.stored, .gzip, .zstandard }) |mode| {
+    inline for (.{
+        Mode.stored,
+        .gzip,
+        .lzma,
+        .lzo,
+        .xz,
+        .lz4,
+        .zstandard,
+    }) |mode| {
         const encoded = try encodeAlloc(allocator, &entries, .{
             .mode = mode,
             .block_size = 4096,
@@ -522,6 +528,14 @@ test "SquashFS writer round trips stored gzip and Zstd trees" {
         });
         defer allocator.free(encoded);
         const archive = try archive_mod.Archive.init(encoded);
+        try std.testing.expectEqual(
+            writer_codec.compression(mode),
+            archive.superblock.compression,
+        );
+        try std.testing.expectEqual(
+            mode == .lz4,
+            archive.superblock.flags.compressorOptions(),
+        );
         const config = try archive.extractByPathAllocLimited(
             allocator,
             "etc/config",
@@ -538,6 +552,14 @@ test "SquashFS writer round trips stored gzip and Zstd trees" {
         );
         defer allocator.free(decoded_large);
         try std.testing.expectEqualSlices(u8, large, decoded_large);
+        const decoded_random = try archive.extractByPathAllocLimited(
+            allocator,
+            "random.bin",
+            random.len,
+            1024 * 1024,
+        );
+        defer allocator.free(decoded_random);
+        try std.testing.expectEqualSlices(u8, &random, decoded_random);
         const small = try archive.extractByPathAllocLimited(
             allocator,
             "small",
