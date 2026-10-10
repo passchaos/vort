@@ -17871,6 +17871,19 @@ reuse, so production keeps the simpler independently owned plans.
   common CRCs, and nested paths in the reverse direction. See
   `docs/formats/lha.md`.
 
+- Added dependency-free ARJ archive reading and deterministic writing. The
+  parser bounds and CRC-32-validates main, local, and chained extended headers,
+  supports SFX prefixes, exposes borrowed normalized names, verifies file data
+  CRCs, and rejects encryption and unsupported multi-volume extraction before
+  decoding. Stored method 0 and no-data entries are handled directly; methods
+  1–3 reuse the pure Zig LH6-compatible decoder, while method 4 has a dedicated
+  fixed-code MSB LZ77 implementation. Functionality-first writers emit arbitrary
+  literals for all five data methods with deterministic headers and timestamps;
+  match planning remains ratio work. Debian ARJ and 7-Zip independently decode
+  every Vort writer method. Five unarc-rs fixtures cover all reader methods,
+  with separate corrupt-CRC and encrypted fixtures fixing failure behavior.
+  See `docs/formats/arj.md`.
+
 - Added a pure Zig LZO1X encoder/decoder and LZOP container. The implementation parses
   modern and legacy headers, verifies Adler-32 or CRC-32 header/data/compressed
   checksums, accepts LZO1X-1, LZO1X-1(15), and LZO1X-999 payloads, applies the

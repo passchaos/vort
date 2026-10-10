@@ -120,6 +120,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   level-0 writing with stored, LH1, LH4, LH5, LH6, LH7, LZ5, LZS, and directory
   entries, chained filename/path and common-CRC extended headers, payload CRC-16,
   bounded extraction, adaptive/fixed Huffman models, and legacy LArc histories;
+- dependency-free ARJ/SFX reading and deterministic writing with CRC-validated
+  main/local/extended headers, stored and methods 1–4, no-data and directory
+  entries, bounded extraction, encrypted/multi-volume rejection, and external
+  ARJ plus 7-Zip interoperability;
 - pure Zig LZO1X encoding/decoding plus LZOP parsing and deterministic
   compressed-or-stored writing, including Adler-32/CRC-32 header, data, and
   compressed-block checks, legacy delta filters, concatenated streams, and

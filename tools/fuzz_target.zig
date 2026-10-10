@@ -87,6 +87,40 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseArjArchive(data)) |archive| {
+        var iterator = archive.iterator();
+        while (try iterator.next()) |entry| {
+            if (archive.extractAllocLimited(allocator, entry, 1 << 20)) |decoded| {
+                allocator.free(decoded);
+            } else |err| switch (err) {
+                error.OutputLimitExceeded,
+                error.EncryptedArjEntry,
+                error.UnsupportedArjFeature,
+                error.UnsupportedArjMethod,
+                error.InvalidArjArchive,
+                error.InvalidArjMethod4Stream,
+                error.InvalidLegacyLhStream,
+                error.InvalidLh1Stream,
+                error.InvalidLhStream,
+                error.TruncatedFrame,
+                error.TrailingData,
+                error.SizeMismatch,
+                error.ChecksumMismatch,
+                error.IntegerOverflow,
+                => {},
+                else => return err,
+            }
+        }
+    } else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidArjArchive,
+        error.ChecksumMismatch,
+        error.TruncatedFrame,
+        error.TrailingData,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.parseCabArchive(data)) |cabinet| {
         for (0..cabinet.folder_count) |folder_index| {
             if (vort.decodeCabFolderAllocLimited(allocator, cabinet, folder_index, 1 << 20)) |decoded| {
@@ -137,6 +171,7 @@ pub fn main(init: std.process.Init) !void {
         &.{ 'M', 'S', 'C', 'F', 0, 0, 0, 0 },
         &.{ 'Z', 'V', 0, 0, 1, 'x' },
         &.{0},
+        &.{ 0x60, 0xea, 0, 0 },
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
 
