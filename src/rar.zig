@@ -13,6 +13,8 @@ pub const Name = archive.Name;
 pub const Entry = archive.Entry;
 pub const Archive = archive.Archive;
 pub const Iterator = archive.Iterator;
+pub const ExtractSession = archive.ExtractSession;
+pub const DecodedEntry = archive.DecodedEntry;
 pub const EncodeKind = writer.Kind;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
@@ -38,6 +40,7 @@ pub const inspectRar29InitialMode = rar29.initialMode;
 pub const decodeRar50Into = rar50.decodeInto;
 pub const decodeRar50Alloc = rar50.decodeAlloc;
 pub const Rar50DecodeOptions = rar50.DecodeOptions;
+pub const Rar50Decoder = rar50.Decoder;
 
 test {
     _ = archive;

@@ -4,6 +4,8 @@ const filters_mod = @import("rar50_filters.zig");
 
 pub const Error = core.Error || filters_mod.Error || error{
     InvalidRar50Stream,
+    MissingRar50SolidState,
+    Rar50DecoderPoisoned,
     Rar50DictionaryLimitExceeded,
 };
 
@@ -42,6 +44,170 @@ const Block = struct {
     has_tables: bool,
 };
 
+pub const Decoder = struct {
+    allocator: std.mem.Allocator,
+    tables: ?Tables = null,
+    repeated_distances: [4]usize = @splat(0),
+    last_length: usize = 0,
+    history: std.ArrayList(u8) = .empty,
+    initialized: bool = false,
+    poisoned: bool = false,
+
+    pub fn init(allocator: std.mem.Allocator) Decoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *Decoder) void {
+        self.history.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *Decoder) void {
+        self.tables = null;
+        self.repeated_distances = @splat(0);
+        self.last_length = 0;
+        self.history.clearRetainingCapacity();
+        self.initialized = false;
+        self.poisoned = false;
+    }
+
+    pub fn decodeMemberInto(
+        self: *Decoder,
+        input: []const u8,
+        output: []u8,
+        algorithm_version: u8,
+        dictionary_size: usize,
+        solid: bool,
+        options: DecodeOptions,
+    ) Error!void {
+        if (dictionary_size == 0) return error.InvalidRar50Stream;
+        if (dictionary_size > options.max_dictionary_size)
+            return error.Rar50DictionaryLimitExceeded;
+        if (algorithm_version > 1) return error.InvalidRar50Stream;
+        if (!solid)
+            self.reset()
+        else {
+            if (self.poisoned) return error.Rar50DecoderPoisoned;
+            if (!self.initialized) return error.MissingRar50SolidState;
+        }
+        errdefer self.poisoned = true;
+        self.trimHistory(dictionary_size);
+
+        var output_offset: usize = 0;
+        var input_offset: usize = 0;
+        var first_block = true;
+        var pending_filters: std.ArrayList(filters_mod.Filter) = .empty;
+        defer pending_filters.deinit(self.allocator);
+
+        while (first_block or output_offset < output.len) {
+            first_block = false;
+            const block = try parseBlock(input, input_offset);
+            input_offset = block.next_offset;
+            var bits = BitReader{
+                .input = block.payload,
+                .bit_limit = block.payload_bits,
+            };
+            if (block.has_tables)
+                self.tables = try readTables(&bits, algorithm_version);
+            const active = if (self.tables) |*value| value else return error.InvalidRar50Stream;
+
+            while (bits.bit_offset < bits.bit_limit and output_offset < output.len) {
+                const symbol = try active.main.decode(&bits);
+                switch (symbol) {
+                    0...255 => {
+                        output[output_offset] = @intCast(symbol);
+                        output_offset += 1;
+                    },
+                    256 => {
+                        if (pending_filters.items.len == max_filters)
+                            return error.InvalidRar50Stream;
+                        try pending_filters.append(
+                            self.allocator,
+                            try readFilter(&bits, output_offset),
+                        );
+                    },
+                    257 => if (self.last_length != 0) {
+                        try copyMatch(
+                            self.history.items,
+                            output,
+                            &output_offset,
+                            self.repeated_distances[0],
+                            self.last_length,
+                            dictionary_size,
+                        );
+                    },
+                    258...261 => {
+                        const repeat_index = symbol - 258;
+                        const distance = self.repeated_distances[repeat_index];
+                        if (distance == 0) return error.InvalidRar50Stream;
+                        const length_slot = try active.length.decode(&bits);
+                        const length_extra = try bits.read(try lengthSlotBits(length_slot));
+                        const length = try slotToLength(length_slot, length_extra);
+                        var index = repeat_index;
+                        while (index != 0) : (index -= 1)
+                            self.repeated_distances[index] = self.repeated_distances[index - 1];
+                        self.repeated_distances[0] = distance;
+                        self.last_length = length;
+                        try copyMatch(
+                            self.history.items,
+                            output,
+                            &output_offset,
+                            distance,
+                            length,
+                            dictionary_size,
+                        );
+                    },
+                    262...305 => {
+                        const length_slot = symbol - 262;
+                        const length_extra = try bits.read(try lengthSlotBits(length_slot));
+                        var length = try slotToLength(length_slot, length_extra);
+                        const distance_slot = try active.distance.decode(&bits);
+                        const distance_bits = try distanceSlotBits(distance_slot);
+                        const distance_extra: u32 = if (distance_bits >= 4 and active.align_mode) blk: {
+                            const high = try bits.read(@intCast(distance_bits - 4));
+                            const low = try active.alignment.decode(&bits);
+                            break :blk (high << 4) | @as(u32, @intCast(low));
+                        } else try bits.read(@intCast(distance_bits));
+                        const distance = try slotToDistance(distance_slot, distance_extra);
+                        length += lengthBonus(distance);
+                        self.repeated_distances[3] = self.repeated_distances[2];
+                        self.repeated_distances[2] = self.repeated_distances[1];
+                        self.repeated_distances[1] = self.repeated_distances[0];
+                        self.repeated_distances[0] = distance;
+                        self.last_length = length;
+                        try copyMatch(
+                            self.history.items,
+                            output,
+                            &output_offset,
+                            distance,
+                            length,
+                            dictionary_size,
+                        );
+                    },
+                    else => return error.InvalidRar50Stream,
+                }
+            }
+            if (block.is_last or output_offset == output.len) break;
+        }
+        if (output_offset != output.len) return error.SizeMismatch;
+        try self.history.appendSlice(self.allocator, output);
+        self.trimHistory(dictionary_size);
+        try filters_mod.applyAll(self.allocator, output, pending_filters.items);
+        self.initialized = true;
+        self.poisoned = false;
+    }
+
+    fn trimHistory(self: *Decoder, dictionary_size: usize) void {
+        if (self.history.items.len <= dictionary_size) return;
+        const discard = self.history.items.len - dictionary_size;
+        @memmove(
+            self.history.items[0..dictionary_size],
+            self.history.items[discard..],
+        );
+        self.history.items.len = dictionary_size;
+    }
+};
+
 pub fn decodeInto(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -50,109 +216,16 @@ pub fn decodeInto(
     dictionary_size: usize,
     options: DecodeOptions,
 ) Error!void {
-    if (dictionary_size == 0) return error.InvalidRar50Stream;
-    if (dictionary_size > options.max_dictionary_size)
-        return error.Rar50DictionaryLimitExceeded;
-    if (algorithm_version > 1) return error.InvalidRar50Stream;
-
-    var tables: ?Tables = null;
-    var repeated_distances: [4]usize = @splat(0);
-    var last_length: usize = 0;
-    var output_offset: usize = 0;
-    var input_offset: usize = 0;
-    var first_block = true;
-    var pending_filters: std.ArrayList(filters_mod.Filter) = .empty;
-    defer pending_filters.deinit(allocator);
-
-    while (first_block or output_offset < output.len) {
-        first_block = false;
-        const block = try parseBlock(input, input_offset);
-        input_offset = block.next_offset;
-        var bits = BitReader{
-            .input = block.payload,
-            .bit_limit = block.payload_bits,
-        };
-        if (block.has_tables)
-            tables = try readTables(&bits, algorithm_version);
-        const active = if (tables) |*value| value else return error.InvalidRar50Stream;
-
-        while (bits.bit_offset < bits.bit_limit and output_offset < output.len) {
-            const symbol = try active.main.decode(&bits);
-            switch (symbol) {
-                0...255 => {
-                    output[output_offset] = @intCast(symbol);
-                    output_offset += 1;
-                },
-                256 => {
-                    if (pending_filters.items.len == max_filters)
-                        return error.InvalidRar50Stream;
-                    try pending_filters.append(
-                        allocator,
-                        try readFilter(&bits, output_offset),
-                    );
-                },
-                257 => if (last_length != 0) {
-                    try copyMatch(
-                        output,
-                        &output_offset,
-                        repeated_distances[0],
-                        last_length,
-                        dictionary_size,
-                    );
-                },
-                258...261 => {
-                    const repeat_index = symbol - 258;
-                    const distance = repeated_distances[repeat_index];
-                    if (distance == 0) return error.InvalidRar50Stream;
-                    const length_slot = try active.length.decode(&bits);
-                    const length_extra = try bits.read(try lengthSlotBits(length_slot));
-                    const length = try slotToLength(length_slot, length_extra);
-                    var index = repeat_index;
-                    while (index != 0) : (index -= 1)
-                        repeated_distances[index] = repeated_distances[index - 1];
-                    repeated_distances[0] = distance;
-                    last_length = length;
-                    try copyMatch(
-                        output,
-                        &output_offset,
-                        distance,
-                        length,
-                        dictionary_size,
-                    );
-                },
-                262...305 => {
-                    const length_slot = symbol - 262;
-                    const length_extra = try bits.read(try lengthSlotBits(length_slot));
-                    var length = try slotToLength(length_slot, length_extra);
-                    const distance_slot = try active.distance.decode(&bits);
-                    const distance_bits = try distanceSlotBits(distance_slot);
-                    const distance_extra: u32 = if (distance_bits >= 4 and active.align_mode) blk: {
-                        const high = try bits.read(@intCast(distance_bits - 4));
-                        const low = try active.alignment.decode(&bits);
-                        break :blk (high << 4) | @as(u32, @intCast(low));
-                    } else try bits.read(@intCast(distance_bits));
-                    const distance = try slotToDistance(distance_slot, distance_extra);
-                    length += lengthBonus(distance);
-                    repeated_distances[3] = repeated_distances[2];
-                    repeated_distances[2] = repeated_distances[1];
-                    repeated_distances[1] = repeated_distances[0];
-                    repeated_distances[0] = distance;
-                    last_length = length;
-                    try copyMatch(
-                        output,
-                        &output_offset,
-                        distance,
-                        length,
-                        dictionary_size,
-                    );
-                },
-                else => return error.InvalidRar50Stream,
-            }
-        }
-        if (block.is_last or output_offset == output.len) break;
-    }
-    if (output_offset != output.len) return error.SizeMismatch;
-    try filters_mod.applyAll(allocator, output, pending_filters.items);
+    var decoder = Decoder.init(allocator);
+    defer decoder.deinit();
+    try decoder.decodeMemberInto(
+        input,
+        output,
+        algorithm_version,
+        dictionary_size,
+        false,
+        options,
+    );
 }
 
 pub fn decodeAlloc(
@@ -318,6 +391,7 @@ fn readFilterData(bits: *BitReader) Error!u32 {
 }
 
 fn copyMatch(
+    history: []const u8,
     output: []u8,
     output_offset: *usize,
     distance: usize,
@@ -326,10 +400,12 @@ fn copyMatch(
 ) Error!void {
     if (length > output.len - output_offset.*) return error.SizeMismatch;
     const before_history = distance == 0 or distance > dictionary_size or
-        distance > output_offset.*;
+        distance > history.len + output_offset.*;
     for (0..length) |_| {
         output[output_offset.*] = if (before_history)
             0
+        else if (distance > output_offset.*)
+            history[history.len - (distance - output_offset.*)]
         else
             output[output_offset.* - distance];
         output_offset.* += 1;
@@ -488,5 +564,20 @@ test "RAR50 decoder enforces dictionary limit before reading blocks" {
     try std.testing.expectError(
         error.TruncatedFrame,
         decodeInto(std.testing.allocator, &.{}, &.{}, 0, 128 * 1024, .{}),
+    );
+
+    var decoder = Decoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    try std.testing.expectError(
+        error.MissingRar50SolidState,
+        decoder.decodeMemberInto(&.{}, &.{}, 0, 128 * 1024, true, .{}),
+    );
+    try std.testing.expectError(
+        error.TruncatedFrame,
+        decoder.decodeMemberInto(&.{}, &.{}, 0, 128 * 1024, false, .{}),
+    );
+    try std.testing.expectError(
+        error.Rar50DecoderPoisoned,
+        decoder.decodeMemberInto(&.{}, &.{}, 0, 128 * 1024, true, .{}),
     );
 }

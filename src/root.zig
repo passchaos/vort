@@ -356,6 +356,8 @@ pub const RarName = rar.Name;
 pub const RarEntry = rar.Entry;
 pub const RarArchive = rar.Archive;
 pub const RarIterator = rar.Iterator;
+pub const RarExtractSession = rar.ExtractSession;
+pub const RarDecodedEntry = rar.DecodedEntry;
 pub const RarEncodeKind = rar.EncodeKind;
 pub const RarEncodeEntry = rar.EncodeEntry;
 pub const RarEncodeOptions = rar.EncodeOptions;
@@ -381,6 +383,7 @@ pub const inspectRar29InitialMode = rar.inspectRar29InitialMode;
 pub const decodeRar50Into = rar.decodeRar50Into;
 pub const decodeRar50Alloc = rar.decodeRar50Alloc;
 pub const Rar50DecodeOptions = rar.Rar50DecodeOptions;
+pub const Rar50Decoder = rar.Rar50Decoder;
 
 pub const ZooError = zoo.Error;
 pub const ZooMethod = zoo.Method;
