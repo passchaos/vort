@@ -257,6 +257,49 @@ def main() -> None:
                 raise AssertionError("7-Zip rejected Vort RAR29 PPMd output")
             writer_ppmd_external += 1
 
+        rar29_filter_payload = bytearray(
+            (index * 53 + index // 7) & 0xFF for index in range(8192)
+        )
+        rar29_filter_payload[16] = 0xE8
+        rar29_filter_payload[17:21] = (0x1000).to_bytes(4, "little")
+        rar29_filter_payload[32] = 0xE9
+        rar29_filter_payload[33:37] = (0x2000).to_bytes(4, "little")
+        rar29_filter_source = temp / "rar29-filter-source.bin"
+        rar29_filter_source.write_bytes(rar29_filter_payload)
+        for index, filter_name in enumerate(
+            ("delta:4", "e8", "e8e9", "itanium", "rgb:12:1", "audio:2")
+        ):
+            archive = temp / f"vort-rar29-filter-{index}.rar"
+            output = temp / f"vort-rar29-filter-{index}.out"
+            run(
+                args.cli,
+                "create-rar-file",
+                str(archive),
+                "payload.bin",
+                str(rar29_filter_source),
+                "rar4",
+                "rar29",
+                filter_name,
+            )
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(archive),
+                "payload.bin",
+                str(output),
+                str(len(rar29_filter_payload)),
+            )
+            if output.read_bytes() != rar29_filter_payload:
+                raise AssertionError(f"Vort failed its own RAR29 {filter_name} output")
+            writer_filtered += 1
+            if seven_zip is not None:
+                reference = temp / f"vort-rar29-filter-reference-{index}"
+                reference.mkdir()
+                run(seven_zip, "x", "-y", f"-o{reference}", str(archive))
+                if (reference / "payload.bin").read_bytes() != rar29_filter_payload:
+                    raise AssertionError(f"7-Zip rejected Vort RAR29 {filter_name} output")
+                writer_filtered_external += 1
+
         if args.writer is not None:
             for version in versions:
                 archive = temp / f"probe-{version}.rar"

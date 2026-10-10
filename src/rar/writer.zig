@@ -16,7 +16,15 @@ pub const Error = archive.Error || rar29_encoder.Error || rar50_encoder.Error ||
 
 pub const Kind = enum { regular, directory };
 pub const Compression = enum { stored, rar29, rar29_ppmd, rar50 };
-pub const Filter = rar50_encoder.Filter;
+pub const Filter = union(enum) {
+    delta: u8,
+    e8,
+    e8e9,
+    arm,
+    itanium,
+    rgb: struct { width: usize, red_position: u8 = 0 },
+    audio: u8,
+};
 
 pub const EncodeEntry = struct {
     name: []const u8,
@@ -116,7 +124,7 @@ pub fn encodeVolumesAlloc(
     var encoder = rar50_encoder.Encoder.init(allocator, .{
         .dictionary_size = options.dictionary_size,
         .block_size = options.block_size,
-        .filter = options.filter,
+        .filter = try rar50Filter(options.filter),
     });
     defer encoder.deinit();
 
@@ -193,12 +201,14 @@ fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!v
         .stored => if (options.filter != null or options.solid)
             return error.UnsupportedRarEncodeOptions,
         .rar29 => {
-            if (options.version != .rar4 or options.filter != null)
+            if (options.version != .rar4 or (options.solid and options.filter != null))
                 return error.UnsupportedRarEncodeOptions;
             try rar29_encoder.validateOptions(.{
                 .dictionary_size = options.dictionary_size,
                 .block_size = options.block_size,
             });
+            if (options.filter) |filter|
+                try rar29_encoder.validateFilter(try rar29Filter(filter));
         },
         .rar29_ppmd => {
             if (options.version != .rar4 or options.filter != null)
@@ -217,7 +227,7 @@ fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!v
             try rar50_encoder.validateOptions(.{
                 .dictionary_size = options.dictionary_size,
                 .block_size = options.block_size,
-                .filter = options.filter,
+                .filter = try rar50Filter(options.filter),
             });
             if (options.solid and options.filter != null)
                 return error.UnsupportedRarEncodeOptions;
@@ -314,7 +324,14 @@ fn appendRar4File(
     else
         false;
     const compressed: ?[]u8 = if (use_lz)
-        try encoder.encodeMemberAlloc(entry.data, solid_continuation)
+        if (options.filter) |filter|
+            try encoder.encodeFilteredMemberAlloc(
+                entry.data,
+                try rar29Filter(filter),
+                solid_continuation,
+            )
+        else
+            try encoder.encodeMemberAlloc(entry.data, solid_continuation)
     else if (use_ppmd)
         try ppmd_encoder.encodeMemberAlloc(entry.data, solid_continuation)
     else
@@ -368,6 +385,32 @@ fn rar29DictionaryFlags(dictionary_size: usize) Error!u16 {
     return bits << 5;
 }
 
+fn rar29Filter(filter: Filter) Error!rar29_encoder.Filter {
+    return switch (filter) {
+        .delta => |channels| .{ .delta = channels },
+        .e8 => .e8,
+        .e8e9 => .e8e9,
+        .itanium => .itanium,
+        .rgb => |rgb| .{ .rgb = .{
+            .width = rgb.width,
+            .red_position = rgb.red_position,
+        } },
+        .audio => |channels| .{ .audio = channels },
+        .arm => error.UnsupportedRarEncodeOptions,
+    };
+}
+
+fn rar50Filter(filter: ?Filter) Error!?rar50_encoder.Filter {
+    const value = filter orelse return null;
+    return switch (value) {
+        .delta => |channels| .{ .delta = channels },
+        .e8 => .e8,
+        .e8e9 => .e8e9,
+        .arm => .arm,
+        .itanium, .rgb, .audio => error.UnsupportedRarEncodeOptions,
+    };
+}
+
 fn writeRar4HeaderCrc(bytes: []u8, start: usize, end: usize) void {
     const crc: u16 = @truncate(checksum.crc32(bytes[start + 2 .. end]));
     std.mem.writeInt(u16, bytes[start..][0..2], crc, .little);
@@ -383,7 +426,7 @@ fn encodeRar5(
     var encoder = rar50_encoder.Encoder.init(allocator, .{
         .dictionary_size = options.dictionary_size,
         .block_size = options.block_size,
-        .filter = options.filter,
+        .filter = try rar50Filter(options.filter),
     });
     defer encoder.deinit();
     var main_specific: std.ArrayList(u8) = .empty;
@@ -649,14 +692,6 @@ test "RAR writer rejects compression and container mismatches" {
             .compression = .rar50,
         }),
     );
-    try std.testing.expectError(
-        error.UnsupportedRarEncodeOptions,
-        encodeAlloc(std.testing.allocator, &entries, .{
-            .version = .rar4,
-            .compression = .rar29,
-            .filter = .e8,
-        }),
-    );
 }
 
 test "RAR29 writer stamps every supported dictionary window" {
@@ -845,6 +880,65 @@ test "RAR29 PPMd writer emits deterministic ordinary and solid streams" {
             .version = .rar4,
             .compression = .rar29_ppmd,
             .ppmd_memory_size = 512 * 1024,
+        }),
+    );
+}
+
+test "RAR29 writer emits all six standard VM filters" {
+    const allocator = std.testing.allocator;
+    var payload: [8192]u8 = undefined;
+    for (&payload, 0..) |*byte, index| byte.* = @truncate(index *% 53 +% index / 7);
+    payload[16] = 0xe8;
+    std.mem.writeInt(u32, payload[17..21], 0x1000, .little);
+    payload[32] = 0xe9;
+    std.mem.writeInt(u32, payload[33..37], 0x2000, .little);
+    const entries = [_]EncodeEntry{.{ .name = "filtered.bin", .data = &payload }};
+    const filters = [_]Filter{
+        .{ .delta = 4 },
+        .e8,
+        .e8e9,
+        .itanium,
+        .{ .rgb = .{ .width = 12, .red_position = 1 } },
+        .{ .audio = 2 },
+    };
+    for (filters) |filter| {
+        const encoded = try encodeAlloc(allocator, &entries, .{
+            .version = .rar4,
+            .compression = .rar29,
+            .block_size = 1024,
+            .filter = filter,
+        });
+        defer allocator.free(encoded);
+        const parsed = try archive.parse(encoded);
+        const entry = try parsed.entryAt(0);
+        const decoded = try parsed.extractAlloc(allocator, entry);
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, &payload, decoded);
+    }
+
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &entries, .{
+            .version = .rar4,
+            .compression = .rar29,
+            .filter = .arm,
+        }),
+    );
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &entries, .{
+            .version = .rar4,
+            .compression = .rar29,
+            .filter = .e8,
+            .solid = true,
+        }),
+    );
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &entries, .{
+            .version = .rar5,
+            .compression = .rar50,
+            .filter = .itanium,
         }),
     );
 }

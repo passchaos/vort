@@ -223,9 +223,24 @@ fn parseFilter(value: ?[]const u8) !?vort.RarEncodeFilter {
     if (std.mem.eql(u8, name, "e8")) return .e8;
     if (std.mem.eql(u8, name, "e8e9")) return .e8e9;
     if (std.mem.eql(u8, name, "arm")) return .arm;
+    if (std.mem.eql(u8, name, "itanium")) return .itanium;
     const prefix = "delta:";
     if (std.mem.startsWith(u8, name, prefix))
         return .{ .delta = try std.fmt.parseInt(u8, name[prefix.len..], 10) };
+    const audio_prefix = "audio:";
+    if (std.mem.startsWith(u8, name, audio_prefix))
+        return .{ .audio = try std.fmt.parseInt(u8, name[audio_prefix.len..], 10) };
+    const rgb_prefix = "rgb:";
+    if (std.mem.startsWith(u8, name, rgb_prefix)) {
+        const parameters = name[rgb_prefix.len..];
+        const separator = std.mem.indexOfScalar(u8, parameters, ':');
+        const width_text = if (separator) |index| parameters[0..index] else parameters;
+        const red_text = if (separator) |index| parameters[index + 1 ..] else "0";
+        return .{ .rgb = .{
+            .width = try std.fmt.parseInt(usize, width_text, 10),
+            .red_position = try std.fmt.parseInt(u8, red_text, 10),
+        } };
+    }
     return error.UnsupportedRarFilter;
 }
 

@@ -104,6 +104,12 @@ member codec beneath the archive writer.
 across consecutive compressed members, sets the RAR4 main/file solid flags,
 and supports sequential extraction plus by-name replay. Stored members and
 directories terminate both RAR29 LZ and PPMd compression chains.
+RAR29 LZ output can apply E8, E8E9, Delta, Itanium, RGB, or Audio filters.
+The writer emits canonical RAR VM program bytecode, declares/reuses programs
+across blocks, and bounds filter blocks to the VM-compatible 120–128 KiB
+range. RGB and Audio parameters are explicit. Filtered RAR29 solid and PPMd
+writing remain rejected until their combined cross-member semantics are
+exposed by the public API.
 RAR50 output can additionally select a whole-member Delta, E8, E8E9, or ARM
 filter. The writer applies the forward transform independently to each legal
 filter-sized block, writes native filter records, and uses absolute member
@@ -125,8 +131,8 @@ RAR4 end blocks, and RAR5 end headers.
 RAR4 output accepts safe ASCII names and converts `/` to the traditional `\`
 separator. RAR5 output accepts validated UTF-8 names. Both writers reject NUL,
 absolute, empty-component, dot, and parent-component paths. RAR29 compression
-is currently unfiltered; unsupported filter combinations are rejected
-instead of being mislabeled. RAR50 dictionary sizes must be power-of-two
+rejects unsupported filter/codec combinations instead of relabeling them.
+RAR50 dictionary sizes must be power-of-two
 multiples of 128 KiB. Encryption, recovery records, comments, and redirections
 remain future writer work.
 
@@ -135,6 +141,8 @@ remain future writer work.
 ```sh
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5
 zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29
+zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29 e8e9
+zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29 rgb:1920:0
 zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29-ppmd
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50 e8e9
@@ -147,8 +155,9 @@ zig build run -- extract-rar-file output.rar payload.bin decoded.bin 1048576
 The writer version is `rar4` or `rar5`; `rar5` is the default. Compression is
 `stored` by default, `rar29` for RAR4 LZ compatibility compression,
 `rar29-ppmd` for RAR4 PPMd Variant H, or `rar50` for RAR5 compression. The
-optional filter is `delta:N`, `e8`, `e8e9`, or `arm` and currently applies only
-to RAR50.
+optional filter is `delta:N`, `e8`, `e8e9`, `arm`, `itanium`, `rgb:W:R`, or
+`audio:N`. RAR29 supports every listed filter except ARM; RAR50 supports Delta,
+E8, E8E9, and ARM.
 The final optional mode is `solid`; it matters for multi-entry library calls,
 while the single-entry CLI command mainly validates header generation.
 `create-rar-volumes` writes `output.part1.rar`, `output.part2.rar`, and so on;
@@ -158,7 +167,7 @@ its size argument is the packed payload budget per volume.
 
 `tools/rar/diff.py` performs deterministic/self round trips, validates stored,
 multiblock RAR29 LZ, ordinary/solid RAR29 PPMd, and multiblock RAR50 writer
-output with 7-Zip, reads stored
+output plus all six RAR29 and four RAR50 writer filters with 7-Zip, reads stored
 RAR4/RAR5 output from an optional rars-based
 reference helper, verifies that real compressed reference entries are
 classified correctly, checks SFX parsing and both CRC layers, exercises RAR2
@@ -190,7 +199,7 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 \
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-The next RAR4 writer stages are VM filters and encrypted payloads. PPMd hybrid
-match escapes remain a later compression-ratio optimization. Encryption should
-be added on top of the existing codecs rather than approximated in the stored
-path.
+The next RAR4 writer stages are PPMd-attached VM filters, encrypted payloads,
+and multi-volume output. PPMd hybrid match escapes remain a later
+compression-ratio optimization. Encryption should be added on top of the
+existing codecs rather than approximated in the stored path.

@@ -1,11 +1,15 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const filter_encoder = @import("rar29_filter_encoder.zig");
 
-pub const Error = core.Error || std.mem.Allocator.Error || error{
+pub const Error = core.Error || filter_encoder.Error || std.mem.Allocator.Error || error{
     InvalidRar29EncodeOptions,
     MissingRar29SolidEncoderState,
     Rar29EncoderPoisoned,
 };
+
+pub const Filter = filter_encoder.Filter;
+pub const validateFilter = filter_encoder.validate;
 
 pub const Options = struct {
     dictionary_size: usize = 1024 * 1024,
@@ -118,7 +122,28 @@ pub const Encoder = struct {
     }
 
     pub fn encodeMemberAlloc(self: *Encoder, input: []const u8, solid: bool) Error![]u8 {
+        return self.encodeMemberInternal(input, solid, null);
+    }
+
+    pub fn encodeFilteredMemberAlloc(
+        self: *Encoder,
+        input: []const u8,
+        filter: Filter,
+        solid: bool,
+    ) Error![]u8 {
+        if (solid) return error.InvalidRar29FilterOptions;
+        try filter_encoder.validate(filter);
+        return self.encodeMemberInternal(input, false, filter);
+    }
+
+    fn encodeMemberInternal(
+        self: *Encoder,
+        input: []const u8,
+        solid: bool,
+        filter: ?Filter,
+    ) Error![]u8 {
         try validateOptions(self.options);
+        if (filter != null and input.len == 0) return error.InvalidRar29FilterOptions;
         if (!solid)
             self.reset()
         else {
@@ -138,25 +163,72 @@ pub const Encoder = struct {
                 self.options,
                 true,
                 input,
+                null,
             );
         } else {
             var start: usize = 0;
+            const block_size = if (filter) |active|
+                try filter_encoder.blockSize(active, self.options.block_size)
+            else
+                self.options.block_size;
+            var filter_program_initialized = false;
+            var filter_applied = false;
             while (start < input.len) {
-                const end = @min(input.len, start +| self.options.block_size);
+                const end = @min(input.len, start +| block_size);
                 const block = input[start..end];
-                try encodeBlock(
-                    self.allocator,
-                    &output,
-                    self.history.items,
-                    &self.state,
-                    self.options,
-                    end == input.len,
-                    block,
-                );
-                try self.history.appendSlice(self.allocator, block);
+                if (filter) |active| {
+                    if (filter_encoder.canApply(active, block.len)) {
+                        var prepared = try filter_encoder.prepareBlockAlloc(
+                            self.allocator,
+                            block,
+                            active,
+                            start,
+                            !filter_program_initialized,
+                        );
+                        defer prepared.deinit();
+                        try encodeBlock(
+                            self.allocator,
+                            &output,
+                            self.history.items,
+                            &self.state,
+                            self.options,
+                            end == input.len,
+                            prepared.data,
+                            prepared.record,
+                        );
+                        try self.history.appendSlice(self.allocator, prepared.data);
+                        filter_program_initialized = true;
+                        filter_applied = true;
+                    } else {
+                        try encodeBlock(
+                            self.allocator,
+                            &output,
+                            self.history.items,
+                            &self.state,
+                            self.options,
+                            end == input.len,
+                            block,
+                            null,
+                        );
+                        try self.history.appendSlice(self.allocator, block);
+                    }
+                } else {
+                    try encodeBlock(
+                        self.allocator,
+                        &output,
+                        self.history.items,
+                        &self.state,
+                        self.options,
+                        end == input.len,
+                        block,
+                        null,
+                    );
+                    try self.history.appendSlice(self.allocator, block);
+                }
                 self.trimHistory();
                 start = end;
             }
+            if (filter != null and !filter_applied) return error.InvalidRar29FilterOptions;
             self.initialized = true;
         }
         const owned = try output.toOwnedSlice(self.allocator);
@@ -199,6 +271,7 @@ fn encodeBlock(
     options: Options,
     is_last: bool,
     input: []const u8,
+    filter_record: ?[]const u8,
 ) Error!void {
     var tokens: std.ArrayList(Token) = .empty;
     defer tokens.deinit(allocator);
@@ -224,6 +297,11 @@ fn encodeBlock(
     try writer.writeBits(0, 1); // Code lengths are absolute, not table deltas.
     for (level_lengths) |length| try writer.writeBits(length, 4);
     try writeTableRuns(&writer, &level_codes, &table_lengths);
+
+    if (filter_record) |record| {
+        try writer.writeCode(&main_codes, 257);
+        for (record) |byte| try writer.writeBits(byte, 8);
+    }
 
     for (tokens.items) |token| switch (token) {
         .literal => |byte| try writer.writeCode(&main_codes, byte),
@@ -572,6 +650,53 @@ test "RAR29 solid encoder and decoder reuse cross-member history" {
     try std.testing.expectError(
         error.MissingRar29SolidState,
         missing.decodeMemberInto(second_packed, second_decoded, options.dictionary_size, true),
+    );
+}
+
+test "RAR29 encoder round trips all six standard VM filters across blocks" {
+    const decoder = @import("rar29.zig");
+    const allocator = std.testing.allocator;
+    var input: [8192]u8 = undefined;
+    for (&input, 0..) |*byte, index| byte.* = @truncate(index *% 37 +% index / 11);
+    input[16] = 0xe8;
+    std.mem.writeInt(u32, input[17..21], 0x1000, .little);
+    input[32] = 0xe9;
+    std.mem.writeInt(u32, input[33..37], 0x2000, .little);
+    const filters = [_]Filter{
+        .{ .delta = 4 },
+        .e8,
+        .e8e9,
+        .itanium,
+        .{ .rgb = .{ .width = 12, .red_position = 1 } },
+        .{ .audio = 2 },
+    };
+    for (filters) |filter| {
+        var encoder = Encoder.init(allocator, .{ .block_size = 1024 });
+        defer encoder.deinit();
+        const encoded = try encoder.encodeFilteredMemberAlloc(&input, filter, false);
+        defer allocator.free(encoded);
+        var output: [input.len]u8 = undefined;
+        try decoder.decodeIntoWithOptions(allocator, encoded, &output, .{});
+        try std.testing.expectEqualSlices(u8, &input, &output);
+    }
+
+    var invalid = Encoder.init(allocator, .{});
+    defer invalid.deinit();
+    try std.testing.expectError(
+        error.InvalidRar29FilterOptions,
+        invalid.encodeFilteredMemberAlloc(&input, .{ .delta = 0 }, false),
+    );
+    try std.testing.expectError(
+        error.InvalidRar29FilterOptions,
+        invalid.encodeFilteredMemberAlloc(&input, .{ .rgb = .{ .width = 10 } }, false),
+    );
+    try std.testing.expectError(
+        error.InvalidRar29FilterOptions,
+        invalid.encodeFilteredMemberAlloc(&input, .e8, true),
+    );
+    try std.testing.expectError(
+        error.InvalidRar29FilterOptions,
+        invalid.encodeFilteredMemberAlloc("", .e8, false),
     );
 }
 
