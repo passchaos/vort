@@ -22,7 +22,8 @@ E8E9, Itanium, Delta, RGB, and Audio standard programs, and executes other
 valid programs in a bounded 256 KiB RAR VM. RAR5 compressed entries remain
 classified as `rar50`; non-solid members decode both algorithm table sizes,
 multiblock/table-reuse streams, LZ repeat distances, out-of-window zero fill,
-and Delta, E8, E8E9, and ARM filters.
+and Delta, E8, E8E9, and ARM filters. RAR50 solid sessions retain Huffman,
+repeat-distance, last-length, and pre-filter LZ history across members.
 
 ## Reader
 
@@ -55,11 +56,17 @@ budget. These default to 256 MiB and 25 million instructions, respectively. The
 independent RAR5 dictionary-size ceiling defaults to `usize`'s maximum; the
 declared dictionary bounds match validation but the dictionary is not allocated
 eagerly.
+`Archive.extractSession` exposes explicit sequential decoding and returns owned
+entry data from `nextAlloc`. `extractByNameAllocLimited` and
+`extractByNameAllocWithOptions` automatically replay preceding RAR50 members
+when the requested entry is a solid continuation. Direct random-access
+`extractAlloc` remains an explicit `UnsupportedRarFeature` for such an entry,
+because it has no preceding state.
 Directories, unsupported compressed data, encrypted entries, encrypted
 headers, RAR5 redirections, unknown-size members, incomplete split-volume
-members, and compressed solid continuations return specific errors. This
-prevents an unsupported or incomplete member from being copied as if it were
-stored data.
+members, and unsupported RAR20/RAR29 solid continuations return specific
+errors. This prevents an unsupported or incomplete member from being copied as
+if it were stored data.
 
 RAR4 Unicode names use a historical custom encoding. The current borrowed
 parser exposes their ANSI fallback name; RAR5 names are the archive's UTF-8
@@ -105,7 +112,9 @@ checksum-valid generic-program mutation is compared with its canonical
 standard-program output. RAR5 checks cover compression methods 1, 3, and 5,
 all four native filters, generated multi-block input, malformed first-block
 table reuse, and the legacy out-of-window zero-fill behavior. Solid
-continuations retain their explicit unsupported error:
+coverage includes five archives and nineteen members, including Quick Open
+metadata and a seven-member history chain. RAR20/RAR29 solid continuations
+retain their explicit unsupported error:
 
 ```sh
 zig build run-rar-diff -- \
@@ -115,6 +124,6 @@ zig build run-rar-diff -- \
   --legacy-fixtures path/to/rars/tests/fixtures/rar15_40
 ```
 
-The next functionality stages are RAR5 solid state and multi-volume
-reconstruction, then compressed writing. Encrypted payloads should be added on
-top of those decoders rather than approximated in the stored path.
+The next functionality stages are RAR5 multi-volume reconstruction and
+compressed writing. Encrypted payloads should be added on top of those decoders
+rather than approximated in the stored path.

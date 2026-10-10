@@ -166,9 +166,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   escape literals and match tokens, all six standard RAR VM filters and a
   bounded generic VM interpreter, SFX discovery, both header CRC variants,
   payload CRC-32,
-  UTF-8 RAR5 names, non-solid RAR50 LZ and Delta/E8/E8E9/ARM filters, bounded
-  extraction, explicit encrypted/split/redirection/unknown-size/solid errors,
-  and 7-Zip plus rars interoperability; compressed RAR writing remains pending;
+  UTF-8 RAR5 names, RAR50 LZ and Delta/E8/E8E9/ARM filters, sequential solid
+  sessions with pre-filter history, bounded extraction, explicit encrypted/
+  split/redirection/unknown-size and unsupported legacy-solid errors, and
+  7-Zip plus rars interoperability; compressed RAR writing remains pending;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded
   extraction for Stored, MSZIP, 15–21 bit LZX, and 10–21 bit Quantum folders,
   including Stored/MSZIP, reference uncompressed-block LZX, and literal

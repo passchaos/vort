@@ -252,6 +252,45 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
                 else => return err,
             }
         }
+        if (archive.version == .rar5) {
+            var session = archive.extractSession(allocator, .{
+                .max_output_len = 1 << 20,
+                .max_ppmd_memory = 4 << 20,
+                .max_vm_instructions = 100_000,
+                .max_rar50_dictionary_size = 64 << 20,
+            });
+            defer session.deinit();
+            session_loop: while (true) {
+                if (session.nextAlloc()) |decoded_optional| {
+                    const decoded = decoded_optional orelse break;
+                    allocator.free(decoded.data);
+                } else |err| switch (err) {
+                    error.OutputLimitExceeded,
+                    error.UnsupportedRarCompression,
+                    error.UnsupportedRarEntry,
+                    error.UnsupportedRarFeature,
+                    error.EncryptedRarEntry,
+                    error.SplitRarEntry,
+                    error.InvalidRarArchive,
+                    error.InvalidRar15Stream,
+                    error.InvalidRar20Stream,
+                    error.InvalidRar29Stream,
+                    error.InvalidRar50Stream,
+                    error.InvalidRarPpmd,
+                    error.MissingRar50SolidState,
+                    error.RarPpmdMemoryLimitExceeded,
+                    error.Rar50DictionaryLimitExceeded,
+                    error.UnsupportedRar29Ppmd,
+                    error.UnsupportedRar29Filter,
+                    error.TruncatedFrame,
+                    error.SizeMismatch,
+                    error.ChecksumMismatch,
+                    error.IntegerOverflow,
+                    => break :session_loop,
+                    else => return err,
+                }
+            }
+        }
     } else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidRarArchive,

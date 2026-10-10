@@ -95,6 +95,7 @@ def main() -> None:
     rar29_vm_entries = 0
     rar50_entries = 0
     rar50_multiblock = 0
+    rar50_solid_entries = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-rar-diff-") as temp_text:
         temp = Path(temp_text)
@@ -387,6 +388,26 @@ def main() -> None:
                 raise AssertionError("Vort RAR50 out-of-window zero fill mismatch")
             rar50_entries += 1
 
+            rar50_solid_archives = (
+                args.legacy_fixtures.parent / "rar50" / "solid.rar",
+                args.legacy_fixtures.parent / "rar50" / "wild" / "rarfile_solid.rar",
+                args.legacy_fixtures.parent / "rar50" / "wild" / "libarchive_solid.rar",
+                args.legacy_fixtures.parent
+                / "rar50"
+                / "wild"
+                / "libarchive_multiple_files_solid.rar",
+                args.legacy_fixtures.parent / "rar50" / "wild" / "rarfile_solid_qo.rar",
+            )
+            for index, archive in enumerate(rar50_solid_archives):
+                rar50_solid_entries += compare_archive_entries(
+                    args.cli,
+                    seven_zip,
+                    archive,
+                    temp,
+                    f"rar50-solid-{index}",
+                    method="rar50",
+                )
+
             missing_tables = args.legacy_fixtures.parent / "rar50" / "first_block_without_tables.rar"
             failed = run(
                 args.cli,
@@ -472,6 +493,7 @@ def main() -> None:
         f"rar29_vm_entries={rar29_vm_entries} "
         f"rar50_entries={rar50_entries} "
         f"rar50_multiblock={rar50_multiblock} "
+        f"rar50_solid_entries={rar50_solid_entries} "
         f"header_crc=True data_crc=True sfx=True"
     )
 
