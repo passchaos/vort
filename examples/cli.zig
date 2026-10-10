@@ -2139,9 +2139,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-lzf-file <path> [max_output]
         \\                              Validate and report an LZF stream's decoded size
         \\  inspect-lzf-file <path>     Parse and print LZF ZV block metadata
-        \\  create-lha-file <out> <entry> <in> [stored|lh1|lh5|lh6|lh7|lz5|lzs]
+        \\  create-lha-file <out> <entry> <in> [stored|lh1|lh4|lh5|lh6|lh7|lz5|lzs]
         \\                              Create a deterministic level-0 LHA archive
-        \\  list-lha-file <path>        List LHA level-0/1/2 entries
+        \\  list-lha-file <path>        List LHA level-0/1/2/3 and SFX entries
         \\  extract-lha-file <lha> <entry> <out> [max_output]
         \\                              Extract common stored/LH/LArc LHA data
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]

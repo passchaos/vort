@@ -39,7 +39,10 @@ pub fn listFile(
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
     const archive = try vort.parseLhaArchive(bytes);
-    try stdout.print("lha_entries={d}\n", .{archive.entry_count});
+    try stdout.print("lha_entries={d} prefix_bytes={d}\n", .{
+        archive.entry_count,
+        archive.prefix_size,
+    });
     var iterator = archive.iterator();
     var index: usize = 0;
     while (try iterator.next()) |entry| : (index += 1) {
@@ -92,6 +95,7 @@ fn parseMethod(value: ?[]const u8) !vort.LhaMethod {
     const name = value orelse return .lh5;
     if (std.mem.eql(u8, name, "stored") or std.mem.eql(u8, name, "lh0")) return .stored;
     if (std.mem.eql(u8, name, "lh1")) return .lh1;
+    if (std.mem.eql(u8, name, "lh4")) return .lh4;
     if (std.mem.eql(u8, name, "lh5")) return .lh5;
     if (std.mem.eql(u8, name, "lh6")) return .lh6;
     if (std.mem.eql(u8, name, "lh7")) return .lh7;

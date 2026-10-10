@@ -46,6 +46,10 @@ def fixture_cases(root: Path) -> tuple[tuple[Path, str, int, str, str], ...]:
         (root / "lharc113" / "lh1.lzh", "lh1", 0, "GPL-2", "gpl-2"),
         (root / "lharc_atari_313a" / "lz5.lzh", "lz5", 0, "GPL2", "gpl2"),
         (root / "generated" / "lzs" / "lzs.lzs", "lzs", 0, "GPL-2", "gpl-2"),
+        (root / "lha_amiga_122" / "lh4.lzh", "lh4", 0, "gpl-2", "gpl-2"),
+        (root / "lha_os2_208" / "h3_lh5.lzh", "lh5", 3, "GPL-2", "gpl-2"),
+        (root / "lha_os2_208" / "h3_subdir.lzh", "stored", 3, "subdir/subdir2/HELLO.TXT", "subdir/subdir2/HELLO.TXT"),
+        (root / "lha213" / "sfx.exe", "lh5", 0, "GPL-2", "gpl-2"),
     )
 
 
@@ -64,7 +68,7 @@ def main() -> None:
         temp = Path(temp_text)
         source = temp / "payload.bin"
         source.write_bytes(payload)
-        methods = ("stored", "lh1", "lh5", "lh6", "lh7", "lz5", "lzs")
+        methods = ("stored", "lh1", "lh4", "lh5", "lh6", "lh7", "lz5", "lzs")
         for method in methods:
             first = temp / f"vort-{method}-first.lzh"
             second = temp / f"vort-{method}-second.lzh"
@@ -98,6 +102,9 @@ def main() -> None:
                 listing = run(args.cli, "list-lha-file", str(fixture)).stdout
                 if f"method={method}" not in listing or f"level={level}" not in listing:
                     raise AssertionError(f"Vort misparsed {fixture.name}: {listing}")
+                has_prefix = "prefix_bytes=0" not in listing
+                if has_prefix != (fixture.name == "sfx.exe"):
+                    raise AssertionError(f"Vort SFX prefix detection mismatch for {fixture}")
                 output = temp / f"fixture-{reader_fixtures}.out"
                 run(
                     args.cli,
@@ -114,9 +121,9 @@ def main() -> None:
                 reader_fixtures += 1
 
     print(
-        "lha_diff=ok methods=7 self_writer_cases=7 "
+        "lha_diff=ok methods=8 self_writer_cases=8 "
         f"reference={reference is not None} writer_external={writer_external} "
-        f"reader_fixtures={reader_fixtures} levels=3"
+        f"reader_fixtures={reader_fixtures} levels=4 sfx=True"
     )
 
 

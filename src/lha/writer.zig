@@ -50,6 +50,11 @@ pub fn encodeAppend(
                 owned_compressed = bytes;
                 break :blk bytes;
             },
+            .lh4 => blk: {
+                const bytes = try lh_new.encodeAlloc(allocator, entry.data, .lh5);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
             .lh5 => blk: {
                 const bytes = try lh_new.encodeAlloc(allocator, entry.data, .lh5);
                 owned_compressed = bytes;
@@ -135,6 +140,7 @@ fn methodId(method: archive.Method) []const u8 {
     return switch (method) {
         .stored => "-lh0-",
         .lh1 => "-lh1-",
+        .lh4 => "-lh4-",
         .lh5 => "-lh5-",
         .lh6 => "-lh6-",
         .lh7 => "-lh7-",
@@ -171,6 +177,7 @@ test "LHA writer round trips common compressed stored and directory entries" {
     const entries = [_]EncodeEntry{
         .{ .name = "stored.bin", .data = &.{ 0, 1, 2, 3 }, .method = .stored },
         .{ .name = "one.txt", .data = payload, .method = .lh1 },
+        .{ .name = "four.txt", .data = payload, .method = .lh4 },
         .{ .name = "five.txt", .data = payload, .method = .lh5 },
         .{ .name = "six.txt", .data = payload, .method = .lh6 },
         .{ .name = "seven.txt", .data = payload, .method = .lh7 },
@@ -210,6 +217,28 @@ test "LHA writer rejects invalid names transactionally" {
         encodeAppend(std.testing.allocator, &output, &entries),
     );
     try std.testing.expectEqualSlices(u8, before, output.items);
+}
+
+test "LHA append output forms a readable self-extracting prefix" {
+    const entries = [_]EncodeEntry{.{
+        .name = "payload.txt",
+        .data = "prefixed LHA payload",
+        .method = .lh4,
+    }};
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(std.testing.allocator);
+    try output.appendSlice(std.testing.allocator, "MZ-VORT-LHA-SFX\n");
+    const prefix_len = output.items.len;
+    _ = try encodeAppend(std.testing.allocator, &output, &entries);
+    const parsed = try archive.parse(output.items);
+    try std.testing.expectEqual(prefix_len, parsed.prefix_size);
+    const decoded = try parsed.extractByNameAllocLimited(
+        std.testing.allocator,
+        entries[0].name,
+        entries[0].data.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, entries[0].data, decoded);
 }
 
 test "LHA reader rejects corrupt headers payloads limits and forged entries" {

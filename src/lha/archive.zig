@@ -15,6 +15,7 @@ pub const Error = core.Error || larc.Error || lh1.Error || lh_new.Error || error
 pub const Method = enum {
     stored,
     lh1,
+    lh4,
     lh5,
     lh6,
     lh7,
@@ -97,9 +98,14 @@ pub const Entry = struct {
 pub const Archive = struct {
     bytes: []const u8,
     entry_count: usize,
+    prefix_size: usize = 0,
 
     pub fn iterator(self: Archive) Iterator {
-        return .{ .archive = self, .remaining = self.entry_count };
+        return .{
+            .archive = self,
+            .offset = self.prefix_size,
+            .remaining = self.entry_count,
+        };
     }
 
     pub fn entryAt(self: Archive, wanted: usize) Error!Entry {
@@ -136,6 +142,7 @@ pub const Archive = struct {
                 @memcpy(target, compressed);
             },
             .lh1 => try lh1.decodeInto(compressed, target),
+            .lh4 => try lh_new.decodeInto(compressed, target, .lh5),
             .lh5 => try lh_new.decodeInto(compressed, target, .lh5),
             .lh6 => try lh_new.decodeInto(compressed, target, .lh6),
             .lh7 => try lh_new.decodeInto(compressed, target, .lh7),
@@ -202,7 +209,31 @@ pub const Iterator = struct {
 };
 
 pub fn parse(bytes: []const u8) Error!Archive {
-    var offset: usize = 0;
+    if (bytes.len == 0) return .{ .bytes = bytes, .entry_count = 0 };
+    const direct = scanArchive(bytes, 0) catch |direct_error| {
+        var candidate: usize = 1;
+        var attempts: usize = 0;
+        while (candidate < bytes.len and bytes.len - candidate >= 22) : (candidate += 1) {
+            if (!looksLikeHeader(bytes, candidate)) continue;
+            attempts += 1;
+            if (attempts > 256) return error.InvalidLhaArchive;
+            const scanned = scanArchive(bytes, candidate) catch continue;
+            if (scanned.entry_count == 0) continue;
+            return .{
+                .bytes = bytes,
+                .entry_count = scanned.entry_count,
+                .prefix_size = candidate,
+            };
+        }
+        return direct_error;
+    };
+    return .{ .bytes = bytes, .entry_count = direct.entry_count };
+}
+
+const ScanResult = struct { entry_count: usize };
+
+fn scanArchive(bytes: []const u8, start: usize) Error!ScanResult {
+    var offset = start;
     var entry_count: usize = 0;
     while (offset < bytes.len) {
         if (bytes[offset] == 0) {
@@ -215,7 +246,14 @@ pub fn parse(bytes: []const u8) Error!Archive {
         entry_count += 1;
     }
     if (offset != bytes.len) return error.TrailingData;
-    return .{ .bytes = bytes, .entry_count = entry_count };
+    return .{ .entry_count = entry_count };
+}
+
+fn looksLikeHeader(bytes: []const u8, offset: usize) bool {
+    if (bytes.len - offset < 22) return false;
+    return bytes[offset + 2] == '-' and bytes[offset + 6] == '-' and
+        bytes[offset + 3] != 0 and bytes[offset + 4] != 0 and
+        bytes[offset + 20] <= 3;
 }
 
 const ParsedEntry = struct { entry: Entry, next_offset: usize };
@@ -319,6 +357,38 @@ fn parseEntry(bytes: []const u8, offset: usize) Error!ParsedEntry {
             if (!terminated or cursor != header_end) return error.InvalidLhaArchive;
             data_offset = header_end;
         },
+        3 => {
+            _ = try checkedEnd(offset, 32, bytes.len);
+            if (readLe16(bytes, offset) != 4) return error.InvalidLhaArchive;
+            const header_size = readLe32(bytes, offset + 24);
+            if (header_size < 32 or header_size > 1024 * 1024)
+                return error.InvalidLhaArchive;
+            const header_end = try checkedEnd(offset, header_size, bytes.len);
+            crc = readLe16(bytes, offset + 21);
+            os_type = bytes[offset + 23];
+            var cursor = offset + 28;
+            var terminated = false;
+            while (cursor < header_end) {
+                if (header_end - cursor < 4) return error.TruncatedFrame;
+                const extension_size = readLe32(bytes, cursor);
+                if (extension_size == 0) {
+                    cursor += 4;
+                    terminated = true;
+                    break;
+                }
+                if (extension_size < 5) return error.InvalidLhaArchive;
+                const extension_end = try checkedEnd(cursor, extension_size, header_end);
+                try parseExtension(
+                    bytes[cursor + 4],
+                    bytes[cursor + 5 .. extension_end],
+                    cursor + 5,
+                    &extensions,
+                );
+                cursor = extension_end;
+            }
+            if (!terminated or cursor != header_end) return error.InvalidLhaArchive;
+            data_offset = header_end;
+        },
         else => return error.UnsupportedLhaHeaderLevel,
     }
 
@@ -404,6 +474,7 @@ fn normalizedSeparator(byte: u8) u8 {
 fn methodFromId(id: [5]u8) Method {
     if (std.mem.eql(u8, &id, "-lh0-")) return .stored;
     if (std.mem.eql(u8, &id, "-lh1-")) return .lh1;
+    if (std.mem.eql(u8, &id, "-lh4-")) return .lh4;
     if (std.mem.eql(u8, &id, "-lh5-")) return .lh5;
     if (std.mem.eql(u8, &id, "-lh6-")) return .lh6;
     if (std.mem.eql(u8, &id, "-lh7-")) return .lh7;

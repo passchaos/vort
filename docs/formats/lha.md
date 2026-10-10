@@ -4,18 +4,20 @@ Vort provides dependency-free LHA/LZH archive reading and deterministic
 writing. The implementation targets common new-style and legacy methods while keeping
 container parsing and the codec core separate.
 
-The reader accepts header levels 0, 1, and 2. It validates level-0/1 additive
-header checksums, chained extended-header sizes, level-2 total header sizes,
+The reader accepts header levels 0, 1, 2, and 3 plus bounded SFX-prefix scans.
+It validates level-0/1 additive header checksums, chained extended-header sizes,
+level-2/3 total header sizes and field widths,
 optional common-header CRC-16 records, 32- and 64-bit size declarations,
 payload bounds, and the per-file LHA CRC-16. Filename and path extended headers
 are exposed as borrowed `LhaName` components; `writeInto`, `alloc`, and `eql`
-normalize DOS backslashes and the level-1/2 `0xff` path separator without
+normalize DOS backslashes and the level-1/2/3 `0xff` path separator without
 silently materializing filesystem paths.
 
 Supported entry methods are:
 
 - stored `-lh0-`;
 - adaptive-Huffman `-lh1-` with a 4 KiB dictionary;
+- `-lh4-`, decoded through its LH5-compatible new-style wire;
 - `-lh5-` with an 8 KiB dictionary;
 - `-lh6-` with a 32 KiB dictionary;
 - `-lh7-` with a 64 KiB dictionary;
@@ -41,7 +43,7 @@ from initialized or produced history.
 
 The deterministic writer emits level-0 headers with a fixed 1980-01-01 DOS
 timestamp, additive header checksum, payload CRC-16, and an archive terminator.
-Stored, LH1, LH5, LH6, LH7, LZ5, LZS, and directory entries may coexist in one archive.
+Stored, LH1, LH4, LH5, LH6, LH7, LZ5, LZS, and directory entries may coexist in one archive.
 New-style compressed output currently uses a complete fixed 510-symbol command
 tree and literal commands. This produces fully interoperable streams for all
 input bytes; LZ match planning and adaptive new-style Huffman tables remain later ratio
@@ -72,10 +74,10 @@ zig build run-lha-diff
 ```
 
 The differential always checks deterministic Vort writing and self-extraction
-for all seven data methods. With lhasa and its fixture directory supplied, it
-also decodes all seven Vort writer modes through lhasa and checks real
-level-0/1/2 archives, LH1/LH5/LH6/LH7/LZ5/LZS streams, common header CRCs, and
-nested extended paths in the reverse direction:
+for all eight data methods. With lhasa and its fixture directory supplied, it
+also decodes all eight Vort writer modes through lhasa and checks real
+level-0/1/2/3 archives, LH1/LH4/LH5/LH6/LH7/LZ5/LZS streams, SFX executables,
+common header CRCs, and nested extended paths in the reverse direction:
 
 ```sh
 zig build run-lha-diff -- \
@@ -83,7 +85,7 @@ zig build run-lha-diff -- \
   --fixtures path/to/lhasa/test/archives
 ```
 
-Header level 3, self-extracting prefixes, encryption, multi-volume metadata,
-and older `-lz4-`, PMarc, and LHARK-specific `-lk7-` methods remain explicit
+Encryption, multi-volume metadata, and older `-lz4-`, PMarc, and
+LHARK-specific `-lk7-` methods remain explicit
 future compatibility increments. Archive names are never joined to a host
 filesystem path by the library.

@@ -17852,13 +17852,13 @@ reuse, so production keeps the simpler independently owned plans.
   record and incremental state machines remain future functionality. See
   `docs/formats/lzf.md`.
 
-- Added dependency-free LHA/LZH reading for header levels 0, 1, and 2 plus
-  deterministic level-0 writing. The container validates additive base-header
+- Added dependency-free LHA/LZH reading for header levels 0, 1, 2, and 3 plus
+  bounded SFX-prefix discovery and deterministic level-0 writing. The container validates additive base-header
   checksums, chained/total extended-header sizes, optional common-header CRCs,
   32-/64-bit declared sizes, payload bounds, and per-file CRC-16. Borrowed name
   views compose legacy and extended path components without joining them to the
   filesystem. Stored `-lh0-`, directory `-lhd-`, adaptive-Huffman `-lh1-`,
-  new-style `-lh5-/-lh6-/-lh7-`, and LArc `-lz5-/-lzs-` are implemented in both
+  new-style `-lh4-/-lh5-/-lh6-/-lh7-`, and LArc `-lz5-/-lzs-` are implemented in both
   directions. LH1 includes frequency-group leader swaps and the 32 KiB tree
   reconstruction transition; LZ5/LZS reproduce their exact initialized ring
   histories and command packing. The new-style path covers 8/32/64 KiB
@@ -17866,9 +17866,9 @@ reuse, so production keeps the simpler independently owned plans.
   initialized space history, overlapping matches, and exact input/output
   consumption. Functionality-first writers emit literals through valid method-
   specific state machines; match planning and adaptive new-style trees remain
-  ratio work. Lhasa independently decodes all seven Vort writer modes, while
-  eight real fixtures cover every method, all three header levels, common CRCs,
-  and nested paths in the reverse direction. See
+  ratio work. Lhasa independently decodes all eight Vort writer modes, while
+  twelve real fixtures cover every method, all four header levels, SFX prefixes,
+  common CRCs, and nested paths in the reverse direction. See
   `docs/formats/lha.md`.
 
 - Added a pure Zig LZO1X encoder/decoder and LZOP container. The implementation parses
