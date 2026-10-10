@@ -14,6 +14,7 @@ pub fn createFile(
     const version = try parseVersion(args.next());
     const compression = try parseCompression(args.next());
     const filter = try parseFilter(args.next());
+    const solid = try parseSolid(args.next());
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.RarEncodeEntry{.{ .name = entry_name, .data = input }};
@@ -21,13 +22,15 @@ pub fn createFile(
         .version = version,
         .compression = compression,
         .filter = filter,
+        .solid = solid,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("rar_entries=1 version={s} method={s} filter={s} input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("rar_entries=1 version={s} method={s} filter={s} solid={} input_bytes={d} archive_bytes={d} path={s}\n", .{
         @tagName(version),
         @tagName(compression),
         if (filter) |value| @tagName(value) else "none",
+        solid,
         input.len,
         encoded.len,
         output_path,
@@ -173,6 +176,13 @@ fn parseFilter(value: ?[]const u8) !?vort.RarEncodeFilter {
     if (std.mem.startsWith(u8, name, prefix))
         return .{ .delta = try std.fmt.parseInt(u8, name[prefix.len..], 10) };
     return error.UnsupportedRarFilter;
+}
+
+fn parseSolid(value: ?[]const u8) !bool {
+    const name = value orelse return false;
+    if (std.mem.eql(u8, name, "solid")) return true;
+    if (std.mem.eql(u8, name, "non-solid") or std.mem.eql(u8, name, "nonsolid")) return false;
+    return error.UnsupportedRarSolidMode;
 }
 
 fn readFile(init: std.process.Init, path: []const u8) ![]u8 {

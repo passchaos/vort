@@ -3,6 +3,8 @@ const core = @import("../core.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error || error{
     InvalidRar50EncodeOptions,
+    MissingRar50SolidEncoderState,
+    Rar50EncoderPoisoned,
 };
 
 pub const Options = struct {
@@ -70,36 +72,108 @@ pub fn encodeAlloc(
     input: []const u8,
     options: Options,
 ) Error![]u8 {
-    try validateOptions(options);
-    if (input.len == 0 and options.filter != null)
-        return error.InvalidRar50EncodeOptions;
-    var output: std.ArrayList(u8) = .empty;
-    errdefer output.deinit(allocator);
-    var state = MatchState{};
-    if (input.len == 0) {
-        try encodeBlock(allocator, &output, input, 0, options, &state, true);
-    } else {
-        var start: usize = 0;
-        const block_size = if (options.filter == null)
-            options.block_size
-        else
-            @min(options.block_size, 0x3ffff);
-        while (start < input.len) {
-            const end = @min(input.len, start +| block_size);
-            try encodeBlock(
-                allocator,
-                &output,
-                input[start..end],
-                start,
-                options,
-                &state,
-                end == input.len,
-            );
-            start = end;
-        }
-    }
-    return output.toOwnedSlice(allocator);
+    var encoder = Encoder.init(allocator, options);
+    defer encoder.deinit();
+    return encoder.encodeMemberAlloc(input, false);
 }
+
+pub const Encoder = struct {
+    allocator: std.mem.Allocator,
+    options: Options,
+    state: MatchState = .{},
+    history: std.ArrayList(u8) = .empty,
+    initialized: bool = false,
+    poisoned: bool = false,
+
+    pub fn init(allocator: std.mem.Allocator, options: Options) Encoder {
+        return .{ .allocator = allocator, .options = options };
+    }
+
+    pub fn deinit(self: *Encoder) void {
+        self.history.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *Encoder) void {
+        self.state = .{};
+        self.history.clearRetainingCapacity();
+        self.initialized = false;
+        self.poisoned = false;
+    }
+
+    pub fn canContinue(self: *const Encoder) bool {
+        return self.initialized and !self.poisoned;
+    }
+
+    pub fn encodeMemberAlloc(
+        self: *Encoder,
+        input: []const u8,
+        solid: bool,
+    ) Error![]u8 {
+        try validateOptions(self.options);
+        if (input.len == 0 and self.options.filter != null)
+            return error.InvalidRar50EncodeOptions;
+        if (!solid)
+            self.reset()
+        else {
+            if (self.poisoned) return error.Rar50EncoderPoisoned;
+            if (!self.initialized) return error.MissingRar50SolidEncoderState;
+            if (self.options.filter != null) return error.InvalidRar50EncodeOptions;
+        }
+        errdefer self.poisoned = true;
+
+        var output: std.ArrayList(u8) = .empty;
+        errdefer output.deinit(self.allocator);
+        if (input.len == 0) {
+            try encodeBlock(
+                self.allocator,
+                &output,
+                input,
+                0,
+                self.options,
+                &self.state,
+                self.history.items,
+                &self.history,
+                true,
+            );
+        } else {
+            var start: usize = 0;
+            const block_size = if (self.options.filter == null)
+                self.options.block_size
+            else
+                @min(self.options.block_size, 0x3ffff);
+            while (start < input.len) {
+                const end = @min(input.len, start +| block_size);
+                try encodeBlock(
+                    self.allocator,
+                    &output,
+                    input[start..end],
+                    start,
+                    self.options,
+                    &self.state,
+                    self.history.items,
+                    &self.history,
+                    end == input.len,
+                );
+                self.trimHistory();
+                start = end;
+            }
+        }
+        self.initialized = true;
+        self.poisoned = false;
+        return output.toOwnedSlice(self.allocator);
+    }
+
+    fn trimHistory(self: *Encoder) void {
+        if (self.history.items.len <= self.options.dictionary_size) return;
+        const discard = self.history.items.len - self.options.dictionary_size;
+        @memmove(
+            self.history.items[0..self.options.dictionary_size],
+            self.history.items[discard..],
+        );
+        self.history.items.len = self.options.dictionary_size;
+    }
+};
 
 pub fn validateOptions(options: Options) Error!void {
     if (options.dictionary_size < 128 * 1024 or options.block_size == 0 or
@@ -115,6 +189,8 @@ fn encodeBlock(
     file_offset: usize,
     options: Options,
     state: *MatchState,
+    history: []const u8,
+    history_out: *std.ArrayList(u8),
     is_last: bool,
 ) Error!void {
     var tokens: std.ArrayList(Token) = .empty;
@@ -132,6 +208,7 @@ fn encodeBlock(
     try tokenize(
         allocator,
         &tokens,
+        history,
         transformed orelse input,
         options.dictionary_size,
     );
@@ -200,6 +277,7 @@ fn encodeBlock(
         writer.bit_offset,
         is_last,
     );
+    try history_out.appendSlice(allocator, transformed orelse input);
 }
 
 fn validateFilter(filter: Filter) Error!void {
@@ -313,28 +391,41 @@ fn writeFilterData(writer: *BitWriter, raw_value: usize) Error!void {
 fn tokenize(
     allocator: std.mem.Allocator,
     tokens: *std.ArrayList(Token),
+    history: []const u8,
     input: []const u8,
     dictionary_size: usize,
 ) Error!void {
+    const combined_len = std.math.add(usize, history.len, input.len) catch
+        return error.IntegerOverflow;
+    const combined = try allocator.alloc(u8, combined_len);
+    defer allocator.free(combined);
+    @memcpy(combined[0..history.len], history);
+    @memcpy(combined[history.len..], input);
     const heads = try allocator.alloc(usize, hash_size);
     defer allocator.free(heads);
     @memset(heads, std.math.maxInt(usize));
-    var position: usize = 0;
-    while (position < input.len) {
+    var seed: usize = 0;
+    while (seed < history.len) : (seed += 1) {
+        if (seed + min_match <= combined.len) {
+            heads[hashAt(combined, seed)] = seed;
+        }
+    }
+    var position: usize = history.len;
+    while (position < combined.len) {
         var best_length: usize = 0;
         var best_distance: usize = 0;
-        if (position + min_match <= input.len) {
-            const hash = hashAt(input, position);
+        if (position + min_match <= combined.len) {
+            const hash = hashAt(combined, position);
             const previous = heads[hash];
             heads[hash] = position;
             if (previous != std.math.maxInt(usize)) {
                 const distance = position - previous;
                 if (distance <= dictionary_size) {
                     const length = matchLength(
-                        input,
+                        combined,
                         position,
                         distance,
-                        @min(max_match, input.len - position),
+                        @min(max_match, combined.len - position),
                     );
                     const required = @max(min_match, 2 + lengthBonus(distance));
                     if (length >= required) {
@@ -345,7 +436,7 @@ fn tokenize(
             }
         }
         if (best_length < min_match) {
-            try tokens.append(allocator, .{ .literal = input[position] });
+            try tokens.append(allocator, .{ .literal = combined[position] });
             position += 1;
             continue;
         }
@@ -356,8 +447,8 @@ fn tokenize(
         const match_end = position + best_length;
         position += 1;
         while (position < match_end) : (position += 1) {
-            if (position + min_match <= input.len)
-                heads[hashAt(input, position)] = position;
+            if (position + min_match <= combined.len)
+                heads[hashAt(combined, position)] = position;
         }
     }
 }

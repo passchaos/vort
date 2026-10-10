@@ -30,6 +30,7 @@ pub const EncodeOptions = struct {
     dictionary_size: usize = 128 * 1024,
     block_size: usize = 64 * 1024,
     filter: ?Filter = null,
+    solid: bool = false,
 };
 
 pub fn encodeAlloc(
@@ -80,13 +81,17 @@ fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!v
         if (options.version != .rar5 or options.block_size == 0 or
             options.block_size > rar50_encoder.max_block_size)
             return error.UnsupportedRarEncodeOptions;
-        _ = try rar50CompressionInfo(options.dictionary_size);
+        _ = try rar50CompressionInfo(options.dictionary_size, false);
         try rar50_encoder.validateOptions(.{
             .dictionary_size = options.dictionary_size,
             .block_size = options.block_size,
             .filter = options.filter,
         });
+        if (options.solid and options.filter != null)
+            return error.UnsupportedRarEncodeOptions;
     } else if (options.filter != null) {
+        return error.UnsupportedRarEncodeOptions;
+    } else if (options.solid) {
         return error.UnsupportedRarEncodeOptions;
     }
     for (entries) |entry| {
@@ -181,11 +186,23 @@ fn encodeRar5(
     options: EncodeOptions,
 ) !void {
     try output.appendSlice(allocator, archive.rar5_signature);
+    var encoder = rar50_encoder.Encoder.init(allocator, .{
+        .dictionary_size = options.dictionary_size,
+        .block_size = options.block_size,
+        .filter = options.filter,
+    });
+    defer encoder.deinit();
     var main_specific: std.ArrayList(u8) = .empty;
     defer main_specific.deinit(allocator);
-    try appendVint(allocator, &main_specific, 0);
+    try appendVint(allocator, &main_specific, if (options.solid) @as(u64, 0x0004) else 0);
     try appendRar5Block(allocator, output, 1, 0, null, main_specific.items, "", "");
-    for (entries) |entry| try appendRar5File(allocator, output, entry, options);
+    for (entries) |entry| try appendRar5File(
+        allocator,
+        output,
+        entry,
+        options,
+        &encoder,
+    );
     var end_specific: std.ArrayList(u8) = .empty;
     defer end_specific.deinit(allocator);
     try appendVint(allocator, &end_specific, 0);
@@ -197,22 +214,18 @@ fn appendRar5File(
     output: *std.ArrayList(u8),
     entry: EncodeEntry,
     options: EncodeOptions,
+    encoder: *rar50_encoder.Encoder,
 ) !void {
     var compressed: ?[]u8 = null;
     defer if (compressed) |bytes| allocator.free(bytes);
     const use_compression = entry.kind == .regular and options.compression == .rar50;
-    if (use_compression) compressed = try rar50_encoder.encodeAlloc(
-        allocator,
-        entry.data,
-        .{
-            .dictionary_size = options.dictionary_size,
-            .block_size = options.block_size,
-            .filter = options.filter,
-        },
-    );
+    if (!use_compression) encoder.reset();
+    const solid_continuation = options.solid and encoder.canContinue();
+    if (use_compression)
+        compressed = try encoder.encodeMemberAlloc(entry.data, solid_continuation);
     const payload = compressed orelse entry.data;
     const compression_info: u64 = if (use_compression)
-        try rar50CompressionInfo(options.dictionary_size)
+        try rar50CompressionInfo(options.dictionary_size, solid_continuation)
     else
         0;
     var specific: std.ArrayList(u8) = .empty;
@@ -242,14 +255,15 @@ fn appendRar5File(
     );
 }
 
-fn rar50CompressionInfo(dictionary_size: usize) Error!u64 {
+fn rar50CompressionInfo(dictionary_size: usize, solid_continuation: bool) Error!u64 {
     if (dictionary_size < 128 * 1024 or dictionary_size % (128 * 1024) != 0)
         return error.UnsupportedRarEncodeOptions;
     const multiple = dictionary_size / (128 * 1024);
     if (!std.math.isPowerOfTwo(multiple)) return error.UnsupportedRarEncodeOptions;
     const power = std.math.log2_int(usize, multiple);
     if (power > 15) return error.UnsupportedRarEncodeOptions;
-    return (@as(u64, 3) << 7) | (@as(u64, power) << 10);
+    return (@as(u64, 3) << 7) | (@as(u64, power) << 10) |
+        if (solid_continuation) @as(u64, 0x40) else 0;
 }
 
 fn appendRar5Block(
@@ -391,6 +405,68 @@ test "RAR50 writer emits deterministic multiblock LZ streams" {
         encodeAlloc(allocator, &entries, .{
             .compression = .rar50,
             .filter = .{ .delta = 33 },
+        }),
+    );
+}
+
+test "RAR50 solid writer reuses history across members" {
+    const allocator = std.testing.allocator;
+    const payload = try allocator.alloc(u8, 64 * 1024);
+    defer allocator.free(payload);
+    var state: u64 = 0x2545_f491_4f6c_dd1d;
+    for (payload) |*byte| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        byte.* = @truncate(state);
+    }
+    const entries = [_]EncodeEntry{
+        .{ .name = "first.bin", .data = payload },
+        .{ .name = "second.bin", .data = payload },
+    };
+    const encoded = try encodeAlloc(allocator, &entries, .{
+        .compression = .rar50,
+        .solid = true,
+    });
+    defer allocator.free(encoded);
+    const parsed = try archive.parse(encoded);
+    try std.testing.expect(parsed.solid);
+    const first = try parsed.entryAt(0);
+    const second = try parsed.entryAt(1);
+    try std.testing.expect(!first.solid);
+    try std.testing.expect(second.solid);
+    try std.testing.expect(second.compressed_size * 10 < first.compressed_size);
+    try std.testing.expectError(
+        error.UnsupportedRarFeature,
+        parsed.extractAlloc(allocator, second),
+    );
+    const decoded = try parsed.extractByNameAllocLimited(
+        allocator,
+        "second.bin",
+        payload.len,
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const broken_entries = [_]EncodeEntry{
+        .{ .name = "first.bin", .data = payload },
+        .{ .name = "folder", .kind = .directory },
+        .{ .name = "second.bin", .data = payload },
+    };
+    const broken = try encodeAlloc(allocator, &broken_entries, .{
+        .compression = .rar50,
+        .solid = true,
+    });
+    defer allocator.free(broken);
+    const broken_archive = try archive.parse(broken);
+    try std.testing.expect(!(try broken_archive.entryAt(2)).solid);
+
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &entries, .{
+            .compression = .rar50,
+            .filter = .e8,
+            .solid = true,
         }),
     );
 }
