@@ -168,6 +168,14 @@ pub fn build(b: *std.Build) void {
     const run_hadoop_lz4_tests = b.addRunArtifact(hadoop_lz4_tests);
     const hadoop_lz4_test_step = b.step("test-hadoop-lz4", "Run focused Hadoop LZ4 framing tests");
     hadoop_lz4_test_step.dependOn(&run_hadoop_lz4_tests.step);
+    const hadoop_lzo_index_tests = b.addTest(.{
+        .name = "vort-hadoop-lzo-index-tests",
+        .root_module = tests_mod,
+        .filters = &.{"Hadoop LZO index"},
+    });
+    const run_hadoop_lzo_index_tests = b.addRunArtifact(hadoop_lzo_index_tests);
+    const hadoop_lzo_index_test_step = b.step("test-hadoop-lzo-index", "Run focused Hadoop LZO index tests");
+    hadoop_lzo_index_test_step.dependOn(&run_hadoop_lzo_index_tests.step);
 
     const test_step = b.step("test", "Run vort unit tests");
     test_step.dependOn(&run_tests.step);
@@ -1066,6 +1074,12 @@ pub fn build(b: *std.Build) void {
     hadoop_lz4_diff.addArtifactArg(cli_exe);
     const hadoop_lz4_diff_step = b.step("run-hadoop-lz4-diff", "Validate Hadoop LZ4 framing against Python lz4.block");
     hadoop_lz4_diff_step.dependOn(&hadoop_lz4_diff.step);
+
+    const hadoop_lzo_index_diff = b.addSystemCommand(&.{ "python3", "tools/hadoop_lzo_index/diff.py", "--cli" });
+    hadoop_lzo_index_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| hadoop_lzo_index_diff.addArgs(args);
+    const hadoop_lzo_index_diff_step = b.step("run-hadoop-lzo-index-diff", "Validate Hadoop LZO indexes against an independent scanner and optional lzop");
+    hadoop_lzo_index_diff_step.dependOn(&hadoop_lzo_index_diff.step);
 
     const zip_writer_probe_exe = b.addExecutable(.{
         .name = "vort-zip-writer-probe",
@@ -4770,6 +4784,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(bgzf_diff_step);
     ci_smoke_step.dependOn(snappy_framing_diff_step);
     ci_smoke_step.dependOn(hadoop_lz4_diff_step);
+    ci_smoke_step.dependOn(hadoop_lzo_index_diff_step);
     ci_smoke_step.dependOn(zip_diff_step);
     ci_smoke_step.dependOn(bzip2_diff_step);
     ci_smoke_step.dependOn(xz_diff_step);

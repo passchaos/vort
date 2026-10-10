@@ -11,6 +11,7 @@ const rpm_cli = @import("cli/rpm.zig");
 const zoo_cli = @import("cli/zoo.zig");
 const compress_z_cli = @import("cli/compress_z.zig");
 const filters_cli = @import("cli/filters.zig");
+const hadoop_lzo_cli = @import("cli/hadoop_lzo.zig");
 const lzip_cli = @import("cli/lzip.zig");
 const lzf_cli = @import("cli/lzf.zig");
 const lha_cli = @import("cli/lha.zig");
@@ -107,6 +108,12 @@ pub fn main(init: std.process.Init) !void {
         try snappy_framing_cli.decodeHadoopLz4(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-hadoop-lz4-file")) {
         try snappy_framing_cli.inspectHadoopLz4(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-hadoop-lzo-index")) {
+        try hadoop_lzo_cli.createIndex(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-hadoop-lzo-index")) {
+        try hadoop_lzo_cli.inspectIndex(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-hadoop-lzo-blocks")) {
+        try hadoop_lzo_cli.extractBlocks(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
         try bgzf_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-bgzf-file")) {
@@ -2202,6 +2209,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-hadoop-lz4-file <in> <out> [block_size] [chunk_size]
         \\  decode-hadoop-lz4-file <in> <out> [max_output]
         \\  inspect-hadoop-lz4-file <path>
+        \\  create-hadoop-lzo-index <input.lzo> [output.lzo.index]
+        \\  inspect-hadoop-lzo-index <input.lzo> <input.lzo.index>
+        \\  extract-hadoop-lzo-blocks <input.lzo> <index> <out> <first> <count> [max_output]
         \\  encode-bgzf-file <in> <out> [block_size]
         \\                              Encode deterministic blocked gzip/BGZF
         \\  decode-bgzf-file <in> <out> [max_output]

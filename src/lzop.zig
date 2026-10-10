@@ -5,6 +5,7 @@ const writer = @import("lzop/writer.zig");
 pub const Error = container.Error || writer.Error;
 pub const header_magic = header.magic;
 pub const Header = header.Header;
+pub const Flag = header.Flag;
 pub const Method = header.Method;
 pub const DecodeOptions = container.DecodeOptions;
 pub const FileInfo = container.FileInfo;

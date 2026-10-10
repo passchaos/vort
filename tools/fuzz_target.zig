@@ -70,6 +70,11 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseHadoopLzoIndex(data)) |_| {} else |err| switch (err) {
+        error.InvalidHadoopLzoIndex,
+        => {},
+        else => return err,
+    }
     if (vort.decodeLzfBlockAllocLimited(allocator, data, 1 << 20)) |decoded| {
         allocator.free(decoded);
     } else |err| switch (err) {
