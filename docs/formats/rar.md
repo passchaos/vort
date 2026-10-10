@@ -7,17 +7,18 @@ writer for the two RAR container generations most often encountered today:
 - the VINT-based `Rar!\x1a\x07\x01\x00` family used by RAR 5 and later.
 
 In addition to stored data, Vort decodes non-solid RAR 1.5, RAR 2.0/2.6, and
-ordinary RAR 2.9/3.x LZ
-compressed members. The RAR15 path implements the historical adaptive
+ordinary RAR 2.9/3.x LZ and PPMd Variant H compressed members. The RAR15 path
+implements the historical adaptive
 literal/short/long/old-distance state machine and ST mode over a 64 KiB
 history. The RAR20 path implements dynamic canonical Huffman tables, table
 reuse and multiblock transitions, a 1 MiB LZ history, repeated distances, and
 the multimedia/audio predictor. The RAR29 LZ path implements byte-aligned block
 tables, table reuse, canonical main/distance/low-distance/length codes,
-repeated-distance tokens, low-offset repeats and a 4 MiB history. RAR29 PPMd
-and VM-filter blocks return `UnsupportedRar29Ppmd` or
-`UnsupportedRar29Filter`; RAR5 compressed entries remain classified as
-`rar50` and return `UnsupportedRarCompression`.
+repeated-distance tokens, low-offset repeats and a 4 MiB history. The RAR29
+PPMd path implements the Variant H range coder, model reset/reuse, configurable
+escape byte, literal escapes, distance-one repeats, and long match escapes.
+RAR29 VM-filter records return `UnsupportedRar29Filter`; RAR5 compressed entries
+remain classified as `rar50` and return `UnsupportedRarCompression`.
 
 ## Reader
 
@@ -38,7 +39,12 @@ version, sizes, CRC, host OS, attributes, timestamp, directory/encryption/solid
 flags, split-before/split-after state, unknown-size state, redirection presence,
 and path-safety classification.
 
-Stored regular files use caller-owned or explicitly bounded allocation APIs.
+Regular files use caller-owned or explicitly bounded allocation APIs. PPMd
+requires an allocator, so callers use `extractIntoWithAllocator`,
+`extractIntoWithOptions`, `extractAlloc`, or their bounded variants. The
+allocator-free `extractInto` API returns `UnsupportedRar29Ppmd` for a PPMd
+member. `RarDecodeOptions` keeps the output limit independent from the PPMd
+model-memory limit; the latter defaults to the format maximum of 256 MiB.
 Directories, unsupported compressed data, encrypted entries, encrypted
 headers, RAR5 redirections, unknown-size members, incomplete split-volume
 members, and compressed solid continuations return specific errors. This
@@ -81,9 +87,10 @@ writers with 7-Zip, reads stored RAR4/RAR5 output from an optional rars-based
 reference helper, verifies that real compressed reference entries are
 classified correctly, checks SFX parsing and both CRC layers, exercises RAR2
 and RAR5 split-volume fixtures, and compares RAR15/RAR20 text, multiblock,
-keep-table, long-history and audio plus ordinary RAR29 LZ outputs
-byte-for-byte with 7-Zip. PPMd and VM-filter fixtures pin their explicit
-unsupported errors:
+keep-table, long-history and audio plus ordinary RAR29 LZ and PPMd literal,
+escape, match, mixed-member, and first-solid-member outputs byte-for-byte with
+7-Zip. Solid PPMd continuations and both LZ/PPMd VM-filter fixtures pin their
+explicit unsupported errors:
 
 ```sh
 zig build run-rar-diff -- \
@@ -93,7 +100,7 @@ zig build run-rar-diff -- \
   --legacy-fixtures path/to/rars/tests/fixtures/rar15_40
 ```
 
-The next functionality stages are RAR 2.9 PPMd and standard VM filters,
-followed by RAR5 LZ/filters. Encrypted payloads, solid state and multi-volume
+The next functionality stages are RAR 2.9 standard VM filters followed by RAR5
+LZ/filters. Encrypted payloads, solid state and multi-volume
 reconstruction should be added on top of those decoders rather than
 approximated in the stored path.

@@ -798,7 +798,10 @@ pub const Model = struct {
         const min_context_record = self.context(self.min_context);
         const suffix_stats_count = @as(u32, self.context(min_context_record.suffix).num_stats);
         const sum_frequency = @as(u32, min_context_record.union2.summ_freq);
-        const column = @as(usize, @intFromBool(non_masked < suffix_stats_count - stats_count)) +
+        // PPMd7 and Variant H specify unsigned subtraction here. When the
+        // suffix has fewer states, wraparound makes this comparison true.
+        const suffix_delta = suffix_stats_count -% stats_count;
+        const column = @as(usize, @intFromBool(non_masked < suffix_delta)) +
             2 * @as(usize, @intFromBool(sum_frequency < 11 * stats_count)) +
             4 * @as(usize, @intFromBool(num_masked > non_masked)) + self.hi_bits_flag;
         const selected = &self.see[row][column];

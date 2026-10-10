@@ -1,10 +1,18 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const ppmd_h = @import("ppmd_h.zig");
 
-pub const Error = core.Error || error{
+pub const Error = core.Error || ppmd_h.Error || error{
     InvalidRar29Stream,
     UnsupportedRar29Ppmd,
     UnsupportedRar29Filter,
+};
+
+pub const default_max_ppmd_memory: usize = 256 * 1024 * 1024;
+
+pub const DecodeOptions = struct {
+    max_output_len: usize = std.math.maxInt(usize),
+    max_ppmd_memory: usize = default_max_ppmd_memory,
 };
 
 pub const InitialMode = enum { lz, ppmd };
@@ -122,6 +130,7 @@ const Huffman = struct {
 };
 
 const BlockEnd = enum { same_file_new_table, new_file_keep_tables, new_file_new_tables };
+const BlockMode = enum { lz, ppmd };
 
 const Decoder = struct {
     bits: BitReader,
@@ -138,6 +147,14 @@ const Decoder = struct {
     last_low_offset: usize = 0,
     low_offset_repeats: usize = 0,
     in_block: bool = false,
+    block_mode: BlockMode = .lz,
+    allocator: ?std.mem.Allocator = null,
+    ppmd: ?ppmd_h.Session = null,
+    max_ppmd_memory: usize = 0,
+
+    fn deinit(self: *Decoder) void {
+        if (self.ppmd) |*session| session.deinit();
+    }
 
     fn decode(self: *Decoder) Error!void {
         while (self.output_offset < self.output.len) {
@@ -145,15 +162,32 @@ const Decoder = struct {
                 try self.readTables();
                 self.in_block = true;
             }
-            try self.decodeBlock();
+            switch (self.block_mode) {
+                .lz => try self.decodeBlock(),
+                .ppmd => try self.decodePpmd(),
+            }
         }
         try self.finishMember();
     }
 
     fn readTables(self: *Decoder) Error!void {
         try self.bits.alignByte();
-        if (try self.bits.peek(1) != 0) return error.UnsupportedRar29Ppmd;
+        if (try self.bits.peek(1) != 0) {
+            const allocator = self.allocator orelse return error.UnsupportedRar29Ppmd;
+            const first_byte: u8 = @intCast(try self.bits.read(8));
+            if (self.ppmd == null) self.ppmd = ppmd_h.Session.init(allocator);
+            const position = self.bits.bit_offset / 8;
+            try self.ppmd.?.startBlock(
+                first_byte,
+                self.bits.input,
+                position,
+                self.max_ppmd_memory,
+            );
+            self.block_mode = .ppmd;
+            return;
+        }
         _ = try self.bits.read(1);
+        self.block_mode = .lz;
         const keep_tables = try self.bits.read(1) != 0;
         self.last_low_offset = 0;
         self.low_offset_repeats = 0;
@@ -226,6 +260,53 @@ const Decoder = struct {
             self.levels[main_count + offset_count .. main_count + offset_count + low_offset_count],
         );
         self.lengths = try Huffman.init(self.levels[main_count + offset_count + low_offset_count ..]);
+    }
+
+    fn decodePpmd(self: *Decoder) Error!void {
+        while (self.output_offset < self.output.len and self.in_block) {
+            const session = if (self.ppmd) |*value| value else return error.InvalidRar29Stream;
+            const symbol = (try session.decodeSymbol(self.bits.input)) orelse
+                return error.TruncatedFrame;
+            if (symbol != session.escape) {
+                try self.putByte(symbol);
+                continue;
+            }
+            const control = (try session.decodeSymbol(self.bits.input)) orelse
+                return error.TruncatedFrame;
+            switch (control) {
+                0 => {
+                    self.syncPpmd();
+                    self.in_block = false;
+                },
+                1, 6...std.math.maxInt(u8) => try self.putByte(session.escape),
+                2 => {
+                    self.syncPpmd();
+                    self.in_block = false;
+                    if (self.output_offset != self.output.len) return error.SizeMismatch;
+                },
+                3 => return error.UnsupportedRar29Filter,
+                4 => {
+                    var offset: usize = 0;
+                    for (0..3) |_| offset = (offset << 8) | try self.readPpmdByte();
+                    offset += 2;
+                    const length = @as(usize, try self.readPpmdByte()) + 32;
+                    try self.copy(length, offset);
+                },
+                5 => {
+                    const length = @as(usize, try self.readPpmdByte()) + 4;
+                    try self.copy(length, 1);
+                },
+            }
+        }
+    }
+
+    fn readPpmdByte(self: *Decoder) Error!u8 {
+        const session = if (self.ppmd) |*value| value else return error.InvalidRar29Stream;
+        return (try session.decodeSymbol(self.bits.input)) orelse error.TruncatedFrame;
+    }
+
+    fn syncPpmd(self: *Decoder) void {
+        if (self.ppmd) |session| self.bits.bit_offset = session.position * 8;
     }
 
     fn decodeBlock(self: *Decoder) Error!void {
@@ -310,6 +391,7 @@ const Decoder = struct {
     }
 
     fn finishMember(self: *Decoder) Error!void {
+        if (self.block_mode == .ppmd) return self.finishPpmd();
         while (self.in_block) {
             if (try self.main.decode(&self.bits) != 256) return error.TrailingData;
             switch (try self.readBlockEnd()) {
@@ -324,6 +406,17 @@ const Decoder = struct {
                 .new_file_keep_tables, .new_file_new_tables => return,
             }
         }
+    }
+
+    fn finishPpmd(self: *Decoder) Error!void {
+        if (!self.in_block) return;
+        const session = if (self.ppmd) |*value| value else return error.InvalidRar29Stream;
+        const symbol = (try session.decodeSymbol(self.bits.input)) orelse return;
+        if (symbol != session.escape) return error.TrailingData;
+        const control = (try session.decodeSymbol(self.bits.input)) orelse return;
+        if (control != 0 and control != 2) return error.TrailingData;
+        self.syncPpmd();
+        self.in_block = false;
     }
 
     fn copy(self: *Decoder, length: usize, raw_offset: usize) Error!void {
@@ -359,6 +452,24 @@ const Decoder = struct {
 
 pub fn decodeInto(input: []const u8, output: []u8) Error!void {
     var decoder = Decoder{ .bits = .{ .input = input }, .output = output };
+    defer decoder.deinit();
+    try decoder.decode();
+}
+
+pub fn decodeIntoWithOptions(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output: []u8,
+    options: DecodeOptions,
+) Error!void {
+    if (output.len > options.max_output_len) return error.OutputLimitExceeded;
+    var decoder = Decoder{
+        .bits = .{ .input = input },
+        .output = output,
+        .allocator = allocator,
+        .max_ppmd_memory = options.max_ppmd_memory,
+    };
+    defer decoder.deinit();
     try decoder.decode();
 }
 
@@ -367,7 +478,7 @@ pub fn decodeAlloc(
     input: []const u8,
     output_len: usize,
 ) ![]u8 {
-    return decodeAllocLimited(allocator, input, output_len, std.math.maxInt(usize));
+    return decodeAllocWithOptions(allocator, input, output_len, .{});
 }
 
 pub fn decodeAllocLimited(
@@ -376,10 +487,24 @@ pub fn decodeAllocLimited(
     output_len: usize,
     max_output_len: usize,
 ) ![]u8 {
-    if (output_len > max_output_len) return error.OutputLimitExceeded;
+    return decodeAllocWithOptions(
+        allocator,
+        input,
+        output_len,
+        .{ .max_output_len = max_output_len },
+    );
+}
+
+pub fn decodeAllocWithOptions(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output_len: usize,
+    options: DecodeOptions,
+) ![]u8 {
+    if (output_len > options.max_output_len) return error.OutputLimitExceeded;
     const output = try allocator.alloc(u8, output_len);
     errdefer allocator.free(output);
-    try decodeInto(input, output);
+    try decodeIntoWithOptions(allocator, input, output, options);
     return output;
 }
 
@@ -394,4 +519,24 @@ test "RAR29 decoder distinguishes truncated LZ PPMd and VM input" {
     try std.testing.expectError(error.TruncatedFrame, decodeInto("", &output));
     // A set first bit selects a PPMd block before any model data is consumed.
     try std.testing.expectError(error.UnsupportedRar29Ppmd, decodeInto(&.{0x80}, &output));
+
+    var one_byte: [1]u8 = undefined;
+    try std.testing.expectError(
+        error.RarPpmdMemoryLimitExceeded,
+        decodeIntoWithOptions(
+            std.testing.allocator,
+            &.{ 0xa1, 63, 0, 0, 0, 0 },
+            &one_byte,
+            .{ .max_ppmd_memory = 32 * 1024 * 1024 },
+        ),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        decodeIntoWithOptions(
+            std.testing.allocator,
+            "",
+            &output,
+            .{ .max_output_len = output.len - 1 },
+        ),
+    );
 }

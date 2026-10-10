@@ -45,12 +45,16 @@ def compare_archive_entries(
     archive: Path,
     root: Path,
     label: str,
+    method: str | None = None,
+    solid: bool | None = None,
 ) -> int:
     listing = run(cli, "list-rar-file", str(archive)).stdout
     names = [
         line.split(" name=", 1)[1]
         for line in listing.splitlines()
         if line.startswith("index=") and "directory=false" in line
+        and (method is None or f"method={method}" in line)
+        and (solid is None or f"solid={str(solid).lower()}" in line)
     ]
     reference = root / f"reference-{label}"
     reference.mkdir()
@@ -87,6 +91,7 @@ def main() -> None:
     rar15_entries = 0
     rar20_entries = 0
     rar29_entries = 0
+    rar29_ppmd_entries = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-rar-diff-") as temp_text:
         temp = Path(temp_text)
@@ -241,16 +246,63 @@ def main() -> None:
                     f"rar29-{index}",
                 )
 
+            ppmd_archives = (
+                args.legacy_fixtures / "ppmd" / "ppmd_lorem_rar300.rar",
+                args.legacy_fixtures / "ppmd" / "ppmd_escape_rar300.rar",
+                args.legacy_fixtures / "ppmd" / "ppmd_lz_match_rar300.rar",
+                args.legacy_fixtures / "ppmd" / "ppmd_mixed_rar300.rar",
+            )
+            for index, archive in enumerate(ppmd_archives):
+                rar29_ppmd_entries += compare_archive_entries(
+                    args.cli,
+                    seven_zip,
+                    archive,
+                    temp,
+                    f"rar29-ppmd-{index}",
+                    method="rar29",
+                )
+
+            solid_ppmd = args.legacy_fixtures / "ppmd" / "ppmd_solid_rar300.rar"
+            rar29_ppmd_entries += compare_archive_entries(
+                args.cli,
+                seven_zip,
+                solid_ppmd,
+                temp,
+                "rar29-ppmd-solid-first",
+                method="rar29",
+                solid=False,
+            )
+            solid_ppmd_listing = run(args.cli, "list-rar-file", str(solid_ppmd)).stdout
+            solid_ppmd_name = next(
+                line.split(" name=", 1)[1]
+                for line in solid_ppmd_listing.splitlines()
+                if line.startswith("index=")
+                and "method=rar29" in line
+                and "solid=true" in line
+            )
+            failed = run(
+                args.cli,
+                "extract-rar-file",
+                str(solid_ppmd),
+                solid_ppmd_name,
+                str(temp / "solid-ppmd-continuation.out"),
+                check=False,
+            )
+            if failed.returncode == 0 or "UnsupportedRarFeature" not in failed.stderr:
+                raise AssertionError(
+                    "Vort accepted a solid RAR29 PPMd continuation without session state"
+                )
+
             unsupported_cases = (
-                (
-                    args.legacy_fixtures / "ppmd" / "ppmd_lorem_rar300.rar",
-                    "UnsupportedRar29Ppmd",
-                    "ppmd",
-                ),
                 (
                     args.legacy_fixtures / "rar300" / "rarvm_x86_e8_rar300.rar",
                     "UnsupportedRar29Filter",
                     "filter",
+                ),
+                (
+                    args.legacy_fixtures / "rarvm" / "ppmd_embedded_vm_filter.rar",
+                    "UnsupportedRar29Filter",
+                    "ppmd-filter",
                 ),
             )
             for archive, expected_error, label in unsupported_cases:
@@ -341,6 +393,7 @@ def main() -> None:
         f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "
         f"rar20_entries={rar20_entries} rar29_entries={rar29_entries} "
+        f"rar29_ppmd_entries={rar29_ppmd_entries} "
         f"header_crc=True data_crc=True sfx=True"
     )
 

@@ -18,6 +18,11 @@ pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || err
 
 pub const Version = enum { rar4, rar5 };
 
+pub const DecodeOptions = struct {
+    max_output_len: usize = std.math.maxInt(usize),
+    max_ppmd_memory: usize = rar29.default_max_ppmd_memory,
+};
+
 pub const Method = enum {
     stored,
     rar15,
@@ -118,7 +123,38 @@ pub const Archive = struct {
     }
 
     pub fn extractInto(self: Archive, entry: Entry, output: []u8) Error!usize {
+        return self.extractIntoOptionalAllocator(null, entry, output, .{});
+    }
+
+    pub fn extractIntoWithAllocator(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        output: []u8,
+    ) Error!usize {
+        return self.extractIntoOptionalAllocator(allocator, entry, output, .{});
+    }
+
+    pub fn extractIntoWithOptions(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        output: []u8,
+        options: DecodeOptions,
+    ) Error!usize {
+        return self.extractIntoOptionalAllocator(allocator, entry, output, options);
+    }
+
+    fn extractIntoOptionalAllocator(
+        self: Archive,
+        allocator: ?std.mem.Allocator,
+        entry: Entry,
+        output: []u8,
+        options: DecodeOptions,
+    ) Error!usize {
         const canonical = try self.extractableEntry(entry);
+        if (canonical.uncompressed_size > options.max_output_len)
+            return error.OutputLimitExceeded;
         if (output.len < canonical.uncompressed_size) return error.OutputTooSmall;
         const data_end = try checkedEnd(
             canonical.data_offset,
@@ -131,7 +167,13 @@ pub const Archive = struct {
             .stored => @memcpy(target, data),
             .rar15 => try rar15.decodeInto(data, target),
             .rar20 => try rar20.decodeInto(data, target),
-            .rar29 => try rar29.decodeInto(data, target),
+            .rar29 => if (allocator) |scratch|
+                try rar29.decodeIntoWithOptions(scratch, data, target, .{
+                    .max_output_len = options.max_output_len,
+                    .max_ppmd_memory = options.max_ppmd_memory,
+                })
+            else
+                try rar29.decodeInto(data, target),
             else => unreachable,
         }
         if (canonical.crc32) |expected|
@@ -153,11 +195,25 @@ pub const Archive = struct {
         entry: Entry,
         max_output_len: usize,
     ) ![]u8 {
+        return self.extractAllocWithOptions(
+            allocator,
+            entry,
+            .{ .max_output_len = max_output_len },
+        );
+    }
+
+    pub fn extractAllocWithOptions(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        options: DecodeOptions,
+    ) ![]u8 {
         const canonical = try self.extractableEntry(entry);
-        if (canonical.uncompressed_size > max_output_len) return error.OutputLimitExceeded;
+        if (canonical.uncompressed_size > options.max_output_len)
+            return error.OutputLimitExceeded;
         const output = try allocator.alloc(u8, canonical.uncompressed_size);
         errdefer allocator.free(output);
-        const written = try self.extractInto(entry, output);
+        const written = try self.extractIntoWithOptions(allocator, entry, output, options);
         if (written != output.len) return error.SizeMismatch;
         return output;
     }
@@ -170,6 +226,16 @@ pub const Archive = struct {
     ) ![]u8 {
         const entry = (try self.find(name)) orelse return error.RarEntryNotFound;
         return self.extractAllocLimited(allocator, entry, max_output_len);
+    }
+
+    pub fn extractByNameAllocWithOptions(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        name: []const u8,
+        options: DecodeOptions,
+    ) ![]u8 {
+        const entry = (try self.find(name)) orelse return error.RarEntryNotFound;
+        return self.extractAllocWithOptions(allocator, entry, options);
     }
 
     fn canonicalEntry(self: Archive, entry: Entry) Error!Entry {
@@ -192,15 +258,6 @@ pub const Archive = struct {
         if (canonical.method != .stored and canonical.method != .rar15 and
             canonical.method != .rar20 and canonical.method != .rar29)
             return error.UnsupportedRarCompression;
-        if (canonical.method == .rar29) {
-            const data_end = try checkedEnd(
-                canonical.data_offset,
-                canonical.compressed_size,
-                self.bytes.len,
-            );
-            if (try rar29.initialMode(self.bytes[canonical.data_offset..data_end]) == .ppmd)
-                return error.UnsupportedRar29Ppmd;
-        }
         if (canonical.method == .stored and canonical.compressed_size != canonical.uncompressed_size)
             return error.SizeMismatch;
         return canonical;

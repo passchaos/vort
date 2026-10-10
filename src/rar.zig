@@ -6,6 +6,7 @@ const writer = @import("rar/writer.zig");
 
 pub const Error = archive.Error || writer.Error;
 pub const Version = archive.Version;
+pub const DecodeOptions = archive.DecodeOptions;
 pub const Method = archive.Method;
 pub const Name = archive.Name;
 pub const Entry = archive.Entry;
@@ -28,6 +29,9 @@ pub const decodeRar20AllocLimited = rar20.decodeAllocLimited;
 pub const decodeRar29Into = rar29.decodeInto;
 pub const decodeRar29Alloc = rar29.decodeAlloc;
 pub const decodeRar29AllocLimited = rar29.decodeAllocLimited;
+pub const decodeRar29AllocWithOptions = rar29.decodeAllocWithOptions;
+pub const decodeRar29IntoWithOptions = rar29.decodeIntoWithOptions;
+pub const Rar29DecodeOptions = rar29.DecodeOptions;
 pub const Rar29InitialMode = rar29.InitialMode;
 pub const inspectRar29InitialMode = rar29.initialMode;
 

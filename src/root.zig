@@ -350,6 +350,7 @@ pub const decodeAutoCpioAlloc = cpio.decodeAutoAlloc;
 
 pub const RarError = rar.Error;
 pub const RarVersion = rar.Version;
+pub const RarDecodeOptions = rar.DecodeOptions;
 pub const RarMethod = rar.Method;
 pub const RarName = rar.Name;
 pub const RarEntry = rar.Entry;
@@ -372,6 +373,9 @@ pub const decodeRar20AllocLimited = rar.decodeRar20AllocLimited;
 pub const decodeRar29Into = rar.decodeRar29Into;
 pub const decodeRar29Alloc = rar.decodeRar29Alloc;
 pub const decodeRar29AllocLimited = rar.decodeRar29AllocLimited;
+pub const decodeRar29AllocWithOptions = rar.decodeRar29AllocWithOptions;
+pub const decodeRar29IntoWithOptions = rar.decodeRar29IntoWithOptions;
+pub const Rar29DecodeOptions = rar.Rar29DecodeOptions;
 pub const Rar29InitialMode = rar.Rar29InitialMode;
 pub const inspectRar29InitialMode = rar.inspectRar29InitialMode;
 

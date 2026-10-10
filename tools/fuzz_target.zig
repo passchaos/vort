@@ -219,7 +219,10 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         var iterator = archive.iterator();
         while (try iterator.next()) |entry| {
             if (entry.directory) continue;
-            if (archive.extractAllocLimited(allocator, entry, 1 << 20)) |decoded| {
+            if (archive.extractAllocWithOptions(allocator, entry, .{
+                .max_output_len = 1 << 20,
+                .max_ppmd_memory = 4 << 20,
+            })) |decoded| {
                 allocator.free(decoded);
             } else |err| switch (err) {
                 error.OutputLimitExceeded,
@@ -233,6 +236,8 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
                 error.InvalidRar15Stream,
                 error.InvalidRar20Stream,
                 error.InvalidRar29Stream,
+                error.InvalidRarPpmd,
+                error.RarPpmdMemoryLimitExceeded,
                 error.UnsupportedRar29Ppmd,
                 error.UnsupportedRar29Filter,
                 error.TruncatedFrame,
