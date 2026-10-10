@@ -131,6 +131,8 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
                 error.UnsupportedArcMethod,
                 error.InvalidArcArchive,
                 error.InvalidArcCrunchStream,
+                error.InvalidArcCrushedStream,
+                error.InvalidArcDistilledStream,
                 error.InvalidArcLzwStream,
                 error.InvalidArcRleStream,
                 error.InvalidArcSqueezeStream,

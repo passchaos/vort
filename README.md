@@ -126,8 +126,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   ARJ plus 7-Zip interoperability;
 - dependency-free ARC/PAK/SFX reading and deterministic ARC writing for stored,
   packed RLE90, Squeeze, old fixed-12-bit Crunch, dynamic Crunch, and Squash
-  methods 1–9, including PAK trailers, CRC-16, bounded extraction, CLEAR/code-
-  width transitions, and external ARC 5.21 interoperability;
+  plus PAK Crushed and Distilled methods 1–11, including PAK trailers, CRC-16,
+  bounded extraction, CLEAR/code-width transitions, and external ARC 5.21/
+  unarc-rs interoperability;
 - pure Zig LZO1X encoding/decoding plus LZOP parsing and deterministic
   compressed-or-stored writing, including Adler-32/CRC-32 header, data, and
   compressed-block checks, legacy delta filters, concatenated streams, and

@@ -99,6 +99,8 @@ fn parseMethod(value: ?[]const u8) !vort.ArcMethod {
     if (std.mem.eql(u8, name, "crunched7")) return .crunched_7;
     if (std.mem.eql(u8, name, "crunched") or std.mem.eql(u8, name, "crunched8")) return .crunched_8;
     if (std.mem.eql(u8, name, "squashed")) return .squashed;
+    if (std.mem.eql(u8, name, "crushed")) return .crushed;
+    if (std.mem.eql(u8, name, "distilled")) return .distilled;
     return error.UnsupportedArcMethod;
 }
 

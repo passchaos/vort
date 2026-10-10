@@ -1,4 +1,6 @@
 const archive = @import("arc/archive.zig");
+const crushed = @import("arc/crushed.zig");
+const distilled = @import("arc/distilled.zig");
 const lzw = @import("arc/lzw.zig");
 const old_crunch = @import("arc/old_crunch.zig");
 const rle = @import("arc/rle.zig");
@@ -17,6 +19,13 @@ pub const encodeAppend = writer.encodeAppend;
 pub const encodeInto = writer.encodeInto;
 pub const crc16 = archive.crc16;
 
+pub const decodeCrushedInto = crushed.decodeInto;
+pub const encodeCrushedAlloc = crushed.encodeAlloc;
+pub const encodeCrushedAppend = crushed.encodeAppend;
+pub const decodeDistilledInto = distilled.decodeInto;
+pub const encodeDistilledAlloc = distilled.encodeAlloc;
+pub const encodeDistilledAppend = distilled.encodeAppend;
+
 pub const decodeRleInto = rle.decodeInto;
 pub const encodeRleAlloc = rle.encodeAlloc;
 pub const encodeRleAppend = rle.encodeAppend;
@@ -32,6 +41,8 @@ pub const encodeLzwAppend = lzw.encodeAppend;
 
 test {
     _ = archive;
+    _ = crushed;
+    _ = distilled;
     _ = lzw;
     _ = old_crunch;
     _ = rle;

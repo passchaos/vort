@@ -1,11 +1,13 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const crushed = @import("crushed.zig");
+const distilled = @import("distilled.zig");
 const lzw = @import("lzw.zig");
 const old_crunch = @import("old_crunch.zig");
 const rle = @import("rle.zig");
 const squeeze = @import("squeeze.zig");
 
-pub const Error = core.Error || lzw.Error || old_crunch.Error || rle.Error || squeeze.Error || error{
+pub const Error = core.Error || crushed.Error || distilled.Error || lzw.Error || old_crunch.Error || rle.Error || squeeze.Error || error{
     InvalidArcArchive,
     UnsupportedArcMethod,
     ArcEntryNotFound,
@@ -91,7 +93,9 @@ pub const Archive = struct {
             .crunched_7 => try old_crunch.decodeInto(compressed, target, .method_7),
             .crunched_8 => try lzw.decodeInto(compressed, target, .crunched),
             .squashed => try lzw.decodeInto(compressed, target, .squashed),
-            .crushed, .distilled, .unsupported => return error.UnsupportedArcMethod,
+            .crushed => try crushed.decodeInto(compressed, target),
+            .distilled => try distilled.decodeInto(compressed, target),
+            .unsupported => return error.UnsupportedArcMethod,
         }
         if (crc16(target) != canonical.crc16) return error.ChecksumMismatch;
         return target.len;

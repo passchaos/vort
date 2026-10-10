@@ -1,5 +1,7 @@
 const std = @import("std");
 const archive = @import("archive.zig");
+const crushed = @import("crushed.zig");
+const distilled = @import("distilled.zig");
 const lzw = @import("lzw.zig");
 const old_crunch = @import("old_crunch.zig");
 const rle = @import("rle.zig");
@@ -79,7 +81,17 @@ pub fn encodeAppend(
                 owned = bytes;
                 break :blk bytes;
             },
-            .crushed, .distilled, .unsupported => return error.UnsupportedArcMethod,
+            .crushed => blk: {
+                const bytes = try crushed.encodeAlloc(allocator, entry.data);
+                owned = bytes;
+                break :blk bytes;
+            },
+            .distilled => blk: {
+                const bytes = try distilled.encodeAlloc(allocator, entry.data);
+                owned = bytes;
+                break :blk bytes;
+            },
+            .unsupported => return error.UnsupportedArcMethod,
         };
         if (compressed.len > std.math.maxInt(u32) or entry.data.len > std.math.maxInt(u32))
             return error.ArcFileTooLarge;
@@ -160,7 +172,7 @@ fn appendLe32(
     try output.appendSlice(allocator, &bytes);
 }
 
-test "ARC writer round trips methods one through nine" {
+test "ARC writer round trips methods one through eleven" {
     const allocator = std.testing.allocator;
     const payload = "ARC archive payload\n" ** 128;
     const entries = [_]EncodeEntry{
@@ -173,6 +185,8 @@ test "ARC writer round trips methods one through nine" {
         .{ .name = "CRUNCH7", .data = payload, .method = .crunched_7 },
         .{ .name = "CRUNCH8", .data = payload, .method = .crunched_8 },
         .{ .name = "SQUASHED", .data = payload, .method = .squashed },
+        .{ .name = "CRUSHED", .data = payload, .method = .crushed },
+        .{ .name = "DISTILLED", .data = payload, .method = .distilled },
     };
     const encoded = try encodeAlloc(allocator, &entries);
     defer allocator.free(encoded);

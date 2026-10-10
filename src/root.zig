@@ -315,6 +315,12 @@ pub const encodeArcAlloc = arc.encodeAlloc;
 pub const encodeArcAppend = arc.encodeAppend;
 pub const encodeArcInto = arc.encodeInto;
 pub const arcCrc16 = arc.crc16;
+pub const decodeArcCrushedInto = arc.decodeCrushedInto;
+pub const encodeArcCrushedAlloc = arc.encodeCrushedAlloc;
+pub const encodeArcCrushedAppend = arc.encodeCrushedAppend;
+pub const decodeArcDistilledInto = arc.decodeDistilledInto;
+pub const encodeArcDistilledAlloc = arc.encodeDistilledAlloc;
+pub const encodeArcDistilledAppend = arc.encodeDistilledAppend;
 
 pub const Lzo1xError = lzo1x.Error;
 pub const Lzo1xEncodeOptions = lzo1x.EncodeOptions;

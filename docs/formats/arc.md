@@ -1,7 +1,7 @@
 # ARC/PAK archive support
 
 Vort provides dependency-free ARC and compatible PAK archive reading plus
-deterministic ARC writing for methods 1 through 9.
+deterministic writing for methods 1 through 11.
 
 The parser recognizes the `0x1a` member marker, supports bounded SFX-prefix
 search, handles the shorter obsolete method-1 header, preserves PAK extended
@@ -17,7 +17,10 @@ Supported methods are:
 - method 4, Squeeze Huffman coding followed by RLE90;
 - methods 5–7, old fixed-12-bit hash-table Crunch variants;
 - method 8, dynamic 12-bit Crunch followed by RLE90;
-- method 9, dynamic 13-bit Squash.
+- method 9, dynamic 13-bit Squash;
+- method 10, PAK Crushed with adaptive literal/string modes and usage-based
+  dictionary replacement;
+- method 11, PAK Distilled with explicit Huffman/LZ tables.
 
 The RLE decoder validates DLE/count state and exact output. Squeeze parses an
 explicit signed-node tree, rejects cycles and invalid leaves, recognizes the
@@ -32,6 +35,13 @@ every method above. Packed and Squeeze writers use complete RLE/Huffman streams;
 old and dynamic LZW writers currently emit literal codes while maintaining the
 required dictionaries and width transitions. Match discovery remains later
 ratio work.
+
+Crushed implements its 500-symbol mode ring, 375-string threshold, 1...13-bit
+string codes, 8,192-entry dictionary, chain usage tracking, least-used
+replacement, KwKwK, explicit EOF, and RLE90 postprocessing. Distilled parses a
+packed explicit tree, static offset prefixes, position-dependent extra bits,
+implicit space history, and explicit EOF. Their writers emit complete literal
+streams while preserving every required state transition.
 
 ```zig
 const entries = [_]vort.ArcEncodeEntry{
@@ -57,18 +67,20 @@ zig build run -- extract-arc-file archive.arc PAYLOAD output.bin 67108864
 zig build run-arc-diff
 ```
 
-The differential checks all nine Vort writer modes with ARC 5.21 and covers
+The differential self-checks all eleven writer modes, validates the nine
+classic modes with ARC 5.21, and validates seven applicable modes including
+Crushed/Distilled with unarc-rs. It covers
 stored, packed, squeezed, old/dynamic Crunch, Squash, dictionary CLEAR, 13-bit
 codes, PAK trailers, corrupt CRC, and encrypted data through external fixtures:
 
 ```sh
 zig build run-arc-diff -- \
   --arc path/to/arc \
+  --unarc path/to/unarc \
   --arc-fixtures path/to/unarc-rs/crates/unarc-rs/tests/arc \
   --pak-fixtures path/to/unarc-rs/crates/unarc-rs/tests/pak
 ```
 
 ARC has no reliable encryption flag, so encrypted payloads fail content CRC
-without a password API. PAK methods 10 (Crushed) and 11 (Distilled) are parsed
-and reported but extraction returns `UnsupportedArcMethod`; they remain the
-next compatibility increment.
+without a password API. Match-oriented writers and an explicit password API
+remain future functionality.

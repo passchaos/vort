@@ -2163,11 +2163,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-arj-file <path>        List ARJ entries and methods
         \\  extract-arj-file <arj> <entry> <out> [max_output]
         \\                              Extract ARJ methods 0 through 4
-        \\  create-arc-file <out> <entry> <in> [stored|packed|squeezed|crunched|squashed]
+        \\  create-arc-file <out> <entry> <in> [stored|packed|squeezed|crunched|squashed|crushed|distilled]
         \\                              Create a deterministic ARC/PAK archive
         \\  list-arc-file <path>        List ARC/PAK entries and methods
         \\  extract-arc-file <arc> <entry> <out> [max_output]
-        \\                              Extract ARC/PAK methods 1 through 9
+        \\                              Extract ARC/PAK methods 1 through 11
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
         \\                              Encode compressed-or-stored LZOP blocks
         \\  encode-lzop-stored-file <in> <out> [block_size] [adler32|crc32]

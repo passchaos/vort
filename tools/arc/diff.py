@@ -42,12 +42,15 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--arc", type=Path)
+    parser.add_argument("--unarc", type=Path)
     parser.add_argument("--arc-fixtures", type=Path)
     parser.add_argument("--pak-fixtures", type=Path)
     args = parser.parse_args()
     arc_tool = str(args.arc) if args.arc else shutil.which("arc")
+    unarc_tool = str(args.unarc) if args.unarc else shutil.which("unarc")
     payload = make_payload()
     writer_external = 0
+    writer_unarc = 0
     reader_fixtures = 0
 
     methods = (
@@ -60,6 +63,8 @@ def main() -> None:
         "crunched7",
         "crunched8",
         "squashed",
+        "crushed",
+        "distilled",
     )
     expected_tags = {
         "stored1": "stored_1",
@@ -71,6 +76,8 @@ def main() -> None:
         "crunched7": "crunched_7",
         "crunched8": "crunched_8",
         "squashed": "squashed",
+        "crushed": "crushed",
+        "distilled": "distilled",
     }
 
     with tempfile.TemporaryDirectory(prefix="vort-arc-diff-") as temp_text:
@@ -98,7 +105,7 @@ def main() -> None:
             )
             if output.read_bytes() != payload:
                 raise AssertionError(f"Vort ARC {method} self-extraction mismatch")
-            if arc_tool is not None:
+            if arc_tool is not None and method not in {"crushed", "distilled"}:
                 tested = subprocess.run(
                     [arc_tool, "t", str(first)],
                     stdout=subprocess.PIPE,
@@ -107,6 +114,25 @@ def main() -> None:
                 if tested.returncode != 0:
                     raise AssertionError(f"ARC rejected Vort {method}: {tested.stdout!r}")
                 writer_external += 1
+            if unarc_tool is not None and method in {
+                "stored2",
+                "packed",
+                "squeezed",
+                "crunched8",
+                "squashed",
+                "crushed",
+                "distilled",
+            }:
+                unarc_dir = temp / f"unarc-{method}"
+                unarc_dir.mkdir()
+                extracted = subprocess.run(
+                    [unarc_tool, "extract", "-f", "-o", str(unarc_dir), str(first), "PAYLOAD"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                if extracted.returncode != 0 or (unarc_dir / "PAYLOAD").read_bytes() != payload:
+                    raise AssertionError(f"unarc-rs rejected Vort {method}: {extracted.stdout!r}")
+                writer_unarc += 1
 
         if args.arc_fixtures is not None:
             cases = (
@@ -161,7 +187,6 @@ def main() -> None:
             if encrypted_extract.returncode == 0:
                 raise AssertionError("Vort accepted encrypted ARC data without a password")
 
-        unsupported_pak = 0
         if args.pak_fixtures is not None:
             supported = (
                 (args.pak_fixtures / "license_crunched.pak", "crunched_8"),
@@ -183,23 +208,32 @@ def main() -> None:
                 listing = run(args.cli, "list-arc-file", str(fixture)).stdout
                 if f"method={tag}" not in listing:
                     raise AssertionError(f"Vort failed to identify {tag}")
-                failed = run(
+                output = temp / f"pak-{reader_fixtures}.out"
+                extracted = run(
                     args.cli,
                     "extract-arc-file",
                     str(fixture),
                     "LICENSE",
-                    str(temp / f"unsupported-{tag}.out"),
-                    check=False,
+                    str(output),
                 )
-                if failed.returncode == 0:
-                    raise AssertionError(f"Vort silently accepted unsupported PAK {tag}")
-                unsupported_pak += 1
+                _ = extracted
+                if unarc_tool is not None:
+                    unarc_dir = temp / f"unarc-fixture-{tag}"
+                    unarc_dir.mkdir()
+                    reference = subprocess.run(
+                        [unarc_tool, "extract", "-f", "-o", str(unarc_dir), str(fixture), "LICENSE"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                    if reference.returncode != 0 or output.read_bytes() != (unarc_dir / "LICENSE").read_bytes():
+                        raise AssertionError(f"Vort PAK {tag} extraction mismatch")
+                reader_fixtures += 1
 
     print(
-        "arc_diff=ok methods=9 self_writer_cases=9 "
+        "arc_diff=ok methods=11 self_writer_cases=11 "
         f"arc={arc_tool is not None} writer_external={writer_external} "
-        f"reader_fixtures={reader_fixtures} corrupt_crc=True encrypted_crc=True "
-        f"unsupported_pak={unsupported_pak}"
+        f"unarc={unarc_tool is not None} writer_unarc={writer_unarc} "
+        f"reader_fixtures={reader_fixtures} corrupt_crc=True encrypted_crc=True"
     )
 
 
