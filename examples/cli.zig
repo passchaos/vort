@@ -101,6 +101,12 @@ pub fn main(init: std.process.Init) !void {
         try snappy_framing_cli.decodeHadoop(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-hadoop-snappy-file")) {
         try snappy_framing_cli.inspectHadoop(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-hadoop-lz4-file")) {
+        try snappy_framing_cli.encodeHadoopLz4(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-hadoop-lz4-file")) {
+        try snappy_framing_cli.decodeHadoopLz4(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-hadoop-lz4-file")) {
+        try snappy_framing_cli.inspectHadoopLz4(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
         try bgzf_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-bgzf-file")) {
@@ -2193,6 +2199,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-hadoop-snappy-file <in> <out> [block_size] [chunk_size]
         \\  decode-hadoop-snappy-file <in> <out> [max_output]
         \\  inspect-hadoop-snappy-file <path>
+        \\  encode-hadoop-lz4-file <in> <out> [block_size] [chunk_size]
+        \\  decode-hadoop-lz4-file <in> <out> [max_output]
+        \\  inspect-hadoop-lz4-file <path>
         \\  encode-bgzf-file <in> <out> [block_size]
         \\                              Encode deterministic blocked gzip/BGZF
         \\  decode-bgzf-file <in> <out> [max_output]

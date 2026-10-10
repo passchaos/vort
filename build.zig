@@ -160,6 +160,14 @@ pub fn build(b: *std.Build) void {
     const run_snappy_framing_tests = b.addRunArtifact(snappy_framing_tests);
     const snappy_framing_test_step = b.step("test-snappy-framing", "Run focused Xerial and Hadoop Snappy tests");
     snappy_framing_test_step.dependOn(&run_snappy_framing_tests.step);
+    const hadoop_lz4_tests = b.addTest(.{
+        .name = "vort-hadoop-lz4-tests",
+        .root_module = tests_mod,
+        .filters = &.{"Hadoop LZ4"},
+    });
+    const run_hadoop_lz4_tests = b.addRunArtifact(hadoop_lz4_tests);
+    const hadoop_lz4_test_step = b.step("test-hadoop-lz4", "Run focused Hadoop LZ4 framing tests");
+    hadoop_lz4_test_step.dependOn(&run_hadoop_lz4_tests.step);
 
     const test_step = b.step("test", "Run vort unit tests");
     test_step.dependOn(&run_tests.step);
@@ -1053,6 +1061,11 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| snappy_framing_diff.addArgs(args);
     const snappy_framing_diff_step = b.step("run-snappy-framing-diff", "Validate Xerial and Hadoop Snappy framing against optional snappy-java");
     snappy_framing_diff_step.dependOn(&snappy_framing_diff.step);
+
+    const hadoop_lz4_diff = b.addSystemCommand(&.{ "python3", "tools/hadoop_lz4/diff.py", "--cli" });
+    hadoop_lz4_diff.addArtifactArg(cli_exe);
+    const hadoop_lz4_diff_step = b.step("run-hadoop-lz4-diff", "Validate Hadoop LZ4 framing against Python lz4.block");
+    hadoop_lz4_diff_step.dependOn(&hadoop_lz4_diff.step);
 
     const zip_writer_probe_exe = b.addExecutable(.{
         .name = "vort-zip-writer-probe",
@@ -4756,6 +4769,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(bgzf_diff_step);
     ci_smoke_step.dependOn(snappy_framing_diff_step);
+    ci_smoke_step.dependOn(hadoop_lz4_diff_step);
     ci_smoke_step.dependOn(zip_diff_step);
     ci_smoke_step.dependOn(bzip2_diff_step);
     ci_smoke_step.dependOn(xz_diff_step);

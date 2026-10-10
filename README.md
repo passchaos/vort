@@ -203,6 +203,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - Xerial Snappy version-1 and Hadoop BlockCompressorStream Snappy framing with
   deterministic multi-block writing, strict big-endian nested lengths,
   exact outer-block accounting, bounded allocation, and caller-owned decode;
+- Hadoop LZ4 `BlockCompressorStream` framing with raw inner LZ4 blocks,
+  token-derived decoded-size validation, deterministic nested-block writing,
+  bounded allocation, and caller-owned decode;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, frame-index CRC composition, range CRC summaries, caller-owned and batch range decode APIs, and bounded streaming APIs;
 - LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training, match-coverage, patch-codec, native dictionary-patch frame, self-contained dictionary streams, native LDM reference frame, and dictionary-/LDM-aware native best-frame prototypes, long-distance match scanner, LDM-aware block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
 
