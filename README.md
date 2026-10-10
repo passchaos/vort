@@ -98,7 +98,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free SquashFS v4 reading with compressed metadata, short/long
   inode and directory layouts, nested path lookup, sparse/data/fragment blocks,
   regular-file and symlink extraction, gzip/LZMA/LZO/XZ/LZ4/Zstd codecs,
-  explicit output limits, and squashfs-tools interoperability;
+  explicit output limits, plus deterministic stored/gzip/Zstd writing for
+  regular files, nested/empty directories, symlinks and packed fragments, with
+  squashfs-tools interoperability;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,

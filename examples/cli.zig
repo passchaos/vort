@@ -140,6 +140,8 @@ pub fn main(init: std.process.Init) !void {
         try zchunk_cli.extractChunk(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-squashfs-file")) {
         try squashfs_cli.list(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-squashfs-file")) {
+        try squashfs_cli.create(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-squashfs-file")) {
         try squashfs_cli.extract(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
@@ -2251,6 +2253,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  inspect-zchunk-file <path>
         \\  extract-zchunk-chunk <in> <number> <out> [max_output]
         \\  list-squashfs-file <path>
+        \\  create-squashfs-file <out> <entry> <in> [stored|gzip|zstd] [block_size]
         \\  extract-squashfs-file <image> <entry> <out> [max_output]
         \\  encode-bgzf-file <in> <out> [block_size]
         \\                              Encode deterministic blocked gzip/BGZF

@@ -1125,8 +1125,19 @@ pub fn build(b: *std.Build) void {
     const zchunk_diff_step = b.step("run-zchunk-diff", "Validate zchunk files against optional zck/unzck tools");
     zchunk_diff_step.dependOn(&zchunk_diff.step);
 
+    const squashfs_writer_probe = b.addExecutable(.{
+        .name = "vort-squashfs-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/squashfs/writer_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
     const squashfs_diff = b.addSystemCommand(&.{ "python3", "tools/squashfs/diff.py", "--cli" });
     squashfs_diff.addArtifactArg(cli_exe);
+    squashfs_diff.addArg("--writer");
+    squashfs_diff.addArtifactArg(squashfs_writer_probe);
     if (b.args) |args| squashfs_diff.addArgs(args);
     const squashfs_diff_step = b.step("run-squashfs-diff", "Validate SquashFS extraction against optional squashfs-tools");
     squashfs_diff_step.dependOn(&squashfs_diff.step);

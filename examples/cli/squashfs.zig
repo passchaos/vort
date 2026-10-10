@@ -5,6 +5,39 @@ const max_file_size = 512 * 1024 * 1024;
 const max_directory_size = 64 * 1024 * 1024;
 const max_depth = 256;
 
+pub fn create(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const entry_name = args.next() orelse return error.MissingCorpusPath;
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const mode: vort.SquashfsEncodeMode = if (args.next()) |name|
+        if (std.mem.eql(u8, name, "stored")) .stored else if (std.mem.eql(u8, name, "gzip")) .gzip else if (std.mem.eql(u8, name, "zstd")) .zstandard else return error.InvalidBlockPlan
+    else
+        .gzip;
+    const block_size = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        128 * 1024;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const encoded = try vort.encodeSquashfsAlloc(init.gpa, &.{.{
+        .path = entry_name,
+        .data = input,
+    }}, .{
+        .mode = mode,
+        .block_size = block_size,
+    });
+    defer init.gpa.free(encoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+    try stdout.print(
+        "entry={s} input_bytes={d} squashfs_bytes={d} mode={s} block_size={d} path={s}\n",
+        .{ entry_name, input.len, encoded.len, @tagName(mode), block_size, output_path },
+    );
+}
+
 pub fn list(
     init: std.process.Init,
     args: *std.process.Args.Iterator,

@@ -97,6 +97,7 @@ def verify_vort(cli: Path, image: Path, payloads: dict[str, bytes], codec: str, 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
+    parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--mksquashfs", type=Path)
     parser.add_argument("--unsquashfs", type=Path)
     args = parser.parse_args()
@@ -112,6 +113,8 @@ def main() -> None:
     fixture_cases = 0
     codec_cases = 0
     variant_cases = 0
+    writer_cases = 0
+    external_writer = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-squashfs-") as temp_text:
         temp = Path(temp_text)
@@ -134,6 +137,48 @@ def main() -> None:
         source = temp / "tree"
         payloads = write_tree(source)
         primary: Path = fixture
+
+        writer_large = b"SquashFS writer probe multi-block payload 0123456789\n" * 4096
+        for mode in ("stored", "gzip", "zstd"):
+            image = temp / f"writer-{mode}.sqfs"
+            repeated = temp / f"writer-{mode}-repeat.sqfs"
+            run(args.writer, image, mode)
+            run(args.writer, repeated, mode)
+            if image.read_bytes() != repeated.read_bytes():
+                raise AssertionError(f"non-deterministic SquashFS writer output for {mode}")
+            expected_writer = {
+                "etc/config": b"writer probe configuration\n",
+                "large.bin": writer_large,
+                "small": b"fragment payload",
+                "link": b"etc/config",
+            }
+            for name, expected in expected_writer.items():
+                output = temp / f"writer-{mode}-{name.replace('/', '-')}.out"
+                run(
+                    args.cli,
+                    "extract-squashfs-file",
+                    image,
+                    name,
+                    output,
+                    len(expected),
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError(f"Vort writer self decode mismatch for {mode}/{name}")
+            writer_cases += 1
+            if unsquashfs is not None:
+                extracted = temp / f"writer-{mode}-extracted"
+                run(unsquashfs, "-f", "-d", extracted, image)
+                if (extracted / "etc/config").read_bytes() != expected_writer["etc/config"]:
+                    raise AssertionError(f"unsquashfs config mismatch for {mode}")
+                if (extracted / "large.bin").read_bytes() != writer_large:
+                    raise AssertionError(f"unsquashfs large mismatch for {mode}")
+                if (extracted / "small").read_bytes() != expected_writer["small"]:
+                    raise AssertionError(f"unsquashfs fragment mismatch for {mode}")
+                if (extracted / "link").readlink().as_posix() != "etc/config":
+                    raise AssertionError(f"unsquashfs symlink mismatch for {mode}")
+                if not (extracted / "empty").is_dir():
+                    raise AssertionError(f"unsquashfs empty directory missing for {mode}")
+                external_writer += 1
         if mksquashfs is not None:
             assert unsquashfs is not None
             for codec in ("gzip", "lzma", "lzo", "xz", "lz4", "zstd"):
@@ -205,7 +250,8 @@ def main() -> None:
 
     print(
         f"fixture_cases={fixture_cases} tools={mksquashfs is not None} "
-        f"codec_cases={codec_cases} variants={variant_cases} malformed={malformed}"
+        f"codec_cases={codec_cases} variants={variant_cases} writer={writer_cases} "
+        f"external_writer={external_writer} malformed={malformed}"
     )
 
 
