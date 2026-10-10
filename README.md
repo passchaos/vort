@@ -116,6 +116,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   8 KiB match distances, 65,535-byte stored/compressed blocks, optional EOF markers,
   bounded/caller-owned APIs, decoded-size preflight, metadata inspection, and
   automatic `.tar.lzf` composition;
+- dependency-free LHA/LZH level-0/1/2 reading and deterministic level-0 writing
+  with stored, LH5, LH6, LH7, and directory entries, chained filename/path and
+  common-CRC extended headers, payload CRC-16, bounded extraction, and a pure
+  Zig new-style canonical-Huffman decoder/writer;
 - pure Zig LZO1X encoding/decoding plus LZOP parsing and deterministic
   compressed-or-stored writing, including Adler-32/CRC-32 header, data, and
   compressed-block checks, legacy delta filters, concatenated streams, and

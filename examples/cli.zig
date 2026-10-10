@@ -4,6 +4,7 @@ const compress_z_cli = @import("cli/compress_z.zig");
 const filters_cli = @import("cli/filters.zig");
 const lzip_cli = @import("cli/lzip.zig");
 const lzf_cli = @import("cli/lzf.zig");
+const lha_cli = @import("cli/lha.zig");
 const lzop_cli = @import("cli/lzop.zig");
 const seven_zip_cli = @import("cli/seven_zip.zig");
 
@@ -210,6 +211,12 @@ pub fn main(init: std.process.Init) !void {
         try lzf_cli.sizeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-lzf-file")) {
         try lzf_cli.inspectFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-lha-file")) {
+        try lha_cli.createFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-lha-file")) {
+        try lha_cli.listFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-lha-file")) {
+        try lha_cli.extractFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-file")) {
         try lzop_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-stored-file")) {
@@ -2132,6 +2139,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-lzf-file <path> [max_output]
         \\                              Validate and report an LZF stream's decoded size
         \\  inspect-lzf-file <path>     Parse and print LZF ZV block metadata
+        \\  create-lha-file <out> <entry> <in> [stored|lh5|lh6|lh7]
+        \\                              Create a deterministic level-0 LHA archive
+        \\  list-lha-file <path>        List LHA level-0/1/2 entries
+        \\  extract-lha-file <lha> <entry> <out> [max_output]
+        \\                              Extract stored or LH5/LH6/LH7 LHA data
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
         \\                              Encode compressed-or-stored LZOP blocks
         \\  encode-lzop-stored-file <in> <out> [block_size] [adler32|crc32]

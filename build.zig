@@ -1059,6 +1059,12 @@ pub fn build(b: *std.Build) void {
     const lzf_diff_step = b.step("run-lzf-diff", "Validate raw/framed LZF against the optional upstream lzf CLI");
     lzf_diff_step.dependOn(&lzf_diff.step);
 
+    const lha_diff = b.addSystemCommand(&.{ "python3", "tools/lha/diff.py", "--cli" });
+    lha_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| lha_diff.addArgs(args);
+    const lha_diff_step = b.step("run-lha-diff", "Validate LHA level 0/1/2 and LH5/LH6/LH7 against optional lhasa");
+    lha_diff_step.dependOn(&lha_diff.step);
+
     const lzop_diff = b.addSystemCommand(&.{ "python3", "tools/lzop/diff.py", "--cli" });
     lzop_diff.addArtifactArg(cli_exe);
     const lzop_diff_step = b.step("run-lzop-diff", "Validate LZO1X/LZOP encoding and decoding against optional lzop");
@@ -4636,6 +4642,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(compress_z_diff_step);
     ci_smoke_step.dependOn(lzip_diff_step);
     ci_smoke_step.dependOn(lzf_diff_step);
+    ci_smoke_step.dependOn(lha_diff_step);
     ci_smoke_step.dependOn(lzop_diff_step);
     ci_smoke_step.dependOn(seven_zip_diff_step);
     ci_smoke_step.dependOn(tar_diff_step);

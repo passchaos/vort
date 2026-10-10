@@ -17852,6 +17852,21 @@ reuse, so production keeps the simpler independently owned plans.
   record and incremental state machines remain future functionality. See
   `docs/formats/lzf.md`.
 
+- Added dependency-free LHA/LZH reading for header levels 0, 1, and 2 plus
+  deterministic level-0 writing. The container validates additive base-header
+  checksums, chained/total extended-header sizes, optional common-header CRCs,
+  32-/64-bit declared sizes, payload bounds, and per-file CRC-16. Borrowed name
+  views compose legacy and extended path components without joining them to the
+  filesystem. Stored `-lh0-`, directory `-lhd-`, and pure Zig `-lh5-/-lh6-/-lh7-`
+  decoding cover 8/32/64 KiB dictionaries, temporary/code/position canonical
+  trees, zero-run code lengths, initialized space history, overlapping matches,
+  and exact input/output consumption. The functionality-first writer emits a
+  complete fixed command tree with arbitrary literal payloads; match planning
+  and adaptive trees remain ratio work. Lhasa independently decodes all four
+  Vort writer modes, while real lhasa level-0/LH5, level-1/LH6, level-2/LH7,
+  common-CRC, and nested-path fixtures cover the reverse direction. See
+  `docs/formats/lha.md`.
+
 - Added a pure Zig LZO1X encoder/decoder and LZOP container. The implementation parses
   modern and legacy headers, verifies Adler-32 or CRC-32 header/data/compressed
   checksums, accepts LZO1X-1, LZO1X-1(15), and LZO1X-999 payloads, applies the
