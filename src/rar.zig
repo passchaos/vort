@@ -18,6 +18,7 @@ pub const ExtractSession = archive.ExtractSession;
 pub const DecodedEntry = archive.DecodedEntry;
 pub const EncodeKind = writer.Kind;
 pub const EncodeCompression = writer.Compression;
+pub const EncodeFilter = writer.Filter;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const parse = archive.parse;

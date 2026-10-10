@@ -8,6 +8,14 @@ pub const Error = core.Error || std.mem.Allocator.Error || error{
 pub const Options = struct {
     dictionary_size: usize = 128 * 1024,
     block_size: usize = 64 * 1024,
+    filter: ?Filter = null,
+};
+
+pub const Filter = union(enum) {
+    delta: u8,
+    e8,
+    e8e9,
+    arm,
 };
 
 const main_count: usize = 306;
@@ -21,8 +29,14 @@ const hash_size: usize = 1 << 16;
 pub const max_block_size: usize = 4 * 1024 * 1024;
 
 const Token = union(enum) {
+    filter: FilterRecord,
     literal: u8,
     match: struct { length: usize, distance: usize },
+};
+
+const FilterRecord = struct {
+    length: usize,
+    kind: Filter,
 };
 
 const MatchState = struct {
@@ -56,22 +70,27 @@ pub fn encodeAlloc(
     input: []const u8,
     options: Options,
 ) Error![]u8 {
-    if (options.dictionary_size < 128 * 1024 or options.block_size == 0 or
-        options.block_size > max_block_size)
+    try validateOptions(options);
+    if (input.len == 0 and options.filter != null)
         return error.InvalidRar50EncodeOptions;
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
     var state = MatchState{};
     if (input.len == 0) {
-        try encodeBlock(allocator, &output, input, options, &state, true);
+        try encodeBlock(allocator, &output, input, 0, options, &state, true);
     } else {
         var start: usize = 0;
+        const block_size = if (options.filter == null)
+            options.block_size
+        else
+            @min(options.block_size, 0x3ffff);
         while (start < input.len) {
-            const end = @min(input.len, start +| options.block_size);
+            const end = @min(input.len, start +| block_size);
             try encodeBlock(
                 allocator,
                 &output,
                 input[start..end],
+                start,
                 options,
                 &state,
                 end == input.len,
@@ -82,17 +101,40 @@ pub fn encodeAlloc(
     return output.toOwnedSlice(allocator);
 }
 
+pub fn validateOptions(options: Options) Error!void {
+    if (options.dictionary_size < 128 * 1024 or options.block_size == 0 or
+        options.block_size > max_block_size)
+        return error.InvalidRar50EncodeOptions;
+    if (options.filter) |filter| try validateFilter(filter);
+}
+
 fn encodeBlock(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     input: []const u8,
+    file_offset: usize,
     options: Options,
     state: *MatchState,
     is_last: bool,
 ) Error!void {
     var tokens: std.ArrayList(Token) = .empty;
     defer tokens.deinit(allocator);
-    try tokenize(allocator, &tokens, input, options.dictionary_size);
+    var transformed: ?[]u8 = null;
+    defer if (transformed) |bytes| allocator.free(bytes);
+    if (options.filter) |filter| {
+        transformed = try allocator.dupe(u8, input);
+        try encodeFilter(allocator, transformed.?, filter, file_offset);
+        try tokens.append(allocator, .{ .filter = .{
+            .length = input.len,
+            .kind = filter,
+        } });
+    }
+    try tokenize(
+        allocator,
+        &tokens,
+        transformed orelse input,
+        options.dictionary_size,
+    );
 
     var writer = BitWriter{ .allocator = allocator };
     defer writer.bytes.deinit(allocator);
@@ -114,6 +156,10 @@ fn encodeBlock(
     try writeTableRuns(&writer, &level_codes, &length_lengths);
 
     for (tokens.items) |token| switch (token) {
+        .filter => |filter| {
+            try writer.writeCode(&main_codes, 256);
+            try writeFilter(&writer, filter);
+        },
         .literal => |byte| try writer.writeCode(&main_codes, byte),
         .match => |match| {
             const distance = match.distance;
@@ -154,6 +200,114 @@ fn encodeBlock(
         writer.bit_offset,
         is_last,
     );
+}
+
+fn validateFilter(filter: Filter) Error!void {
+    switch (filter) {
+        .delta => |channels| if (channels == 0 or channels > 32)
+            return error.InvalidRar50EncodeOptions,
+        .e8, .e8e9, .arm => {},
+    }
+}
+
+fn encodeFilter(
+    allocator: std.mem.Allocator,
+    data: []u8,
+    filter: Filter,
+    file_offset: usize,
+) Error!void {
+    switch (filter) {
+        .delta => |channels| {
+            const encoded = try allocator.alloc(u8, data.len);
+            defer allocator.free(encoded);
+            var destination: usize = 0;
+            for (0..channels) |channel| {
+                var previous: u8 = 0;
+                var source = channel;
+                while (source < data.len) : (source += channels) {
+                    encoded[destination] = previous -% data[source];
+                    previous = data[source];
+                    destination += 1;
+                }
+            }
+            @memcpy(data, encoded);
+        },
+        .e8 => encodeE8E9(data, @truncate(file_offset), false),
+        .e8e9 => encodeE8E9(data, @truncate(file_offset), true),
+        .arm => encodeArm(data, @truncate(file_offset)),
+    }
+}
+
+const x86_file_size: u32 = 0x0100_0000;
+
+fn encodeE8E9(data: []u8, file_offset: u32, include_e9: bool) void {
+    if (data.len <= 4) return;
+    const compare_mask: u8 = if (include_e9) 0xfe else 0xff;
+    var position: usize = 0;
+    while (position < data.len - 4) {
+        position += 1;
+        if (data[position - 1] & compare_mask != 0xe8) continue;
+        const offset = (file_offset +% @as(u32, @truncate(position))) % x86_file_size;
+        const address = std.mem.readInt(u32, data[position..][0..4], .little);
+        const candidate = address +% offset;
+        const encoded: ?u32 = if (candidate < x86_file_size)
+            candidate
+        else blk: {
+            const wrapped = address -% x86_file_size;
+            break :blk if (wrapped & 0x8000_0000 != 0 and
+                wrapped +% offset & 0x8000_0000 == 0)
+                wrapped
+            else
+                null;
+        };
+        if (encoded) |value|
+            std.mem.writeInt(u32, data[position..][0..4], value, .little);
+        position += 4;
+    }
+}
+
+fn encodeArm(data: []u8, file_offset: u32) void {
+    var position: usize = 0;
+    while (position + 3 < data.len) : (position += 4) {
+        if (data[position + 3] != 0xeb) continue;
+        var offset = @as(u32, data[position]) |
+            (@as(u32, data[position + 1]) << 8) |
+            (@as(u32, data[position + 2]) << 16);
+        offset +%= (file_offset +% @as(u32, @truncate(position))) / 4;
+        data[position] = @truncate(offset);
+        data[position + 1] = @truncate(offset >> 8);
+        data[position + 2] = @truncate(offset >> 16);
+    }
+}
+
+fn writeFilter(writer: *BitWriter, filter: FilterRecord) Error!void {
+    try writeFilterData(writer, 0);
+    try writeFilterData(writer, filter.length);
+    switch (filter.kind) {
+        .delta => |channels| {
+            try writer.writeBits(0, 3);
+            try writer.writeBits(channels - 1, 5);
+        },
+        .e8 => try writer.writeBits(1, 3),
+        .e8e9 => try writer.writeBits(2, 3),
+        .arm => try writer.writeBits(3, 3),
+    }
+}
+
+fn writeFilterData(writer: *BitWriter, raw_value: usize) Error!void {
+    if (raw_value > std.math.maxInt(u32)) return error.InvalidRar50EncodeOptions;
+    const value: u32 = @intCast(raw_value);
+    const byte_count: u8 = if (value <= 0xff)
+        1
+    else if (value <= 0xffff)
+        2
+    else if (value <= 0x00ff_ffff)
+        3
+    else
+        4;
+    try writer.writeBits(byte_count - 1, 2);
+    for (0..byte_count) |index|
+        try writer.writeBits(value >> @intCast(index * 8) & 0xff, 8);
 }
 
 fn tokenize(
@@ -452,4 +606,42 @@ test "RAR50 encoder round trips repetitive and empty data" {
         );
         try std.testing.expectEqualSlices(u8, input, output);
     }
+}
+
+test "RAR50 encoder round trips all native filters across blocks" {
+    const decoder = @import("rar50.zig");
+    var input: [8192]u8 = undefined;
+    for (&input, 0..) |*byte, index| byte.* = @truncate(index *% 37);
+    input[16] = 0xe8;
+    std.mem.writeInt(u32, input[17..21], 0x1000, .little);
+    input[32] = 0xe9;
+    std.mem.writeInt(u32, input[33..37], 0x2000, .little);
+    input[64..68].* = .{ 4, 0, 0, 0xeb };
+    const filter_cases = [_]Filter{
+        .{ .delta = 4 },
+        .e8,
+        .e8e9,
+        .arm,
+    };
+    for (filter_cases) |filter| {
+        const encoded = try encodeAlloc(std.testing.allocator, &input, .{
+            .block_size = 1024,
+            .filter = filter,
+        });
+        defer std.testing.allocator.free(encoded);
+        var output: [input.len]u8 = undefined;
+        try decoder.decodeInto(
+            std.testing.allocator,
+            encoded,
+            &output,
+            0,
+            128 * 1024,
+            .{},
+        );
+        try std.testing.expectEqualSlices(u8, &input, &output);
+    }
+    try std.testing.expectError(
+        error.InvalidRar50EncodeOptions,
+        encodeAlloc(std.testing.allocator, &input, .{ .filter = .{ .delta = 0 } }),
+    );
 }

@@ -13,18 +13,21 @@ pub fn createFile(
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const version = try parseVersion(args.next());
     const compression = try parseCompression(args.next());
+    const filter = try parseFilter(args.next());
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.RarEncodeEntry{.{ .name = entry_name, .data = input }};
     const encoded = try vort.encodeRarAlloc(init.gpa, &entries, .{
         .version = version,
         .compression = compression,
+        .filter = filter,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("rar_entries=1 version={s} method={s} input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("rar_entries=1 version={s} method={s} filter={s} input_bytes={d} archive_bytes={d} path={s}\n", .{
         @tagName(version),
         @tagName(compression),
+        if (filter) |value| @tagName(value) else "none",
         input.len,
         encoded.len,
         output_path,
@@ -158,6 +161,18 @@ fn parseCompression(value: ?[]const u8) !vort.RarEncodeCompression {
     if (std.mem.eql(u8, name, "stored") or std.mem.eql(u8, name, "store")) return .stored;
     if (std.mem.eql(u8, name, "rar50") or std.mem.eql(u8, name, "compress")) return .rar50;
     return error.UnsupportedRarCompression;
+}
+
+fn parseFilter(value: ?[]const u8) !?vort.RarEncodeFilter {
+    const name = value orelse return null;
+    if (std.mem.eql(u8, name, "none")) return null;
+    if (std.mem.eql(u8, name, "e8")) return .e8;
+    if (std.mem.eql(u8, name, "e8e9")) return .e8e9;
+    if (std.mem.eql(u8, name, "arm")) return .arm;
+    const prefix = "delta:";
+    if (std.mem.startsWith(u8, name, prefix))
+        return .{ .delta = try std.fmt.parseInt(u8, name[prefix.len..], 10) };
+    return error.UnsupportedRarFilter;
 }
 
 fn readFile(init: std.process.Init, path: []const u8) ![]u8 {

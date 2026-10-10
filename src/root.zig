@@ -360,6 +360,7 @@ pub const RarExtractSession = rar.ExtractSession;
 pub const RarDecodedEntry = rar.DecodedEntry;
 pub const RarEncodeKind = rar.EncodeKind;
 pub const RarEncodeCompression = rar.EncodeCompression;
+pub const RarEncodeFilter = rar.EncodeFilter;
 pub const RarEncodeEntry = rar.EncodeEntry;
 pub const RarEncodeOptions = rar.EncodeOptions;
 pub const parseRarArchive = rar.parse;

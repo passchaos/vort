@@ -12,6 +12,7 @@ pub const Error = archive.Error || rar50_encoder.Error || std.mem.Allocator.Erro
 
 pub const Kind = enum { regular, directory };
 pub const Compression = enum { stored, rar50 };
+pub const Filter = rar50_encoder.Filter;
 
 pub const EncodeEntry = struct {
     name: []const u8,
@@ -28,6 +29,7 @@ pub const EncodeOptions = struct {
     compression: Compression = .stored,
     dictionary_size: usize = 128 * 1024,
     block_size: usize = 64 * 1024,
+    filter: ?Filter = null,
 };
 
 pub fn encodeAlloc(
@@ -79,6 +81,13 @@ fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!v
             options.block_size > rar50_encoder.max_block_size)
             return error.UnsupportedRarEncodeOptions;
         _ = try rar50CompressionInfo(options.dictionary_size);
+        try rar50_encoder.validateOptions(.{
+            .dictionary_size = options.dictionary_size,
+            .block_size = options.block_size,
+            .filter = options.filter,
+        });
+    } else if (options.filter != null) {
+        return error.UnsupportedRarEncodeOptions;
     }
     for (entries) |entry| {
         if (!archive.isSafePath(entry.name) or std.mem.indexOfScalar(u8, entry.name, 0) != null)
@@ -198,6 +207,7 @@ fn appendRar5File(
         .{
             .dictionary_size = options.dictionary_size,
             .block_size = options.block_size,
+            .filter = options.filter,
         },
     );
     const payload = compressed orelse entry.data;
@@ -370,6 +380,17 @@ test "RAR50 writer emits deterministic multiblock LZ streams" {
             .version = .rar5,
             .compression = .rar50,
             .block_size = rar50_encoder.max_block_size + 1,
+        }),
+    );
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &entries, .{ .filter = .e8 }),
+    );
+    try std.testing.expectError(
+        error.InvalidRar50EncodeOptions,
+        encodeAlloc(allocator, &entries, .{
+            .compression = .rar50,
+            .filter = .{ .delta = 33 },
         }),
     );
 }
