@@ -6,6 +6,7 @@ const br = @import("../br.zig");
 const compress_z = @import("../compress_z.zig");
 const deflate = @import("../deflate.zig");
 const lz4 = @import("../lz4.zig");
+const lz4_legacy = @import("../lz4_legacy.zig");
 const lzip = @import("../lzip.zig");
 const lzf = @import("../lzf.zig");
 const lzma = @import("../lzma.zig");
@@ -13,7 +14,7 @@ const lzop = @import("../lzop.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = archive.Error || writer.Error || bzip2.Error || br.Error || compress_z.Error || lz4.Error || lzip.Error || lzf.Error || lzma.Error || lzop.Error || xz.Error || zstd.Error || deflate.Error || error{
+pub const Error = archive.Error || writer.Error || bzip2.Error || br.Error || compress_z.Error || lz4.Error || lz4_legacy.Error || lzip.Error || lzf.Error || lzma.Error || lzop.Error || xz.Error || zstd.Error || deflate.Error || error{
     UnknownTarCompression,
 };
 
@@ -68,7 +69,8 @@ pub fn detect(input: []const u8) Compression {
     if (input.len >= 2 and input[0] == 0x1f and input[1] == 0x9d) return .compress_z;
     if (input.len >= 3 and std.mem.eql(u8, input[0..3], "BZh")) return .bzip2;
     if (input.len >= 6 and std.mem.eql(u8, input[0..6], &.{ 0xfd, '7', 'z', 'X', 'Z', 0 })) return .xz;
-    if (input.len >= 4 and std.mem.readInt(u32, input[0..4], .little) == 0x184d_2204) return .lz4;
+    if (input.len >= 4 and (std.mem.readInt(u32, input[0..4], .little) == 0x184d_2204 or
+        lz4_legacy.isLegacy(input))) return .lz4;
     if (input.len >= 4 and std.mem.eql(u8, input[0..4], "LZIP")) return .lzip;
     if (input.len >= 2 and std.mem.eql(u8, input[0..2], "ZV")) return .lzf;
     if (input.len >= 4 and std.mem.readInt(u32, input[0..4], .little) == 0xfd2f_b528) return .zstandard;
@@ -171,7 +173,10 @@ pub fn decodeAlloc(
         .compress_z => try compress_z.decodeAllocLimited(allocator, input, max_tar_size),
         .lzma => try lzma.decodeAllocLimited(allocator, input, max_tar_size),
         .xz => try xz.decodeAllocLimited(allocator, input, max_tar_size),
-        .lz4 => try lz4.decodeFrameAllocLimited(allocator, input, max_tar_size),
+        .lz4 => if (lz4_legacy.isLegacy(input))
+            try lz4_legacy.decodeAllocLimited(allocator, input, max_tar_size)
+        else
+            try lz4.decodeFrameAllocLimited(allocator, input, max_tar_size),
         .lzip => try lzip.decodeAllocLimited(allocator, input, max_tar_size),
         .lzf => try lzf.decodeAllocLimited(allocator, input, max_tar_size),
         .zstandard => try zstd.decodeFrameAllocLimited(allocator, input, max_tar_size),
@@ -270,4 +275,18 @@ test "TAR compression detection distinguishes raw TAR and LZMA-Alone headers" {
     std.mem.writeInt(u32, false_positive[1..5], 32 * 1024, .little);
     std.mem.writeInt(u64, false_positive[5..13], 123, .little);
     try std.testing.expectEqual(Compression.none, detect(&false_positive));
+}
+
+test "TAR auto decode accepts LZ4 legacy frames" {
+    const allocator = std.testing.allocator;
+    const entries = [_]writer.EncodeEntry{.{ .name = "payload", .data = "legacy LZ4 tar" }};
+    const raw = try writer.encodeAlloc(allocator, &entries);
+    defer allocator.free(raw);
+    const encoded = try lz4_legacy.encodeAlloc(allocator, raw, .{ .block_size = 1024 });
+    defer allocator.free(encoded);
+    try std.testing.expectEqual(Compression.lz4, detect(encoded));
+    const decoded = try decodeAutoAlloc(allocator, encoded, raw.len);
+    defer decoded.deinit(allocator);
+    try std.testing.expectEqual(Compression.lz4, decoded.compression);
+    try std.testing.expectEqualSlices(u8, raw, decoded.bytes);
 }

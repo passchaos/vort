@@ -70,6 +70,18 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.decodeLz4LegacyAllocLimited(allocator, data, 1 << 20)) |decoded| {
+        allocator.free(decoded);
+    } else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidLz4LegacyStream,
+        error.InvalidMatch,
+        error.TruncatedFrame,
+        error.IntegerOverflow,
+        error.OutputLimitExceeded,
+        => {},
+        else => return err,
+    }
     if (vort.parseHadoopLzoIndex(data)) |_| {} else |err| switch (err) {
         error.InvalidHadoopLzoIndex,
         => {},
@@ -469,6 +481,7 @@ pub fn main(init: std.process.Init) !void {
         "!<arch>\n",
         "\xed\xab\xee\xdb\x03\x00",
         "Rar!\x1a\x07\x01\x00",
+        "\x02\x21\x4c\x18\x04\x00\x00\x00\x30abc",
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
 

@@ -81,6 +81,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;
+- pure Zig LZ4 legacy-frame parsing and deterministic writing with independent
+  blocks up to 8 MiB, zero-allocation metadata iteration, decoded-size preflight,
+  bounded/caller-owned decode, system `lz4 -l` interoperability, and automatic
+  TAR/CPIO legacy-magic detection;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,

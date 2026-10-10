@@ -168,6 +168,14 @@ pub fn build(b: *std.Build) void {
     const run_hadoop_lz4_tests = b.addRunArtifact(hadoop_lz4_tests);
     const hadoop_lz4_test_step = b.step("test-hadoop-lz4", "Run focused Hadoop LZ4 framing tests");
     hadoop_lz4_test_step.dependOn(&run_hadoop_lz4_tests.step);
+    const lz4_legacy_tests = b.addTest(.{
+        .name = "vort-lz4-legacy-tests",
+        .root_module = tests_mod,
+        .filters = &.{"LZ4 legacy"},
+    });
+    const run_lz4_legacy_tests = b.addRunArtifact(lz4_legacy_tests);
+    const lz4_legacy_test_step = b.step("test-lz4-legacy", "Run focused LZ4 legacy frame tests");
+    lz4_legacy_test_step.dependOn(&run_lz4_legacy_tests.step);
     const hadoop_lzo_index_tests = b.addTest(.{
         .name = "vort-hadoop-lzo-index-tests",
         .root_module = tests_mod,
@@ -1074,6 +1082,12 @@ pub fn build(b: *std.Build) void {
     hadoop_lz4_diff.addArtifactArg(cli_exe);
     const hadoop_lz4_diff_step = b.step("run-hadoop-lz4-diff", "Validate Hadoop LZ4 framing against Python lz4.block");
     hadoop_lz4_diff_step.dependOn(&hadoop_lz4_diff.step);
+
+    const lz4_legacy_diff = b.addSystemCommand(&.{ "python3", "tools/lz4_legacy/diff.py", "--cli" });
+    lz4_legacy_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| lz4_legacy_diff.addArgs(args);
+    const lz4_legacy_diff_step = b.step("run-lz4-legacy-diff", "Validate LZ4 legacy frames against the system lz4 CLI");
+    lz4_legacy_diff_step.dependOn(&lz4_legacy_diff.step);
 
     const hadoop_lzo_index_diff = b.addSystemCommand(&.{ "python3", "tools/hadoop_lzo_index/diff.py", "--cli" });
     hadoop_lzo_index_diff.addArtifactArg(cli_exe);
@@ -4784,6 +4798,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(bgzf_diff_step);
     ci_smoke_step.dependOn(snappy_framing_diff_step);
     ci_smoke_step.dependOn(hadoop_lz4_diff_step);
+    ci_smoke_step.dependOn(lz4_legacy_diff_step);
     ci_smoke_step.dependOn(hadoop_lzo_index_diff_step);
     ci_smoke_step.dependOn(zip_diff_step);
     ci_smoke_step.dependOn(bzip2_diff_step);

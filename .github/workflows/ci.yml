@@ -27,7 +27,7 @@ jobs:
       - name: Install optional CLI competitors
         run: |
           sudo apt-get update
-          sudo apt-get install -y cabextract gzip p7zip-full zstd libarchive-dev libbrotli-dev liblz4-dev libsnappy-dev git
+          sudo apt-get install -y cabextract gzip lz4 p7zip-full zstd libarchive-dev libbrotli-dev liblz4-dev libsnappy-dev git
 
       - name: Check formatting
         run: zig fmt --check build.zig build.zig.zon src examples bench tools
