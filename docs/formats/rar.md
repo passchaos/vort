@@ -94,6 +94,11 @@ compressed members and writes both the archive and per-file continuation
 flags. A stored file or directory ends the current compression chain, so the
 next compressed member starts non-solid. Filtered solid writing is rejected
 until cross-member transformed-history semantics are exposed explicitly.
+`encodeRarVolumesAlloc` splits logical RAR5 members at an explicit maximum
+payload-per-volume budget and returns an owned `EncodedVolumes` collection. It
+writes numbered volume main headers, per-fragment split flags and CRCs, and
+next-volume end flags; stored, compressed, and solid compressed members can all
+span volumes. Header bytes are intentionally outside the payload budget.
 The writers emit standard header/data CRCs, Unix attributes, optional
 generation-native timestamps (DOS date/time for RAR4, Unix seconds for RAR5),
 RAR4 end blocks, and RAR5 end headers.
@@ -102,8 +107,7 @@ RAR4 output accepts safe ASCII names and converts `/` to the traditional `\`
 separator. RAR5 output accepts validated UTF-8 names. Both writers reject NUL,
 absolute, empty-component, dot, and parent-component paths. RAR50 dictionary
 sizes must be power-of-two multiples of 128 KiB. RAR4 compression, encryption,
-recovery records, comments, redirections, and volume splitting remain future
-writer work.
+recovery records, comments, and redirections remain future writer work.
 
 ## CLI
 
@@ -112,6 +116,7 @@ zig build run -- create-rar-file output.rar payload.bin input.bin rar5
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50 e8e9
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50 none solid
+zig build run -- create-rar-volumes output payload.bin input.bin 1048576 rar50 none solid
 zig build run -- list-rar-file output.rar
 zig build run -- extract-rar-file output.rar payload.bin decoded.bin 1048576
 ```
@@ -121,6 +126,8 @@ The writer version is `rar4` or `rar5`; `rar5` is the default. Compression is
 is `delta:N`, `e8`, `e8e9`, or `arm`.
 The final optional mode is `solid`; it matters for multi-entry library calls,
 while the single-entry CLI command mainly validates header generation.
+`create-rar-volumes` writes `output.part1.rar`, `output.part2.rar`, and so on;
+its size argument is the packed payload budget per volume.
 
 ## Differential validation
 
@@ -156,6 +163,6 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 \
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-The next writer stage is volume splitting, followed by RAR29 compatibility
-writing and encrypted payloads. Encryption should be added on top of the
-existing codecs rather than approximated in the stored path.
+The next writer stages are RAR29 compatibility writing and encrypted payloads.
+Encryption should be added on top of the existing codecs rather than
+approximated in the stored path.

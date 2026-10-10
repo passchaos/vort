@@ -117,6 +117,8 @@ def main() -> None:
     writer_filtered_external = 0
     writer_solid = 0
     writer_solid_external = 0
+    writer_volumes = 0
+    writer_volumes_external = 0
     reference_stored = 0
     reference_compressed = 0
     reference_compressed_decoded = 0
@@ -244,6 +246,37 @@ def main() -> None:
                 if (solid_reference / "second.txt").read_bytes() != expected_solid:
                     raise AssertionError("7-Zip rejected Vort solid RAR50 output")
                 writer_solid_external += 1
+
+            volume_prefix = temp / "vort-rar50-volume"
+            volume_output = temp / "vort-rar50-volume.out"
+            run(args.writer, str(volume_prefix), "rar5", "volumes")
+            written_volumes = tuple(sorted(temp.glob("vort-rar50-volume.part*.rar")))
+            if len(written_volumes) < 2:
+                raise AssertionError("Vort volume writer did not split its payload")
+            run(
+                args.cli,
+                "extract-rar-volumes",
+                "second.txt",
+                str(volume_output),
+                str(1024 * 1024),
+                *(str(volume) for volume in written_volumes),
+            )
+            if volume_output.read_bytes() != expected_solid:
+                raise AssertionError("Vort failed its own solid volume output")
+            writer_volumes += 1
+            if seven_zip is not None:
+                volume_reference = temp / "vort-rar50-volume-reference"
+                volume_reference.mkdir()
+                run(
+                    seven_zip,
+                    "x",
+                    "-y",
+                    f"-o{volume_reference}",
+                    str(written_volumes[0]),
+                )
+                if (volume_reference / "second.txt").read_bytes() != expected_solid:
+                    raise AssertionError("7-Zip rejected Vort solid volume output")
+                writer_volumes_external += 1
 
         if args.rars is not None:
             for version in versions:
@@ -703,6 +736,8 @@ def main() -> None:
         f"writer_filtered_external={writer_filtered_external} "
         f"writer_solid={writer_solid} "
         f"writer_solid_external={writer_solid_external} "
+        f"writer_volumes={writer_volumes} "
+        f"writer_volumes_external={writer_volumes_external} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "
