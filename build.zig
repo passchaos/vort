@@ -1071,6 +1071,12 @@ pub fn build(b: *std.Build) void {
     const arj_diff_step = b.step("run-arj-diff", "Validate ARJ methods 0-4 against optional ARJ and 7-Zip tools");
     arj_diff_step.dependOn(&arj_diff.step);
 
+    const arc_diff = b.addSystemCommand(&.{ "python3", "tools/arc/diff.py", "--cli" });
+    arc_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| arc_diff.addArgs(args);
+    const arc_diff_step = b.step("run-arc-diff", "Validate ARC/PAK methods 1-9 against the optional ARC tool");
+    arc_diff_step.dependOn(&arc_diff.step);
+
     const lzop_diff = b.addSystemCommand(&.{ "python3", "tools/lzop/diff.py", "--cli" });
     lzop_diff.addArtifactArg(cli_exe);
     const lzop_diff_step = b.step("run-lzop-diff", "Validate LZO1X/LZOP encoding and decoding against optional lzop");
@@ -4650,6 +4656,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(lzf_diff_step);
     ci_smoke_step.dependOn(lha_diff_step);
     ci_smoke_step.dependOn(arj_diff_step);
+    ci_smoke_step.dependOn(arc_diff_step);
     ci_smoke_step.dependOn(lzop_diff_step);
     ci_smoke_step.dependOn(seven_zip_diff_step);
     ci_smoke_step.dependOn(tar_diff_step);

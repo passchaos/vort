@@ -124,6 +124,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   main/local/extended headers, stored and methods 1–4, no-data and directory
   entries, bounded extraction, encrypted/multi-volume rejection, and external
   ARJ plus 7-Zip interoperability;
+- dependency-free ARC/PAK/SFX reading and deterministic ARC writing for stored,
+  packed RLE90, Squeeze, old fixed-12-bit Crunch, dynamic Crunch, and Squash
+  methods 1–9, including PAK trailers, CRC-16, bounded extraction, CLEAR/code-
+  width transitions, and external ARC 5.21 interoperability;
 - pure Zig LZO1X encoding/decoding plus LZOP parsing and deterministic
   compressed-or-stored writing, including Adler-32/CRC-32 header, data, and
   compressed-block checks, legacy delta filters, concatenated streams, and

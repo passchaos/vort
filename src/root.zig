@@ -31,6 +31,7 @@ pub const lzip = @import("lzip.zig");
 pub const lzf = @import("lzf.zig");
 pub const lha = @import("lha.zig");
 pub const arj = @import("arj.zig");
+pub const arc = @import("arc.zig");
 pub const lzo1x = @import("lzo1x.zig");
 pub const lzop = @import("lzop.zig");
 pub const seven_zip = @import("seven_zip.zig");
@@ -302,6 +303,18 @@ pub const decodeArjMethod4AllocLimited = arj.decodeMethod4AllocLimited;
 pub const encodeArjMethod4Alloc = arj.encodeMethod4Alloc;
 pub const encodeArjMethod4Append = arj.encodeMethod4Append;
 pub const encodeArjMethod4Into = arj.encodeMethod4Into;
+
+pub const ArcError = arc.Error;
+pub const ArcMethod = arc.Method;
+pub const ArcEntry = arc.Entry;
+pub const ArcArchive = arc.Archive;
+pub const ArcIterator = arc.Iterator;
+pub const ArcEncodeEntry = arc.EncodeEntry;
+pub const parseArcArchive = arc.parse;
+pub const encodeArcAlloc = arc.encodeAlloc;
+pub const encodeArcAppend = arc.encodeAppend;
+pub const encodeArcInto = arc.encodeInto;
+pub const arcCrc16 = arc.crc16;
 
 pub const Lzo1xError = lzo1x.Error;
 pub const Lzo1xEncodeOptions = lzo1x.EncodeOptions;
@@ -2525,6 +2538,7 @@ test {
     _ = lzf;
     _ = lha;
     _ = arj;
+    _ = arc;
     _ = lzo1x;
     _ = lzop;
     _ = seven_zip;

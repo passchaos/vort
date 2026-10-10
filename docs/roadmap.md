@@ -17884,6 +17884,19 @@ reuse, so production keeps the simpler independently owned plans.
   with separate corrupt-CRC and encrypted fixtures fixing failure behavior.
   See `docs/formats/arj.md`.
 
+- Added dependency-free ARC/PAK reading and deterministic ARC writing for
+  methods 1 through 9. The container supports SFX prefixes, obsolete short
+  method-1 headers, fixed member metadata, PAK post-terminator trailers, bounded
+  extraction, and final CRC-16. Modular codecs cover RLE90 packing, explicit-
+  tree Squeeze, old 12-bit hash-slot Crunch methods 5–7, dynamic grouped-code
+  Crunch method 8, and 13-bit Squash method 9, including CLEAR alignment and
+  KwKwK. Functionality-first writers produce valid literal streams through each
+  state machine; match planning remains ratio work. ARC 5.21 validates all nine
+  Vort writer modes, while nine external ARC/PAK fixtures cover stored, packed,
+  Squeeze, old/dynamic Crunch, Squash, CLEAR, and 13-bit boundaries. Methods 10
+  and 11 are identified but remain explicitly unsupported. See
+  `docs/formats/arc.md`.
+
 - Added a pure Zig LZO1X encoder/decoder and LZOP container. The implementation parses
   modern and legacy headers, verifies Adler-32 or CRC-32 header/data/compressed
   checksums, accepts LZO1X-1, LZO1X-1(15), and LZO1X-999 payloads, applies the

@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const arj_cli = @import("cli/arj.zig");
+const arc_cli = @import("cli/arc.zig");
 const compress_z_cli = @import("cli/compress_z.zig");
 const filters_cli = @import("cli/filters.zig");
 const lzip_cli = @import("cli/lzip.zig");
@@ -224,6 +225,12 @@ pub fn main(init: std.process.Init) !void {
         try arj_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-arj-file")) {
         try arj_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-arc-file")) {
+        try arc_cli.createFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-arc-file")) {
+        try arc_cli.listFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-arc-file")) {
+        try arc_cli.extractFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-file")) {
         try lzop_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-stored-file")) {
@@ -2156,6 +2163,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-arj-file <path>        List ARJ entries and methods
         \\  extract-arj-file <arj> <entry> <out> [max_output]
         \\                              Extract ARJ methods 0 through 4
+        \\  create-arc-file <out> <entry> <in> [stored|packed|squeezed|crunched|squashed]
+        \\                              Create a deterministic ARC/PAK archive
+        \\  list-arc-file <path>        List ARC/PAK entries and methods
+        \\  extract-arc-file <arc> <entry> <out> [max_output]
+        \\                              Extract ARC/PAK methods 1 through 9
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
         \\                              Encode compressed-or-stored LZOP blocks
         \\  encode-lzop-stored-file <in> <out> [block_size] [adler32|crc32]

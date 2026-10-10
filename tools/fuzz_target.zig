@@ -121,6 +121,37 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseArcArchive(data)) |archive| {
+        var iterator = archive.iterator();
+        while (try iterator.next()) |entry| {
+            if (archive.extractAllocLimited(allocator, entry, 1 << 20)) |decoded| {
+                allocator.free(decoded);
+            } else |err| switch (err) {
+                error.OutputLimitExceeded,
+                error.UnsupportedArcMethod,
+                error.InvalidArcArchive,
+                error.InvalidArcCrunchStream,
+                error.InvalidArcLzwStream,
+                error.InvalidArcRleStream,
+                error.InvalidArcSqueezeStream,
+                error.TruncatedFrame,
+                error.TrailingData,
+                error.SizeMismatch,
+                error.ChecksumMismatch,
+                error.IntegerOverflow,
+                => {},
+                else => return err,
+            }
+        }
+    } else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidArcArchive,
+        error.TruncatedFrame,
+        error.TrailingData,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.parseCabArchive(data)) |cabinet| {
         for (0..cabinet.folder_count) |folder_index| {
             if (vort.decodeCabFolderAllocLimited(allocator, cabinet, folder_index, 1 << 20)) |decoded| {
@@ -172,6 +203,7 @@ pub fn main(init: std.process.Init) !void {
         &.{ 'Z', 'V', 0, 0, 1, 'x' },
         &.{0},
         &.{ 0x60, 0xea, 0, 0 },
+        &.{ 0x1a, 0 },
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
 
