@@ -113,6 +113,8 @@ def main() -> None:
     writer_external = 0
     writer_compressed = 0
     writer_compressed_external = 0
+    writer_filtered = 0
+    writer_filtered_external = 0
     reference_stored = 0
     reference_compressed = 0
     reference_compressed_decoded = 0
@@ -432,6 +434,7 @@ def main() -> None:
                 raise AssertionError("Vort generic RAR VM output mismatch")
             rar29_vm_entries += 1
 
+            rar50_root = args.legacy_fixtures.parent / "rar50"
             rar50_archives = (
                 args.legacy_fixtures.parent / "rar50" / "m1_fastest.rar",
                 args.legacy_fixtures.parent / "rar50" / "m3_default.rar",
@@ -450,6 +453,47 @@ def main() -> None:
                     f"rar50-{index}",
                     method="rar50",
                 )
+
+            filter_writer_cases = (
+                (rar50_root / "filter_delta.rar", "delta_4ch_ramp.bin", "delta:4"),
+                (rar50_root / "filter_e8.rar", "x86_e8_stream.bin", "e8"),
+                (rar50_root / "filter_e8e9.rar", "x86_e8e9_stream.bin", "e8e9"),
+                (rar50_root / "filter_arm.rar", "arm_synthetic.bin", "arm"),
+            )
+            for index, (reference_archive, name, filter_name) in enumerate(filter_writer_cases):
+                source_dir = temp / f"rar50-filter-writer-source-{index}"
+                source_dir.mkdir()
+                run(seven_zip, "x", "-y", f"-o{source_dir}", str(reference_archive))
+                source_path = source_dir / name
+                written_archive = temp / f"vort-rar50-filter-{index}.rar"
+                self_output = temp / f"vort-rar50-filter-{index}.out"
+                run(
+                    args.cli,
+                    "create-rar-file",
+                    str(written_archive),
+                    name,
+                    str(source_path),
+                    "rar5",
+                    "rar50",
+                    filter_name,
+                )
+                run(
+                    args.cli,
+                    "extract-rar-file",
+                    str(written_archive),
+                    name,
+                    str(self_output),
+                    str(source_path.stat().st_size),
+                )
+                if self_output.read_bytes() != source_path.read_bytes():
+                    raise AssertionError(f"Vort failed its own RAR50 {filter_name} output")
+                writer_filtered += 1
+                external_dir = temp / f"rar50-filter-writer-external-{index}"
+                external_dir.mkdir()
+                run(seven_zip, "x", "-y", f"-o{external_dir}", str(written_archive))
+                if (external_dir / name).read_bytes() != source_path.read_bytes():
+                    raise AssertionError(f"7-Zip rejected Vort RAR50 {filter_name} output")
+                writer_filtered_external += 1
 
             zero_fill = args.legacy_fixtures.parent / "rar50" / "zero_fill_out_of_window.rar"
             zero_fill_output = temp / "rar50-zero-fill.out"
@@ -486,7 +530,6 @@ def main() -> None:
                     method="rar50",
                 )
 
-            rar50_root = args.legacy_fixtures.parent / "rar50"
             volume_cases = (
                 (
                     tuple(rar50_root / f"multivol.part{index}.rar" for index in range(1, 4)),
@@ -628,6 +671,8 @@ def main() -> None:
         f"seven_zip={seven_zip is not None} writer_external={writer_external} "
         f"writer_compressed={writer_compressed} "
         f"writer_compressed_external={writer_compressed_external} "
+        f"writer_filtered={writer_filtered} "
+        f"writer_filtered_external={writer_filtered_external} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "
