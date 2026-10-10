@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 const arj_cli = @import("cli/arj.zig");
 const arc_cli = @import("cli/arc.zig");
+const zoo_cli = @import("cli/zoo.zig");
 const compress_z_cli = @import("cli/compress_z.zig");
 const filters_cli = @import("cli/filters.zig");
 const lzip_cli = @import("cli/lzip.zig");
@@ -231,6 +232,12 @@ pub fn main(init: std.process.Init) !void {
         try arc_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-arc-file")) {
         try arc_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-zoo-file")) {
+        try zoo_cli.createFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-zoo-file")) {
+        try zoo_cli.listFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-zoo-file")) {
+        try zoo_cli.extractFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-file")) {
         try lzop_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-stored-file")) {
@@ -2168,6 +2175,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-arc-file <path>        List ARC/PAK entries and methods
         \\  extract-arc-file <arc> <entry> <out> [max_output]
         \\                              Extract ARC/PAK methods 1 through 11
+        \\  create-zoo-file <out> <entry> <in> [stored|lzd|lh5]
+        \\                              Create a deterministic ZOO archive
+        \\  list-zoo-file <path>        List ZOO entries and methods
+        \\  extract-zoo-file <zoo> <entry> <out> [max_output]
+        \\                              Extract ZOO stored, LZD, or LH5 data
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
         \\                              Encode compressed-or-stored LZOP blocks
         \\  encode-lzop-stored-file <in> <out> [block_size] [adler32|crc32]

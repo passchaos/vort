@@ -129,6 +129,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   plus PAK Crushed and Distilled methods 1–11, including PAK trailers, CRC-16,
   bounded extraction, CLEAR/code-width transitions, and external ARC 5.21/
   unarc-rs interoperability;
+- dependency-free ZOO reading and deterministic type-2 archive writing for
+  stored, 9–13-bit/8192-entry LZD, and LH5 methods, with absolute directory
+  chains, long names and paths, data leaders, directory/content CRC-16,
+  bounded extraction, hostile-offset/path validation, and original Zoo 2.10
+  bidirectional interoperability;
 - pure Zig LZO1X encoding/decoding plus LZOP parsing and deterministic
   compressed-or-stored writing, including Adler-32/CRC-32 header, data, and
   compressed-block checks, legacy delta filters, concatenated streams, and
