@@ -90,6 +90,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   reconstruction, bounded/caller-owned APIs, deterministic LZVN-or-stored block
   writing, strict stream termination, and bidirectional Apple reference
   interoperability;
+- dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
+  writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
+  source hashes, optional/header-only metadata, stream-aware indexes, bounded
+  full-stream and individual-chunk extraction, and `zck`/`unzck`
+  interoperability;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,

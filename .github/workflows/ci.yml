@@ -27,7 +27,7 @@ jobs:
       - name: Install optional CLI competitors
         run: |
           sudo apt-get update
-          sudo apt-get install -y cabextract gzip lz4 p7zip-full zstd libarchive-dev libbrotli-dev liblz4-dev libsnappy-dev git
+          sudo apt-get install -y cabextract gzip lz4 meson ninja-build p7zip-full zstd libarchive-dev libbrotli-dev liblz4-dev libsnappy-dev libssl-dev libzstd-dev git
 
       - name: Check formatting
         run: zig fmt --check build.zig build.zig.zon src examples bench tools
@@ -41,6 +41,18 @@ jobs:
           git -C "$lzfse_reference_dir" checkout --detach FETCH_HEAD
           make -C "$lzfse_reference_dir" -j2
           sudo install "$lzfse_reference_dir/build/bin/lzfse" /usr/local/bin/lzfse
+
+      - name: Build pinned zchunk reference CLIs
+        run: |
+          zchunk_reference_dir=$(mktemp -d)
+          git -C "$zchunk_reference_dir" init
+          git -C "$zchunk_reference_dir" remote add origin https://github.com/zchunk/zchunk.git
+          git -C "$zchunk_reference_dir" fetch --depth 1 origin 99e51afa38c723e7c25834c2c3b305d20ef55d04
+          git -C "$zchunk_reference_dir" checkout --detach FETCH_HEAD
+          meson setup "$zchunk_reference_dir/build" "$zchunk_reference_dir" -Dwith-curl=disabled -Dwith-openssl=enabled
+          ninja -C "$zchunk_reference_dir/build"
+          sudo meson install -C "$zchunk_reference_dir/build"
+          sudo ldconfig
 
       - name: Run CI smoke aggregate
         run: zig build -Doptimize=ReleaseFast ci-smoke

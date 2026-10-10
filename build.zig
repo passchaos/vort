@@ -184,6 +184,14 @@ pub fn build(b: *std.Build) void {
     const run_lzfse_tests = b.addRunArtifact(lzfse_tests);
     const lzfse_test_step = b.step("test-lzfse", "Run focused LZFSE and LZVN tests");
     lzfse_test_step.dependOn(&run_lzfse_tests.step);
+    const zchunk_tests = b.addTest(.{
+        .name = "vort-zchunk-tests",
+        .root_module = tests_mod,
+        .filters = &.{"zchunk "},
+    });
+    const run_zchunk_tests = b.addRunArtifact(zchunk_tests);
+    const zchunk_test_step = b.step("test-zchunk", "Run focused zchunk container tests");
+    zchunk_test_step.dependOn(&run_zchunk_tests.step);
     const hadoop_lzo_index_tests = b.addTest(.{
         .name = "vort-hadoop-lzo-index-tests",
         .root_module = tests_mod,
@@ -1102,6 +1110,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lzfse_diff.addArgs(args);
     const lzfse_diff_step = b.step("run-lzfse-diff", "Validate LZFSE and LZVN streams against the optional Apple reference CLI");
     lzfse_diff_step.dependOn(&lzfse_diff.step);
+
+    const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
+    zchunk_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| zchunk_diff.addArgs(args);
+    const zchunk_diff_step = b.step("run-zchunk-diff", "Validate zchunk files against optional zck/unzck tools");
+    zchunk_diff_step.dependOn(&zchunk_diff.step);
 
     const hadoop_lzo_index_diff = b.addSystemCommand(&.{ "python3", "tools/hadoop_lzo_index/diff.py", "--cli" });
     hadoop_lzo_index_diff.addArtifactArg(cli_exe);
@@ -4814,6 +4828,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(hadoop_lz4_diff_step);
     ci_smoke_step.dependOn(lz4_legacy_diff_step);
     ci_smoke_step.dependOn(lzfse_diff_step);
+    ci_smoke_step.dependOn(zchunk_diff_step);
     ci_smoke_step.dependOn(hadoop_lzo_index_diff_step);
     ci_smoke_step.dependOn(zip_diff_step);
     ci_smoke_step.dependOn(bzip2_diff_step);
