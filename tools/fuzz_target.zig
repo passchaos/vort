@@ -215,6 +215,39 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseRarArchive(data)) |archive| {
+        var iterator = archive.iterator();
+        while (try iterator.next()) |entry| {
+            if (entry.directory) continue;
+            if (archive.extractAllocLimited(allocator, entry, 1 << 20)) |decoded| {
+                allocator.free(decoded);
+            } else |err| switch (err) {
+                error.OutputLimitExceeded,
+                error.OutputTooSmall,
+                error.UnsupportedRarCompression,
+                error.UnsupportedRarEntry,
+                error.UnsupportedRarFeature,
+                error.EncryptedRarEntry,
+                error.SplitRarEntry,
+                error.InvalidRarArchive,
+                error.TruncatedFrame,
+                error.SizeMismatch,
+                error.ChecksumMismatch,
+                error.IntegerOverflow,
+                => {},
+                else => return err,
+            }
+        }
+    } else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidRarArchive,
+        error.EncryptedRarHeaders,
+        error.TruncatedFrame,
+        error.ChecksumMismatch,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.parseCabArchive(data)) |cabinet| {
         for (0..cabinet.folder_count) |folder_index| {
             if (vort.decodeCabFolderAllocLimited(allocator, cabinet, folder_index, 1 << 20)) |decoded| {
@@ -269,6 +302,7 @@ pub fn main(init: std.process.Init) !void {
         &.{ 0x1a, 0 },
         "ZOO 2.10 Archive.\x1a\x00\x00\xdc\xa7\xc4\xfd",
         "070701",
+        "Rar!\x1a\x07\x01\x00",
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
 

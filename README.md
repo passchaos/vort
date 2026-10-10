@@ -158,6 +158,12 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   bounded extraction, CRC byte sums, safe-path classification, GNU cpio
   bidirectional interoperability, and automatic composition with the same
   twelve raw/gzip/Bzip2/Brotli/compress/LZMA/XZ/LZ4/lzip/LZF/Zstd/LZOP modes;
+- dependency-free RAR4/RAR5 container parsing plus deterministic stored-file
+  and directory writing, with SFX discovery, RAR4/RAR5 header CRC validation,
+  payload CRC-32, UTF-8 RAR5 names, bounded extraction, explicit encrypted/
+  split/redirection/unknown-size errors, compressed-method classification,
+  and 7-Zip plus rars interoperability; proprietary RAR15/20/29/50 compressed
+  streams are recognized but deliberately rejected until their decoders land;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded
   extraction for Stored, MSZIP, 15–21 bit LZX, and 10–21 bit Quantum folders,
   including Stored/MSZIP, reference uncompressed-block LZX, and literal

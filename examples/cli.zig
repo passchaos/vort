@@ -3,6 +3,7 @@ const vort = @import("vort");
 const arj_cli = @import("cli/arj.zig");
 const arc_cli = @import("cli/arc.zig");
 const cpio_cli = @import("cli/cpio.zig");
+const rar_cli = @import("cli/rar.zig");
 const zoo_cli = @import("cli/zoo.zig");
 const compress_z_cli = @import("cli/compress_z.zig");
 const filters_cli = @import("cli/filters.zig");
@@ -245,6 +246,12 @@ pub fn main(init: std.process.Init) !void {
         try cpio_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-cpio-file")) {
         try cpio_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-rar-file")) {
+        try rar_cli.createFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-rar-file")) {
+        try rar_cli.listFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-rar-file")) {
+        try rar_cli.extractFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-file")) {
         try lzop_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-stored-file")) {
@@ -2192,6 +2199,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-cpio-file <path>       List newc/CRC/ODC/binary CPIO entries
         \\  extract-cpio-file <cpio> <entry> <out> [max_output]
         \\                              Extract a regular file or symlink target
+        \\  create-rar-file <out> <entry> <in> [rar4|rar5]
+        \\                              Create a deterministic stored RAR archive
+        \\  list-rar-file <path>        List RAR4/RAR5 entries and methods
+        \\  extract-rar-file <rar> <entry> <out> [max_output]
+        \\                              Extract a supported stored RAR entry
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
         \\                              Encode compressed-or-stored LZOP blocks
         \\  encode-lzop-stored-file <in> <out> [block_size] [adler32|crc32]

@@ -1094,6 +1094,23 @@ pub fn build(b: *std.Build) void {
     const cpio_diff_step = b.step("run-cpio-diff", "Validate CPIO header formats, metadata, and compression wrappers against optional GNU cpio");
     cpio_diff_step.dependOn(&cpio_diff.step);
 
+    const rar_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-rar-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/rar/writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const rar_diff = b.addSystemCommand(&.{ "python3", "tools/rar/diff.py", "--cli" });
+    rar_diff.addArtifactArg(cli_exe);
+    rar_diff.addArg("--writer");
+    rar_diff.addArtifactArg(rar_writer_probe_exe);
+    if (b.args) |args| rar_diff.addArgs(args);
+    const rar_diff_step = b.step("run-rar-diff", "Validate RAR4/RAR5 stored containers and compressed-entry rejection against optional 7-Zip and rars");
+    rar_diff_step.dependOn(&rar_diff.step);
+
     const lzop_diff = b.addSystemCommand(&.{ "python3", "tools/lzop/diff.py", "--cli" });
     lzop_diff.addArtifactArg(cli_exe);
     const lzop_diff_step = b.step("run-lzop-diff", "Validate LZO1X/LZOP encoding and decoding against optional lzop");
@@ -4675,6 +4692,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(arj_diff_step);
     ci_smoke_step.dependOn(arc_diff_step);
     ci_smoke_step.dependOn(cpio_diff_step);
+    ci_smoke_step.dependOn(rar_diff_step);
     ci_smoke_step.dependOn(lzop_diff_step);
     ci_smoke_step.dependOn(seven_zip_diff_step);
     ci_smoke_step.dependOn(tar_diff_step);
