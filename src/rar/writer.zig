@@ -190,7 +190,7 @@ fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!v
         .stored => if (options.filter != null or options.solid)
             return error.UnsupportedRarEncodeOptions,
         .rar29 => {
-            if (options.version != .rar4 or options.filter != null or options.solid)
+            if (options.version != .rar4 or options.filter != null)
                 return error.UnsupportedRarEncodeOptions;
             try rar29_encoder.validateOptions(.{
                 .dictionary_size = options.dictionary_size,
@@ -231,16 +231,25 @@ fn encodeRar4(
     options: EncodeOptions,
 ) !void {
     try output.appendSlice(allocator, archive.rar4_signature);
-    try appendRar4Main(allocator, output);
-    for (entries) |entry| try appendRar4File(allocator, output, entry, options);
+    try appendRar4Main(allocator, output, options.solid);
+    var encoder = rar29_encoder.Encoder.init(allocator, .{
+        .dictionary_size = options.dictionary_size,
+        .block_size = options.block_size,
+    });
+    defer encoder.deinit();
+    for (entries) |entry| try appendRar4File(allocator, output, entry, options, &encoder);
     try appendRar4ShortHeader(allocator, output, 0x7b, 0x4000);
 }
 
-fn appendRar4Main(allocator: std.mem.Allocator, output: *std.ArrayList(u8)) !void {
+fn appendRar4Main(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    solid: bool,
+) !void {
     const start = output.items.len;
     try output.appendNTimes(allocator, 0, 2);
     try output.append(allocator, 0x73);
-    try appendLe16(allocator, output, 0);
+    try appendLe16(allocator, output, if (solid) 0x0008 else 0);
     try appendLe16(allocator, output, 13);
     try appendLe16(allocator, output, 0);
     try appendLe32(allocator, output, 0);
@@ -266,13 +275,13 @@ fn appendRar4File(
     output: *std.ArrayList(u8),
     entry: EncodeEntry,
     options: EncodeOptions,
+    encoder: *rar29_encoder.Encoder,
 ) !void {
     const use_compression = entry.kind == .regular and options.compression == .rar29;
+    if (!use_compression) encoder.reset();
+    const solid_continuation = options.solid and encoder.canContinue();
     const compressed: ?[]u8 = if (use_compression)
-        try rar29_encoder.encodeAlloc(allocator, entry.data, .{
-            .dictionary_size = options.dictionary_size,
-            .block_size = options.block_size,
-        })
+        try encoder.encodeMemberAlloc(entry.data, solid_continuation)
     else
         null;
     defer if (compressed) |bytes| allocator.free(bytes);
@@ -286,12 +295,13 @@ fn appendRar4File(
     const start = output.items.len;
     try output.appendNTimes(allocator, 0, 2);
     try output.append(allocator, 0x74);
-    const flags: u16 = 0x8000 | if (entry.kind == .directory)
-        @as(u16, 0x00e0)
-    else if (use_compression)
-        try rar29DictionaryFlags(options.dictionary_size)
-    else
-        0;
+    const flags: u16 = 0x8000 | (if (solid_continuation) @as(u16, 0x0010) else 0) |
+        if (entry.kind == .directory)
+            @as(u16, 0x00e0)
+        else if (use_compression)
+            try rar29DictionaryFlags(options.dictionary_size)
+        else
+            0;
     try appendLe16(allocator, output, flags);
     try appendLe16(allocator, output, header_size);
     try appendLe32(allocator, output, packed_size);
@@ -612,14 +622,6 @@ test "RAR writer rejects compression and container mismatches" {
             .filter = .e8,
         }),
     );
-    try std.testing.expectError(
-        error.UnsupportedRarEncodeOptions,
-        encodeAlloc(std.testing.allocator, &entries, .{
-            .version = .rar4,
-            .compression = .rar29,
-            .solid = true,
-        }),
-    );
 }
 
 test "RAR29 writer stamps every supported dictionary window" {
@@ -648,6 +650,91 @@ test "RAR29 writer stamps every supported dictionary window" {
         const entry = try parsed.entryAt(0);
         try std.testing.expectEqual(@as(?usize, dictionary_size), entry.dictionary_size);
     }
+}
+
+test "RAR29 solid writer reuses history across members" {
+    const allocator = std.testing.allocator;
+    const payload = try allocator.alloc(u8, 64 * 1024);
+    defer allocator.free(payload);
+    var random = std.Random.DefaultPrng.init(0x72617232395f736f);
+    random.fill(payload);
+    const entries = [_]EncodeEntry{
+        .{ .name = "first.bin", .data = payload },
+        .{ .name = "second.bin", .data = payload },
+    };
+    const options = EncodeOptions{
+        .version = .rar4,
+        .compression = .rar29,
+        .dictionary_size = 128 * 1024,
+        .solid = true,
+    };
+    const encoded = try encodeAlloc(allocator, &entries, options);
+    defer allocator.free(encoded);
+    const parsed = try archive.parse(encoded);
+    try std.testing.expect(parsed.solid);
+    const first = try parsed.entryAt(0);
+    const second = try parsed.entryAt(1);
+    try std.testing.expect(!first.solid);
+    try std.testing.expect(second.solid);
+    try std.testing.expect(second.compressed_size < first.compressed_size / 4);
+    try std.testing.expectError(
+        error.UnsupportedRarFeature,
+        parsed.extractAlloc(allocator, second),
+    );
+
+    const decoded = try parsed.extractByNameAllocLimited(
+        allocator,
+        "second.bin",
+        payload.len,
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var session = parsed.extractSession(allocator, .{ .max_output_len = payload.len });
+    defer session.deinit();
+    const decoded_first = (try session.nextAlloc()) orelse return error.TestExpectedEqual;
+    defer allocator.free(decoded_first.data);
+    try std.testing.expectEqualSlices(u8, payload, decoded_first.data);
+    const decoded_second = (try session.nextAlloc()) orelse return error.TestExpectedEqual;
+    defer allocator.free(decoded_second.data);
+    try std.testing.expectEqualSlices(u8, payload, decoded_second.data);
+
+    const broken_entries = [_]EncodeEntry{
+        entries[0],
+        .{ .name = "folder", .kind = .directory },
+        entries[1],
+    };
+    const broken = try encodeAlloc(allocator, &broken_entries, options);
+    defer allocator.free(broken);
+    const broken_archive = try archive.parse(broken);
+    try std.testing.expect(!(try broken_archive.entryAt(2)).solid);
+
+    const empty_entries = [_]EncodeEntry{
+        entries[0],
+        .{ .name = "empty.bin" },
+        entries[1],
+    };
+    const with_empty = try encodeAlloc(allocator, &empty_entries, options);
+    defer allocator.free(with_empty);
+    const empty_archive = try archive.parse(with_empty);
+    try std.testing.expect((try empty_archive.entryAt(1)).solid);
+    try std.testing.expect((try empty_archive.entryAt(2)).solid);
+    const after_empty = try empty_archive.extractByNameAllocLimited(
+        allocator,
+        "second.bin",
+        payload.len,
+    );
+    defer allocator.free(after_empty);
+    try std.testing.expectEqualSlices(u8, payload, after_empty);
+
+    const leading_empty_entries = [_]EncodeEntry{
+        .{ .name = "empty.bin" },
+        entries[1],
+    };
+    const leading_empty = try encodeAlloc(allocator, &leading_empty_entries, options);
+    defer allocator.free(leading_empty);
+    const leading_empty_archive = try archive.parse(leading_empty);
+    try std.testing.expect(!(try leading_empty_archive.entryAt(1)).solid);
 }
 
 test "RAR29 archive extraction detects packed stream corruption" {

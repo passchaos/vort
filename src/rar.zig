@@ -40,6 +40,7 @@ pub const decodeRar29AllocLimited = rar29.decodeAllocLimited;
 pub const decodeRar29AllocWithOptions = rar29.decodeAllocWithOptions;
 pub const decodeRar29IntoWithOptions = rar29.decodeIntoWithOptions;
 pub const Rar29DecodeOptions = rar29.DecodeOptions;
+pub const Rar29Session = rar29.Session;
 pub const Rar29InitialMode = rar29.InitialMode;
 pub const inspectRar29InitialMode = rar29.initialMode;
 pub const decodeRar50Into = rar50.decodeInto;

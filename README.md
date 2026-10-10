@@ -161,19 +161,19 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free RAR4/RAR5 container parsing plus deterministic stored-file
   and directory writing, non-solid RAR15 and RAR20/26 decompression including
   adaptive/ST-mode, dynamic Huffman, multiblock, table reuse, long-history and
-  audio paths, ordinary non-solid RAR29 LZ with dynamic/low-distance tables and
+  audio paths, ordinary and solid RAR29 LZ with dynamic/low-distance tables and
   4 MiB history, plus allocator-backed PPMd Variant H with bounded model memory,
   escape literals and match tokens, all six standard RAR VM filters and a
   bounded generic VM interpreter, SFX discovery, both header CRC variants,
   payload CRC-32,
   UTF-8 RAR5 names, RAR50 LZ and Delta/E8/E8E9/ARM filters, sequential solid
   sessions with pre-filter history, bounded extraction, explicit encrypted/
-  redirection/unknown-size and unsupported legacy-solid errors, ordered RAR5
+  redirection/unknown-size and unsupported RAR15/RAR20-solid errors, ordered RAR5
   multi-volume reconstruction for stored/compressed/solid split entries, and
   deterministic RAR29 compatibility LZ writing with canonical tables,
   table-length RLE, multiblock output, 64 KiB through 4 MiB declared
-  dictionaries, and 7-Zip interoperability, plus deterministic RAR50 LZ
-  writing with canonical tables, multiblock output, and
+  dictionaries, cross-member solid history, and 7-Zip interoperability, plus
+  deterministic RAR50 LZ writing with canonical tables, multiblock output, and
   Delta/E8/E8E9/ARM filters plus cross-member solid history and deterministic
   stored/compressed/solid volume splitting, with 7-Zip and rars interoperability;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded

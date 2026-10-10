@@ -3,6 +3,8 @@ const core = @import("../core.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error || error{
     InvalidRar29EncodeOptions,
+    MissingRar29SolidEncoderState,
+    Rar29EncoderPoisoned,
 };
 
 pub const Options = struct {
@@ -82,32 +84,96 @@ pub fn encodeAlloc(
     input: []const u8,
     options: Options,
 ) Error![]u8 {
-    try validateOptions(options);
-    var output: std.ArrayList(u8) = .empty;
-    errdefer output.deinit(allocator);
-    var state = MatchState{};
-
-    if (input.len == 0) {
-        try encodeBlock(allocator, &output, "", &state, options, true, input);
-    } else {
-        var start: usize = 0;
-        while (start < input.len) {
-            const end = @min(input.len, start +| options.block_size);
-            const history_start = start - @min(start, options.dictionary_size);
-            try encodeBlock(
-                allocator,
-                &output,
-                input[history_start..start],
-                &state,
-                options,
-                end == input.len,
-                input[start..end],
-            );
-            start = end;
-        }
-    }
-    return output.toOwnedSlice(allocator);
+    var encoder = Encoder.init(allocator, options);
+    defer encoder.deinit();
+    return encoder.encodeMemberAlloc(input, false);
 }
+
+pub const Encoder = struct {
+    allocator: std.mem.Allocator,
+    options: Options,
+    state: MatchState = .{},
+    history: std.ArrayList(u8) = .empty,
+    initialized: bool = false,
+    poisoned: bool = false,
+
+    pub fn init(allocator: std.mem.Allocator, options: Options) Encoder {
+        return .{ .allocator = allocator, .options = options };
+    }
+
+    pub fn deinit(self: *Encoder) void {
+        self.history.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *Encoder) void {
+        self.state = .{};
+        self.history.clearRetainingCapacity();
+        self.initialized = false;
+        self.poisoned = false;
+    }
+
+    pub fn canContinue(self: *const Encoder) bool {
+        return self.initialized and !self.poisoned;
+    }
+
+    pub fn encodeMemberAlloc(self: *Encoder, input: []const u8, solid: bool) Error![]u8 {
+        try validateOptions(self.options);
+        if (!solid)
+            self.reset()
+        else {
+            if (self.poisoned) return error.Rar29EncoderPoisoned;
+            if (!self.initialized) return error.MissingRar29SolidEncoderState;
+        }
+        errdefer self.poisoned = true;
+
+        var output: std.ArrayList(u8) = .empty;
+        errdefer output.deinit(self.allocator);
+        if (input.len == 0) {
+            try encodeBlock(
+                self.allocator,
+                &output,
+                self.history.items,
+                &self.state,
+                self.options,
+                true,
+                input,
+            );
+        } else {
+            var start: usize = 0;
+            while (start < input.len) {
+                const end = @min(input.len, start +| self.options.block_size);
+                const block = input[start..end];
+                try encodeBlock(
+                    self.allocator,
+                    &output,
+                    self.history.items,
+                    &self.state,
+                    self.options,
+                    end == input.len,
+                    block,
+                );
+                try self.history.appendSlice(self.allocator, block);
+                self.trimHistory();
+                start = end;
+            }
+            self.initialized = true;
+        }
+        const owned = try output.toOwnedSlice(self.allocator);
+        self.poisoned = false;
+        return owned;
+    }
+
+    fn trimHistory(self: *Encoder) void {
+        if (self.history.items.len <= self.options.dictionary_size) return;
+        const discard = self.history.items.len - self.options.dictionary_size;
+        @memmove(
+            self.history.items[0..self.options.dictionary_size],
+            self.history.items[discard..],
+        );
+        self.history.items.len = self.options.dictionary_size;
+    }
+};
 
 pub fn validateOptions(options: Options) Error!void {
     if (options.block_size == 0 or options.block_size > max_block_size)
@@ -468,6 +534,45 @@ test "RAR29 encoder round trips literals matches repeats and multiple blocks" {
         try std.testing.expectEqualSlices(u8, input, decoded);
         try std.testing.expectEqual(decoder.InitialMode.lz, try decoder.initialMode(encoded));
     }
+}
+
+test "RAR29 solid encoder and decoder reuse cross-member history" {
+    const decoder = @import("rar29.zig");
+    const allocator = std.testing.allocator;
+    const first = try allocator.alloc(u8, 64 * 1024);
+    defer allocator.free(first);
+    var random = std.Random.DefaultPrng.init(0x736f6c69645f3239);
+    random.fill(first);
+    const second = first[16 * 1024 .. 48 * 1024];
+    const options = Options{ .dictionary_size = 128 * 1024, .block_size = 4096 };
+
+    const independent = try encodeAlloc(allocator, second, options);
+    defer allocator.free(independent);
+    var encoder = Encoder.init(allocator, options);
+    defer encoder.deinit();
+    const first_packed = try encoder.encodeMemberAlloc(first, false);
+    defer allocator.free(first_packed);
+    const second_packed = try encoder.encodeMemberAlloc(second, true);
+    defer allocator.free(second_packed);
+    try std.testing.expect(second_packed.len < independent.len);
+
+    var session = decoder.Session.init(allocator, .{});
+    defer session.deinit();
+    const first_decoded = try allocator.alloc(u8, first.len);
+    defer allocator.free(first_decoded);
+    try session.decodeMemberInto(first_packed, first_decoded, options.dictionary_size, false);
+    try std.testing.expectEqualSlices(u8, first, first_decoded);
+    const second_decoded = try allocator.alloc(u8, second.len);
+    defer allocator.free(second_decoded);
+    try session.decodeMemberInto(second_packed, second_decoded, options.dictionary_size, true);
+    try std.testing.expectEqualSlices(u8, second, second_decoded);
+
+    var missing = decoder.Session.init(allocator, .{});
+    defer missing.deinit();
+    try std.testing.expectError(
+        error.MissingRar29SolidState,
+        missing.decodeMemberInto(second_packed, second_decoded, options.dictionary_size, true),
+    );
 }
 
 test "RAR29 encoder validates dictionary and block sizes" {

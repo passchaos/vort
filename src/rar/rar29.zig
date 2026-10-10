@@ -7,6 +7,8 @@ pub const Error = core.Error || ppmd_h.Error || rar29_vm.Error || error{
     InvalidRar29Stream,
     UnsupportedRar29Ppmd,
     UnsupportedRar29Filter,
+    MissingRar29SolidState,
+    Rar29DecoderPoisoned,
 };
 
 pub const default_max_ppmd_memory: usize = 256 * 1024 * 1024;
@@ -163,6 +165,11 @@ const Decoder = struct {
     }
 
     fn decode(self: *Decoder) Error!void {
+        try self.decodeRaw();
+        try self.applyFilters(0);
+    }
+
+    fn decodeRaw(self: *Decoder) Error!void {
         while (self.output_offset < self.output.len) {
             if (!self.in_block) {
                 try self.readTables();
@@ -174,7 +181,11 @@ const Decoder = struct {
             }
         }
         try self.finishMember();
-        if (self.vm) |*state| try state.apply(self.output[0..self.output_offset]);
+    }
+
+    fn applyFilters(self: *Decoder, member_start: usize) Error!void {
+        if (self.vm) |*state|
+            try state.applyMember(self.output[0..self.output_offset], member_start);
     }
 
     fn readTables(self: *Decoder) Error!void {
@@ -499,6 +510,128 @@ const Decoder = struct {
         self.old_offsets[0] = value;
     }
 };
+
+/// Reusable RAR29 state for sequential solid and non-solid members.
+///
+/// RAR29 filters transform bytes after LZ/PPMd decoding, while the solid
+/// dictionary retains the bytes before that transform. The session therefore
+/// captures raw member bytes before applying pending VM filters.
+pub const Session = struct {
+    allocator: std.mem.Allocator,
+    options: DecodeOptions,
+    decoder: Decoder,
+    history: std.ArrayList(u8) = .empty,
+    initialized: bool = false,
+    poisoned: bool = false,
+
+    pub fn init(allocator: std.mem.Allocator, options: DecodeOptions) Session {
+        return .{
+            .allocator = allocator,
+            .options = options,
+            .decoder = newDecoder(allocator, options),
+        };
+    }
+
+    pub fn deinit(self: *Session) void {
+        self.decoder.deinit();
+        self.history.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *Session) void {
+        self.decoder.deinit();
+        self.decoder = newDecoder(self.allocator, self.options);
+        self.history.clearRetainingCapacity();
+        self.initialized = false;
+        self.poisoned = false;
+    }
+
+    pub fn canContinue(self: *const Session) bool {
+        return self.initialized and !self.poisoned;
+    }
+
+    pub fn decodeMemberInto(
+        self: *Session,
+        input: []const u8,
+        output: []u8,
+        dictionary_size: usize,
+        solid: bool,
+    ) Error!void {
+        if (output.len > self.options.max_output_len) return error.OutputLimitExceeded;
+        if (!validDictionarySize(dictionary_size)) return error.InvalidRar29Stream;
+        if (!solid)
+            self.reset()
+        else {
+            if (self.poisoned) return error.Rar29DecoderPoisoned;
+            if (!self.initialized) return error.MissingRar29SolidState;
+        }
+        errdefer self.poisoned = true;
+        self.trimHistory(dictionary_size);
+
+        const combined_len = std.math.add(usize, self.history.items.len, output.len) catch
+            return error.IntegerOverflow;
+        const combined = try self.allocator.alloc(u8, combined_len);
+        defer self.allocator.free(combined);
+        @memcpy(combined[0..self.history.items.len], self.history.items);
+        const member_start = self.history.items.len;
+
+        self.decoder.bits = .{ .input = input };
+        self.decoder.output = combined;
+        self.decoder.output_offset = member_start;
+        defer {
+            self.decoder.bits = .{ .input = "" };
+            self.decoder.output = undefined;
+            self.decoder.output_offset = 0;
+        }
+        if (output.len == 0 and input.len != 0 and !self.decoder.in_block) {
+            try self.decoder.readTables();
+            self.decoder.in_block = true;
+        }
+        try self.decoder.decodeRaw();
+        if (self.decoder.output_offset != combined.len) return error.SizeMismatch;
+
+        try self.history.appendSlice(self.allocator, combined[member_start..]);
+        self.trimHistory(dictionary_size);
+        try self.decoder.applyFilters(member_start);
+        @memcpy(output, combined[member_start..]);
+        if (input.len != 0) self.initialized = true;
+        self.poisoned = false;
+    }
+
+    fn trimHistory(self: *Session, dictionary_size: usize) void {
+        if (self.history.items.len <= dictionary_size) return;
+        const discard = self.history.items.len - dictionary_size;
+        @memmove(
+            self.history.items[0..dictionary_size],
+            self.history.items[discard..],
+        );
+        self.history.items.len = dictionary_size;
+    }
+};
+
+fn newDecoder(allocator: std.mem.Allocator, options: DecodeOptions) Decoder {
+    return .{
+        .bits = .{ .input = "" },
+        .output = undefined,
+        .allocator = allocator,
+        .max_ppmd_memory = options.max_ppmd_memory,
+        .max_vm_instructions = options.max_vm_instructions,
+    };
+}
+
+fn validDictionarySize(dictionary_size: usize) bool {
+    return switch (dictionary_size) {
+        64 * 1024,
+        128 * 1024,
+        256 * 1024,
+        512 * 1024,
+        1024 * 1024,
+        2 * 1024 * 1024,
+        4 * 1024 * 1024,
+        => true,
+        else => false,
+    };
+}
 
 pub fn decodeInto(input: []const u8, output: []u8) Error!void {
     var decoder = Decoder{ .bits = .{ .input = input }, .output = output };

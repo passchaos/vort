@@ -1,13 +1,15 @@
 # RAR archive support
 
-Vort provides a dependency-free pure Zig parser and deterministic stored-data
-writer for the two RAR container generations most often encountered today:
+Vort provides a dependency-free pure Zig parser and deterministic
+stored/compressed writer for the two RAR container generations most often
+encountered today:
 
 - the `Rar!\x1a\x07\x00` family used by RAR 1.5 through 4.x;
 - the VINT-based `Rar!\x1a\x07\x01\x00` family used by RAR 5 and later.
 
-In addition to stored data, Vort decodes non-solid RAR 1.5, RAR 2.0/2.6, and
-ordinary RAR 2.9/3.x LZ and PPMd Variant H compressed members. The RAR15 path
+In addition to stored data, Vort decodes non-solid RAR 1.5 and RAR 2.0/2.6,
+plus ordinary and solid RAR 2.9/3.x LZ and PPMd Variant H compressed members.
+The RAR15 path
 implements the historical adaptive
 literal/short/long/old-distance state machine and ST mode over a 64 KiB
 history. The RAR20 path implements dynamic canonical Huffman tables, table
@@ -58,8 +60,8 @@ declared dictionary bounds match validation but the dictionary is not allocated
 eagerly.
 `Archive.extractSession` exposes explicit sequential decoding and returns owned
 entry data from `nextAlloc`. `extractByNameAllocLimited` and
-`extractByNameAllocWithOptions` automatically replay preceding RAR50 members
-when the requested entry is a solid continuation. Direct random-access
+`extractByNameAllocWithOptions` automatically replays preceding RAR29 or RAR50
+members when the requested entry is a solid continuation. Direct random-access
 `extractAlloc` remains an explicit `UnsupportedRarFeature` for such an entry,
 because it has no preceding state.
 `parseRarVolumeSetAlloc` accepts an ordered slice of borrowed volume bytes. It
@@ -70,7 +72,7 @@ session concatenates packed fragments before decoding and carries RAR50 solid
 state across logical entries and volume boundaries.
 Directories, unsupported compressed data, encrypted entries, encrypted
 headers, RAR5 redirections, unknown-size members, incomplete split-volume
-members, and unsupported RAR20/RAR29 solid continuations return specific
+members, and unsupported RAR20 solid continuations return specific
 errors. This prevents an unsupported or incomplete member from being copied as
 if it were stored data.
 
@@ -89,14 +91,18 @@ Blocks default to 64 KiB, and the declared dictionary can be 64 KiB, 128 KiB,
 256 KiB, 512 KiB, 1 MiB, 2 MiB, or 4 MiB. RAR5 regular files can select
 `.compression = .rar50`; its portable baseline uses the corresponding RAR50
 wire format. Directories remain stored in both generations.
+`.solid = true` on RAR29 retains the 4 MiB-or-smaller LZ window and match state
+across consecutive compressed members, sets the RAR4 main/file solid flags,
+and supports sequential extraction plus by-name replay. Stored members and
+directories terminate the RAR29 compression chain.
 RAR50 output can additionally select a whole-member Delta, E8, E8E9, or ARM
 filter. The writer applies the forward transform independently to each legal
 filter-sized block, writes native filter records, and uses absolute member
 offsets for executable transforms.
-`.solid = true` keeps LZ history and repeat-distance state across consecutive
-compressed members and writes both the archive and per-file continuation
-flags. A stored file or directory ends the current compression chain, so the
-next compressed member starts non-solid. Filtered solid writing is rejected
+`.solid = true` on RAR50 keeps LZ history and repeat-distance state across
+consecutive compressed members and writes both the archive and per-file
+continuation flags. A stored file or directory ends the current compression
+chain, so the next compressed member starts non-solid. Filtered solid writing is rejected
 until cross-member transformed-history semantics are exposed explicitly.
 `encodeRarVolumesAlloc` splits logical RAR5 members at an explicit maximum
 payload-per-volume budget and returns an owned `EncodedVolumes` collection. It
@@ -110,7 +116,7 @@ RAR4 end blocks, and RAR5 end headers.
 RAR4 output accepts safe ASCII names and converts `/` to the traditional `\`
 separator. RAR5 output accepts validated UTF-8 names. Both writers reject NUL,
 absolute, empty-component, dot, and parent-component paths. RAR29 compression
-is currently non-solid and unfiltered; unsupported combinations are rejected
+is currently unfiltered; unsupported filter combinations are rejected
 instead of being mislabeled. RAR50 dictionary sizes must be power-of-two
 multiples of 128 KiB. Encryption, recovery records, comments, and redirections
 remain future writer work.
@@ -146,7 +152,7 @@ reference helper, verifies that real compressed reference entries are
 classified correctly, checks SFX parsing and both CRC layers, exercises RAR2
 and RAR5 split-volume fixtures, and compares RAR15/RAR20 text, multiblock,
 keep-table, long-history and audio plus ordinary RAR29 LZ and PPMd literal,
-escape, match, mixed-member, and first-solid-member outputs byte-for-byte with
+escape, match, mixed-member, and solid-member outputs byte-for-byte with
 7-Zip. It also covers all six standard RAR VM filters, LZ and PPMd filter
 records, 64-channel Delta, program reuse and unusual encoded integers. A
 checksum-valid generic-program mutation is compared with its canonical
@@ -154,8 +160,8 @@ standard-program output. RAR5 checks cover compression methods 1, 3, and 5,
 all four native filters, generated multi-block input, malformed first-block
 table reuse, and the legacy out-of-window zero-fill behavior. Solid
 coverage includes five archives and nineteen members, including Quick Open
-metadata and a seven-member history chain. RAR20/RAR29 solid continuations
-retain their explicit unsupported error:
+metadata and a seven-member history chain. RAR20 solid continuations retain
+their explicit unsupported error:
 
 ```sh
 zig build run-rar-diff -- \
@@ -172,6 +178,6 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 \
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-The next RAR4 writer stages are RAR29 solid state, PPMd encoding, VM filters,
-and encrypted payloads. Encryption should be added on top of the existing
-codecs rather than approximated in the stored path.
+The next RAR4 writer stages are PPMd encoding, VM filters, and encrypted
+payloads. Encryption should be added on top of the existing codecs rather than
+approximated in the stored path.

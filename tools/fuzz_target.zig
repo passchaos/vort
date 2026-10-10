@@ -252,7 +252,7 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
                 else => return err,
             }
         }
-        if (archive.version == .rar5) {
+        {
             var session = archive.extractSession(allocator, .{
                 .max_output_len = 1 << 20,
                 .max_ppmd_memory = 4 << 20,
@@ -277,7 +277,9 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
                     error.InvalidRar29Stream,
                     error.InvalidRar50Stream,
                     error.InvalidRarPpmd,
+                    error.MissingRar29SolidState,
                     error.MissingRar50SolidState,
+                    error.Rar29DecoderPoisoned,
                     error.RarPpmdMemoryLimitExceeded,
                     error.Rar50DictionaryLimitExceeded,
                     error.UnsupportedRar29Ppmd,

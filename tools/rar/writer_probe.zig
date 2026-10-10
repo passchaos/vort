@@ -10,15 +10,16 @@ pub fn main(init: std.process.Init) !void {
     const version: vort.RarVersion = if (std.mem.eql(u8, version_text, "rar4")) .rar4 else .rar5;
     const mode = args.next() orelse "stored";
     if (std.mem.eql(u8, mode, "solid") or std.mem.eql(u8, mode, "volumes")) {
-        if (version != .rar5) return error.UnsupportedRarVersion;
+        if (std.mem.eql(u8, mode, "volumes") and version != .rar5)
+            return error.UnsupportedRarVersion;
         const payload = "solid history payload alpha beta gamma\n" ** 128;
         const solid_entries = [_]vort.RarEncodeEntry{
             .{ .name = "first.txt", .data = payload },
             .{ .name = "second.txt", .data = payload },
         };
         const options = vort.RarEncodeOptions{
-            .version = .rar5,
-            .compression = .rar50,
+            .version = version,
+            .compression = if (version == .rar4) .rar29 else .rar50,
             .solid = true,
         };
         if (std.mem.eql(u8, mode, "solid")) {

@@ -174,6 +174,12 @@ pub const State = struct {
     }
 
     pub fn apply(self: *State, output: []u8) Error!void {
+        return self.applyMember(output, 0);
+    }
+
+    pub fn applyMember(self: *State, output: []u8, member_start: usize) Error!void {
+        if (member_start > output.len) return error.InvalidRar29Stream;
+        defer self.clearFilters();
         var filtered: std.ArrayList(u8) = .empty;
         defer filtered.deinit(self.allocator);
         var raw_position: usize = 0;
@@ -195,7 +201,8 @@ pub const State = struct {
                 try self.allocator.dupe(u8, output[first_filter.start..raw_end]),
             );
             defer block.deinit(self.allocator);
-            const file_offset = filtered.items.len;
+            if (filtered.items.len < member_start) return error.InvalidRar29Stream;
+            const file_offset = filtered.items.len - member_start;
             const chain_start = first_filter.start;
             while (true) {
                 const filter = &self.filters.items[filter_index];
@@ -574,4 +581,26 @@ test "RAR29 filter scheduler chains records covering one block" {
     var bytes = [_]u8{ 255, 255 };
     try state.apply(&bytes);
     try std.testing.expectEqualSlices(u8, &.{ 255, 253 }, &bytes);
+}
+
+test "RAR29 solid VM filter offsets are relative to the current member" {
+    var state = State.init(std.testing.allocator, 1000);
+    defer state.deinit();
+    try state.programs.append(std.testing.allocator, .{
+        .kind = .{ .standard = .e8 },
+        .block_size = 6,
+    });
+    try state.filters.append(std.testing.allocator, .{
+        .program = 0,
+        .start = 8,
+        .size = 6,
+        .regs = @splat(0),
+    });
+    var bytes = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8, 0xe8, 0x10, 0, 0, 0, 0 };
+    var expected = bytes[8..].*;
+    decodeE8E9(&expected, 0, false);
+    try state.applyMember(&bytes, 8);
+    try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3, 4, 5, 6, 7, 8 }, bytes[0..8]);
+    try std.testing.expectEqualSlices(u8, &expected, bytes[8..]);
+    try std.testing.expectEqual(@as(usize, 0), state.filters.items.len);
 }

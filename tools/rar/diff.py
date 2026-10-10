@@ -228,31 +228,46 @@ def main() -> None:
                 if seven_zip is not None:
                     run(seven_zip, "t", str(archive))
 
-            solid_archive = temp / "vort-rar50-solid.rar"
-            solid_output = temp / "vort-rar50-solid.out"
-            run(args.writer, str(solid_archive), "rar5", "solid")
-            solid_listing = run(args.cli, "list-rar-file", str(solid_archive)).stdout
-            if "solid=true" not in solid_listing or "name=second.txt" not in solid_listing:
-                raise AssertionError(f"Vort solid writer metadata mismatch: {solid_listing}")
-            run(
-                args.cli,
-                "extract-rar-file",
-                str(solid_archive),
-                "second.txt",
-                str(solid_output),
-                str(1024 * 1024),
-            )
             expected_solid = b"solid history payload alpha beta gamma\n" * 128
-            if solid_output.read_bytes() != expected_solid:
-                raise AssertionError("Vort failed its own solid RAR50 output")
-            writer_solid += 1
-            if seven_zip is not None:
-                solid_reference = temp / "vort-rar50-solid-reference"
-                solid_reference.mkdir()
-                run(seven_zip, "x", "-y", f"-o{solid_reference}", str(solid_archive))
-                if (solid_reference / "second.txt").read_bytes() != expected_solid:
-                    raise AssertionError("7-Zip rejected Vort solid RAR50 output")
-                writer_solid_external += 1
+            for version, compression in (("rar4", "rar29"), ("rar5", "rar50")):
+                solid_archive = temp / f"vort-{compression}-solid.rar"
+                solid_output = temp / f"vort-{compression}-solid.out"
+                run(args.writer, str(solid_archive), version, "solid")
+                solid_listing = run(args.cli, "list-rar-file", str(solid_archive)).stdout
+                if (
+                    "solid=true" not in solid_listing
+                    or "name=second.txt" not in solid_listing
+                    or f"method={compression}" not in solid_listing
+                ):
+                    raise AssertionError(
+                        f"Vort {compression} solid writer metadata mismatch: {solid_listing}"
+                    )
+                run(
+                    args.cli,
+                    "extract-rar-file",
+                    str(solid_archive),
+                    "second.txt",
+                    str(solid_output),
+                    str(1024 * 1024),
+                )
+                if solid_output.read_bytes() != expected_solid:
+                    raise AssertionError(f"Vort failed its own solid {compression} output")
+                writer_solid += 1
+                if seven_zip is not None:
+                    solid_reference = temp / f"vort-{compression}-solid-reference"
+                    solid_reference.mkdir()
+                    run(
+                        seven_zip,
+                        "x",
+                        "-y",
+                        f"-o{solid_reference}",
+                        str(solid_archive),
+                    )
+                    if (solid_reference / "second.txt").read_bytes() != expected_solid:
+                        raise AssertionError(
+                            f"7-Zip rejected Vort solid {compression} output"
+                        )
+                    writer_solid_external += 1
 
             volume_prefix = temp / "vort-rar50-volume"
             volume_output = temp / "vort-rar50-volume.out"
@@ -427,30 +442,9 @@ def main() -> None:
                 seven_zip,
                 solid_ppmd,
                 temp,
-                "rar29-ppmd-solid-first",
+                "rar29-ppmd-solid",
                 method="rar29",
-                solid=False,
             )
-            solid_ppmd_listing = run(args.cli, "list-rar-file", str(solid_ppmd)).stdout
-            solid_ppmd_name = next(
-                line.split(" name=", 1)[1]
-                for line in solid_ppmd_listing.splitlines()
-                if line.startswith("index=")
-                and "method=rar29" in line
-                and "solid=true" in line
-            )
-            failed = run(
-                args.cli,
-                "extract-rar-file",
-                str(solid_ppmd),
-                solid_ppmd_name,
-                str(temp / "solid-ppmd-continuation.out"),
-                check=False,
-            )
-            if failed.returncode == 0 or "UnsupportedRarFeature" not in failed.stderr:
-                raise AssertionError(
-                    "Vort accepted a solid RAR29 PPMd continuation without session state"
-                )
 
             vm_archives = (
                 args.legacy_fixtures / "rar300" / "rarvm_x86_e8_rar300.rar",
