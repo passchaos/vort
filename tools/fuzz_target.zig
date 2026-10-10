@@ -215,6 +215,42 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseArArchive(data)) |archive| {
+        var iterator_value = archive.iterator();
+        while (try iterator_value.next()) |entry| {
+            if (archive.extractAllocLimited(allocator, entry, 1 << 20)) |decoded| {
+                allocator.free(decoded);
+            } else |err| switch (err) {
+                error.OutputLimitExceeded,
+                error.InvalidArArchive,
+                error.TruncatedFrame,
+                error.IntegerOverflow,
+                => {},
+                else => return err,
+            }
+        }
+    } else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidArArchive,
+        error.UnsupportedArFeature,
+        error.TruncatedFrame,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
+    if (vort.parseDebPackage(data)) |_| {} else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidArArchive,
+        error.UnsupportedArFeature,
+        error.InvalidDebPackage,
+        error.MissingDebControlArchive,
+        error.MissingDebDataArchive,
+        error.UnsupportedDebCompression,
+        error.TruncatedFrame,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.parseRarArchive(data)) |archive| {
         var iterator = archive.iterator();
         while (try iterator.next()) |entry| {
@@ -371,6 +407,7 @@ pub fn main(init: std.process.Init) !void {
         &.{ 0x1a, 0 },
         "ZOO 2.10 Archive.\x1a\x00\x00\xdc\xa7\xc4\xfd",
         "070701",
+        "!<arch>\n",
         "Rar!\x1a\x07\x01\x00",
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);

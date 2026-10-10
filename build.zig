@@ -128,6 +128,14 @@ pub fn build(b: *std.Build) void {
     const run_zstd_huffman_x2_tests = b.addRunArtifact(zstd_huffman_x2_tests);
     const zstd_huffman_x2_test_step = b.step("test-zstd-huffman-x2", "Run focused wide Huffman X2 correctness tests");
     zstd_huffman_x2_test_step.dependOn(&run_zstd_huffman_x2_tests.step);
+    const ar_deb_tests = b.addTest(.{
+        .name = "vort-ar-deb-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "ar ", "Debian package" },
+    });
+    const run_ar_deb_tests = b.addRunArtifact(ar_deb_tests);
+    const ar_deb_test_step = b.step("test-ar-deb", "Run focused Unix ar and Debian package tests");
+    ar_deb_test_step.dependOn(&run_ar_deb_tests.step);
 
     const test_step = b.step("test", "Run vort unit tests");
     test_step.dependOn(&run_tests.step);
@@ -1064,6 +1072,29 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lha_diff.addArgs(args);
     const lha_diff_step = b.step("run-lha-diff", "Validate LHA level 0/1/2 and common LH/LArc methods against optional lhasa");
     lha_diff_step.dependOn(&lha_diff.step);
+
+    const ar_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-ar-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/ar/writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const ar_diff = b.addSystemCommand(&.{ "python3", "tools/ar/diff.py", "--cli" });
+    ar_diff.addArtifactArg(cli_exe);
+    ar_diff.addArg("--writer");
+    ar_diff.addArtifactArg(ar_writer_probe_exe);
+    if (b.args) |args| ar_diff.addArgs(args);
+    const ar_diff_step = b.step("run-ar-diff", "Validate GNU/BSD Unix ar reading and writing against optional GNU ar");
+    ar_diff_step.dependOn(&ar_diff.step);
+
+    const deb_diff = b.addSystemCommand(&.{ "python3", "tools/deb/diff.py", "--cli" });
+    deb_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| deb_diff.addArgs(args);
+    const deb_diff_step = b.step("run-deb-diff", "Validate Debian binary package reading and writing against optional dpkg-deb");
+    deb_diff_step.dependOn(&deb_diff.step);
 
     const arj_diff = b.addSystemCommand(&.{ "python3", "tools/arj/diff.py", "--cli" });
     arj_diff.addArtifactArg(cli_exe);
@@ -4689,6 +4720,8 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(lzip_diff_step);
     ci_smoke_step.dependOn(lzf_diff_step);
     ci_smoke_step.dependOn(lha_diff_step);
+    ci_smoke_step.dependOn(ar_diff_step);
+    ci_smoke_step.dependOn(deb_diff_step);
     ci_smoke_step.dependOn(arj_diff_step);
     ci_smoke_step.dependOn(arc_diff_step);
     ci_smoke_step.dependOn(cpio_diff_step);

@@ -120,6 +120,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   level-0 writing with stored, LH1, LH4, LH5, LH6, LH7, LZ5, LZS, and directory
   entries, chained filename/path and common-CRC extended headers, payload CRC-16,
   bounded extraction, adaptive/fixed Huffman models, and legacy LArc histories;
+- dependency-free Unix `ar` reading/writing with traditional, GNU string-table,
+  and BSD inline long names, bounded extraction, explicit thin-archive
+  rejection, plus Debian binary package parsing/writing with validated
+  `debian-binary`, control/data TAR members, and none/gzip/Bzip2/LZMA/XZ/Zstd
+  compression, validated bidirectionally with GNU `ar` and `dpkg-deb`;
 - dependency-free ARJ/SFX reading and deterministic writing with CRC-validated
   main/local/extended headers, stored and methods 1–4, no-data and directory
   entries, bounded extraction, encrypted/multi-volume rejection, and external

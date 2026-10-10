@@ -1,8 +1,10 @@
 const std = @import("std");
 const vort = @import("vort");
+const ar_cli = @import("cli/ar.zig");
 const arj_cli = @import("cli/arj.zig");
 const arc_cli = @import("cli/arc.zig");
 const cpio_cli = @import("cli/cpio.zig");
+const deb_cli = @import("cli/deb.zig");
 const rar_cli = @import("cli/rar.zig");
 const zoo_cli = @import("cli/zoo.zig");
 const compress_z_cli = @import("cli/compress_z.zig");
@@ -222,6 +224,18 @@ pub fn main(init: std.process.Init) !void {
         try lha_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-lha-file")) {
         try lha_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-ar-file")) {
+        try ar_cli.createFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-ar-file")) {
+        try ar_cli.listFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-ar-file")) {
+        try ar_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-deb-file")) {
+        try deb_cli.createFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-deb-file")) {
+        try deb_cli.listFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-deb-file")) {
+        try deb_cli.extractFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "create-arj-file")) {
         try arj_cli.createFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-arj-file")) {
@@ -2183,6 +2197,16 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-lha-file <path>        List LHA level-0/1/2/3 and SFX entries
         \\  extract-lha-file <lha> <entry> <out> [max_output]
         \\                              Extract common stored/LH/LArc LHA data
+        \\  create-ar-file <out> <entry> <in>
+        \\                              Create a deterministic Unix ar archive
+        \\  list-ar-file <path>         List GNU/BSD Unix ar members
+        \\  extract-ar-file <ar> <entry> <out> [max_output]
+        \\                              Extract a bounded Unix ar member
+        \\  create-deb-file <out> <package> <version> <entry> <in> [none|gzip|bzip2|lzma|xz|zstd]
+        \\                              Create a deterministic Debian binary package
+        \\  list-deb-file <path>        List Debian control/data archive metadata
+        \\  extract-deb-file <deb> <entry> <out> [max_output]
+        \\                              Extract a bounded Debian data member
         \\  create-arj-file <out> <entry> <in> [stored|method1|method2|method3|method4]
         \\                              Create a deterministic ARJ archive
         \\  list-arj-file <path>        List ARJ entries and methods

@@ -27,6 +27,8 @@ pub const xz = @import("xz.zig");
 pub const lzma = @import("lzma.zig");
 pub const tar = @import("tar.zig");
 pub const cpio = @import("cpio.zig");
+pub const ar = @import("ar.zig");
+pub const deb = @import("deb.zig");
 pub const rar = @import("rar.zig");
 pub const compress_z = @import("compress_z.zig");
 pub const lzip = @import("lzip.zig");
@@ -347,6 +349,26 @@ pub const encodeCompressedCpioAlloc = cpio.encodeCompressedAlloc;
 pub const encodeCompressedCpioAppend = cpio.encodeCompressedAppend;
 pub const decodeCompressedCpioAlloc = cpio.decodeCompressedAlloc;
 pub const decodeAutoCpioAlloc = cpio.decodeAutoAlloc;
+
+pub const ArError = ar.Error;
+pub const ArEntry = ar.Entry;
+pub const ArArchive = ar.Archive;
+pub const ArIterator = ar.Iterator;
+pub const ArEncodeEntry = ar.EncodeEntry;
+pub const parseArArchive = ar.parse;
+pub const encodeArAlloc = ar.encodeAlloc;
+pub const encodeArAppend = ar.encodeAppend;
+pub const encodeArInto = ar.encodeInto;
+pub const isSafeArPath = ar.isSafePath;
+
+pub const DebError = deb.Error;
+pub const DebCompression = deb.Compression;
+pub const DebPackage = deb.Package;
+pub const DebEncodeOptions = deb.EncodeOptions;
+pub const parseDebPackage = deb.parse;
+pub const encodeDebAlloc = deb.encodeAlloc;
+pub const encodeDebAppend = deb.encodeAppend;
+pub const encodeDebInto = deb.encodeInto;
 
 pub const RarError = rar.Error;
 pub const RarVersion = rar.Version;
