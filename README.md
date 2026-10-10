@@ -125,7 +125,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   rejection, plus Debian binary package parsing/writing with validated
   `debian-binary`, control/data TAR members, and none/gzip/Bzip2/LZMA/XZ/Zstd
   compression, validated bidirectionally with GNU `ar` and `dpkg-deb`, plus
-  bounded RPM lead/signature/main-header parsing and CPIO payload extraction
+  bounded RPM lead/signature/main-header parsing, MD5/SHA1/SHA256 integrity
+  verification, deterministic unsigned writing, and CPIO payload extraction
   for none/gzip/Bzip2/LZMA/XZ/Zstd payloads with 7-Zip differential validation;
 - dependency-free ARJ/SFX reading and deterministic writing with CRC-validated
   main/local/extended headers, stored and methods 1–4, no-data and directory

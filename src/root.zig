@@ -374,11 +374,17 @@ pub const encodeDebInto = deb.encodeInto;
 pub const RpmError = rpm.Error;
 pub const RpmPayloadCompression = rpm.PayloadCompression;
 pub const RpmLead = rpm.Lead;
+pub const RpmDigestReport = rpm.DigestReport;
 pub const RpmHeader = rpm.Header;
 pub const RpmIndex = rpm.Index;
 pub const RpmValueType = rpm.ValueType;
 pub const RpmPackage = rpm.Package;
+pub const RpmEncodeOptions = rpm.EncodeOptions;
+pub const RpmEncodeEntry = rpm.EncodeEntry;
 pub const parseRpmPackage = rpm.parse;
+pub const encodeRpmAlloc = rpm.encodeAlloc;
+pub const encodeRpmAppend = rpm.encodeAppend;
+pub const encodeRpmInto = rpm.encodeInto;
 
 pub const RarError = rar.Error;
 pub const RarVersion = rar.Version;

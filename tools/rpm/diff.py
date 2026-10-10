@@ -26,15 +26,108 @@ def main() -> None:
     if seven_zip is None:
         found = shutil.which("7zz") or shutil.which("7z")
         seven_zip = Path(found) if found else None
-    if args.fixture is None:
-        print(f"fixture=False seven_zip={seven_zip is not None} entries=0 external=0 malformed=0")
-        return
-
     entries = 0
     external = 0
     malformed = 0
+    writer_cases = 0
+    writer_external = 0
     with tempfile.TemporaryDirectory(prefix="vort-rpm-diff-") as temp_text:
         temp = Path(temp_text)
+        writer_source = temp / "writer-source.bin"
+        writer_payload = b"Vort RPM writer payload\n" * 128
+        writer_source.write_bytes(writer_payload)
+        writer_name = "usr/share/vort/payload.txt"
+        first_writer_archive: Path | None = None
+        for index, compression in enumerate(
+            ("none", "gzip", "bzip2", "lzma", "xz", "zstd")
+        ):
+            archive = temp / f"vort-writer-{compression}.rpm"
+            run(
+                args.cli,
+                "create-rpm-file",
+                archive,
+                "vort-test",
+                "1.0",
+                writer_name,
+                writer_source,
+                compression,
+            )
+            if first_writer_archive is None:
+                first_writer_archive = archive
+            writer_listing = run(args.cli, "list-rpm-file", archive).stdout
+            if (
+                "rpm_name=vort-test" not in writer_listing
+                or "md5=true" not in writer_listing
+                or "sha1=true" not in writer_listing
+                or "sha256=true" not in writer_listing
+                or f"name={writer_name}" not in writer_listing
+            ):
+                raise AssertionError(
+                    f"Vort RPM {compression} writer metadata mismatch: {writer_listing}"
+                )
+            output = temp / f"writer-{compression}.out"
+            run(
+                args.cli,
+                "extract-rpm-file",
+                archive,
+                writer_name,
+                output,
+                len(writer_payload),
+            )
+            if output.read_bytes() != writer_payload:
+                raise AssertionError(f"Vort RPM {compression} writer self mismatch")
+            writer_cases += 1
+            if seven_zip is not None:
+                run(seven_zip, "t", archive)
+                reference = temp / f"writer-7z-{compression}"
+                run(seven_zip, "x", "-y", f"-o{reference}", archive)
+                vort_cpio = temp / f"writer-{compression}.cpio"
+                run(args.cli, "extract-rpm-payload", archive, vort_cpio, 64 * 1024 * 1024)
+                reference_cpio = next(reference.glob("*.cpio"), None)
+                if reference_cpio is not None:
+                    if reference_cpio.read_bytes() != vort_cpio.read_bytes():
+                        raise AssertionError(
+                            f"7-Zip rejected Vort RPM {compression} payload"
+                        )
+                elif (reference / writer_name).read_bytes() != writer_payload:
+                    raise AssertionError(
+                        f"7-Zip rejected Vort RPM {compression} member"
+                    )
+                writer_external += 1
+
+        if first_writer_archive is None:
+            raise AssertionError("RPM writer matrix was empty")
+        duplicate = temp / "vort-writer-duplicate.rpm"
+        run(
+            args.cli,
+            "create-rpm-file",
+            duplicate,
+            "vort-test",
+            "1.0",
+            writer_name,
+            writer_source,
+            "none",
+        )
+        if duplicate.read_bytes() != first_writer_archive.read_bytes():
+            raise AssertionError("Vort RPM writer output is not deterministic")
+
+        corrupt_writer = bytearray(first_writer_archive.read_bytes())
+        corrupt_writer[-1] ^= 1
+        corrupt_writer_path = temp / "writer-bad-digest.rpm"
+        corrupt_writer_path.write_bytes(corrupt_writer)
+        failed = run(args.cli, "list-rpm-file", corrupt_writer_path, check=False)
+        if failed.returncode == 0 or "RpmDigestMismatch" not in failed.stderr:
+            raise AssertionError("Vort accepted a corrupt RPM writer digest")
+        malformed += 1
+
+        if args.fixture is None:
+            print(
+                f"fixture=False seven_zip={seven_zip is not None} entries=0 "
+                f"external=0 writer_cases={writer_cases} "
+                f"writer_external={writer_external} malformed={malformed}"
+            )
+            return
+
         listing = run(args.cli, "list-rpm-file", args.fixture).stdout
         if "payload_entries=" not in listing or "payload_compression=" not in listing:
             raise AssertionError(f"Vort RPM listing is incomplete: {listing}")
@@ -107,7 +200,8 @@ def main() -> None:
 
     print(
         f"fixture=True seven_zip={seven_zip is not None} entries={entries} "
-        f"external={external} malformed={malformed}"
+        f"external={external} writer_cases={writer_cases} "
+        f"writer_external={writer_external} malformed={malformed}"
     )
 
 

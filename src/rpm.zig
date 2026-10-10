@@ -2,9 +2,12 @@ const std = @import("std");
 const core = @import("core.zig");
 const cpio = @import("cpio.zig");
 const header_mod = @import("rpm/header.zig");
+const types = @import("rpm/types.zig");
+const writer = @import("rpm/writer.zig");
 
-pub const Error = core.Error || cpio.Error || header_mod.Error || error{
+pub const Error = core.Error || cpio.Error || header_mod.Error || writer.Error || error{
     InvalidRpmPackage,
+    RpmDigestMismatch,
     UnsupportedRpmPayload,
 };
 
@@ -12,8 +15,13 @@ pub const Header = header_mod.Header;
 pub const Index = header_mod.Index;
 pub const ValueType = header_mod.ValueType;
 pub const StringIterator = header_mod.StringIterator;
+pub const EncodeOptions = writer.Options;
+pub const EncodeEntry = cpio.EncodeEntry;
+pub const encodeAlloc = writer.encodeAlloc;
+pub const encodeAppend = writer.encodeAppend;
+pub const encodeInto = writer.encodeInto;
 
-pub const PayloadCompression = enum { none, gzip, bzip2, lzma, xz, zstandard };
+pub const PayloadCompression = types.PayloadCompression;
 
 pub const Lead = struct {
     major: u8,
@@ -23,6 +31,12 @@ pub const Lead = struct {
     name: []const u8,
     operating_system: u16,
     signature_type: u16,
+};
+
+pub const DigestReport = struct {
+    md5: bool,
+    sha1: bool,
+    sha256: bool,
 };
 
 pub const Package = struct {
@@ -51,6 +65,38 @@ pub const Package = struct {
 
     pub fn operatingSystem(self: Package) Error![]const u8 {
         return (try self.header.string(tag_os)) orelse return error.InvalidRpmPackage;
+    }
+
+    pub fn verifyDigests(self: Package) Error!DigestReport {
+        var report = DigestReport{ .md5 = false, .sha1 = false, .sha256 = false };
+        if (try self.signature.binary(signature_tag_md5)) |expected| {
+            if (expected.len != std.crypto.hash.Md5.digest_length)
+                return error.InvalidRpmPackage;
+            const actual = std.crypto.hash.Md5.hashResult(self.bytes[self.header.offset..]);
+            if (!std.mem.eql(u8, expected, &actual)) return error.RpmDigestMismatch;
+            report.md5 = true;
+        }
+        if (try self.signature.string(signature_tag_sha1)) |expected| {
+            var actual: [std.crypto.hash.Sha1.digest_length]u8 = undefined;
+            std.crypto.hash.Sha1.hash(
+                self.bytes[self.header.offset..self.header.next_offset],
+                &actual,
+                .{},
+            );
+            if (!digestMatchesHex(&actual, expected)) return error.RpmDigestMismatch;
+            report.sha1 = true;
+        }
+        if (try self.signature.string(signature_tag_sha256)) |expected| {
+            var actual: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+            std.crypto.hash.sha2.Sha256.hash(
+                self.bytes[self.header.offset..self.header.next_offset],
+                &actual,
+                .{},
+            );
+            if (!digestMatchesHex(&actual, expected)) return error.RpmDigestMismatch;
+            report.sha256 = true;
+        }
+        return report;
     }
 
     pub fn decodePayloadAlloc(
@@ -152,6 +198,25 @@ fn alignEnd(offset: usize, alignment: usize, limit: usize) Error!usize {
     return end;
 }
 
+fn digestMatchesHex(digest: []const u8, expected: []const u8) bool {
+    if (expected.len != digest.len * 2) return false;
+    for (digest, 0..) |byte, index| {
+        const high = hexNibble(expected[index * 2]) orelse return false;
+        const low = hexNibble(expected[index * 2 + 1]) orelse return false;
+        if (byte != ((@as(u8, high) << 4) | low)) return false;
+    }
+    return true;
+}
+
+fn hexNibble(byte: u8) ?u4 {
+    return switch (byte) {
+        '0'...'9' => @intCast(byte - '0'),
+        'a'...'f' => @intCast(byte - 'a' + 10),
+        'A'...'F' => @intCast(byte - 'A' + 10),
+        else => null,
+    };
+}
+
 const lead_size: usize = 96;
 pub const tag_name: u32 = 1000;
 pub const tag_version: u32 = 1001;
@@ -161,6 +226,9 @@ pub const tag_arch: u32 = 1022;
 pub const tag_payload_format: u32 = 1124;
 pub const tag_payload_compressor: u32 = 1125;
 pub const tag_payload_flags: u32 = 1126;
+pub const signature_tag_sha1: u32 = 269;
+pub const signature_tag_sha256: u32 = 273;
+pub const signature_tag_md5: u32 = 1004;
 
 test "RPM parser rejects missing and malformed leads" {
     try std.testing.expectError(error.TruncatedFrame, parse(""));
@@ -172,6 +240,44 @@ test "RPM parser rejects missing and malformed leads" {
     try std.testing.expectError(error.TruncatedFrame, parse(&lead));
 }
 
+test "RPM writer round trips metadata digests and CPIO payload" {
+    const allocator = std.testing.allocator;
+    const entries = [_]EncodeEntry{.{
+        .name = "usr/share/vort/payload.txt",
+        .data = "RPM writer payload",
+    }};
+    inline for (.{
+        PayloadCompression.none,
+        .gzip,
+        .bzip2,
+        .lzma,
+        .xz,
+        .zstandard,
+    }) |compression| {
+        const encoded = try encodeAlloc(allocator, &entries, .{
+            .name = "vort-test",
+            .version = "1.0",
+            .release = "1",
+            .payload_compression = compression,
+        });
+        defer allocator.free(encoded);
+        const package = try parse(encoded);
+        try std.testing.expectEqualStrings("vort-test", try package.name());
+        try std.testing.expectEqual(compression, package.payload_compression);
+        const digests = try package.verifyDigests();
+        try std.testing.expect(digests.md5 and digests.sha1 and digests.sha256);
+        const payload = try package.extractByNameAllocLimited(
+            allocator,
+            entries[0].name,
+            1024 * 1024,
+            1024,
+        );
+        defer allocator.free(payload);
+        try std.testing.expectEqualStrings(entries[0].data, payload);
+    }
+}
+
 test {
     _ = header_mod;
+    _ = writer;
 }

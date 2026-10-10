@@ -237,6 +237,8 @@ pub fn main(init: std.process.Init) !void {
         try deb_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-deb-file")) {
         try deb_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-rpm-file")) {
+        try rpm_cli.createFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-rpm-file")) {
         try rpm_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-rpm-file")) {
@@ -2214,6 +2216,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-deb-file <path>        List Debian control/data archive metadata
         \\  extract-deb-file <deb> <entry> <out> [max_output]
         \\                              Extract a bounded Debian data member
+        \\  create-rpm-file <out> <package> <version> <entry> <in> [none|gzip|bzip2|lzma|xz|zstd]
+        \\                              Create a deterministic unsigned RPM package
         \\  list-rpm-file <path>        List RPM metadata and CPIO payload entries
         \\  extract-rpm-file <rpm> <entry> <out> [max_output]
         \\                              Extract a bounded RPM payload member
