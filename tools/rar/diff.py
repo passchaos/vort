@@ -111,6 +111,8 @@ def main() -> None:
     versions = ("rar4", "rar5")
     payload = make_payload()
     writer_external = 0
+    writer_compressed = 0
+    writer_compressed_external = 0
     reference_stored = 0
     reference_compressed = 0
     reference_compressed_decoded = 0
@@ -130,6 +132,9 @@ def main() -> None:
         temp = Path(temp_text)
         source = temp / "source.bin"
         source.write_bytes(payload)
+        large_payload = payload * 80
+        large_source = temp / "rar50-large-source.bin"
+        large_source.write_bytes(large_payload)
 
         for version in versions:
             first = temp / f"vort-{version}-first.rar"
@@ -150,6 +155,53 @@ def main() -> None:
                 if seven_zip_extract(seven_zip, first, temp / f"7z-vort-{version}") != payload:
                     raise AssertionError(f"7-Zip rejected Vort {version}")
                 writer_external += 1
+
+        compressed_first = temp / "vort-rar5-compressed-first.rar"
+        compressed_second = temp / "vort-rar5-compressed-second.rar"
+        compressed_output = temp / "vort-rar5-compressed.out"
+        run(
+            args.cli,
+            "create-rar-file",
+            str(compressed_first),
+            "payload.bin",
+            str(large_source),
+            "rar5",
+            "rar50",
+        )
+        run(
+            args.cli,
+            "create-rar-file",
+            str(compressed_second),
+            "payload.bin",
+            str(large_source),
+            "rar5",
+            "rar50",
+        )
+        if compressed_first.read_bytes() != compressed_second.read_bytes():
+            raise AssertionError("Vort RAR50 compressed output is not deterministic")
+        listing = run(args.cli, "list-rar-file", str(compressed_first)).stdout
+        if "method=rar50" not in listing:
+            raise AssertionError(f"Vort mislabeled its RAR50 output: {listing}")
+        run(
+            args.cli,
+            "extract-rar-file",
+            str(compressed_first),
+            "payload.bin",
+            str(compressed_output),
+            str(len(large_payload)),
+        )
+        if compressed_output.read_bytes() != large_payload:
+            raise AssertionError("Vort failed its own multiblock RAR50 output")
+        writer_compressed += 1
+        if seven_zip is not None:
+            run(seven_zip, "t", str(compressed_first))
+            if seven_zip_extract(
+                seven_zip,
+                compressed_first,
+                temp / "7z-vort-rar50-compressed",
+            ) != large_payload:
+                raise AssertionError("7-Zip rejected Vort RAR50 compressed output")
+            writer_compressed_external += 1
 
         if args.writer is not None:
             for version in versions:
@@ -196,9 +248,6 @@ def main() -> None:
                 reference_compressed_decoded += 1
                 reference_compressed += 1
 
-            large_payload = payload * 80
-            large_source = temp / "rar50-large-source.bin"
-            large_source.write_bytes(large_payload)
             large_archive = temp / "reference-rar5-large-compress.rar"
             large_output = temp / "reference-rar5-large.out"
             run(args.rars, "rar5", "compress", str(large_archive), str(large_source))
@@ -577,6 +626,8 @@ def main() -> None:
     print(
         f"versions={len(versions)} self_writer_cases={len(versions)} "
         f"seven_zip={seven_zip is not None} writer_external={writer_external} "
+        f"writer_compressed={writer_compressed} "
+        f"writer_compressed_external={writer_compressed_external} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "

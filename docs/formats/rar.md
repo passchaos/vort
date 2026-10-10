@@ -81,27 +81,32 @@ bytes. Adding an allocator-backed RAR4 Unicode-name view remains future work.
 ## Writer
 
 `encodeRarAlloc`, `encodeRarAppend`, and `encodeRarInto` emit deterministic
-multi-entry RAR4 or RAR5 archives with stored regular files and directories.
-They write standard header/data CRCs, Unix attributes, optional
+multi-entry RAR4 or RAR5 archives with regular files and directories. RAR5
+regular files can select `.compression = .rar50`; the portable baseline writes
+64 KiB compressed blocks, complete canonical Huffman tables, basic hash-indexed
+LZ matches, and new/repeat/last-distance tokens. Directories remain stored.
+The writers emit standard header/data CRCs, Unix attributes, optional
 generation-native timestamps (DOS date/time for RAR4, Unix seconds for RAR5),
 RAR4 end blocks, and RAR5 end headers.
 
 RAR4 output accepts safe ASCII names and converts `/` to the traditional `\`
 separator. RAR5 output accepts validated UTF-8 names. Both writers reject NUL,
-absolute, empty-component, dot, and parent-component paths. Compression,
-encryption, solid writing, recovery records, comments, redirections, and volume
-splitting are intentionally not exposed until their full semantics are
-implemented.
+absolute, empty-component, dot, and parent-component paths. RAR50 dictionary
+sizes must be power-of-two multiples of 128 KiB. RAR4 compression, encryption,
+compressed filters, solid writing, recovery records, comments, redirections,
+and volume splitting remain future writer work.
 
 ## CLI
 
 ```sh
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5
+zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50
 zig build run -- list-rar-file output.rar
 zig build run -- extract-rar-file output.rar payload.bin decoded.bin 1048576
 ```
 
-The writer version is `rar4` or `rar5`; `rar5` is the default.
+The writer version is `rar4` or `rar5`; `rar5` is the default. Compression is
+`stored` by default and `rar50` when explicitly requested.
 
 ## Differential validation
 
@@ -137,6 +142,7 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 \
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-The next functionality stage is compressed RAR writing, followed by encrypted
-payloads. Encryption should be added on top of the existing decoders rather
-than approximated in the stored path.
+The next writer stages are RAR50 filters, solid state and volume splitting,
+followed by RAR29 compatibility writing and encrypted payloads. Encryption
+should be added on top of the existing codecs rather than approximated in the
+stored path.

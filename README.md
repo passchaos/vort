@@ -170,7 +170,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   sessions with pre-filter history, bounded extraction, explicit encrypted/
   redirection/unknown-size and unsupported legacy-solid errors, ordered RAR5
   multi-volume reconstruction for stored/compressed/solid split entries, and
-  7-Zip plus rars interoperability; compressed RAR writing remains pending;
+  deterministic RAR50 LZ writing with canonical tables and multiblock output,
+  plus 7-Zip and rars interoperability;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded
   extraction for Stored, MSZIP, 15–21 bit LZX, and 10–21 bit Quantum folders,
   including Stored/MSZIP, reference uncompressed-block LZX, and literal
