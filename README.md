@@ -112,6 +112,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   dictionary sizes, per-member CRC/data/member-size validation, deterministic
   concatenated writing, strict multimember handling, and caller-selected output
   and dictionary limits;
+- pure Zig raw LZF block and standard `ZV` stream encoding/decoding with
+  8 KiB match distances, 65,535-byte stored/compressed blocks, optional EOF markers,
+  bounded/caller-owned APIs, decoded-size preflight, metadata inspection, and
+  automatic `.tar.lzf` composition;
 - pure Zig LZO1X encoding/decoding plus LZOP parsing and deterministic
   compressed-or-stored writing, including Adler-32/CRC-32 header, data, and
   compressed-block checks, legacy delta filters, concatenated streams, and
@@ -129,7 +133,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   bounded extraction;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
   safe-path classification, borrowed entry views, and automatic raw/gzip/
-  Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/Zstandard/LZOP tarball composition;
+  Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded
   extraction for Stored, MSZIP, 15–21 bit LZX, and 10–21 bit Quantum folders,
   including Stored/MSZIP, reference uncompressed-block LZX, and literal

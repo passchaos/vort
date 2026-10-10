@@ -33,16 +33,16 @@ defer allocator.free(decoded);
 ```
 
 `TarCompression` supports raw TAR, gzip, Bzip2, Brotli, Unix compress,
-LZMA-Alone, XZ, LZ4 frame, lzip, Zstandard, and LZOP. This includes `.tar.br`,
-`.tar.Z`, `.tar.lzma` / `.tlz`, `.tar.xz`, `.tar.lz4`, `.tar.lz`, `.tar.lzo`,
-and `.tzo`. Detection
+LZMA-Alone, XZ, LZ4 frame, lzip, LZF, Zstandard, and LZOP. This includes `.tar.br`,
+`.tar.Z`, `.tar.lzma` / `.tlz`, `.tar.xz`, `.tar.lz4`, `.tar.lz`, `.tar.lzf`,
+`.tar.lzo`, and `.tzo`. Detection
 uses the outer stream magic where the format provides one. Because LZMA-Alone
 has no magic, Vort first recognizes a structurally valid raw TAR, then accepts
 a valid LZMA header only when its known output size has TAR's 512-byte alignment
 and is large enough to contain the two end blocks, or when it uses the standard
 unknown-size marker. XZ, LZMA, and lzip use their compressed LZMA writers, while
-LZ4 and LZOP select compressed or stored representation independently for each
-block.
+LZ4, LZF, and LZOP select compressed or stored representation independently
+for each block.
 `TarOwnedArchive` owns the decompressed TAR bytes so all borrowed entry paths,
 link targets, and payloads remain valid until `deinit`; its `compression` field
 reports the format actually selected by automatic decode.
@@ -66,6 +66,7 @@ CLI validation surfaces:
 zig build run -- create-tar-file archive.tar.gz payload.bin input.bin gzip
 zig build run -- create-tar-file archive.tar.br payload.bin input.bin brotli
 zig build run -- create-tar-file archive.tar.lzma payload.bin input.bin lzma
+zig build run -- create-tar-file archive.tar.lzf payload.bin input.bin lzf
 zig build run -- list-tar-file archive.tar.gz 268435456
 zig build run -- extract-tar-file archive.tar.gz payload.bin output.bin 268435456
 zig build run-tar-diff

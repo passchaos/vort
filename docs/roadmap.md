@@ -17757,7 +17757,7 @@ reuse, so production keeps the simpler independently owned plans.
   disk. The writer emits regular files, directories, symbolic/hard links, and
   deterministic PAX long paths. A compositional layer automatically detects,
   decodes, and writes raw TAR, tar.gz, tar.bz2, tar.br, tar.Z, tar.lzma/tlz,
-  tar.xz, tar.lz4, tar.lz, tar.zst, and tar.lzo through existing Vort codecs.
+  tar.xz, tar.lz4, tar.lz, tar.lzf, tar.zst, and tar.lzo through existing Vort codecs.
   Brotli's no-magic automatic path is attempted only after structural raw-TAR
   and identifiable-wrapper checks fail, applies the caller's output bound
   during decode, and accepts only a fully validated TAR. LZMA-Alone
@@ -17838,6 +17838,19 @@ reuse, so production keeps the simpler independently owned plans.
   independent output/dictionary limits. Python raw-LZMA generation and decoding
   plus the optional reference `lzip` tool provide bidirectional interoperability
   coverage. See `docs/formats/lzip.md`.
+
+- Added dependency-free raw LZF and standard `ZV` stream encoding and decoding.
+  Raw blocks cover 1...32-byte literals, overlapping 3...264-byte matches, the
+  complete 8 KiB distance range, decoded-size preflight, caller-owned output,
+  bounded allocation, and transactional deterministic writing. The stream
+  layer strictly parses stored and compressed 65,535-byte blocks, validates
+  declared decoded sizes and complete input consumption, accepts an optional
+  terminal zero marker, and exposes metadata inspection. TAR auto-detection and
+  writing now include `.tar.lzf`. Six corpus shapes pass twelve bidirectional
+  checks against the upstream liblzf 3.6 utility, and the TAR differential
+  covers both outer-format directions. The unused upstream type-2 checksum
+  record and incremental state machines remain future functionality. See
+  `docs/formats/lzf.md`.
 
 - Added a pure Zig LZO1X encoder/decoder and LZOP container. The implementation parses
   modern and legacy headers, verifies Adler-32 or CRC-32 header/data/compressed

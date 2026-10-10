@@ -7,12 +7,13 @@ const compress_z = @import("../compress_z.zig");
 const deflate = @import("../deflate.zig");
 const lz4 = @import("../lz4.zig");
 const lzip = @import("../lzip.zig");
+const lzf = @import("../lzf.zig");
 const lzma = @import("../lzma.zig");
 const lzop = @import("../lzop.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = archive.Error || writer.Error || bzip2.Error || br.Error || compress_z.Error || lz4.Error || lzip.Error || lzma.Error || lzop.Error || xz.Error || zstd.Error || deflate.Error || error{
+pub const Error = archive.Error || writer.Error || bzip2.Error || br.Error || compress_z.Error || lz4.Error || lzip.Error || lzf.Error || lzma.Error || lzop.Error || xz.Error || zstd.Error || deflate.Error || error{
     UnknownTarCompression,
 };
 
@@ -26,6 +27,7 @@ pub const Compression = enum {
     xz,
     lz4,
     lzip,
+    lzf,
     zstandard,
     lzop,
 };
@@ -40,6 +42,7 @@ pub const EncodeOptions = struct {
     lz4_level: c_int = lz4.default_compression_level,
     lz4_options: lz4.FrameOptions = .{},
     lzip_options: lzip.EncodeOptions = .{},
+    lzf_options: lzf.EncodeOptions = .{},
     zstd_level: c_int = zstd.default_compression_level,
     zstd_options: zstd.FrameOptions = .{},
     lzop_options: lzop.EncodeOptions = .{},
@@ -67,6 +70,7 @@ pub fn detect(input: []const u8) Compression {
     if (input.len >= 6 and std.mem.eql(u8, input[0..6], &.{ 0xfd, '7', 'z', 'X', 'Z', 0 })) return .xz;
     if (input.len >= 4 and std.mem.readInt(u32, input[0..4], .little) == 0x184d_2204) return .lz4;
     if (input.len >= 4 and std.mem.eql(u8, input[0..4], "LZIP")) return .lzip;
+    if (input.len >= 2 and std.mem.eql(u8, input[0..2], "ZV")) return .lzf;
     if (input.len >= 4 and std.mem.readInt(u32, input[0..4], .little) == 0xfd2f_b528) return .zstandard;
     if (input.len >= 9 and std.mem.eql(u8, input[0..9], &lzop.header_magic)) return .lzop;
     if (looksLikeLzmaTar(input)) return .lzma;
@@ -105,6 +109,7 @@ pub fn encodeAlloc(
             options.lz4_options,
         ),
         .lzip => lzip.encodeAlloc(allocator, tar_bytes, options.lzip_options),
+        .lzf => lzf.encodeAlloc(allocator, tar_bytes, options.lzf_options),
         .zstandard => zstd.encodeFrameWithLevelAndOptionsAlloc(
             allocator,
             tar_bytes,
@@ -168,6 +173,7 @@ pub fn decodeAlloc(
         .xz => try xz.decodeAllocLimited(allocator, input, max_tar_size),
         .lz4 => try lz4.decodeFrameAllocLimited(allocator, input, max_tar_size),
         .lzip => try lzip.decodeAllocLimited(allocator, input, max_tar_size),
+        .lzf => try lzf.decodeAllocLimited(allocator, input, max_tar_size),
         .zstandard => try zstd.decodeFrameAllocLimited(allocator, input, max_tar_size),
         .lzop => try lzop.decodeAllocLimited(allocator, input, max_tar_size),
     };
@@ -185,7 +191,7 @@ test "compressed TAR wrappers round trip every available encoder" {
         .{ .name = "folder/", .kind = .directory },
         .{ .name = "folder/data.txt", .data = "tarball payload " ** 64 },
     };
-    inline for (.{ Compression.none, .gzip, .bzip2, .brotli, .compress_z, .lzma, .xz, .lz4, .lzip, .zstandard, .lzop }) |compression| {
+    inline for (.{ Compression.none, .gzip, .bzip2, .brotli, .compress_z, .lzma, .xz, .lz4, .lzip, .lzf, .zstandard, .lzop }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{ .compression = compression });
         defer allocator.free(encoded);
         if (compression == .brotli)
@@ -196,6 +202,8 @@ test "compressed TAR wrappers round trip every available encoder" {
             try std.testing.expect((try lzop.inspect(encoded)).compressed_block_count != 0);
         if (compression == .lzip)
             try std.testing.expectEqual(@as(usize, 1), (try lzip.inspect(allocator, encoded)).member_count);
+        if (compression == .lzf)
+            try std.testing.expect((try lzf.inspect(encoded)).block_count != 0);
         if (compression == .xz) {
             const tar_bytes = try writer.encodeAlloc(allocator, &entries);
             defer allocator.free(tar_bytes);

@@ -1053,6 +1053,12 @@ pub fn build(b: *std.Build) void {
     const lzip_diff_step = b.step("run-lzip-diff", "Validate lzip encoding and decoding against Python lzma and the optional lzip CLI");
     lzip_diff_step.dependOn(&lzip_diff.step);
 
+    const lzf_diff = b.addSystemCommand(&.{ "python3", "tools/lzf/diff.py", "--cli" });
+    lzf_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| lzf_diff.addArgs(args);
+    const lzf_diff_step = b.step("run-lzf-diff", "Validate raw/framed LZF against the optional upstream lzf CLI");
+    lzf_diff_step.dependOn(&lzf_diff.step);
+
     const lzop_diff = b.addSystemCommand(&.{ "python3", "tools/lzop/diff.py", "--cli" });
     lzop_diff.addArtifactArg(cli_exe);
     const lzop_diff_step = b.step("run-lzop-diff", "Validate LZO1X/LZOP encoding and decoding against optional lzop");
@@ -1088,7 +1094,8 @@ pub fn build(b: *std.Build) void {
     tar_diff.addArtifactArg(cli_exe);
     tar_diff.addArg("--writer");
     tar_diff.addArtifactArg(tar_writer_probe_exe);
-    const tar_diff_step = b.step("run-tar-diff", "Validate TAR and common compressed tarballs against Python tarfile, Brotli, and lzma");
+    if (b.args) |args| tar_diff.addArgs(args);
+    const tar_diff_step = b.step("run-tar-diff", "Validate TAR and common compressed tarballs against Python tarfile, Brotli, lzma, and optional LZF");
     tar_diff_step.dependOn(&tar_diff.step);
 
     const cab_diff = b.addSystemCommand(&.{ "python3", "tools/cab/diff.py", "--cli" });
@@ -4628,6 +4635,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(lzma_diff_step);
     ci_smoke_step.dependOn(compress_z_diff_step);
     ci_smoke_step.dependOn(lzip_diff_step);
+    ci_smoke_step.dependOn(lzf_diff_step);
     ci_smoke_step.dependOn(lzop_diff_step);
     ci_smoke_step.dependOn(seven_zip_diff_step);
     ci_smoke_step.dependOn(tar_diff_step);

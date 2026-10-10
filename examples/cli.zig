@@ -3,6 +3,7 @@ const vort = @import("vort");
 const compress_z_cli = @import("cli/compress_z.zig");
 const filters_cli = @import("cli/filters.zig");
 const lzip_cli = @import("cli/lzip.zig");
+const lzf_cli = @import("cli/lzf.zig");
 const lzop_cli = @import("cli/lzop.zig");
 const seven_zip_cli = @import("cli/seven_zip.zig");
 
@@ -201,6 +202,14 @@ pub fn main(init: std.process.Init) !void {
         try lzip_cli.sizeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-lzip-file")) {
         try lzip_cli.inspectFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-lzf-file")) {
+        try lzf_cli.encodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-lzf-file")) {
+        try lzf_cli.decodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "size-lzf-file")) {
+        try lzf_cli.sizeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-lzf-file")) {
+        try lzf_cli.inspectFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-file")) {
         try lzop_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzop-stored-file")) {
@@ -2116,6 +2125,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-lzip-file <path> [max_output] [max_dictionary]
         \\                              Decode and report a verified lzip file's size
         \\  inspect-lzip-file <path>    Parse and print structural lzip member metadata
+        \\  encode-lzf-file <in> <out> [block_size] [eof|no-eof]
+        \\                              Encode a deterministic LZF ZV stream
+        \\  decode-lzf-file <in> <out> [max_output]
+        \\                              Decode an LZF ZV stream
+        \\  size-lzf-file <path> [max_output]
+        \\                              Validate and report an LZF stream's decoded size
+        \\  inspect-lzf-file <path>     Parse and print LZF ZV block metadata
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
         \\                              Encode compressed-or-stored LZOP blocks
         \\  encode-lzop-stored-file <in> <out> [block_size] [adler32|crc32]
@@ -2148,7 +2164,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-xz-file <path> [max_output]
         \\                              Preflight an XZ stream's decoded size
         \\  inspect-xz-file <path>      Validate and print XZ stream metadata
-        \\  create-tar-file <out> <entry> <in> [none|gzip|bzip2|brotli|compress-z|lzma|xz|lz4|lzip|zstd|lzop]
+        \\  create-tar-file <out> <entry> <in> [none|gzip|bzip2|brotli|compress-z|lzma|xz|lz4|lzip|lzf|zstd|lzop]
         \\                              Create a deterministic one-entry tarball
         \\  list-tar-file <path> [max_tar_size]
         \\                              List common compressed tarball formats
@@ -3164,6 +3180,7 @@ fn parseTarCompression(text: ?[]const u8) !vort.TarCompression {
     if (std.mem.eql(u8, value, "xz")) return .xz;
     if (std.mem.eql(u8, value, "lz4")) return .lz4;
     if (std.mem.eql(u8, value, "lzip") or std.mem.eql(u8, value, "lz")) return .lzip;
+    if (std.mem.eql(u8, value, "lzf")) return .lzf;
     if (std.mem.eql(u8, value, "zstandard") or std.mem.eql(u8, value, "zstd")) return .zstandard;
     if (std.mem.eql(u8, value, "lzop") or std.mem.eql(u8, value, "lzo") or std.mem.eql(u8, value, "tzo")) return .lzop;
     return error.UnknownTarCompression;

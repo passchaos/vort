@@ -31,6 +31,31 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.decodeLzfBlockAllocLimited(allocator, data, 1 << 20)) |decoded| {
+        allocator.free(decoded);
+    } else |err| switch (err) {
+        error.TruncatedFrame,
+        error.InvalidLzfBlock,
+        error.OutputLimitExceeded,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
+    if (vort.decodeLzfAllocLimited(allocator, data, 1 << 20)) |decoded| {
+        allocator.free(decoded);
+    } else |err| switch (err) {
+        error.TruncatedFrame,
+        error.InvalidMagic,
+        error.InvalidLzfBlock,
+        error.InvalidLzfStream,
+        error.UnsupportedLzfFeature,
+        error.SizeMismatch,
+        error.TrailingData,
+        error.OutputLimitExceeded,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.parseCabArchive(data)) |cabinet| {
         for (0..cabinet.folder_count) |folder_index| {
             if (vort.decodeCabFolderAllocLimited(allocator, cabinet, folder_index, 1 << 20)) |decoded| {
@@ -79,6 +104,7 @@ pub fn main(init: std.process.Init) !void {
         &.{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 },
         &.{ 'V', 'S', 'K', 'P', 1, 0, 0, 0, 'x' },
         &.{ 'M', 'S', 'C', 'F', 0, 0, 0, 0 },
+        &.{ 'Z', 'V', 0, 0, 1, 'x' },
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
 

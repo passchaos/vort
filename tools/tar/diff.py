@@ -135,6 +135,7 @@ def main() -> None:
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--lzip", type=Path)
+    parser.add_argument("--lzf", type=Path)
     parser.add_argument("--lzop", type=Path)
     args = parser.parse_args()
     compressions = (
@@ -147,6 +148,7 @@ def main() -> None:
         "xz",
         "lz4",
         "lzip",
+        "lzf",
         "zstd",
         "lzop",
     )
@@ -180,6 +182,7 @@ def main() -> None:
         zstd_tool = shutil.which("zstd")
         lz4_tool = shutil.which("lz4")
         lzip_tool = str(args.lzip) if args.lzip else shutil.which("lzip")
+        lzf_tool = str(args.lzf) if args.lzf else shutil.which("lzf")
         lzop_tool = str(args.lzop) if args.lzop else shutil.which("lzop")
         uncompress_tool = shutil.which("uncompress")
         compress_tool = shutil.which("compress")
@@ -246,6 +249,17 @@ def main() -> None:
                     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
                         if archive.extractfile("payload.bin").read() != payload:
                             raise AssertionError(f"Python could not read Vort tar.{compression}")
+            elif compression == "lzf":
+                if lzf_tool is not None:
+                    raw = subprocess.run(
+                        [lzf_tool, "-d"],
+                        input=archive_path.read_bytes(),
+                        check=True,
+                        stdout=subprocess.PIPE,
+                    ).stdout
+                    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
+                        if archive.extractfile("payload.bin").read() != payload:
+                            raise AssertionError("Python could not read Vort tar.lzf")
             else:
                 mode = "r:" if compression == "none" else {"gzip": "r:gz", "bzip2": "r:bz2", "xz": "r:xz"}[compression]
                 with tarfile.open(archive_path, mode=mode) as archive:
@@ -279,6 +293,10 @@ def main() -> None:
             compressed_inputs["lzip"] = subprocess.run(
                 [lzip_tool, "-c"], input=python_tar, check=True, stdout=subprocess.PIPE
             ).stdout
+        if lzf_tool is not None:
+            compressed_inputs["lzf"] = subprocess.run(
+                [lzf_tool, "-c"], input=python_tar, check=True, stdout=subprocess.PIPE
+            ).stdout
         if lzop_tool is not None:
             compressed_inputs["lzop"] = subprocess.run(
                 [lzop_tool, "-c"], input=python_tar, check=True, stdout=subprocess.PIPE
@@ -290,7 +308,7 @@ def main() -> None:
 
     print(
         f"tar_diff=ok raw_formats=2 compressions={len(compressions)} "
-        "brotli_directions=2 entries=5"
+        f"brotli_directions=2 lzf_directions={2 if lzf_tool is not None else 0} entries=5"
     )
 
 
