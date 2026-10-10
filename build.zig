@@ -206,7 +206,7 @@ pub fn build(b: *std.Build) void {
         .filters = &.{"EROFS"},
     });
     const run_erofs_tests = b.addRunArtifact(erofs_tests);
-    const erofs_test_step = b.step("test-erofs", "Run focused EROFS parser and extraction tests");
+    const erofs_test_step = b.step("test-erofs", "Run focused EROFS reader and writer tests");
     erofs_test_step.dependOn(&run_erofs_tests.step);
     const hadoop_lzo_index_tests = b.addTest(.{
         .name = "vort-hadoop-lzo-index-tests",
@@ -1150,10 +1150,21 @@ pub fn build(b: *std.Build) void {
     const squashfs_diff_step = b.step("run-squashfs-diff", "Validate SquashFS extraction against optional squashfs-tools");
     squashfs_diff_step.dependOn(&squashfs_diff.step);
 
+    const erofs_writer_probe = b.addExecutable(.{
+        .name = "vort-erofs-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/erofs/writer_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
     const erofs_diff = b.addSystemCommand(&.{ "python3", "tools/erofs/diff.py", "--cli" });
     erofs_diff.addArtifactArg(cli_exe);
+    erofs_diff.addArg("--writer");
+    erofs_diff.addArtifactArg(erofs_writer_probe);
     if (b.args) |args| erofs_diff.addArgs(args);
-    const erofs_diff_step = b.step("run-erofs-diff", "Validate EROFS extraction against optional erofs-utils");
+    const erofs_diff_step = b.step("run-erofs-diff", "Validate EROFS reading and writing against optional erofs-utils");
     erofs_diff_step.dependOn(&erofs_diff.step);
 
     const hadoop_lzo_index_diff = b.addSystemCommand(&.{ "python3", "tools/hadoop_lzo_index/diff.py", "--cli" });

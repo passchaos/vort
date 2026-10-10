@@ -94,14 +94,8 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
         else
             block_size;
         if (super_offset + checksum_len > input.len) return error.TruncatedFrame;
-        var state: u32 = 0xffff_ffff;
-        for (input[super_offset..][0..checksum_len], 0..) |byte, index| {
-            const value: u8 = if (index >= 4 and index < 8) 0 else byte;
-            state ^= value;
-            for (0..8) |_| state = (state >> 1) ^
-                (if (state & 1 != 0) @as(u32, 0x82f6_3b78) else 0);
-        }
-        if (state != checksum) return error.ChecksumMismatch;
+        if (computeSuperblockChecksum(input[super_offset..][0..checksum_len]) != checksum)
+            return error.ChecksumMismatch;
     }
     const root_nid: u64 = readU16(bytes, 14);
     const inode_count = readU64(bytes, 16);
@@ -125,6 +119,17 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
         .available_compression_algorithms = readU16(bytes, 84),
         .build_time = readU32(bytes, 108),
     };
+}
+
+pub fn computeSuperblockChecksum(block_tail: []const u8) u32 {
+    var state: u32 = 0xffff_ffff;
+    for (block_tail, 0..) |byte, index| {
+        const value: u8 = if (index >= 4 and index < 8) 0 else byte;
+        state ^= value;
+        for (0..8) |_| state = (state >> 1) ^
+            (if (state & 1 != 0) @as(u32, 0x82f6_3b78) else 0);
+    }
+    return state;
 }
 
 pub fn readU16(input: []const u8, offset: usize) u16 {

@@ -1002,10 +1002,15 @@ pub const encodeSquashfsAppend = squashfs.encodeAppend;
 pub const ErofsArchive = erofs.Archive;
 pub const ErofsDirectory = erofs.Directory;
 pub const ErofsDirectoryEntry = erofs.DirectoryEntry;
+pub const ErofsEntry = erofs.Entry;
+pub const ErofsEntryKind = erofs.EntryKind;
 pub const ErofsFileType = erofs.FileType;
 pub const ErofsInode = erofs.Inode;
 pub const ErofsLayout = erofs.Layout;
 pub const ErofsSuperblock = erofs.Superblock;
+pub const ErofsWriterCompression = erofs.WriterCompression;
+pub const ErofsWriterOptions = erofs.WriterOptions;
+pub const encodeErofsAlloc = erofs.encodeAlloc;
 pub const parseErofs = erofs.parse;
 pub const parseErofsSuperblock = erofs.parseSuperblock;
 

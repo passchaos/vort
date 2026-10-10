@@ -147,6 +147,8 @@ pub fn main(init: std.process.Init) !void {
         try squashfs_cli.extract(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-erofs-file")) {
         try erofs_cli.list(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-erofs-file")) {
+        try erofs_cli.create(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-erofs-file")) {
         try erofs_cli.extract(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
@@ -2261,6 +2263,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  create-squashfs-file <out> <entry> <in> [stored|gzip|zstd] [block_size]
         \\  extract-squashfs-file <image> <entry> <out> [max_output]
         \\  list-erofs-file <path>
+        \\  create-erofs-file <out> <entry> <in> [stored|lz4]
         \\  extract-erofs-file <image> <entry> <out> [max_output]
         \\  encode-bgzf-file <in> <out> [block_size]
         \\                              Encode deterministic blocked gzip/BGZF

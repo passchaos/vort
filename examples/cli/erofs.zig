@@ -5,6 +5,37 @@ const max_file_size = 512 * 1024 * 1024;
 const max_directory_size = 64 * 1024 * 1024;
 const max_depth = 256;
 
+pub fn create(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const entry_name = args.next() orelse return error.MissingCorpusPath;
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const compression: vort.ErofsWriterCompression = if (args.next()) |name|
+        if (std.mem.eql(u8, name, "stored"))
+            .stored
+        else if (std.mem.eql(u8, name, "lz4"))
+            .lz4
+        else
+            return error.InvalidBlockPlan
+    else
+        .lz4;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const encoded = try vort.encodeErofsAlloc(init.gpa, &.{.{
+        .path = entry_name,
+        .data = input,
+    }}, .{ .compression = compression });
+    defer init.gpa.free(encoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+    try stdout.print(
+        "entry={s} input_bytes={d} erofs_bytes={d} compression={s} path={s}\n",
+        .{ entry_name, input.len, encoded.len, @tagName(compression), output_path },
+    );
+}
+
 pub fn list(
     init: std.process.Init,
     args: *std.process.Args.Iterator,

@@ -80,6 +80,7 @@ def verify_vort(cli: Path, image: Path, payloads: dict[str, bytes], label: str, 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
+    parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--mkfs", type=Path)
     parser.add_argument("--fsck", type=Path)
     args = parser.parse_args()
@@ -92,6 +93,8 @@ def main() -> None:
     plain_cases = 0
     lz4_cases = 0
     modern_cases = 0
+    writer_cases = 0
+    external_writer = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -109,6 +112,52 @@ def main() -> None:
         source = temp / "tree"
         payloads = write_tree(source)
         primary = fixture
+
+        writer_large = b"EROFS writer probe multi-block payload 0123456789\n" * 4096
+        state = 0x1234_5678
+        writer_random = bytearray()
+        for _ in range(8193):
+            state ^= (state << 13) & 0xFFFF_FFFF
+            state ^= state >> 17
+            state ^= (state << 5) & 0xFFFF_FFFF
+            state &= 0xFFFF_FFFF
+            writer_random.append(state & 0xFF)
+        expected_writer = {
+            "etc/config": b"writer probe configuration\n",
+            "large.bin": writer_large,
+            "random.bin": bytes(writer_random),
+            "small": b"inline payload",
+            "link": b"etc/config",
+        }
+        for mode in ("stored", "lz4"):
+            image = temp / f"writer-{mode}.erofs"
+            repeated = temp / f"writer-{mode}-repeat.erofs"
+            run(args.writer, image, mode)
+            run(args.writer, repeated, mode)
+            if image.read_bytes() != repeated.read_bytes():
+                raise AssertionError(f"non-deterministic EROFS writer output for {mode}")
+            listing = run(args.cli, "list-erofs-file", image).stdout
+            for required in (b"etc/config", b"large.bin", b"random.bin", b"small", b"link", b"empty"):
+                if required not in listing:
+                    raise AssertionError(f"EROFS writer listing missing {required!r} for {mode}")
+            for name, expected in expected_writer.items():
+                output = temp / f"writer-{mode}-{name.replace('/', '-')}.out"
+                run(args.cli, "extract-erofs-file", image, name, output, len(expected))
+                if output.read_bytes() != expected:
+                    raise AssertionError(f"Vort writer self decode mismatch for {mode}/{name}")
+            writer_cases += 1
+            if fsck is not None:
+                extracted = temp / f"writer-{mode}-fsck"
+                run(fsck, f"--extract={extracted}", "--no-preserve", image)
+                for name in ("etc/config", "large.bin", "random.bin", "small"):
+                    if (extracted / name).read_bytes() != expected_writer[name]:
+                        raise AssertionError(f"fsck.erofs writer mismatch for {mode}/{name}")
+                if (extracted / "link").readlink().as_posix() != "etc/config":
+                    raise AssertionError(f"fsck.erofs symlink mismatch for {mode}")
+                if not (extracted / "empty").is_dir():
+                    raise AssertionError(f"fsck.erofs empty directory missing for {mode}")
+                external_writer += 1
+
         if mkfs is not None:
             assert fsck is not None
             help_text = run(mkfs, "--help", check=False).stderr + run(
@@ -199,7 +248,8 @@ def main() -> None:
 
     print(
         f"fixture_cases={fixture_cases} tools={mkfs is not None} "
-        f"plain={plain_cases} lz4={lz4_cases} modern={modern_cases} malformed={malformed}"
+        f"plain={plain_cases} lz4={lz4_cases} modern={modern_cases} "
+        f"writer={writer_cases} external_writer={external_writer} malformed={malformed}"
     )
 
 
