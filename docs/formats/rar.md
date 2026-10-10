@@ -20,7 +20,9 @@ escape byte, literal escapes, distance-one repeats, and long match escapes.
 RAR29 VM support parses program records and reuse state, recognizes the E8,
 E8E9, Itanium, Delta, RGB, and Audio standard programs, and executes other
 valid programs in a bounded 256 KiB RAR VM. RAR5 compressed entries remain
-classified as `rar50` and return `UnsupportedRarCompression`.
+classified as `rar50`; non-solid members decode both algorithm table sizes,
+multiblock/table-reuse streams, LZ repeat distances, out-of-window zero fill,
+and Delta, E8, E8E9, and ARM filters.
 
 ## Reader
 
@@ -42,13 +44,17 @@ flags, split-before/split-after state, unknown-size state, redirection presence,
 and path-safety classification.
 
 Regular files use caller-owned or explicitly bounded allocation APIs. PPMd and
-RAR VM filters require an allocator, so callers use `extractIntoWithAllocator`,
+RAR VM filters and RAR5 compression require an allocator, so callers use
+`extractIntoWithAllocator`,
 `extractIntoWithOptions`, `extractAlloc`, or their bounded variants. The
 allocator-free `extractInto` API returns `UnsupportedRar29Ppmd` or
-`UnsupportedRar29Filter` for those members. `RarDecodeOptions` keeps the output
-limit independent from the PPMd model-memory limit and per-invocation VM
-instruction budget. These default to 256 MiB and 25 million instructions,
-respectively.
+`UnsupportedRar29Filter` for those RAR29 members and
+`RarEntryRequiresAllocator` for RAR50. `RarDecodeOptions` keeps the output limit
+independent from the PPMd model-memory limit and per-invocation VM instruction
+budget. These default to 256 MiB and 25 million instructions, respectively. The
+independent RAR5 dictionary-size ceiling defaults to `usize`'s maximum; the
+declared dictionary bounds match validation but the dictionary is not allocated
+eagerly.
 Directories, unsupported compressed data, encrypted entries, encrypted
 headers, RAR5 redirections, unknown-size members, incomplete split-volume
 members, and compressed solid continuations return specific errors. This
@@ -96,8 +102,10 @@ escape, match, mixed-member, and first-solid-member outputs byte-for-byte with
 7-Zip. It also covers all six standard RAR VM filters, LZ and PPMd filter
 records, 64-channel Delta, program reuse and unusual encoded integers. A
 checksum-valid generic-program mutation is compared with its canonical
-standard-program output. Solid PPMd continuations retain their explicit
-unsupported error:
+standard-program output. RAR5 checks cover compression methods 1, 3, and 5,
+all four native filters, generated multi-block input, malformed first-block
+table reuse, and the legacy out-of-window zero-fill behavior. Solid
+continuations retain their explicit unsupported error:
 
 ```sh
 zig build run-rar-diff -- \
@@ -107,6 +115,6 @@ zig build run-rar-diff -- \
   --legacy-fixtures path/to/rars/tests/fixtures/rar15_40
 ```
 
-The next functionality stage is RAR5 LZ and standard filters. Encrypted
-payloads, solid state and multi-volume reconstruction should be added on top of
-those decoders rather than approximated in the stored path.
+The next functionality stages are RAR5 solid state and multi-volume
+reconstruction, then compressed writing. Encrypted payloads should be added on
+top of those decoders rather than approximated in the stored path.

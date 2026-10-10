@@ -93,6 +93,8 @@ def main() -> None:
     rar29_entries = 0
     rar29_ppmd_entries = 0
     rar29_vm_entries = 0
+    rar50_entries = 0
+    rar50_multiblock = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-rar-diff-") as temp_text:
         temp = Path(temp_text)
@@ -151,31 +153,38 @@ def main() -> None:
                 if f"method={expected_method}" not in listing:
                     raise AssertionError(f"Vort misparsed reference compressed {version}: {listing}")
                 compressed_output = temp / f"compressed-{version}.out"
-                if version == "rar4":
-                    run(
-                        args.cli,
-                        "extract-rar-file",
-                        str(compressed),
-                        "payload.bin",
-                        str(compressed_output),
-                        str(len(payload)),
-                    )
-                    if compressed_output.read_bytes() != payload:
-                        raise AssertionError("Vort failed reference RAR29 LZ data")
-                    reference_compressed_decoded += 1
-                else:
-                    failed = run(
-                        args.cli,
-                        "extract-rar-file",
-                        str(compressed),
-                        "payload.bin",
-                        str(compressed_output),
-                        str(len(payload)),
-                        check=False,
-                    )
-                    if failed.returncode == 0 or "UnsupportedRarCompression" not in failed.stderr:
-                        raise AssertionError(f"Vort did not explicitly reject compressed {version}")
+                run(
+                    args.cli,
+                    "extract-rar-file",
+                    str(compressed),
+                    "payload.bin",
+                    str(compressed_output),
+                    str(len(payload)),
+                )
+                if compressed_output.read_bytes() != payload:
+                    raise AssertionError(f"Vort failed reference compressed {version} data")
+                reference_compressed_decoded += 1
                 reference_compressed += 1
+
+            large_payload = payload * 80
+            large_source = temp / "rar50-large-source.bin"
+            large_source.write_bytes(large_payload)
+            large_archive = temp / "reference-rar5-large-compress.rar"
+            large_output = temp / "reference-rar5-large.out"
+            run(args.rars, "rar5", "compress", str(large_archive), str(large_source))
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(large_archive),
+                "payload.bin",
+                str(large_output),
+                str(len(large_payload)),
+            )
+            if large_output.read_bytes() != large_payload:
+                raise AssertionError("Vort failed multiblock reference RAR50 data")
+            if seven_zip is not None:
+                run(seven_zip, "t", str(large_archive))
+            rar50_multiblock += 1
 
         if args.fixtures is not None:
             acid = args.fixtures.parent.parent / "acid-70a.rar"
@@ -344,6 +353,52 @@ def main() -> None:
                 raise AssertionError("Vort generic RAR VM output mismatch")
             rar29_vm_entries += 1
 
+            rar50_archives = (
+                args.legacy_fixtures.parent / "rar50" / "m1_fastest.rar",
+                args.legacy_fixtures.parent / "rar50" / "m3_default.rar",
+                args.legacy_fixtures.parent / "rar50" / "m5_max.rar",
+                args.legacy_fixtures.parent / "rar50" / "filter_delta.rar",
+                args.legacy_fixtures.parent / "rar50" / "filter_e8.rar",
+                args.legacy_fixtures.parent / "rar50" / "filter_e8e9.rar",
+                args.legacy_fixtures.parent / "rar50" / "filter_arm.rar",
+            )
+            for index, archive in enumerate(rar50_archives):
+                rar50_entries += compare_archive_entries(
+                    args.cli,
+                    seven_zip,
+                    archive,
+                    temp,
+                    f"rar50-{index}",
+                    method="rar50",
+                )
+
+            zero_fill = args.legacy_fixtures.parent / "rar50" / "zero_fill_out_of_window.rar"
+            zero_fill_output = temp / "rar50-zero-fill.out"
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(zero_fill),
+                "zerofill.bin",
+                str(zero_fill_output),
+                "1024",
+            )
+            expected_zero_fill = b"\0" * 8 + b"zero-fill regression payload " * 8
+            if zero_fill_output.read_bytes() != expected_zero_fill:
+                raise AssertionError("Vort RAR50 out-of-window zero fill mismatch")
+            rar50_entries += 1
+
+            missing_tables = args.legacy_fixtures.parent / "rar50" / "first_block_without_tables.rar"
+            failed = run(
+                args.cli,
+                "extract-rar-file",
+                str(missing_tables),
+                "mid.txt",
+                str(temp / "rar50-missing-tables.out"),
+                check=False,
+            )
+            if failed.returncode == 0 or "InvalidRar50Stream" not in failed.stderr:
+                raise AssertionError("Vort accepted a first RAR50 block without tables")
+
             encrypted = args.legacy_fixtures / "rar154" / "readme_154_password.rar"
             failed = run(
                 args.cli,
@@ -415,6 +470,8 @@ def main() -> None:
         f"rar20_entries={rar20_entries} rar29_entries={rar29_entries} "
         f"rar29_ppmd_entries={rar29_ppmd_entries} "
         f"rar29_vm_entries={rar29_vm_entries} "
+        f"rar50_entries={rar50_entries} "
+        f"rar50_multiblock={rar50_multiblock} "
         f"header_crc=True data_crc=True sfx=True"
     )
 

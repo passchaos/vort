@@ -223,6 +223,7 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
                 .max_output_len = 1 << 20,
                 .max_ppmd_memory = 4 << 20,
                 .max_vm_instructions = 100_000,
+                .max_rar50_dictionary_size = 64 << 20,
             })) |decoded| {
                 allocator.free(decoded);
             } else |err| switch (err) {
@@ -237,8 +238,10 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
                 error.InvalidRar15Stream,
                 error.InvalidRar20Stream,
                 error.InvalidRar29Stream,
+                error.InvalidRar50Stream,
                 error.InvalidRarPpmd,
                 error.RarPpmdMemoryLimitExceeded,
+                error.Rar50DictionaryLimitExceeded,
                 error.UnsupportedRar29Ppmd,
                 error.UnsupportedRar29Filter,
                 error.TruncatedFrame,
