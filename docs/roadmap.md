@@ -17646,7 +17646,7 @@ reuse, so production keeps the simpler independently owned plans.
   single-disk ZIP64 reading and deterministic writing. The library parses EOCD,
   ZIP64 locator/EOCD, ordered `0x0001` central/local extra fields, and 32-/64-bit
   data descriptors; it iterates and finds entries without allocation, extracts
-  stored, Shrink, Implode, raw-Deflate, Deflate64, Bzip2, LZMA, Zstandard
+  stored, Shrink, Reduce factors 1...4, Implode, raw-Deflate, Deflate64, Bzip2, LZMA, Zstandard
   methods 20/93, XZ, and PPMd
   members into caller buffers or bounded allocations where their scratch
   requirements allow, and encodes multi-entry stored/Deflate/Deflate64/Bzip2/
@@ -17669,6 +17669,14 @@ reuse, so production keeps the simpler independently owned plans.
   freezes a full dictionary; adaptive partial clearing remains ratio work. An
   Apache Commons Compress Shrink archive supplies independent reader coverage,
   while system 7-Zip extracts Vort-generated method-1 entries.
+  ZIP methods 2...5 now share a parameterized Reduce core: reverse-ordered
+  follower sets, deterministic transition training, DLE match expansion,
+  factor-specific 512...4096-byte windows, extended lengths, implicit-zero
+  history, and exact input/output consumption. Four factor-specific writer and
+  self-reader cases are required in the ZIP differential. The locally available
+  7-Zip and copyright-clean Info-ZIP builds expose no Reduce decoder, so this
+  increment does not claim external decode evidence that those tools cannot
+  provide.
   Method 6 adds all four Implode combinations: 4/8 KiB dictionaries and raw
   two-tree or Shannon-Fano literal three-tree streams. The decoder validates
   arbitrary complete tree descriptions, extended lengths, zero-prefill,

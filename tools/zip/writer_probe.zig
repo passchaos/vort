@@ -1,6 +1,18 @@
 const std = @import("std");
 const vort = @import("vort");
 
+fn makeLegacyPayload(allocator: std.mem.Allocator, prefix_len: usize, seed: u32) ![]u8 {
+    const payload = try allocator.alloc(u8, prefix_len * 2 + 1);
+    var state = seed;
+    for (payload[0..prefix_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    payload[prefix_len] = 0x42;
+    @memcpy(payload[prefix_len + 1 ..], payload[0..prefix_len]);
+    return payload;
+}
+
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
@@ -12,6 +24,7 @@ pub fn main(init: std.process.Init) !void {
     var implode_large = true;
     var implode_literal_tree = true;
     var implode_mode = false;
+    var reduce_mode = false;
     if (mode) |value| {
         if (std.mem.eql(u8, value, "zip64")) {
             zip64 = .always;
@@ -30,6 +43,8 @@ pub fn main(init: std.process.Init) !void {
                 implode_literal_tree = false
             else
                 return error.InvalidZipMode;
+        } else if (std.mem.eql(u8, value, "reduce")) {
+            reduce_mode = true;
         } else {
             return error.InvalidZipMode;
         }
@@ -52,6 +67,14 @@ pub fn main(init: std.process.Init) !void {
     }
     implode_payload[5000] = 0x42;
     @memcpy(implode_payload[5001..], implode_payload[0..5000]);
+    const reduce1_payload = try makeLegacyPayload(init.gpa, 400, 0x1020_3041);
+    defer init.gpa.free(reduce1_payload);
+    const reduce2_payload = try makeLegacyPayload(init.gpa, 800, 0x2030_4052);
+    defer init.gpa.free(reduce2_payload);
+    const reduce3_payload = try makeLegacyPayload(init.gpa, 1500, 0x3040_5063);
+    defer init.gpa.free(reduce3_payload);
+    const reduce4_payload = try makeLegacyPayload(init.gpa, 3000, 0x4050_6074);
+    defer init.gpa.free(reduce4_payload);
     const deflated = "Vort ZIP writer differential.\n" ** 128;
     const deflate64_payload = "Vort ZIP Deflate64 method 9.\n" ** 128;
     const bzip2_payload = "Vort ZIP Bzip2 method 12.\n" ** 96;
@@ -65,6 +88,10 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "stored.bin", .data = &stored, .method = .stored, .comment = "stored entry" },
         .{ .name = "folder/shrink.txt", .data = shrink_payload, .method = .shrink, .comment = "shrink entry" },
         .{ .name = "folder/implode.txt", .data = implode_payload, .method = .implode, .comment = "implode entry" },
+        .{ .name = "folder/reduce1.txt", .data = reduce1_payload, .method = .reduce_1, .comment = "reduce1 entry" },
+        .{ .name = "folder/reduce2.txt", .data = reduce2_payload, .method = .reduce_2, .comment = "reduce2 entry" },
+        .{ .name = "folder/reduce3.txt", .data = reduce3_payload, .method = .reduce_3, .comment = "reduce3 entry" },
+        .{ .name = "folder/reduce4.txt", .data = reduce4_payload, .method = .reduce_4, .comment = "reduce4 entry" },
         .{ .name = "folder/deflated.txt", .data = deflated, .method = .deflate, .comment = "deflated entry" },
         .{ .name = "folder/deflate64.txt", .data = deflate64_payload, .method = .deflate64, .comment = "deflate64 entry" },
         .{ .name = "folder/bzip2.txt", .data = bzip2_payload, .method = .bzip2, .comment = "bzip2 entry" },
@@ -82,7 +109,7 @@ pub fn main(init: std.process.Init) !void {
     try bytes.appendSlice(init.gpa, "MZ-VORT-ZIP-PREFIX\n");
     _ = try vort.zipEncodeAppend(init.gpa, &bytes, &entries, .{
         .archive_comment = "vort zip writer differential",
-        .data_descriptor = !implode_mode,
+        .data_descriptor = !(implode_mode or reduce_mode),
         .zip64 = zip64,
         .implode_options = .{
             .dictionary = if (implode_large) .large_8k else .small_4k,

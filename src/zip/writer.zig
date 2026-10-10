@@ -7,12 +7,13 @@ const deflate64 = @import("../deflate64.zig");
 const implode = @import("implode.zig");
 const lzma_writer = @import("../lzma/writer.zig");
 const ppmd8 = @import("../ppmd8.zig");
+const reduce = @import("reduce.zig");
 const shrink = @import("shrink.zig");
 const types = @import("types.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = core.Error || bzip2.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || shrink.Error || xz.Error || zstd.Error || error{
+pub const Error = core.Error || bzip2.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -45,6 +46,7 @@ pub const EncodeOptions = struct {
     bzip2_options: bzip2.EncodeOptions = .{},
     lzma_options: lzma_writer.ZipEncodeOptions = .{},
     ppmd_options: ppmd8.ZipProperties = .{},
+    reduce_options: reduce.Options = .{},
     xz_options: xz.EncodeOptions = .{},
     zstd_level: c_int = zstd.default_compression_level,
     zstd_options: zstd.FrameOptions = .{},
@@ -123,6 +125,16 @@ pub fn encodeAppend(
             .stored => entry.data,
             .shrink => blk: {
                 const bytes = try shrink.encodeAlloc(allocator, entry.data);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
+            .reduce_1, .reduce_2, .reduce_3, .reduce_4 => blk: {
+                const bytes = try reduce.encodeAlloc(
+                    allocator,
+                    entry.data,
+                    reduceFactor(entry.method).?,
+                    options.reduce_options,
+                );
                 owned_compressed = bytes;
                 break :blk bytes;
             },
@@ -264,6 +276,8 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
             return error.Zip32LimitExceeded;
         switch (entry.method) {
             .stored, .shrink, .deflate, .deflate64, .bzip2, .xz, .zstandard_legacy, .zstandard => {},
+            .reduce_1, .reduce_2, .reduce_3, .reduce_4 => if (options.reduce_options.max_chain == 0)
+                return error.InvalidReduceOptions,
             .implode => if (options.implode_options.max_chain == 0)
                 return error.InvalidImplodeOptions,
             .lzma => try lzma_writer.validateZipOptions(options.lzma_options),
@@ -409,6 +423,16 @@ fn requiredVersion(method: CompressionMethod, zip64: bool) u16 {
 
 fn isZstandardMethod(method: CompressionMethod) bool {
     return method == .zstandard_legacy or method == .zstandard;
+}
+
+fn reduceFactor(method: CompressionMethod) ?reduce.Factor {
+    return switch (method) {
+        .reduce_1 => .factor_1,
+        .reduce_2 => .factor_2,
+        .reduce_3 => .factor_3,
+        .reduce_4 => .factor_4,
+        else => null,
+    };
 }
 
 fn absoluteOffset(base: usize, relative: usize) Error!u64 {

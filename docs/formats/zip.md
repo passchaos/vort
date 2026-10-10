@@ -12,6 +12,8 @@ Supported entry methods:
 - stored (`method 0`);
 - Shrink (`method 1`) with 9...13-bit LSB-first LZW, code-width controls, and
   leaf-only partial dictionary clearing;
+- Reduce factors 1...4 (`methods 2...5`) with follower-set probability coding
+  and DLE-encoded length/distance matches;
 - Implode (`method 6`) with 4/8 KiB dictionaries and both raw-literal/two-tree
   and Huffman-literal/three-tree modes;
 - raw Deflate (`method 8`) through the same decoder used by Vort's public raw,
@@ -34,8 +36,9 @@ Deflate consumption, and IEEE CRC-32. It supports 32- and 64-bit data
 descriptors with or without a descriptor signature because extraction
 boundaries come from the central directory.
 
-The writer accepts multiple borrowed entries and emits stored, Shrink, Implode,
-raw-Deflate, Deflate64, Bzip2, LZMA, legacy/current Zstandard, XZ, or PPMd
+The writer accepts multiple borrowed entries and emits stored, Shrink, all four
+Reduce factors, Implode, raw-Deflate, Deflate64, Bzip2, LZMA,
+legacy/current Zstandard, XZ, or PPMd
 members. Select
 `.zstandard_legacy` for method 20 and `.zstandard` for method 93; both carry the
 same standard Zstandard frame payload. Deflate64 uses a greedy
@@ -57,6 +60,7 @@ descriptor signature when enabled.
 const entries = [_]vort.ZipEncodeEntry{
     .{ .name = "plain.bin", .data = plain, .method = .stored },
     .{ .name = "folder/legacy.txt", .data = text, .method = .shrink },
+    .{ .name = "folder/reduced.txt", .data = text, .method = .reduce_4 },
     .{ .name = "folder/imploded.txt", .data = text, .method = .implode },
     .{ .name = "folder/data.txt", .data = text, .method = .deflate },
     .{ .name = "folder/large.bin", .data = large_data, .method = .deflate64 },
@@ -85,6 +89,13 @@ full 8,192-entry dictionary. This is valid method-1 output; emitting adaptive
 partial clears is a later ratio optimization. The decoder already accepts and
 validates width controls, partial clears, orphan protection, truncation, exact
 decoded size, and packed-input consumption.
+The Reduce implementation shares one parameterized core across factors 1...4.
+Its writer trains deterministic follower sets and applies a bounded greedy DLE
+matcher; its decoder accepts arbitrary valid sets, escaped DLE literals,
+extended lengths, implicit zero history, overlapping matches, and exact packed
+input/output accounting. Locally available 7-Zip and copyright-clean Info-ZIP
+builds omit Reduce decompression, so the required differential reports these
+four methods as Vort self-coverage rather than overstating external validation.
 `EncodeOptions.implode_options` selects a 4 or 8 KiB dictionary and raw or
 Shannon-Fano-coded literals. The writer uses a bounded greedy match search and
 complete fixed 6/8-bit trees; adaptive tree generation is later ratio work.
@@ -138,11 +149,11 @@ zig build run-zip-diff
 
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
-than stored/Shrink/Implode/Deflate/Deflate64/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
+than stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
 reader deliberately
 rejects encrypted entries, multi-disk archives, malformed/duplicate ZIP64
 extra fields, and compression methods other than
-stored/Shrink/Implode/Deflate/Deflate64/Bzip2/LZMA/
+stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/Bzip2/LZMA/
 Zstandard-20/Zstandard-93/XZ/PPMd with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. Encryption, split archives, and additional entry

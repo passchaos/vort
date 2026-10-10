@@ -549,6 +549,10 @@ pub fn main(init: std.process.Init) !void {
             const method_name: []const u8 = switch (entry.method) {
                 .stored => "stored",
                 .shrink => "shrink",
+                .reduce_1 => "reduce1",
+                .reduce_2 => "reduce2",
+                .reduce_3 => "reduce3",
+                .reduce_4 => "reduce4",
                 .implode => "implode",
                 .deflate => "deflate",
                 .deflate64 => "deflate64",

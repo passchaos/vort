@@ -87,6 +87,15 @@ def make_single_entry_zip(name: str, payload: bytes, compressed: bytes, method: 
     return local + central + eocd
 
 
+def make_legacy_payload(prefix_len: int, seed: int) -> bytes:
+    state = seed
+    prefix = bytearray()
+    for _ in range(prefix_len):
+        state = (state * 1_664_525 + 1_013_904_223) & 0xFFFFFFFF
+        prefix.append(state >> 24)
+    return bytes(prefix) + b"\x42" + bytes(prefix)
+
+
 def validate_python_archive_with_vort(cli: Path, temp: Path) -> int:
     payloads = {
         "stored.bin": bytes(range(64)) + b"\x00stored\xff",
@@ -213,16 +222,15 @@ def validate_vort_archive_with_python(
     for _ in range(32 * 1024):
         shrink_state = (shrink_state * 1_664_525 + 1_013_904_223) & 0xFFFFFFFF
         shrink_payload.append(shrink_state >> 24)
-    implode_state = 0x193A72D5
-    implode_prefix = bytearray()
-    for _ in range(5000):
-        implode_state = (implode_state * 1_664_525 + 1_013_904_223) & 0xFFFFFFFF
-        implode_prefix.append(implode_state >> 24)
-    implode_payload = bytes(implode_prefix) + b"\x42" + bytes(implode_prefix)
+    implode_payload = make_legacy_payload(5000, 0x193A72D5)
     payloads = {
         "stored.bin": bytes([0, 1, 2, 255]) + b"stored by Vort",
         "folder/shrink.txt": bytes(shrink_payload),
         "folder/implode.txt": implode_payload,
+        "folder/reduce1.txt": make_legacy_payload(400, 0x10203041),
+        "folder/reduce2.txt": make_legacy_payload(800, 0x20304052),
+        "folder/reduce3.txt": make_legacy_payload(1500, 0x30405063),
+        "folder/reduce4.txt": make_legacy_payload(3000, 0x40506074),
         "folder/deflated.txt": b"Vort ZIP writer differential.\n" * 128,
         "folder/deflate64.txt": b"Vort ZIP Deflate64 method 9.\n" * 128,
         "folder/bzip2.txt": b"Vort ZIP Bzip2 method 12.\n" * 96,
@@ -259,6 +267,10 @@ def validate_vort_archive_with_python(
             "stored.bin": zipfile.ZIP_STORED,
             "folder/shrink.txt": 1,
             "folder/implode.txt": 6,
+            "folder/reduce1.txt": 2,
+            "folder/reduce2.txt": 3,
+            "folder/reduce3.txt": 4,
+            "folder/reduce4.txt": 5,
             "folder/deflated.txt": zipfile.ZIP_DEFLATED,
             "folder/deflate64.txt": 9,
             "folder/bzip2.txt": zipfile.ZIP_BZIP2,
@@ -284,7 +296,7 @@ def validate_vort_archive_with_python(
                     check=True,
                     stdout=subprocess.PIPE,
                 ).stdout
-            elif info.compress_type == 6:
+            elif info.compress_type in (2, 3, 4, 5, 6):
                 # 7-Zip 21.07 rejects descriptor-backed Implode entries. The
                 # dedicated no-descriptor mode matrix below validates its
                 # decoder independently; Vort self-extraction validates this
@@ -416,12 +428,7 @@ def validate_vort_ppmd_cutoff_with_seven_zip(writer: Path, tool: str, temp: Path
 
 
 def validate_vort_implode_modes_with_seven_zip(writer: Path, tool: str, temp: Path) -> int:
-    state = 0x193A72D5
-    prefix = bytearray()
-    for _ in range(5000):
-        state = (state * 1_664_525 + 1_013_904_223) & 0xFFFFFFFF
-        prefix.append(state >> 24)
-    expected = bytes(prefix) + b"\x42" + bytes(prefix)
+    expected = make_legacy_payload(5000, 0x193A72D5)
     sizes: dict[str, int] = {}
     for dictionary, dictionary_flag in (("4k", 0), ("8k", 2)):
         for literals, literal_flag in (("raw", 0), ("tree", 4)):
@@ -447,6 +454,27 @@ def validate_vort_implode_modes_with_seven_zip(writer: Path, tool: str, temp: Pa
         if sizes[f"implode-8k-{literals}"] >= sizes[f"implode-4k-{literals}"]:
             raise AssertionError("Vort 8 KiB Implode mode did not use its long-distance match")
     return len(sizes)
+
+
+def validate_vort_reduce_modes(cli: Path, writer: Path, temp: Path) -> int:
+    archive = temp / "vort-reduce.zip"
+    run(writer, str(archive), "reduce")
+    cases = {
+        "folder/reduce1.txt": make_legacy_payload(400, 0x10203041),
+        "folder/reduce2.txt": make_legacy_payload(800, 0x20304052),
+        "folder/reduce3.txt": make_legacy_payload(1500, 0x30405063),
+        "folder/reduce4.txt": make_legacy_payload(3000, 0x40506074),
+    }
+    with zipfile.ZipFile(archive) as parsed:
+        for index, (name, expected) in enumerate(cases.items(), start=1):
+            info = parsed.getinfo(name)
+            if info.compress_type != index + 1:
+                raise AssertionError(f"Vort ZIP Reduce method mismatch for {name}")
+            output = temp / f"reduce-{index}.out"
+            run(cli, "extract-zip-file", str(archive), name, str(output))
+            if output.read_bytes() != expected:
+                raise AssertionError(f"Vort ZIP Reduce self-extraction mismatch for {name}")
+    return len(cases)
 
 
 def validate_seven_zip_deflate64_with_vort(cli: Path, tool: str, temp: Path) -> int:
@@ -567,6 +595,7 @@ def main() -> None:
         deflate64_cases = 0
         ppmd_cases = 0
         implode_modes = 0
+        reduce_methods = validate_vort_reduce_modes(args.cli, args.writer, temp)
         if seven_zip_tool is not None:
             validate_seven_zip_xz_with_vort(args.cli, seven_zip_tool, temp)
             validate_vort_ppmd_cutoff_with_seven_zip(
@@ -584,11 +613,12 @@ def main() -> None:
 
     print(
         "zip_diff=ok directions=2 "
-        f"python_entries=7 vort_entries=13 zstd_methods=2 python_bytes={python_bytes} "
+        f"python_entries=7 vort_entries=17 zstd_methods=2 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"system_7zip={seven_zip_tool is not None} deflate64_cases={deflate64_cases} "
         f"ppmd_cases={ppmd_cases} vort_ppmd_cutoff={seven_zip_tool is not None} "
-        f"vort_shrink={seven_zip_tool is not None} implode_modes={implode_modes}"
+        f"vort_shrink={seven_zip_tool is not None} implode_modes={implode_modes} "
+        f"reduce_self_methods={reduce_methods}"
     )
 
 

@@ -1024,7 +1024,7 @@ pub fn build(b: *std.Build) void {
     zip_diff.addArg("--writer");
     zip_diff.addArtifactArg(zip_writer_probe_exe);
     if (b.args) |args| zip_diff.addArgs(args);
-    const zip_diff_step = b.step("run-zip-diff", "Validate ZIP32/ZIP64 Shrink, Implode, Deflate64, Bzip2, LZMA, Zstandard, XZ, and PPMd interoperability");
+    const zip_diff_step = b.step("run-zip-diff", "Validate ZIP32/ZIP64 Reduce, Shrink, Implode, Deflate64, Bzip2, LZMA, Zstandard, XZ, and PPMd interoperability");
     zip_diff_step.dependOn(&zip_diff.step);
 
     const bzip2_diff = b.addSystemCommand(&.{ "python3", "tools/bzip2/diff.py", "--cli" });

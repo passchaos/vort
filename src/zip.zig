@@ -10,10 +10,11 @@ const ppmd8 = @import("ppmd8.zig");
 const xz = @import("xz.zig");
 const zstd = @import("zstd.zig");
 const records = @import("zip/records.zig");
+const reduce = @import("zip/reduce.zig");
 const shrink = @import("zip/shrink.zig");
 pub const writer = @import("zip/writer.zig");
 
-pub const Error = writer.Error || bzip2.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || shrink.Error || xz.Error || zstd.Error || error{
+pub const Error = writer.Error || bzip2.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -149,6 +150,11 @@ pub const Archive = struct {
                 @memcpy(target, compressed);
             },
             .shrink => try shrink.decodeInto(compressed, target),
+            .reduce_1, .reduce_2, .reduce_3, .reduce_4 => try reduce.decodeInto(
+                compressed,
+                target,
+                reduceFactor(canonical.method).?,
+            ),
             .implode => try implode.decodeInto(compressed, target, canonical.flags),
             .deflate => {
                 const decoded = try deflate.decodeRawAuto(compressed, target);
@@ -442,6 +448,16 @@ fn readU16(bytes: []const u8, offset: usize) Error!u16 {
 
 fn isZstandardMethod(method: CompressionMethod) bool {
     return method == .zstandard_legacy or method == .zstandard;
+}
+
+fn reduceFactor(method: CompressionMethod) ?reduce.Factor {
+    return switch (method) {
+        .reduce_1 => .factor_1,
+        .reduce_2 => .factor_2,
+        .reduce_3 => .factor_3,
+        .reduce_4 => .factor_4,
+        else => null,
+    };
 }
 
 fn readU32(bytes: []const u8, offset: usize) Error!u32 {
@@ -814,6 +830,33 @@ test "ZIP method 1 extracts an Apache Commons Compress Shrink fixture" {
         const decoded = try archive.extractAlloc(allocator, entry);
         defer allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "ZIP methods 2 through 5 Reduce writer round trip all factors" {
+    const allocator = std.testing.allocator;
+    const payload = ("Reduced ZIP follower-set payload.\n" ** 256) ++
+        ([_]u8{ 0, 1, 2, 3, 4, 5, 144 } ** 128);
+    inline for (.{
+        CompressionMethod.reduce_1,
+        .reduce_2,
+        .reduce_3,
+        .reduce_4,
+    }) |method| {
+        const entries = [_]EncodeEntry{.{
+            .name = "compressed-with-reduce.txt",
+            .data = payload,
+            .method = method,
+        }};
+        const bytes = try encodeAlloc(allocator, &entries, .{ .data_descriptor = true });
+        defer allocator.free(bytes);
+        const archive = try parse(bytes);
+        const entry = try archive.entryAt(0);
+        try std.testing.expectEqual(method, entry.method);
+        try std.testing.expect(entry.compressed_size < entry.uncompressed_size);
+        var output: [payload.len]u8 = undefined;
+        try std.testing.expectEqual(payload.len, try archive.extractInto(entry, &output));
+        try std.testing.expectEqualSlices(u8, payload, &output);
     }
 }
 
