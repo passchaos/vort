@@ -68,6 +68,33 @@ def compare_archive_entries(
     return len(names)
 
 
+def compare_volume_entries(
+    cli: Path,
+    seven_zip: Path,
+    archives: tuple[Path, ...],
+    names: tuple[str, ...],
+    root: Path,
+    label: str,
+) -> int:
+    reference = root / f"reference-{label}"
+    reference.mkdir()
+    run(seven_zip, "x", "-y", f"-o{reference}", str(archives[0]))
+    for index, name in enumerate(names):
+        output = root / f"decoded-{label}-{index}.out"
+        run(
+            cli,
+            "extract-rar-volumes",
+            name,
+            str(output),
+            str(256 * 1024 * 1024),
+            *(str(archive) for archive in archives),
+        )
+        expected = reference.joinpath(*name.replace("\\", "/").split("/"))
+        if output.read_bytes() != expected.read_bytes():
+            raise AssertionError(f"Vort volume mismatch for {archives[0].name}:{name}")
+    return len(names)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
@@ -96,6 +123,8 @@ def main() -> None:
     rar50_entries = 0
     rar50_multiblock = 0
     rar50_solid_entries = 0
+    rar50_volume_sets = 0
+    rar50_volume_entries = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-rar-diff-") as temp_text:
         temp = Path(temp_text)
@@ -408,6 +437,69 @@ def main() -> None:
                     method="rar50",
                 )
 
+            rar50_root = args.legacy_fixtures.parent / "rar50"
+            volume_cases = (
+                (
+                    tuple(rar50_root / f"multivol.part{index}.rar" for index in range(1, 4)),
+                    ("random_4k.bin",),
+                    "rar50-volume-compressed",
+                ),
+                (
+                    tuple(rar50_root / f"stored_multivol.part{index}.rar" for index in range(1, 4)),
+                    ("random_4k.bin",),
+                    "rar50-volume-stored",
+                ),
+                (
+                    tuple(
+                        rar50_root / f"solid_multivol.part{index:02}.rar"
+                        for index in range(1, 7)
+                    ),
+                    ("tiny.txt", "bigtext_64k.bin"),
+                    "rar50-volume-solid",
+                ),
+                (
+                    tuple(rar50_root / f"multivol_rev.part{index}.rar" for index in range(1, 6)),
+                    ("random_16k.bin",),
+                    "rar50-volume-recovery",
+                ),
+            )
+            for archives, names, label in volume_cases:
+                rar50_volume_entries += compare_volume_entries(
+                    args.cli,
+                    seven_zip,
+                    archives,
+                    names,
+                    temp,
+                    label,
+                )
+                rar50_volume_sets += 1
+
+            missing_volume = run(
+                args.cli,
+                "extract-rar-volumes",
+                "random_4k.bin",
+                str(temp / "rar50-missing-volume.out"),
+                "10000",
+                str(rar50_root / "multivol.part1.rar"),
+                str(rar50_root / "multivol.part3.rar"),
+                check=False,
+            )
+            if missing_volume.returncode == 0 or "InvalidRarVolumeSet" not in missing_volume.stderr:
+                raise AssertionError("Vort accepted a RAR50 set with a missing volume")
+
+            reversed_volumes = run(
+                args.cli,
+                "extract-rar-volumes",
+                "random_4k.bin",
+                str(temp / "rar50-reversed-volumes.out"),
+                "10000",
+                str(rar50_root / "multivol.part2.rar"),
+                str(rar50_root / "multivol.part1.rar"),
+                check=False,
+            )
+            if reversed_volumes.returncode == 0 or "InvalidRarVolumeSet" not in reversed_volumes.stderr:
+                raise AssertionError("Vort accepted reversed RAR50 volumes")
+
             missing_tables = args.legacy_fixtures.parent / "rar50" / "first_block_without_tables.rar"
             failed = run(
                 args.cli,
@@ -494,6 +586,8 @@ def main() -> None:
         f"rar50_entries={rar50_entries} "
         f"rar50_multiblock={rar50_multiblock} "
         f"rar50_solid_entries={rar50_solid_entries} "
+        f"rar50_volume_sets={rar50_volume_sets} "
+        f"rar50_volume_entries={rar50_volume_entries} "
         f"header_crc=True data_crc=True sfx=True"
     )
 

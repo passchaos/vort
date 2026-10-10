@@ -62,6 +62,12 @@ entry data from `nextAlloc`. `extractByNameAllocLimited` and
 when the requested entry is a solid continuation. Direct random-access
 `extractAlloc` remains an explicit `UnsupportedRarFeature` for such an entry,
 because it has no preceding state.
+`parseRarVolumeSetAlloc` accepts an ordered slice of borrowed volume bytes. It
+validates RAR5 volume numbers and next-volume flags, groups contiguous
+split-before/split-after fragments into logical entries, and rejects missing,
+reversed, interrupted, or metadata-changing fragment chains. Its extraction
+session concatenates packed fragments before decoding and carries RAR50 solid
+state across logical entries and volume boundaries.
 Directories, unsupported compressed data, encrypted entries, encrypted
 headers, RAR5 redirections, unknown-size members, incomplete split-volume
 members, and unsupported RAR20/RAR29 solid continuations return specific
@@ -124,6 +130,13 @@ zig build run-rar-diff -- \
   --legacy-fixtures path/to/rars/tests/fixtures/rar15_40
 ```
 
-The next functionality stages are RAR5 multi-volume reconstruction and
-compressed writing. Encrypted payloads should be added on top of those decoders
-rather than approximated in the stored path.
+The CLI validation surface accepts an explicit ordered volume list:
+
+```sh
+zig build run -- extract-rar-volumes entry.bin output.bin 1048576 \
+  archive.part1.rar archive.part2.rar archive.part3.rar
+```
+
+The next functionality stage is compressed RAR writing, followed by encrypted
+payloads. Encryption should be added on top of the existing decoders rather
+than approximated in the stored path.

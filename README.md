@@ -168,7 +168,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   payload CRC-32,
   UTF-8 RAR5 names, RAR50 LZ and Delta/E8/E8E9/ARM filters, sequential solid
   sessions with pre-filter history, bounded extraction, explicit encrypted/
-  split/redirection/unknown-size and unsupported legacy-solid errors, and
+  redirection/unknown-size and unsupported legacy-solid errors, ordered RAR5
+  multi-volume reconstruction for stored/compressed/solid split entries, and
   7-Zip plus rars interoperability; compressed RAR writing remains pending;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded
   extraction for Stored, MSZIP, 15–21 bit LZX, and 10–21 bit Quantum folders,

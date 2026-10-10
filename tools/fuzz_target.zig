@@ -301,6 +301,20 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseRarVolumeSetAlloc(allocator, &.{data})) |set_value| {
+        var set = set_value;
+        set.deinit();
+    } else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidRarArchive,
+        error.InvalidRarVolumeSet,
+        error.EncryptedRarHeaders,
+        error.TruncatedFrame,
+        error.ChecksumMismatch,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.parseCabArchive(data)) |cabinet| {
         for (0..cabinet.folder_count) |folder_index| {
             if (vort.decodeCabFolderAllocLimited(allocator, cabinet, folder_index, 1 << 20)) |decoded| {
