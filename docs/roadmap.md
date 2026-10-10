@@ -17646,7 +17646,8 @@ reuse, so production keeps the simpler independently owned plans.
   single-disk ZIP64 reading and deterministic writing. The library parses EOCD,
   ZIP64 locator/EOCD, ordered `0x0001` central/local extra fields, and 32-/64-bit
   data descriptors; it iterates and finds entries without allocation, extracts
-  stored, raw-Deflate, Deflate64, Bzip2, LZMA, Zstandard methods 20/93, XZ, and PPMd
+  stored, Shrink, raw-Deflate, Deflate64, Bzip2, LZMA, Zstandard methods 20/93,
+  XZ, and PPMd
   members into caller buffers or bounded allocations where their scratch
   requirements allow, and encodes multi-entry stored/Deflate/Deflate64/Bzip2/
   LZMA/Zstandard-20/93/XZ/PPMd archives through owned or transactional append APIs.
@@ -17662,6 +17663,12 @@ reuse, so production keeps the simpler independently owned plans.
   Zig PPMd8 model with both restart and cut-off restoration, a checked two-byte
   order/memory/restore prefix, explicit end-marker and range completion, and a
   caller-selected model-memory limit (64 MiB by default, 256 MiB wire maximum).
+  Method 1 adds a bounded 8,192-entry Shrink/LZW decoder with 9...13-bit width
+  changes, partial leaf clearing, orphan checks, and exact input/output
+  consumption. Its deterministic writer emits standard width controls and
+  freezes a full dictionary; adaptive partial clearing remains ratio work. An
+  Apache Commons Compress Shrink archive supplies independent reader coverage,
+  while system 7-Zip extracts Vort-generated method-1 entries.
   A bidirectional
   Python `zipfile` differential covers Python `force_zip64`, fully forced Vort ZIP64 archives,
   descriptors, UTF-8 names, directories, comments, deterministic output,

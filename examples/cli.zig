@@ -548,6 +548,7 @@ pub fn main(init: std.process.Init) !void {
         while (try it.next()) |entry| : (index += 1) {
             const method_name: []const u8 = switch (entry.method) {
                 .stored => "stored",
+                .shrink => "shrink",
                 .deflate => "deflate",
                 .deflate64 => "deflate64",
                 .bzip2 => "bzip2",

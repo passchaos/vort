@@ -6,11 +6,12 @@ const deflate = @import("../deflate.zig");
 const deflate64 = @import("../deflate64.zig");
 const lzma_writer = @import("../lzma/writer.zig");
 const ppmd8 = @import("../ppmd8.zig");
+const shrink = @import("shrink.zig");
 const types = @import("types.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = core.Error || bzip2.Error || deflate64.Error || lzma_writer.Error || ppmd8.Error || xz.Error || zstd.Error || error{
+pub const Error = core.Error || bzip2.Error || deflate64.Error || lzma_writer.Error || ppmd8.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -117,6 +118,11 @@ pub fn encodeAppend(
         defer if (owned_compressed) |bytes| allocator.free(bytes);
         const compressed = switch (entry.method) {
             .stored => entry.data,
+            .shrink => blk: {
+                const bytes = try shrink.encodeAlloc(allocator, entry.data);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
             .deflate => blk: {
                 const bytes = try deflate.encodeRawBestAlloc(allocator, entry.data, options.deflate_options);
                 owned_compressed = bytes;
@@ -249,7 +255,7 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
         if (options.zip64 == .never and entry.data.len >= std.math.maxInt(u32))
             return error.Zip32LimitExceeded;
         switch (entry.method) {
-            .stored, .deflate, .deflate64, .bzip2, .xz, .zstandard_legacy, .zstandard => {},
+            .stored, .shrink, .deflate, .deflate64, .bzip2, .xz, .zstandard_legacy, .zstandard => {},
             .lzma => try lzma_writer.validateZipOptions(options.lzma_options),
             .ppmd => try ppmd8.validateZipProperties(options.ppmd_options),
             else => return error.UnsupportedZipCompressionMethod,

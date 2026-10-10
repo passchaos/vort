@@ -208,8 +208,14 @@ def validate_vort_archive_with_python(
     force_zip64: bool,
     seven_zip_tool: str | None,
 ) -> int:
+    shrink_state = 0x5A17C9E3
+    shrink_payload = bytearray()
+    for _ in range(32 * 1024):
+        shrink_state = (shrink_state * 1_664_525 + 1_013_904_223) & 0xFFFFFFFF
+        shrink_payload.append(shrink_state >> 24)
     payloads = {
         "stored.bin": bytes([0, 1, 2, 255]) + b"stored by Vort",
+        "folder/shrink.txt": bytes(shrink_payload),
         "folder/deflated.txt": b"Vort ZIP writer differential.\n" * 128,
         "folder/deflate64.txt": b"Vort ZIP Deflate64 method 9.\n" * 128,
         "folder/bzip2.txt": b"Vort ZIP Bzip2 method 12.\n" * 96,
@@ -244,6 +250,7 @@ def validate_vort_archive_with_python(
             raise AssertionError(f"unexpected Vort entry order: {archive.namelist()!r}")
         expected_methods = {
             "stored.bin": zipfile.ZIP_STORED,
+            "folder/shrink.txt": 1,
             "folder/deflated.txt": zipfile.ZIP_DEFLATED,
             "folder/deflate64.txt": 9,
             "folder/bzip2.txt": zipfile.ZIP_BZIP2,
@@ -269,10 +276,10 @@ def validate_vort_archive_with_python(
                     check=True,
                     stdout=subprocess.PIPE,
                 ).stdout
-            elif info.compress_type in (9, 98):
+            elif info.compress_type in (1, 9, 98):
                 if seven_zip_tool is None:
                     # The Vort self-extraction pass below still validates these
-                    # entries when no independent Deflate64/PPMd tool is installed.
+                    # entries when no independent Shrink/Deflate64/PPMd tool is installed.
                     actual = expected
                 else:
                     actual = subprocess.run(
@@ -525,10 +532,11 @@ def main() -> None:
 
     print(
         "zip_diff=ok directions=2 "
-        f"python_entries=7 vort_entries=11 zstd_methods=2 python_bytes={python_bytes} "
+        f"python_entries=7 vort_entries=12 zstd_methods=2 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"system_7zip={seven_zip_tool is not None} deflate64_cases={deflate64_cases} "
-        f"ppmd_cases={ppmd_cases} vort_ppmd_cutoff={seven_zip_tool is not None}"
+        f"ppmd_cases={ppmd_cases} vort_ppmd_cutoff={seven_zip_tool is not None} "
+        f"vort_shrink={seven_zip_tool is not None}"
     )
 
 

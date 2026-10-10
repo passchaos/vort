@@ -19,6 +19,13 @@ pub fn main(init: std.process.Init) !void {
     const ppmd_cutoff = if (mode) |value| std.mem.eql(u8, value, "ppmd-cutoff") else false;
 
     const stored = [_]u8{ 0, 1, 2, 0xff } ++ "stored by Vort".*;
+    const shrink_payload = try init.gpa.alloc(u8, 32 * 1024);
+    defer init.gpa.free(shrink_payload);
+    var shrink_state: u32 = 0x5a17_c9e3;
+    for (shrink_payload) |*byte| {
+        shrink_state = shrink_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(shrink_state >> 24);
+    }
     const deflated = "Vort ZIP writer differential.\n" ** 128;
     const deflate64_payload = "Vort ZIP Deflate64 method 9.\n" ** 128;
     const bzip2_payload = "Vort ZIP Bzip2 method 12.\n" ** 96;
@@ -30,6 +37,7 @@ pub fn main(init: std.process.Init) !void {
     const utf8_payload = "ZIP UTF-8 文件名\n" ** 17;
     const entries = [_]vort.ZipEncodeEntry{
         .{ .name = "stored.bin", .data = &stored, .method = .stored, .comment = "stored entry" },
+        .{ .name = "folder/shrink.txt", .data = shrink_payload, .method = .shrink, .comment = "shrink entry" },
         .{ .name = "folder/deflated.txt", .data = deflated, .method = .deflate, .comment = "deflated entry" },
         .{ .name = "folder/deflate64.txt", .data = deflate64_payload, .method = .deflate64, .comment = "deflate64 entry" },
         .{ .name = "folder/bzip2.txt", .data = bzip2_payload, .method = .bzip2, .comment = "bzip2 entry" },

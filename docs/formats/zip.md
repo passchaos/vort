@@ -10,6 +10,8 @@ local headers.
 Supported entry methods:
 
 - stored (`method 0`);
+- Shrink (`method 1`) with 9...13-bit LSB-first LZW, code-width controls, and
+  leaf-only partial dictionary clearing;
 - raw Deflate (`method 8`) through the same decoder used by Vort's public raw,
   zlib, and gzip APIs;
 - Deflate64 (`method 9`) with its 64 KiB window, 32 distance symbols, and
@@ -30,8 +32,9 @@ Deflate consumption, and IEEE CRC-32. It supports 32- and 64-bit data
 descriptors with or without a descriptor signature because extraction
 boundaries come from the central directory.
 
-The writer accepts multiple borrowed entries and emits stored, raw-Deflate,
-Deflate64, Bzip2, LZMA, legacy/current Zstandard, XZ, or PPMd members. Select
+The writer accepts multiple borrowed entries and emits stored, Shrink,
+raw-Deflate, Deflate64, Bzip2, LZMA, legacy/current Zstandard, XZ, or PPMd
+members. Select
 `.zstandard_legacy` for method 20 and `.zstandard` for method 93; both carry the
 same standard Zstandard frame payload. Deflate64 uses a greedy
 fixed-Huffman-or-stored baseline with extended 64 KiB distances and records
@@ -51,6 +54,7 @@ descriptor signature when enabled.
 ```zig
 const entries = [_]vort.ZipEncodeEntry{
     .{ .name = "plain.bin", .data = plain, .method = .stored },
+    .{ .name = "folder/legacy.txt", .data = text, .method = .shrink },
     .{ .name = "folder/data.txt", .data = text, .method = .deflate },
     .{ .name = "folder/large.bin", .data = large_data, .method = .deflate64 },
     .{ .name = "folder/archive.txt", .data = archive_text, .method = .bzip2 },
@@ -73,6 +77,11 @@ through 256 MiB in whole-MiB units, and `.restart` or `.cut_off` restoration.
 Defaults are order 8, 16 MiB, and restart. Method 98 stores those values in its
 two-byte payload prefix, emits an explicit PPMd end marker, and requires ZIP
 version-needed 6.3.
+The functionality-first Shrink writer grows codes through 13 bits and freezes a
+full 8,192-entry dictionary. This is valid method-1 output; emitting adaptive
+partial clears is a later ratio optimization. The decoder already accepts and
+validates width controls, partial clears, orphan protection, truncation, exact
+decoded size, and packed-input consumption.
 
 `zipEncodeAppend` builds the archive transactionally: an error leaves the
 destination length and bytes unchanged. When the destination already contains
@@ -121,15 +130,20 @@ zig build run-zip-diff
 
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
-than stored/Deflate/Deflate64/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
+than stored/Shrink/Deflate/Deflate64/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
 reader deliberately
 rejects encrypted entries, multi-disk archives, malformed/duplicate ZIP64
 extra fields, and compression methods other than
-stored/Deflate/Deflate64/Bzip2/LZMA/
+stored/Shrink/Deflate/Deflate64/Bzip2/LZMA/
 Zstandard-20/Zstandard-93/XZ/PPMd with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. Encryption, split archives, and additional entry
 compression methods remain explicit future compatibility increments.
+
+The differential verifies Vort Shrink output with system 7-Zip, including a
+32 KiB deterministic high-entropy payload that reaches the full dictionary.
+An Apache Commons Compress `SHRUNK.ZIP` fixture independently covers reader
+compatibility, while focused tests cover partial clear and malformed controls.
 
 The Deflate64 codec and its raw APIs are described in
 [`deflate64.md`](deflate64.md).

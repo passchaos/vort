@@ -9,9 +9,10 @@ const ppmd8 = @import("ppmd8.zig");
 const xz = @import("xz.zig");
 const zstd = @import("zstd.zig");
 const records = @import("zip/records.zig");
+const shrink = @import("zip/shrink.zig");
 pub const writer = @import("zip/writer.zig");
 
-pub const Error = writer.Error || bzip2.Error || deflate64.Error || lzma.Error || ppmd8.Error || xz.Error || zstd.Error || error{
+pub const Error = writer.Error || bzip2.Error || deflate64.Error || lzma.Error || ppmd8.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -146,6 +147,7 @@ pub const Archive = struct {
                 if (canonical.compressed_size != canonical.uncompressed_size) return error.InvalidZipArchive;
                 @memcpy(target, compressed);
             },
+            .shrink => try shrink.decodeInto(compressed, target),
             .deflate => {
                 const decoded = try deflate.decodeRawAuto(compressed, target);
                 if (decoded.input_read != compressed.len) return error.InvalidZipArchive;
@@ -760,6 +762,52 @@ test "ZIP writer auto promotes the ZIP32 entry-count sentinel" {
     try std.testing.expect(!first.zip64);
     try std.testing.expect(!last.zip64);
     try std.testing.expectEqualStrings("x", last.name);
+}
+
+test "ZIP method 1 Shrink writer round trips without extraction scratch" {
+    const allocator = std.testing.allocator;
+    const payload = "Shrunk ZIP entry with legacy LZW.\n" ** 256;
+    const entries = [_]EncodeEntry{.{
+        .name = "compressed-with-shrink.txt",
+        .data = payload,
+        .method = .shrink,
+    }};
+    const bytes = try encodeAlloc(allocator, &entries, .{ .data_descriptor = true });
+    defer allocator.free(bytes);
+    const archive = try parse(bytes);
+    const entry = try archive.entryAt(0);
+    try std.testing.expectEqual(CompressionMethod.shrink, entry.method);
+    try std.testing.expect(entry.compressed_size < entry.uncompressed_size);
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try archive.extractInto(entry, &output));
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "ZIP method 1 extracts an Apache Commons Compress Shrink fixture" {
+    const allocator = std.testing.allocator;
+    // Apache Commons Compress src/test/resources/SHRUNK.ZIP.
+    // SHA-256: 7403088a3219165f6de8d76abd2daf03bdcf72458dfa14713fc2b34d0293fb4e.
+    const fixture_hex = std.mem.trim(
+        u8,
+        @embedFile("zip/testdata/commons-compress-shrunk.zip.hex"),
+        "\r\n \t",
+    );
+    const fixture = try allocator.alloc(u8, fixture_hex.len / 2);
+    defer allocator.free(fixture);
+    _ = try std.fmt.hexToBytes(fixture, fixture_hex);
+    const archive = try parse(fixture);
+    try std.testing.expectEqual(@as(usize, 2), archive.entry_count);
+    const expected = [_][]const u8{
+        "<?xml version = '1.0'?>\n<!DOCTYPE connections>\n<connections>\n</connections>\n",
+        "<?xml version = '1.0'?>\n<!DOCTYPE connections>\n<meinxml>\n    <leer />\n</meinxml>\n",
+    };
+    for (expected, 0..) |payload, index| {
+        const entry = try archive.entryAt(index);
+        try std.testing.expectEqual(CompressionMethod.shrink, entry.method);
+        const decoded = try archive.extractAlloc(allocator, entry);
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
 }
 
 test "ZIP method 12 round trips through the allocating Bzip2 extraction path" {
