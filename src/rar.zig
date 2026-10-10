@@ -1,4 +1,6 @@
 const archive = @import("rar/archive.zig");
+const rar15 = @import("rar/rar15.zig");
+const rar20 = @import("rar/rar20.zig");
 const writer = @import("rar/writer.zig");
 
 pub const Error = archive.Error || writer.Error;
@@ -16,8 +18,16 @@ pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
 pub const encodeInto = writer.encodeInto;
 pub const isSafePath = archive.isSafePath;
+pub const decodeRar15Into = rar15.decodeInto;
+pub const decodeRar15Alloc = rar15.decodeAlloc;
+pub const decodeRar15AllocLimited = rar15.decodeAllocLimited;
+pub const decodeRar20Into = rar20.decodeInto;
+pub const decodeRar20Alloc = rar20.decodeAlloc;
+pub const decodeRar20AllocLimited = rar20.decodeAllocLimited;
 
 test {
     _ = archive;
+    _ = rar15;
+    _ = rar20;
     _ = writer;
 }

@@ -39,6 +39,31 @@ def seven_zip_extract(tool: Path, archive: Path, output_dir: Path) -> bytes:
     return (output_dir / "payload.bin").read_bytes()
 
 
+def compare_archive_entries(
+    cli: Path,
+    seven_zip: Path,
+    archive: Path,
+    root: Path,
+    label: str,
+) -> int:
+    listing = run(cli, "list-rar-file", str(archive)).stdout
+    names = [
+        line.split(" name=", 1)[1]
+        for line in listing.splitlines()
+        if line.startswith("index=") and "directory=false" in line
+    ]
+    reference = root / f"reference-{label}"
+    reference.mkdir()
+    run(seven_zip, "x", "-y", f"-o{reference}", str(archive))
+    for index, name in enumerate(names):
+        output = root / f"decoded-{label}-{index}.out"
+        run(cli, "extract-rar-file", str(archive), name, str(output), str(256 * 1024 * 1024))
+        expected = reference.joinpath(*name.replace("\\", "/").split("/"))
+        if output.read_bytes() != expected.read_bytes():
+            raise AssertionError(f"Vort mismatch for {archive.name}:{name}")
+    return len(names)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
@@ -46,6 +71,7 @@ def main() -> None:
     parser.add_argument("--7zz", dest="seven_zip", type=Path)
     parser.add_argument("--rars", type=Path)
     parser.add_argument("--fixtures", type=Path)
+    parser.add_argument("--legacy-fixtures", type=Path)
     args = parser.parse_args()
     seven_zip = args.seven_zip
     if seven_zip is None:
@@ -57,6 +83,8 @@ def main() -> None:
     reference_stored = 0
     reference_compressed = 0
     fixture_cases = 0
+    rar15_entries = 0
+    rar20_entries = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-rar-diff-") as temp_text:
         temp = Path(temp_text)
@@ -151,6 +179,69 @@ def main() -> None:
                     raise AssertionError("Vort accepted an incomplete split RAR entry")
                 fixture_cases += 1
 
+        if args.legacy_fixtures is not None and seven_zip is not None:
+            rar15_archives = (
+                args.legacy_fixtures / "rar154" / "readme_154_normal.rar",
+                args.legacy_fixtures / "rar154" / "doc_154_best.rar",
+                args.legacy_fixtures / "rar154" / "audio_dos_names_unpack15.rar",
+                args.legacy_fixtures / "rar154" / "audio_win_names_unpack15.rar",
+            )
+            for index, archive in enumerate(rar15_archives):
+                rar15_entries += compare_archive_entries(
+                    args.cli,
+                    seven_zip,
+                    archive,
+                    temp,
+                    f"rar15-{index}",
+                )
+
+            rar20_archives = (
+                args.legacy_fixtures / "rar250" / "BIGLZ.RAR",
+                args.legacy_fixtures / "rar250" / "AUDIO.RAR",
+                args.legacy_fixtures / "rar250" / "AUTOREJ.RAR",
+                args.legacy_fixtures / "rar250" / "unpack20_audio_text.rar",
+                args.legacy_fixtures / "rar250" / "unpack20_keep_tables.rar",
+                args.legacy_fixtures / "rar250" / "unpack20_multiblock.rar",
+            )
+            for index, archive in enumerate(rar20_archives):
+                rar20_entries += compare_archive_entries(
+                    args.cli,
+                    seven_zip,
+                    archive,
+                    temp,
+                    f"rar20-{index}",
+                )
+
+            encrypted = args.legacy_fixtures / "rar154" / "readme_154_password.rar"
+            failed = run(
+                args.cli,
+                "extract-rar-file",
+                str(encrypted),
+                "README.md",
+                str(temp / "encrypted.out"),
+                check=False,
+            )
+            if failed.returncode == 0 or "EncryptedRarEntry" not in failed.stderr:
+                raise AssertionError("Vort accepted encrypted RAR15 data")
+
+            solid = args.legacy_fixtures / "rar250" / "SOLID.RAR"
+            solid_listing = run(args.cli, "list-rar-file", str(solid)).stdout
+            solid_name = next(
+                line.split(" name=", 1)[1]
+                for line in solid_listing.splitlines()
+                if line.startswith("index=") and "solid=true" in line
+            )
+            failed = run(
+                args.cli,
+                "extract-rar-file",
+                str(solid),
+                solid_name,
+                str(temp / "solid.out"),
+                check=False,
+            )
+            if failed.returncode == 0 or "UnsupportedRarFeature" not in failed.stderr:
+                raise AssertionError("Vort accepted a solid RAR20 continuation without session state")
+
         original = temp / "vort-rar5-first.rar"
         sfx = temp / "sfx.rar"
         sfx.write_bytes(b"MZ deterministic prefix" + original.read_bytes())
@@ -187,7 +278,8 @@ def main() -> None:
         f"versions={len(versions)} self_writer_cases={len(versions)} "
         f"seven_zip={seven_zip is not None} writer_external={writer_external} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
-        f"fixture_cases={fixture_cases} header_crc=True data_crc=True sfx=True"
+        f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "
+        f"rar20_entries={rar20_entries} header_crc=True data_crc=True sfx=True"
     )
 
 

@@ -6,11 +6,14 @@ writer for the two RAR container generations most often encountered today:
 - the `Rar!\x1a\x07\x00` family used by RAR 1.5 through 4.x;
 - the VINT-based `Rar!\x1a\x07\x01\x00` family used by RAR 5 and later.
 
-This increment establishes container and stored-entry interoperability. It does
-not claim to decompress RAR's proprietary compressed methods yet. RAR 1.5,
-2.0/2.6, 2.9/3.x and 5.x compressed entries are classified as `rar15`,
-`rar20`, `rar29`, or `rar50` and extraction returns
-`UnsupportedRarCompression` before allocating output.
+In addition to stored data, Vort decodes non-solid RAR 1.5 and RAR 2.0/2.6
+compressed members. The RAR15 path implements the historical adaptive
+literal/short/long/old-distance state machine and ST mode over a 64 KiB
+history. The RAR20 path implements dynamic canonical Huffman tables, table
+reuse and multiblock transitions, a 1 MiB LZ history, repeated distances, and
+the multimedia/audio predictor. RAR 2.9/3.x and RAR5 compressed entries remain
+classified as `rar29` or `rar50` and return `UnsupportedRarCompression` before
+allocating output.
 
 ## Reader
 
@@ -32,10 +35,11 @@ flags, split-before/split-after state, unknown-size state, redirection presence,
 and path-safety classification.
 
 Stored regular files use caller-owned or explicitly bounded allocation APIs.
-Directories, compressed data, encrypted entries, encrypted headers, RAR5
-redirections, unknown-size members, and incomplete split-volume members return
-specific errors. This prevents a compressed or incomplete member from being
-copied as if it were stored data.
+Directories, unsupported compressed data, encrypted entries, encrypted
+headers, RAR5 redirections, unknown-size members, incomplete split-volume
+members, and compressed solid continuations return specific errors. This
+prevents an unsupported or incomplete member from being copied as if it were
+stored data.
 
 RAR4 Unicode names use a historical custom encoding. The current borrowed
 parser exposes their ANSI fallback name; RAR5 names are the archive's UTF-8
@@ -71,17 +75,19 @@ The writer version is `rar4` or `rar5`; `rar5` is the default.
 `tools/rar/diff.py` performs deterministic/self round trips, validates both
 writers with 7-Zip, reads stored RAR4/RAR5 output from an optional rars-based
 reference helper, verifies that real compressed reference entries are
-classified and explicitly rejected, checks SFX parsing and both CRC layers,
-and exercises RAR2 and RAR5 split-volume fixtures:
+classified correctly, checks SFX parsing and both CRC layers, exercises RAR2
+and RAR5 split-volume fixtures, and compares RAR15/RAR20 text, multiblock,
+keep-table, long-history and audio outputs byte-for-byte with 7-Zip:
 
 ```sh
 zig build run-rar-diff -- \
   --7zz path/to/7zz \
   --rars path/to/reference-writer \
-  --fixtures path/to/unarc-rs/crates/unarc-rs/tests/rar/multi
+  --fixtures path/to/unarc-rs/crates/unarc-rs/tests/rar/multi \
+  --legacy-fixtures path/to/rars/tests/fixtures/rar15_40
 ```
 
-The next functionality stages are the independent RAR 1.5 and RAR 2.0 LZ
-decoders, followed by RAR 2.9 LZ/PPMd and VM filters, then RAR5 LZ/filters.
-Encrypted payloads, solid state and multi-volume reconstruction should be added
-on top of those decoders rather than approximated in the stored path.
+The next functionality stages are RAR 2.9 LZ/PPMd and VM filters, followed by
+RAR5 LZ/filters. Encrypted payloads, solid state and multi-volume reconstruction
+should be added on top of those decoders rather than approximated in the stored
+path.

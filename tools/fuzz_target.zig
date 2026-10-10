@@ -230,6 +230,8 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
                 error.EncryptedRarEntry,
                 error.SplitRarEntry,
                 error.InvalidRarArchive,
+                error.InvalidRar15Stream,
+                error.InvalidRar20Stream,
                 error.TruncatedFrame,
                 error.SizeMismatch,
                 error.ChecksumMismatch,

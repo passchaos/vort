@@ -1,8 +1,10 @@
 const std = @import("std");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
+const rar15 = @import("rar15.zig");
+const rar20 = @import("rar20.zig");
 
-pub const Error = core.Error || error{
+pub const Error = core.Error || rar15.Error || rar20.Error || error{
     InvalidRarArchive,
     UnsupportedRarCompression,
     UnsupportedRarEntry,
@@ -123,10 +125,16 @@ pub const Archive = struct {
             self.bytes.len,
         );
         const data = self.bytes[canonical.data_offset..data_end];
+        const target = output[0..canonical.uncompressed_size];
+        switch (canonical.method) {
+            .stored => @memcpy(target, data),
+            .rar15 => try rar15.decodeInto(data, target),
+            .rar20 => try rar20.decodeInto(data, target),
+            else => unreachable,
+        }
         if (canonical.crc32) |expected|
-            if (checksum.crc32(data) != expected) return error.ChecksumMismatch;
-        @memcpy(output[0..data.len], data);
-        return data.len;
+            if (checksum.crc32(target) != expected) return error.ChecksumMismatch;
+        return target.len;
     }
 
     pub fn extractAlloc(
@@ -178,8 +186,10 @@ pub const Archive = struct {
         if (canonical.encrypted) return error.EncryptedRarEntry;
         if (canonical.split_before or canonical.split_after) return error.SplitRarEntry;
         if (canonical.redirection or canonical.unknown_size) return error.UnsupportedRarFeature;
-        if (canonical.method != .stored) return error.UnsupportedRarCompression;
-        if (canonical.compressed_size != canonical.uncompressed_size)
+        if (canonical.solid and canonical.method != .stored) return error.UnsupportedRarFeature;
+        if (canonical.method != .stored and canonical.method != .rar15 and canonical.method != .rar20)
+            return error.UnsupportedRarCompression;
+        if (canonical.method == .stored and canonical.compressed_size != canonical.uncompressed_size)
             return error.SizeMismatch;
         return canonical;
     }

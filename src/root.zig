@@ -363,6 +363,12 @@ pub const encodeRarAlloc = rar.encodeAlloc;
 pub const encodeRarAppend = rar.encodeAppend;
 pub const encodeRarInto = rar.encodeInto;
 pub const isSafeRarPath = rar.isSafePath;
+pub const decodeRar15Into = rar.decodeRar15Into;
+pub const decodeRar15Alloc = rar.decodeRar15Alloc;
+pub const decodeRar15AllocLimited = rar.decodeRar15AllocLimited;
+pub const decodeRar20Into = rar.decodeRar20Into;
+pub const decodeRar20Alloc = rar.decodeRar20Alloc;
+pub const decodeRar20AllocLimited = rar.decodeRar20AllocLimited;
 
 pub const ZooError = zoo.Error;
 pub const ZooMethod = zoo.Method;
