@@ -7,16 +7,33 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     const output_path = args.next() orelse return error.MissingOutputPath;
     const mode = args.next();
-    const zip64 = if (mode) |value|
-        if (std.mem.eql(u8, value, "zip64"))
-            vort.Zip64Mode.always
-        else if (std.mem.eql(u8, value, "ppmd-cutoff"))
-            vort.Zip64Mode.auto
-        else
-            return error.InvalidZipMode
-    else
-        vort.Zip64Mode.auto;
-    const ppmd_cutoff = if (mode) |value| std.mem.eql(u8, value, "ppmd-cutoff") else false;
+    var zip64: vort.Zip64Mode = .auto;
+    var ppmd_cutoff = false;
+    var implode_large = true;
+    var implode_literal_tree = true;
+    var implode_mode = false;
+    if (mode) |value| {
+        if (std.mem.eql(u8, value, "zip64")) {
+            zip64 = .always;
+        } else if (std.mem.eql(u8, value, "ppmd-cutoff")) {
+            ppmd_cutoff = true;
+        } else if (std.mem.startsWith(u8, value, "implode-")) {
+            implode_mode = true;
+            const specification = value["implode-".len..];
+            if (std.mem.startsWith(u8, specification, "4k-"))
+                implode_large = false
+            else if (!std.mem.startsWith(u8, specification, "8k-"))
+                return error.InvalidZipMode;
+            if (std.mem.endsWith(u8, specification, "tree"))
+                implode_literal_tree = true
+            else if (std.mem.endsWith(u8, specification, "raw"))
+                implode_literal_tree = false
+            else
+                return error.InvalidZipMode;
+        } else {
+            return error.InvalidZipMode;
+        }
+    }
 
     const stored = [_]u8{ 0, 1, 2, 0xff } ++ "stored by Vort".*;
     const shrink_payload = try init.gpa.alloc(u8, 32 * 1024);
@@ -26,6 +43,15 @@ pub fn main(init: std.process.Init) !void {
         shrink_state = shrink_state *% 1_664_525 +% 1_013_904_223;
         byte.* = @truncate(shrink_state >> 24);
     }
+    const implode_payload = try init.gpa.alloc(u8, 10_001);
+    defer init.gpa.free(implode_payload);
+    var implode_state: u32 = 0x193a_72d5;
+    for (implode_payload[0..5000]) |*byte| {
+        implode_state = implode_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(implode_state >> 24);
+    }
+    implode_payload[5000] = 0x42;
+    @memcpy(implode_payload[5001..], implode_payload[0..5000]);
     const deflated = "Vort ZIP writer differential.\n" ** 128;
     const deflate64_payload = "Vort ZIP Deflate64 method 9.\n" ** 128;
     const bzip2_payload = "Vort ZIP Bzip2 method 12.\n" ** 96;
@@ -38,6 +64,7 @@ pub fn main(init: std.process.Init) !void {
     const entries = [_]vort.ZipEncodeEntry{
         .{ .name = "stored.bin", .data = &stored, .method = .stored, .comment = "stored entry" },
         .{ .name = "folder/shrink.txt", .data = shrink_payload, .method = .shrink, .comment = "shrink entry" },
+        .{ .name = "folder/implode.txt", .data = implode_payload, .method = .implode, .comment = "implode entry" },
         .{ .name = "folder/deflated.txt", .data = deflated, .method = .deflate, .comment = "deflated entry" },
         .{ .name = "folder/deflate64.txt", .data = deflate64_payload, .method = .deflate64, .comment = "deflate64 entry" },
         .{ .name = "folder/bzip2.txt", .data = bzip2_payload, .method = .bzip2, .comment = "bzip2 entry" },
@@ -55,8 +82,12 @@ pub fn main(init: std.process.Init) !void {
     try bytes.appendSlice(init.gpa, "MZ-VORT-ZIP-PREFIX\n");
     _ = try vort.zipEncodeAppend(init.gpa, &bytes, &entries, .{
         .archive_comment = "vort zip writer differential",
-        .data_descriptor = true,
+        .data_descriptor = !implode_mode,
         .zip64 = zip64,
+        .implode_options = .{
+            .dictionary = if (implode_large) .large_8k else .small_4k,
+            .literal_tree = implode_literal_tree,
+        },
         .ppmd_options = if (ppmd_cutoff) .{
             .order = 12,
             .memory_size = 1024 * 1024,

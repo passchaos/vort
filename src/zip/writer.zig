@@ -4,6 +4,7 @@ const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const deflate = @import("../deflate.zig");
 const deflate64 = @import("../deflate64.zig");
+const implode = @import("implode.zig");
 const lzma_writer = @import("../lzma/writer.zig");
 const ppmd8 = @import("../ppmd8.zig");
 const shrink = @import("shrink.zig");
@@ -11,7 +12,7 @@ const types = @import("types.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = core.Error || bzip2.Error || deflate64.Error || lzma_writer.Error || ppmd8.Error || shrink.Error || xz.Error || zstd.Error || error{
+pub const Error = core.Error || bzip2.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -40,6 +41,7 @@ pub const EncodeOptions = struct {
     zip64: Zip64Mode = .auto,
     deflate_options: deflate.CompressionOptions = deflate.optionsForLevel(.default),
     deflate64_options: deflate64.EncodeOptions = .{},
+    implode_options: implode.Options = .{},
     bzip2_options: bzip2.EncodeOptions = .{},
     lzma_options: lzma_writer.ZipEncodeOptions = .{},
     ppmd_options: ppmd8.ZipProperties = .{},
@@ -111,6 +113,7 @@ pub fn encodeAppend(
         const crc = checksum.crc32Best(entry.data);
         const uncompressed_size = try usizeToU64(entry.data.len);
         const flags: u16 = (if (entry.method == .lzma) lzma_end_marker_flag else 0) |
+            (if (entry.method == .implode) options.implode_options.flags() else 0) |
             (if (options.data_descriptor) descriptor_flag else 0) |
             (if (options.utf8) utf8_flag else 0);
 
@@ -120,6 +123,11 @@ pub fn encodeAppend(
             .stored => entry.data,
             .shrink => blk: {
                 const bytes = try shrink.encodeAlloc(allocator, entry.data);
+                owned_compressed = bytes;
+                break :blk bytes;
+            },
+            .implode => blk: {
+                const bytes = try implode.encodeAlloc(allocator, entry.data, options.implode_options);
                 owned_compressed = bytes;
                 break :blk bytes;
             },
@@ -256,6 +264,8 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
             return error.Zip32LimitExceeded;
         switch (entry.method) {
             .stored, .shrink, .deflate, .deflate64, .bzip2, .xz, .zstandard_legacy, .zstandard => {},
+            .implode => if (options.implode_options.max_chain == 0)
+                return error.InvalidImplodeOptions,
             .lzma => try lzma_writer.validateZipOptions(options.lzma_options),
             .ppmd => try ppmd8.validateZipProperties(options.ppmd_options),
             else => return error.UnsupportedZipCompressionMethod,

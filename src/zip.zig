@@ -5,6 +5,7 @@ const checksum = @import("checksum.zig");
 const deflate = @import("deflate.zig");
 const deflate64 = @import("deflate64.zig");
 const lzma = @import("lzma.zig");
+const implode = @import("zip/implode.zig");
 const ppmd8 = @import("ppmd8.zig");
 const xz = @import("xz.zig");
 const zstd = @import("zstd.zig");
@@ -12,7 +13,7 @@ const records = @import("zip/records.zig");
 const shrink = @import("zip/shrink.zig");
 pub const writer = @import("zip/writer.zig");
 
-pub const Error = writer.Error || bzip2.Error || deflate64.Error || lzma.Error || ppmd8.Error || shrink.Error || xz.Error || zstd.Error || error{
+pub const Error = writer.Error || bzip2.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -148,6 +149,7 @@ pub const Archive = struct {
                 @memcpy(target, compressed);
             },
             .shrink => try shrink.decodeInto(compressed, target),
+            .implode => try implode.decodeInto(compressed, target, canonical.flags),
             .deflate => {
                 const decoded = try deflate.decodeRawAuto(compressed, target);
                 if (decoded.input_read != compressed.len) return error.InvalidZipArchive;
@@ -399,7 +401,12 @@ fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
     const name_len: usize = try readU16(archive.bytes, offset + 26);
     const extra_len: usize = try readU16(archive.bytes, offset + 28);
     if (local_method != @intFromEnum(entry.method)) return error.InvalidZipArchive;
-    if ((local_flags ^ entry.flags) & 0x0009 != 0) return error.InvalidZipArchive;
+    const compared_flags: u16 = 0x0009 | switch (entry.method) {
+        .lzma => @as(u16, 0x0002),
+        .implode => @as(u16, 0x0006),
+        else => @as(u16, 0),
+    };
+    if ((local_flags ^ entry.flags) & compared_flags != 0) return error.InvalidZipArchive;
     if (local_flags & 1 != 0) return error.EncryptedZipEntry;
 
     const name_start = offset + 30;
@@ -807,6 +814,80 @@ test "ZIP method 1 extracts an Apache Commons Compress Shrink fixture" {
         const decoded = try archive.extractAlloc(allocator, entry);
         defer allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "ZIP method 6 Implode writer round trips all flag modes" {
+    const allocator = std.testing.allocator;
+    const payload = "Imploded ZIP entry with Shannon-Fano trees.\n" ** 256;
+    const entries = [_]EncodeEntry{.{
+        .name = "compressed-with-implode.txt",
+        .data = payload,
+        .method = .implode,
+    }};
+    inline for (.{ implode.Dictionary.small_4k, .large_8k }) |dictionary| {
+        inline for (.{ false, true }) |literal_tree| {
+            const options = EncodeOptions{
+                .data_descriptor = true,
+                .implode_options = .{
+                    .dictionary = dictionary,
+                    .literal_tree = literal_tree,
+                },
+            };
+            const bytes = try encodeAlloc(allocator, &entries, options);
+            defer allocator.free(bytes);
+            const archive = try parse(bytes);
+            const entry = try archive.entryAt(0);
+            try std.testing.expectEqual(CompressionMethod.implode, entry.method);
+            try std.testing.expectEqual(options.implode_options.flags(), entry.flags & 0x0006);
+            try std.testing.expect(entry.compressed_size < entry.uncompressed_size);
+            var output: [payload.len]u8 = undefined;
+            try std.testing.expectEqual(payload.len, try archive.extractInto(entry, &output));
+            try std.testing.expectEqualSlices(u8, payload, &output);
+        }
+    }
+}
+
+test "ZIP method 6 extracts Apache Commons Compress Implode fixtures" {
+    const allocator = std.testing.allocator;
+    const Fixture = struct {
+        encoded: []const u8,
+        name: []const u8,
+        size: usize,
+        flags: u16,
+    };
+    const fixtures = [_]Fixture{
+        .{
+            // src/test/resources/imploding-4Kdict-2trees.zip
+            // SHA-256: cde0fbf261fb6f18339b2159c530462bc91220d9b43cd090b303d5b663b3f0bb.
+            .encoded = @embedFile("zip/testdata/commons-compress-implode-4k-2trees.zip.b64"),
+            .name = "HEADER.TXT",
+            .size = 818,
+            .flags = 0,
+        },
+        .{
+            // src/test/resources/imploding-8Kdict-3trees.zip
+            // SHA-256: 88d2bf6cf1e2f9604be7639ab67218e9a6ed946d0919b29cfff699c5bbc6c5fa.
+            .encoded = @embedFile("zip/testdata/commons-compress-implode-8k-3trees.zip.b64"),
+            .name = "LICENSE.TXT",
+            .size = 11_560,
+            .flags = 0x0006,
+        },
+    };
+    const decoder = std.base64.standard.decoderWithIgnore("\r\n \t");
+    for (fixtures) |fixture| {
+        const encoded_size = decoder.calcSizeUpperBound(fixture.encoded.len);
+        const storage = try allocator.alloc(u8, encoded_size);
+        defer allocator.free(storage);
+        const decoded_size = try decoder.decode(storage, fixture.encoded);
+        const archive = try parse(storage[0..decoded_size]);
+        const entry = (try archive.find(fixture.name)).?;
+        try std.testing.expectEqual(CompressionMethod.implode, entry.method);
+        try std.testing.expectEqual(fixture.flags, entry.flags & 0x0006);
+        try std.testing.expectEqual(fixture.size, entry.uncompressed_size);
+        const payload = try archive.extractAlloc(allocator, entry);
+        defer allocator.free(payload);
+        try std.testing.expectEqual(fixture.size, payload.len);
     }
 }
 

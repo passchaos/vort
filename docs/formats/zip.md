@@ -12,6 +12,8 @@ Supported entry methods:
 - stored (`method 0`);
 - Shrink (`method 1`) with 9...13-bit LSB-first LZW, code-width controls, and
   leaf-only partial dictionary clearing;
+- Implode (`method 6`) with 4/8 KiB dictionaries and both raw-literal/two-tree
+  and Huffman-literal/three-tree modes;
 - raw Deflate (`method 8`) through the same decoder used by Vort's public raw,
   zlib, and gzip APIs;
 - Deflate64 (`method 9`) with its 64 KiB window, 32 distance symbols, and
@@ -32,7 +34,7 @@ Deflate consumption, and IEEE CRC-32. It supports 32- and 64-bit data
 descriptors with or without a descriptor signature because extraction
 boundaries come from the central directory.
 
-The writer accepts multiple borrowed entries and emits stored, Shrink,
+The writer accepts multiple borrowed entries and emits stored, Shrink, Implode,
 raw-Deflate, Deflate64, Bzip2, LZMA, legacy/current Zstandard, XZ, or PPMd
 members. Select
 `.zstandard_legacy` for method 20 and `.zstandard` for method 93; both carry the
@@ -55,6 +57,7 @@ descriptor signature when enabled.
 const entries = [_]vort.ZipEncodeEntry{
     .{ .name = "plain.bin", .data = plain, .method = .stored },
     .{ .name = "folder/legacy.txt", .data = text, .method = .shrink },
+    .{ .name = "folder/imploded.txt", .data = text, .method = .implode },
     .{ .name = "folder/data.txt", .data = text, .method = .deflate },
     .{ .name = "folder/large.bin", .data = large_data, .method = .deflate64 },
     .{ .name = "folder/archive.txt", .data = archive_text, .method = .bzip2 },
@@ -82,6 +85,11 @@ full 8,192-entry dictionary. This is valid method-1 output; emitting adaptive
 partial clears is a later ratio optimization. The decoder already accepts and
 validates width controls, partial clears, orphan protection, truncation, exact
 decoded size, and packed-input consumption.
+`EncodeOptions.implode_options` selects a 4 or 8 KiB dictionary and raw or
+Shannon-Fano-coded literals. The writer uses a bounded greedy match search and
+complete fixed 6/8-bit trees; adaptive tree generation is later ratio work.
+The decoder accepts arbitrary complete 1...16-bit tree descriptions, extended
+lengths, overlapping matches, implicit zero history, and all four flag modes.
 
 `zipEncodeAppend` builds the archive transactionally: an error leaves the
 destination length and bytes unchanged. When the destination already contains
@@ -130,11 +138,11 @@ zig build run-zip-diff
 
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
-than stored/Shrink/Deflate/Deflate64/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
+than stored/Shrink/Implode/Deflate/Deflate64/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
 reader deliberately
 rejects encrypted entries, multi-disk archives, malformed/duplicate ZIP64
 extra fields, and compression methods other than
-stored/Shrink/Deflate/Deflate64/Bzip2/LZMA/
+stored/Shrink/Implode/Deflate/Deflate64/Bzip2/LZMA/
 Zstandard-20/Zstandard-93/XZ/PPMd with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. Encryption, split archives, and additional entry
@@ -144,6 +152,11 @@ The differential verifies Vort Shrink output with system 7-Zip, including a
 32 KiB deterministic high-entropy payload that reaches the full dictionary.
 An Apache Commons Compress `SHRUNK.ZIP` fixture independently covers reader
 compatibility, while focused tests cover partial clear and malformed controls.
+Two Apache Commons Compress fixtures independently cover Implode's 4 KiB/
+two-tree and 8 KiB/three-tree endpoints. System 7-Zip extracts Vort output in
+all four modes, including a match at distance 5,001. Its 21.07 build rejects
+descriptor-backed Implode, so those legal entries remain covered by Vort
+self-extraction while the independent mode matrix uses ordinary local sizes.
 
 The Deflate64 codec and its raw APIs are described in
 [`deflate64.md`](deflate64.md).

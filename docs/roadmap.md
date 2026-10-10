@@ -17646,8 +17646,8 @@ reuse, so production keeps the simpler independently owned plans.
   single-disk ZIP64 reading and deterministic writing. The library parses EOCD,
   ZIP64 locator/EOCD, ordered `0x0001` central/local extra fields, and 32-/64-bit
   data descriptors; it iterates and finds entries without allocation, extracts
-  stored, Shrink, raw-Deflate, Deflate64, Bzip2, LZMA, Zstandard methods 20/93,
-  XZ, and PPMd
+  stored, Shrink, Implode, raw-Deflate, Deflate64, Bzip2, LZMA, Zstandard
+  methods 20/93, XZ, and PPMd
   members into caller buffers or bounded allocations where their scratch
   requirements allow, and encodes multi-entry stored/Deflate/Deflate64/Bzip2/
   LZMA/Zstandard-20/93/XZ/PPMd archives through owned or transactional append APIs.
@@ -17669,6 +17669,14 @@ reuse, so production keeps the simpler independently owned plans.
   freezes a full dictionary; adaptive partial clearing remains ratio work. An
   Apache Commons Compress Shrink archive supplies independent reader coverage,
   while system 7-Zip extracts Vort-generated method-1 entries.
+  Method 6 adds all four Implode combinations: 4/8 KiB dictionaries and raw
+  two-tree or Shannon-Fano literal three-tree streams. The decoder validates
+  arbitrary complete tree descriptions, extended lengths, zero-prefill,
+  overlapping matches, exact sizes, and compressed-byte consumption. The
+  deterministic writer uses complete fixed trees plus a bounded greedy matcher;
+  adaptive tree construction remains ratio work. Two Apache Commons Compress
+  fixtures cover both external flag endpoints, and 7-Zip extracts all four
+  Vort modes including a 5,001-byte-distance match.
   A bidirectional
   Python `zipfile` differential covers Python `force_zip64`, fully forced Vort ZIP64 archives,
   descriptors, UTF-8 names, directories, comments, deterministic output,

@@ -213,9 +213,16 @@ def validate_vort_archive_with_python(
     for _ in range(32 * 1024):
         shrink_state = (shrink_state * 1_664_525 + 1_013_904_223) & 0xFFFFFFFF
         shrink_payload.append(shrink_state >> 24)
+    implode_state = 0x193A72D5
+    implode_prefix = bytearray()
+    for _ in range(5000):
+        implode_state = (implode_state * 1_664_525 + 1_013_904_223) & 0xFFFFFFFF
+        implode_prefix.append(implode_state >> 24)
+    implode_payload = bytes(implode_prefix) + b"\x42" + bytes(implode_prefix)
     payloads = {
         "stored.bin": bytes([0, 1, 2, 255]) + b"stored by Vort",
         "folder/shrink.txt": bytes(shrink_payload),
+        "folder/implode.txt": implode_payload,
         "folder/deflated.txt": b"Vort ZIP writer differential.\n" * 128,
         "folder/deflate64.txt": b"Vort ZIP Deflate64 method 9.\n" * 128,
         "folder/bzip2.txt": b"Vort ZIP Bzip2 method 12.\n" * 96,
@@ -251,6 +258,7 @@ def validate_vort_archive_with_python(
         expected_methods = {
             "stored.bin": zipfile.ZIP_STORED,
             "folder/shrink.txt": 1,
+            "folder/implode.txt": 6,
             "folder/deflated.txt": zipfile.ZIP_DEFLATED,
             "folder/deflate64.txt": 9,
             "folder/bzip2.txt": zipfile.ZIP_BZIP2,
@@ -276,10 +284,16 @@ def validate_vort_archive_with_python(
                     check=True,
                     stdout=subprocess.PIPE,
                 ).stdout
+            elif info.compress_type == 6:
+                # 7-Zip 21.07 rejects descriptor-backed Implode entries. The
+                # dedicated no-descriptor mode matrix below validates its
+                # decoder independently; Vort self-extraction validates this
+                # legal descriptor-backed entry.
+                actual = expected
             elif info.compress_type in (1, 9, 98):
                 if seven_zip_tool is None:
                     # The Vort self-extraction pass below still validates these
-                    # entries when no independent Shrink/Deflate64/PPMd tool is installed.
+                    # entries when no independent legacy/Deflate64/PPMd tool is installed.
                     actual = expected
                 else:
                     actual = subprocess.run(
@@ -401,6 +415,40 @@ def validate_vort_ppmd_cutoff_with_seven_zip(writer: Path, tool: str, temp: Path
             raise AssertionError("Vort ZIP PPMd writer omitted cut-off restore mode")
 
 
+def validate_vort_implode_modes_with_seven_zip(writer: Path, tool: str, temp: Path) -> int:
+    state = 0x193A72D5
+    prefix = bytearray()
+    for _ in range(5000):
+        state = (state * 1_664_525 + 1_013_904_223) & 0xFFFFFFFF
+        prefix.append(state >> 24)
+    expected = bytes(prefix) + b"\x42" + bytes(prefix)
+    sizes: dict[str, int] = {}
+    for dictionary, dictionary_flag in (("4k", 0), ("8k", 2)):
+        for literals, literal_flag in (("raw", 0), ("tree", 4)):
+            mode = f"implode-{dictionary}-{literals}"
+            archive = temp / f"vort-{mode}.zip"
+            run(writer, str(archive), mode)
+            actual = subprocess.run(
+                [tool, "x", "-so", "-bd", str(archive), "folder/implode.txt"],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ).stdout
+            if actual != expected:
+                raise AssertionError(f"7-Zip could not extract Vort ZIP {mode} entry")
+            with zipfile.ZipFile(archive) as parsed:
+                info = parsed.getinfo("folder/implode.txt")
+                if info.compress_type != 6:
+                    raise AssertionError("Vort Implode writer used the wrong method ID")
+                if (info.flag_bits & 6) != (dictionary_flag | literal_flag):
+                    raise AssertionError(f"Vort ZIP {mode} flags mismatch")
+                sizes[mode] = info.compress_size
+    for literals in ("raw", "tree"):
+        if sizes[f"implode-8k-{literals}"] >= sizes[f"implode-4k-{literals}"]:
+            raise AssertionError("Vort 8 KiB Implode mode did not use its long-distance match")
+    return len(sizes)
+
+
 def validate_seven_zip_deflate64_with_vort(cli: Path, tool: str, temp: Path) -> int:
     rng = random.Random(0xDEF1A7E64)
     prefix = bytes(rng.randrange(256) for _ in range(40_000))
@@ -518,9 +566,13 @@ def main() -> None:
         )
         deflate64_cases = 0
         ppmd_cases = 0
+        implode_modes = 0
         if seven_zip_tool is not None:
             validate_seven_zip_xz_with_vort(args.cli, seven_zip_tool, temp)
             validate_vort_ppmd_cutoff_with_seven_zip(
+                args.writer, seven_zip_tool, temp
+            )
+            implode_modes = validate_vort_implode_modes_with_seven_zip(
                 args.writer, seven_zip_tool, temp
             )
             deflate64_cases = validate_seven_zip_deflate64_with_vort(
@@ -532,11 +584,11 @@ def main() -> None:
 
     print(
         "zip_diff=ok directions=2 "
-        f"python_entries=7 vort_entries=12 zstd_methods=2 python_bytes={python_bytes} "
+        f"python_entries=7 vort_entries=13 zstd_methods=2 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"system_7zip={seven_zip_tool is not None} deflate64_cases={deflate64_cases} "
         f"ppmd_cases={ppmd_cases} vort_ppmd_cutoff={seven_zip_tool is not None} "
-        f"vort_shrink={seven_zip_tool is not None}"
+        f"vort_shrink={seven_zip_tool is not None} implode_modes={implode_modes}"
     )
 
 

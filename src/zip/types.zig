@@ -1,6 +1,7 @@
 pub const CompressionMethod = enum(u16) {
     stored = 0,
     shrink = 1,
+    implode = 6,
     deflate = 8,
     deflate64 = 9,
     bzip2 = 12,
