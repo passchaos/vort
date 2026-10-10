@@ -27,7 +27,7 @@ jobs:
       - name: Install optional CLI competitors
         run: |
           sudo apt-get update
-          sudo apt-get install -y cabextract gzip lz4 meson ninja-build p7zip-full squashfs-tools zstd libarchive-dev libbrotli-dev liblz4-dev libsnappy-dev libssl-dev libzstd-dev git
+          sudo apt-get install -y autoconf automake cabextract gzip libtool lz4 meson ninja-build p7zip-full squashfs-tools zstd libarchive-dev libbrotli-dev liblz4-dev liblzma-dev libsnappy-dev libssl-dev libzstd-dev zlib1g-dev git
 
       - name: Check formatting
         run: zig fmt --check build.zig build.zig.zon src examples bench tools
@@ -53,6 +53,19 @@ jobs:
           ninja -C "$zchunk_reference_dir/build"
           sudo meson install -C "$zchunk_reference_dir/build"
           sudo ldconfig
+
+      - name: Build pinned erofs-utils reference CLIs
+        run: |
+          erofs_reference_dir=$(mktemp -d)
+          git -C "$erofs_reference_dir" init
+          git -C "$erofs_reference_dir" remote add origin https://github.com/erofs/erofs-utils.git
+          git -C "$erofs_reference_dir" fetch --depth 1 origin 5fcb2f76f7b95df87f5c6d3a580e4d756ceaa1c8
+          git -C "$erofs_reference_dir" checkout --detach FETCH_HEAD
+          cd "$erofs_reference_dir"
+          ./autogen.sh
+          ./configure --without-uuid --without-libcurl --without-openssl --without-libxml2 --without-json-c
+          make -j2
+          sudo install mkfs/mkfs.erofs fsck/fsck.erofs dump/dump.erofs /usr/local/bin/
 
       - name: Run CI smoke aggregate
         run: zig build -Doptimize=ReleaseFast ci-smoke

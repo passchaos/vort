@@ -101,6 +101,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   explicit output limits, plus deterministic stored/gzip/Zstd writing for
   regular files, nested/empty directories, symlinks and packed fragments, with
   squashfs-tools interoperability;
+- dependency-free EROFS reading with CRC-32C superblock verification,
+  compact/extended inodes, flat plain/inline data, sorted directories,
+  symlinks, legacy full and modern compact compression indexes, big pclusters,
+  and LZ4/raw-Deflate/Zstandard extraction with explicit bounds;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,

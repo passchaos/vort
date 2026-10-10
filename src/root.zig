@@ -28,6 +28,7 @@ pub const lzfse = @import("lzfse.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
+pub const erofs = @import("erofs.zig");
 pub const cab = @import("cab.zig");
 pub const zip = @import("zip.zig");
 pub const bzip2 = @import("bzip2.zig");
@@ -997,6 +998,16 @@ pub const parseSquashfs = squashfs.parse;
 pub const parseSquashfsSuperblock = squashfs.parseSuperblock;
 pub const encodeSquashfsAlloc = squashfs.encodeAlloc;
 pub const encodeSquashfsAppend = squashfs.encodeAppend;
+
+pub const ErofsArchive = erofs.Archive;
+pub const ErofsDirectory = erofs.Directory;
+pub const ErofsDirectoryEntry = erofs.DirectoryEntry;
+pub const ErofsFileType = erofs.FileType;
+pub const ErofsInode = erofs.Inode;
+pub const ErofsLayout = erofs.Layout;
+pub const ErofsSuperblock = erofs.Superblock;
+pub const parseErofs = erofs.parse;
+pub const parseErofsSuperblock = erofs.parseSuperblock;
 
 pub const Lz4Error = lz4.Error;
 pub const lz4DefaultCompressionLevel = lz4.default_compression_level;

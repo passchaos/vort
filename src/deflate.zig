@@ -3935,6 +3935,19 @@ pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8
     return decodeRawAutoAllocPartialWithDictionary(allocator, input, "", null);
 }
 
+pub fn decodeRawAutoAllocPartialLimited(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    max_output_len: usize,
+) !OwnedDecodeResult {
+    return decodeRawAutoAllocPartialWithDictionary(
+        allocator,
+        input,
+        "",
+        max_output_len,
+    );
+}
+
 fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: ?usize) !OwnedDecodeResult {
     if (input.len == 0) return error.TruncatedFrame;
     try rejectReservedFirstBlockBeforeAlloc(input);

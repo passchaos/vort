@@ -16,6 +16,7 @@ const lz4_legacy_cli = @import("cli/lz4_legacy.zig");
 const lzfse_cli = @import("cli/lzfse.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
+const erofs_cli = @import("cli/erofs.zig");
 const lzip_cli = @import("cli/lzip.zig");
 const lzf_cli = @import("cli/lzf.zig");
 const lha_cli = @import("cli/lha.zig");
@@ -144,6 +145,10 @@ pub fn main(init: std.process.Init) !void {
         try squashfs_cli.create(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-squashfs-file")) {
         try squashfs_cli.extract(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-erofs-file")) {
+        try erofs_cli.list(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-erofs-file")) {
+        try erofs_cli.extract(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
         try bgzf_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-bgzf-file")) {
@@ -2255,6 +2260,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-squashfs-file <path>
         \\  create-squashfs-file <out> <entry> <in> [stored|gzip|zstd] [block_size]
         \\  extract-squashfs-file <image> <entry> <out> [max_output]
+        \\  list-erofs-file <path>
+        \\  extract-erofs-file <image> <entry> <out> [max_output]
         \\  encode-bgzf-file <in> <out> [block_size]
         \\                              Encode deterministic blocked gzip/BGZF
         \\  decode-bgzf-file <in> <out> [max_output]

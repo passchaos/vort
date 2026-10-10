@@ -200,6 +200,14 @@ pub fn build(b: *std.Build) void {
     const run_squashfs_tests = b.addRunArtifact(squashfs_tests);
     const squashfs_test_step = b.step("test-squashfs", "Run focused SquashFS parser and extraction tests");
     squashfs_test_step.dependOn(&run_squashfs_tests.step);
+    const erofs_tests = b.addTest(.{
+        .name = "vort-erofs-tests",
+        .root_module = tests_mod,
+        .filters = &.{"EROFS"},
+    });
+    const run_erofs_tests = b.addRunArtifact(erofs_tests);
+    const erofs_test_step = b.step("test-erofs", "Run focused EROFS parser and extraction tests");
+    erofs_test_step.dependOn(&run_erofs_tests.step);
     const hadoop_lzo_index_tests = b.addTest(.{
         .name = "vort-hadoop-lzo-index-tests",
         .root_module = tests_mod,
@@ -1141,6 +1149,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| squashfs_diff.addArgs(args);
     const squashfs_diff_step = b.step("run-squashfs-diff", "Validate SquashFS extraction against optional squashfs-tools");
     squashfs_diff_step.dependOn(&squashfs_diff.step);
+
+    const erofs_diff = b.addSystemCommand(&.{ "python3", "tools/erofs/diff.py", "--cli" });
+    erofs_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| erofs_diff.addArgs(args);
+    const erofs_diff_step = b.step("run-erofs-diff", "Validate EROFS extraction against optional erofs-utils");
+    erofs_diff_step.dependOn(&erofs_diff.step);
 
     const hadoop_lzo_index_diff = b.addSystemCommand(&.{ "python3", "tools/hadoop_lzo_index/diff.py", "--cli" });
     hadoop_lzo_index_diff.addArtifactArg(cli_exe);
@@ -4855,6 +4869,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(lzfse_diff_step);
     ci_smoke_step.dependOn(zchunk_diff_step);
     ci_smoke_step.dependOn(squashfs_diff_step);
+    ci_smoke_step.dependOn(erofs_diff_step);
     ci_smoke_step.dependOn(hadoop_lzo_index_diff_step);
     ci_smoke_step.dependOn(zip_diff_step);
     ci_smoke_step.dependOn(bzip2_diff_step);
