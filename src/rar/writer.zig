@@ -363,7 +363,7 @@ test "RAR extraction rejects encrypted entries before allocating output" {
     defer allocator.free(compressed);
     const stored_archive = try archive.parse(compressed);
     const stored_entry = try stored_archive.entryAt(0);
-    compressed[stored_entry.header_offset + 25] = 0x33;
+    compressed[stored_entry.header_offset + 25] = 0x36;
     writeRar4HeaderCrc(
         compressed,
         stored_entry.header_offset,

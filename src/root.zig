@@ -369,6 +369,11 @@ pub const decodeRar15AllocLimited = rar.decodeRar15AllocLimited;
 pub const decodeRar20Into = rar.decodeRar20Into;
 pub const decodeRar20Alloc = rar.decodeRar20Alloc;
 pub const decodeRar20AllocLimited = rar.decodeRar20AllocLimited;
+pub const decodeRar29Into = rar.decodeRar29Into;
+pub const decodeRar29Alloc = rar.decodeRar29Alloc;
+pub const decodeRar29AllocLimited = rar.decodeRar29AllocLimited;
+pub const Rar29InitialMode = rar.Rar29InitialMode;
+pub const inspectRar29InitialMode = rar.inspectRar29InitialMode;
 
 pub const ZooError = zoo.Error;
 pub const ZooMethod = zoo.Method;

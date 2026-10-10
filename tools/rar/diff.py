@@ -82,9 +82,11 @@ def main() -> None:
     writer_external = 0
     reference_stored = 0
     reference_compressed = 0
+    reference_compressed_decoded = 0
     fixture_cases = 0
     rar15_entries = 0
     rar20_entries = 0
+    rar29_entries = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-rar-diff-") as temp_text:
         temp = Path(temp_text)
@@ -142,17 +144,31 @@ def main() -> None:
                 expected_method = "rar29" if version == "rar4" else "rar50"
                 if f"method={expected_method}" not in listing:
                     raise AssertionError(f"Vort misparsed reference compressed {version}: {listing}")
-                failed = run(
-                    args.cli,
-                    "extract-rar-file",
-                    str(compressed),
-                    "payload.bin",
-                    str(temp / f"unsupported-{version}.out"),
-                    str(len(payload)),
-                    check=False,
-                )
-                if failed.returncode == 0 or "UnsupportedRarCompression" not in failed.stderr:
-                    raise AssertionError(f"Vort did not explicitly reject compressed {version}")
+                compressed_output = temp / f"compressed-{version}.out"
+                if version == "rar4":
+                    run(
+                        args.cli,
+                        "extract-rar-file",
+                        str(compressed),
+                        "payload.bin",
+                        str(compressed_output),
+                        str(len(payload)),
+                    )
+                    if compressed_output.read_bytes() != payload:
+                        raise AssertionError("Vort failed reference RAR29 LZ data")
+                    reference_compressed_decoded += 1
+                else:
+                    failed = run(
+                        args.cli,
+                        "extract-rar-file",
+                        str(compressed),
+                        "payload.bin",
+                        str(compressed_output),
+                        str(len(payload)),
+                        check=False,
+                    )
+                    if failed.returncode == 0 or "UnsupportedRarCompression" not in failed.stderr:
+                        raise AssertionError(f"Vort did not explicitly reject compressed {version}")
                 reference_compressed += 1
 
         if args.fixtures is not None:
@@ -211,6 +227,50 @@ def main() -> None:
                     temp,
                     f"rar20-{index}",
                 )
+
+            rar29_archives = (
+                args.legacy_fixtures / "rar300" / "compressed_text_rar300.rar",
+                args.legacy_fixtures / "rars_generated" / "compressed.rar",
+            )
+            for index, archive in enumerate(rar29_archives):
+                rar29_entries += compare_archive_entries(
+                    args.cli,
+                    seven_zip,
+                    archive,
+                    temp,
+                    f"rar29-{index}",
+                )
+
+            unsupported_cases = (
+                (
+                    args.legacy_fixtures / "ppmd" / "ppmd_lorem_rar300.rar",
+                    "UnsupportedRar29Ppmd",
+                    "ppmd",
+                ),
+                (
+                    args.legacy_fixtures / "rar300" / "rarvm_x86_e8_rar300.rar",
+                    "UnsupportedRar29Filter",
+                    "filter",
+                ),
+            )
+            for archive, expected_error, label in unsupported_cases:
+                listing = run(args.cli, "list-rar-file", str(archive)).stdout
+                name = next(
+                    line.split(" name=", 1)[1]
+                    for line in listing.splitlines()
+                    if line.startswith("index=") and "directory=false" in line
+                )
+                failed = run(
+                    args.cli,
+                    "extract-rar-file",
+                    str(archive),
+                    name,
+                    str(temp / f"unsupported-{label}.out"),
+                    str(256 * 1024 * 1024),
+                    check=False,
+                )
+                if failed.returncode == 0 or expected_error not in failed.stderr:
+                    raise AssertionError(f"Vort did not explicitly reject RAR29 {label}")
 
             encrypted = args.legacy_fixtures / "rar154" / "readme_154_password.rar"
             failed = run(
@@ -278,8 +338,10 @@ def main() -> None:
         f"versions={len(versions)} self_writer_cases={len(versions)} "
         f"seven_zip={seven_zip is not None} writer_external={writer_external} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
+        f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "
-        f"rar20_entries={rar20_entries} header_crc=True data_crc=True sfx=True"
+        f"rar20_entries={rar20_entries} rar29_entries={rar29_entries} "
+        f"header_crc=True data_crc=True sfx=True"
     )
 
 

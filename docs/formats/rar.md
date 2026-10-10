@@ -6,14 +6,18 @@ writer for the two RAR container generations most often encountered today:
 - the `Rar!\x1a\x07\x00` family used by RAR 1.5 through 4.x;
 - the VINT-based `Rar!\x1a\x07\x01\x00` family used by RAR 5 and later.
 
-In addition to stored data, Vort decodes non-solid RAR 1.5 and RAR 2.0/2.6
+In addition to stored data, Vort decodes non-solid RAR 1.5, RAR 2.0/2.6, and
+ordinary RAR 2.9/3.x LZ
 compressed members. The RAR15 path implements the historical adaptive
 literal/short/long/old-distance state machine and ST mode over a 64 KiB
 history. The RAR20 path implements dynamic canonical Huffman tables, table
 reuse and multiblock transitions, a 1 MiB LZ history, repeated distances, and
-the multimedia/audio predictor. RAR 2.9/3.x and RAR5 compressed entries remain
-classified as `rar29` or `rar50` and return `UnsupportedRarCompression` before
-allocating output.
+the multimedia/audio predictor. The RAR29 LZ path implements byte-aligned block
+tables, table reuse, canonical main/distance/low-distance/length codes,
+repeated-distance tokens, low-offset repeats and a 4 MiB history. RAR29 PPMd
+and VM-filter blocks return `UnsupportedRar29Ppmd` or
+`UnsupportedRar29Filter`; RAR5 compressed entries remain classified as
+`rar50` and return `UnsupportedRarCompression`.
 
 ## Reader
 
@@ -77,7 +81,9 @@ writers with 7-Zip, reads stored RAR4/RAR5 output from an optional rars-based
 reference helper, verifies that real compressed reference entries are
 classified correctly, checks SFX parsing and both CRC layers, exercises RAR2
 and RAR5 split-volume fixtures, and compares RAR15/RAR20 text, multiblock,
-keep-table, long-history and audio outputs byte-for-byte with 7-Zip:
+keep-table, long-history and audio plus ordinary RAR29 LZ outputs
+byte-for-byte with 7-Zip. PPMd and VM-filter fixtures pin their explicit
+unsupported errors:
 
 ```sh
 zig build run-rar-diff -- \
@@ -87,7 +93,7 @@ zig build run-rar-diff -- \
   --legacy-fixtures path/to/rars/tests/fixtures/rar15_40
 ```
 
-The next functionality stages are RAR 2.9 LZ/PPMd and VM filters, followed by
-RAR5 LZ/filters. Encrypted payloads, solid state and multi-volume reconstruction
-should be added on top of those decoders rather than approximated in the stored
-path.
+The next functionality stages are RAR 2.9 PPMd and standard VM filters,
+followed by RAR5 LZ/filters. Encrypted payloads, solid state and multi-volume
+reconstruction should be added on top of those decoders rather than
+approximated in the stored path.

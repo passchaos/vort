@@ -161,10 +161,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free RAR4/RAR5 container parsing plus deterministic stored-file
   and directory writing, non-solid RAR15 and RAR20/26 decompression including
   adaptive/ST-mode, dynamic Huffman, multiblock, table reuse, long-history and
-  audio paths, SFX discovery, both header CRC variants, payload CRC-32, UTF-8
-  RAR5 names, bounded extraction, explicit encrypted/split/redirection/
-  unknown-size/solid errors, and 7-Zip plus rars interoperability; RAR29/50
-  compressed streams are classified but deliberately rejected pending decoders;
+  audio paths, ordinary non-solid RAR29 LZ with dynamic/low-distance tables and
+  4 MiB history, SFX discovery, both header CRC variants, payload CRC-32,
+  UTF-8 RAR5 names, bounded extraction, explicit encrypted/split/redirection/
+  unknown-size/solid/PPMd/VM-filter errors, and 7-Zip plus rars
+  interoperability; RAR50 compressed streams remain pending;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded
   extraction for Stored, MSZIP, 15–21 bit LZX, and 10–21 bit Quantum folders,
   including Stored/MSZIP, reference uncompressed-block LZX, and literal
