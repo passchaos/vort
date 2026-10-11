@@ -149,6 +149,50 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
             else => return err,
         }
     }
+    if (data.len >= 5) {
+        const algorithm: vort.WofAlgorithm = @enumFromInt(data[0] & 3);
+        const expected_size: usize = std.mem.readInt(u32, data[1..5], .little);
+        if (vort.parseWofBacking(data[5..], algorithm, expected_size)) |backing| {
+            if (vort.decodeWofAllocLimited(allocator, backing, 1 << 20)) |decoded| {
+                allocator.free(decoded);
+            } else |err| switch (err) {
+                error.InvalidWof,
+                error.InvalidXpress,
+                error.InvalidLzxStream,
+                error.InvalidHuffmanCode,
+                error.InvalidMatch,
+                error.UnsupportedCabinetFeature,
+                error.TruncatedFrame,
+                error.TrailingData,
+                error.SizeMismatch,
+                error.OutputLimitExceeded,
+                error.IntegerOverflow,
+                => {},
+                else => return err,
+            }
+        } else |err| switch (err) {
+            error.InvalidWof,
+            error.TruncatedFrame,
+            error.TrailingData,
+            error.IntegerOverflow,
+            => {},
+            else => return err,
+        }
+    }
+    if (vort.parseWofExternalInfo(data)) |_| {} else |err| switch (err) {
+        error.InvalidWof,
+        error.UnsupportedWofProvider,
+        error.UnsupportedWofCompression,
+        => {},
+        else => return err,
+    }
+    if (vort.parseWofReparsePoint(data)) |_| {} else |err| switch (err) {
+        error.InvalidWof,
+        error.UnsupportedWofProvider,
+        error.UnsupportedWofCompression,
+        => {},
+        else => return err,
+    }
     if (data.len >= 2) {
         const expected_size: usize = std.mem.readInt(u16, data[0..2], .little);
         if (vort.decodeLzmsAllocLimited(
@@ -751,6 +795,17 @@ pub fn main(init: std.process.Init) !void {
     const micro_len = try base64.decode(micro[3..], micro_text);
     try fuzzOne(init.gpa, micro[0 .. micro_len + 3]);
 
+    const wof_text = vort.fuzz.wof_fixture_base64;
+    const wof = try init.gpa.alloc(
+        u8,
+        5 + base64.calcSizeUpperBound(wof_text.len),
+    );
+    defer init.gpa.free(wof);
+    wof[0] = @intFromEnum(vort.WofAlgorithm.xpress4k);
+    std.mem.writeInt(u32, wof[1..5], vort.fuzz.wof_fixture_decoded_size, .little);
+    const wof_len = try base64.decode(wof[5..], wof_text);
+    try fuzzOne(init.gpa, wof[0 .. wof_len + 5]);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -766,7 +821,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 3,
+        samples.len + 4,
         data.len,
     });
     try stdout.flush();

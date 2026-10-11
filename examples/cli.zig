@@ -16,6 +16,7 @@ const lz4_legacy_cli = @import("cli/lz4_legacy.zig");
 const lznt1_cli = @import("cli/lznt1.zig");
 const xpress_cli = @import("cli/xpress.zig");
 const lzms_cli = @import("cli/lzms.zig");
+const wof_cli = @import("cli/wof.zig");
 const lzfse_cli = @import("cli/lzfse.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
@@ -149,6 +150,14 @@ pub fn main(init: std.process.Init) !void {
         try xpress_cli.inspectHuffman(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzms-file")) {
         try lzms_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-wof-file")) {
+        try wof_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-wof-file")) {
+        try wof_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-wof-range")) {
+        try wof_cli.decodeRange(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-wof-file")) {
+        try wof_cli.inspect(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzfse-file")) {
         try lzfse_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzfse-file")) {
@@ -2322,6 +2331,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-xpress-huffman-file <in> <out> <decoded_size>
         \\  inspect-xpress-huffman-file <path> <decoded_size>
         \\  decode-lzms-file <in> <out> <decoded_size>
+        \\  encode-wof-file <in> <out> <xpress4k|xpress8k|xpress16k|lzx>
+        \\  decode-wof-file <in> <out> <algorithm> <decoded_size> [max_output]
+        \\  decode-wof-range <in> <out> <algorithm> <decoded_size> <offset> <length>
+        \\  inspect-wof-file <in> <algorithm> <decoded_size>
         \\  encode-lzfse-file <in> <out> [block_size] [lzvn|stored]
         \\  decode-lzfse-file <in> <out> [max_output]
         \\  inspect-lzfse-file <path> [max_output]

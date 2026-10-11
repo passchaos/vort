@@ -101,6 +101,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   repeat queues, mandatory x86 address postprocessing, reusable decoder state,
   exact-size/caller-owned APIs, pinned fixtures, fuzzing, and wimlib-generated
   text, delta, mixed, source, and x86-code differentials;
+- dependency-free WOF/CompactOS file-provider metadata and backing-stream
+  support with XPRESS4K/8K/16K and WIM-LZX chunks, strict 32-/64-bit cumulative
+  offset tables, raw-chunk fallback, bounded whole-file and random-range decode,
+  deterministic XPRESS compression plus LZX raw writing, reparse/ioctl metadata
+  parsing, pinned fixtures, fuzzing, and bidirectional wimlib differentials;
 - pure Zig Apple LZFSE stream and raw LZVN support with `bvx-`, `bvxn`, `bvx1`,
   and `bvx2` decoding, compressed frequency-table and four-way literal FSE
   reconstruction, bounded/caller-owned APIs, deterministic LZVN-or-stored block

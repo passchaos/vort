@@ -11,6 +11,8 @@ pub const lzms_raw_fixture_decoded_size = @embedFile("lzms/testdata/lzms-small.t
 pub const wim_lzms_fixture_base64 = @embedFile("wim/testdata/lzms-small.esd.b64");
 pub const microlzma_fixture_base64 = @embedFile("lzma/testdata/microlzma-small.bin.b64");
 pub const microlzma_fixture_decoded_size = @embedFile("lzms/testdata/lzms-small.txt").len;
+pub const wof_fixture_base64 = @embedFile("wof/testdata/xpress4k-small.wof.b64");
+pub const wof_fixture_decoded_size: usize = 11_700;
 
 pub const CorpusStats = struct {
     cases: usize = 0,

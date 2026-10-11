@@ -63,4 +63,6 @@ self round trips, extension-length tiers, malformed streams, and output limits.
 The independent `xpress-lz77` 1.0.1 Rust/Python module decodes both Vort modes;
 pinned wimlib independently decodes Vort Huffman output and supplies Huffman
 blocks that Vort decodes. Files larger than 64 KiB remain a container concern:
-WIM/WOF split them into independently sized XPRESS blocks.
+WIM and WOF split them into independently sized XPRESS blocks. Vort's WOF
+module now parses and writes the cumulative chunk table and uses this same
+XPRESS-Huffman implementation for XPRESS4K, XPRESS8K, and XPRESS16K.

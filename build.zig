@@ -208,6 +208,14 @@ pub fn build(b: *std.Build) void {
     const run_microlzma_tests = b.addRunArtifact(microlzma_tests);
     const microlzma_test_step = b.step("test-microlzma", "Run focused MicroLZMA tests");
     microlzma_test_step.dependOn(&run_microlzma_tests.step);
+    const wof_tests = b.addTest(.{
+        .name = "vort-wof-tests",
+        .root_module = tests_mod,
+        .filters = &.{"WOF"},
+    });
+    const run_wof_tests = b.addRunArtifact(wof_tests);
+    const wof_test_step = b.step("test-wof", "Run focused WOF backing stream tests");
+    wof_test_step.dependOn(&run_wof_tests.step);
     const lzfse_tests = b.addTest(.{
         .name = "vort-lzfse-tests",
         .root_module = tests_mod,
@@ -1184,6 +1192,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| microlzma_diff.addArgs(args);
     const microlzma_diff_step = b.step("run-microlzma-diff", "Validate MicroLZMA decoding against optional XZ Utils");
     microlzma_diff_step.dependOn(&microlzma_diff.step);
+
+    const wof_diff = b.addSystemCommand(&.{ "python3", "tools/wof/diff.py", "--cli" });
+    wof_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| wof_diff.addArgs(args);
+    const wof_diff_step = b.step("run-wof-diff", "Validate WOF streams against optional wimlib");
+    wof_diff_step.dependOn(&wof_diff.step);
 
     const lzfse_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/diff.py", "--cli" });
     lzfse_diff.addArtifactArg(cli_exe);
@@ -4951,6 +4965,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(xpress_diff_step);
     ci_smoke_step.dependOn(lzms_diff_step);
     ci_smoke_step.dependOn(microlzma_diff_step);
+    ci_smoke_step.dependOn(wof_diff_step);
     ci_smoke_step.dependOn(lzfse_diff_step);
     ci_smoke_step.dependOn(zchunk_diff_step);
     ci_smoke_step.dependOn(squashfs_diff_step);
