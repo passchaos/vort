@@ -23,6 +23,7 @@ zig build run-chd-diff
 zig build run-vhd-diff
 zig build run-vhdx-diff
 zig build run-cso-diff
+zig build run-dax-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
@@ -84,6 +85,12 @@ it decodes every Vort layout and generates fresh v1/v2/ZSO images for Vort.
 Use `-- --maxcso /path/to/maxcso --seven-zip /path/to/7zz` for explicit tools.
 7-Zip is counted only if the installed release actually recognizes and
 byte-exactly extracts the image; lack of a CSO handler is reported as skipped.
+
+The DAX differential always checks deterministic zlib-only version-0, raw and
+automatic version-1 output, canonical non-compressed areas, partial tails,
+bounded ranges, and malformed metadata. When `maxcso` is available, it decodes
+all three Vort writer modes and creates a fresh DAX image for Vort. Supply an
+explicit oracle with `-- --maxcso /path/to/maxcso`.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

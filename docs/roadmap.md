@@ -18072,3 +18072,13 @@ reuse, so production keeps the simpler independently owned plans.
   differential cover all three layouts in both directions. Streaming file I/O,
   DAX, parallel encoding, and ratio/throughput tuning remain follow-up work.
   See `docs/formats/cso.md`.
+
+- Added dependency-free DAX v0/v1 reading and deterministic writing. The
+  parser checks bounded fixed-frame tables, absolute extents, canonical ordered
+  non-compressed areas, exact zlib streams and Adler-32 values, and exposes
+  bounded whole-image and random-range reads. The writer emits zlib-only v0 or
+  raw/automatic v1 images, groups adjacent raw frames deterministically, and
+  preserves exact partial logical tails. Fuzzing and bidirectional maxcso
+  validation plus a pinned maxcso 1.13.0 fixture cover both versions. Streaming
+  file I/O, parallel encoding, and ratio/throughput tuning remain follow-up
+  work. See `docs/formats/dax.md`.

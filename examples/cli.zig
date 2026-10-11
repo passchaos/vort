@@ -30,6 +30,7 @@ const chd_cli = @import("cli/chd.zig");
 const vhd_cli = @import("cli/vhd.zig");
 const vhdx_cli = @import("cli/vhdx.zig");
 const cso_cli = @import("cli/cso.zig");
+const dax_cli = @import("cli/dax.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
@@ -266,6 +267,14 @@ pub fn main(init: std.process.Init) !void {
         try cso_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-cso")) {
         try cso_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-dax")) {
+        try dax_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-dax")) {
+        try dax_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-dax-range")) {
+        try dax_cli.decodeRange(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-dax")) {
+        try dax_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2485,6 +2494,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-cso <in> <out> [max_output]
         \\  decode-cso-range <in> <out> <offset> <length>
         \\  encode-cso <in> <out> <cso1|cso2|zso> [auto|raw|deflate|lz4] [block_size] [level] [index_shift]
+        \\  inspect-dax <image.dax>
+        \\  decode-dax <in> <out> [max_output]
+        \\  decode-dax-range <in> <out> <offset> <length>
+        \\  encode-dax <in> <out> [auto|raw|zlib] [level]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

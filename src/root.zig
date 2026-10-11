@@ -42,6 +42,7 @@ pub const chd = @import("chd.zig");
 pub const vhd = @import("vhd.zig");
 pub const vhdx = @import("vhdx.zig");
 pub const cso = @import("cso.zig");
+pub const dax = @import("dax.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1175,6 +1176,18 @@ pub const CsoEncodeOptions = cso.EncodeOptions;
 pub const parseCsoHeader = cso.parseHeader;
 pub const parseCso = cso.parse;
 pub const encodeCsoAlloc = cso.encodeAlloc;
+
+pub const DaxError = dax.Error;
+pub const DaxHeader = dax.Header;
+pub const DaxNonCompressedArea = dax.NonCompressedArea;
+pub const DaxFrame = dax.Frame;
+pub const DaxArchive = dax.Archive;
+pub const DaxOpenOptions = dax.OpenOptions;
+pub const DaxCompression = dax.Compression;
+pub const DaxEncodeOptions = dax.EncodeOptions;
+pub const parseDaxHeader = dax.parseHeader;
+pub const parseDax = dax.parse;
+pub const encodeDaxAlloc = dax.encodeAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3152,6 +3165,7 @@ test {
     _ = vhd;
     _ = vhdx;
     _ = cso;
+    _ = dax;
 }
 
 test "root 7z exports create list and extract Copy archives" {

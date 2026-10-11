@@ -551,6 +551,26 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedCsoError(err)) return err;
     }
+    if (vort.parseDax(data, .{
+        .max_frames = 4096,
+        .max_nc_areas = 4096,
+        .max_compressed_frame_bytes = std.math.maxInt(u16),
+    })) |archive| {
+        const logical_size: usize = archive.header.uncompressed_size;
+        const length = @min(logical_size, 4096);
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            length,
+            length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedDaxError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedDaxError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -1254,6 +1274,15 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(cso);
         try fuzzOne(init.gpa, cso);
     }
+    inline for (.{ vort.DaxCompression.zlib, vort.DaxCompression.raw }) |compression| {
+        const dax = try vort.encodeDaxAlloc(
+            init.gpa,
+            "DAX fuzz target valid frame\n" ** 320,
+            .{ .compression = compression },
+        );
+        defer init.gpa.free(dax);
+        try fuzzOne(init.gpa, dax);
+    }
 
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
@@ -1270,7 +1299,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 23,
+        samples.len + 25,
         data.len,
     });
     try stdout.flush();
@@ -1598,6 +1627,33 @@ fn isExpectedCsoError(err: anyerror) bool {
         error.UnsupportedDeflateFeature,
         error.InvalidMatch,
         error.InvalidDynamicBlockHeader,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.TrailingData,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedDaxError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidDax,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.InvalidDeflateBlockType,
+        error.StoredLengthMismatch,
+        error.BadZlibHeader,
+        error.NeedDictionary,
+        error.InvalidHuffmanCode,
+        error.UnsupportedDeflateFeature,
+        error.InvalidMatch,
+        error.InvalidDynamicBlockHeader,
+        error.ChecksumMismatch,
         error.RangeOutOfBounds,
         error.OutputLimitExceeded,
         error.OutputTooSmall,

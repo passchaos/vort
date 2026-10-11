@@ -328,6 +328,14 @@ pub fn build(b: *std.Build) void {
     const run_cso_tests = b.addRunArtifact(cso_tests);
     const cso_test_step = b.step("test-cso", "Run focused CSO/ZSO image tests");
     cso_test_step.dependOn(&run_cso_tests.step);
+    const dax_tests = b.addTest(.{
+        .name = "vort-dax-tests",
+        .root_module = tests_mod,
+        .filters = &.{"DAX"},
+    });
+    const run_dax_tests = b.addRunArtifact(dax_tests);
+    const dax_test_step = b.step("test-dax", "Run focused DAX image tests");
+    dax_test_step.dependOn(&run_dax_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1380,6 +1388,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| cso_diff.addArgs(args);
     const cso_diff_step = b.step("run-cso-diff", "Validate CSO/ZSO images against optional maxcso and 7-Zip");
     cso_diff_step.dependOn(&cso_diff.step);
+
+    const dax_diff = b.addSystemCommand(&.{ "python3", "tools/dax/diff.py", "--cli" });
+    dax_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| dax_diff.addArgs(args);
+    const dax_diff_step = b.step("run-dax-diff", "Validate DAX images against optional maxcso");
+    dax_diff_step.dependOn(&dax_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);
