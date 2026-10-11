@@ -312,6 +312,14 @@ pub fn build(b: *std.Build) void {
     const run_vhd_tests = b.addRunArtifact(vhd_tests);
     const vhd_test_step = b.step("test-vhd", "Run focused VHD image tests");
     vhd_test_step.dependOn(&run_vhd_tests.step);
+    const vhdx_tests = b.addTest(.{
+        .name = "vort-vhdx-tests",
+        .root_module = tests_mod,
+        .filters = &.{"VHDX"},
+    });
+    const run_vhdx_tests = b.addRunArtifact(vhdx_tests);
+    const vhdx_test_step = b.step("test-vhdx", "Run focused VHDX image tests");
+    vhdx_test_step.dependOn(&run_vhdx_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1352,6 +1360,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| vhd_diff.addArgs(args);
     const vhd_diff_step = b.step("run-vhd-diff", "Validate VHD images against optional QEMU and 7-Zip");
     vhd_diff_step.dependOn(&vhd_diff.step);
+
+    const vhdx_diff = b.addSystemCommand(&.{ "python3", "tools/vhdx/diff.py", "--cli" });
+    vhdx_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| vhdx_diff.addArgs(args);
+    const vhdx_diff_step = b.step("run-vhdx-diff", "Validate VHDX images against optional QEMU and 7-Zip");
+    vhdx_diff_step.dependOn(&vhdx_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

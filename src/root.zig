@@ -40,6 +40,7 @@ pub const vmdk = @import("vmdk.zig");
 pub const ewf = @import("ewf.zig");
 pub const chd = @import("chd.zig");
 pub const vhd = @import("vhd.zig");
+pub const vhdx = @import("vhdx.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1149,6 +1150,17 @@ pub const VhdEncodeOptions = vhd.EncodeOptions;
 pub const parseVhdFooter = vhd.parseFooter;
 pub const parseVhd = vhd.parse;
 pub const encodeVhdAlloc = vhd.encodeAlloc;
+
+pub const VhdxError = vhdx.Error;
+pub const VhdxHeader = vhdx.Header;
+pub const VhdxRegions = vhdx.Regions;
+pub const VhdxMetadata = vhdx.Metadata;
+pub const VhdxArchive = vhdx.Archive;
+pub const VhdxOpenOptions = vhdx.OpenOptions;
+pub const VhdxImageType = vhdx.ImageType;
+pub const VhdxEncodeOptions = vhdx.EncodeOptions;
+pub const parseVhdx = vhdx.parse;
+pub const encodeVhdxAlloc = vhdx.encodeAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3124,6 +3136,7 @@ test {
     _ = ewf;
     _ = chd;
     _ = vhd;
+    _ = vhdx;
 }
 
 test "root 7z exports create list and extract Copy archives" {

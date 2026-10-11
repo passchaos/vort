@@ -18050,3 +18050,13 @@ reuse, so production keeps the simpler independently owned plans.
   QEMU's vpc driver does not resolve parent chains. In-place updates, parent
   locator path resolution, and VHDX remain follow-up work. See
   `docs/formats/vhd.md`.
+
+- Added dependency-free standalone VHDX reading and deterministic
+  dynamic/fixed writing. The parser selects between redundant CRC-32C headers
+  and region tables, validates required metadata GUIDs and BAT geometry, and
+  exposes bounded sparse full/range reads. The writer emits deterministic
+  GUIDs, both header/region copies, a zeroed log, required metadata, interleaved
+  BAT entries, and MiB-aligned sparse or fully allocated payloads. A pinned
+  QEMU 9.2 fixture plus bidirectional QEMU and 7-Zip validation cover both
+  modes. Active-log replay, differencing/sector-bitmap blocks, and in-place
+  updates remain follow-up work. See `docs/formats/vhdx.md`.

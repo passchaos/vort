@@ -164,6 +164,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   sector bitmaps, sparse blocks, explicit parent UUID chains, whole-image and
   random-range decoding, a pinned QEMU fixture, fuzzing, and bidirectional
   QEMU plus 7-Zip interoperability;
+- dependency-free standalone VHDX reading and deterministic dynamic/fixed
+  writing, with redundant CRC-32C headers and region tables, required metadata,
+  interleaved BAT entries, sparse MiB-aligned payload blocks, bounded whole and
+  random-range reads, a pinned QEMU fixture, fuzzing, and bidirectional QEMU
+  plus 7-Zip interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded
@@ -1561,7 +1566,8 @@ status, `docs/zstd-gap.md` for current zstd comparison limitations, and
 storage-specific limits are documented in `docs/formats/qcow2.md`; VMDK support
 is documented in `docs/formats/vmdk.md`, EWF/E01 support in
 `docs/formats/ewf.md`, CHD v5 support in `docs/formats/chd.md`, and classic VHD
-support in `docs/formats/vhd.md`. Local Rust deflate
+support in `docs/formats/vhd.md`, and VHDX support in `docs/formats/vhdx.md`.
+Local Rust deflate
 baselines such as `~/Work/fdeflate` and `~/Work/miniz_oxide` should be treated
 as required functionality/performance competitors once their executable harnesses
 are wired into Vort validation.

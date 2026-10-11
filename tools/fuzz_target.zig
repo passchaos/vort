@@ -506,6 +506,28 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedVhdError(err)) return err;
     }
+    if (vort.parseVhdx(data, .{
+        .max_bat_entries = 4096,
+        .max_block_size = 16 * 1024 * 1024,
+    })) |archive| {
+        const logical_size = std.math.cast(
+            usize,
+            archive.metadata.virtual_disk_size,
+        ) orelse 0;
+        const length = @min(logical_size, 4096);
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            length,
+            length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedVhdxError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedVhdxError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -1176,6 +1198,14 @@ pub fn main(init: std.process.Init) !void {
         try fuzzOne(init.gpa, vhd);
     }
 
+    const vhdx = try vort.encodeVhdxAlloc(
+        init.gpa,
+        "VHDX fuzz target valid block\n" ** 128,
+        .{ .image_type = .dynamic, .block_size = 1024 * 1024 },
+    );
+    defer init.gpa.free(vhdx);
+    try fuzzOne(init.gpa, vhdx);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -1191,7 +1221,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 18,
+        samples.len + 19,
         data.len,
     });
     try stdout.flush();
@@ -1474,6 +1504,22 @@ fn isExpectedVhdError(err: anyerror) bool {
         error.InvalidVhd,
         error.UnsupportedVhdFeature,
         error.MissingVhdParent,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.ChecksumMismatch,
+        error.IntegerOverflow,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedVhdxError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidVhdx,
+        error.UnsupportedVhdxFeature,
         error.InvalidMagic,
         error.UnsupportedVersion,
         error.TruncatedFrame,
