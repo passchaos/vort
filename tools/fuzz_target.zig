@@ -291,6 +291,36 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseDmgAlloc(allocator, data, .{
+        .max_xml_bytes = 1 << 20,
+        .max_partitions = 256,
+        .max_blocks_per_partition = 4096,
+        .max_block_decoded_bytes = 1 << 20,
+        .max_xz_dictionary_bytes = 1 << 20,
+    })) |archive_value| {
+        var archive = archive_value;
+        defer archive.deinit();
+        if (archive.partitions.len != 0) {
+            const decoded_size = std.math.cast(
+                usize,
+                archive.partitions[0].decoded_size,
+            ) orelse 0;
+            const length = @min(decoded_size, 4096);
+            if (archive.decodePartitionRangeAllocLimited(
+                allocator,
+                0,
+                0,
+                length,
+                length,
+            )) |decoded| {
+                allocator.free(decoded);
+            } else |err| {
+                if (!isExpectedDmgError(err)) return err;
+            }
+        }
+    } else |err| {
+        if (!isExpectedDmgError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -870,6 +900,12 @@ pub fn main(init: std.process.Init) !void {
     const decmpfs_len = try base64.decode(decmpfs[18..], decmpfs_text);
     try fuzzOne(init.gpa, decmpfs[0 .. 18 + decmpfs_len]);
 
+    const dmg_text = vort.fuzz.dmg_fixture_base64;
+    const dmg = try init.gpa.alloc(u8, base64.calcSizeUpperBound(dmg_text.len));
+    defer init.gpa.free(dmg);
+    const dmg_len = try base64.decode(dmg, dmg_text);
+    try fuzzOne(init.gpa, dmg[0..dmg_len]);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -885,8 +921,52 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 5,
+        samples.len + 6,
         data.len,
     });
     try stdout.flush();
+}
+
+fn isExpectedDmgError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidDmg,
+        error.InvalidDmgPlist,
+        error.UnsupportedDmgFeature,
+        error.UnsupportedDmgMetadata,
+        error.UnsupportedDmgChunk,
+        error.UnsupportedDmgChecksum,
+        error.EncryptedDmg,
+        error.InvalidAppleAdcStream,
+        error.InvalidBzip2Header,
+        error.InvalidBzip2Stream,
+        error.UnsupportedBzip2Feature,
+        error.InvalidLzfseStream,
+        error.InvalidLzvnStream,
+        error.InvalidXzHeader,
+        error.InvalidXzStream,
+        error.UnsupportedXzFeature,
+        error.InvalidLzmaHeader,
+        error.InvalidLzmaStream,
+        error.UnsupportedLzmaFeature,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.TrailingData,
+        error.ChecksumMismatch,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.RangeOutOfBounds,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.BadZlibHeader,
+        error.NeedDictionary,
+        error.InvalidDeflateBlockType,
+        error.StoredLengthMismatch,
+        error.InvalidHuffmanCode,
+        error.InvalidDynamicBlockHeader,
+        error.InvalidMatch,
+        error.UnsupportedDeflateFeature,
+        => true,
+        else => false,
+    };
 }

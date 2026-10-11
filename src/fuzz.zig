@@ -15,6 +15,7 @@ pub const wof_fixture_base64 = @embedFile("wof/testdata/xpress4k-small.wof.b64")
 pub const wof_fixture_decoded_size: usize = 11_700;
 pub const decmpfs_fixture_base64 = @embedFile("decmpfs/testdata/ditto-type8-200k-a.rsrc.b64");
 pub const decmpfs_fixture_decoded_size: usize = 200_000;
+pub const dmg_fixture_base64 = @embedFile("dmg/testdata/hdiutil-hfs-xattrs.dmg.b64");
 
 pub const CorpusStats = struct {
     cases: usize = 0,

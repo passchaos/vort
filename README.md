@@ -116,6 +116,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   resource descriptors, Apple LZVN/LZFSE offset tables, stored-block markers,
   bounded whole-file and 64 KiB-aware range decoding, a pinned `ditto` resource
   fork, fuzzing, and Python zlib plus Apple LZFSE interoperability;
+- dependency-free Apple DMG/UDIF reading and deterministic single-partition
+  writing with `koly` trailers, XML-plist/Base64 `blkx` maps, sparse/copy/ADC/
+  zlib/Bzip2/LZFSE/XZ chunks, CRC verification, bounded whole-partition and
+  random-range decoding, a standalone Apple ADC codec, a pinned `hdiutil`
+  image, fuzzing, and 7-Zip plus dmg2img interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded

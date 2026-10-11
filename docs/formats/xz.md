@@ -30,6 +30,14 @@ const decoded = try vort.decodeXzAllocLimited(
 );
 defer allocator.free(decoded);
 
+const tightly_bounded = try vort.decodeXzAllocWithLimits(
+    allocator,
+    compressed,
+    256 * 1024 * 1024,
+    64 * 1024 * 1024,
+);
+defer allocator.free(tightly_bounded);
+
 const filter_chain = [_]vort.XzFilter{
     vort.XzFilter.x86(0),
     try vort.XzFilter.delta(4),
@@ -43,7 +51,8 @@ defer allocator.free(encoded);
 ```
 
 Available decoding forms include caller-owned output, bounded allocation,
-validated decoded-size preflight, and explicit concatenated-stream variants.
+separate decoded-output and LZMA2-dictionary limits, validated decoded-size
+preflight, and explicit concatenated-stream variants.
 The compressed and stored writers provide alloc, transactional append, and
 caller-owned output APIs.
 

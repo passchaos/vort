@@ -19,6 +19,7 @@ const lzms_cli = @import("cli/lzms.zig");
 const wof_cli = @import("cli/wof.zig");
 const lzfse_cli = @import("cli/lzfse.zig");
 const decmpfs_cli = @import("cli/decmpfs.zig");
+const dmg_cli = @import("cli/dmg.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
@@ -171,6 +172,14 @@ pub fn main(init: std.process.Init) !void {
         try decmpfs_cli.decode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-decmpfs-range")) {
         try decmpfs_cli.decodeRange(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-dmg")) {
+        try dmg_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-dmg-partition")) {
+        try dmg_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-dmg-range")) {
+        try dmg_cli.decodeRange(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-dmg")) {
+        try dmg_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2348,6 +2357,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  inspect-decmpfs <xattr> [resource|-]
         \\  decode-decmpfs <xattr> <resource|-> <out> [max_output]
         \\  decode-decmpfs-range <xattr> <resource|-> <out> <offset> <length>
+        \\  inspect-dmg <path>
+        \\  decode-dmg-partition <in> <out> <partition> [max_output]
+        \\  decode-dmg-range <in> <out> <partition> <offset> <length>
+        \\  encode-dmg <in> <out> <copy|adc|zlib|bzip2|lzfse|xz> [block_size] [fallback|always]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

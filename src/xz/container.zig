@@ -72,9 +72,29 @@ pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
 }
 
 pub fn decodeAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    return decodeAllocWithLimits(
+        allocator,
+        input,
+        max_output_len,
+        std.math.maxInt(usize),
+    );
+}
+
+pub fn decodeAllocWithLimits(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    max_output_len: usize,
+    max_dictionary_size: usize,
+) ![]u8 {
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
-    const consumed = try decodeOne(allocator, input, &output, max_output_len);
+    const consumed = (try decodeOneWithInfo(
+        allocator,
+        input,
+        &output,
+        max_output_len,
+        max_dictionary_size,
+    )).consumed;
     const end = try skipStreamPadding(input, consumed);
     if (end != input.len) return error.TrailingData;
     return output.toOwnedSlice(allocator);
@@ -139,7 +159,13 @@ pub fn decodedSizeConcatenatedLimited(
 pub fn inspect(allocator: std.mem.Allocator, input: []const u8) !StreamInfo {
     var output: std.ArrayList(u8) = .empty;
     defer output.deinit(allocator);
-    const parsed = try decodeOneWithInfo(allocator, input, &output, std.math.maxInt(usize));
+    const parsed = try decodeOneWithInfo(
+        allocator,
+        input,
+        &output,
+        std.math.maxInt(usize),
+        std.math.maxInt(usize),
+    );
     const end = try skipStreamPadding(input, parsed.info.compressed_size);
     if (end != input.len) return error.TrailingData;
     return parsed.info;
@@ -153,7 +179,13 @@ fn decodeOne(
     output: *std.ArrayList(u8),
     max_output_len: usize,
 ) !usize {
-    return (try decodeOneWithInfo(allocator, input, output, max_output_len)).consumed;
+    return (try decodeOneWithInfo(
+        allocator,
+        input,
+        output,
+        max_output_len,
+        std.math.maxInt(usize),
+    )).consumed;
 }
 
 fn decodeOneWithInfo(
@@ -161,6 +193,7 @@ fn decodeOneWithInfo(
     input: []const u8,
     output: *std.ArrayList(u8),
     max_output_len: usize,
+    max_dictionary_size: usize,
 ) !DecodedStream {
     const output_start = output.items.len;
     errdefer output.items.len = output_start;
@@ -174,7 +207,7 @@ fn decodeOneWithInfo(
 
     var records: std.ArrayList(BlockRecord) = .empty;
     defer records.deinit(allocator);
-    var max_dictionary_size: u64 = 0;
+    var stream_max_dictionary_size: u64 = 0;
     var delta_filter_blocks: usize = 0;
     var bcj_filter_blocks: usize = 0;
     var x86_filter_blocks: usize = 0;
@@ -190,7 +223,12 @@ fn decodeOneWithInfo(
         if (offset >= input.len) return error.TruncatedFrame;
         if (input[offset] == 0) break;
         const header = try parseBlockHeader(input, offset);
-        max_dictionary_size = @max(max_dictionary_size, header.dictionary_size);
+        if (header.dictionary_size > max_dictionary_size)
+            return error.OutputLimitExceeded;
+        stream_max_dictionary_size = @max(
+            stream_max_dictionary_size,
+            header.dictionary_size,
+        );
         const scan = try scanLzma2(input[header.end_offset..], max_output_len -| output.items.len);
         if (header.packed_size) |declared|
             if (declared != scan.packed_size) return error.SizeMismatch;
@@ -294,7 +332,7 @@ fn decodeOneWithInfo(
             .block_count = records.items.len,
             .compressed_size = footer_end,
             .uncompressed_size = produced,
-            .max_dictionary_size = max_dictionary_size,
+            .max_dictionary_size = stream_max_dictionary_size,
             .delta_filter_blocks = delta_filter_blocks,
             .bcj_filter_blocks = bcj_filter_blocks,
             .x86_filter_blocks = x86_filter_blocks,

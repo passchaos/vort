@@ -30,6 +30,8 @@ pub const lzms = @import("lzms.zig");
 pub const wof = @import("wof.zig");
 pub const lzfse = @import("lzfse.zig");
 pub const decmpfs = @import("decmpfs.zig");
+pub const apple_adc = @import("apple_adc.zig");
+pub const dmg = @import("dmg.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -184,6 +186,7 @@ pub const inspectXz = xz.inspect;
 pub const decodeXzInto = xz.decodeInto;
 pub const decodeXzAlloc = xz.decodeAlloc;
 pub const decodeXzAllocLimited = xz.decodeAllocLimited;
+pub const decodeXzAllocWithLimits = xz.decodeAllocWithLimits;
 pub const xzDecodedSize = xz.decodedSize;
 pub const xzDecodedSizeLimited = xz.decodedSizeLimited;
 pub const decodeXzConcatenatedInto = xz.decodeConcatenatedInto;
@@ -989,6 +992,37 @@ pub const decmpfsHeaderSize = decmpfs.headerSize;
 pub const decmpfsBlockSize = decmpfs.blockSize;
 pub const parseDecmpfsHeader = decmpfs.parseHeader;
 pub const parseDecmpfs = decmpfs.parse;
+
+pub const AppleAdcError = apple_adc.Error;
+pub const appleAdcDecodedSize = apple_adc.decodedSize;
+pub const appleAdcDecodedSizeLimited = apple_adc.decodedSizeLimited;
+pub const decodeAppleAdcInto = apple_adc.decodeInto;
+pub const decodeAppleAdcIntoExactSize = apple_adc.decodeIntoExactSize;
+pub const decodeAppleAdcAllocLimited = apple_adc.decodeAllocLimited;
+pub const decodeAppleAdcAllocExactSize = apple_adc.decodeAllocExactSize;
+pub const appleAdcEncodedBound = apple_adc.encodedBound;
+pub const encodeAppleAdcAlloc = apple_adc.encodeAlloc;
+pub const encodeAppleAdcAppend = apple_adc.encodeAppend;
+pub const encodeAppleAdcInto = apple_adc.encodeInto;
+
+pub const DmgError = dmg.Error;
+pub const DmgChunkKind = dmg.ChunkKind;
+pub const DmgFork = dmg.Fork;
+pub const DmgChecksum = dmg.Checksum;
+pub const DmgTrailer = dmg.Trailer;
+pub const DmgBlock = dmg.Block;
+pub const DmgPartition = dmg.Partition;
+pub const DmgArchive = dmg.Archive;
+pub const DmgParseOptions = dmg.ParseOptions;
+pub const DmgCompression = dmg.Compression;
+pub const DmgEncodeOptions = dmg.EncodeOptions;
+pub const dmgSectorSize = dmg.sectorSize;
+pub const dmgTrailerSize = dmg.trailerSize;
+pub const parseDmgTrailer = dmg.parseTrailer;
+pub const parseDmgAlloc = dmg.parseAlloc;
+pub const encodeDmgAlloc = dmg.encodeAlloc;
+pub const encodeDmgAppend = dmg.encodeAppend;
+pub const encodeDmgInto = dmg.encodeInto;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -2954,6 +2988,8 @@ test {
     _ = lzop;
     _ = seven_zip;
     _ = decmpfs;
+    _ = apple_adc;
+    _ = dmg;
 }
 
 test "root 7z exports create list and extract Copy archives" {

@@ -16,6 +16,7 @@ pub const inspect = container.inspect;
 pub const decodeInto = container.decodeInto;
 pub const decodeAlloc = container.decodeAlloc;
 pub const decodeAllocLimited = container.decodeAllocLimited;
+pub const decodeAllocWithLimits = container.decodeAllocWithLimits;
 pub const decodedSize = container.decodedSize;
 pub const decodedSizeLimited = container.decodedSizeLimited;
 pub const decodeConcatenatedInto = container.decodeConcatenatedInto;

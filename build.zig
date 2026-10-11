@@ -232,6 +232,22 @@ pub fn build(b: *std.Build) void {
     const run_decmpfs_tests = b.addRunArtifact(decmpfs_tests);
     const decmpfs_test_step = b.step("test-decmpfs", "Run focused Apple decmpfs tests");
     decmpfs_test_step.dependOn(&run_decmpfs_tests.step);
+    const apple_adc_tests = b.addTest(.{
+        .name = "vort-apple-adc-tests",
+        .root_module = tests_mod,
+        .filters = &.{"Apple ADC"},
+    });
+    const run_apple_adc_tests = b.addRunArtifact(apple_adc_tests);
+    const apple_adc_test_step = b.step("test-apple-adc", "Run focused Apple ADC codec tests");
+    apple_adc_test_step.dependOn(&run_apple_adc_tests.step);
+    const dmg_tests = b.addTest(.{
+        .name = "vort-dmg-tests",
+        .root_module = tests_mod,
+        .filters = &.{"DMG"},
+    });
+    const run_dmg_tests = b.addRunArtifact(dmg_tests);
+    const dmg_test_step = b.step("test-dmg", "Run focused Apple DMG/UDIF tests");
+    dmg_test_step.dependOn(&run_dmg_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1218,6 +1234,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| decmpfs_diff.addArgs(args);
     const decmpfs_diff_step = b.step("run-decmpfs-diff", "Validate Apple decmpfs wrappers against Python zlib and optional Apple LZFSE");
     decmpfs_diff_step.dependOn(&decmpfs_diff.step);
+
+    const dmg_diff = b.addSystemCommand(&.{ "python3", "tools/dmg/diff.py", "--cli" });
+    dmg_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| dmg_diff.addArgs(args);
+    const dmg_diff_step = b.step("run-dmg-diff", "Validate Apple DMG/UDIF against optional dmg2img, 7-Zip, and Rust udif");
+    dmg_diff_step.dependOn(&dmg_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);
