@@ -19,6 +19,12 @@ pub const dmg_fixture_base64 = @embedFile("dmg/testdata/hdiutil-hfs-xattrs.dmg.b
 pub const xar_fixture_base64 = @embedFile("xar/testdata/apple-xar-bzip2.xar.b64");
 pub const zfs_lzjb_fixture_base64 = @embedFile("zfs/testdata/openzfs-lzjb.bin.b64");
 pub const zfs_lzjb_fixture_decoded_size: usize = 11_700;
+pub const wia_partition_fixture_base64 = @embedFile(
+    "wia/testdata/python-partition-bzip2.wia.bz2.b64",
+);
+pub const rvz_partition_fixture_base64 = @embedFile(
+    "wia/testdata/python-partition-smallchunks.rvz.bz2.b64",
+);
 
 pub const CorpusStats = struct {
     cases: usize = 0,

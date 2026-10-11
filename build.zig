@@ -1420,7 +1420,7 @@ pub fn build(b: *std.Build) void {
     const wia_diff = b.addSystemCommand(&.{ "python3", "tools/wia/diff.py", "--cli" });
     wia_diff.addArtifactArg(cli_exe);
     if (b.args) |args| wia_diff.addArgs(args);
-    const wia_diff_step = b.step("run-wia-diff", "Validate WIA/RVZ raw-data images against optional DolphinTool");
+    const wia_diff_step = b.step("run-wia-diff", "Validate WIA/RVZ images against optional DolphinTool");
     wia_diff_step.dependOn(&wia_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });

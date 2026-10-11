@@ -72,7 +72,7 @@ pub fn decodeAllocExact(
 ) Error![]u8 {
     const decoded = switch (compression) {
         .none => try allocator.dupe(u8, input),
-        .purge => try decodePurgeAlloc(allocator, input, expected_size),
+        .purge => try decodePurgeAlloc(allocator, input, expected_size, ""),
         .bzip2 => try bzip2.decodeAllocLimited(allocator, input, expected_size),
         .lzma => try lzma_decoder.decode7zPayloadAllocLimited(
             allocator,
@@ -97,6 +97,47 @@ pub fn decodeAllocExact(
     errdefer allocator.free(decoded);
     if (decoded.len != expected_size) return error.SizeMismatch;
     return decoded;
+}
+
+pub fn decodeAllocLimited(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    compression: format.Compression,
+    compressor_data: []const u8,
+    max_output_len: usize,
+    max_dictionary_size: usize,
+) Error![]u8 {
+    return switch (compression) {
+        .none => if (input.len <= max_output_len)
+            try allocator.dupe(u8, input)
+        else
+            error.OutputLimitExceeded,
+        .purge => error.UnsupportedWiaFeature,
+        .bzip2 => try bzip2.decodeAllocLimited(
+            allocator,
+            input,
+            max_output_len,
+        ),
+        .lzma => try lzma_decoder.decode7zPayloadAllocUnknownSizeLimited(
+            allocator,
+            input,
+            compressor_data,
+            max_output_len,
+            max_dictionary_size,
+        ),
+        .lzma2 => try lzma2_container.decode7zPayloadAllocUnknownSizeLimited(
+            allocator,
+            input,
+            compressor_data[0],
+            max_output_len,
+            max_dictionary_size,
+        ),
+        .zstd => try zstd.decodeFrameAllocLimited(
+            allocator,
+            input,
+            max_output_len,
+        ),
+    };
 }
 
 fn encodePurgeAlloc(
@@ -135,14 +176,32 @@ fn encodePurgeAlloc(
     return output.toOwnedSlice(allocator);
 }
 
+pub fn decodePurgeWithHashPrefixAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    expected_size: usize,
+    hash_prefix: []const u8,
+) Error![]u8 {
+    return decodePurgeAlloc(
+        allocator,
+        input,
+        expected_size,
+        hash_prefix,
+    );
+}
+
 fn decodePurgeAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
     expected_size: usize,
+    hash_prefix: []const u8,
 ) Error![]u8 {
     if (input.len < 20) return error.TruncatedFrame;
+    var sha = std.crypto.hash.Sha1.init(.{});
+    sha.update(hash_prefix);
+    sha.update(input[0 .. input.len - 20]);
     var actual: [20]u8 = undefined;
-    std.crypto.hash.Sha1.hash(input[0 .. input.len - 20], &actual, .{});
+    sha.final(&actual);
     if (!std.mem.eql(u8, &actual, input[input.len - 20 ..]))
         return error.ChecksumMismatch;
     const output = try allocator.alloc(u8, expected_size);
@@ -173,4 +232,67 @@ fn decodePurgeAlloc(
         previous_end = end;
     }
     return output;
+}
+
+test "WIA marker-terminated LZMA codecs honor output limits" {
+    const allocator = std.testing.allocator;
+    const input = "WIA partition unknown-size codec payload\n" ** 128;
+    inline for (.{ format.Compression.lzma, format.Compression.lzma2 }) |compression| {
+        const encoded = try encodeAlloc(allocator, input, compression, 6);
+        defer allocator.free(encoded);
+        const properties = metadata(compression);
+        const decoded = try decodeAllocLimited(
+            allocator,
+            encoded,
+            compression,
+            properties.bytes[0..properties.len],
+            input.len,
+            1 << 20,
+        );
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+        try std.testing.expectError(
+            error.OutputLimitExceeded,
+            decodeAllocLimited(
+                allocator,
+                encoded,
+                compression,
+                properties.bytes[0..properties.len],
+                input.len - 1,
+                1 << 20,
+            ),
+        );
+    }
+}
+
+test "WIA purge decoder authenticates partition exception prefixes" {
+    const allocator = std.testing.allocator;
+    const input = ([_]u8{0} ** 64) ++ "partition purge payload" ++
+        ([_]u8{0} ** 64);
+    const prefix = [_]u8{ 0, 1, 0, 0 } ++ ([_]u8{0xaa} ** 20);
+    const encoded = try encodeAlloc(allocator, input, .purge, 0);
+    defer allocator.free(encoded);
+    var sha = std.crypto.hash.Sha1.init(.{});
+    sha.update(&prefix);
+    sha.update(encoded[0 .. encoded.len - 20]);
+    sha.final(encoded[encoded.len - 20 ..][0..20]);
+    const decoded = try decodePurgeWithHashPrefixAlloc(
+        allocator,
+        encoded,
+        input.len,
+        &prefix,
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+
+    encoded[encoded.len - 1] ^= 1;
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        decodePurgeWithHashPrefixAlloc(
+            allocator,
+            encoded,
+            input.len,
+            &prefix,
+        ),
+    );
 }

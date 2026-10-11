@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 import argparse
+import base64
+import bz2
+import hashlib
 import random
 import shutil
 import subprocess
@@ -9,6 +12,29 @@ from pathlib import Path
 
 WIA_CHUNK = 2 * 1024 * 1024
 RVZ_CHUNK = 128 * 1024
+PARTITION_LOGICAL_SIZE = 65 * 0x8000
+FIXTURE_DIR = Path(__file__).resolve().parents[2] / "src" / "wia" / "testdata"
+
+PARTITION_CASES = (
+    (
+        "wia-bzip2",
+        "python-partition-bzip2.wia.bz2.b64",
+        "wia",
+        "bzip2",
+        WIA_CHUNK,
+        "1380f2ef05967e11ef608b249b7211f3952880101e9f1698c60d1b71ae3c7c27",
+        "7ed1e69506a89dc1455c8b4dc50d79469fe1b921d6b73beb070549ea55f6bc54",
+    ),
+    (
+        "rvz-smallchunks",
+        "python-partition-smallchunks.rvz.bz2.b64",
+        "rvz",
+        "none",
+        RVZ_CHUNK,
+        "d6c151201f0ca55ad24ff454742848c8b6b0909b590f4f357f7f3d3e1f8010c6",
+        "5366ef2365a409b77a272f5932ee488dba52e03f10cf39f92e13b50bd8e44ef7",
+    ),
+)
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -28,6 +54,13 @@ def expect_failure(*args: object, error_name: str) -> None:
         raise AssertionError(
             f"missing {error_name}: {result.stderr.decode(errors='replace')}"
         )
+
+
+def load_partition_fixture(name: str, expected_digest: str) -> bytes:
+    image = bz2.decompress(base64.b64decode((FIXTURE_DIR / name).read_bytes()))
+    if hashlib.sha256(image).hexdigest() != expected_digest:
+        raise AssertionError(f"partition fixture digest mismatch: {name}")
+    return image
 
 
 def payload() -> bytes:
@@ -114,6 +147,7 @@ def main() -> None:
     external_encode = 0
     external_decode = 0
     malformed = 0
+    partition_cases = 0
     with tempfile.TemporaryDirectory(prefix="vort-wia-") as temp_text:
         temp = Path(temp_text)
         source = temp / "payload.iso"
@@ -208,6 +242,62 @@ def main() -> None:
         expect_failure(args.cli, "inspect-rvz", bad_header, error_name="ChecksumMismatch")
         malformed += 1
 
+        for (
+            label,
+            fixture_name,
+            container,
+            compression,
+            chunk_size,
+            image_digest,
+            output_digest,
+        ) in PARTITION_CASES:
+            image = temp / f"partition-{label}.{container}"
+            output = temp / f"partition-{label}.vort.iso"
+            ranged = temp / f"partition-{label}.range"
+            image.write_bytes(load_partition_fixture(fixture_name, image_digest))
+            summary = run(args.cli, f"inspect-{container}", image).stdout
+            if (
+                f"format={container}".encode() not in summary
+                or f"compression={compression}".encode() not in summary
+                or f"chunk_bytes={chunk_size}".encode() not in summary
+                or b"partitions=1" not in summary
+            ):
+                raise AssertionError(f"partition inspect mismatch for {label}")
+            run(
+                args.cli,
+                f"decode-{container}",
+                image,
+                output,
+                PARTITION_LOGICAL_SIZE,
+            )
+            decoded = output.read_bytes()
+            if hashlib.sha256(decoded).hexdigest() != output_digest:
+                raise AssertionError(f"partition decode mismatch for {label}")
+
+            # Sector 12 in the RVZ fixture carries an exception in subchunk 3.
+            range_offset = 13 * 0x8000 - 37
+            range_length = 2 * 0x8000 + 91
+            run(
+                args.cli,
+                f"decode-{container}-range",
+                image,
+                ranged,
+                range_offset,
+                range_length,
+            )
+            if ranged.read_bytes() != decoded[range_offset : range_offset + range_length]:
+                raise AssertionError(f"partition range mismatch for {label}")
+            partition_cases += 1
+
+            if dolphin_tool is not None:
+                external = temp / f"partition-{label}.dolphin.iso"
+                dolphin_convert(dolphin_tool, image, external, "iso")
+                if external.read_bytes() != decoded:
+                    raise AssertionError(
+                        f"DolphinTool partition decode mismatch for {label}"
+                    )
+                external_decode += 1
+
         if dolphin_tool is not None:
             dolphin_plain = bytes(
                 (index * 29 + index // 31) & 0xFF
@@ -275,7 +365,7 @@ def main() -> None:
     print(
         f"self={self_cases} dolphin_tool={dolphin_tool is not None} "
         f"external_encode={external_encode} external_decode={external_decode} "
-        f"malformed={malformed} partitions=unsupported "
+        f"malformed={malformed} partitions={partition_cases} "
         f"rvz_packing_decode=True rvz_packing_write=False"
     )
 

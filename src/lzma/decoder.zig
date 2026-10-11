@@ -287,6 +287,40 @@ pub fn decode7zPayloadAllocLimited(
     );
 }
 
+/// Decode a marker-terminated raw LZMA1 payload when the unpacked size is
+/// carried inside a surrounding container only implicitly. The five 7z-style
+/// property bytes still provide lc/lp/pb and dictionary size.
+pub fn decode7zPayloadAllocUnknownSizeLimited(
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    properties: []const u8,
+    max_output_len: usize,
+    max_dictionary_size: usize,
+) ![]u8 {
+    if (properties.len != 5) return error.InvalidLzmaHeader;
+    const parsed = try parseProperties(properties[0]);
+    const dictionary_size = @max(
+        @as(u32, 4096),
+        std.mem.readInt(u32, properties[1..5], .little),
+    );
+    if (dictionary_size > max_dictionary_size)
+        return error.OutputLimitExceeded;
+    return decodeRawAlloc(
+        allocator,
+        payload,
+        .{
+            .lc = parsed.lc,
+            .lp = parsed.lp,
+            .pb = parsed.pb,
+            .dictionary_size = dictionary_size,
+            .uncompressed_size = null,
+        },
+        max_output_len,
+        true,
+        true,
+    );
+}
+
 /// Decode the headerless LZMA1 stream stored in a CHD v5 hunk. CHD fixes the
 /// properties to lc/lp/pb=3/0/2 and carries both dictionary and output sizes
 /// out of band. Every encoded byte belongs to exactly one hunk, so trailing

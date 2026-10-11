@@ -596,9 +596,11 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     }
     if (vort.parseWiaAlloc(allocator, data, .{
         .max_header2_bytes = 4096,
+        .max_partition_entries = 4096,
+        .max_partition_entry_size = 4096,
         .max_raw_entries = 4096,
         .max_group_entries = 4096,
-        .max_chunk_size = 1 << 20,
+        .max_chunk_size = 2 << 20,
         .max_metadata_bytes = 1 << 20,
         .max_group_stored_bytes = 2 << 20,
         .max_dictionary_size = 1 << 20,
@@ -619,6 +621,26 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
             allocator.free(decoded);
         } else |err| {
             if (!isExpectedWiaError(err)) return err;
+        }
+        if (archive.partitions.len != 0) {
+            const partition_offset = std.math.cast(
+                usize,
+                archive.partitions[0].data[0].logicalOffset(),
+            ) orelse 0;
+            const partition_length = if (partition_offset < logical_size)
+                @min(logical_size - partition_offset, 4096)
+            else
+                0;
+            if (archive.readRangeAllocLimited(
+                allocator,
+                partition_offset,
+                partition_length,
+                partition_length,
+            )) |decoded| {
+                allocator.free(decoded);
+            } else |err| {
+                if (!isExpectedWiaError(err)) return err;
+            }
         }
     } else |err| {
         if (!isExpectedWiaError(err)) return err;
@@ -1360,6 +1382,24 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(wia);
         try fuzzOne(init.gpa, wia);
     }
+    inline for (.{
+        vort.fuzz.wia_partition_fixture_base64,
+        vort.fuzz.rvz_partition_fixture_base64,
+    }) |text| {
+        const compressed = try init.gpa.alloc(
+            u8,
+            base64.calcSizeUpperBound(text.len),
+        );
+        defer init.gpa.free(compressed);
+        const compressed_len = try base64.decode(compressed, text);
+        const wia = try vort.bzip2.decodeAllocLimited(
+            init.gpa,
+            compressed[0..compressed_len],
+            3 * 1024 * 1024,
+        );
+        defer init.gpa.free(wia);
+        try fuzzOne(init.gpa, wia);
+    }
 
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
@@ -1376,7 +1416,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 29,
+        samples.len + 31,
         data.len,
     });
     try stdout.flush();

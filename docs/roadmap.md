@@ -18094,12 +18094,16 @@ reuse, so production keeps the simpler independently owned plans.
   parallel encoding, and deeper ratio/throughput tuning remain follow-up work.
   See `docs/formats/gcz.md`.
 
-- Added a pure-Zig WIA/RVZ raw-data baseline. Shared parsing verifies both
+- Added a pure-Zig WIA/RVZ baseline. Shared parsing verifies both
   SHA-1-protected headers, version/chunk geometry, compressed metadata tables,
-  ordered raw extents, group indexes, limits, and all supported codec streams.
+  ordered raw/partition extents, group indexes, limits, and all supported codec
+  streams. The reader regenerates Wii H0/H1/H2 hash trees, applies stored hash
+  exceptions, and rebuilds AES-128-CBC encrypted partition groups across both
+  large WIA chunks and small RVZ chunks.
   WIA supports none/purge/Bzip2/LZMA/LZMA2; RVZ adds Zstandard, per-group raw
   fallback, zero groups, and junk-packing decode. The deterministic writer
   emits all ten valid raw-data combinations. Pinned current-Dolphin fixtures,
-  fuzzing, and bidirectional DolphinTool conversion cover the implementation.
-  Wii partition entries and writer-side junk packing remain explicit follow-up
-  work rather than silently degrading correctness. See `docs/formats/wia-rvz.md`.
+  independent encrypted partition fixtures, fuzzing, and bidirectional
+  DolphinTool conversion cover the implementation. Wii partition writing and
+  writer-side junk packing remain explicit follow-up work rather than silently
+  degrading correctness. See `docs/formats/wia-rvz.md`.

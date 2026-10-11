@@ -7,6 +7,8 @@ pub const Container = format.Container;
 pub const Compression = format.Compression;
 pub const Header1 = format.Header1;
 pub const Header2 = format.Header2;
+pub const PartitionDataEntry = format.PartitionDataEntry;
+pub const PartitionEntry = format.PartitionEntry;
 pub const RawEntry = format.RawEntry;
 pub const GroupEntry = format.GroupEntry;
 pub const Archive = archive.Archive;
@@ -20,6 +22,7 @@ test {
     _ = format;
     _ = @import("wia/codec.zig");
     _ = @import("wia/rvz_pack.zig");
+    _ = @import("wia/wii_partition.zig");
     _ = archive;
     _ = writer;
     _ = @import("wia/test.zig");

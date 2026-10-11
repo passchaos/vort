@@ -88,6 +88,31 @@ pub const RawEntry = struct {
     group_count: usize,
 };
 
+pub const PartitionDataEntry = struct {
+    first_sector: u32,
+    sector_count: u32,
+    group_index: usize,
+    group_count: usize,
+
+    pub fn logicalOffset(self: PartitionDataEntry) u64 {
+        return @as(u64, self.first_sector) * wii_block_size;
+    }
+
+    pub fn logicalSize(self: PartitionDataEntry) u64 {
+        return @as(u64, self.sector_count) * wii_block_size;
+    }
+};
+
+pub const PartitionEntry = struct {
+    key: [16]u8,
+    data: [2]PartitionDataEntry,
+};
+
+pub const HashException = struct {
+    offset: u16,
+    hash: [20]u8,
+};
+
 pub const GroupEntry = struct {
     data_offset: u64,
     stored_size: usize,
@@ -203,6 +228,30 @@ pub fn parseRawEntry(bytes: []const u8) Error!RawEntry {
         .data_size = readU64Be(bytes, 8),
         .group_index = readU32Be(bytes, 16),
         .group_count = readU32Be(bytes, 20),
+    };
+}
+
+pub fn parsePartitionEntry(bytes: []const u8) Error!PartitionEntry {
+    if (bytes.len < 16) return error.InvalidWia;
+    var padded = [_]u8{0} ** partition_entry_size;
+    @memcpy(padded[0..@min(bytes.len, padded.len)], bytes[0..@min(bytes.len, padded.len)]);
+    var key: [16]u8 = undefined;
+    @memcpy(&key, padded[0..16]);
+    return .{
+        .key = key,
+        .data = .{
+            parsePartitionDataEntry(padded[16..32]),
+            parsePartitionDataEntry(padded[32..48]),
+        },
+    };
+}
+
+fn parsePartitionDataEntry(bytes: []const u8) PartitionDataEntry {
+    return .{
+        .first_sector = readU32Be(bytes, 0),
+        .sector_count = readU32Be(bytes, 4),
+        .group_index = readU32Be(bytes, 8),
+        .group_count = readU32Be(bytes, 12),
     };
 }
 

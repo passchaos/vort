@@ -478,6 +478,24 @@ pub fn decode7zPayloadAllocLimited(
     return decodeLzma2Alloc(allocator, input, expected_size);
 }
 
+/// Decode a raw LZMA2 payload when the caller only has an output ceiling.
+/// LZMA2 chunk headers carry the exact unpacked size, so a bounded preflight
+/// can recover it without allocating the surrounding container's worst case.
+pub fn decode7zPayloadAllocUnknownSizeLimited(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary_property: u8,
+    max_output_len: usize,
+    max_dictionary_size: usize,
+) ![]u8 {
+    if (dictionary_property > 40) return error.InvalidXzHeader;
+    if (lzma2DictionarySize(dictionary_property) > max_dictionary_size)
+        return error.OutputLimitExceeded;
+    const scan = try scanLzma2(input, max_output_len);
+    if (scan.packed_size != input.len) return error.SizeMismatch;
+    return decodeLzma2Alloc(allocator, input, scan.unpacked_size);
+}
+
 fn verifyCheck(check: Check, decoded: []const u8, stored: []const u8) Error!void {
     switch (check) {
         .none => {},
