@@ -224,6 +224,14 @@ pub fn build(b: *std.Build) void {
     const run_erofs_tests = b.addRunArtifact(erofs_tests);
     const erofs_test_step = b.step("test-erofs", "Run focused EROFS reader and writer tests");
     erofs_test_step.dependOn(&run_erofs_tests.step);
+    const wim_tests = b.addTest(.{
+        .name = "vort-wim-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "WIM ", "LZX " },
+    });
+    const run_wim_tests = b.addRunArtifact(wim_tests);
+    const wim_test_step = b.step("test-wim", "Run focused WIM container and resource tests");
+    wim_test_step.dependOn(&run_wim_tests.step);
     const hadoop_lzo_index_tests = b.addTest(.{
         .name = "vort-hadoop-lzo-index-tests",
         .root_module = tests_mod,
@@ -1194,6 +1202,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| erofs_diff.addArgs(args);
     const erofs_diff_step = b.step("run-erofs-diff", "Validate EROFS reading and writing against optional erofs-utils");
     erofs_diff_step.dependOn(&erofs_diff.step);
+
+    const wim_diff = b.addSystemCommand(&.{ "python3", "tools/wim/diff.py", "--cli" });
+    wim_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| wim_diff.addArgs(args);
+    const wim_diff_step = b.step("run-wim-diff", "Validate WIM resources against optional wimlib-imagex");
+    wim_diff_step.dependOn(&wim_diff.step);
 
     const hadoop_lzo_index_diff = b.addSystemCommand(&.{ "python3", "tools/hadoop_lzo_index/diff.py", "--cli" });
     hadoop_lzo_index_diff.addArtifactArg(cli_exe);
@@ -4911,6 +4925,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zchunk_diff_step);
     ci_smoke_step.dependOn(squashfs_diff_step);
     ci_smoke_step.dependOn(erofs_diff_step);
+    ci_smoke_step.dependOn(wim_diff_step);
     ci_smoke_step.dependOn(hadoop_lzo_index_diff_step);
     ci_smoke_step.dependOn(zip_diff_step);
     ci_smoke_step.dependOn(bzip2_diff_step);

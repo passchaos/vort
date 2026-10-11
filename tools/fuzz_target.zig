@@ -175,6 +175,37 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.parseWim(data)) |archive| {
+        if (archive.readXmlAllocLimited(allocator, 1 << 20)) |xml| {
+            allocator.free(xml);
+        } else |err| switch (err) {
+            error.InvalidWim,
+            error.InvalidXpress,
+            error.InvalidLzxStream,
+            error.InvalidHuffmanCode,
+            error.InvalidMatch,
+            error.UnsupportedWimCompression,
+            error.UnsupportedWimFeature,
+            error.UnsupportedCabinetFeature,
+            error.TruncatedFrame,
+            error.TrailingData,
+            error.OutputLimitExceeded,
+            error.IntegerOverflow,
+            error.SizeMismatch,
+            => {},
+            else => return err,
+        }
+    } else |err| switch (err) {
+        error.InvalidMagic,
+        error.InvalidWim,
+        error.UnsupportedWimVersion,
+        error.UnsupportedWimCompression,
+        error.UnsupportedWimFeature,
+        error.TruncatedFrame,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
     if (vort.parseHadoopLzoIndex(data)) |_| {} else |err| switch (err) {
         error.InvalidHadoopLzoIndex,
         => {},

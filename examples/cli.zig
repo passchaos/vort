@@ -19,6 +19,7 @@ const lzfse_cli = @import("cli/lzfse.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
+const wim_cli = @import("cli/wim.zig");
 const lzip_cli = @import("cli/lzip.zig");
 const lzf_cli = @import("cli/lzf.zig");
 const lha_cli = @import("cli/lha.zig");
@@ -171,6 +172,12 @@ pub fn main(init: std.process.Init) !void {
         try erofs_cli.create(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-erofs-file")) {
         try erofs_cli.extract(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-wim-file")) {
+        try wim_cli.list(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-wim-resource")) {
+        try wim_cli.extractResource(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-wim-xml")) {
+        try wim_cli.extractXml(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
         try bgzf_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-bgzf-file")) {
@@ -2294,6 +2301,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-erofs-file <path>
         \\  create-erofs-file <out> <entry> <in> [stored|lz4|deflate|zstd]
         \\  extract-erofs-file <image> <entry> <out> [max_output]
+        \\  list-wim-file <path>
+        \\  extract-wim-resource <image> <sha1> <out> [max_output]
+        \\  extract-wim-xml <image> <out> [max_output]
         \\  encode-bgzf-file <in> <out> [block_size]
         \\                              Encode deterministic blocked gzip/BGZF
         \\  decode-bgzf-file <in> <out> [max_output]

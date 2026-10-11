@@ -31,6 +31,7 @@ pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
 pub const erofs = @import("erofs.zig");
+pub const wim = @import("wim.zig");
 pub const cab = @import("cab.zig");
 pub const zip = @import("zip.zig");
 pub const bzip2 = @import("bzip2.zig");
@@ -1015,6 +1016,16 @@ pub const ErofsWriterOptions = erofs.WriterOptions;
 pub const encodeErofsAlloc = erofs.encodeAlloc;
 pub const parseErofs = erofs.parse;
 pub const parseErofsSuperblock = erofs.parseSuperblock;
+
+pub const WimArchive = wim.Archive;
+pub const WimError = wim.Error;
+pub const WimCompression = wim.Compression;
+pub const WimHeader = wim.Header;
+pub const WimLookupEntry = wim.LookupEntry;
+pub const WimLookupTable = wim.LookupTable;
+pub const WimResourceHeader = wim.ResourceHeader;
+pub const parseWim = wim.parse;
+pub const parseWimHeader = wim.parseHeader;
 
 pub const Lznt1Error = lznt1.Error;
 pub const Lznt1EncodeOptions = lznt1.EncodeOptions;

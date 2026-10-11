@@ -5,6 +5,11 @@ const lzx_huffman = @import("lzx/huffman.zig");
 
 pub const Error = core.Error || error{ InvalidLzxStream, UnsupportedCabinetFeature };
 
+pub const StreamFormat = enum {
+    cabinet,
+    wim,
+};
+
 const min_window_bits: u5 = 15;
 const max_window_bits: u5 = 21;
 const frame_size: usize = 32 * 1024;
@@ -32,20 +37,38 @@ pub fn decodeAlloc(
     expected_output_len: usize,
     window_bits: u5,
 ) ![]u8 {
+    return decodeAllocWithFormat(
+        allocator,
+        input,
+        expected_output_len,
+        window_bits,
+        .cabinet,
+    );
+}
+
+pub fn decodeAllocWithFormat(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    expected_output_len: usize,
+    window_bits: u5,
+    stream_format: StreamFormat,
+) ![]u8 {
     if (window_bits < min_window_bits or window_bits > max_window_bits)
         return error.UnsupportedCabinetFeature;
     const raw = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(raw);
     if (expected_output_len == 0) return raw;
 
-    var decoder = Decoder.init(input, raw, window_bits);
+    var decoder = Decoder.init(input, raw, window_bits, stream_format);
     try decoder.decode();
     if (decoder.written != raw.len) return error.SizeMismatch;
 
     if (decoder.intel_started_frame) |start_frame| {
-        if (decoder.intel_filesize != 0)
+        if (stream_format == .cabinet and decoder.intel_filesize != 0)
             applyIntelE8(raw, decoder.intel_filesize, start_frame);
     }
+    if (stream_format == .wim and decoder.may_have_e8)
+        applyWimIntelE8(raw);
     return raw;
 }
 
@@ -53,6 +76,8 @@ const Decoder = struct {
     reader: WordBitReader,
     output: []u8,
     written: usize = 0,
+    stream_format: StreamFormat,
+    window_bits: u5,
     window_size: usize,
     main_symbol_count: usize,
     r0: usize = 1,
@@ -70,24 +95,35 @@ const Decoder = struct {
     length_tree_empty: bool = true,
     intel_filesize: i32 = 0,
     intel_started_frame: ?usize = null,
+    may_have_e8: bool = false,
 
-    fn init(input: []const u8, output: []u8, window_bits: u5) Decoder {
+    fn init(
+        input: []const u8,
+        output: []u8,
+        window_bits: u5,
+        stream_format: StreamFormat,
+    ) Decoder {
         return .{
             .reader = .{ .input = input },
             .output = output,
+            .stream_format = stream_format,
+            .window_bits = window_bits,
             .window_size = @as(usize, 1) << @intCast(window_bits),
             .main_symbol_count = 256 + @as(usize, position_slots[window_bits - min_window_bits]) * 8,
         };
     }
 
     fn decode(self: *Decoder) !void {
-        const intel = try self.reader.readBits(1);
-        if (intel != 0) {
-            const high = try self.reader.readBits(16);
-            const low = try self.reader.readBits(16);
-            self.intel_filesize = @bitCast((high << 16) | low);
+        if (self.stream_format == .cabinet) {
+            const intel = try self.reader.readBits(1);
+            if (intel != 0) {
+                const high = try self.reader.readBits(16);
+                const low = try self.reader.readBits(16);
+                self.intel_filesize = @bitCast((high << 16) | low);
+            }
         }
 
+        if (self.stream_format == .wim) return self.decodeWim();
         var frame_index: usize = 0;
         while (self.written < self.output.len) : (frame_index += 1) {
             const frame_start = self.written;
@@ -106,13 +142,39 @@ const Decoder = struct {
         }
     }
 
+    fn decodeWim(self: *Decoder) !void {
+        while (self.written < self.output.len) {
+            if (self.block_remaining == 0) try self.readBlockHeader(0);
+            if (self.block_remaining > self.output.len - self.written)
+                return error.InvalidLzxStream;
+            const run = self.block_remaining;
+            switch (self.block_type) {
+                .verbatim, .aligned => try self.decodeCompressedRun(run),
+                .uncompressed => try self.decodeUncompressedRun(run),
+                else => return error.InvalidLzxStream,
+            }
+            self.block_remaining = 0;
+        }
+    }
+
     fn readBlockHeader(self: *Decoder, frame_index: usize) !void {
         if (self.block_type == .uncompressed and self.block_length & 1 != 0)
             try self.reader.skipAlignedByte();
         self.block_type = @enumFromInt(@as(u3, @intCast(try self.reader.readBits(3))));
-        const high = try self.reader.readBits(16);
-        const low = try self.reader.readBits(8);
-        self.block_length = (high << 8) | low;
+        if (self.stream_format == .wim) {
+            if (try self.reader.readBits(1) != 0) {
+                self.block_length = frame_size;
+            } else {
+                self.block_length = try self.reader.readBits(16);
+                if (self.window_bits >= 16)
+                    self.block_length = (self.block_length << 8) |
+                        try self.reader.readBits(8);
+            }
+        } else {
+            const high = try self.reader.readBits(16);
+            const low = try self.reader.readBits(8);
+            self.block_length = (high << 8) | low;
+        }
         if (self.block_length == 0) return error.InvalidLzxStream;
         self.block_remaining = self.block_length;
 
@@ -128,6 +190,7 @@ const Decoder = struct {
             },
             .verbatim => try self.readCompressedTrees(frame_index),
             .uncompressed => {
+                self.may_have_e8 = true;
                 if (self.intel_started_frame == null) self.intel_started_frame = frame_index;
                 try self.reader.alignForUncompressed();
                 self.r0 = try self.reader.readAlignedInt(u32);
@@ -149,6 +212,7 @@ const Decoder = struct {
         );
         if (self.main_lengths[0xe8] != 0 and self.intel_started_frame == null)
             self.intel_started_frame = frame_index;
+        if (self.main_lengths[0xe8] != 0) self.may_have_e8 = true;
         try readLengths(&self.reader, &self.length_lengths);
         self.length_tree = try CanonicalHuffman(secondary_length_count).init(
             &self.length_lengths,
@@ -272,6 +336,33 @@ fn applyIntelE8(bytes: []u8, file_size: i32, start_frame: usize) void {
             index += 4;
             current_position += 5;
         }
+    }
+}
+
+fn applyWimIntelE8(bytes: []u8) void {
+    if (bytes.len <= 10) return;
+    const scan_end = bytes.len - 10;
+    var index: usize = 0;
+    while (index < scan_end) {
+        if (bytes[index] != 0xe8) {
+            index += 1;
+            continue;
+        }
+        const target_offset = index + 1;
+        const absolute = std.mem.readInt(i32, bytes[target_offset..][0..4], .little);
+        const position: i32 = @intCast(index);
+        if (absolute >= 0) {
+            if (absolute < 12_000_000)
+                std.mem.writeInt(i32, bytes[target_offset..][0..4], absolute - position, .little);
+        } else if (absolute >= -position) {
+            std.mem.writeInt(
+                i32,
+                bytes[target_offset..][0..4],
+                absolute + 12_000_000,
+                .little,
+            );
+        }
+        index += 5;
     }
 }
 
