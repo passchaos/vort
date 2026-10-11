@@ -1028,13 +1028,16 @@ pub const WimExtraStreamIterator = wim.ExtraStreamIterator;
 pub const WimHeader = wim.Header;
 pub const WimImageMetadata = wim.ImageMetadata;
 pub const WimLookupEntry = wim.LookupEntry;
+pub const WimLookupKind = wim.LookupKind;
 pub const WimLookupTable = wim.LookupTable;
 pub const WimPathLimits = wim.PathLimits;
 pub const WimResourceHeader = wim.ResourceHeader;
 pub const WimSecurityData = wim.SecurityData;
+pub const WimSolidResource = wim.SolidResource;
 pub const parseWim = wim.parse;
 pub const parseWimHeader = wim.parseHeader;
 pub const parseWimImageMetadataOwned = wim.parseImageMetadataOwned;
+pub const wimSolidResourceMagic = wim.solidResourceMagic;
 
 pub const Lznt1Error = lznt1.Error;
 pub const Lznt1EncodeOptions = lznt1.EncodeOptions;

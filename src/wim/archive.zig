@@ -3,8 +3,9 @@ const core = @import("../core.zig");
 const format = @import("format.zig");
 const codec = @import("codec.zig");
 const image_metadata = @import("metadata.zig");
+const solid = @import("solid.zig");
 
-pub const Error = core.Error || format.Error || codec.Error || image_metadata.Error ||
+pub const Error = core.Error || format.Error || codec.Error || image_metadata.Error || solid.Error ||
     std.mem.Allocator.Error || error{
     InvalidWim,
     WimImageNotFound,
@@ -15,17 +16,25 @@ pub const Error = core.Error || format.Error || codec.Error || image_metadata.Er
 
 pub const PathLimits = struct {
     max_metadata_bytes: usize = 256 * 1024 * 1024,
+    max_solid_chunk_bytes: usize = 256 * 1024 * 1024,
     max_lookup_entries: usize = 4 * 1024 * 1024,
     max_lookup_bytes: usize = 256 * 1024 * 1024,
     max_directory_entries: usize = 1024 * 1024,
     max_path_depth: usize = 256,
 };
 
+pub const solid_resource_magic = solid.resource_magic;
+pub const LookupKind = solid.LookupKind;
+pub const SolidResource = solid.Resource;
+
 pub const LookupEntry = struct {
     resource: format.ResourceHeader,
     part_number: u16,
     reference_count: u32,
     sha1: [20]u8,
+    kind: LookupKind = .standalone,
+    solid_resource: ?SolidResource = null,
+    solid_offset: u64 = 0,
 
     pub fn hashIsZero(self: LookupEntry) bool {
         return std.mem.allEqual(u8, &self.sha1, 0);
@@ -116,6 +125,12 @@ pub const Archive = struct {
                 .sha1 = sha1,
             };
         }
+        try solid.resolveEntries(
+            allocator,
+            self.bytes,
+            self.header.version,
+            entries,
+        );
         return .{ .allocator = allocator, .bytes = bytes, .entries = entries };
     }
 
@@ -134,7 +149,12 @@ pub const Archive = struct {
         );
         defer lookup.deinit();
         const entry = lookup.find(sha1) orelse return error.WimResourceNotFound;
-        return self.extractEntryAllocLimited(allocator, entry, max_output_len);
+        return self.extractEntryAllocLimitedWithSolidLimit(
+            allocator,
+            entry,
+            max_output_len,
+            max_output_len,
+        );
     }
 
     pub fn readImageMetadataAlloc(
@@ -200,7 +220,12 @@ pub const Archive = struct {
             if (self.header.total_parts > 1) return error.WimResourceInOtherPart;
             return error.WimResourceNotFound;
         };
-        return self.extractEntryAllocLimited(allocator, entry, max_output_len);
+        return self.extractEntryAllocLimitedWithSolidLimit(
+            allocator,
+            entry,
+            max_output_len,
+            limits.max_solid_chunk_bytes,
+        );
     }
 
     pub fn extractEntryAllocLimited(
@@ -209,13 +234,38 @@ pub const Archive = struct {
         entry: LookupEntry,
         max_output_len: usize,
     ) Error![]u8 {
-        if (entry.part_number != self.header.part_number)
-            return error.WimResourceInOtherPart;
-        const output = try self.readResourceAllocLimited(
+        return self.extractEntryAllocLimitedWithSolidLimit(
             allocator,
-            entry.resource,
+            entry,
+            max_output_len,
             max_output_len,
         );
+    }
+
+    pub fn extractEntryAllocLimitedWithSolidLimit(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: LookupEntry,
+        max_output_len: usize,
+        max_solid_chunk_bytes: usize,
+    ) Error![]u8 {
+        if (entry.part_number != self.header.part_number)
+            return error.WimResourceInOtherPart;
+        const output = switch (entry.kind) {
+            .standalone => try self.readResourceAllocLimited(
+                allocator,
+                entry.resource,
+                max_output_len,
+            ),
+            .solid_resource => return error.UnsupportedWimFeature,
+            .solid_blob => try solid.readBlobAllocLimited(
+                allocator,
+                self.bytes,
+                entry,
+                max_output_len,
+                max_solid_chunk_bytes,
+            ),
+        };
         errdefer allocator.free(output);
         if (!entry.hashIsZero()) {
             var actual: [std.crypto.hash.Sha1.digest_length]u8 = undefined;
@@ -503,6 +553,128 @@ test "WIM reads LZX metadata resources" {
     );
     defer allocator.free(file);
     try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", file);
+}
+
+test "WIM reads LZMS metadata and solid file resources" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/lzms-small.esd.b64"),
+    );
+    defer allocator.free(bytes);
+    const archive = try Archive.init(bytes);
+    try std.testing.expectEqual(format.solid_version, archive.header.version);
+    try std.testing.expectEqual(format.Compression.lzms, archive.header.compression);
+    var lookup = try archive.readLookupTableAlloc(allocator, 16, 4096);
+    defer lookup.deinit();
+    try std.testing.expectEqual(@as(usize, 3), lookup.entries.len);
+    try std.testing.expectEqual(LookupKind.standalone, lookup.entries[0].kind);
+    try std.testing.expectEqual(LookupKind.solid_resource, lookup.entries[1].kind);
+    try std.testing.expectEqual(LookupKind.solid_blob, lookup.entries[2].kind);
+    const solid_info = lookup.entries[2].solid_resource.?;
+    try std.testing.expectEqual(format.Compression.lzms, solid_info.compression);
+    try std.testing.expectEqual(@as(usize, 32 * 1024), solid_info.chunk_size);
+    try std.testing.expectEqual(@as(u64, 695), solid_info.uncompressed_size);
+    try std.testing.expectEqual(@as(u64, 0), lookup.entries[2].solid_offset);
+
+    const expected = @embedFile("../lzms/testdata/lzms-small.txt");
+    const file_hash = try parseSha1("d5929858ebffe1963ca1e26dd189cc32c6ce2914");
+    const by_hash = try archive.extractBySha1AllocLimited(
+        allocator,
+        &file_hash,
+        expected.len,
+        16,
+        4096,
+    );
+    defer allocator.free(by_hash);
+    try std.testing.expectEqualStrings(expected, by_hash);
+    const by_path = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "/nested/lzms.txt",
+        expected.len,
+        .{
+            .max_metadata_bytes = 4096,
+            .max_solid_chunk_bytes = 4096,
+            .max_lookup_entries = 16,
+            .max_lookup_bytes = 4096,
+            .max_directory_entries = 16,
+            .max_path_depth = 8,
+        },
+    );
+    defer allocator.free(by_path);
+    try std.testing.expectEqualStrings(expected, by_path);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        archive.extractByPathAllocLimited(
+            allocator,
+            1,
+            "/nested/lzms.txt",
+            expected.len,
+            .{
+                .max_metadata_bytes = 4096,
+                .max_solid_chunk_bytes = expected.len - 1,
+                .max_lookup_entries = 16,
+                .max_lookup_bytes = 4096,
+                .max_directory_entries = 16,
+                .max_path_depth = 8,
+            },
+        ),
+    );
+
+    const bad_compression = try allocator.dupe(u8, bytes);
+    defer allocator.free(bad_compression);
+    std.mem.writeInt(u32, bad_compression[220..224], 99, .little);
+    const bad_compression_archive = try Archive.init(bad_compression);
+    try std.testing.expectError(
+        error.UnsupportedWimCompression,
+        bad_compression_archive.readLookupTableAlloc(allocator, 16, 4096),
+    );
+    const bad_chunk = try allocator.dupe(u8, bytes);
+    defer allocator.free(bad_chunk);
+    std.mem.writeInt(u32, bad_chunk[216..220], 12_345, .little);
+    const bad_chunk_archive = try Archive.init(bad_chunk);
+    try std.testing.expectError(
+        error.InvalidWim,
+        bad_chunk_archive.readLookupTableAlloc(allocator, 16, 4096),
+    );
+    const bad_size = try allocator.dupe(u8, bytes);
+    defer allocator.free(bad_size);
+    std.mem.writeInt(u32, bad_size[224..228], 0, .little);
+    const bad_size_archive = try Archive.init(bad_size);
+    try std.testing.expectError(
+        error.InvalidWim,
+        bad_size_archive.readLookupTableAlloc(allocator, 16, 4096),
+    );
+
+    const corrupt_payload = try allocator.dupe(u8, bytes);
+    defer allocator.free(corrupt_payload);
+    corrupt_payload[250] ^= 0x40;
+    const corrupt_archive = try Archive.init(corrupt_payload);
+    if (corrupt_archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "/nested/lzms.txt",
+        expected.len,
+        .{
+            .max_metadata_bytes = 4096,
+            .max_solid_chunk_bytes = 4096,
+            .max_lookup_entries = 16,
+            .max_lookup_bytes = 4096,
+            .max_directory_entries = 16,
+            .max_path_depth = 8,
+        },
+    )) |unexpected| {
+        allocator.free(unexpected);
+        return error.TestUnexpectedResult;
+    } else |err| switch (err) {
+        error.InvalidLzms,
+        error.InvalidHuffmanCode,
+        error.InvalidMatch,
+        error.ChecksumMismatch,
+        => {},
+        else => return err,
+    }
 }
 
 test "WIM metadata rejects corrupt security names offsets and terminators" {

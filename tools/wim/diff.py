@@ -50,6 +50,7 @@ def verify_vort(
     compression: str,
     payloads: dict[str, bytes],
     temp: Path,
+    verify_resources: bool = True,
 ) -> None:
     listing = run(cli, "list-wim-file", image).stdout
     if f"compression={compression}".encode() not in listing:
@@ -59,7 +60,7 @@ def verify_vort(
         digest = hashlib.sha1(expected).hexdigest()
         if f"/{name}".encode() not in image_listing:
             raise AssertionError(f"WIM image listing missing {name}")
-        if expected:
+        if expected and verify_resources:
             if digest.encode() not in listing:
                 raise AssertionError(f"WIM lookup missing {name}/{digest}")
             output = temp / f"{compression}-{name.replace('/', '-')}.out"
@@ -121,6 +122,25 @@ def main() -> None:
         )
         if fixture_path_out.read_bytes() != b"hello WIM XPRESS payload\n":
             raise AssertionError("checked-in WIM path extraction mismatch")
+        fixture_cases += 1
+
+        lzms_fixture = temp / "fixture.esd"
+        lzms_fixture.write_bytes(
+            base64.b64decode(Path("src/wim/testdata/lzms-small.esd.b64").read_text())
+        )
+        lzms_expected = Path("src/lzms/testdata/lzms-small.txt").read_bytes()
+        lzms_fixture_out = temp / "fixture-lzms.out"
+        run(
+            args.cli,
+            "extract-wim-path",
+            lzms_fixture,
+            1,
+            "/nested/lzms.txt",
+            lzms_fixture_out,
+            len(lzms_expected),
+        )
+        if lzms_fixture_out.read_bytes() != lzms_expected:
+            raise AssertionError("checked-in solid LZMS ESD fixture mismatch")
         fixture_cases += 1
 
         source = temp / "tree"
@@ -198,11 +218,25 @@ def main() -> None:
                 "test",
                 "--compress=LZMS",
                 "--solid",
+                "--solid-chunk-size=32768",
                 "--no-acls",
             )
             solid_listing = run(args.cli, "list-wim-file", solid).stdout
             if b"wim_version=0xe00 compression=lzms" not in solid_listing:
                 raise AssertionError("solid ESD header mismatch")
+            verify_vort(
+                args.cli,
+                solid,
+                "lzms",
+                payloads,
+                temp,
+                verify_resources=False,
+            )
+            solid_reference = temp / "wimlib-solid"
+            run(wimlib, "extract", solid, 1, f"--dest-dir={solid_reference}")
+            for name, expected in payloads.items():
+                if (solid_reference / name).read_bytes() != expected:
+                    raise AssertionError(f"wimlib solid extraction mismatch for {name}")
             solid_cases += 1
 
             split_source = temp / "split-tree"

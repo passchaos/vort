@@ -142,7 +142,7 @@ fn compressionFromFlags(flags: u32) Error!Compression {
     return .lzms;
 }
 
-fn validateChunkSize(compression: Compression, size: usize) Error!void {
+pub fn validateChunkSize(compression: Compression, size: usize) Error!void {
     if (compression == .none) {
         if (size != 0) return error.InvalidWim;
         return;

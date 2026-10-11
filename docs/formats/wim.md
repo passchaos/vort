@@ -18,9 +18,18 @@ Resource extraction supports:
 - raw chunks selected when stored size equals decoded size;
 - XPRESS-Huffman compressed chunks from 4 through 64 KiB;
 - WIM LZX compressed chunks from 32 KiB through 2 MiB;
+- LZMS compressed chunks from 32 KiB through 1 GiB;
 - multi-chunk resources and a partial final chunk;
 - SHA-1 verification for lookup-table resources;
 - explicit caller output, lookup-entry, and lookup-table byte limits.
+
+Solid-version resources use their 16-byte alternate chunk-table header rather
+than the ordinary cumulative-offset table. Vort resolves the overloaded lookup
+entries into resource markers and non-overlapping blob ranges, validates every
+per-chunk compressed size, and decodes only the chunks overlapping the selected
+blob. This supports multi-chunk solid LZMS ESD extraction without allocating or
+decoding the complete solid resource; output and decoded-chunk scratch have
+separate caller limits.
 
 Image metadata support validates the security-descriptor prefix, root dentry,
 aligned variable-length dentries, UTF-16LE long and short names, extra stream
@@ -88,18 +97,19 @@ zig build run -- extract-wim-path install.wim 1 /Windows/System32/example.dll ou
 zig build run-wim-diff
 ```
 
-Solid LZMS resource payloads, pipable WIM layout, cross-part SWM resource
-assembly, alternate solid chunk tables, encrypted file data, reparse data, and
-named alternate-stream extraction are not yet decoded. They return explicit
-errors rather than being treated as ordinary resources or files.
+Pipable WIM layout, cross-part SWM resource assembly, encrypted file data,
+reparse data, and named alternate-stream extraction are not yet decoded. They
+return explicit errors rather than being treated as ordinary resources or
+files.
 
 The differential gate creates stored, XPRESS, and LZX multi-chunk WIMs with
 pinned wimlib, verifies them with `wimlib-imagex`, compares metadata tree paths,
 extracts every file through both Vort and wimlib, and compares SHA-1 and bytes.
 The generated trees include empty and non-ASCII filenames, while a two-image
-archive checks lookup-table metadata ordering. It also covers a solid LZMS ESD
-header, two split SWM part headers and cross-part errors, checked-in XPRESS/LZX
-fixtures, output limits, missing images/paths/hashes, directory extraction
-rejection, and malformed headers. Unit tests additionally mutate security
-lengths, UTF-16 name lengths, child offsets, stream counts, duplicate names, and
-directory terminators.
+archive checks lookup-table metadata ordering. It also fully extracts a
+multi-chunk solid LZMS ESD through both Vort and wimlib, covers two split SWM
+part headers and cross-part errors, and keeps checked-in XPRESS/LZX/LZMS
+fixtures. Negative coverage includes output limits, missing images/paths/hashes,
+directory extraction rejection, malformed headers, security lengths, UTF-16
+name lengths, child offsets, stream counts, duplicate names, alternate chunk
+headers, and directory terminators.

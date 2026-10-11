@@ -2,9 +2,10 @@ const std = @import("std");
 const core = @import("../core.zig");
 const xpress = @import("../xpress.zig");
 const lzx = @import("../cab/lzx.zig");
+const lzms = @import("../lzms.zig");
 const format = @import("format.zig");
 
-pub const Error = core.Error || xpress.Error || lzx.Error || std.mem.Allocator.Error ||
+pub const Error = core.Error || xpress.Error || lzx.Error || lzms.Error || std.mem.Allocator.Error ||
     error{ UnsupportedWimCompression, InvalidWim };
 
 pub fn decodeChunkInto(
@@ -31,6 +32,6 @@ pub fn decodeChunkInto(
             defer allocator.free(decoded);
             @memcpy(output, decoded);
         },
-        .lzms => return error.UnsupportedWimCompression,
+        .lzms => try lzms.decodeInto(allocator, input, output),
     }
 }

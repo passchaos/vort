@@ -96,6 +96,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   512-symbol canonical tables, 64 KiB history, interwoven raw length bytes, and
   exact-size bounded decode. Both modes have caller-owned APIs, MS-XCA official
   vectors, fuzzing, and pinned Rust/Python plus wimlib interoperability;
+- pure Zig Windows LZMS raw-block decoding with forward 16-bit range coding,
+  backward adaptive canonical Huffman codes, LZ and delta matches, delayed LRU
+  repeat queues, mandatory x86 address postprocessing, reusable decoder state,
+  exact-size/caller-owned APIs, pinned fixtures, fuzzing, and wimlib-generated
+  text, delta, mixed, source, and x86-code differentials;
 - pure Zig Apple LZFSE stream and raw LZVN support with `bvx-`, `bvxn`, `bvx1`,
   and `bvx2` decoding, compressed frequency-table and four-way literal FSE
   reconstruction, bounded/caller-owned APIs, deterministic LZVN-or-stored block
@@ -126,9 +131,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   security tables, borrowed dentry/extra-stream views, directory iteration,
   UTF-16LE path lookup, and bounded regular-file extraction by image/path.
   Stored, XPRESS-Huffman, and WIM-flavored LZX chunks are decoded across
-  multi-chunk resources; solid LZMS payloads, pipable WIMs, cross-part SWM
-  extraction, and encrypted/reparse/ADS path extraction are reported explicitly
-  as unsupported;
+  multi-chunk resources; LZMS metadata chunks and alternate-table solid LZMS
+  resources support bounded individual-blob extraction without materializing
+  the whole solid stream. Pipable WIMs, cross-part SWM assembly, and encrypted/
+  reparse/ADS path extraction are reported explicitly as unsupported;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,

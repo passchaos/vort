@@ -126,6 +126,25 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
             else => return err,
         }
     }
+    if (data.len >= 2) {
+        const expected_size: usize = std.mem.readInt(u16, data[0..2], .little);
+        if (vort.decodeLzmsAllocLimited(
+            allocator,
+            data[2..],
+            expected_size,
+            1 << 20,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| switch (err) {
+            error.InvalidLzms,
+            error.InvalidHuffmanCode,
+            error.CorruptFrame,
+            error.OutputLimitExceeded,
+            error.IntegerOverflow,
+            => {},
+            else => return err,
+        }
+    }
     if (vort.decodeLzfseAllocLimited(allocator, data, 1 << 20)) |decoded| {
         allocator.free(decoded);
     } else |err| switch (err) {
@@ -180,9 +199,11 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
             allocator.free(xml);
         } else |err| switch (err) {
             error.InvalidWim,
+            error.InvalidLzms,
             error.InvalidXpress,
             error.InvalidLzxStream,
             error.InvalidHuffmanCode,
+            error.CorruptFrame,
             error.InvalidMatch,
             error.UnsupportedWimCompression,
             error.UnsupportedWimFeature,
@@ -198,6 +219,7 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         if (archive.header.image_count != 0) {
             if (archive.readImageMetadataAlloc(allocator, 1, .{
                 .max_metadata_bytes = 1 << 20,
+                .max_solid_chunk_bytes = 1 << 20,
                 .max_lookup_entries = 4096,
                 .max_lookup_bytes = 1 << 20,
                 .max_directory_entries = 4096,
@@ -218,9 +240,11 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
             } else |err| switch (err) {
                 error.InvalidWim,
                 error.InvalidWimMetadata,
+                error.InvalidLzms,
                 error.InvalidXpress,
                 error.InvalidLzxStream,
                 error.InvalidHuffmanCode,
+                error.CorruptFrame,
                 error.InvalidMatch,
                 error.UnsupportedWimCompression,
                 error.UnsupportedWimFeature,
@@ -675,6 +699,24 @@ pub fn main(init: std.process.Init) !void {
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
 
+    const base64 = std.base64.standard.decoderWithIgnore(" \r\n\t");
+    const raw_lzms_text = vort.fuzz.lzms_raw_fixture_base64;
+    const raw_lzms = try init.gpa.alloc(
+        u8,
+        2 + base64.calcSizeUpperBound(raw_lzms_text.len),
+    );
+    defer init.gpa.free(raw_lzms);
+    const raw_lzms_size = vort.fuzz.lzms_raw_fixture_decoded_size;
+    std.mem.writeInt(u16, raw_lzms[0..2], raw_lzms_size, .little);
+    const raw_lzms_len = try base64.decode(raw_lzms[2..], raw_lzms_text);
+    try fuzzOne(init.gpa, raw_lzms[0 .. raw_lzms_len + 2]);
+
+    const esd_text = vort.fuzz.wim_lzms_fixture_base64;
+    const esd = try init.gpa.alloc(u8, base64.calcSizeUpperBound(esd_text.len));
+    defer init.gpa.free(esd);
+    const esd_len = try base64.decode(esd, esd_text);
+    try fuzzOne(init.gpa, esd[0..esd_len]);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -689,6 +731,9 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [128]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{ samples.len, data.len });
+    try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
+        samples.len + 2,
+        data.len,
+    });
     try stdout.flush();
 }

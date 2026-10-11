@@ -15,13 +15,16 @@ pub const ExtraStreamIterator = metadata.ExtraStreamIterator;
 pub const Header = format.Header;
 pub const ImageMetadata = metadata.ImageMetadata;
 pub const LookupEntry = archive.LookupEntry;
+pub const LookupKind = archive.LookupKind;
 pub const LookupTable = archive.LookupTable;
 pub const PathLimits = archive.PathLimits;
 pub const ResourceHeader = format.ResourceHeader;
 pub const SecurityData = metadata.SecurityData;
+pub const SolidResource = archive.SolidResource;
 pub const parse = archive.Archive.init;
 pub const parseHeader = format.parseHeader;
 pub const parseImageMetadataOwned = metadata.ImageMetadata.fromOwnedBytes;
+pub const solidResourceMagic = archive.solid_resource_magic;
 
 test {
     _ = format;
