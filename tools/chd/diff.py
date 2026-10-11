@@ -85,7 +85,19 @@ def main() -> None:
             image = temp / f"vort-{compression}.chd"
             output = temp / f"vort-{compression}.raw"
             ranged = temp / f"vort-{compression}.range"
-            run(args.cli, "encode-chd", source, image, compression, 4096, 512, 6)
+            encode_args: list[object] = [
+                args.cli,
+                "encode-chd",
+                source,
+                image,
+                compression,
+                4096,
+                512,
+                6,
+            ]
+            if compression == "auto":
+                encode_args.extend(("-", "TEST=checked-metadata"))
+            run(*encode_args)
             summary = run(args.cli, "inspect-chd", image).stdout
             expected_name = {
                 "none": "none",
@@ -95,6 +107,8 @@ def main() -> None:
             expected_codec = f"codec={expected_name}".encode()
             if expected_codec not in summary or b"hunks=6" not in summary:
                 raise AssertionError(f"Vort CHD inspect mismatch for {compression}")
+            if compression == "auto" and b"metadata=1" not in summary:
+                raise AssertionError("Vort CHD metadata writer was not exposed")
             run(args.cli, "decode-chd", image, output, len(plain))
             if output.read_bytes() != plain:
                 raise AssertionError(f"Vort CHD round trip mismatch for {compression}")
@@ -122,6 +136,74 @@ def main() -> None:
                 if external.read_bytes() != plain:
                     raise AssertionError(f"chdman decode of Vort {compression} mismatch")
                 external_encode += 1
+
+        hunk_bytes = 4096
+        child_plain = (
+            plain[2 * hunk_bytes : 3 * hunk_bytes]
+            + plain[0:hunk_bytes]
+            + bytes([ord("E")]) * hunk_bytes
+            + plain[2 * hunk_bytes : 3 * hunk_bytes]
+        )
+        parent_child_source = temp / "vort-parent-child.raw"
+        parent_child_image = temp / "vort-parent-child.chd"
+        parent_child_output = temp / "vort-parent-child.vort.raw"
+        parent_child_source.write_bytes(child_plain)
+        run(
+            args.cli,
+            "encode-chd",
+            parent_child_source,
+            parent_child_image,
+            "auto",
+            hunk_bytes,
+            512,
+            6,
+            images["zlib"],
+            "PARN=parent-writer",
+        )
+        child_summary = run(
+            args.cli,
+            "inspect-chd",
+            parent_child_image,
+            images["zlib"],
+        ).stdout
+        if b"parent=true" not in child_summary or b"metadata=1" not in child_summary:
+            raise AssertionError("Vort parent writer metadata mismatch")
+        run(
+            args.cli,
+            "decode-chd",
+            parent_child_image,
+            parent_child_output,
+            len(child_plain),
+            images["zlib"],
+        )
+        if parent_child_output.read_bytes() != child_plain:
+            raise AssertionError("Vort parent writer round trip mismatch")
+        self_cases += 1
+        parent_cases += 1
+        if chdman is not None:
+            run(
+                chdman,
+                "verify",
+                "-i",
+                parent_child_image,
+                "-ip",
+                images["zlib"],
+            )
+            parent_external = temp / "vort-parent-child.chdman.raw"
+            run(
+                chdman,
+                "extractraw",
+                "-i",
+                parent_child_image,
+                "-ip",
+                images["zlib"],
+                "-o",
+                parent_external,
+                "-f",
+            )
+            if parent_external.read_bytes() != child_plain:
+                raise AssertionError("chdman decode of Vort parent writer mismatch")
+            external_encode += 1
 
         partial_plain = plain + b"partial logical tail"
         partial_source = temp / "partial.raw"
@@ -273,6 +355,20 @@ def main() -> None:
             len(plain) - 10,
             20,
             error_name="RangeOutOfBounds",
+        )
+        malformed += 1
+        expect_failure(
+            args.cli,
+            "encode-chd",
+            source,
+            temp / "bad-metadata.chd",
+            "auto",
+            4096,
+            512,
+            6,
+            "-",
+            "BAD=value",
+            error_name="InvalidChdMetadata",
         )
         malformed += 1
 

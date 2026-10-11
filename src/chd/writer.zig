@@ -2,11 +2,12 @@ const std = @import("std");
 const deflate = @import("../deflate.zig");
 const lzma = @import("../lzma.zig");
 const zstd = @import("../zstd.zig");
+const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
 const huffman = @import("huffman.zig");
 
-pub const Error = format.Error || huffman.Error || deflate.Error || lzma.Error ||
-    zstd.Error || std.mem.Allocator.Error;
+pub const Error = archive_mod.Error || format.Error || huffman.Error ||
+    deflate.Error || lzma.Error || zstd.Error || std.mem.Allocator.Error;
 
 pub const Compression = enum {
     none,
@@ -17,11 +18,22 @@ pub const Compression = enum {
     auto,
 };
 
+pub const EncodeMetadata = struct {
+    tag: u32,
+    flags: u8 = format.metadata_checksum_flag,
+    data: []const u8,
+};
+
 pub const EncodeOptions = struct {
     compression: Compression = .auto,
     hunk_bytes: u32 = 4096,
     unit_bytes: u32 = 512,
     compression_level: u8 = 6,
+    metadata: []const EncodeMetadata = &.{},
+    max_metadata_entries: usize = 1 << 16,
+    /// Parent ownership remains with the caller for the duration of encoding.
+    parent: ?*const archive_mod.Archive = null,
+    max_parent_hunks: usize = 1 << 24,
 };
 
 pub fn encodeAlloc(
@@ -48,6 +60,18 @@ fn validateOptions(options: EncodeOptions) Error!void {
         .zstd => if (options.compression_level > 22)
             return error.InvalidChd,
         .none, .lzma, .huffman => {},
+    }
+    if (options.metadata.len > options.max_metadata_entries)
+        return error.OutputLimitExceeded;
+    for (options.metadata) |entry|
+        if (entry.data.len > 0x00ff_ffff) return error.InvalidChdMetadata;
+    if (options.parent) |parent| {
+        if (parent.header.hunk_count > options.max_parent_hunks)
+            return error.OutputLimitExceeded;
+        if (parent.header.hunk_bytes != options.hunk_bytes or
+            parent.header.unit_bytes != options.unit_bytes or
+            std.mem.allEqual(u8, &parent.header.combined_sha1, 0))
+            return error.InvalidChd;
     }
 }
 
@@ -90,9 +114,21 @@ fn encodeUncompressedAlloc(
 
     const scratch = try allocator.alloc(u8, options.hunk_bytes);
     defer allocator.free(scratch);
+    const parent_scratch = if (options.parent != null)
+        try allocator.alloc(u8, options.hunk_bytes)
+    else
+        null;
+    defer if (parent_scratch) |bytes| allocator.free(bytes);
     for (0..hunk_count) |hunk_index| {
         fillHunk(input, hunk_index, options.hunk_bytes, scratch);
-        if (std.mem.allEqual(u8, scratch, 0)) continue;
+        if (options.parent) |parent| {
+            if (hunk_index < parent.header.hunk_count) {
+                try parent.decodeHunkInto(allocator, hunk_index, parent_scratch.?);
+                if (std.mem.eql(u8, scratch, parent_scratch.?)) continue;
+            }
+        } else if (std.mem.allEqual(u8, scratch, 0)) {
+            continue;
+        }
         if (output.items.len % options.hunk_bytes != 0)
             return error.InvalidChd;
         const raw_offset = output.items.len / options.hunk_bytes;
@@ -105,9 +141,15 @@ fn encodeUncompressedAlloc(
         );
         try output.appendSlice(allocator, scratch);
     }
+    const metadata_offset = try appendMetadata(allocator, &output, options.metadata);
+    const digests = try computeDigests(allocator, input, options.metadata);
     writeHeader(output.items[0..format.header_size], input, options, .{
         .compressors = @splat(0),
         .map_offset = format.header_size,
+        .metadata_offset = metadata_offset,
+        .raw_sha1 = digests.raw,
+        .combined_sha1 = digests.combined,
+        .parent_sha1 = parentSha1(options.parent),
     });
     return output.toOwnedSlice(allocator);
 }
@@ -131,6 +173,22 @@ fn encodeCompressedAlloc(
     defer allocator.free(entries);
     const scratch = try allocator.alloc(u8, options.hunk_bytes);
     defer allocator.free(scratch);
+    const parent_scratch = if (options.parent != null)
+        try allocator.alloc(u8, options.hunk_bytes)
+    else
+        null;
+    defer if (parent_scratch) |bytes| allocator.free(bytes);
+    var parent_index = std.AutoHashMap([20]u8, usize).init(allocator);
+    defer parent_index.deinit();
+    if (options.parent) |parent| {
+        for (0..parent.header.hunk_count) |parent_hunk| {
+            try parent.decodeHunkInto(allocator, parent_hunk, parent_scratch.?);
+            var digest: [20]u8 = undefined;
+            std.crypto.hash.Sha1.hash(parent_scratch.?, &digest, .{});
+            const result = try parent_index.getOrPut(digest);
+            if (!result.found_existing) result.value_ptr.* = parent_hunk;
+        }
+    }
     var seen = std.AutoHashMap([20]u8, usize).init(allocator);
     defer seen.deinit();
     var output: std.ArrayList(u8) = .empty;
@@ -141,6 +199,24 @@ fn encodeCompressedAlloc(
         fillHunk(input, hunk_index, options.hunk_bytes, scratch);
         var digest: [20]u8 = undefined;
         std.crypto.hash.Sha1.hash(scratch, &digest, .{});
+        if (options.parent) |parent| {
+            if (parent_index.get(digest)) |parent_hunk| {
+                try parent.decodeHunkInto(allocator, parent_hunk, parent_scratch.?);
+                if (std.mem.eql(u8, scratch, parent_scratch.?)) {
+                    entry.* = .{
+                        .kind = .parent,
+                        .length = 0,
+                        .offset = std.math.mul(
+                            u64,
+                            parent_hunk,
+                            options.hunk_bytes / options.unit_bytes,
+                        ) catch return error.IntegerOverflow,
+                        .crc16 = 0,
+                    };
+                    continue;
+                }
+            }
+        }
         const seen_result = try seen.getOrPut(digest);
         if (seen_result.found_existing and samePaddedHunk(
             input,
@@ -192,9 +268,15 @@ fn encodeCompressedAlloc(
     );
     defer allocator.free(encoded_map);
     try output.appendSlice(allocator, encoded_map);
+    const metadata_offset = try appendMetadata(allocator, &output, options.metadata);
+    const digests = try computeDigests(allocator, input, options.metadata);
     writeHeader(output.items[0..format.header_size], input, options, .{
         .compressors = compressors,
         .map_offset = map_offset,
+        .metadata_offset = metadata_offset,
+        .raw_sha1 = digests.raw,
+        .combined_sha1 = digests.combined,
+        .parent_sha1 = parentSha1(options.parent),
     });
     return output.toOwnedSlice(allocator);
 }
@@ -255,6 +337,10 @@ fn encodeCodecAlloc(
 const HeaderFields = struct {
     compressors: [4]u32,
     map_offset: u64,
+    metadata_offset: u64,
+    raw_sha1: [20]u8,
+    combined_sha1: [20]u8,
+    parent_sha1: [20]u8,
 };
 
 fn writeHeader(
@@ -271,14 +357,74 @@ fn writeHeader(
         format.writeU32Be(output, 16 + index * 4, compressor);
     format.writeU64Be(output, 32, input.len);
     format.writeU64Be(output, 40, fields.map_offset);
+    format.writeU64Be(output, 48, fields.metadata_offset);
     format.writeU32Be(output, 56, options.hunk_bytes);
     format.writeU32Be(output, 60, options.unit_bytes);
-    var raw_sha1: [20]u8 = undefined;
-    std.crypto.hash.Sha1.hash(input, &raw_sha1, .{});
-    @memcpy(output[64..84], &raw_sha1);
-    var combined_sha1: [20]u8 = undefined;
-    std.crypto.hash.Sha1.hash(&raw_sha1, &combined_sha1, .{});
-    @memcpy(output[84..104], &combined_sha1);
+    @memcpy(output[64..84], &fields.raw_sha1);
+    @memcpy(output[84..104], &fields.combined_sha1);
+    @memcpy(output[104..124], &fields.parent_sha1);
+}
+
+const Digests = struct {
+    raw: [20]u8,
+    combined: [20]u8,
+};
+
+fn computeDigests(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    metadata: []const EncodeMetadata,
+) Error!Digests {
+    var result: Digests = undefined;
+    std.crypto.hash.Sha1.hash(input, &result.raw, .{});
+    var hashes: std.ArrayList([24]u8) = .empty;
+    defer hashes.deinit(allocator);
+    for (metadata) |entry| {
+        if (entry.flags & format.metadata_checksum_flag == 0) continue;
+        var record: [24]u8 = undefined;
+        std.mem.writeInt(u32, record[0..4], entry.tag, .big);
+        std.crypto.hash.Sha1.hash(entry.data, record[4..24], .{});
+        try hashes.append(allocator, record);
+    }
+    std.mem.sort([24]u8, hashes.items, {}, metadataHashLessThan);
+    var state = std.crypto.hash.Sha1.init(.{});
+    state.update(&result.raw);
+    for (hashes.items) |*record| state.update(record);
+    state.final(&result.combined);
+    return result;
+}
+
+fn metadataHashLessThan(_: void, left: [24]u8, right: [24]u8) bool {
+    return std.mem.order(u8, &left, &right) == .lt;
+}
+
+fn appendMetadata(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    metadata: []const EncodeMetadata,
+) Error!u64 {
+    if (metadata.len == 0) return 0;
+    const first_offset = std.math.cast(u64, output.items.len) orelse
+        return error.IntegerOverflow;
+    var previous_offset: ?usize = null;
+    for (metadata) |entry| {
+        const offset = output.items.len;
+        if (previous_offset) |previous|
+            format.writeU64Be(output.items, previous + 8, offset);
+        var header = [_]u8{0} ** format.metadata_header_size;
+        format.writeU32Be(&header, 0, entry.tag);
+        const length_and_flags = (@as(u32, entry.flags) << 24) |
+            @as(u32, @intCast(entry.data.len));
+        format.writeU32Be(&header, 4, length_and_flags);
+        try output.appendSlice(allocator, &header);
+        try output.appendSlice(allocator, entry.data);
+        previous_offset = offset;
+    }
+    return first_offset;
+}
+
+fn parentSha1(parent: ?*const archive_mod.Archive) [20]u8 {
+    return if (parent) |archive| archive.header.combined_sha1 else @splat(0);
 }
 
 fn encodeMapAlloc(
@@ -288,6 +434,7 @@ fn encodeMapAlloc(
     var active = [_]bool{false} ** 16;
     var max_length: u32 = 0;
     var max_self: u64 = 0;
+    var max_parent: u64 = 0;
     var expanded_crc: u16 = 0xffff;
     for (entries) |entry| {
         const kind: usize = @intFromEnum(entry.kind);
@@ -299,6 +446,8 @@ fn encodeMapAlloc(
         }
         if (entry.kind == .self)
             max_self = @max(max_self, entry.offset);
+        if (entry.kind == .parent)
+            max_parent = @max(max_parent, entry.offset);
         var raw: [format.expanded_map_entry_size]u8 = undefined;
         entry.writeExpanded(&raw);
         expanded_crc = format.crc16Update(expanded_crc, &raw);
@@ -345,6 +494,7 @@ fn encodeMapAlloc(
     }
     const length_bits = bitWidth(max_length);
     const self_bits = bitWidth(max_self);
+    const parent_bits = bitWidth(max_parent);
     for (entries) |entry| switch (entry.kind) {
         .codec_0, .codec_1, .codec_2, .codec_3 => {
             try bits.write(entry.length, length_bits);
@@ -352,6 +502,7 @@ fn encodeMapAlloc(
         },
         .uncompressed => try bits.write(entry.crc16, 16),
         .self => try bits.write(@intCast(entry.offset), self_bits),
+        .parent => try bits.write(@intCast(entry.offset), parent_bits),
         else => return error.InvalidChdMap,
     };
     const payload = try bits.finishAlloc();
@@ -370,7 +521,7 @@ fn encodeMapAlloc(
     format.writeU16Be(output, 10, expanded_crc);
     output[12] = length_bits;
     output[13] = self_bits;
-    output[14] = bitWidth(0);
+    output[14] = parent_bits;
     @memcpy(output[format.compressed_map_header_size..], payload);
     return output;
 }

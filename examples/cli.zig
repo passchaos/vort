@@ -2445,7 +2445,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  inspect-chd <image.chd> [parent.chd]
         \\  decode-chd <image.chd> <out> [max_output] [parent.chd]
         \\  decode-chd-range <image.chd> <out> <offset> <length> [parent.chd]
-        \\  encode-chd <in> <out> <none|zlib|lzma|huffman|zstd|auto> [hunk_bytes] [unit_bytes] [level]
+        \\  encode-chd <in> <out> <none|zlib|lzma|huffman|zstd|auto> [hunk_bytes] [unit_bytes] [level] [parent.chd|-] [TAG=value...]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

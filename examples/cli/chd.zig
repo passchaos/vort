@@ -136,13 +136,31 @@ pub fn encode(
         try std.fmt.parseInt(u8, text, 10)
     else
         6;
+    const parent_path = args.next();
+    var metadata: std.ArrayList(vort.ChdEncodeMetadata) = .empty;
+    defer metadata.deinit(init.gpa);
+    while (args.next()) |text|
+        try metadata.append(init.gpa, try parseMetadataArgument(text));
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
+    const parent_bytes = if (parent_path) |path|
+        if (std.mem.eql(u8, path, "-")) null else try readFile(init, path)
+    else
+        null;
+    defer if (parent_bytes) |bytes| init.gpa.free(bytes);
+    var parent: ?vort.ChdArchive = if (parent_bytes) |bytes|
+        try vort.parseChdAlloc(init.gpa, bytes, .{})
+    else
+        null;
+    defer if (parent) |*archive| archive.deinit();
+    const parent_ptr = if (parent) |*archive| archive else null;
     const encoded = try vort.encodeChdAlloc(init.gpa, input, .{
         .compression = compression,
         .hunk_bytes = hunk_bytes,
         .unit_bytes = unit_bytes,
         .compression_level = level,
+        .metadata = metadata.items,
+        .parent = parent_ptr,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{
@@ -150,16 +168,26 @@ pub fn encode(
         .data = encoded,
     });
     try stdout.print(
-        "compression={s} input_bytes={d} hunk_bytes={d} unit_bytes={d} chd_bytes={d} path={s}\n",
+        "compression={s} input_bytes={d} hunk_bytes={d} unit_bytes={d} metadata={d} parent={any} chd_bytes={d} path={s}\n",
         .{
             @tagName(compression),
             input.len,
             hunk_bytes,
             unit_bytes,
+            metadata.items.len,
+            parent != null,
             encoded.len,
             output_path,
         },
     );
+}
+
+fn parseMetadataArgument(text: []const u8) !vort.ChdEncodeMetadata {
+    if (text.len < 5 or text[4] != '=') return error.InvalidChdMetadata;
+    return .{
+        .tag = std.mem.readInt(u32, text[0..4], .big),
+        .data = text[5..],
+    };
 }
 
 fn openArchive(

@@ -286,6 +286,160 @@ test "CHD v5 compressed map and hunk corruption are detected" {
     );
 }
 
+test "CHD v5 writer emits linked checksummed metadata" {
+    const allocator = std.testing.allocator;
+    const input = "CHD metadata writer payload\n" ** 256;
+    const metadata = [_]writer.EncodeMetadata{
+        .{ .tag = format.tag("TEST"), .data = "checked-second" },
+        .{ .tag = format.tag("AAAA"), .data = "checked-first" },
+        .{
+            .tag = format.tag("NOTE"),
+            .flags = 0,
+            .data = "not-in-overall-sha1",
+        },
+    };
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        writer.encodeAlloc(allocator, input, .{
+            .metadata = &metadata,
+            .max_metadata_entries = 2,
+        }),
+    );
+    inline for (.{ writer.Compression.none, writer.Compression.auto }) |compression| {
+        const encoded = try writer.encodeAlloc(allocator, input, .{
+            .compression = compression,
+            .metadata = &metadata,
+        });
+        defer allocator.free(encoded);
+        var archive = try archive_mod.Archive.initAlloc(allocator, encoded, .{});
+        defer archive.deinit();
+        try std.testing.expectEqual(@as(usize, metadata.len), archive.metadata.len);
+        for (archive.metadata, metadata) |actual, expected| {
+            try std.testing.expectEqual(expected.tag, actual.tag);
+            try std.testing.expectEqual(expected.flags, actual.flags);
+            try std.testing.expectEqualSlices(u8, expected.data, actual.data);
+        }
+        const decoded = try archive.decodeAllocLimited(allocator, input.len);
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+
+        const corrupt_checked = try allocator.dupe(u8, encoded);
+        defer allocator.free(corrupt_checked);
+        const first_metadata: usize = @intCast(format.readU64Be(corrupt_checked, 48));
+        corrupt_checked[first_metadata + format.metadata_header_size] ^= 1;
+        var corrupt_archive = try archive_mod.Archive.initAlloc(
+            allocator,
+            corrupt_checked,
+            .{},
+        );
+        defer corrupt_archive.deinit();
+        try std.testing.expectError(
+            error.ChecksumMismatch,
+            corrupt_archive.decodeAllocLimited(allocator, input.len),
+        );
+
+        const corrupt_unchecked = try allocator.dupe(u8, encoded);
+        defer allocator.free(corrupt_unchecked);
+        corrupt_unchecked[archive.metadata[2].offset + format.metadata_header_size] ^= 1;
+        var unchecked_archive = try archive_mod.Archive.initAlloc(
+            allocator,
+            corrupt_unchecked,
+            .{},
+        );
+        defer unchecked_archive.deinit();
+        const unchecked_decoded = try unchecked_archive.decodeAllocLimited(
+            allocator,
+            input.len,
+        );
+        defer allocator.free(unchecked_decoded);
+        try std.testing.expectEqualSlices(u8, input, unchecked_decoded);
+    }
+}
+
+test "CHD v5 writer emits compressed parent hunk references" {
+    const allocator = std.testing.allocator;
+    const hunk_bytes = 4096;
+    const parent_input = try allocator.alloc(u8, 4 * hunk_bytes);
+    defer allocator.free(parent_input);
+    for (0..4) |hunk|
+        @memset(parent_input[hunk * hunk_bytes ..][0..hunk_bytes], @intCast('A' + hunk));
+    const parent_encoded = try writer.encodeAlloc(allocator, parent_input, .{
+        .compression = .auto,
+    });
+    defer allocator.free(parent_encoded);
+    var parent = try archive_mod.Archive.initAlloc(allocator, parent_encoded, .{});
+    defer parent.deinit();
+
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        writer.encodeAlloc(allocator, parent_input, .{
+            .parent = &parent,
+            .max_parent_hunks = 3,
+        }),
+    );
+
+    const child_input = try allocator.alloc(u8, 4 * hunk_bytes);
+    defer allocator.free(child_input);
+    @memcpy(child_input[0 * hunk_bytes ..][0..hunk_bytes], parent_input[2 * hunk_bytes ..][0..hunk_bytes]);
+    @memcpy(child_input[1 * hunk_bytes ..][0..hunk_bytes], parent_input[0 * hunk_bytes ..][0..hunk_bytes]);
+    @memset(child_input[2 * hunk_bytes ..][0..hunk_bytes], 'E');
+    @memcpy(child_input[3 * hunk_bytes ..][0..hunk_bytes], parent_input[2 * hunk_bytes ..][0..hunk_bytes]);
+    const child_encoded = try writer.encodeAlloc(allocator, child_input, .{
+        .compression = .auto,
+        .parent = &parent,
+    });
+    defer allocator.free(child_encoded);
+    try std.testing.expectError(
+        error.MissingChdParent,
+        archive_mod.Archive.initAlloc(allocator, child_encoded, .{}),
+    );
+    var child = try archive_mod.Archive.initAlloc(allocator, child_encoded, .{
+        .parent = &parent,
+    });
+    defer child.deinit();
+    try std.testing.expectEqualSlices(u8, &parent.header.combined_sha1, &child.header.parent_sha1);
+    try std.testing.expectEqual(format.MapType.parent, child.map[0].kind);
+    try std.testing.expectEqual(format.MapType.parent, child.map[1].kind);
+    try std.testing.expect(@intFromEnum(child.map[2].kind) <= @intFromEnum(format.MapType.uncompressed));
+    try std.testing.expectEqual(format.MapType.parent, child.map[3].kind);
+    try std.testing.expectEqual(@as(u64, 16), child.map[0].offset);
+    try std.testing.expectEqual(@as(u64, 0), child.map[1].offset);
+    try std.testing.expectEqual(@as(u64, 16), child.map[3].offset);
+    const decoded = try child.decodeAllocLimited(allocator, child_input.len);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, child_input, decoded);
+}
+
+test "CHD v5 uncompressed parent map stores explicit zero overrides" {
+    const allocator = std.testing.allocator;
+    const hunk_bytes = 4096;
+    const parent_input = ("parent raw hunk bytes\n" ** 512)[0 .. 2 * hunk_bytes];
+    const parent_encoded = try writer.encodeAlloc(allocator, parent_input, .{
+        .compression = .auto,
+    });
+    defer allocator.free(parent_encoded);
+    var parent = try archive_mod.Archive.initAlloc(allocator, parent_encoded, .{});
+    defer parent.deinit();
+    const child_input = try allocator.alloc(u8, 2 * hunk_bytes);
+    defer allocator.free(child_input);
+    @memcpy(child_input[0..hunk_bytes], parent_input[0..hunk_bytes]);
+    @memset(child_input[hunk_bytes..], 0);
+    const child_encoded = try writer.encodeAlloc(allocator, child_input, .{
+        .compression = .none,
+        .parent = &parent,
+    });
+    defer allocator.free(child_encoded);
+    var child = try archive_mod.Archive.initAlloc(allocator, child_encoded, .{
+        .parent = &parent,
+    });
+    defer child.deinit();
+    try std.testing.expectEqual(@as(u64, 0), child.map[0].offset);
+    try std.testing.expect(child.map[1].offset != 0);
+    const decoded = try child.decodeAllocLimited(allocator, child_input.len);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, child_input, decoded);
+}
+
 fn decodeFixture(comptime path: []const u8, max_output: usize) ![]u8 {
     const allocator = std.testing.allocator;
     const text = @embedFile(path);

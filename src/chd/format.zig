@@ -15,6 +15,7 @@ pub const header_size: usize = 124;
 pub const compressed_map_header_size: usize = 16;
 pub const expanded_map_entry_size: usize = 12;
 pub const metadata_header_size: usize = 16;
+pub const metadata_checksum_flag: u8 = 0x01;
 pub const maximum_hunk_bytes: u32 = 512 * 1024;
 
 pub const Codec = enum(u32) {

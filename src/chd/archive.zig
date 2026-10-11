@@ -135,7 +135,7 @@ pub const Archive = struct {
         var hashes: std.ArrayList([24]u8) = .empty;
         defer hashes.deinit(allocator);
         for (self.metadata) |entry| {
-            if (entry.flags & 1 == 0) continue;
+            if (entry.flags & format.metadata_checksum_flag == 0) continue;
             var record: [24]u8 = undefined;
             std.mem.writeInt(u32, record[0..4], entry.tag, .big);
             std.crypto.hash.Sha1.hash(entry.data, record[4..24], .{});

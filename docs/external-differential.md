@@ -50,7 +50,8 @@ and explicit multi-segment sets. A locally built tool directory can be supplied
 with `-- --libewf-dir <path>`.
 
 The CHD differential always checks all six Vort writer modes, per-hunk automatic
-selection, a partial final hunk, and pinned chdman 0.289
+selection, checked metadata, a Vort-written parent delta, a partial final hunk,
+and pinned chdman 0.289
 LZMA/Huffman/Zstandard plus metadata/aligned-parent/unit-shifted-parent
 fixtures.
 When `chdman` is available, it verifies and extracts Vort output byte-exactly;

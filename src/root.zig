@@ -1130,10 +1130,12 @@ pub const ChdMetadata = chd.Metadata;
 pub const ChdArchive = chd.Archive;
 pub const ChdOpenOptions = chd.OpenOptions;
 pub const ChdCompression = chd.Compression;
+pub const ChdEncodeMetadata = chd.EncodeMetadata;
 pub const ChdEncodeOptions = chd.EncodeOptions;
 pub const parseChdHeader = chd.parseHeader;
 pub const parseChdAlloc = chd.parseAlloc;
 pub const encodeChdAlloc = chd.encodeAlloc;
+pub const chdTag = chd.tag;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
