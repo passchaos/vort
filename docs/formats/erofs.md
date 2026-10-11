@@ -12,8 +12,10 @@ symbolic links are supported.
 Compressed files support both legacy full indexes and modern compact indexes,
 including four-byte and sixteen-entry/two-byte packs, HEAD/NONHEAD lookback,
 EOF sentinels, and big pclusters. LZ4, raw Deflate, and Zstandard extents are
-decoded. MicroLZMA is intentionally reported as unsupported because its wire
-format is not LZMA-Alone; Vort does not substitute an incompatible decoder.
+decoded, as are exact-size MicroLZMA extents with inverted property bytes,
+8 MiB EROFS dictionary bounds, exact compressed-input consumption, and range
+termination validation. MicroLZMA is handled as its own wire format rather than
+being substituted with LZMA-Alone.
 
 The writer emits 4 KiB filesystems with compact inodes, CRC-32C-protected
 superblocks, dot-omitted sorted directories, nested and empty directories,
@@ -40,7 +42,7 @@ defer allocator.free(image);
 ```
 
 Chunk-based files, external devices, 48-bit addressing, packed fragments,
-metaboxes, MicroLZMA, compressed tail packing, and xattrs remain future work.
+metaboxes, compressed tail packing, and xattrs remain future work.
 
 ```sh
 zig build run -- list-erofs-file system.erofs
@@ -50,8 +52,9 @@ zig build run-erofs-diff
 ```
 
 CI builds a pinned `erofs-utils` reference and generates plain, compact/full
-LZ4, Deflate, and Zstandard images. `fsck.erofs` validates and extracts those
-images before Vort performs independent listing and byte-for-byte extraction.
+LZ4, MicroLZMA, Deflate, and Zstandard images when the reference has a recent
+XZ Utils. `fsck.erofs` validates and extracts those images before Vort performs
+independent listing and byte-for-byte extraction.
 The same gate generates Vort stored, LZ4, raw Deflate, and Zstandard images
 twice to prove determinism, self-decodes their nested tree, and has `fsck.erofs`
 extract their regular files, incompressible `PLAIN` fallbacks, symlink, and empty

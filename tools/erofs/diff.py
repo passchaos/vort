@@ -92,6 +92,7 @@ def main() -> None:
     fixture_cases = 0
     plain_cases = 0
     lz4_cases = 0
+    lzma_cases = 0
     modern_cases = 0
     writer_cases = 0
     external_writer = 0
@@ -175,6 +176,13 @@ def main() -> None:
                         ("deflate-full", "deflate", True),
                     )
                 )
+            if b"lzma" in help_text:
+                cases.extend(
+                    (
+                        ("lzma-compact", "lzma", False),
+                        ("lzma-full", "lzma", True),
+                    )
+                )
             if b"zstd" in help_text:
                 cases.append(("zstd-compact", "zstd", False))
             for label, compressor, legacy in cases:
@@ -190,6 +198,8 @@ def main() -> None:
                     plain_cases += 1
                 elif compressor == "lz4":
                     lz4_cases += 1
+                elif compressor == "lzma":
+                    lzma_cases += 1
                 else:
                     modern_cases += 1
 
@@ -248,7 +258,8 @@ def main() -> None:
 
     print(
         f"fixture_cases={fixture_cases} tools={mkfs is not None} "
-        f"plain={plain_cases} lz4={lz4_cases} modern={modern_cases} "
+        f"plain={plain_cases} lz4={lz4_cases} lzma={lzma_cases} "
+        f"modern={modern_cases} "
         f"writer={writer_cases} external_writer={external_writer} malformed={malformed}"
     )
 

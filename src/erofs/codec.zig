@@ -1,10 +1,11 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const deflate = @import("../deflate.zig");
+const lzma = @import("../lzma.zig");
 const zstd = @import("../zstd.zig");
 const format = @import("format.zig");
 
-pub const Error = core.Error || deflate.Error || zstd.Error ||
+pub const Error = core.Error || deflate.Error || lzma.Error || zstd.Error ||
     std.mem.Allocator.Error || error{
     InvalidErofs,
     UnsupportedErofsCompression,
@@ -49,7 +50,13 @@ pub fn decodeExtentAlloc(
             );
             break :blk output;
         },
-        .lzma => error.UnsupportedErofsCompression,
+        .lzma => lzma.decodeMicroAllocLimited(
+            allocator,
+            payload,
+            expected_size,
+            8 * 1024 * 1024,
+            expected_size,
+        ),
     };
 }
 
@@ -123,4 +130,25 @@ fn checkedOutputEnd(start: usize, length: usize, limit: usize) Error!usize {
     const end = std.math.add(usize, start, length) catch return error.IntegerOverflow;
     if (end > limit) return error.OutputTooSmall;
     return end;
+}
+
+test "EROFS decodes zero-padded MicroLZMA extents" {
+    const allocator = std.testing.allocator;
+    const encoded_text = @embedFile("../lzma/testdata/microlzma-small.bin.b64");
+    const base64 = std.base64.standard.decoderWithIgnore(" \r\n\t");
+    const encoded_bound = base64.calcSizeUpperBound(encoded_text.len);
+    const padded = try allocator.alloc(u8, encoded_bound + 3);
+    defer allocator.free(padded);
+    @memset(padded[0..3], 0);
+    const encoded_len = try base64.decode(padded[3..], encoded_text);
+    const expected = @embedFile("../lzms/testdata/lzms-small.txt");
+    const decoded = try decodeExtentAlloc(
+        allocator,
+        .lzma,
+        padded[0 .. encoded_len + 3],
+        expected.len,
+        false,
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualStrings(expected, decoded);
 }

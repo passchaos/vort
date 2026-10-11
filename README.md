@@ -120,7 +120,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free EROFS reading with CRC-32C superblock verification,
   compact/extended inodes, flat plain/inline data, sorted directories,
   symlinks, legacy full and modern compact compression indexes, big pclusters,
-  and LZ4/raw-Deflate/Zstandard extraction with explicit bounds, plus
+  and LZ4/MicroLZMA/raw-Deflate/Zstandard extraction with explicit bounds, plus
   deterministic compact-inode stored/LZ4/raw-Deflate/Zstandard writing for
   regular files, nested and empty directories, symlinks, inline tails,
   multi-block directories, compression-configuration records, and per-cluster
@@ -162,7 +162,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   stored fallback;
 - dependency-free LZMA-Alone encoding and decoding with known-size or
   end-marker streams, caller-selected output/dictionary limits, caller-owned
-  output, and ZIP method-14 writing/extraction through the same LZMA core;
+  output, exact-size MicroLZMA decoding with inverted properties and strict
+  compressed-size/range termination, and ZIP method-14 writing/extraction
+  through the same LZMA core;
 - pure Zig Unix `compress` (`.Z`) LZW encoding and decoding with 9..16-bit
   variable-width LSB-first codes, block-mode dictionary clears, non-block
   dictionary freeze, caller-owned/bounded APIs, and decoded-size preflight;
