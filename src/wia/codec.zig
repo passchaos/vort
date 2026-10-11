@@ -35,7 +35,7 @@ pub fn encodeAlloc(
 ) Error![]u8 {
     return switch (compression) {
         .none => try allocator.dupe(u8, input),
-        .purge => try encodePurgeAlloc(allocator, input),
+        .purge => try encodePurgeAlloc(allocator, input, ""),
         .bzip2 => try bzip2.encodeAlloc(allocator, input, .{
             .block_size_100k = @intCast(std.math.clamp(level, 1, 9)),
         }),
@@ -140,9 +140,18 @@ pub fn decodeAllocLimited(
     };
 }
 
+pub fn encodePurgeWithHashPrefixAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    hash_prefix: []const u8,
+) Error![]u8 {
+    return encodePurgeAlloc(allocator, input, hash_prefix);
+}
+
 fn encodePurgeAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
+    hash_prefix: []const u8,
 ) Error![]u8 {
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
@@ -170,8 +179,11 @@ fn encodePurgeAlloc(
         try output.appendSlice(allocator, input[start..last_nonzero]);
         position = @max(position, last_nonzero);
     }
+    var sha = std.crypto.hash.Sha1.init(.{});
+    sha.update(hash_prefix);
+    sha.update(output.items);
     var digest: [20]u8 = undefined;
-    std.crypto.hash.Sha1.hash(output.items, &digest, .{});
+    sha.final(&digest);
     try output.appendSlice(allocator, &digest);
     return output.toOwnedSlice(allocator);
 }
@@ -270,12 +282,12 @@ test "WIA purge decoder authenticates partition exception prefixes" {
     const input = ([_]u8{0} ** 64) ++ "partition purge payload" ++
         ([_]u8{0} ** 64);
     const prefix = [_]u8{ 0, 1, 0, 0 } ++ ([_]u8{0xaa} ** 20);
-    const encoded = try encodeAlloc(allocator, input, .purge, 0);
+    const encoded = try encodePurgeWithHashPrefixAlloc(
+        allocator,
+        input,
+        &prefix,
+    );
     defer allocator.free(encoded);
-    var sha = std.crypto.hash.Sha1.init(.{});
-    sha.update(&prefix);
-    sha.update(encoded[0 .. encoded.len - 20]);
-    sha.final(encoded[encoded.len - 20 ..][0..20]);
     const decoded = try decodePurgeWithHashPrefixAlloc(
         allocator,
         encoded,

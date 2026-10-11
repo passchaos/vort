@@ -123,6 +123,22 @@ pub fn encodeRvz(
     return encode(init, args, stdout, .rvz);
 }
 
+pub fn encodeWiaPartition(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    return encodePartition(init, args, stdout, .wia);
+}
+
+pub fn encodeRvzPartition(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    return encodePartition(init, args, stdout, .rvz);
+}
+
 fn encode(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
@@ -161,6 +177,80 @@ fn encode(
     });
     try stdout.print(
         "format={s} compression={s} input_bytes={d} chunk_bytes={d} image_bytes={d} path={s}\n",
+        .{
+            @tagName(container),
+            @tagName(compression),
+            input.len,
+            chunk_size,
+            encoded.len,
+            output_path,
+        },
+    );
+}
+
+fn encodePartition(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+    container: vort.WiaContainer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const compression = try parseCompression(
+        args.next() orelse return error.MissingCorpusPath,
+    );
+    const partition_offset = try std.fmt.parseInt(
+        u64,
+        args.next() orelse return error.MissingCorpusPath,
+        0,
+    );
+    const partition_size = try std.fmt.parseInt(
+        u64,
+        args.next() orelse return error.MissingCorpusPath,
+        0,
+    );
+    var key: [16]u8 = undefined;
+    const key_text = args.next() orelse return error.MissingCorpusPath;
+    if (key_text.len != 32) return error.InvalidWia;
+    _ = std.fmt.hexToBytes(&key, key_text) catch return error.InvalidWia;
+    const chunk_size: u32 = if (args.next()) |text|
+        try std.fmt.parseInt(u32, text, 10)
+    else if (container == .wia)
+        2 * 1024 * 1024
+    else
+        128 * 1024;
+    const level: i32 = if (args.next()) |text|
+        try std.fmt.parseInt(i32, text, 10)
+    else if (compression == .zstd)
+        5
+    else
+        6;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const encoded = try vort.encodeWiaWithPartitionsAlloc(
+        init.gpa,
+        input,
+        &.{.{
+            .key = key,
+            .data = .{
+                .{ .offset = partition_offset, .size = partition_size },
+                .{ .offset = 0, .size = 0 },
+            },
+        }},
+        .{
+            .container = container,
+            .compression = compression,
+            .chunk_size = chunk_size,
+            .compression_level = level,
+        },
+    );
+    defer init.gpa.free(encoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = encoded,
+    });
+    try stdout.print(
+        "format={s} compression={s} partitions=1 input_bytes={d} chunk_bytes={d} image_bytes={d} path={s}\n",
         .{
             @tagName(container),
             @tagName(compression),

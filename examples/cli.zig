@@ -301,6 +301,10 @@ pub fn main(init: std.process.Init) !void {
         try wia_cli.encodeWia(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-rvz")) {
         try wia_cli.encodeRvz(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-wia-partition")) {
+        try wia_cli.encodeWiaPartition(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-rvz-partition")) {
+        try wia_cli.encodeRvzPartition(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2533,6 +2537,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-wia-range|decode-rvz-range <in> <out> <offset> <length>
         \\  encode-wia <in> <out> <none|purge|bzip2|lzma|lzma2> [chunk_size] [level]
         \\  encode-rvz <in> <out> <none|bzip2|lzma|lzma2|zstd> [chunk_size] [level]
+        \\  encode-wia-partition <in> <out> <codec> <offset> <size> <key_hex> [chunk_size] [level]
+        \\  encode-rvz-partition <in> <out> <codec> <offset> <size> <key_hex> [chunk_size] [level]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

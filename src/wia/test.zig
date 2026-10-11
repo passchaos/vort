@@ -2,6 +2,7 @@ const std = @import("std");
 const bzip2 = @import("../bzip2.zig");
 const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
+const wii = @import("wii_partition.zig");
 const writer = @import("writer.zig");
 
 const allocator = std.testing.allocator;
@@ -81,6 +82,284 @@ test "RVZ reconstructs Wii hash exceptions from small partition chunks" {
         decoded[range_offset..][0..range_length],
         range,
     );
+}
+
+test "WIA and RVZ partition writers preserve encrypted Wii sectors" {
+    const text = @embedFile("testdata/python-partition-smallchunks.rvz.bz2.b64");
+    const fixture = try decodeFixtureAlloc(text, 3 * 1024 * 1024);
+    defer allocator.free(fixture);
+    var source_archive = try archive_mod.Archive.initAlloc(
+        allocator,
+        fixture,
+        .{},
+    );
+    defer source_archive.deinit();
+    const source = try source_archive.decodeAllocLimited(
+        allocator,
+        3 * 1024 * 1024,
+    );
+    defer allocator.free(source);
+    const source_partition = source_archive.partitions[0];
+    const partition = writer.Partition{
+        .key = source_partition.key,
+        .data = .{
+            .{
+                .offset = source_partition.data[0].logicalOffset(),
+                .size = source_partition.data[0].logicalSize(),
+            },
+            .{ .offset = 0, .size = 0 },
+        },
+    };
+
+    inline for (.{
+        .{ format.Container.wia, format.Compression.none, @as(u32, 2 * 1024 * 1024) },
+        .{ format.Container.wia, format.Compression.purge, @as(u32, 2 * 1024 * 1024) },
+        .{ format.Container.wia, format.Compression.bzip2, @as(u32, 2 * 1024 * 1024) },
+        .{ format.Container.wia, format.Compression.lzma, @as(u32, 2 * 1024 * 1024) },
+        .{ format.Container.wia, format.Compression.lzma2, @as(u32, 2 * 1024 * 1024) },
+        .{ format.Container.rvz, format.Compression.none, @as(u32, 128 * 1024) },
+        .{ format.Container.rvz, format.Compression.bzip2, @as(u32, 128 * 1024) },
+        .{ format.Container.rvz, format.Compression.lzma, @as(u32, 128 * 1024) },
+        .{ format.Container.rvz, format.Compression.lzma2, @as(u32, 128 * 1024) },
+        .{ format.Container.rvz, format.Compression.zstd, @as(u32, 128 * 1024) },
+    }) |case| {
+        const encoded = try writer.encodeWithPartitionsAlloc(
+            allocator,
+            source,
+            &.{partition},
+            .{
+                .container = case[0],
+                .compression = case[1],
+                .compression_level = if (case[1] == .zstd) 5 else 6,
+                .chunk_size = case[2],
+            },
+        );
+        defer allocator.free(encoded);
+        var archive = try archive_mod.Archive.initAlloc(allocator, encoded, .{});
+        defer archive.deinit();
+        try std.testing.expectEqual(@as(usize, 1), archive.partitions.len);
+        try std.testing.expectEqual(case[0], archive.header1.container);
+        try std.testing.expectEqual(case[1], archive.header2.compression);
+        const decoded = try archive.decodeAllocLimited(
+            allocator,
+            source.len,
+        );
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, source, decoded);
+    }
+}
+
+test "WIA partition writer rejects invalid layouts" {
+    const input = [_]u8{0} ** (3 * format.wii_block_size);
+    const key: [16]u8 = @splat(0);
+    try std.testing.expectError(
+        error.InvalidWia,
+        writer.encodeWithPartitionsAlloc(
+            allocator,
+            &input,
+            &.{.{
+                .key = key,
+                .data = .{
+                    .{ .offset = format.wii_block_size + 1, .size = format.wii_block_size },
+                    .{ .offset = 0, .size = 0 },
+                },
+            }},
+            .{},
+        ),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        writer.encodeWithPartitionsAlloc(
+            allocator,
+            &input,
+            &.{.{
+                .key = key,
+                .data = .{
+                    .{ .offset = format.wii_block_size, .size = format.wii_block_size },
+                    .{ .offset = 0, .size = 0 },
+                },
+            }},
+            .{ .max_partitions = 0 },
+        ),
+    );
+    const overlapping = writer.Partition{
+        .key = key,
+        .data = .{
+            .{ .offset = format.wii_block_size, .size = format.wii_block_size },
+            .{ .offset = 0, .size = 0 },
+        },
+    };
+    try std.testing.expectError(
+        error.InvalidWia,
+        writer.encodeWithPartitionsAlloc(
+            allocator,
+            &input,
+            &.{ overlapping, overlapping },
+            .{},
+        ),
+    );
+}
+
+test "WIA partition writer handles large chunks split entries and partial groups" {
+    const text = @embedFile("testdata/python-partition-smallchunks.rvz.bz2.b64");
+    const fixture = try decodeFixtureAlloc(text, 3 * 1024 * 1024);
+    defer allocator.free(fixture);
+    var fixture_archive = try archive_mod.Archive.initAlloc(
+        allocator,
+        fixture,
+        .{},
+    );
+    defer fixture_archive.deinit();
+    const single = try fixture_archive.decodeAllocLimited(
+        allocator,
+        3 * 1024 * 1024,
+    );
+    defer allocator.free(single);
+    const key = fixture_archive.partitions[0].key;
+    const partition_offset = format.wii_block_size;
+    const encrypted_group = single[partition_offset..];
+
+    const doubled = try allocator.alloc(
+        u8,
+        partition_offset + 2 * format.wii_group_size,
+    );
+    defer allocator.free(doubled);
+    @memcpy(doubled[0..partition_offset], single[0..partition_offset]);
+    @memcpy(
+        doubled[partition_offset..][0..format.wii_group_size],
+        encrypted_group,
+    );
+    @memcpy(
+        doubled[partition_offset + format.wii_group_size ..],
+        encrypted_group,
+    );
+
+    try expectPartitionWriterRoundTrip(
+        doubled,
+        &.{.{
+            .key = key,
+            .data = .{
+                .{ .offset = partition_offset, .size = 2 * format.wii_group_size },
+                .{ .offset = 0, .size = 0 },
+            },
+        }},
+        .{
+            .container = .wia,
+            .compression = .bzip2,
+            .compression_level = 6,
+            .chunk_size = 4 * 1024 * 1024,
+        },
+    );
+    try expectPartitionWriterRoundTrip(
+        doubled,
+        &.{.{
+            .key = key,
+            .data = .{
+                .{ .offset = partition_offset, .size = format.wii_group_size },
+                .{
+                    .offset = partition_offset + format.wii_group_size,
+                    .size = format.wii_group_size,
+                },
+            },
+        }},
+        .{
+            .container = .rvz,
+            .compression = .zstd,
+            .compression_level = 5,
+            .chunk_size = 128 * 1024,
+        },
+    );
+    try expectPartitionWriterRoundTrip(
+        doubled,
+        &.{
+            .{
+                .key = key,
+                .data = .{
+                    .{ .offset = partition_offset, .size = format.wii_group_size },
+                    .{ .offset = 0, .size = 0 },
+                },
+            },
+            .{
+                .key = key,
+                .data = .{
+                    .{
+                        .offset = partition_offset + format.wii_group_size,
+                        .size = format.wii_group_size,
+                    },
+                    .{ .offset = 0, .size = 0 },
+                },
+            },
+        },
+        .{
+            .container = .rvz,
+            .compression = .none,
+            .compression_level = 0,
+            .chunk_size = 2 * 1024 * 1024,
+        },
+    );
+
+    try expectPartitionWriterRoundTrip(
+        single,
+        &.{.{
+            .key = key,
+            .data = .{
+                .{
+                    .offset = partition_offset,
+                    .size = 20 * format.wii_block_size,
+                },
+                .{ .offset = 0, .size = 0 },
+            },
+        }},
+        .{
+            .container = .rvz,
+            .compression = .bzip2,
+            .compression_level = 6,
+            .chunk_size = 128 * 1024,
+        },
+    );
+}
+
+test "RVZ partition writer emits zero-group sentinels" {
+    const key: [16]u8 = @splat(0x5a);
+    const encrypted = try wii.reconstructEncryptedGroupAlloc(
+        allocator,
+        &.{},
+        &key,
+        &.{},
+    );
+    defer allocator.free(encrypted);
+    const input = try allocator.alloc(
+        u8,
+        format.wii_block_size + encrypted.len,
+    );
+    defer allocator.free(input);
+    @memset(input[0..format.wii_block_size], 0);
+    @memcpy(input[format.wii_block_size..], encrypted);
+    const encoded = try writer.encodeWithPartitionsAlloc(
+        allocator,
+        input,
+        &.{.{
+            .key = key,
+            .data = .{
+                .{ .offset = format.wii_block_size, .size = encrypted.len },
+                .{ .offset = 0, .size = 0 },
+            },
+        }},
+        .{
+            .container = .rvz,
+            .compression = .zstd,
+            .compression_level = 5,
+            .chunk_size = 128 * 1024,
+        },
+    );
+    defer allocator.free(encoded);
+    var archive = try archive_mod.Archive.initAlloc(allocator, encoded, .{});
+    defer archive.deinit();
+    for (archive.groups) |group|
+        try std.testing.expectEqual(@as(usize, 0), group.stored_size);
+    const decoded = try archive.decodeAllocLimited(allocator, input.len);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "WIA and RVZ decode pinned DolphinTool e2ad09306e6d images" {
@@ -274,6 +553,25 @@ fn expectSha256(bytes: []const u8, expected_hex: *const [64:0]u8) !void {
     var expected: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(&expected, expected_hex);
     try std.testing.expectEqual(expected, actual);
+}
+
+fn expectPartitionWriterRoundTrip(
+    input: []const u8,
+    partitions: []const writer.Partition,
+    options: writer.EncodeOptions,
+) !void {
+    const encoded = try writer.encodeWithPartitionsAlloc(
+        allocator,
+        input,
+        partitions,
+        options,
+    );
+    defer allocator.free(encoded);
+    var archive = try archive_mod.Archive.initAlloc(allocator, encoded, .{});
+    defer archive.deinit();
+    const decoded = try archive.decodeAllocLimited(allocator, input.len);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 fn makeInput(size: usize) ![]u8 {

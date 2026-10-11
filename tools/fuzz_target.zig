@@ -1385,7 +1385,7 @@ pub fn main(init: std.process.Init) !void {
     inline for (.{
         vort.fuzz.wia_partition_fixture_base64,
         vort.fuzz.rvz_partition_fixture_base64,
-    }) |text| {
+    }, 0..) |text, fixture_index| {
         const compressed = try init.gpa.alloc(
             u8,
             base64.calcSizeUpperBound(text.len),
@@ -1399,6 +1399,37 @@ pub fn main(init: std.process.Init) !void {
         );
         defer init.gpa.free(wia);
         try fuzzOne(init.gpa, wia);
+        if (fixture_index == 1) {
+            var archive = try vort.parseWiaAlloc(init.gpa, wia, .{});
+            defer archive.deinit();
+            const source = try archive.decodeAllocLimited(
+                init.gpa,
+                3 * 1024 * 1024,
+            );
+            defer init.gpa.free(source);
+            const partition = archive.partitions[0];
+            const generated = try vort.encodeWiaWithPartitionsAlloc(
+                init.gpa,
+                source,
+                &.{.{
+                    .key = partition.key,
+                    .data = .{
+                        .{
+                            .offset = partition.data[0].logicalOffset(),
+                            .size = partition.data[0].logicalSize(),
+                        },
+                        .{ .offset = 0, .size = 0 },
+                    },
+                }},
+                .{
+                    .container = .rvz,
+                    .compression = .zstd,
+                    .chunk_size = 128 * 1024,
+                },
+            );
+            defer init.gpa.free(generated);
+            try fuzzOne(init.gpa, generated);
+        }
     }
 
     var stdin_buffer: [4096]u8 = undefined;
@@ -1416,7 +1447,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 31,
+        samples.len + 32,
         data.len,
     });
     try stdout.flush();

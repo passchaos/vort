@@ -1215,9 +1215,12 @@ pub const WiaGroupEntry = wia.GroupEntry;
 pub const WiaArchive = wia.Archive;
 pub const WiaOpenOptions = wia.OpenOptions;
 pub const WiaEncodeOptions = wia.EncodeOptions;
+pub const WiaEncodePartitionData = wia.EncodePartitionData;
+pub const WiaEncodePartition = wia.EncodePartition;
 pub const parseWiaHeader1 = wia.parseHeader1;
 pub const parseWiaAlloc = wia.parseAlloc;
 pub const encodeWiaAlloc = wia.encodeAlloc;
+pub const encodeWiaWithPartitionsAlloc = wia.encodeWithPartitionsAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;

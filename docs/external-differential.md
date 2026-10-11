@@ -106,10 +106,10 @@ none, purge, Bzip2, LZMA, LZMA2, and Zstandard. Pinned current-Dolphin WIA
 LZMA2 and RVZ Zstandard files preserve external coverage. Independently
 generated WIA and RVZ partition fixtures exercise Wii SHA-1 hash regeneration,
 hash exceptions, AES re-encryption, and both 2 MiB and 128 KiB chunks. With
-DolphinTool, all ten Vort images and both partition fixtures are converted
-byte-exactly back to ISO, while Vort decodes four fresh WIA codecs, RVZ
-Zstandard, and a junk-packed RVZ. Select an explicit tool with
-`-- --dolphin-tool /path/to/dolphin-tool`.
+DolphinTool, all ten raw-data outputs, all ten partition outputs, and both
+partition fixtures are converted byte-exactly back to ISO, while Vort decodes
+four fresh WIA codecs, RVZ Zstandard, and a junk-packed RVZ. Select an explicit
+tool with `-- --dolphin-tool /path/to/dolphin-tool`.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

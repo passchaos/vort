@@ -148,6 +148,7 @@ def main() -> None:
     external_decode = 0
     malformed = 0
     partition_cases = 0
+    partition_encode = 0
     with tempfile.TemporaryDirectory(prefix="vort-wia-") as temp_text:
         temp = Path(temp_text)
         source = temp / "payload.iso"
@@ -298,6 +299,61 @@ def main() -> None:
                     )
                 external_decode += 1
 
+            if label == "rvz-smallchunks":
+                key_hex = "000102030405060708090a0b0c0d0e0f"
+                for (
+                    writer_container,
+                    writer_compression,
+                    writer_chunk_size,
+                    writer_level,
+                ) in cases:
+                    written = temp / (
+                        f"partition-vort-{writer_container}-"
+                        f"{writer_compression}.{writer_container}"
+                    )
+                    roundtrip = temp / (
+                        f"partition-vort-{writer_container}-"
+                        f"{writer_compression}.iso"
+                    )
+                    run(
+                        args.cli,
+                        f"encode-{writer_container}-partition",
+                        output,
+                        written,
+                        writer_compression,
+                        0x8000,
+                        2 * 1024 * 1024,
+                        key_hex,
+                        writer_chunk_size,
+                        writer_level,
+                    )
+                    run(
+                        args.cli,
+                        f"decode-{writer_container}",
+                        written,
+                        roundtrip,
+                        PARTITION_LOGICAL_SIZE,
+                    )
+                    if roundtrip.read_bytes() != decoded:
+                        raise AssertionError(
+                            "partition writer round trip mismatch for "
+                            f"{writer_container}/{writer_compression}"
+                        )
+                    partition_encode += 1
+
+                    if dolphin_tool is not None:
+                        external = temp / (
+                            f"partition-vort-{writer_container}-"
+                            f"{writer_compression}.dolphin.iso"
+                        )
+                        dolphin_convert(dolphin_tool, written, external, "iso")
+                        if external.read_bytes() != decoded:
+                            raise AssertionError(
+                                "DolphinTool partition writer mismatch for "
+                                f"{writer_container}/{writer_compression}"
+                            )
+                        external_encode += 1
+
         if dolphin_tool is not None:
             dolphin_plain = bytes(
                 (index * 29 + index // 31) & 0xFF
@@ -366,6 +422,7 @@ def main() -> None:
         f"self={self_cases} dolphin_tool={dolphin_tool is not None} "
         f"external_encode={external_encode} external_decode={external_decode} "
         f"malformed={malformed} partitions={partition_cases} "
+        f"partition_encode={partition_encode} "
         f"rvz_packing_decode=True rvz_packing_write=False"
     )
 

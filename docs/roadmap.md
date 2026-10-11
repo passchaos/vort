@@ -18102,8 +18102,11 @@ reuse, so production keeps the simpler independently owned plans.
   large WIA chunks and small RVZ chunks.
   WIA supports none/purge/Bzip2/LZMA/LZMA2; RVZ adds Zstandard, per-group raw
   fallback, zero groups, and junk-packing decode. The deterministic writer
-  emits all ten valid raw-data combinations. Pinned current-Dolphin fixtures,
-  independent encrypted partition fixtures, fuzzing, and bidirectional
-  DolphinTool conversion cover the implementation. Wii partition writing and
-  writer-side junk packing remain explicit follow-up work rather than silently
-  degrading correctness. See `docs/formats/wia-rvz.md`.
+  emits all ten valid raw-data combinations and all ten explicit-partition
+  combinations, decrypting encrypted sectors and deriving minimal exception
+  lists from caller-provided ranges and title keys. Pinned current-Dolphin
+  fixtures, independent encrypted partition fixtures, fuzzing, and
+  bidirectional DolphinTool conversion cover the implementation. Automatic
+  partition/key discovery and writer-side junk packing remain explicit
+  follow-up work rather than silently degrading correctness. See
+  `docs/formats/wia-rvz.md`.

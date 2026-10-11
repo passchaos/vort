@@ -14,13 +14,18 @@ pub const GroupEntry = format.GroupEntry;
 pub const Archive = archive.Archive;
 pub const OpenOptions = archive.OpenOptions;
 pub const EncodeOptions = writer.EncodeOptions;
+pub const EncodePartitionData = writer.PartitionData;
+pub const EncodePartition = writer.Partition;
 pub const parseHeader1 = format.parseHeader1;
 pub const parseAlloc = archive.Archive.initAlloc;
 pub const encodeAlloc = writer.encodeAlloc;
+pub const encodeWithPartitionsAlloc = writer.encodeWithPartitionsAlloc;
 
 test {
     _ = format;
     _ = @import("wia/codec.zig");
+    _ = @import("wia/group_writer.zig");
+    _ = @import("wia/partition_writer.zig");
     _ = @import("wia/rvz_pack.zig");
     _ = @import("wia/wii_partition.zig");
     _ = archive;

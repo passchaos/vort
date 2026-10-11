@@ -29,6 +29,18 @@ pub const ParsedExceptionLists = struct {
     }
 };
 
+pub const ExtractedGroup = struct {
+    allocator: std.mem.Allocator,
+    data: []u8,
+    exceptions: []format.HashException,
+
+    pub fn deinit(self: *ExtractedGroup) void {
+        self.allocator.free(self.exceptions);
+        self.allocator.free(self.data);
+        self.* = undefined;
+    }
+};
+
 pub fn parseExceptionListsAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -94,36 +106,7 @@ pub fn reconstructEncryptedGroupAlloc(
     @memset(data, 0);
     @memcpy(data[0..decrypted.len], decrypted);
     var headers: [blocks_per_group][block_header_size]u8 = @splat(@splat(0));
-
-    for (0..blocks_per_group) |block_index| {
-        const block = data[block_index * block_data_size ..][0..block_data_size];
-        for (0..31) |hash_index| {
-            const source = block[hash_index * 0x400 ..][0..0x400];
-            std.crypto.hash.Sha1.hash(
-                source,
-                headers[block_index][hash_index * 20 ..][0..20],
-                .{},
-            );
-        }
-    }
-    for (0..8) |subgroup| {
-        const base = subgroup * 8;
-        for (0..8) |index|
-            std.crypto.hash.Sha1.hash(
-                headers[base + index][0..620],
-                headers[base][640 + index * 20 ..][0..20],
-                .{},
-            );
-        for (1..8) |index|
-            @memcpy(headers[base + index][640..800], headers[base][640..800]);
-        std.crypto.hash.Sha1.hash(
-            headers[base][640..800],
-            headers[0][832 + subgroup * 20 ..][0..20],
-            .{},
-        );
-    }
-    for (1..blocks_per_group) |index|
-        @memcpy(headers[index][832..992], headers[0][832..992]);
+    buildHashHeaders(data, &headers);
 
     for (exceptions) |exception| {
         const block_index = exception.offset / block_header_size;
@@ -156,6 +139,137 @@ pub fn reconstructEncryptedGroupAlloc(
     return output;
 }
 
+pub fn extractEncryptedGroupAlloc(
+    allocator: std.mem.Allocator,
+    encrypted: []const u8,
+    key: *const [16]u8,
+) Error!ExtractedGroup {
+    if (encrypted.len == 0 or encrypted.len > group_total_size or
+        encrypted.len % format.wii_block_size != 0)
+        return error.SizeMismatch;
+    const block_count = encrypted.len / format.wii_block_size;
+    const data_len = std.math.mul(usize, block_count, block_data_size) catch
+        return error.IntegerOverflow;
+    const data = try allocator.alloc(u8, data_len);
+    errdefer allocator.free(data);
+    var original_headers = try allocator.alloc(
+        [block_header_size]u8,
+        block_count,
+    );
+    defer allocator.free(original_headers);
+
+    var context = std.crypto.core.aes.Aes128.initDec(key.*);
+    defer std.crypto.secureZero(@TypeOf(context), (&context)[0..1]);
+    for (0..block_count) |block_index| {
+        const encrypted_block = encrypted[block_index * format.wii_block_size ..][0..format.wii_block_size];
+        var zero_iv: [16]u8 = @splat(0);
+        decryptCbc(
+            &context,
+            &zero_iv,
+            encrypted_block[0..block_header_size],
+            &original_headers[block_index],
+        );
+        var data_iv: [16]u8 = encrypted_block[0x3d0..0x3e0].*;
+        decryptCbc(
+            &context,
+            &data_iv,
+            encrypted_block[block_header_size..],
+            data[block_index * block_data_size ..][0..block_data_size],
+        );
+    }
+
+    const padded = try allocator.alloc(u8, group_data_size);
+    defer allocator.free(padded);
+    @memset(padded, 0);
+    @memcpy(padded[0..data.len], data);
+    var expected_headers: [blocks_per_group][block_header_size]u8 = @splat(@splat(0));
+    buildHashHeaders(padded, &expected_headers);
+
+    var exceptions: std.ArrayList(format.HashException) = .empty;
+    errdefer exceptions.deinit(allocator);
+    for (0..block_count) |block_index|
+        try appendHeaderExceptions(
+            allocator,
+            &exceptions,
+            block_index,
+            &original_headers[block_index],
+            &expected_headers[block_index],
+        );
+    return .{
+        .allocator = allocator,
+        .data = data,
+        .exceptions = try exceptions.toOwnedSlice(allocator),
+    };
+}
+
+fn buildHashHeaders(
+    data: []const u8,
+    headers: *[blocks_per_group][block_header_size]u8,
+) void {
+    std.debug.assert(data.len == group_data_size);
+    for (0..blocks_per_group) |block_index| {
+        const block = data[block_index * block_data_size ..][0..block_data_size];
+        for (0..31) |hash_index| {
+            const source = block[hash_index * 0x400 ..][0..0x400];
+            std.crypto.hash.Sha1.hash(
+                source,
+                headers[block_index][hash_index * 20 ..][0..20],
+                .{},
+            );
+        }
+    }
+    for (0..8) |subgroup| {
+        const base = subgroup * 8;
+        for (0..8) |index|
+            std.crypto.hash.Sha1.hash(
+                headers[base + index][0..620],
+                headers[base][640 + index * 20 ..][0..20],
+                .{},
+            );
+        for (1..8) |index|
+            @memcpy(headers[base + index][640..800], headers[base][640..800]);
+        std.crypto.hash.Sha1.hash(
+            headers[base][640..800],
+            headers[0][832 + subgroup * 20 ..][0..20],
+            .{},
+        );
+    }
+    for (1..blocks_per_group) |index|
+        @memcpy(headers[index][832..992], headers[0][832..992]);
+}
+
+fn appendHeaderExceptions(
+    allocator: std.mem.Allocator,
+    exceptions: *std.ArrayList(format.HashException),
+    block_index: usize,
+    actual: *const [block_header_size]u8,
+    expected: *const [block_header_size]u8,
+) Error!void {
+    const regions = [_][2]usize{
+        .{ 0, 620 },
+        .{ 620, 20 },
+        .{ 640, 160 },
+        .{ 800, 32 },
+        .{ 832, 160 },
+        .{ 992, 32 },
+    };
+    for (regions) |region| {
+        var position: usize = 0;
+        while (position < region[1]) : (position += 20) {
+            const within_block = region[0] + @min(position, region[1] - 20);
+            if (std.mem.eql(
+                u8,
+                actual[within_block..][0..20],
+                expected[within_block..][0..20],
+            )) continue;
+            try exceptions.append(allocator, .{
+                .offset = @intCast(block_index * block_header_size + within_block),
+                .hash = actual[within_block..][0..20].*,
+            });
+        }
+    }
+}
+
 fn encryptCbc(
     context: anytype,
     iv: *[16]u8,
@@ -170,6 +284,25 @@ fn encryptCbc(
         const encrypted: *[16]u8 = output[offset..][0..16];
         context.encrypt(encrypted, &plain);
         iv.* = encrypted.*;
+    }
+}
+
+fn decryptCbc(
+    context: anytype,
+    iv: *[16]u8,
+    input: []const u8,
+    output: []u8,
+) void {
+    std.debug.assert(input.len == output.len and input.len % 16 == 0);
+    var offset: usize = 0;
+    while (offset < input.len) : (offset += 16) {
+        const encrypted: *const [16]u8 = input[offset..][0..16];
+        var plain: [16]u8 = undefined;
+        context.decrypt(&plain, encrypted);
+        for (&plain, iv.*) |*byte, previous| byte.* ^= previous;
+        @memcpy(output[offset..][0..16], &plain);
+        iv.* = encrypted.*;
+        std.crypto.secureZero(u8, &plain);
     }
 }
 
