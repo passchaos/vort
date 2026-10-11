@@ -1,14 +1,19 @@
 const std = @import("std");
 const deflate = @import("../deflate.zig");
+const lzma = @import("../lzma.zig");
+const zstd = @import("../zstd.zig");
 const format = @import("format.zig");
 const huffman = @import("huffman.zig");
 
-pub const Error = format.Error || huffman.Error || deflate.Error ||
-    std.mem.Allocator.Error;
+pub const Error = format.Error || huffman.Error || deflate.Error || lzma.Error ||
+    zstd.Error || std.mem.Allocator.Error;
 
 pub const Compression = enum {
     none,
     zlib,
+    lzma,
+    huffman,
+    zstd,
     auto,
 };
 
@@ -16,7 +21,7 @@ pub const EncodeOptions = struct {
     compression: Compression = .auto,
     hunk_bytes: u32 = 4096,
     unit_bytes: u32 = 512,
-    compression_level: u4 = 6,
+    compression_level: u8 = 6,
 };
 
 pub fn encodeAlloc(
@@ -27,7 +32,7 @@ pub fn encodeAlloc(
     try validateOptions(options);
     return switch (options.compression) {
         .none => encodeUncompressedAlloc(allocator, input, options),
-        .zlib, .auto => encodeCompressedAlloc(allocator, input, options),
+        .zlib, .lzma, .huffman, .zstd, .auto => encodeCompressedAlloc(allocator, input, options),
     };
 }
 
@@ -35,9 +40,33 @@ fn validateOptions(options: EncodeOptions) Error!void {
     if (options.hunk_bytes == 0 or
         options.hunk_bytes > format.maximum_hunk_bytes or
         options.unit_bytes == 0 or
-        options.hunk_bytes % options.unit_bytes != 0 or
-        options.compression_level > 9)
+        options.hunk_bytes % options.unit_bytes != 0)
         return error.InvalidChd;
+    switch (options.compression) {
+        .zlib, .auto => if (options.compression_level > 9)
+            return error.InvalidChd,
+        .zstd => if (options.compression_level > 22)
+            return error.InvalidChd,
+        .none, .lzma, .huffman => {},
+    }
+}
+
+const auto_codecs = [_]format.Codec{
+    .zlib,
+    .lzma,
+    .huffman,
+    .zstd,
+};
+
+fn codecsFor(compression: Compression) []const format.Codec {
+    return switch (compression) {
+        .none => &.{},
+        .zlib => &.{.zlib},
+        .lzma => &.{.lzma},
+        .huffman => &.{.huffman},
+        .zstd => &.{.zstd},
+        .auto => &auto_codecs,
+    };
 }
 
 fn encodeUncompressedAlloc(
@@ -88,6 +117,11 @@ fn encodeCompressedAlloc(
     input: []const u8,
     options: EncodeOptions,
 ) Error![]u8 {
+    const codecs = codecsFor(options.compression);
+    if (codecs.len == 0 or codecs.len > 4) return error.InvalidChd;
+    var compressors = [_]u32{0} ** 4;
+    for (codecs, 0..) |codec, slot|
+        compressors[slot] = @intFromEnum(codec);
     const hunk_count = std.math.divCeil(
         usize,
         input.len,
@@ -125,21 +159,25 @@ fn encodeCompressedAlloc(
         if (!seen_result.found_existing)
             seen_result.value_ptr.* = hunk_index;
 
-        const compressed = try deflate.encodeRawBestAlloc(
+        const choice = try chooseCompressedAlloc(
             allocator,
             scratch,
-            try deflate.optionsForZlibLevel(options.compression_level),
+            codecs,
+            options,
         );
-        defer allocator.free(compressed);
-        const use_compressed = compressed.len <= options.hunk_bytes and
-            compressed.len <= 0x00ff_ffff and
-            (options.compression == .zlib or compressed.len < options.hunk_bytes);
-        const stored = if (use_compressed) compressed else scratch;
+        defer allocator.free(choice.bytes);
+        const use_compressed = choice.bytes.len <= options.hunk_bytes and
+            choice.bytes.len <= 0x00ff_ffff and
+            (options.compression != .auto or choice.bytes.len < options.hunk_bytes);
+        const stored = if (use_compressed) choice.bytes else scratch;
         const offset = std.math.cast(u64, output.items.len) orelse
             return error.IntegerOverflow;
         try output.appendSlice(allocator, stored);
         entry.* = .{
-            .kind = if (use_compressed) .codec_0 else .uncompressed,
+            .kind = if (use_compressed)
+                @enumFromInt(choice.slot)
+            else
+                .uncompressed,
             .length = @intCast(stored.len),
             .offset = offset,
             .crc16 = format.crc16(scratch),
@@ -151,15 +189,67 @@ fn encodeCompressedAlloc(
     const encoded_map = try encodeMapAlloc(
         allocator,
         entries,
-        options.hunk_bytes,
     );
     defer allocator.free(encoded_map);
     try output.appendSlice(allocator, encoded_map);
     writeHeader(output.items[0..format.header_size], input, options, .{
-        .compressors = .{ @intFromEnum(format.Codec.zlib), 0, 0, 0 },
+        .compressors = compressors,
         .map_offset = map_offset,
     });
     return output.toOwnedSlice(allocator);
+}
+
+const CompressedChoice = struct {
+    bytes: []u8,
+    slot: u8,
+};
+
+fn chooseCompressedAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    codecs: []const format.Codec,
+    options: EncodeOptions,
+) Error!CompressedChoice {
+    var best: ?CompressedChoice = null;
+    errdefer if (best) |choice| allocator.free(choice.bytes);
+    for (codecs, 0..) |codec, slot| {
+        const candidate = try encodeCodecAlloc(allocator, codec, input, options);
+        if (best == null or candidate.len < best.?.bytes.len) {
+            if (best) |previous| allocator.free(previous.bytes);
+            best = .{ .bytes = candidate, .slot = @intCast(slot) };
+        } else {
+            allocator.free(candidate);
+        }
+    }
+    return best orelse error.InvalidChd;
+}
+
+fn encodeCodecAlloc(
+    allocator: std.mem.Allocator,
+    codec: format.Codec,
+    input: []const u8,
+    options: EncodeOptions,
+) Error![]u8 {
+    return switch (codec) {
+        .zlib => deflate.encodeRawBestAlloc(
+            allocator,
+            input,
+            try deflate.optionsForZlibLevel(@intCast(options.compression_level)),
+        ),
+        .lzma => lzma.encodeChdPayloadAlloc(
+            allocator,
+            input,
+            format.alignedLzmaDictionarySize(options.hunk_bytes),
+        ),
+        .huffman => huffman.encodeHunkAlloc(allocator, input),
+        .zstd => zstd.encodeFrameWithLevelAndOptionsAlloc(
+            allocator,
+            input,
+            @intCast(options.compression_level),
+            .{ .include_content_size = true, .content_checksum = false },
+        ),
+        else => error.UnsupportedChdCodec,
+    };
 }
 
 const HeaderFields = struct {
@@ -194,7 +284,6 @@ fn writeHeader(
 fn encodeMapAlloc(
     allocator: std.mem.Allocator,
     entries: []const format.MapEntry,
-    hunk_bytes: u32,
 ) Error![]u8 {
     var active = [_]bool{false} ** 16;
     var max_length: u32 = 0;
@@ -204,8 +293,10 @@ fn encodeMapAlloc(
         const kind: usize = @intFromEnum(entry.kind);
         if (kind >= active.len) return error.InvalidChdMap;
         active[kind] = true;
-        if (entry.kind == .codec_0)
-            max_length = @max(max_length, entry.length);
+        switch (entry.kind) {
+            .codec_0, .codec_1, .codec_2, .codec_3 => max_length = @max(max_length, entry.length),
+            else => {},
+        }
         if (entry.kind == .self)
             max_self = @max(max_self, entry.offset);
         var raw: [format.expanded_map_entry_size]u8 = undefined;
@@ -214,33 +305,27 @@ fn encodeMapAlloc(
     }
 
     var active_count: usize = 0;
-    var first_active: ?usize = null;
+    var active_symbols: [16]usize = undefined;
     for (active, 0..) |is_active, symbol| {
         if (!is_active) continue;
+        active_symbols[active_count] = symbol;
         active_count += 1;
-        if (first_active == null) first_active = symbol;
     }
     var lengths = [_]u8{0} ** 16;
     if (active_count == 1) {
-        lengths[first_active.?] = 1;
+        lengths[active_symbols[0]] = 1;
     } else if (active_count == 2) {
-        for (active, 0..) |is_active, symbol| {
-            if (is_active) lengths[symbol] = 1;
-        }
+        lengths[active_symbols[0]] = 1;
+        lengths[active_symbols[1]] = 1;
     } else if (active_count > 2) {
-        // The current writer emits at most codec-0/raw/self. A complete
-        // three-symbol tree has one one-bit code and two two-bit codes.
-        if (active_count != 3) return error.InvalidChdMap;
-        lengths[first_active.?] = 1;
-        var skipped_first = false;
-        for (active, 0..) |is_active, symbol| {
-            if (!is_active) continue;
-            if (!skipped_first) {
-                skipped_first = true;
-                continue;
-            }
-            lengths[symbol] = 2;
-        }
+        const long_bits = bitWidth(active_count - 1);
+        const capacity = @as(usize, 1) << @intCast(long_bits);
+        const short_count = capacity - active_count;
+        for (active_symbols[0..active_count], 0..) |symbol, index|
+            lengths[symbol] = if (index < short_count)
+                long_bits - 1
+            else
+                long_bits;
     }
     const codes = try canonicalCodes(lengths);
     var bits = huffman.BitWriter.init(allocator);
@@ -261,7 +346,7 @@ fn encodeMapAlloc(
     const length_bits = bitWidth(max_length);
     const self_bits = bitWidth(max_self);
     for (entries) |entry| switch (entry.kind) {
-        .codec_0 => {
+        .codec_0, .codec_1, .codec_2, .codec_3 => {
             try bits.write(entry.length, length_bits);
             try bits.write(entry.crc16, 16);
         },
@@ -287,7 +372,6 @@ fn encodeMapAlloc(
     output[13] = self_bits;
     output[14] = bitWidth(0);
     @memcpy(output[format.compressed_map_header_size..], payload);
-    _ = hunk_bytes;
     return output;
 }
 

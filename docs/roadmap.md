@@ -18032,9 +18032,10 @@ reuse, so production keeps the simpler independently owned plans.
   CRC-16, exposes bounded linked metadata, resolves backward self references
   and unit-addressed parent ranges, and decodes raw, raw-DEFLATE, LZMA,
   byte-Huffman, and Zstandard hunks with bounded whole-image/range APIs. The
-  writer emits none/zlib/automatic images with sparse zeros, raw fallback,
-  duplicate-hunk self references, per-hunk CRC-16, and raw/overall SHA-1.
+  writer emits none/zlib/LZMA/Huffman/Zstandard/automatic images with sparse
+  zeros, raw fallback, per-hunk multi-codec selection, duplicate-hunk self
+  references, CRC-16, and raw/overall SHA-1.
   Pinned chdman 0.289 codec/metadata/parent fixtures and bidirectional chdman
   generation, verification, and extraction validate both directions. Legacy
-  v1--v4, FLAC/CD/A-V codecs, writer-side parent/metadata, and writer-side
-  LZMA/Huffman/Zstandard remain follow-up work. See `docs/formats/chd.md`.
+  v1--v4, FLAC/CD/A-V codecs, and writer-side parent/metadata remain follow-up
+  work. See `docs/formats/chd.md`.

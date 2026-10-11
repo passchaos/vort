@@ -1,4 +1,5 @@
 const std = @import("std");
+const core_huffman = @import("../huffman.zig");
 const format = @import("format.zig");
 
 pub const Error = format.Error || std.mem.Allocator.Error;
@@ -233,6 +234,127 @@ pub fn decodeHunk(input: []const u8, output: []u8) Error!void {
         byte.* = @intCast(try decoder.decode(&reader));
 }
 
+/// Encode a CHD `huff` hunk. The wire representation first describes the
+/// 256-symbol byte tree through a second, 24-symbol Huffman tree and then
+/// writes the hunk bytes with CHD's reverse-canonical codes.
+pub fn encodeHunkAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+) Error![]u8 {
+    var frequencies = [_]u32{0} ** 256;
+    for (input) |byte| frequencies[byte] += 1;
+    const lengths = core_huffman.treeCodeLengths(256, &frequencies, 15);
+    const codes = try canonicalCodes(256, 15, &lengths);
+
+    const TreeToken = struct {
+        symbol: u8,
+        repeat_extra: u8 = 0,
+    };
+    var tokens: [256]TreeToken = undefined;
+    var token_count: usize = 0;
+    var small_frequencies = [_]u32{0} ** 24;
+    var first: usize = 0;
+    while (first < lengths.len) {
+        const length = lengths[first];
+        var end = first + 1;
+        while (end < lengths.len and lengths[end] == length) : (end += 1) {}
+        const run = end - first;
+        const literal_symbol: u8 = @as(u8, length) + 1;
+        tokens[token_count] = .{ .symbol = literal_symbol };
+        token_count += 1;
+        small_frequencies[literal_symbol] += 1;
+        const additional = run - 1;
+        if (additional == 1) {
+            tokens[token_count] = .{ .symbol = literal_symbol };
+            token_count += 1;
+            small_frequencies[literal_symbol] += 1;
+        } else if (additional >= 2) {
+            tokens[token_count] = .{
+                .symbol = 0,
+                .repeat_extra = @intCast(additional - 2),
+            };
+            token_count += 1;
+            small_frequencies[0] += 1;
+        }
+        first = end;
+    }
+
+    const small_lengths = core_huffman.treeCodeLengths(
+        24,
+        &small_frequencies,
+        6,
+    );
+    const small_codes = try canonicalCodes(24, 6, &small_lengths);
+    var first_non_zero: usize = 24;
+    var last_non_zero: usize = 0;
+    for (small_lengths[1..], 1..) |length, symbol| {
+        if (length == 0) continue;
+        first_non_zero = @min(first_non_zero, symbol);
+        last_non_zero = symbol;
+    }
+    if (first_non_zero == 24) return error.InvalidHuffmanCode;
+    first_non_zero = @min(first_non_zero, 8);
+
+    var writer = BitWriter.init(allocator);
+    defer writer.deinit();
+    try writer.write(small_lengths[0], 3);
+    try writer.write(@intCast(first_non_zero - 1), 3);
+    for (small_lengths[first_non_zero .. last_non_zero + 1]) |length|
+        try writer.write(length, 3);
+    try writer.write(7, 3);
+
+    for (tokens[0..token_count]) |token| {
+        const bits = small_lengths[token.symbol];
+        if (bits == 0) return error.InvalidHuffmanCode;
+        try writer.write(small_codes[token.symbol], bits);
+        if (token.symbol == 0) {
+            if (token.repeat_extra < 7) {
+                try writer.write(token.repeat_extra, 3);
+            } else {
+                try writer.write(7, 3);
+                try writer.write(token.repeat_extra - 7, 8);
+            }
+        }
+    }
+    for (input) |byte| {
+        const bits = lengths[byte];
+        if (bits == 0) return error.InvalidHuffmanCode;
+        try writer.write(codes[byte], bits);
+    }
+    return writer.finishAlloc();
+}
+
+fn canonicalCodes(
+    comptime symbol_count: usize,
+    comptime max_bits: usize,
+    lengths: *const [symbol_count]u4,
+) Error![symbol_count]u32 {
+    var counts = [_]u32{0} ** (max_bits + 1);
+    for (lengths) |length| {
+        if (length > max_bits) return error.InvalidHuffmanCode;
+        if (length != 0) counts[length] += 1;
+    }
+    var starts = [_]u32{0} ** (max_bits + 1);
+    var current: u32 = 0;
+    var length = max_bits;
+    while (length != 0) : (length -= 1) {
+        const sum = std.math.add(u32, current, counts[length]) catch
+            return error.InvalidHuffmanCode;
+        const next = sum >> 1;
+        if (length != 1 and next * 2 != sum)
+            return error.InvalidHuffmanCode;
+        starts[length] = current;
+        current = next;
+    }
+    var codes = [_]u32{0} ** symbol_count;
+    for (lengths, 0..) |bits, symbol| {
+        if (bits == 0) continue;
+        codes[symbol] = starts[bits];
+        starts[bits] += 1;
+    }
+    return codes;
+}
+
 test "CHD MSB bit reader and writer round trip" {
     var writer = BitWriter.init(std.testing.allocator);
     defer writer.deinit();
@@ -260,4 +382,23 @@ test "CHD reverse canonical Huffman assignment" {
     try std.testing.expectEqual(@as(usize, 0), try decoder.decode(&reader));
     try std.testing.expectEqual(@as(usize, 2), try decoder.decode(&reader));
     try std.testing.expectEqual(@as(usize, 3), try decoder.decode(&reader));
+}
+
+test "CHD Huffman encoder round trips varied byte alphabets" {
+    const allocator = std.testing.allocator;
+    var broad: [4096]u8 = undefined;
+    for (&broad, 0..) |*byte, index| byte.* = @truncate(index * 37 + index / 11);
+    const cases = [_][]const u8{
+        "A" ** 4096,
+        ("CHD Huffman structured bytes\n" ** 256)[0..4096],
+        &broad,
+    };
+    for (cases) |input| {
+        const encoded = try encodeHunkAlloc(allocator, input);
+        defer allocator.free(encoded);
+        const decoded = try allocator.alloc(u8, input.len);
+        defer allocator.free(decoded);
+        try decodeHunk(encoded, decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
 }

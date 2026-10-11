@@ -154,7 +154,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   bidirectional libewf interoperability;
 - dependency-free CHD v5 reading and deterministic writing, with simple and
   Huffman/RLE compressed maps, metadata chains, raw/self/parent hunks,
-  raw-DEFLATE/LZMA/Huffman/Zstandard codecs, CRC-16 and SHA-1 verification,
+  raw-DEFLATE/LZMA/Huffman/Zstandard codecs in both directions, per-hunk
+  automatic codec selection, CRC-16 and SHA-1 verification,
   bounded whole-image and random-range decoding, pinned chdman fixtures,
   fuzzing, and bidirectional chdman interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd

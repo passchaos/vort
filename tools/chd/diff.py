@@ -43,12 +43,13 @@ def expect_failure(*args: object, error_name: str) -> None:
 
 
 def payload() -> bytes:
-    rng = random.Random(0x4348_4435)
-    first = (b"Vort CHD differential payload 0123456789\n" * 256)[:4096]
-    random_hunk = rng.randbytes(4096)
-    zeros = bytes(4096)
-    structured = bytes((index * 17 + index // 13) & 0xFF for index in range(4096))
-    return first + random_hunk + zeros + first + structured + zeros + first + random_hunk
+    rng = random.Random(0x434844)
+    two_symbol = bytes(ord("A") if byte & 1 else ord("B") for byte in rng.randbytes(4096))
+    sparse = bytes((index * 31) & 0xFF if index % 10 == 0 else 0 for index in range(4096))
+    deflate_friendly = bytes((index * 17 + index // 19) % 13 for index in range(4096))
+    lzma_friendly = bytes(index // 16 for index in range(4096))
+    incompressible = rng.randbytes(4096)
+    return two_symbol + sparse + deflate_friendly + lzma_friendly + incompressible + two_symbol
 
 
 def read_fixture(name: str) -> bytes:
@@ -80,14 +81,19 @@ def main() -> None:
         source = temp / "payload.raw"
         source.write_bytes(plain)
         images: dict[str, Path] = {}
-        for compression in ("none", "zlib", "auto"):
+        for compression in ("none", "zlib", "lzma", "huffman", "zstd", "auto"):
             image = temp / f"vort-{compression}.chd"
             output = temp / f"vort-{compression}.raw"
             ranged = temp / f"vort-{compression}.range"
             run(args.cli, "encode-chd", source, image, compression, 4096, 512, 6)
             summary = run(args.cli, "inspect-chd", image).stdout
-            expected_codec = b"codec=none" if compression == "none" else b"codec=zlib"
-            if expected_codec not in summary or b"hunks=8" not in summary:
+            expected_name = {
+                "none": "none",
+                "huffman": "huff",
+                "auto": "zlib",
+            }.get(compression, compression)
+            expected_codec = f"codec={expected_name}".encode()
+            if expected_codec not in summary or b"hunks=6" not in summary:
                 raise AssertionError(f"Vort CHD inspect mismatch for {compression}")
             run(args.cli, "decode-chd", image, output, len(plain))
             if output.read_bytes() != plain:
@@ -143,13 +149,54 @@ def main() -> None:
                 raise AssertionError("chdman decode of Vort partial CHD mismatch")
             external_encode += 1
 
+        large_lzma_plain = (plain * 6)[:140_000]
+        large_lzma_source = temp / "large-lzma.raw"
+        large_lzma_image = temp / "vort-large-lzma.chd"
+        large_lzma_output = temp / "vort-large-lzma.raw"
+        large_lzma_source.write_bytes(large_lzma_plain)
+        run(
+            args.cli,
+            "encode-chd",
+            large_lzma_source,
+            large_lzma_image,
+            "lzma",
+            128 * 1024,
+            512,
+            6,
+        )
+        run(
+            args.cli,
+            "decode-chd",
+            large_lzma_image,
+            large_lzma_output,
+            len(large_lzma_plain),
+        )
+        if large_lzma_output.read_bytes() != large_lzma_plain:
+            raise AssertionError("Vort large-hunk LZMA CHD round trip mismatch")
+        self_cases += 1
+        if chdman is not None:
+            run(chdman, "verify", "-i", large_lzma_image)
+            large_lzma_external = temp / "vort-large-lzma.chdman.raw"
+            run(
+                chdman,
+                "extractraw",
+                "-i",
+                large_lzma_image,
+                "-o",
+                large_lzma_external,
+                "-f",
+            )
+            if large_lzma_external.read_bytes() != large_lzma_plain:
+                raise AssertionError("chdman decode of Vort large-hunk LZMA CHD mismatch")
+            external_encode += 1
+
         pinned_paths: dict[str, Path] = {}
         for codec in ("lzma", "huff", "zstd"):
             image = read_fixture(codec)
             path = temp / f"pinned-{codec}.chd"
             output = temp / f"pinned-{codec}.raw"
             path.write_bytes(image)
-            run(args.cli, "decode-chd", path, output, len(plain))
+            run(args.cli, "decode-chd", path, output, 32768)
             if hashlib.sha256(output.read_bytes()).hexdigest() != PINNED_RAW_SHA256:
                 raise AssertionError(f"Vort decode of pinned {codec} CHD mismatch")
             pinned_paths[codec] = path
@@ -164,7 +211,7 @@ def main() -> None:
         if b"metadata=1" not in child_summary or b"parent=true" not in child_summary:
             raise AssertionError("pinned CHD parent metadata mismatch")
         child_output = temp / "pinned-child.raw"
-        run(args.cli, "decode-chd", child_path, child_output, len(plain), parent_path)
+        run(args.cli, "decode-chd", child_path, child_output, 32768, parent_path)
         if hashlib.sha256(child_output.read_bytes()).hexdigest() != PINNED_RAW_SHA256:
             raise AssertionError("Vort decode of pinned parent CHD mismatch")
         pinned += 2
@@ -179,7 +226,7 @@ def main() -> None:
             "decode-chd",
             shifted_child_path,
             shifted_output,
-            len(plain),
+            32768,
             parent_path,
         )
         if hashlib.sha256(shifted_output.read_bytes()).hexdigest() != PINNED_SHIFTED_SHA256:

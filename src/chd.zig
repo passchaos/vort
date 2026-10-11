@@ -18,7 +18,7 @@ pub const signature = format.signature;
 pub const parseHeader = format.parseHeader;
 pub const crc16 = format.crc16;
 pub const parseAlloc = archive.Archive.initAlloc;
-pub const alignedLzmaDictionarySize = archive.alignedLzmaDictionarySize;
+pub const alignedLzmaDictionarySize = format.alignedLzmaDictionarySize;
 pub const encodeAlloc = writer.encodeAlloc;
 
 test {

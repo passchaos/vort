@@ -3107,6 +3107,7 @@ test {
     _ = qcow2;
     _ = vmdk;
     _ = ewf;
+    _ = chd;
 }
 
 test "root 7z exports create list and extract Copy archives" {

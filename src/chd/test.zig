@@ -102,7 +102,7 @@ test "CHD v5 decodes pinned chdman metadata and parent map" {
     try std.testing.expectEqual(expected_shifted_digest, shifted_digest);
 }
 
-test "CHD v5 writer round trips none zlib and auto" {
+test "CHD v5 writer round trips every compression mode" {
     const allocator = std.testing.allocator;
     const input = try allocator.alloc(u8, 4096 * 4 + 137);
     defer allocator.free(input);
@@ -115,6 +115,9 @@ test "CHD v5 writer round trips none zlib and auto" {
     inline for (.{
         writer.Compression.none,
         writer.Compression.zlib,
+        writer.Compression.lzma,
+        writer.Compression.huffman,
+        writer.Compression.zstd,
         writer.Compression.auto,
     }) |compression| {
         const encoded = try writer.encodeAlloc(allocator, input, .{
@@ -126,6 +129,26 @@ test "CHD v5 writer round trips none zlib and auto" {
         const decoded = try archive.decodeAllocLimited(allocator, input.len);
         defer allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, input, decoded);
+        if (compression == .auto) {
+            try std.testing.expectEqual(
+                [_]u32{
+                    @intFromEnum(format.Codec.zlib),
+                    @intFromEnum(format.Codec.lzma),
+                    @intFromEnum(format.Codec.huffman),
+                    @intFromEnum(format.Codec.zstd),
+                },
+                archive.header.compressors,
+            );
+        } else if (compression != .none) {
+            const expected: format.Codec = switch (compression) {
+                .zlib => .zlib,
+                .lzma => .lzma,
+                .huffman => .huffman,
+                .zstd => .zstd,
+                else => unreachable,
+            };
+            try std.testing.expectEqual(expected, try archive.header.codec(0));
+        }
 
         const range = try archive.readRangeAllocLimited(
             allocator,
@@ -140,6 +163,62 @@ test "CHD v5 writer round trips none zlib and auto" {
             try std.testing.expectEqual(@as(u64, 0), archive.map[2].offset);
         }
     }
+}
+
+test "CHD v5 LZMA writer supports hunks above its match-finder window" {
+    const allocator = std.testing.allocator;
+    const input = ("large CHD LZMA hunk payload 0123456789\n" ** 4096)[0..70_000];
+    const encoded = try writer.encodeAlloc(allocator, input, .{
+        .compression = .lzma,
+        .hunk_bytes = 128 * 1024,
+        .unit_bytes = 512,
+    });
+    defer allocator.free(encoded);
+    var archive = try archive_mod.Archive.initAlloc(allocator, encoded, .{});
+    defer archive.deinit();
+    try std.testing.expectEqual(format.Codec.lzma, try archive.header.codec(0));
+    try std.testing.expectEqual(format.MapType.codec_0, archive.map[0].kind);
+    const decoded = try archive.decodeAllocLimited(allocator, input.len);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "CHD v5 auto writer selects every codec slot raw and self" {
+    const allocator = std.testing.allocator;
+    const hunk_bytes = 4096;
+    const input = try allocator.alloc(u8, 6 * hunk_bytes);
+    defer allocator.free(input);
+    var prng = std.Random.DefaultPrng.init(0x434844);
+    for (input[0..hunk_bytes]) |*byte|
+        byte.* = if (prng.random().boolean()) 'A' else 'B';
+    for (input[hunk_bytes .. 2 * hunk_bytes], 0..) |*byte, index|
+        byte.* = if (index % 10 == 0) @truncate(index * 31) else 0;
+    for (input[2 * hunk_bytes .. 3 * hunk_bytes], 0..) |*byte, index|
+        byte.* = @truncate((index * 17 + index / 19) % 13);
+    for (input[3 * hunk_bytes .. 4 * hunk_bytes], 0..) |*byte, index|
+        byte.* = @truncate(index / 16);
+    prng.random().bytes(input[4 * hunk_bytes .. 5 * hunk_bytes]);
+    @memcpy(input[5 * hunk_bytes .. 6 * hunk_bytes], input[0..hunk_bytes]);
+
+    const encoded = try writer.encodeAlloc(allocator, input, .{
+        .compression = .auto,
+    });
+    defer allocator.free(encoded);
+    var archive = try archive_mod.Archive.initAlloc(allocator, encoded, .{});
+    defer archive.deinit();
+    var kinds: [6]format.MapType = undefined;
+    for (archive.map, 0..) |entry, index| kinds[index] = entry.kind;
+    try std.testing.expectEqualSlices(format.MapType, &.{
+        .codec_2,
+        .codec_3,
+        .codec_0,
+        .codec_1,
+        .uncompressed,
+        .self,
+    }, &kinds);
+    const decoded = try archive.decodeAllocLimited(allocator, input.len);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "CHD v5 writer handles empty and partial hunks" {

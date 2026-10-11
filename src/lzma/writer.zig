@@ -35,6 +35,29 @@ pub fn encodeAlloc(
     return output.toOwnedSlice(allocator);
 }
 
+/// Encode the headerless, fixed-property LZMA1 payload stored by a CHD v5
+/// hunk. CHD derives its advertised dictionary from the hunk size instead of
+/// storing LZMA properties. The current greedy match finder uses at most a
+/// 65,535-byte window; using a smaller encoder window remains valid when the
+/// independently derived decoder dictionary is larger.
+pub fn encodeChdPayloadAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary_size: u32,
+) ![]u8 {
+    if (dictionary_size < 4096 or dictionary_size > (1 << 30) + (1 << 29))
+        return error.InvalidLzmaOptions;
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    _ = try encoder.encodeChunkAppend(allocator, &output, input, .{
+        .properties = .{ .lc = 3, .lp = 0, .pb = 2 },
+        .dictionary_size = @min(dictionary_size, std.math.maxInt(u16)),
+        .mode = .greedy,
+        .end_marker = false,
+    });
+    return output.toOwnedSlice(allocator);
+}
+
 pub fn encodeInto(
     allocator: std.mem.Allocator,
     input: []const u8,

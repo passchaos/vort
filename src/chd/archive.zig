@@ -550,7 +550,7 @@ fn decodeCodec(
             allocator,
             input,
             hunk_bytes,
-            alignedLzmaDictionarySize(hunk_bytes),
+            format.alignedLzmaDictionarySize(hunk_bytes),
         ),
         .huffman => decoded: {
             const output = try allocator.alloc(u8, hunk_bytes);
@@ -561,29 +561,6 @@ fn decodeCodec(
         .zstd => zstd.decodeFrameAllocExactSize(allocator, input, hunk_bytes),
         else => error.UnsupportedChdCodec,
     };
-}
-
-pub fn alignedLzmaDictionarySize(hunk_bytes: u32) u32 {
-    const level: u5 = 6;
-    var dictionary_size: u32 = @as(u32, 1) << (level + 20);
-    if (dictionary_size > hunk_bytes)
-        dictionary_size = @min(dictionary_size, @max(hunk_bytes, 1 << 12));
-    if (dictionary_size >= 1 << 21) {
-        const mask: u32 = (1 << 20) - 1;
-        return (dictionary_size + mask) & ~mask;
-    }
-    var index: u8 = 22;
-    while (true) : (index += 1) {
-        const aligned = @as(u32, 2 + (index & 1)) << @as(u5, @intCast(index >> 1));
-        if (aligned >= dictionary_size) return aligned;
-    }
-}
-
-test "CHD LZMA dictionary alignment mirrors SDK properties" {
-    try std.testing.expectEqual(@as(u32, 4096), alignedLzmaDictionarySize(1));
-    try std.testing.expectEqual(@as(u32, 4096), alignedLzmaDictionarySize(4096));
-    try std.testing.expectEqual(@as(u32, 6144), alignedLzmaDictionarySize(5000));
-    try std.testing.expectEqual(@as(u32, 1 << 20), alignedLzmaDictionarySize(1 << 20));
 }
 
 test "CHD archive rejects a truncated header" {

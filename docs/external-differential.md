@@ -49,9 +49,10 @@ libewf. The reverse direction generates both mixed compressed/raw single-file
 and explicit multi-segment sets. A locally built tool directory can be supplied
 with `-- --libewf-dir <path>`.
 
-The CHD differential always checks Vort none/zlib/automatic writer round trips,
-a partial final hunk, and pinned chdman 0.289 LZMA/Huffman/Zstandard plus
-metadata/aligned-parent/unit-shifted-parent fixtures.
+The CHD differential always checks all six Vort writer modes, per-hunk automatic
+selection, a partial final hunk, and pinned chdman 0.289
+LZMA/Huffman/Zstandard plus metadata/aligned-parent/unit-shifted-parent
+fixtures.
 When `chdman` is available, it verifies and extracts Vort output byte-exactly;
 the reverse direction creates fresh none/zlib/LZMA/Huffman/Zstandard images
 and a parent-only delta image. An explicit binary can be supplied with

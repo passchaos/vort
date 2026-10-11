@@ -1130,6 +1130,19 @@ pub fn main(init: std.process.Init) !void {
     );
     defer init.gpa.free(chd);
     try fuzzOne(init.gpa, chd);
+    inline for (.{
+        vort.ChdCompression.lzma,
+        vort.ChdCompression.huffman,
+        vort.ChdCompression.zstd,
+    }) |compression| {
+        const codec_chd = try vort.encodeChdAlloc(
+            init.gpa,
+            "CHD codec fuzz target valid hunk\n" ** 128,
+            .{ .hunk_bytes = 4096, .unit_bytes = 512, .compression = compression },
+        );
+        defer init.gpa.free(codec_chd);
+        try fuzzOne(init.gpa, codec_chd);
+    }
 
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
@@ -1146,7 +1159,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 13,
+        samples.len + 16,
         data.len,
     });
     try stdout.flush();
