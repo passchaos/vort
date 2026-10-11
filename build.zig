@@ -280,6 +280,14 @@ pub fn build(b: *std.Build) void {
     const run_qcow2_tests = b.addRunArtifact(qcow2_tests);
     const qcow2_test_step = b.step("test-qcow2", "Run focused QCOW2 image tests");
     qcow2_test_step.dependOn(&run_qcow2_tests.step);
+    const vmdk_tests = b.addTest(.{
+        .name = "vort-vmdk-tests",
+        .root_module = tests_mod,
+        .filters = &.{"VMDK"},
+    });
+    const run_vmdk_tests = b.addRunArtifact(vmdk_tests);
+    const vmdk_test_step = b.step("test-vmdk", "Run focused VMDK image tests");
+    vmdk_test_step.dependOn(&run_vmdk_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1296,6 +1304,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| qcow2_diff.addArgs(args);
     const qcow2_diff_step = b.step("run-qcow2-diff", "Validate QCOW2 images against optional qemu-img and 7-Zip");
     qcow2_diff_step.dependOn(&qcow2_diff.step);
+
+    const vmdk_diff = b.addSystemCommand(&.{ "python3", "tools/vmdk/diff.py", "--cli" });
+    vmdk_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| vmdk_diff.addArgs(args);
+    const vmdk_diff_step = b.step("run-vmdk-diff", "Validate VMDK images against optional qemu-img and 7-Zip");
+    vmdk_diff_step.dependOn(&vmdk_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

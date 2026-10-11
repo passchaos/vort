@@ -408,6 +408,30 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedQcow2Error(err)) return err;
     }
+    if (vort.parseVmdk(data, .{
+        .max_descriptor_bytes = 1 << 16,
+        .max_grain_bytes = 1 << 20,
+        .max_gd_entries = 4096,
+        .max_compressed_bytes = 1 << 20,
+    })) |archive| {
+        const virtual_size = std.math.cast(
+            usize,
+            archive.header.virtual_size,
+        ) orelse 0;
+        const length = @min(virtual_size, 4096);
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            length,
+            length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedVmdkError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedVmdkError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -1031,6 +1055,14 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(qcow2);
     try fuzzOne(init.gpa, qcow2);
 
+    const vmdk = try vort.encodeVmdkAlloc(
+        init.gpa,
+        "VMDK fuzz target valid grain\n" ** 128,
+        .{ .grain_sectors = 8, .compression = .zlib },
+    );
+    defer init.gpa.free(vmdk);
+    try fuzzOne(init.gpa, vmdk);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -1046,7 +1078,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 10,
+        samples.len + 11,
         data.len,
     });
     try stdout.flush();
@@ -1221,6 +1253,36 @@ fn isExpectedQcow2Error(err: anyerror) bool {
         error.TrailingData,
         error.DuplicateDictionaryId,
         error.InvalidDictionaryMetadata,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedVmdkError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidVmdk,
+        error.UnsupportedVmdkFeature,
+        error.UnsupportedVmdkCompression,
+        error.MissingVmdkBackingFile,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.ChecksumMismatch,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.InvalidDeflateBlockType,
+        error.StoredLengthMismatch,
+        error.BadZlibHeader,
+        error.NeedDictionary,
+        error.InvalidHuffmanCode,
+        error.UnsupportedDeflateFeature,
+        error.InvalidMatch,
+        error.InvalidDynamicBlockHeader,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.TrailingData,
         => true,
         else => false,
     };

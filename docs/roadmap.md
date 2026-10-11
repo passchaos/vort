@@ -18002,3 +18002,15 @@ reuse, so production keeps the simpler independently owned plans.
   writer-side extended/external layouts, multi-payload compressed-cluster
   packing, and broader refcount scaling remain follow-up work. See
   `docs/formats/qcow2.md`.
+
+- Added dependency-free hosted-sparse VMDK reading and deterministic
+  monolithicSparse/streamOptimized writing. The reader covers versions 1--3,
+  grain directory/table translation, unallocated and explicit-zero grains,
+  zlib-wrapped embedded-LBA grains, standard footer markers, QEMU's direct-GD
+  compressed layout, logical backing bytes, and bounded ranges. The writer
+  emits either version-2 sparse grains or a complete version-3 streamOptimized
+  marker/GT/GD/footer/EOS sequence. QEMU 9.2 and 7-Zip decode both writer modes;
+  reverse coverage includes QEMU sparse/compressed/backing layouts and a pinned
+  16 GiB version-3 QEMU iotest fixture. Descriptor-only multi-file, flat/split,
+  legacy COWD, SEsparse, and writer-side delta chains remain follow-up work. See
+  `docs/formats/vmdk.md`.

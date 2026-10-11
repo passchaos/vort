@@ -24,6 +24,7 @@ const pbzx_cli = @import("cli/pbzx.zig");
 const xar_cli = @import("cli/xar.zig");
 const zfs_cli = @import("cli/zfs.zig");
 const qcow2_cli = @import("cli/qcow2.zig");
+const vmdk_cli = @import("cli/vmdk.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
@@ -212,6 +213,14 @@ pub fn main(init: std.process.Init) !void {
         try qcow2_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-qcow2")) {
         try qcow2_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-vmdk")) {
+        try vmdk_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-vmdk")) {
+        try vmdk_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-vmdk-range")) {
+        try vmdk_cli.decodeRange(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-vmdk")) {
+        try vmdk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2407,6 +2416,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-qcow2 <in> <out> [max_output] [backing|-] [data_file|-]
         \\  decode-qcow2-range <in> <out> <offset> <length> [backing|-] [data_file|-]
         \\  encode-qcow2 <in> <out> <none|zlib|zstd> [cluster_bits] [version]
+        \\  inspect-vmdk <path>
+        \\  decode-vmdk <in> <out> [max_output] [logical_backing|-]
+        \\  decode-vmdk-range <in> <out> <offset> <length> [logical_backing|-]
+        \\  encode-vmdk <in> <out> <none|zlib> [grain_sectors]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

@@ -140,6 +140,12 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   clusters, extended-L2 subclusters, caller-supplied raw backing/external data
   files, bounded whole-image and random-range decoding, fuzzing, and
   bidirectional QEMU plus 7-Zip interoperability;
+- dependency-free hosted-sparse VMDK reading and deterministic monolithicSparse
+  plus streamOptimized writing, with grain directory/table lookup, unallocated
+  and explicit-zero grains, logical backing bytes, zlib-compressed embedded-LBA
+  grains, standard GT/GD/footer/EOS markers, bounded whole-image and random-range
+  decoding, a pinned QEMU version-3 fixture, fuzzing, and bidirectional QEMU plus
+  7-Zip interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded
@@ -1534,7 +1540,8 @@ audit, `docs/validation-json.md` for validation/report JSON schemas,
 differential validation, `docs/checksum-dispatch.md` for checksum dispatch
 status, `docs/zstd-gap.md` for current zstd comparison limitations, and
 `docs/dynamic-encoder.md` for dynamic encoder status. QCOW2 support and its
-storage-specific limits are documented in `docs/formats/qcow2.md`. Local Rust deflate
+storage-specific limits are documented in `docs/formats/qcow2.md`; VMDK support
+is documented in `docs/formats/vmdk.md`. Local Rust deflate
 baselines such as `~/Work/fdeflate` and `~/Work/miniz_oxide` should be treated
 as required functionality/performance competitors once their executable harnesses
 are wired into Vort validation.

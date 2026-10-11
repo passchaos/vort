@@ -36,6 +36,7 @@ pub const pbzx = @import("pbzx.zig");
 pub const xar = @import("xar.zig");
 pub const zfs = @import("zfs.zig");
 pub const qcow2 = @import("qcow2.zig");
+pub const vmdk = @import("vmdk.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1090,6 +1091,18 @@ pub const qcow2Magic = qcow2.magic;
 pub const parseQcow2Header = qcow2.parseHeader;
 pub const parseQcow2 = qcow2.parse;
 pub const encodeQcow2Alloc = qcow2.encodeAlloc;
+
+pub const VmdkError = vmdk.Error;
+pub const VmdkHeader = vmdk.Header;
+pub const VmdkDescriptor = vmdk.Descriptor;
+pub const VmdkArchive = vmdk.Archive;
+pub const VmdkOpenOptions = vmdk.OpenOptions;
+pub const VmdkCompression = vmdk.Compression;
+pub const VmdkEncodeOptions = vmdk.EncodeOptions;
+pub const vmdkMagic = vmdk.magic;
+pub const parseVmdkHeader = vmdk.parseHeader;
+pub const parseVmdk = vmdk.parse;
+pub const encodeVmdkAlloc = vmdk.encodeAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3061,6 +3074,7 @@ test {
     _ = xar;
     _ = zfs;
     _ = qcow2;
+    _ = vmdk;
 }
 
 test "root 7z exports create list and extract Copy archives" {

@@ -17,6 +17,7 @@ zig build run-gzip-cli-diff
 zig build run-rust-deflate-diff
 zig build run-snappy-interop-probe
 zig build run-qcow2-diff
+zig build run-vmdk-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
@@ -29,6 +30,14 @@ available, it independently extracts Vort's v2/v3 uncompressed and
 raw-DEFLATE images. Explicit tool paths can be supplied with
 `-- --qemu-img <path> --seven-zip <path>`; the summary reports unavailable
 oracles as skipped instead of counting them as evidence.
+
+The VMDK differential validates deterministic monolithicSparse and standard
+footer-bearing streamOptimized output through both `qemu-img` and 7-Zip. In the
+reverse direction it decodes QEMU-generated sparse, zero-grain, compressed
+direct-directory, and backing-chain layouts. A pinned QEMU iotest version-3
+streamOptimized image keeps real footer/marker and large virtual-address range
+coverage available without an installed oracle. Explicit tool paths use the
+same `-- --qemu-img <path> --seven-zip <path>` form.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,
