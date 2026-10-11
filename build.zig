@@ -192,6 +192,14 @@ pub fn build(b: *std.Build) void {
     const run_xpress_tests = b.addRunArtifact(xpress_tests);
     const xpress_test_step = b.step("test-xpress", "Run focused Windows XPRESS codec tests");
     xpress_test_step.dependOn(&run_xpress_tests.step);
+    const lzms_tests = b.addTest(.{
+        .name = "vort-lzms-tests",
+        .root_module = tests_mod,
+        .filters = &.{"LZMS"},
+    });
+    const run_lzms_tests = b.addRunArtifact(lzms_tests);
+    const lzms_test_step = b.step("test-lzms", "Run focused Windows LZMS codec tests");
+    lzms_test_step.dependOn(&run_lzms_tests.step);
     const lzfse_tests = b.addTest(.{
         .name = "vort-lzfse-tests",
         .root_module = tests_mod,
@@ -1156,6 +1164,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| xpress_diff.addArgs(args);
     const xpress_diff_step = b.step("run-xpress-diff", "Validate Windows XPRESS plain and Huffman against pinned references");
     xpress_diff_step.dependOn(&xpress_diff.step);
+
+    const lzms_diff = b.addSystemCommand(&.{ "python3", "tools/lzms/diff.py", "--cli" });
+    lzms_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| lzms_diff.addArgs(args);
+    const lzms_diff_step = b.step("run-lzms-diff", "Validate Windows LZMS decoding against optional wimlib");
+    lzms_diff_step.dependOn(&lzms_diff.step);
 
     const lzfse_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/diff.py", "--cli" });
     lzfse_diff.addArtifactArg(cli_exe);
@@ -4921,6 +4935,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(lz4_legacy_diff_step);
     ci_smoke_step.dependOn(lznt1_diff_step);
     ci_smoke_step.dependOn(xpress_diff_step);
+    ci_smoke_step.dependOn(lzms_diff_step);
     ci_smoke_step.dependOn(lzfse_diff_step);
     ci_smoke_step.dependOn(zchunk_diff_step);
     ci_smoke_step.dependOn(squashfs_diff_step);

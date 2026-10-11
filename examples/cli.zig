@@ -15,6 +15,7 @@ const hadoop_lzo_cli = @import("cli/hadoop_lzo.zig");
 const lz4_legacy_cli = @import("cli/lz4_legacy.zig");
 const lznt1_cli = @import("cli/lznt1.zig");
 const xpress_cli = @import("cli/xpress.zig");
+const lzms_cli = @import("cli/lzms.zig");
 const lzfse_cli = @import("cli/lzfse.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
@@ -146,6 +147,8 @@ pub fn main(init: std.process.Init) !void {
         try xpress_cli.decodeHuffman(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-xpress-huffman-file")) {
         try xpress_cli.inspectHuffman(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-lzms-file")) {
+        try lzms_cli.decode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzfse-file")) {
         try lzfse_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzfse-file")) {
@@ -2292,6 +2295,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-xpress-huffman-file <in> <out>
         \\  decode-xpress-huffman-file <in> <out> <decoded_size>
         \\  inspect-xpress-huffman-file <path> <decoded_size>
+        \\  decode-lzms-file <in> <out> <decoded_size>
         \\  encode-lzfse-file <in> <out> [block_size] [lzvn|stored]
         \\  decode-lzfse-file <in> <out> [max_output]
         \\  inspect-lzfse-file <path> [max_output]

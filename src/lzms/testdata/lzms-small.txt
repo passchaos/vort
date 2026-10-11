@@ -1,0 +1,19 @@
+LZMS adaptive coding fixture
+
+The quick brown fox jumps over the lazy dog. 0123456789
+The quick brown fox jumps over the lazy dog. 0123456789
+The quick brown fox jumps over the lazy dog. 0123456789
+The quick brown fox jumps over the lazy dog. 0123456789
+
+delta-series:
+000102030405060708090a0b0c0d0e0f
+0102030405060708090a0b0c0d0e0f10
+02030405060708090a0b0c0d0e0f1011
+030405060708090a0b0c0d0e0f101112
+
+Unicode survives as ordinary UTF-8 payload bytes: 压缩格式 😀
+
+The quick brown fox jumps over the lazy dog. 0123456789
+The quick brown fox jumps over the lazy dog. 0123456789
+The quick brown fox jumps over the lazy dog. 0123456789
+The quick brown fox jumps over the lazy dog. 0123456789

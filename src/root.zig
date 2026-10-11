@@ -26,6 +26,7 @@ pub const lz4 = @import("lz4.zig");
 pub const lz4_legacy = @import("lz4_legacy.zig");
 pub const lznt1 = @import("lznt1.zig");
 pub const xpress = @import("xpress.zig");
+pub const lzms = @import("lzms.zig");
 pub const lzfse = @import("lzfse.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
@@ -1075,6 +1076,13 @@ pub const decodeXpressHuffmanAllocExactSize = xpress.decodeHuffmanAllocExactSize
 pub const encodeXpressHuffmanInto = xpress.encodeHuffmanInto;
 pub const encodeXpressHuffmanAppend = xpress.encodeHuffmanAppend;
 pub const encodeXpressHuffmanAlloc = xpress.encodeHuffmanAlloc;
+
+pub const LzmsError = lzms.Error;
+pub const LzmsDecoder = lzms.Decoder;
+pub const lzmsMaxBufferSize = lzms.maxBufferSize;
+pub const decodeLzmsInto = lzms.decodeInto;
+pub const decodeLzmsAllocExactSize = lzms.decodeAllocExactSize;
+pub const decodeLzmsAllocLimited = lzms.decodeAllocLimited;
 
 pub const Lz4Error = lz4.Error;
 pub const lz4DefaultCompressionLevel = lz4.default_compression_level;
