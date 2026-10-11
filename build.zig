@@ -224,6 +224,14 @@ pub fn build(b: *std.Build) void {
     const run_lzfse_tests = b.addRunArtifact(lzfse_tests);
     const lzfse_test_step = b.step("test-lzfse", "Run focused LZFSE and LZVN tests");
     lzfse_test_step.dependOn(&run_lzfse_tests.step);
+    const decmpfs_tests = b.addTest(.{
+        .name = "vort-decmpfs-tests",
+        .root_module = tests_mod,
+        .filters = &.{"decmpfs"},
+    });
+    const run_decmpfs_tests = b.addRunArtifact(decmpfs_tests);
+    const decmpfs_test_step = b.step("test-decmpfs", "Run focused Apple decmpfs tests");
+    decmpfs_test_step.dependOn(&run_decmpfs_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1204,6 +1212,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lzfse_diff.addArgs(args);
     const lzfse_diff_step = b.step("run-lzfse-diff", "Validate LZFSE and LZVN streams against the optional Apple reference CLI");
     lzfse_diff_step.dependOn(&lzfse_diff.step);
+
+    const decmpfs_diff = b.addSystemCommand(&.{ "python3", "tools/decmpfs/diff.py", "--cli" });
+    decmpfs_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| decmpfs_diff.addArgs(args);
+    const decmpfs_diff_step = b.step("run-decmpfs-diff", "Validate Apple decmpfs wrappers against Python zlib and optional Apple LZFSE");
+    decmpfs_diff_step.dependOn(&decmpfs_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

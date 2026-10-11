@@ -29,6 +29,7 @@ pub const xpress = @import("xpress.zig");
 pub const lzms = @import("lzms.zig");
 pub const wof = @import("wof.zig");
 pub const lzfse = @import("lzfse.zig");
+pub const decmpfs = @import("decmpfs.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -975,6 +976,19 @@ pub const decodeLzvnAlloc = lzfse.decodeLzvnAlloc;
 pub const decodeLzvnAllocLimited = lzfse.decodeLzvnAllocLimited;
 pub const decodeLzvnInto = lzfse.decodeLzvnInto;
 pub const decodeLzvnIntoWithPrefix = lzfse.decodeLzvnIntoWithPrefix;
+
+pub const DecmpfsError = decmpfs.Error;
+pub const DecmpfsCompressionType = decmpfs.CompressionType;
+pub const DecmpfsHeader = decmpfs.Header;
+pub const DecmpfsResourceLayout = decmpfs.ResourceLayout;
+pub const DecmpfsResourceFork = decmpfs.ResourceFork;
+pub const DecmpfsResourceChunk = decmpfs.ResourceChunk;
+pub const DecmpfsArchive = decmpfs.Archive;
+pub const decmpfsMagic = decmpfs.magic;
+pub const decmpfsHeaderSize = decmpfs.headerSize;
+pub const decmpfsBlockSize = decmpfs.blockSize;
+pub const parseDecmpfsHeader = decmpfs.parseHeader;
+pub const parseDecmpfs = decmpfs.parse;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -2939,6 +2953,7 @@ test {
     _ = lzo1x;
     _ = lzop;
     _ = seven_zip;
+    _ = decmpfs;
 }
 
 test "root 7z exports create list and extract Copy archives" {

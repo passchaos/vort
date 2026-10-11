@@ -18,6 +18,7 @@ const xpress_cli = @import("cli/xpress.zig");
 const lzms_cli = @import("cli/lzms.zig");
 const wof_cli = @import("cli/wof.zig");
 const lzfse_cli = @import("cli/lzfse.zig");
+const decmpfs_cli = @import("cli/decmpfs.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
@@ -164,6 +165,12 @@ pub fn main(init: std.process.Init) !void {
         try lzfse_cli.decode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-lzfse-file")) {
         try lzfse_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-decmpfs")) {
+        try decmpfs_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-decmpfs")) {
+        try decmpfs_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-decmpfs-range")) {
+        try decmpfs_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2338,6 +2345,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-lzfse-file <in> <out> [block_size] [lzvn|stored]
         \\  decode-lzfse-file <in> <out> [max_output]
         \\  inspect-lzfse-file <path> [max_output]
+        \\  inspect-decmpfs <xattr> [resource|-]
+        \\  decode-decmpfs <xattr> <resource|-> <out> [max_output]
+        \\  decode-decmpfs-range <xattr> <resource|-> <out> <offset> <length>
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

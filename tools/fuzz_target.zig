@@ -226,6 +226,57 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (data.len >= 2) {
+        const xattr_len = @min(
+            @as(usize, std.mem.readInt(u16, data[0..2], .little)),
+            data.len - 2,
+        );
+        const xattr = data[2..][0..xattr_len];
+        const resource_bytes = data[2 + xattr_len ..];
+        const resource: ?[]const u8 = if (resource_bytes.len == 0)
+            null
+        else
+            resource_bytes;
+        if (vort.parseDecmpfs(xattr, resource)) |archive| {
+            if (archive.decodeAllocLimited(allocator, 1 << 20)) |decoded| {
+                allocator.free(decoded);
+            } else |err| switch (err) {
+                error.InvalidDecmpfs,
+                error.UnsupportedDecmpfsType,
+                error.InvalidMagic,
+                error.TruncatedFrame,
+                error.TrailingData,
+                error.IntegerOverflow,
+                error.RangeOutOfBounds,
+                error.OutputLimitExceeded,
+                error.OutputTooSmall,
+                error.SizeMismatch,
+                error.BadZlibHeader,
+                error.NeedDictionary,
+                error.ChecksumMismatch,
+                error.InvalidDeflateBlockType,
+                error.StoredLengthMismatch,
+                error.InvalidHuffmanCode,
+                error.InvalidDynamicBlockHeader,
+                error.InvalidMatch,
+                error.UnsupportedDeflateFeature,
+                error.InvalidLzfseStream,
+                error.InvalidLzvnStream,
+                => {},
+                else => return err,
+            }
+        } else |err| switch (err) {
+            error.InvalidDecmpfs,
+            error.UnsupportedDecmpfsType,
+            error.MissingDecmpfsResourceFork,
+            error.InvalidMagic,
+            error.TruncatedFrame,
+            error.TrailingData,
+            error.IntegerOverflow,
+            => {},
+            else => return err,
+        }
+    }
     if (vort.parseZchunkHeader(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidZchunk,
@@ -806,6 +857,19 @@ pub fn main(init: std.process.Init) !void {
     const wof_len = try base64.decode(wof[5..], wof_text);
     try fuzzOne(init.gpa, wof[0 .. wof_len + 5]);
 
+    const decmpfs_text = vort.fuzz.decmpfs_fixture_base64;
+    const decmpfs = try init.gpa.alloc(
+        u8,
+        2 + 16 + base64.calcSizeUpperBound(decmpfs_text.len),
+    );
+    defer init.gpa.free(decmpfs);
+    std.mem.writeInt(u16, decmpfs[0..2], 16, .little);
+    std.mem.writeInt(u32, decmpfs[2..6], vort.decmpfsMagic, .little);
+    std.mem.writeInt(u32, decmpfs[6..10], @intFromEnum(vort.DecmpfsCompressionType.lzvn_resource), .little);
+    std.mem.writeInt(u64, decmpfs[10..18], vort.fuzz.decmpfs_fixture_decoded_size, .little);
+    const decmpfs_len = try base64.decode(decmpfs[18..], decmpfs_text);
+    try fuzzOne(init.gpa, decmpfs[0 .. 18 + decmpfs_len]);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -821,7 +885,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 4,
+        samples.len + 5,
         data.len,
     });
     try stdout.flush();

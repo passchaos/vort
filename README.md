@@ -111,6 +111,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   reconstruction, bounded/caller-owned APIs, deterministic LZVN-or-stored block
   writing, strict stream termination, and bidirectional Apple reference
   interoperability;
+- pure Zig Apple `decmpfs` transparent-file decoding for inline types 1/3/7/9/11
+  and resource-fork types 4/8/12, with strict 16-byte xattr headers, zlib
+  resource descriptors, Apple LZVN/LZFSE offset tables, stored-block markers,
+  bounded whole-file and 64 KiB-aware range decoding, a pinned `ditto` resource
+  fork, fuzzing, and Python zlib plus Apple LZFSE interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded
