@@ -32,6 +32,9 @@ jobs:
       - name: Install pinned LZNT1 reference
         run: python3 -m pip install --break-system-packages lznt1==0.2
 
+      - name: Install pinned XPRESS reference
+        run: python3 -m pip install --break-system-packages xpress-lz77==1.0.1
+
       - name: Check formatting
         run: zig fmt --check build.zig build.zig.zon src examples bench tools
 

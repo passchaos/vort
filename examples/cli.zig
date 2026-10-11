@@ -14,6 +14,7 @@ const filters_cli = @import("cli/filters.zig");
 const hadoop_lzo_cli = @import("cli/hadoop_lzo.zig");
 const lz4_legacy_cli = @import("cli/lz4_legacy.zig");
 const lznt1_cli = @import("cli/lznt1.zig");
+const xpress_cli = @import("cli/xpress.zig");
 const lzfse_cli = @import("cli/lzfse.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
@@ -132,6 +133,12 @@ pub fn main(init: std.process.Init) !void {
         try lznt1_cli.decode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-lznt1-file")) {
         try lznt1_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-xpress-plain-file")) {
+        try xpress_cli.encodePlain(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-xpress-plain-file")) {
+        try xpress_cli.decodePlain(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-xpress-plain-file")) {
+        try xpress_cli.inspectPlain(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzfse-file")) {
         try lzfse_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzfse-file")) {
@@ -2262,6 +2269,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-lznt1-file <in> <out> [marker|no-marker]
         \\  decode-lznt1-file <in> <out> [max_output]
         \\  inspect-lznt1-file <path> [max_output]
+        \\  encode-xpress-plain-file <in> <out>
+        \\  decode-xpress-plain-file <in> <out> [max_output]
+        \\  inspect-xpress-plain-file <path> [max_output]
         \\  encode-lzfse-file <in> <out> [block_size] [lzvn|stored]
         \\  decode-lzfse-file <in> <out> [max_output]
         \\  inspect-lzfse-file <path> [max_output]

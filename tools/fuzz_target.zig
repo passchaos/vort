@@ -95,6 +95,17 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.decodeXpressPlainAllocLimited(allocator, data, 1 << 20)) |decoded| {
+        allocator.free(decoded);
+    } else |err| switch (err) {
+        error.InvalidXpress,
+        error.InvalidMatch,
+        error.TruncatedFrame,
+        error.IntegerOverflow,
+        error.OutputLimitExceeded,
+        => {},
+        else => return err,
+    }
     if (vort.decodeLzfseAllocLimited(allocator, data, 1 << 20)) |decoded| {
         allocator.free(decoded);
     } else |err| switch (err) {

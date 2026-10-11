@@ -184,6 +184,14 @@ pub fn build(b: *std.Build) void {
     const run_lznt1_tests = b.addRunArtifact(lznt1_tests);
     const lznt1_test_step = b.step("test-lznt1", "Run focused Windows LZNT1 codec tests");
     lznt1_test_step.dependOn(&run_lznt1_tests.step);
+    const xpress_tests = b.addTest(.{
+        .name = "vort-xpress-tests",
+        .root_module = tests_mod,
+        .filters = &.{"XPRESS plain"},
+    });
+    const run_xpress_tests = b.addRunArtifact(xpress_tests);
+    const xpress_test_step = b.step("test-xpress", "Run focused Windows XPRESS codec tests");
+    xpress_test_step.dependOn(&run_xpress_tests.step);
     const lzfse_tests = b.addTest(.{
         .name = "vort-lzfse-tests",
         .root_module = tests_mod,
@@ -1134,6 +1142,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lznt1_diff.addArgs(args);
     const lznt1_diff_step = b.step("run-lznt1-diff", "Validate Windows LZNT1 against the optional Python reference");
     lznt1_diff_step.dependOn(&lznt1_diff.step);
+
+    const xpress_diff = b.addSystemCommand(&.{ "python3", "tools/xpress/diff.py", "--cli" });
+    xpress_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| xpress_diff.addArgs(args);
+    const xpress_diff_step = b.step("run-xpress-diff", "Validate Windows XPRESS plain against the optional Rust/Python reference");
+    xpress_diff_step.dependOn(&xpress_diff.step);
 
     const lzfse_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/diff.py", "--cli" });
     lzfse_diff.addArtifactArg(cli_exe);
@@ -4892,6 +4906,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(hadoop_lz4_diff_step);
     ci_smoke_step.dependOn(lz4_legacy_diff_step);
     ci_smoke_step.dependOn(lznt1_diff_step);
+    ci_smoke_step.dependOn(xpress_diff_step);
     ci_smoke_step.dependOn(lzfse_diff_step);
     ci_smoke_step.dependOn(zchunk_diff_step);
     ci_smoke_step.dependOn(squashfs_diff_step);
