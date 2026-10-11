@@ -264,6 +264,14 @@ pub fn build(b: *std.Build) void {
     const run_xar_tests = b.addRunArtifact(xar_tests);
     const xar_test_step = b.step("test-xar", "Run focused Apple XAR tests");
     xar_test_step.dependOn(&run_xar_tests.step);
+    const zfs_compression_tests = b.addTest(.{
+        .name = "vort-zfs-compression-tests",
+        .root_module = tests_mod,
+        .filters = &.{"ZFS"},
+    });
+    const run_zfs_compression_tests = b.addRunArtifact(zfs_compression_tests);
+    const zfs_compression_test_step = b.step("test-zfs-compression", "Run focused ZFS block compression tests");
+    zfs_compression_test_step.dependOn(&run_zfs_compression_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1268,6 +1276,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| xar_diff.addArgs(args);
     const xar_diff_step = b.step("run-xar-diff", "Validate Apple XAR against optional libarchive and 7-Zip");
     xar_diff_step.dependOn(&xar_diff.step);
+
+    const zfs_compression_diff = b.addSystemCommand(&.{ "python3", "tools/zfs/diff.py", "--cli" });
+    zfs_compression_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| zfs_compression_diff.addArgs(args);
+    const zfs_compression_diff_step = b.step("run-zfs-compression-diff", "Validate ZFS block codecs against optional OpenZFS and system codec references");
+    zfs_compression_diff_step.dependOn(&zfs_compression_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

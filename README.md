@@ -130,6 +130,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   TOC and per-entry SHA-1/MD5/SHA-256/SHA-512 verification, explicit heap and
   dictionary limits, a pinned Apple `xar` fixture, fuzzing, and bidirectional
   libarchive plus 7-Zip interoperability;
+- pure Zig ZFS on-disk block compression support for uncompressed/empty,
+  LZJB, gzip-1...9, ZLE, ZFS-LZ4, and ZFS-Zstd, including physical-block
+  padding semantics, Zstd level/version metadata, deterministic writers,
+  a pinned OpenZFS LZJB fixture, fuzzing, and bidirectional OpenZFS plus system
+  codec differentials;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded

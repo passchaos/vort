@@ -17,6 +17,8 @@ pub const decmpfs_fixture_base64 = @embedFile("decmpfs/testdata/ditto-type8-200k
 pub const decmpfs_fixture_decoded_size: usize = 200_000;
 pub const dmg_fixture_base64 = @embedFile("dmg/testdata/hdiutil-hfs-xattrs.dmg.b64");
 pub const xar_fixture_base64 = @embedFile("xar/testdata/apple-xar-bzip2.xar.b64");
+pub const zfs_lzjb_fixture_base64 = @embedFile("zfs/testdata/openzfs-lzjb.bin.b64");
+pub const zfs_lzjb_fixture_decoded_size: usize = 11_700;
 
 pub const CorpusStats = struct {
     cases: usize = 0,

@@ -364,6 +364,25 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedXarError(err)) return err;
     }
+    if (data.len >= 5) {
+        const algorithm = std.enums.fromInt(
+            vort.ZfsCompressionAlgorithm,
+            data[0] % 17,
+        ) orelse unreachable;
+        const expected_size: usize = std.mem.readInt(u32, data[1..5], .little);
+        if (expected_size <= 1 << 20) {
+            if (vort.decodeZfsBlockAllocExactSize(
+                allocator,
+                algorithm,
+                data[5..],
+                expected_size,
+            )) |decoded| {
+                allocator.free(decoded);
+            } else |err| {
+                if (!isExpectedZfsCompressionError(err)) return err;
+            }
+        }
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -963,6 +982,22 @@ pub fn main(init: std.process.Init) !void {
     const xar_len = try base64.decode(xar, xar_text);
     try fuzzOne(init.gpa, xar[0..xar_len]);
 
+    const zfs_text = vort.fuzz.zfs_lzjb_fixture_base64;
+    const zfs_lzjb = try init.gpa.alloc(
+        u8,
+        5 + base64.calcSizeUpperBound(zfs_text.len),
+    );
+    defer init.gpa.free(zfs_lzjb);
+    zfs_lzjb[0] = @intFromEnum(vort.ZfsCompressionAlgorithm.lzjb);
+    std.mem.writeInt(
+        u32,
+        zfs_lzjb[1..5],
+        vort.fuzz.zfs_lzjb_fixture_decoded_size,
+        .little,
+    );
+    const zfs_lzjb_len = try base64.decode(zfs_lzjb[5..], zfs_text);
+    try fuzzOne(init.gpa, zfs_lzjb[0 .. 5 + zfs_lzjb_len]);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -978,7 +1013,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 8,
+        samples.len + 9,
         data.len,
     });
     try stdout.flush();
@@ -1085,6 +1120,38 @@ fn isExpectedXarError(err: anyerror) bool {
         error.InvalidDynamicBlockHeader,
         error.InvalidMatch,
         error.UnsupportedDeflateFeature,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedZfsCompressionError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidZfsBlock,
+        error.UnsupportedZfsCompression,
+        error.IncompressibleZfsBlock,
+        error.InvalidLzjbStream,
+        error.InvalidZleStream,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.TrailingData,
+        error.ChecksumMismatch,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.RangeOutOfBounds,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.BadZlibHeader,
+        error.NeedDictionary,
+        error.InvalidDeflateBlockType,
+        error.StoredLengthMismatch,
+        error.InvalidHuffmanCode,
+        error.InvalidDynamicBlockHeader,
+        error.InvalidMatch,
+        error.UnsupportedDeflateFeature,
+        error.UnsupportedZstdFeature,
+        error.CorruptFrame,
         => true,
         else => false,
     };

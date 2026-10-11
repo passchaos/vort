@@ -22,6 +22,7 @@ const decmpfs_cli = @import("cli/decmpfs.zig");
 const dmg_cli = @import("cli/dmg.zig");
 const pbzx_cli = @import("cli/pbzx.zig");
 const xar_cli = @import("cli/xar.zig");
+const zfs_cli = @import("cli/zfs.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
@@ -196,6 +197,12 @@ pub fn main(init: std.process.Init) !void {
         try xar_cli.extract(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-xar-file")) {
         try xar_cli.encodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-zfs-block")) {
+        try zfs_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-zfs-block")) {
+        try zfs_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-zfs-block")) {
+        try zfs_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2384,6 +2391,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  inspect-xar <path>
         \\  extract-xar-entry <in> <out> <archive_path> [max_output]
         \\  encode-xar-file <in> <out> <archive_path> <auto|copy|zlib|bzip2|lzma|xz> [none|sha1|md5|sha256|sha512]
+        \\  inspect-zfs-block <in> <algorithm>
+        \\  decode-zfs-block <in> <out> <algorithm> <decoded_size>
+        \\  encode-zfs-block <in> <out> <algorithm> [zstd_level]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

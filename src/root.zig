@@ -34,6 +34,7 @@ pub const apple_adc = @import("apple_adc.zig");
 pub const dmg = @import("dmg.zig");
 pub const pbzx = @import("pbzx.zig");
 pub const xar = @import("xar.zig");
+pub const zfs = @import("zfs.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1060,6 +1061,22 @@ pub const parseXarAlloc = xar.parseAlloc;
 pub const encodeXarAlloc = xar.encodeAlloc;
 pub const encodeXarAppend = xar.encodeAppend;
 pub const encodeXarInto = xar.encodeInto;
+
+pub const ZfsCompressionError = zfs.Error;
+pub const ZfsCompressionAlgorithm = zfs.Algorithm;
+pub const ZfsCompressionEncodeOptions = zfs.EncodeOptions;
+pub const ZfsZstdMetadata = zfs.ZstdMetadata;
+pub const encodeZfsLzjbAlloc = zfs.encodeLzjbAlloc;
+pub const encodeZfsLzjbAppend = zfs.encodeLzjbAppend;
+pub const decodeZfsLzjbAllocExactSize = zfs.decodeLzjbAllocExactSize;
+pub const decodeZfsLzjbIntoExactSize = zfs.decodeLzjbIntoExactSize;
+pub const encodeZfsZleAlloc = zfs.encodeZleAlloc;
+pub const encodeZfsZleAppend = zfs.encodeZleAppend;
+pub const decodeZfsZleAllocExactSize = zfs.decodeZleAllocExactSize;
+pub const decodeZfsZleIntoExactSize = zfs.decodeZleIntoExactSize;
+pub const encodeZfsBlockAlloc = zfs.encodeBlockAlloc;
+pub const decodeZfsBlockAllocExactSize = zfs.decodeBlockAllocExactSize;
+pub const parseZfsZstdMetadata = zfs.parseZstdMetadata;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3029,6 +3046,7 @@ test {
     _ = dmg;
     _ = pbzx;
     _ = xar;
+    _ = zfs;
 }
 
 test "root 7z exports create list and extract Copy archives" {
