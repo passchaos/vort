@@ -344,6 +344,14 @@ pub fn build(b: *std.Build) void {
     const run_gcz_tests = b.addRunArtifact(gcz_tests);
     const gcz_test_step = b.step("test-gcz", "Run focused Dolphin GCZ image tests");
     gcz_test_step.dependOn(&run_gcz_tests.step);
+    const wia_tests = b.addTest(.{
+        .name = "vort-wia-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "WIA", "RVZ" },
+    });
+    const run_wia_tests = b.addRunArtifact(wia_tests);
+    const wia_test_step = b.step("test-wia", "Run focused Dolphin WIA/RVZ image tests");
+    wia_test_step.dependOn(&run_wia_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1408,6 +1416,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| gcz_diff.addArgs(args);
     const gcz_diff_step = b.step("run-gcz-diff", "Validate GCZ images against optional DolphinTool");
     gcz_diff_step.dependOn(&gcz_diff.step);
+
+    const wia_diff = b.addSystemCommand(&.{ "python3", "tools/wia/diff.py", "--cli" });
+    wia_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| wia_diff.addArgs(args);
+    const wia_diff_step = b.step("run-wia-diff", "Validate WIA/RVZ raw-data images against optional DolphinTool");
+    wia_diff_step.dependOn(&wia_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

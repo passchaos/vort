@@ -32,6 +32,7 @@ const vhdx_cli = @import("cli/vhdx.zig");
 const cso_cli = @import("cli/cso.zig");
 const dax_cli = @import("cli/dax.zig");
 const gcz_cli = @import("cli/gcz.zig");
+const wia_cli = @import("cli/wia.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
@@ -284,6 +285,22 @@ pub fn main(init: std.process.Init) !void {
         try gcz_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-gcz")) {
         try gcz_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-wia") or
+        std.mem.eql(u8, command, "inspect-rvz"))
+    {
+        try wia_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-wia") or
+        std.mem.eql(u8, command, "decode-rvz"))
+    {
+        try wia_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-wia-range") or
+        std.mem.eql(u8, command, "decode-rvz-range"))
+    {
+        try wia_cli.decodeRange(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-wia")) {
+        try wia_cli.encodeWia(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-rvz")) {
+        try wia_cli.encodeRvz(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2511,6 +2528,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-gcz <in> <out> [max_output]
         \\  decode-gcz-range <in> <out> <offset> <length>
         \\  encode-gcz <in> <out> <auto|raw|zlib> [block_size] [level] [sub_type]
+        \\  inspect-wia|inspect-rvz <image>
+        \\  decode-wia|decode-rvz <in> <out> [max_output]
+        \\  decode-wia-range|decode-rvz-range <in> <out> <offset> <length>
+        \\  encode-wia <in> <out> <none|purge|bzip2|lzma|lzma2> [chunk_size] [level]
+        \\  encode-rvz <in> <out> <none|bzip2|lzma|lzma2|zstd> [chunk_size] [level]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

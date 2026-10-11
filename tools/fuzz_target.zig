@@ -594,6 +594,35 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedGczError(err)) return err;
     }
+    if (vort.parseWiaAlloc(allocator, data, .{
+        .max_header2_bytes = 4096,
+        .max_raw_entries = 4096,
+        .max_group_entries = 4096,
+        .max_chunk_size = 1 << 20,
+        .max_metadata_bytes = 1 << 20,
+        .max_group_stored_bytes = 2 << 20,
+        .max_dictionary_size = 1 << 20,
+    })) |archive_value| {
+        var archive = archive_value;
+        defer archive.deinit();
+        const logical_size = std.math.cast(
+            usize,
+            archive.header1.logical_size,
+        ) orelse 0;
+        const length = @min(logical_size, 4096);
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            length,
+            length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedWiaError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedWiaError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -1315,6 +1344,22 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(gcz);
         try fuzzOne(init.gpa, gcz);
     }
+    inline for (.{
+        .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
+        .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },
+    }) |case| {
+        const wia = try vort.encodeWiaAlloc(
+            init.gpa,
+            "WIA RVZ fuzz target valid group\n" ** 128,
+            .{
+                .container = case[0],
+                .compression = case[1],
+                .chunk_size = case[2],
+            },
+        );
+        defer init.gpa.free(wia);
+        try fuzzOne(init.gpa, wia);
+    }
 
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
@@ -1331,7 +1376,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 27,
+        samples.len + 29,
         data.len,
     });
     try stdout.flush();
@@ -1716,6 +1761,43 @@ fn isExpectedGczError(err: anyerror) bool {
         error.OutputLimitExceeded,
         error.OutputTooSmall,
         error.TrailingData,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedWiaError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidWia,
+        error.UnsupportedWiaFeature,
+        error.UnsupportedWiaCodec,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.ChecksumMismatch,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.TrailingData,
+        error.InvalidBzip2Header,
+        error.InvalidBzip2Stream,
+        error.UnsupportedBzip2Feature,
+        error.InvalidLzmaHeader,
+        error.InvalidLzmaStream,
+        error.UnsupportedLzmaFeature,
+        error.InvalidLzmaOptions,
+        error.InvalidXzHeader,
+        error.InvalidXzStream,
+        error.UnsupportedXzFeature,
+        error.UnsupportedZstdFeature,
+        error.InvalidMatch,
+        error.InvalidHuffmanCode,
+        error.NeedDictionary,
+        error.DuplicateDictionaryId,
+        error.InvalidDictionaryMetadata,
         => true,
         else => false,
     };

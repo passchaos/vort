@@ -18093,3 +18093,13 @@ reuse, so production keeps the simpler independently owned plans.
   and DolphinTool conversion cover both directions. Streaming file I/O,
   parallel encoding, and deeper ratio/throughput tuning remain follow-up work.
   See `docs/formats/gcz.md`.
+
+- Added a pure-Zig WIA/RVZ raw-data baseline. Shared parsing verifies both
+  SHA-1-protected headers, version/chunk geometry, compressed metadata tables,
+  ordered raw extents, group indexes, limits, and all supported codec streams.
+  WIA supports none/purge/Bzip2/LZMA/LZMA2; RVZ adds Zstandard, per-group raw
+  fallback, zero groups, and junk-packing decode. The deterministic writer
+  emits all ten valid raw-data combinations. Pinned current-Dolphin fixtures,
+  fuzzing, and bidirectional DolphinTool conversion cover the implementation.
+  Wii partition entries and writer-side junk packing remain explicit follow-up
+  work rather than silently degrading correctness. See `docs/formats/wia-rvz.md`.

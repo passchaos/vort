@@ -44,6 +44,7 @@ pub const vhdx = @import("vhdx.zig");
 pub const cso = @import("cso.zig");
 pub const dax = @import("dax.zig");
 pub const gcz = @import("gcz.zig");
+pub const wia = @import("wia.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1201,6 +1202,20 @@ pub const gczMagic = gcz.magic;
 pub const parseGczHeader = gcz.parseHeader;
 pub const parseGcz = gcz.parse;
 pub const encodeGczAlloc = gcz.encodeAlloc;
+
+pub const WiaError = wia.Error;
+pub const WiaContainer = wia.Container;
+pub const WiaCompression = wia.Compression;
+pub const WiaHeader1 = wia.Header1;
+pub const WiaHeader2 = wia.Header2;
+pub const WiaRawEntry = wia.RawEntry;
+pub const WiaGroupEntry = wia.GroupEntry;
+pub const WiaArchive = wia.Archive;
+pub const WiaOpenOptions = wia.OpenOptions;
+pub const WiaEncodeOptions = wia.EncodeOptions;
+pub const parseWiaHeader1 = wia.parseHeader1;
+pub const parseWiaAlloc = wia.parseAlloc;
+pub const encodeWiaAlloc = wia.encodeAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3180,6 +3195,7 @@ test {
     _ = cso;
     _ = dax;
     _ = gcz;
+    _ = wia;
 }
 
 test "root 7z exports create list and extract Copy archives" {

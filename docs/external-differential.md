@@ -25,6 +25,7 @@ zig build run-vhdx-diff
 zig build run-cso-diff
 zig build run-dax-diff
 zig build run-gcz-diff
+zig build run-wia-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
@@ -99,6 +100,13 @@ Vort. It also covers partial tails, bounded ranges, stored-payload Adler-32,
 and malformed pointers. When `dolphin-tool` is installed, all Vort writer modes
 are converted back to ISO and DolphinTool creates a fresh GCZ for Vort. Supply
 an explicit binary with `-- --dolphin-tool /path/to/dolphin-tool`.
+
+The WIA/RVZ differential always checks ten Vort raw-data writer modes across
+none, purge, Bzip2, LZMA, LZMA2, and Zstandard. Pinned current-Dolphin WIA
+LZMA2 and RVZ Zstandard files preserve external coverage. With DolphinTool, all
+ten Vort images are converted byte-exactly back to ISO, while Vort decodes four
+fresh WIA codecs, RVZ Zstandard, and a junk-packed RVZ. Select an explicit tool
+with `-- --dolphin-tool /path/to/dolphin-tool`.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,
