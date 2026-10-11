@@ -430,6 +430,32 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("lzma_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "decode-microlzma-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const expected_size_text = args.next() orelse return error.MissingCorpusPath;
+        const expected_size = try std.fmt.parseInt(usize, expected_size_text, 10);
+        const dictionary_size = if (args.next()) |text|
+            try std.fmt.parseInt(u32, text, 10)
+        else
+            8 * 1024 * 1024;
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(8 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded = try vort.decodeMicroLzmaAllocLimited(
+            init.gpa,
+            compressed,
+            expected_size,
+            dictionary_size,
+            12 * 1024 * 1024,
+        );
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("microlzma_compressed_bytes={d} decoded_bytes={d} dictionary={d} path={s}\n", .{
+            compressed.len,
+            decoded.len,
+            dictionary_size,
+            output_path,
+        });
     } else if (std.mem.eql(u8, command, "size-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -2427,6 +2453,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode deterministic LZMA-Alone data
         \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]
         \\                              Decode an LZMA-Alone stream with explicit limits
+        \\  decode-microlzma-file <in> <out> <decoded_size> [dictionary]
+        \\                              Decode an exact-size raw MicroLZMA stream
         \\  size-lzma-file <path> [max_output]
         \\                              Decode and report an LZMA-Alone stream's size
         \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters]

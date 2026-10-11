@@ -126,6 +126,29 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
             else => return err,
         }
     }
+    if (data.len >= 3) {
+        const expected_size: usize = std.mem.readInt(u16, data[0..2], .little);
+        const dictionary_size: u32 = @as(u32, 4096) << @intCast(@min(data[2] & 0x0f, 11));
+        if (vort.decodeMicroLzmaAllocLimited(
+            allocator,
+            data[3..],
+            expected_size,
+            dictionary_size,
+            1 << 20,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| switch (err) {
+            error.InvalidLzmaHeader,
+            error.InvalidLzmaStream,
+            error.TruncatedFrame,
+            error.TrailingData,
+            error.SizeMismatch,
+            error.OutputLimitExceeded,
+            error.IntegerOverflow,
+            => {},
+            else => return err,
+        }
+    }
     if (data.len >= 2) {
         const expected_size: usize = std.mem.readInt(u16, data[0..2], .little);
         if (vort.decodeLzmsAllocLimited(
@@ -717,6 +740,17 @@ pub fn main(init: std.process.Init) !void {
     const esd_len = try base64.decode(esd, esd_text);
     try fuzzOne(init.gpa, esd[0..esd_len]);
 
+    const micro_text = vort.fuzz.microlzma_fixture_base64;
+    const micro = try init.gpa.alloc(
+        u8,
+        3 + base64.calcSizeUpperBound(micro_text.len),
+    );
+    defer init.gpa.free(micro);
+    std.mem.writeInt(u16, micro[0..2], vort.fuzz.microlzma_fixture_decoded_size, .little);
+    micro[2] = 3; // 4 KiB << 3 = 32 KiB dictionary.
+    const micro_len = try base64.decode(micro[3..], micro_text);
+    try fuzzOne(init.gpa, micro[0 .. micro_len + 3]);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -732,7 +766,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 2,
+        samples.len + 3,
         data.len,
     });
     try stdout.flush();

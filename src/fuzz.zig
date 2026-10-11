@@ -9,6 +9,8 @@ const lz77 = @import("lz77.zig");
 pub const lzms_raw_fixture_base64 = @embedFile("lzms/testdata/lzms-small.bin.b64");
 pub const lzms_raw_fixture_decoded_size = @embedFile("lzms/testdata/lzms-small.txt").len;
 pub const wim_lzms_fixture_base64 = @embedFile("wim/testdata/lzms-small.esd.b64");
+pub const microlzma_fixture_base64 = @embedFile("lzma/testdata/microlzma-small.bin.b64");
+pub const microlzma_fixture_decoded_size = @embedFile("lzms/testdata/lzms-small.txt").len;
 
 pub const CorpusStats = struct {
     cases: usize = 0,

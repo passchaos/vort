@@ -20,7 +20,13 @@ pub const DecodeOptions = struct {
     max_dictionary_size: usize = std.math.maxInt(usize),
 };
 
+pub const MicroDecodeOptions = struct {
+    dictionary_size: u32 = 8 * 1024 * 1024,
+    max_output_len: usize = std.math.maxInt(usize),
+};
+
 const alone_header_len: usize = 13;
+const max_lzma_dictionary_size: u32 = (1 << 30) + (1 << 29);
 
 pub fn parseHeader(input: []const u8) Error!Header {
     if (input.len < alone_header_len) return error.TruncatedFrame;
@@ -82,6 +88,97 @@ pub fn decodedSizeLimited(allocator: std.mem.Allocator, input: []const u8, max_o
     const decoded = try decodeAllocLimited(allocator, input, max_output_len);
     defer allocator.free(decoded);
     return decoded.len;
+}
+
+pub fn decodeMicroInto(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output: []u8,
+    dictionary_size: u32,
+) !void {
+    const decoded = try decodeMicroAllocWithOptions(allocator, input, output.len, .{
+        .dictionary_size = dictionary_size,
+        .max_output_len = output.len,
+    });
+    defer allocator.free(decoded);
+    @memcpy(output, decoded);
+}
+
+pub fn decodeMicroAllocExactSize(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    expected_size: usize,
+    dictionary_size: u32,
+) ![]u8 {
+    return decodeMicroAllocWithOptions(allocator, input, expected_size, .{
+        .dictionary_size = dictionary_size,
+        .max_output_len = expected_size,
+    });
+}
+
+pub fn decodeMicroAllocLimited(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    expected_size: usize,
+    dictionary_size: u32,
+    max_output_len: usize,
+) ![]u8 {
+    return decodeMicroAllocWithOptions(allocator, input, expected_size, .{
+        .dictionary_size = dictionary_size,
+        .max_output_len = max_output_len,
+    });
+}
+
+pub fn decodeMicroAllocWithOptions(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    expected_size: usize,
+    options: MicroDecodeOptions,
+) ![]u8 {
+    if (expected_size > options.max_output_len) return error.OutputLimitExceeded;
+    if (options.dictionary_size < 4096 or options.dictionary_size > max_lzma_dictionary_size)
+        return error.OutputLimitExceeded;
+    if (input.len < 5) return error.TruncatedFrame;
+    const properties = try parseProperties(~input[0]);
+    var input_reader: std.Io.Reader = .fixed(input[5..]);
+    var range_decoder = std.compress.lzma.RangeDecoder{
+        .range = std.math.maxInt(u32),
+        .code = std.mem.readInt(u32, input[1..5], .big),
+    };
+    var decoder = std.compress.lzma.Decode.init(allocator, .{
+        .lc = properties.lc,
+        .lp = properties.lp,
+        .pb = properties.pb,
+    }) catch |err| return mapInitError(err);
+    defer decoder.deinit(allocator);
+    var dictionary = CircularBuffer.init(options.dictionary_size, expected_size);
+    defer dictionary.deinit(allocator);
+    var output = std.Io.Writer.Allocating.init(allocator);
+    defer output.deinit();
+
+    while (dictionary.len < expected_size) {
+        var bytes_read: u64 = 0;
+        switch (decoder.process(
+            &input_reader,
+            &output,
+            &dictionary,
+            &range_decoder,
+            &bytes_read,
+        ) catch |err| switch (err) {
+            error.OutputLimitExceeded => return error.SizeMismatch,
+            else => |decode_error| return mapProcessError(decode_error),
+        }) {
+            .more => {},
+            .finished => return error.InvalidLzmaStream,
+        }
+    }
+
+    const decoded = try output.toOwnedSlice();
+    errdefer allocator.free(decoded);
+    if (decoded.len != expected_size) return error.SizeMismatch;
+    if (!range_decoder.isFinished()) return error.InvalidLzmaStream;
+    if (input_reader.seek != input.len - 5) return error.TrailingData;
+    return decoded;
 }
 
 pub fn decodeZipPayloadInto(
@@ -398,4 +495,74 @@ test "ZIP method 14 LZMA payload decoder uses the caller-known size" {
         ),
     );
     try std.testing.expectEqualSlices(u8, expected, &output);
+}
+
+test "MicroLZMA exact-size decoder handles pinned XZ Utils stream" {
+    const allocator = std.testing.allocator;
+    const encoded_text = @embedFile("testdata/microlzma-small.bin.b64");
+    const base64 = std.base64.standard.decoderWithIgnore(" \r\n\t");
+    const encoded = try allocator.alloc(
+        u8,
+        base64.calcSizeUpperBound(encoded_text.len),
+    );
+    defer allocator.free(encoded);
+    const encoded_len = try base64.decode(encoded, encoded_text);
+    const expected = @embedFile("../lzms/testdata/lzms-small.txt");
+    try std.testing.expectEqual(@as(u8, ~@as(u8, 0x5d)), encoded[0]);
+    const decoded = try decodeMicroAllocExactSize(
+        allocator,
+        encoded[0..encoded_len],
+        expected.len,
+        32 * 1024,
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualStrings(expected, decoded);
+    @memset(decoded, 0);
+    try decodeMicroInto(
+        allocator,
+        encoded[0..encoded_len],
+        decoded,
+        32 * 1024,
+    );
+    try std.testing.expectEqualStrings(expected, decoded);
+
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        decodeMicroAllocLimited(
+            allocator,
+            encoded[0..encoded_len],
+            expected.len,
+            32 * 1024,
+            expected.len - 1,
+        ),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        decodeMicroAllocExactSize(
+            allocator,
+            encoded[0..encoded_len],
+            expected.len,
+            1024,
+        ),
+    );
+    try std.testing.expectError(
+        error.TruncatedFrame,
+        decodeMicroAllocExactSize(allocator, encoded[0..4], expected.len, 32 * 1024),
+    );
+
+    const bad_properties = try allocator.dupe(u8, encoded[0..encoded_len]);
+    defer allocator.free(bad_properties);
+    bad_properties[0] = ~@as(u8, 0x6f);
+    try std.testing.expectError(
+        error.InvalidLzmaHeader,
+        decodeMicroAllocExactSize(allocator, bad_properties, expected.len, 32 * 1024),
+    );
+    const trailing = try allocator.alloc(u8, encoded_len + 1);
+    defer allocator.free(trailing);
+    @memcpy(trailing[0..encoded_len], encoded[0..encoded_len]);
+    trailing[encoded_len] = 0;
+    try std.testing.expectError(
+        error.TrailingData,
+        decodeMicroAllocExactSize(allocator, trailing, expected.len, 32 * 1024),
+    );
 }

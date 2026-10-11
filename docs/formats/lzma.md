@@ -1,4 +1,4 @@
-# LZMA-Alone support
+# LZMA-Alone and MicroLZMA support
 
 Vort provides dependency-free encoding and decoding for the legacy `.lzma` /
 LZMA-Alone format. It parses and emits the 13-byte properties header, validates
@@ -40,6 +40,24 @@ dictionary size, and parser mode. Allocating ZIP extraction APIs work directly;
 caller-owned extraction must use
 `zipExtractEntryIntoWithAllocator` so dictionary scratch remains explicit.
 
+MicroLZMA is a distinct raw format used by EROFS. Its first byte is the bitwise
+inverse of the usual `lc`/`lp`/`pb` property byte and replaces raw LZMA's leading
+zero range-coder byte. It has neither a dictionary-size field nor an end marker,
+so callers must provide the exact decoded size and dictionary limit out of
+band. Vort verifies the final range state and requires every compressed byte to
+be consumed; it does not treat LZMA-Alone bytes as MicroLZMA.
+
+```zig
+const decoded = try vort.decodeMicroLzmaAllocLimited(
+    allocator,
+    compressed,
+    exact_decoded_size,
+    dictionary_size,
+    max_output,
+);
+defer allocator.free(decoded);
+```
+
 The TAR composition layer also reads and writes `.tar.lzma` / `.tlz` archives
 through the same LZMA-Alone codec. Automatic detection accounts for the
 format's lack of magic by preferring a structurally valid raw TAR and requiring
@@ -52,6 +70,9 @@ CLI validation surfaces:
 zig build run -- encode-lzma-file input.bin output.lzma end-marker
 zig build run -- decode-lzma-file input.lzma output.bin 268435456 67108864
 zig build run -- size-lzma-file input.lzma 268435456
+zig build run -- decode-microlzma-file input.microlzma output.bin 1048576 32768
+zig build test-microlzma
+zig build run-microlzma-diff
 zig build run-lzma-diff
 zig build run-zip-diff
 ```
