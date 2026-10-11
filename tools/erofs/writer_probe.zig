@@ -7,12 +7,7 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     const output_path = args.next() orelse return error.MissingOutputPath;
     const compression_name = args.next() orelse "lz4";
-    const compression: vort.ErofsWriterCompression = if (std.mem.eql(u8, compression_name, "stored"))
-        .stored
-    else if (std.mem.eql(u8, compression_name, "lz4"))
-        .lz4
-    else
-        return error.InvalidBlockPlan;
+    const compression = parseCompression(compression_name) orelse return error.InvalidBlockPlan;
 
     var random: [8193]u8 = undefined;
     fillPseudoRandom(&random);
@@ -31,6 +26,14 @@ pub fn main(init: std.process.Init) !void {
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+}
+
+fn parseCompression(name: []const u8) ?vort.ErofsWriterCompression {
+    if (std.mem.eql(u8, name, "stored")) return .stored;
+    if (std.mem.eql(u8, name, "lz4")) return .lz4;
+    if (std.mem.eql(u8, name, "deflate")) return .deflate;
+    if (std.mem.eql(u8, name, "zstd")) return .zstandard;
+    return null;
 }
 
 fn fillPseudoRandom(output: []u8) void {

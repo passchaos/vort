@@ -129,7 +129,7 @@ def main() -> None:
             "small": b"inline payload",
             "link": b"etc/config",
         }
-        for mode in ("stored", "lz4"):
+        for mode in ("stored", "lz4", "deflate", "zstd"):
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
             run(args.writer, image, mode)

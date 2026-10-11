@@ -14,12 +14,7 @@ pub fn create(
     const entry_name = args.next() orelse return error.MissingCorpusPath;
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const compression: vort.ErofsWriterCompression = if (args.next()) |name|
-        if (std.mem.eql(u8, name, "stored"))
-            .stored
-        else if (std.mem.eql(u8, name, "lz4"))
-            .lz4
-        else
-            return error.InvalidBlockPlan
+        parseCompression(name) orelse return error.InvalidBlockPlan
     else
         .lz4;
     const input = try readFile(init, input_path);
@@ -34,6 +29,14 @@ pub fn create(
         "entry={s} input_bytes={d} erofs_bytes={d} compression={s} path={s}\n",
         .{ entry_name, input.len, encoded.len, @tagName(compression), output_path },
     );
+}
+
+fn parseCompression(name: []const u8) ?vort.ErofsWriterCompression {
+    if (std.mem.eql(u8, name, "stored")) return .stored;
+    if (std.mem.eql(u8, name, "lz4")) return .lz4;
+    if (std.mem.eql(u8, name, "deflate")) return .deflate;
+    if (std.mem.eql(u8, name, "zstd")) return .zstandard;
+    return null;
 }
 
 pub fn list(

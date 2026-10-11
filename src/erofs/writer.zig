@@ -1,18 +1,15 @@
 const std = @import("std");
 const core = @import("../core.zig");
-const lz4 = @import("../lz4.zig");
 const format = @import("format.zig");
 const tree = @import("writer_tree.zig");
+const writer_codec = @import("writer_codec.zig");
 
-pub const Error = core.Error || lz4.Error || tree.Error || error{InvalidErofs};
+pub const Error = core.Error || writer_codec.Error || tree.Error || error{InvalidErofs};
 
 pub const Entry = tree.Entry;
 pub const EntryKind = tree.EntryKind;
 
-pub const Compression = enum {
-    stored,
-    lz4,
-};
+pub const Compression = writer_codec.Compression;
 
 pub const Options = struct {
     compression: Compression = .stored,
@@ -24,7 +21,7 @@ pub const Options = struct {
 
 const block_size: usize = 4096;
 const block_bits: u8 = 12;
-const metadata_start = format.super_offset + format.super_base_size;
+const configuration_start = format.super_offset + format.super_base_size;
 const no_block = std.math.maxInt(u32);
 
 pub fn encodeAlloc(
@@ -48,13 +45,18 @@ pub fn encodeAlloc(
     errdefer allocator.free(image);
     @memset(image, 0);
 
-    var block_encoder: ?lz4.BlockEncoder = if (options.compression == .lz4)
-        try lz4.BlockEncoder.init(allocator)
+    var block_encoder: ?writer_codec.Encoder = if (options.compression != .stored)
+        try writer_codec.Encoder.init(allocator, options.compression)
     else
         null;
     defer if (block_encoder) |*encoder| encoder.deinit();
 
-    try writeNodes(image, &filesystem, if (block_encoder) |*encoder| encoder else null);
+    try writeNodes(
+        image,
+        &filesystem,
+        options.compression,
+        if (block_encoder) |*encoder| encoder else null,
+    );
     try writeSuperblock(image, filesystem.nodes, block_count, options);
     return image;
 }
@@ -95,7 +97,10 @@ fn planMetadata(
     filesystem: *tree.Tree,
     compression: Compression,
 ) Error!usize {
-    var cursor: usize = metadata_start;
+    var cursor = try checkedAdd(
+        configuration_start,
+        if (writer_codec.configuration(compression)) |bytes| bytes.len else 0,
+    );
     for (filesystem.nodes) |*node| {
         if (node.content().len > std.math.maxInt(u32)) return error.InvalidErofs;
         const location = try alignForward(cursor, format.inode_slot_size);
@@ -104,7 +109,7 @@ fn planMetadata(
         node.nid = location / format.inode_slot_size;
         node.start_block = no_block;
 
-        if (compression == .lz4 and node.kind == .file and node.data.len != 0) {
+        if (compression != .stored and node.kind == .file and node.data.len != 0) {
             node.layout = @intFromEnum(format.Layout.compressed_full);
             const cluster_count = try blockCount(node.data.len);
             node.compressed_indexes = try allocator.alloc(tree.Node.CompressionIndex, cluster_count);
@@ -229,7 +234,8 @@ fn assignDataBlocks(filesystem: *tree.Tree, first_data_block: usize) Error!usize
 fn writeNodes(
     image: []u8,
     filesystem: *tree.Tree,
-    block_encoder: ?*lz4.BlockEncoder,
+    compression: Compression,
+    block_encoder: ?*writer_codec.Encoder,
 ) Error!void {
     for (filesystem.nodes, 0..) |*node, node_index| {
         const layout = std.enums.fromInt(format.Layout, node.layout) orelse
@@ -240,7 +246,7 @@ fn writeNodes(
         } else {
             try writeFlatData(image, node, layout);
         }
-        try writeInode(image, filesystem.nodes, node, node_index);
+        try writeInode(image, filesystem.nodes, node, node_index, compression);
     }
 }
 
@@ -269,7 +275,7 @@ fn writeFlatData(image: []u8, node: *const tree.Node, layout: format.Layout) Err
 fn writeCompressedData(
     image: []u8,
     node: *tree.Node,
-    encoder: *lz4.BlockEncoder,
+    encoder: *writer_codec.Encoder,
 ) Error!void {
     const indexes = node.compressed_indexes orelse return error.InvalidErofs;
     for (indexes, 0..) |*index, cluster_index| {
@@ -296,6 +302,7 @@ fn writeInode(
     nodes: []const tree.Node,
     node: *const tree.Node,
     node_index: usize,
+    compression: Compression,
 ) Error!void {
     const location = node.location;
     if (try checkedAdd(location, format.inode_slot_size) > image.len)
@@ -327,7 +334,9 @@ fn writeInode(
         if (try checkedAdd(index_start, try checkedMul(node.compressed_indexes.?.len, 8)) > image.len)
             return error.InvalidErofs;
         writeU16(image, header_start + 4, 0);
-        image[header_start + 6] = @intFromEnum(format.Compression.lz4);
+        image[header_start + 6] = @intFromEnum(
+            writer_codec.algorithm(compression) orelse return error.InvalidErofs,
+        );
         image[header_start + 7] = 0;
         for (node.compressed_indexes.?, 0..) |index, cluster_index| {
             const offset = index_start + cluster_index * 8;
@@ -361,9 +370,12 @@ fn writeSuperblock(
     writeU32(image, base + 40, 0);
     writeU32(image, base + 44, 0);
     @memcpy(image[base + 64 ..][0..options.volume_name.len], options.volume_name);
-    if (options.compression == .lz4) {
-        writeU32(image, base + 80, 0x0000_0001);
-        writeU16(image, base + 84, 0xffff);
+    writeU32(image, base + 80, writer_codec.featureIncompat(options.compression));
+    writeU16(image, base + 84, writer_codec.compressionField(options.compression));
+    if (writer_codec.configuration(options.compression)) |configuration| {
+        const end = try checkedAdd(configuration_start, configuration.len);
+        if (end > image.len) return error.InvalidErofs;
+        @memcpy(image[configuration_start..end], configuration);
     }
     writeU32(image, base + 108, options.build_time);
     writeU32(image, base + 4, format.computeSuperblockChecksum(image[base..block_size]));
@@ -504,7 +516,7 @@ test "EROFS writer round trips stored trees deterministically" {
     try std.testing.expectEqualStrings("../small.txt", link);
 }
 
-test "EROFS LZ4 writer uses compressed and plain full indexes" {
+test "EROFS writer codecs use compressed and plain full indexes" {
     const archive = @import("archive.zig");
     const allocator = std.testing.allocator;
     var random: [8193]u8 = undefined;
@@ -515,52 +527,62 @@ test "EROFS LZ4 writer uses compressed and plain full indexes" {
         .{ .path = "random.bin", .data = &random },
         .{ .path = "tiny.txt", .data = "tiny" },
     };
-    const encoded = try encodeAlloc(allocator, &entries, .{
-        .compression = .lz4,
-        .volume_name = "lz4-test",
-    });
-    defer allocator.free(encoded);
-    const parsed = try archive.Archive.init(encoded);
-    try std.testing.expectEqual(@as(u32, 1), parsed.superblock.feature_incompat);
+    inline for (.{ Compression.lz4, .deflate, .zstandard }) |compression| {
+        const encoded = try encodeAlloc(allocator, &entries, .{
+            .compression = compression,
+            .volume_name = "codec-test",
+        });
+        defer allocator.free(encoded);
+        const parsed = try archive.Archive.init(encoded);
+        try std.testing.expectEqual(
+            writer_codec.featureIncompat(compression),
+            parsed.superblock.feature_incompat,
+        );
+        try std.testing.expectEqual(
+            writer_codec.compressionField(compression),
+            parsed.superblock.available_compression_algorithms,
+        );
 
-    const repeated_inode = try parsed.lookup(allocator, "repeat.bin", repeated.len, block_size);
-    try std.testing.expectEqual(format.Layout.compressed_full, repeated_inode.layout);
-    try std.testing.expectEqual(
-        @as(u16, 1),
-        format.readU16(encoded, repeated_inode.compressed_index_start) & 3,
-    );
-    const repeated_decoded = try parsed.extractByPathAllocLimited(
-        allocator,
-        "repeat.bin",
-        repeated.len,
-        block_size,
-    );
-    defer allocator.free(repeated_decoded);
-    try std.testing.expectEqualSlices(u8, repeated, repeated_decoded);
+        const repeated_inode = try parsed.lookup(allocator, "repeat.bin", repeated.len, block_size);
+        try std.testing.expectEqual(format.Layout.compressed_full, repeated_inode.layout);
+        try std.testing.expectEqual(writer_codec.algorithm(compression).?, repeated_inode.compressed_algorithms[0].?);
+        try std.testing.expectEqual(
+            @as(u16, 1),
+            format.readU16(encoded, repeated_inode.compressed_index_start) & 3,
+        );
+        const repeated_decoded = try parsed.extractByPathAllocLimited(
+            allocator,
+            "repeat.bin",
+            repeated.len,
+            block_size,
+        );
+        defer allocator.free(repeated_decoded);
+        try std.testing.expectEqualSlices(u8, repeated, repeated_decoded);
 
-    const random_inode = try parsed.lookup(allocator, "random.bin", random.len, block_size);
-    try std.testing.expectEqual(format.Layout.compressed_full, random_inode.layout);
-    try std.testing.expectEqual(
-        @as(u16, 0),
-        format.readU16(encoded, random_inode.compressed_index_start) & 3,
-    );
-    const random_decoded = try parsed.extractByPathAllocLimited(
-        allocator,
-        "random.bin",
-        random.len,
-        block_size,
-    );
-    defer allocator.free(random_decoded);
-    try std.testing.expectEqualSlices(u8, &random, random_decoded);
+        const random_inode = try parsed.lookup(allocator, "random.bin", random.len, block_size);
+        try std.testing.expectEqual(format.Layout.compressed_full, random_inode.layout);
+        try std.testing.expectEqual(
+            @as(u16, 0),
+            format.readU16(encoded, random_inode.compressed_index_start) & 3,
+        );
+        const random_decoded = try parsed.extractByPathAllocLimited(
+            allocator,
+            "random.bin",
+            random.len,
+            block_size,
+        );
+        defer allocator.free(random_decoded);
+        try std.testing.expectEqualSlices(u8, &random, random_decoded);
 
-    const tiny = try parsed.extractByPathAllocLimited(
-        allocator,
-        "tiny.txt",
-        4,
-        block_size,
-    );
-    defer allocator.free(tiny);
-    try std.testing.expectEqualStrings("tiny", tiny);
+        const tiny = try parsed.extractByPathAllocLimited(
+            allocator,
+            "tiny.txt",
+            4,
+            block_size,
+        );
+        defer allocator.free(tiny);
+        try std.testing.expectEqualStrings("tiny", tiny);
+    }
 }
 
 test "EROFS writer rejects unsafe and duplicate paths" {

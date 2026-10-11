@@ -105,10 +105,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   compact/extended inodes, flat plain/inline data, sorted directories,
   symlinks, legacy full and modern compact compression indexes, big pclusters,
   and LZ4/raw-Deflate/Zstandard extraction with explicit bounds, plus
-  deterministic compact-inode stored/LZ4 writing for regular files, nested and
-  empty directories, symlinks, inline tails, multi-block directories, and
-  per-cluster compressed-or-plain full-index selection with erofs-utils
-  interoperability;
+  deterministic compact-inode stored/LZ4/raw-Deflate/Zstandard writing for
+  regular files, nested and empty directories, symlinks, inline tails,
+  multi-block directories, compression-configuration records, and per-cluster
+  compressed-or-plain full-index selection with erofs-utils interoperability;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,

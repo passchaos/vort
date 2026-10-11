@@ -18,10 +18,12 @@ format is not LZMA-Alone; Vort does not substitute an incompatible decoder.
 The writer emits 4 KiB filesystems with compact inodes, CRC-32C-protected
 superblocks, dot-omitted sorted directories, nested and empty directories,
 symbolic links, flat plain/inline stored data, and legacy full compression
-indexes. In LZ4 mode every non-empty regular-file logical cluster independently
-uses a right-aligned `lz4_0padding` compressed physical cluster or a `PLAIN`
-fallback when compression would not reduce the payload. Identical entries and
-options produce identical images.
+indexes. LZ4, raw Deflate, and Zstandard modes encode every non-empty
+regular-file logical cluster into an independently addressable physical cluster.
+Compressed payloads are right-aligned with `lz4_0padding`; a `PLAIN` index is
+used whenever compression would not reduce the payload. Deflate and Zstandard
+images include their required superblock compression-configuration records.
+Identical entries and options produce identical images.
 
 Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,
@@ -33,17 +35,16 @@ const image = try vort.encodeErofsAlloc(allocator, &.{
     .{ .path = "etc/config", .data = "enabled=true\n" },
     .{ .path = "var/empty", .kind = .directory },
     .{ .path = "config-link", .kind = .symlink, .target = "etc/config" },
-}, .{ .compression = .lz4 });
+}, .{ .compression = .zstandard });
 defer allocator.free(image);
 ```
 
 Chunk-based files, external devices, 48-bit addressing, packed fragments,
-metaboxes, MicroLZMA, compressed tail packing, xattrs, and Deflate/Zstandard
-writing remain future work.
+metaboxes, MicroLZMA, compressed tail packing, and xattrs remain future work.
 
 ```sh
 zig build run -- list-erofs-file system.erofs
-zig build run -- create-erofs-file output.erofs path/in/image input.bin lz4
+zig build run -- create-erofs-file output.erofs path/in/image input.bin zstd
 zig build run -- extract-erofs-file system.erofs etc/config output.conf 67108864
 zig build run-erofs-diff
 ```
@@ -51,6 +52,7 @@ zig build run-erofs-diff
 CI builds a pinned `erofs-utils` reference and generates plain, compact/full
 LZ4, Deflate, and Zstandard images. `fsck.erofs` validates and extracts those
 images before Vort performs independent listing and byte-for-byte extraction.
-The same gate generates Vort stored and LZ4 images twice to prove determinism,
-self-decodes their nested tree, and has `fsck.erofs` extract their regular
-files, symlink, and empty directory.
+The same gate generates Vort stored, LZ4, raw Deflate, and Zstandard images
+twice to prove determinism, self-decodes their nested tree, and has `fsck.erofs`
+extract their regular files, incompressible `PLAIN` fallbacks, symlink, and empty
+directory.
