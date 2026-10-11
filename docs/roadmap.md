@@ -18051,12 +18051,13 @@ reuse, so production keeps the simpler independently owned plans.
   locator path resolution, and VHDX remain follow-up work. See
   `docs/formats/vhd.md`.
 
-- Added dependency-free standalone VHDX reading and deterministic
-  dynamic/fixed writing. The parser selects between redundant CRC-32C headers
+- Added dependency-free VHDX reading and deterministic
+  dynamic/fixed/differencing writing. The parser selects between redundant CRC-32C headers
   and region tables, validates required metadata GUIDs and BAT geometry, and
   exposes bounded sparse full/range reads. The writer emits deterministic
-  GUIDs, both header/region copies, a zeroed log, required metadata, interleaved
-  BAT entries, and MiB-aligned sparse or fully allocated payloads. A pinned
+  GUIDs, both header/region copies, a zeroed log, required metadata, parent
+  locators, interleaved BAT entries, shared sector bitmaps, and MiB-aligned
+  sparse, partial, or fully allocated payloads. A pinned
   QEMU 9.2 fixture plus bidirectional QEMU and 7-Zip validation cover both
-  modes. Active-log replay, differencing/sector-bitmap blocks, and in-place
-  updates remain follow-up work. See `docs/formats/vhdx.md`.
+  modes; 7-Zip additionally validates parent-sector overrides. Active-log replay
+  and in-place updates remain follow-up work. See `docs/formats/vhdx.md`.

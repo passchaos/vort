@@ -2468,10 +2468,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-vhd <image.vhd> <out> [max_output] [parent.vhd]
         \\  decode-vhd-range <image.vhd> <out> <offset> <length> [parent.vhd]
         \\  encode-vhd <in> <out> <fixed|dynamic|differencing> [block_size] [parent.vhd]
-        \\  inspect-vhdx <image.vhdx>
-        \\  decode-vhdx <image.vhdx> <out> [max_output]
-        \\  decode-vhdx-range <image.vhdx> <out> <offset> <length>
-        \\  encode-vhdx <in> <out> <dynamic|fixed> [block_size]
+        \\  inspect-vhdx <image.vhdx> [parent.vhdx]
+        \\  decode-vhdx <image.vhdx> <out> [max_output] [parent.vhdx]
+        \\  decode-vhdx-range <image.vhdx> <out> <offset> <length> [parent.vhdx]
+        \\  encode-vhdx <in> <out> <dynamic|fixed|differencing> [block_size] [parent.vhdx]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

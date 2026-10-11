@@ -67,6 +67,7 @@ def main() -> None:
     pinned = 0
     external_encode = 0
     external_decode = 0
+    parent_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-vhdx-") as temp_text:
         temp = Path(temp_text)
@@ -113,6 +114,55 @@ def main() -> None:
                 if extracted != plain:
                     raise AssertionError(f"7-Zip decode of Vort {image_type} VHDX mismatch")
                 external_encode += 1
+
+        parent_path = temp / "parent.vhdx"
+        parent_path.write_bytes(images["dynamic"].read_bytes())
+        child_plain = bytearray(plain)
+        child_plain[3 * 512 : 4 * 512] = bytes(512)
+        child_plain[2 * MIB : 3 * MIB] = bytes(
+            byte ^ 0xFF for byte in child_plain[2 * MIB : 3 * MIB]
+        )
+        child_source = temp / "child.raw"
+        child_image = temp / "child.vhdx"
+        child_output = temp / "child.vort.raw"
+        child_source.write_bytes(child_plain)
+        run(
+            args.cli,
+            "encode-vhdx",
+            child_source,
+            child_image,
+            "differencing",
+            MIB,
+            parent_path,
+        )
+        child_summary = run(args.cli, "inspect-vhdx", child_image, parent_path).stdout
+        if b"parent=true" not in child_summary:
+            raise AssertionError("Vort differencing VHDX metadata mismatch")
+        expect_failure(
+            args.cli,
+            "decode-vhdx",
+            child_image,
+            temp / "missing-parent.raw",
+            len(child_plain),
+            error_name="MissingVhdxParent",
+        )
+        malformed += 1
+        run(
+            args.cli,
+            "decode-vhdx",
+            child_image,
+            child_output,
+            len(child_plain),
+            parent_path,
+        )
+        if child_output.read_bytes() != child_plain:
+            raise AssertionError("Vort differencing VHDX round trip mismatch")
+        parent_cases += 1
+        if seven_zip is not None:
+            extracted = run(seven_zip, "e", "-so", "-tVHDX", child_image).stdout
+            if extracted != child_plain:
+                raise AssertionError("7-Zip decode of Vort differencing VHDX mismatch")
+            external_encode += 1
 
         fixture = read_fixture()
         fixture_path = temp / "qemu-pinned.vhdx"
@@ -198,7 +248,7 @@ def main() -> None:
     print(
         f"self={self_cases} pinned={pinned} qemu_img={qemu_img is not None} "
         f"seven_zip={seven_zip is not None} external_encode={external_encode} "
-        f"external_decode={external_decode} malformed={malformed}"
+        f"external_decode={external_decode} parent={parent_cases} malformed={malformed}"
     )
 
 

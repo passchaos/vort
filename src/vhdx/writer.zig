@@ -1,11 +1,13 @@
 const std = @import("std");
+const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
 
-pub const Error = format.Error || std.mem.Allocator.Error;
+pub const Error = archive_mod.Error || format.Error || std.mem.Allocator.Error;
 
 pub const ImageType = enum {
     dynamic,
     fixed,
+    differencing,
 };
 
 pub const EncodeOptions = struct {
@@ -13,6 +15,9 @@ pub const EncodeOptions = struct {
     block_size: u32 = 8 * format.mib,
     logical_sector_size: u32 = 512,
     physical_sector_size: u32 = 4096,
+    /// Required for differencing output and ignored otherwise.
+    parent: ?*const archive_mod.Archive = null,
+    parent_path: []const u8 = "parent.vhdx",
     max_bat_entries: usize = 1 << 26,
 };
 
@@ -35,7 +40,18 @@ pub fn encodeAlloc(
     const chunk_ratio_u64 = format.maximum_sectors_per_block *
         options.logical_sector_size / options.block_size;
     const chunk_ratio: usize = @intCast(chunk_ratio_u64);
-    const bat_entry_count = if (data_block_count == 0)
+    const bitmap_block_count = std.math.divCeil(
+        usize,
+        data_block_count,
+        chunk_ratio,
+    ) catch return error.IntegerOverflow;
+    const bat_entry_count = if (options.image_type == .differencing)
+        std.math.mul(
+            usize,
+            bitmap_block_count,
+            chunk_ratio + 1,
+        ) catch return error.IntegerOverflow
+    else if (data_block_count == 0)
         0
     else
         data_block_count + (data_block_count - 1) / chunk_ratio;
@@ -92,21 +108,33 @@ pub fn encodeAlloc(
         makeGuid(input, options, 3),
     );
 
-    const block = try allocator.alloc(u8, options.block_size);
-    defer allocator.free(block);
-    for (0..data_block_count) |block_index| {
-        fillBlock(input, block_index, options.block_size, block);
-        if (options.image_type == .dynamic and std.mem.allEqual(u8, block, 0))
-            continue;
-        if (output.items.len % format.mib != 0) return error.InvalidVhdx;
-        const file_offset: u64 = output.items.len;
-        const bat_index = block_index + block_index / chunk_ratio;
-        format.writeU64Le(
-            output.items,
-            bat_offset + bat_index * 8,
-            file_offset | @intFromEnum(format.PayloadState.fully_present),
+    if (options.image_type == .differencing) {
+        try appendDifferencingBlocks(
+            allocator,
+            &output,
+            input,
+            virtual_size,
+            data_block_count,
+            chunk_ratio,
+            bat_offset,
+            options,
         );
-        try output.appendSlice(allocator, block);
+    } else {
+        const block = try allocator.alloc(u8, options.block_size);
+        defer allocator.free(block);
+        for (0..data_block_count) |block_index| {
+            fillBlock(input, block_index, options.block_size, block);
+            if (options.image_type == .dynamic and std.mem.allEqual(u8, block, 0))
+                continue;
+            try appendPayloadBlock(
+                allocator,
+                &output,
+                block,
+                bat_offset,
+                block_index + block_index / chunk_ratio,
+                .fully_present,
+            );
+        }
     }
     return output.toOwnedSlice(allocator);
 }
@@ -129,6 +157,118 @@ fn validateOptions(input: []const u8, options: EncodeOptions) Error!void {
         options.logical_sector_size / options.block_size;
     if (chunk_ratio == 0 or !std.math.isPowerOfTwo(chunk_ratio))
         return error.InvalidVhdx;
+    switch (options.image_type) {
+        .dynamic, .fixed => if (options.parent != null) return error.InvalidVhdx,
+        .differencing => {
+            const parent = options.parent orelse return error.MissingVhdxParent;
+            if (parent.metadata.virtual_disk_size != virtual_size or
+                parent.metadata.logical_sector_size != options.logical_sector_size)
+                return error.MissingVhdxParent;
+            if (options.parent_path.len == 0 or options.parent_path.len > 4096)
+                return error.InvalidVhdx;
+            for (options.parent_path) |byte|
+                if (byte == 0 or byte >= 0x80) return error.UnsupportedVhdxFeature;
+        },
+    }
+}
+
+fn appendDifferencingBlocks(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    virtual_size: usize,
+    data_block_count: usize,
+    chunk_ratio: usize,
+    bat_offset: usize,
+    options: EncodeOptions,
+) Error!void {
+    const parent = options.parent.?;
+    const block = try allocator.alloc(u8, options.block_size);
+    defer allocator.free(block);
+    const bitmap = try allocator.alloc(u8, format.mib);
+    defer allocator.free(bitmap);
+    const parent_sector = try allocator.alloc(u8, options.logical_sector_size);
+    defer allocator.free(parent_sector);
+    const sectors_per_block = options.block_size / options.logical_sector_size;
+    const chunk_count = std.math.divCeil(
+        usize,
+        data_block_count,
+        chunk_ratio,
+    ) catch return error.IntegerOverflow;
+    for (0..chunk_count) |chunk_index| {
+        @memset(bitmap, 0);
+        var has_partial = false;
+        const first_block = chunk_index * chunk_ratio;
+        const end_block = @min(data_block_count, first_block + chunk_ratio);
+        for (first_block..end_block) |block_index| {
+            fillBlock(input, block_index, options.block_size, block);
+            const block_start = block_index * @as(usize, options.block_size);
+            const logical_block_bytes = @min(
+                @as(usize, options.block_size),
+                virtual_size - block_start,
+            );
+            const sector_count = logical_block_bytes / options.logical_sector_size;
+            var changed_sectors: usize = 0;
+            for (0..sector_count) |sector| {
+                const logical_offset = block_start + sector * options.logical_sector_size;
+                try parent.readRangeInto(logical_offset, parent_sector);
+                const child_sector = block[sector * options.logical_sector_size ..][0..options.logical_sector_size];
+                if (!std.mem.eql(u8, child_sector, parent_sector)) {
+                    setBitmapBit(
+                        bitmap,
+                        (block_index - first_block) * sectors_per_block + sector,
+                    );
+                    changed_sectors += 1;
+                }
+            }
+            if (changed_sectors == 0) continue;
+            const state: format.PayloadState = if (changed_sectors == sector_count)
+                .fully_present
+            else
+                .partially_present;
+            has_partial = has_partial or state == .partially_present;
+            try appendPayloadBlock(
+                allocator,
+                output,
+                block,
+                bat_offset,
+                archive_mod.payloadBatIndex(block_index, chunk_ratio),
+                state,
+            );
+        }
+        if (has_partial) {
+            try appendPayloadBlock(
+                allocator,
+                output,
+                bitmap,
+                bat_offset,
+                archive_mod.sectorBitmapBatIndex(chunk_index, chunk_ratio),
+                .fully_present,
+            );
+        }
+    }
+}
+
+fn appendPayloadBlock(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    block: []const u8,
+    bat_offset: usize,
+    bat_index: usize,
+    state: format.PayloadState,
+) Error!void {
+    if (output.items.len % format.mib != 0) return error.InvalidVhdx;
+    const file_offset: u64 = output.items.len;
+    format.writeU64Le(
+        output.items,
+        bat_offset + bat_index * 8,
+        file_offset | @intFromEnum(state),
+    );
+    try output.appendSlice(allocator, block);
+}
+
+fn setBitmapBit(bitmap: []u8, sector_index: usize) void {
+    bitmap[sector_index / 8] |= @as(u8, 1) << @intCast(sector_index % 8);
 }
 
 fn writeFileIdentifier(output: []u8) void {
@@ -203,14 +343,22 @@ fn writeMetadata(
 ) void {
     @memset(output, 0);
     @memcpy(output[0..8], "metadata");
-    format.writeU16Le(output, 10, 5);
+    format.writeU16Le(
+        output,
+        10,
+        if (options.image_type == .differencing) 6 else 5,
+    );
     var item_offset: usize = format.metadata_table_area_size;
     writeMetadataEntry(output[32..64], format.file_parameters_guid, item_offset, 8, 4);
     format.writeU32Le(output, item_offset, options.block_size);
     format.writeU32Le(
         output,
         item_offset + 4,
-        if (options.image_type == .fixed) 1 else 0,
+        switch (options.image_type) {
+            .dynamic => 0,
+            .fixed => 1,
+            .differencing => 2,
+        },
     );
     item_offset += 8;
     writeMetadataEntry(output[64..96], format.virtual_disk_size_guid, item_offset, 8, 6);
@@ -224,6 +372,21 @@ fn writeMetadata(
     item_offset += 4;
     writeMetadataEntry(output[160..192], format.physical_sector_size_guid, item_offset, 4, 6);
     format.writeU32Le(output, item_offset, options.physical_sector_size);
+    item_offset += 4;
+    if (options.image_type == .differencing) {
+        const locator_length = writeParentLocator(
+            output[item_offset..],
+            options.parent.?.header.data_write_guid,
+            options.parent_path,
+        );
+        writeMetadataEntry(
+            output[192..224],
+            format.parent_locator_guid,
+            item_offset,
+            locator_length,
+            4,
+        );
+    }
 }
 
 fn writeMetadataEntry(
@@ -247,12 +410,94 @@ fn makeGuid(
     var state = std.crypto.hash.sha2.Sha256.init(.{});
     state.update(input);
     state.update(&.{ salt, @intFromEnum(options.image_type) });
+    if (options.parent) |parent| state.update(&parent.header.data_write_guid);
     var digest: [32]u8 = undefined;
     state.final(&digest);
     var result: format.Guid = digest[0..16].*;
     result[7] = (result[7] & 0x0f) | 0x40;
     result[8] = (result[8] & 0x3f) | 0x80;
     return result;
+}
+
+fn writeParentLocator(
+    output: []u8,
+    parent_guid: format.Guid,
+    parent_path: []const u8,
+) usize {
+    const linkage_key = "parent_linkage";
+    const path_key = "relative_path";
+    var linkage_value: [38]u8 = undefined;
+    formatGuidText(parent_guid, &linkage_value);
+    const table_size: usize = 20 + 2 * 12;
+    const linkage_key_offset = table_size;
+    const linkage_value_offset = linkage_key_offset + linkage_key.len * 2;
+    const path_key_offset = linkage_value_offset + linkage_value.len * 2;
+    const path_value_offset = path_key_offset + path_key.len * 2;
+    const total = path_value_offset + parent_path.len * 2;
+    @memset(output[0..total], 0);
+    @memcpy(output[0..16], &format.parent_vhdx_guid);
+    format.writeU16Le(output, 18, 2);
+    writeParentLocatorEntry(
+        output[20..32],
+        linkage_key_offset,
+        linkage_value_offset,
+        linkage_key.len * 2,
+        linkage_value.len * 2,
+    );
+    writeParentLocatorEntry(
+        output[32..44],
+        path_key_offset,
+        path_value_offset,
+        path_key.len * 2,
+        parent_path.len * 2,
+    );
+    writeUtf16Le(output[linkage_key_offset..], linkage_key);
+    writeUtf16Le(output[linkage_value_offset..], &linkage_value);
+    writeUtf16Le(output[path_key_offset..], path_key);
+    writeUtf16Le(output[path_value_offset..], parent_path);
+    return total;
+}
+
+fn writeParentLocatorEntry(
+    output: []u8,
+    key_offset: usize,
+    value_offset: usize,
+    key_length: usize,
+    value_length: usize,
+) void {
+    format.writeU32Le(output, 0, @intCast(key_offset));
+    format.writeU32Le(output, 4, @intCast(value_offset));
+    format.writeU16Le(output, 8, @intCast(key_length));
+    format.writeU16Le(output, 10, @intCast(value_length));
+}
+
+fn writeUtf16Le(output: []u8, input: []const u8) void {
+    for (input, 0..) |byte, index| output[index * 2] = byte;
+}
+
+fn formatGuidText(raw: format.Guid, output: *[38]u8) void {
+    const canonical = [_]u8{
+        raw[3],  raw[2],  raw[1],  raw[0],
+        raw[5],  raw[4],  raw[7],  raw[6],
+        raw[8],  raw[9],  raw[10], raw[11],
+        raw[12], raw[13], raw[14], raw[15],
+    };
+    output[0] = '{';
+    output[37] = '}';
+    var out_index: usize = 1;
+    for (canonical, 0..) |byte, index| {
+        if (index == 4 or index == 6 or index == 8 or index == 10) {
+            output[out_index] = '-';
+            out_index += 1;
+        }
+        output[out_index] = hexDigit(byte >> 4);
+        output[out_index + 1] = hexDigit(byte & 0x0f);
+        out_index += 2;
+    }
+}
+
+fn hexDigit(value: u8) u8 {
+    return if (value < 10) '0' + value else 'a' + value - 10;
 }
 
 fn fillBlock(

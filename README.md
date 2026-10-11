@@ -164,11 +164,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   sector bitmaps, sparse blocks, explicit parent UUID chains, whole-image and
   random-range decoding, a pinned QEMU fixture, fuzzing, and bidirectional
   QEMU plus 7-Zip interoperability;
-- dependency-free standalone VHDX reading and deterministic dynamic/fixed
+- dependency-free VHDX reading and deterministic dynamic/fixed/differencing
   writing, with redundant CRC-32C headers and region tables, required metadata,
-  interleaved BAT entries, sparse MiB-aligned payload blocks, bounded whole and
-  random-range reads, a pinned QEMU fixture, fuzzing, and bidirectional QEMU
-  plus 7-Zip interoperability;
+  interleaved BAT entries, sparse MiB-aligned payload blocks, parent locators,
+  shared sector bitmaps, bounded whole and random-range reads, a pinned QEMU
+  fixture, fuzzing, and bidirectional QEMU plus 7-Zip interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded

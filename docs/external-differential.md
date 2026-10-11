@@ -69,10 +69,12 @@ layouts. Explicit tools use
 `-- --qemu-img <path> --seven-zip <path>`.
 
 The VHDX differential always checks dynamic/fixed round trips, redundant-copy
-and BAT corruption, and a pinned QEMU 9.2 image. With external tools, QEMU
+and BAT corruption, a differencing parent/sector-bitmap chain, and a pinned
+QEMU 9.2 image. With external tools, QEMU
 checks and extracts both Vort modes and generates both modes for Vort, while
-7-Zip independently extracts Vort output. It accepts the same explicit QEMU
-and 7-Zip arguments as the VHD differential.
+7-Zip independently extracts all three Vort modes, including parent sector
+overrides. It accepts the same explicit QEMU and 7-Zip arguments as the VHD
+differential.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

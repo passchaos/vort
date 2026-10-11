@@ -1205,6 +1205,18 @@ pub fn main(init: std.process.Init) !void {
     );
     defer init.gpa.free(vhdx);
     try fuzzOne(init.gpa, vhdx);
+    const vhdx_parent = try vort.parseVhdx(vhdx, .{});
+    const differencing_vhdx = try vort.encodeVhdxAlloc(
+        init.gpa,
+        "WHDX fuzz target valid block\n" ** 128,
+        .{
+            .image_type = .differencing,
+            .block_size = 1024 * 1024,
+            .parent = &vhdx_parent,
+        },
+    );
+    defer init.gpa.free(differencing_vhdx);
+    try fuzzOne(init.gpa, differencing_vhdx);
 
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
@@ -1221,7 +1233,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 19,
+        samples.len + 20,
         data.len,
     });
     try stdout.flush();
@@ -1520,6 +1532,7 @@ fn isExpectedVhdxError(err: anyerror) bool {
     return switch (err) {
         error.InvalidVhdx,
         error.UnsupportedVhdxFeature,
+        error.MissingVhdxParent,
         error.InvalidMagic,
         error.UnsupportedVersion,
         error.TruncatedFrame,

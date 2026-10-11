@@ -124,6 +124,78 @@ test "VHDX writer handles empty disks and 4096-byte logical sectors" {
     for (decoded[17..]) |byte| try std.testing.expectEqual(@as(u8, 0), byte);
 }
 
+test "VHDX differencing writer merges parent sectors through bitmap" {
+    const block_size = format.mib;
+    const parent_input = try allocator.alloc(u8, 3 * block_size);
+    defer allocator.free(parent_input);
+    for (parent_input, 0..) |*byte, index| byte.* = @truncate(index * 29 + index / 31);
+    const parent_encoded = try writer.encodeAlloc(allocator, parent_input, .{
+        .image_type = .dynamic,
+        .block_size = block_size,
+    });
+    defer allocator.free(parent_encoded);
+    const parent = try archive_mod.Archive.init(parent_encoded, .{});
+
+    const child_input = try allocator.dupe(u8, parent_input);
+    defer allocator.free(child_input);
+    @memset(child_input[block_size + 3 * 512 ..][0..512], 0xa5);
+    for (child_input[2 * block_size ..]) |*byte| byte.* ^= 0xff;
+    const child_encoded = try writer.encodeAlloc(allocator, child_input, .{
+        .image_type = .differencing,
+        .block_size = block_size,
+        .parent = &parent,
+    });
+    defer allocator.free(child_encoded);
+    try std.testing.expectError(
+        error.MissingVhdxParent,
+        archive_mod.Archive.init(child_encoded, .{}),
+    );
+    const child = try archive_mod.Archive.init(child_encoded, .{
+        .parent = &parent,
+    });
+    try std.testing.expect(child.metadata.has_parent);
+    try std.testing.expectEqualSlices(
+        u8,
+        &parent.header.data_write_guid,
+        &child.metadata.parent_linkage.?,
+    );
+    const bat = child.regions.bat.offset;
+    try std.testing.expectEqual(
+        @intFromEnum(format.PayloadState.not_present),
+        format.readU64Le(child_encoded, bat) & 7,
+    );
+    try std.testing.expectEqual(
+        @intFromEnum(format.PayloadState.partially_present),
+        format.readU64Le(child_encoded, bat + 8) & 7,
+    );
+    try std.testing.expectEqual(
+        @intFromEnum(format.PayloadState.fully_present),
+        format.readU64Le(child_encoded, bat + 16) & 7,
+    );
+    const bitmap_entry = format.readU64Le(
+        child_encoded,
+        bat + archive_mod.sectorBitmapBatIndex(0, child.metadata.chunk_ratio) * 8,
+    );
+    const bitmap_offset: usize = @intCast(bitmap_entry & format.bat_file_offset_mask);
+    const bitmap = child_encoded[bitmap_offset..][0..format.mib];
+    try std.testing.expect(!archive_mod.bitmapBit(bitmap, 2048 + 2));
+    try std.testing.expect(archive_mod.bitmapBit(bitmap, 2048 + 3));
+    const decoded = try child.decodeAllocLimited(allocator, child_input.len);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, child_input, decoded);
+
+    const wrong_input = [_]u8{0} ** 512;
+    const wrong_encoded = try writer.encodeAlloc(allocator, &wrong_input, .{
+        .block_size = block_size,
+    });
+    defer allocator.free(wrong_encoded);
+    const wrong_parent = try archive_mod.Archive.init(wrong_encoded, .{});
+    try std.testing.expectError(
+        error.MissingVhdxParent,
+        archive_mod.Archive.init(child_encoded, .{ .parent = &wrong_parent }),
+    );
+}
+
 test "VHDX parser rejects unsupported parents and malformed BAT offsets" {
     const input = [_]u8{'B'} ** 8192;
     const encoded = try writer.encodeAlloc(allocator, &input, .{
@@ -136,7 +208,7 @@ test "VHDX parser rejects unsupported parents and malformed BAT offsets" {
     const params_offset = archive.regions.metadata.offset + format.metadata_table_area_size;
     format.writeU32Le(patched, params_offset + 4, 2);
     try std.testing.expectError(
-        error.UnsupportedVhdxFeature,
+        error.InvalidVhdx,
         archive_mod.Archive.init(patched, .{}),
     );
 

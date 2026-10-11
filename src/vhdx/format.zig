@@ -5,6 +5,7 @@ const core = @import("../core.zig");
 pub const Error = core.Error || error{
     InvalidVhdx,
     UnsupportedVhdxFeature,
+    MissingVhdxParent,
 };
 
 pub const Guid = [16]u8;
@@ -30,6 +31,7 @@ pub const page83_guid: Guid = .{ 0xab, 0x12, 0xca, 0xbe, 0xe6, 0xb2, 0x23, 0x45,
 pub const logical_sector_size_guid: Guid = .{ 0x1d, 0xbf, 0x41, 0x81, 0x6f, 0xa9, 0x09, 0x47, 0xba, 0x47, 0xf2, 0x33, 0xa8, 0xfa, 0xab, 0x5f };
 pub const physical_sector_size_guid: Guid = .{ 0xc7, 0x48, 0xa3, 0xcd, 0x5d, 0x44, 0x71, 0x44, 0x9c, 0xc9, 0xe9, 0x88, 0x52, 0x51, 0xc5, 0x56 };
 pub const parent_locator_guid: Guid = .{ 0x2d, 0x5f, 0xd3, 0xa8, 0x0b, 0xb3, 0x4d, 0x45, 0xab, 0xf7, 0xd3, 0xd8, 0x48, 0x34, 0xab, 0x0c };
+pub const parent_vhdx_guid: Guid = .{ 0xb7, 0xef, 0x4a, 0xb0, 0x9e, 0xd1, 0x81, 0x4a, 0xb7, 0x89, 0x25, 0xb8, 0xe9, 0x44, 0x59, 0x13 };
 
 pub const PayloadState = enum(u3) {
     not_present = 0,
@@ -67,6 +69,8 @@ pub const Metadata = struct {
     physical_sector_size: u32,
     page83_id: Guid,
     leave_blocks_allocated: bool,
+    has_parent: bool,
+    parent_linkage: ?Guid,
     data_block_count: usize,
     chunk_ratio: usize,
     bat_entry_count: usize,
@@ -162,7 +166,7 @@ pub fn parseMetadata(input: []const u8, region: Region) Error!Metadata {
     var page83: ?Item = null;
     var logical_sector: ?Item = null;
     var physical_sector: ?Item = null;
-    var has_parent_locator = false;
+    var parent_locator: ?Item = null;
     for (0..entry_count) |index| {
         const entry = bytes[32 + index * 32 ..][0..32];
         var id: Guid = undefined;
@@ -198,7 +202,8 @@ pub fn parseMetadata(input: []const u8, region: Region) Error!Metadata {
             if (physical_sector != null) return error.InvalidVhdx;
             physical_sector = item;
         } else if (std.mem.eql(u8, &id, &parent_locator_guid)) {
-            has_parent_locator = true;
+            if (parent_locator != null) return error.InvalidVhdx;
+            parent_locator = item;
         } else if (flags & 4 != 0) {
             return error.UnsupportedVhdxFeature;
         }
@@ -214,9 +219,18 @@ pub fn parseMetadata(input: []const u8, region: Region) Error!Metadata {
         return error.InvalidVhdx;
     const block_size = readU32Le(bytes, params_item.offset);
     const parameter_flags = readU32Le(bytes, params_item.offset + 4);
-    if (parameter_flags & ~@as(u32, 3) != 0 or
-        parameter_flags & 2 != 0 or has_parent_locator)
-        return error.UnsupportedVhdxFeature;
+    if (parameter_flags & ~@as(u32, 3) != 0)
+        return error.InvalidVhdx;
+    const has_parent = parameter_flags & 2 != 0;
+    const parent_linkage = if (has_parent)
+        try parseParentLocator(
+            bytes,
+            parent_locator orelse return error.InvalidVhdx,
+        )
+    else blk: {
+        if (parent_locator != null) return error.InvalidVhdx;
+        break :blk null;
+    };
     if (block_size < mib or block_size > 256 * mib or
         !std.math.isPowerOfTwo(block_size))
         return error.InvalidVhdx;
@@ -237,7 +251,18 @@ pub fn parseMetadata(input: []const u8, region: Region) Error!Metadata {
         return error.IntegerOverflow;
     const data_block_count = std.math.cast(usize, data_blocks) orelse
         return error.OutputLimitExceeded;
-    const bat_entry_count = if (data_block_count == 0)
+    const bitmap_block_count = std.math.divCeil(
+        usize,
+        data_block_count,
+        chunk_ratio,
+    ) catch return error.IntegerOverflow;
+    const bat_entry_count = if (has_parent)
+        std.math.mul(
+            usize,
+            bitmap_block_count,
+            chunk_ratio + 1,
+        ) catch return error.IntegerOverflow
+    else if (data_block_count == 0)
         0
     else
         data_block_count + (data_block_count - 1) / chunk_ratio;
@@ -250,9 +275,89 @@ pub fn parseMetadata(input: []const u8, region: Region) Error!Metadata {
         .physical_sector_size = physical_size,
         .page83_id = page83_id,
         .leave_blocks_allocated = parameter_flags & 1 != 0,
+        .has_parent = has_parent,
+        .parent_linkage = parent_linkage,
         .data_block_count = data_block_count,
         .chunk_ratio = chunk_ratio,
         .bat_entry_count = bat_entry_count,
+    };
+}
+
+fn parseParentLocator(bytes: []const u8, item: anytype) Error!Guid {
+    if (item.length < 20) return error.InvalidVhdx;
+    const locator = bytes[item.offset..][0..item.length];
+    if (!std.mem.eql(u8, locator[0..16], &parent_vhdx_guid))
+        return error.UnsupportedVhdxFeature;
+    const count: usize = readU16Le(locator, 18);
+    const table_end = 20 + count * 12;
+    if (count == 0 or table_end > locator.len) return error.InvalidVhdx;
+    var linkage: ?Guid = null;
+    var has_path = false;
+    for (0..count) |index| {
+        const entry = locator[20 + index * 12 ..][0..12];
+        const key_offset: usize = readU32Le(entry, 0);
+        const value_offset: usize = readU32Le(entry, 4);
+        const key_length: usize = readU16Le(entry, 8);
+        const value_length: usize = readU16Le(entry, 10);
+        if (key_length == 0 or value_length == 0 or
+            key_length % 2 != 0 or value_length % 2 != 0 or
+            key_offset + key_length > locator.len or
+            value_offset + value_length > locator.len)
+            return error.InvalidVhdx;
+        const key = locator[key_offset..][0..key_length];
+        const value = locator[value_offset..][0..value_length];
+        if (utf16LeEqualsAscii(key, "parent_linkage")) {
+            if (linkage != null) return error.InvalidVhdx;
+            linkage = try parseGuidText(value);
+        } else if (utf16LeEqualsAscii(key, "parent_linkage2")) {
+            return error.UnsupportedVhdxFeature;
+        } else if (utf16LeEqualsAscii(key, "relative_path") or
+            utf16LeEqualsAscii(key, "volume_path") or
+            utf16LeEqualsAscii(key, "absolute_win32_path"))
+        {
+            has_path = true;
+        }
+    }
+    if (!has_path) return error.InvalidVhdx;
+    return linkage orelse error.InvalidVhdx;
+}
+
+fn utf16LeEqualsAscii(input: []const u8, expected: []const u8) bool {
+    if (input.len != expected.len * 2) return false;
+    for (expected, 0..) |byte, index|
+        if (input[index * 2] != byte or input[index * 2 + 1] != 0) return false;
+    return true;
+}
+
+fn parseGuidText(input: []const u8) Error!Guid {
+    const code_units = input.len / 2;
+    const start: usize = if (code_units == 38 and input[0] == '{' and input[1] == 0)
+        1
+    else if (code_units == 36)
+        0
+    else
+        return error.InvalidVhdx;
+    if (start == 1 and (input[74] != '}' or input[75] != 0))
+        return error.InvalidVhdx;
+    var compact: [32]u8 = undefined;
+    var compact_len: usize = 0;
+    for (start..start + 36) |unit| {
+        const low = input[unit * 2];
+        if (input[unit * 2 + 1] != 0) return error.InvalidVhdx;
+        if (low == '-') continue;
+        if (compact_len >= compact.len) return error.InvalidVhdx;
+        compact[compact_len] = low;
+        compact_len += 1;
+    }
+    if (compact_len != compact.len) return error.InvalidVhdx;
+    var canonical: [16]u8 = undefined;
+    _ = std.fmt.hexToBytes(&canonical, &compact) catch
+        return error.InvalidVhdx;
+    return .{
+        canonical[3],  canonical[2],  canonical[1],  canonical[0],
+        canonical[5],  canonical[4],  canonical[7],  canonical[6],
+        canonical[8],  canonical[9],  canonical[10], canonical[11],
+        canonical[12], canonical[13], canonical[14], canonical[15],
     };
 }
 
