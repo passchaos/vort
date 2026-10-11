@@ -195,6 +195,47 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
             => {},
             else => return err,
         }
+        if (archive.header.image_count != 0) {
+            if (archive.readImageMetadataAlloc(allocator, 1, .{
+                .max_metadata_bytes = 1 << 20,
+                .max_lookup_entries = 4096,
+                .max_lookup_bytes = 1 << 20,
+                .max_directory_entries = 4096,
+                .max_path_depth = 64,
+            })) |image_value| {
+                var image = image_value;
+                defer image.deinit();
+                if (image.readDirectoryAlloc(allocator, image.root, 4096)) |directory_value| {
+                    var directory = directory_value;
+                    directory.deinit();
+                } else |err| switch (err) {
+                    error.InvalidWimMetadata,
+                    error.OutputLimitExceeded,
+                    error.IntegerOverflow,
+                    => {},
+                    else => return err,
+                }
+            } else |err| switch (err) {
+                error.InvalidWim,
+                error.InvalidWimMetadata,
+                error.InvalidXpress,
+                error.InvalidLzxStream,
+                error.InvalidHuffmanCode,
+                error.InvalidMatch,
+                error.UnsupportedWimCompression,
+                error.UnsupportedWimFeature,
+                error.UnsupportedCabinetFeature,
+                error.WimResourceInOtherPart,
+                error.TruncatedFrame,
+                error.TrailingData,
+                error.OutputLimitExceeded,
+                error.IntegerOverflow,
+                error.SizeMismatch,
+                error.ChecksumMismatch,
+                => {},
+                else => return err,
+            }
+        }
     } else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidWim,
@@ -202,6 +243,26 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         error.UnsupportedWimCompression,
         error.UnsupportedWimFeature,
         error.TruncatedFrame,
+        error.IntegerOverflow,
+        => {},
+        else => return err,
+    }
+    const metadata_copy = try allocator.dupe(u8, data);
+    if (vort.parseWimImageMetadataOwned(allocator, metadata_copy)) |image_value| {
+        var image = image_value;
+        defer image.deinit();
+        if (image.readDirectoryAlloc(allocator, image.root, 4096)) |directory_value| {
+            var directory = directory_value;
+            directory.deinit();
+        } else |err| switch (err) {
+            error.InvalidWimMetadata,
+            error.OutputLimitExceeded,
+            error.IntegerOverflow,
+            => {},
+            else => return err,
+        }
+    } else |err| switch (err) {
+        error.InvalidWimMetadata,
         error.IntegerOverflow,
         => {},
         else => return err,

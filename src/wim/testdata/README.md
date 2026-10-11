@@ -6,5 +6,6 @@
 
 The fixtures cover a compressed image-metadata resource, an uncompressed file
 resource, the 50-byte lookup-table format, UTF-16LE XML metadata, SHA-1 lookup,
-and both XPRESS-Huffman and WIM LZX resource decoding. They are stored as base64
-to keep repository transport text-only.
+security-prefix and dentry parsing, nested path lookup/extraction, and both
+XPRESS-Huffman and WIM LZX resource decoding. They are stored as base64 to keep
+repository transport text-only.

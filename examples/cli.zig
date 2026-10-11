@@ -178,6 +178,10 @@ pub fn main(init: std.process.Init) !void {
         try wim_cli.extractResource(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-wim-xml")) {
         try wim_cli.extractXml(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-wim-image")) {
+        try wim_cli.listImage(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-wim-path")) {
+        try wim_cli.extractPath(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
         try bgzf_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-bgzf-file")) {
@@ -2304,6 +2308,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-wim-file <path>
         \\  extract-wim-resource <image> <sha1> <out> [max_output]
         \\  extract-wim-xml <image> <out> [max_output]
+        \\  list-wim-image <image> [image_index]
+        \\  extract-wim-path <image> <image_index> <entry> <out> [max_output]
         \\  encode-bgzf-file <in> <out> [block_size]
         \\                              Encode deterministic blocked gzip/BGZF
         \\  decode-bgzf-file <in> <out> [max_output]

@@ -122,10 +122,13 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   compressed-or-plain full-index selection with erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression
   and part geometry, resource headers, lookup tables, SHA-1 verification, raw
-  UTF-16 XML access, and bounded resource extraction. Stored, XPRESS-Huffman,
-  and WIM-flavored LZX chunks are decoded across multi-chunk resources; solid
-  LZMS payloads, pipable WIMs, cross-part SWM extraction, and filesystem
-  metadata path traversal are reported explicitly as unsupported;
+  UTF-16 XML access, bounded resource extraction, validated image-metadata
+  security tables, borrowed dentry/extra-stream views, directory iteration,
+  UTF-16LE path lookup, and bounded regular-file extraction by image/path.
+  Stored, XPRESS-Huffman, and WIM-flavored LZX chunks are decoded across
+  multi-chunk resources; solid LZMS payloads, pipable WIMs, cross-part SWM
+  extraction, and encrypted/reparse/ADS path extraction are reported explicitly
+  as unsupported;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,

@@ -34,8 +34,10 @@ def write_tree(root: Path) -> dict[str, bytes]:
     rng = random.Random(0x5749_4D)
     payloads = {
         "nested/config.txt": b"WIM nested configuration\n",
+        "nested/emoji-😀.txt": "UTF-16LE path round trip 文件\n".encode(),
         "large.bin": (b"WIM multi-chunk payload 0123456789\n" * 5000)[:150_000],
         "random.bin": rng.randbytes(70_000),
+        "empty.bin": b"",
     }
     for name, data in payloads.items():
         (root / name).write_bytes(data)
@@ -52,14 +54,26 @@ def verify_vort(
     listing = run(cli, "list-wim-file", image).stdout
     if f"compression={compression}".encode() not in listing:
         raise AssertionError(f"WIM compression mismatch: {listing!r}")
+    image_listing = run(cli, "list-wim-image", image, 1).stdout
     for name, expected in payloads.items():
         digest = hashlib.sha1(expected).hexdigest()
-        if digest.encode() not in listing:
-            raise AssertionError(f"WIM lookup missing {name}/{digest}")
-        output = temp / f"{compression}-{name.replace('/', '-')}.out"
-        run(cli, "extract-wim-resource", image, digest, output, len(expected))
-        if output.read_bytes() != expected:
-            raise AssertionError(f"WIM extraction mismatch for {compression}/{name}")
+        if f"/{name}".encode() not in image_listing:
+            raise AssertionError(f"WIM image listing missing {name}")
+        if expected:
+            if digest.encode() not in listing:
+                raise AssertionError(f"WIM lookup missing {name}/{digest}")
+            output = temp / f"{compression}-{name.replace('/', '-')}.out"
+            run(cli, "extract-wim-resource", image, digest, output, len(expected))
+            if output.read_bytes() != expected:
+                raise AssertionError(
+                    f"WIM extraction mismatch for {compression}/{name}"
+                )
+        path_output = temp / f"{compression}-path-{name.replace('/', '-')}.out"
+        run(cli, "extract-wim-path", image, 1, f"/{name}", path_output, len(expected))
+        if path_output.read_bytes() != expected:
+            raise AssertionError(
+                f"WIM path extraction mismatch for {compression}/{name}"
+            )
     xml = temp / f"{compression}.xml"
     run(cli, "extract-wim-xml", image, xml, 16 * 1024 * 1024)
     if b"<WIM>" not in xml.read_bytes().replace(b"\x00", b""):
@@ -77,6 +91,7 @@ def main() -> None:
 
     fixture_cases = 0
     codec_cases = 0
+    image_cases = 0
     solid_cases = 0
     split_cases = 0
     malformed = 0
@@ -91,6 +106,21 @@ def main() -> None:
         run(args.cli, "extract-wim-resource", fixture, fixture_hash, fixture_out, 1024)
         if fixture_out.read_bytes() != b"hello WIM XPRESS payload\n":
             raise AssertionError("checked-in WIM fixture mismatch")
+        fixture_listing = run(args.cli, "list-wim-image", fixture, 1).stdout
+        if b"/nested/file.txt" not in fixture_listing:
+            raise AssertionError("checked-in WIM image tree mismatch")
+        fixture_path_out = temp / "fixture-path.out"
+        run(
+            args.cli,
+            "extract-wim-path",
+            fixture,
+            1,
+            "/nested/file.txt",
+            fixture_path_out,
+            1024,
+        )
+        if fixture_path_out.read_bytes() != b"hello WIM XPRESS payload\n":
+            raise AssertionError("checked-in WIM path extraction mismatch")
         fixture_cases += 1
 
         source = temp / "tree"
@@ -114,7 +144,50 @@ def main() -> None:
                 )
                 run(wimlib, "verify", image)
                 verify_vort(args.cli, image, expected_name, payloads, temp)
+                reference = temp / f"wimlib-{expected_name}"
+                run(wimlib, "extract", image, 1, f"--dest-dir={reference}")
+                for name, expected in payloads.items():
+                    if (reference / name).read_bytes() != expected:
+                        raise AssertionError(
+                            f"wimlib path extraction mismatch for {expected_name}/{name}"
+                        )
                 codec_cases += 1
+
+            first_source = temp / "first-image"
+            second_source = temp / "second-image"
+            first_source.mkdir()
+            second_source.mkdir()
+            (first_source / "shared.txt").write_bytes(b"first WIM image\n")
+            (second_source / "shared.txt").write_bytes(b"second WIM image\n")
+            multi = temp / "multi.wim"
+            run(
+                wimlib,
+                "capture",
+                first_source,
+                multi,
+                "first",
+                "--compress=XPRESS",
+                "--no-acls",
+            )
+            run(wimlib, "append", second_source, multi, "second", "--no-acls")
+            run(wimlib, "verify", multi)
+            for image_index, expected in (
+                (1, b"first WIM image\n"),
+                (2, b"second WIM image\n"),
+            ):
+                output = temp / f"multi-{image_index}.out"
+                run(
+                    args.cli,
+                    "extract-wim-path",
+                    multi,
+                    image_index,
+                    "/shared.txt",
+                    output,
+                    1024,
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError(f"WIM image mapping mismatch for {image_index}")
+                image_cases += 1
 
             solid = temp / "solid.esd"
             run(
@@ -153,6 +226,26 @@ def main() -> None:
             second_listing = run(args.cli, "list-wim-file", second_part).stdout
             if b"part=1/2" not in first_listing or b"part=2/2" not in second_listing:
                 raise AssertionError("split SWM header mismatch")
+            split_tree = run(args.cli, "list-wim-image", first_part, 1).stdout
+            if b"/large.bin" not in split_tree:
+                raise AssertionError("split SWM metadata tree mismatch")
+            expect_failure(
+                args.cli,
+                "list-wim-image",
+                second_part,
+                1,
+                error_name="WimResourceInOtherPart",
+            )
+            expect_failure(
+                args.cli,
+                "extract-wim-path",
+                first_part,
+                1,
+                "/large.bin",
+                temp / "split-path.out",
+                len(split_payload),
+                error_name="WimResourceInOtherPart",
+            )
             split_cases += 2
 
         original = fixture.read_bytes()
@@ -188,6 +281,50 @@ def main() -> None:
         malformed += 1
         expect_failure(
             args.cli,
+            "extract-wim-path",
+            fixture,
+            1,
+            "/nested/missing.txt",
+            temp / "missing-path.out",
+            1024,
+            error_name="WimPathNotFound",
+        )
+        malformed += 1
+        expect_failure(
+            args.cli,
+            "extract-wim-path",
+            fixture,
+            1,
+            "/nested",
+            temp / "directory.out",
+            1024,
+            error_name="WimNotRegularFile",
+        )
+        malformed += 1
+        expect_failure(
+            args.cli,
+            "extract-wim-path",
+            fixture,
+            2,
+            "/nested/file.txt",
+            temp / "missing-image.out",
+            1024,
+            error_name="WimImageNotFound",
+        )
+        malformed += 1
+        expect_failure(
+            args.cli,
+            "extract-wim-path",
+            fixture,
+            1,
+            "/nested/file.txt",
+            temp / "limited-path.out",
+            24,
+            error_name="OutputLimitExceeded",
+        )
+        malformed += 1
+        expect_failure(
+            args.cli,
             "extract-wim-resource",
             fixture,
             "00" * 20,
@@ -199,7 +336,8 @@ def main() -> None:
 
     print(
         f"fixture={fixture_cases} wimlib={wimlib is not None} "
-        f"codecs={codec_cases} solid={solid_cases} split={split_cases} "
+        f"codecs={codec_cases} images={image_cases} solid={solid_cases} "
+        f"split={split_cases} "
         f"malformed={malformed}"
     )
 
