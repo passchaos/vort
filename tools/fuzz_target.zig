@@ -645,6 +645,21 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedWiaError(err)) return err;
     }
+    const fuzz_wii_keys = [_]vort.WiaWiiCommonKey{
+        .{ .index = 0, .key = @splat(0) },
+        .{ .index = 1, .key = @splat(0) },
+    };
+    if (vort.discoverWiiDiscPartitionsAlloc(
+        allocator,
+        data,
+        &fuzz_wii_keys,
+        .{ .max_partitions = 64 },
+    )) |layout_value| {
+        var layout = layout_value;
+        layout.deinit();
+    } else |err| {
+        if (!isExpectedWiiDiscError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -1429,6 +1444,30 @@ pub fn main(init: std.process.Init) !void {
             );
             defer init.gpa.free(generated);
             try fuzzOne(init.gpa, generated);
+
+            const disc = try makeDiscoverableWiiDiscAlloc(init.gpa, source);
+            defer init.gpa.free(disc);
+            try fuzzOne(init.gpa, disc);
+            const auto_generated = try vort.encodeWiaDiscAlloc(
+                init.gpa,
+                disc,
+                &.{.{
+                    .index = 1,
+                    .key = .{
+                        0x10, 0x21, 0x32, 0x43,
+                        0x54, 0x65, 0x76, 0x87,
+                        0x98, 0xa9, 0xba, 0xcb,
+                        0xdc, 0xed, 0xfe, 0x0f,
+                    },
+                }},
+                .{
+                    .container = .rvz,
+                    .compression = .zstd,
+                    .chunk_size = 128 * 1024,
+                },
+            );
+            defer init.gpa.free(auto_generated);
+            try fuzzOne(init.gpa, auto_generated);
         }
     }
 
@@ -1447,7 +1486,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 32,
+        samples.len + 34,
         data.len,
     });
     try stdout.flush();
@@ -1872,4 +1911,65 @@ fn isExpectedWiaError(err: anyerror) bool {
         => true,
         else => false,
     };
+}
+
+fn isExpectedWiiDiscError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidWiiDisc,
+        error.UnsupportedWiiDisc,
+        error.MissingWiiCommonKey,
+        error.OutputLimitExceeded,
+        error.IntegerOverflow,
+        error.TruncatedFrame,
+        => true,
+        else => false,
+    };
+}
+
+fn makeDiscoverableWiiDiscAlloc(
+    allocator: std.mem.Allocator,
+    source: []const u8,
+) ![]u8 {
+    const block_size = 0x8000;
+    const group_size = 0x20_0000;
+    const partition_offset = 0x50000;
+    const data_relative = 0x20000;
+    const data_offset = partition_offset + data_relative;
+    if (source.len != block_size + group_size) return error.InvalidWiiDisc;
+    const output = try allocator.alloc(u8, data_offset + group_size);
+    @memset(output, 0);
+    @memcpy(output[0..0x80], source[0..0x80]);
+    std.mem.writeInt(u32, output[0x18..0x1c], 0x5d1c9ea3, .big);
+    output[0x60] = 0;
+    output[0x61] = 0;
+    std.mem.writeInt(u32, output[0x40000..0x40004], 1, .big);
+    std.mem.writeInt(u32, output[0x40004..0x40008], 0x40020 / 4, .big);
+    std.mem.writeInt(u32, output[0x40020..0x40024], partition_offset / 4, .big);
+    std.mem.writeInt(u32, output[partition_offset..][0..4], 0x0001_0001, .big);
+    @memcpy(
+        output[partition_offset + 0x1bf ..][0..16],
+        &[_]u8{
+            0x5f, 0x5e, 0x6a, 0xa1, 0x87, 0x46, 0xd1, 0xbb,
+            0xce, 0xc4, 0xc7, 0x05, 0xfe, 0x96, 0x58, 0x3e,
+        },
+    );
+    @memcpy(
+        output[partition_offset + 0x1dc ..][0..8],
+        &[_]u8{ 0x00, 0x01, 0x00, 0x00, 0x57, 0x49, 0x49, 0x31 },
+    );
+    output[partition_offset + 0x1f1] = 1;
+    std.mem.writeInt(
+        u32,
+        output[partition_offset + 0x2b8 ..][0..4],
+        data_relative / 4,
+        .big,
+    );
+    std.mem.writeInt(
+        u32,
+        output[partition_offset + 0x2bc ..][0..4],
+        group_size / 4,
+        .big,
+    );
+    @memcpy(output[data_offset..], source[block_size..]);
+    return output;
 }

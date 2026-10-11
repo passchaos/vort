@@ -1217,10 +1217,16 @@ pub const WiaOpenOptions = wia.OpenOptions;
 pub const WiaEncodeOptions = wia.EncodeOptions;
 pub const WiaEncodePartitionData = wia.EncodePartitionData;
 pub const WiaEncodePartition = wia.EncodePartition;
+pub const WiaWiiCommonKey = wia.WiiCommonKey;
+pub const WiaWiiDiscPartition = wia.WiiDiscPartition;
+pub const WiaWiiDiscLayout = wia.WiiDiscLayout;
+pub const WiaWiiDiscDiscoverOptions = wia.WiiDiscDiscoverOptions;
 pub const parseWiaHeader1 = wia.parseHeader1;
 pub const parseWiaAlloc = wia.parseAlloc;
+pub const discoverWiiDiscPartitionsAlloc = wia.discoverWiiDiscAlloc;
 pub const encodeWiaAlloc = wia.encodeAlloc;
 pub const encodeWiaWithPartitionsAlloc = wia.encodeWithPartitionsAlloc;
+pub const encodeWiaDiscAlloc = wia.encodeDiscAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;

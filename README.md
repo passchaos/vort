@@ -188,9 +188,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   purge, Bzip2, raw LZMA/LZMA2, and Zstandard codecs, dual SHA-1-protected
   headers, compressed metadata tables, per-group RVZ fallback/zero handling,
   RVZ junk-packing decode, Wii partition SHA-1 tree reconstruction, AES
-  decrypt/re-encrypt, hash-exception generation, bounded range reads,
-  independent partition fixtures, fuzzing, and bidirectional DolphinTool
-  interoperability;
+  decrypt/re-encrypt, hash-exception generation, bounded standard-Wii partition
+  discovery with caller-owned common keys, bounded range reads, independent
+  partition fixtures, fuzzing, and bidirectional DolphinTool interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded
@@ -1592,8 +1592,8 @@ support in `docs/formats/vhd.md`, VHDX support in `docs/formats/vhdx.md`, and
 CISO/ZISO support in `docs/formats/cso.md`, and DAX support in
 `docs/formats/dax.md`.
 GCZ support is documented in `docs/formats/gcz.md`.
-The current WIA/RVZ reader, raw/partition writer, and explicit automatic-key
-discovery limits are documented in `docs/formats/wia-rvz.md`.
+The current WIA/RVZ reader, raw/partition writer, and caller-supplied common-key
+model are documented in `docs/formats/wia-rvz.md`.
 Local Rust deflate
 baselines such as `~/Work/fdeflate` and `~/Work/miniz_oxide` should be treated
 as required functionality/performance competitors once their executable harnesses

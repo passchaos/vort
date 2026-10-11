@@ -3,6 +3,7 @@ const bzip2 = @import("../bzip2.zig");
 const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
 const wii = @import("wii_partition.zig");
+const wii_disc = @import("wii_disc.zig");
 const writer = @import("writer.zig");
 
 const allocator = std.testing.allocator;
@@ -362,6 +363,108 @@ test "RVZ partition writer emits zero-group sentinels" {
     try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
+test "WIA writer discovers standard Wii partitions and title keys" {
+    const text = @embedFile("testdata/python-partition-smallchunks.rvz.bz2.b64");
+    const fixture = try decodeFixtureAlloc(text, 3 * 1024 * 1024);
+    defer allocator.free(fixture);
+    var fixture_archive = try archive_mod.Archive.initAlloc(
+        allocator,
+        fixture,
+        .{},
+    );
+    defer fixture_archive.deinit();
+    const fixture_iso = try fixture_archive.decodeAllocLimited(
+        allocator,
+        3 * 1024 * 1024,
+    );
+    defer allocator.free(fixture_iso);
+    const title_key = fixture_archive.partitions[0].key;
+    const common_key = [_]u8{
+        0x10, 0x21, 0x32, 0x43, 0x54, 0x65, 0x76, 0x87,
+        0x98, 0xa9, 0xba, 0xcb, 0xdc, 0xed, 0xfe, 0x0f,
+    };
+    const title_id: u64 = 0x0001_0000_5749_4931;
+    const disc = try makeDiscoverableWiiDiscAlloc(
+        fixture_iso,
+        &title_key,
+        &common_key,
+        title_id,
+        1,
+    );
+    defer allocator.free(disc);
+    const keys = [_]wii_disc.CommonKey{.{
+        .index = 1,
+        .key = common_key,
+    }};
+    var layout = try wii_disc.discoverAlloc(
+        allocator,
+        disc,
+        &keys,
+        .{},
+    );
+    defer layout.deinit();
+    try std.testing.expectEqual(@as(usize, 2), layout.partitions.len);
+    try std.testing.expectEqual(title_id, layout.partitions[0].title_id);
+    try std.testing.expectEqual(@as(u8, 1), layout.partitions[0].common_key_index);
+    try std.testing.expectEqual(title_key, layout.partitions[0].title_key);
+    try std.testing.expectEqual(@as(u64, 0x70000), layout.partitions[0].data_offset);
+    try std.testing.expectEqual(
+        @as(u64, format.wii_group_size),
+        layout.partitions[0].data_size,
+    );
+    try std.testing.expectEqual(@as(u64, 0x2a0000), layout.partitions[1].data_offset);
+    try std.testing.expectEqual(
+        @as(u64, format.wii_block_size),
+        layout.partitions[1].data_size,
+    );
+
+    inline for (.{
+        .{ format.Container.wia, format.Compression.bzip2, @as(u32, 2 * 1024 * 1024) },
+        .{ format.Container.rvz, format.Compression.zstd, @as(u32, 128 * 1024) },
+    }) |case| {
+        const encoded = try writer.encodeDiscAlloc(
+            allocator,
+            disc,
+            &keys,
+            .{
+                .container = case[0],
+                .compression = case[1],
+                .compression_level = if (case[1] == .zstd) 5 else 6,
+                .chunk_size = case[2],
+            },
+        );
+        defer allocator.free(encoded);
+        var archive = try archive_mod.Archive.initAlloc(allocator, encoded, .{});
+        defer archive.deinit();
+        try std.testing.expectEqual(@as(usize, 2), archive.partitions.len);
+        try std.testing.expectEqual(title_key, archive.partitions[0].key);
+        const decoded = try archive.decodeAllocLimited(allocator, disc.len);
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, disc, decoded);
+    }
+
+    try std.testing.expectError(
+        error.MissingWiiCommonKey,
+        wii_disc.discoverAlloc(allocator, disc, &.{}, .{}),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        wii_disc.discoverAlloc(
+            allocator,
+            disc,
+            &keys,
+            .{ .max_partitions = 0 },
+        ),
+    );
+    const unsupported = try allocator.dupe(u8, disc);
+    defer allocator.free(unsupported);
+    unsupported[0x61] = 1;
+    try std.testing.expectError(
+        error.UnsupportedWiiDisc,
+        wii_disc.discoverAlloc(allocator, unsupported, &keys, .{}),
+    );
+}
+
 test "WIA and RVZ decode pinned DolphinTool e2ad09306e6d images" {
     inline for (.{
         .{
@@ -572,6 +675,107 @@ fn expectPartitionWriterRoundTrip(
     const decoded = try archive.decodeAllocLimited(allocator, input.len);
     defer allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+fn makeDiscoverableWiiDiscAlloc(
+    fixture_iso: []const u8,
+    title_key: *const [16]u8,
+    common_key: *const [16]u8,
+    title_id: u64,
+    common_key_index: u8,
+) ![]u8 {
+    const partition_offset = 0x50000;
+    const data_relative = 0x20000;
+    const data_offset = partition_offset + data_relative;
+    const second_partition_offset = 0x280000;
+    const second_data_offset = second_partition_offset + data_relative;
+    if (fixture_iso.len - format.wii_block_size != format.wii_group_size)
+        return error.InvalidWia;
+    const output = try allocator.alloc(
+        u8,
+        second_data_offset + format.wii_block_size,
+    );
+    @memset(output, 0);
+    @memcpy(output[0..format.disc_header_size], fixture_iso[0..format.disc_header_size]);
+    format.writeU32Be(output, 0x18, wii_disc.wii_magic);
+    output[0x60] = 0;
+    output[0x61] = 0;
+    format.writeU32Be(output, 0x40000, 1);
+    format.writeU32Be(output, 0x40004, 0x40020 / 4);
+    format.writeU32Be(output, 0x40008, 1);
+    format.writeU32Be(output, 0x4000c, 0x40028 / 4);
+    format.writeU32Be(output, 0x40020, partition_offset / 4);
+    format.writeU32Be(output, 0x40024, 0);
+    format.writeU32Be(output, 0x40028, second_partition_offset / 4);
+    format.writeU32Be(output, 0x4002c, 1);
+    var title_id_bytes: [8]u8 = undefined;
+    std.mem.writeInt(u64, &title_id_bytes, title_id, .big);
+    var plain = title_key.*;
+    for (plain[0..8], title_id_bytes) |*byte, iv_byte| byte.* ^= iv_byte;
+    var context = std.crypto.core.aes.Aes128.initEnc(common_key.*);
+    defer std.crypto.secureZero(@TypeOf(context), (&context)[0..1]);
+    var encrypted_title_key: [16]u8 = undefined;
+    context.encrypt(&encrypted_title_key, &plain);
+    std.crypto.secureZero(u8, &plain);
+    writeDiscoverablePartition(
+        output,
+        partition_offset,
+        data_relative,
+        format.wii_group_size,
+        common_key_index,
+        &title_id_bytes,
+        &encrypted_title_key,
+    );
+    writeDiscoverablePartition(
+        output,
+        second_partition_offset,
+        data_relative,
+        format.wii_block_size,
+        common_key_index,
+        &title_id_bytes,
+        &encrypted_title_key,
+    );
+    @memcpy(
+        output[data_offset..][0..format.wii_group_size],
+        fixture_iso[format.wii_block_size..],
+    );
+    @memcpy(
+        output[second_data_offset..],
+        fixture_iso[format.wii_block_size..][0..format.wii_block_size],
+    );
+    return output;
+}
+
+fn writeDiscoverablePartition(
+    output: []u8,
+    partition_offset: usize,
+    data_relative: u32,
+    data_size: u32,
+    common_key_index: u8,
+    title_id: *const [8]u8,
+    encrypted_title_key: *const [16]u8,
+) void {
+    format.writeU32Be(output, partition_offset, 0x0001_0001);
+    @memcpy(
+        output[partition_offset + wii_disc.ticket_title_key_offset ..][0..16],
+        encrypted_title_key,
+    );
+    @memcpy(
+        output[partition_offset + wii_disc.ticket_title_id_offset ..][0..8],
+        title_id,
+    );
+    output[partition_offset + wii_disc.ticket_common_key_index_offset] =
+        common_key_index;
+    format.writeU32Be(
+        output,
+        partition_offset + wii_disc.partition_data_offset_field,
+        data_relative / 4,
+    );
+    format.writeU32Be(
+        output,
+        partition_offset + wii_disc.partition_data_size_field,
+        data_size / 4,
+    );
 }
 
 fn makeInput(size: usize) ![]u8 {

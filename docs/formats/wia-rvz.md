@@ -3,8 +3,9 @@
 Vort provides a shared pure-Zig reader and deterministic writer for WIA 1.0 and
 RVZ 1.0 images. This covers GameCube images, arbitrary raw disc images, and Wii
 partition entries whose hash blocks and AES encryption are removed by the
-container. Partition writing uses explicit caller-provided encrypted-sector
-ranges and AES title keys.
+container. Partition writing accepts either explicit encrypted-sector ranges
+and title keys or a standard encrypted Wii ISO plus caller-provided common
+keys, from which Vort discovers the layout and decrypts each title key.
 
 Supported compression methods:
 
@@ -96,6 +97,31 @@ const partitioned_rvz = try vort.encodeWiaWithPartitionsAlloc(
 defer allocator.free(partitioned_rvz);
 ```
 
+For a standard encrypted Wii ISO, the higher-level path discovers all four
+partition-table groups, validates every extent and ticket, selects the supplied
+common key by its ticket index, and decrypts the title key using the title ID as
+the AES-CBC IV:
+
+```zig
+const rvz_from_disc = try vort.encodeWiaDiscAlloc(
+    allocator,
+    encrypted_iso_bytes,
+    &.{.{ .index = 0, .key = retail_common_key }},
+    .{
+        .container = .rvz,
+        .compression = .zstd,
+        .chunk_size = 128 * 1024,
+    },
+);
+defer allocator.free(rvz_from_disc);
+```
+
+Common keys are never embedded or loaded from global state. Callers can supply
+multiple indexed keys; a missing ticket index returns `MissingWiiCommonKey`.
+Automatic discovery is limited to hashed, encrypted Wii discs. Explicit
+partition descriptors remain available for synthetic, repaired, or unusual
+layouts.
+
 CLI and validation surface:
 
 ```sh
@@ -106,6 +132,7 @@ zig build run -- decode-rvz-range game.rvz range.bin 1048576 65536
 zig build run -- encode-wia game.iso game.wia lzma2 2097152 6
 zig build run -- encode-rvz game.iso game.rvz zstd 131072 5
 zig build run -- encode-rvz-partition game.iso game.rvz zstd 32768 2097152 000102030405060708090a0b0c0d0e0f 131072 5
+zig build run -- encode-rvz-disc game.iso game.rvz zstd 0 <common_key_hex> 131072 5
 zig build test-wia
 zig build run-wia-diff
 ```
@@ -115,13 +142,15 @@ Dolphin commit `e2ad09306e6d`, plus independently generated encrypted Wii
 partition fixtures. One uses WIA/Bzip2 with a 2 MiB chunk; the other uses
 RVZ/none with 128 KiB chunks and places a hash exception in the fourth
 subchunk. The differential exercises all ten raw-data writer modes, all ten
-partition writer modes, and both partition fixtures. When DolphinTool is
-available, it decodes all twenty Vort outputs and generates five reverse
-fixtures plus an RVZ junk-packed image. Use
+explicit-partition writer modes, two automatic-disc writer modes, and both
+partition fixtures. When DolphinTool is available, it decodes all twenty-two
+Vort outputs and generates five reverse fixtures plus an RVZ junk-packed image. Use
 `-- --dolphin-tool /path/to/dolphin-tool` for an explicit oracle.
 
-Current explicit limitations are automatic Wii partition discovery/title-key
-derivation and writer-side RVZ junk packing. The writer's unpacked RVZ groups
-are fully valid but can be larger than Dolphin output for images dominated by
-reconstructable pseudorandom padding. Streaming file I/O and parallel group
-compression also remain follow-up work.
+Current explicit limitations are caller-supplied Wii common keys and
+writer-side RVZ junk packing. Automatic discovery stores each partition as one
+data entry instead of using filesystem-aware split points; this is
+behavior-exact but can reduce reuse and compression ratio. The writer's
+unpacked RVZ groups are fully valid but can also be larger than Dolphin output
+for images dominated by reconstructable pseudorandom padding. Streaming file
+I/O and parallel group compression remain follow-up work.

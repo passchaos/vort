@@ -5,6 +5,7 @@ import bz2
 import hashlib
 import random
 import shutil
+import struct
 import subprocess
 import tempfile
 from pathlib import Path
@@ -61,6 +62,38 @@ def load_partition_fixture(name: str, expected_digest: str) -> bytes:
     if hashlib.sha256(image).hexdigest() != expected_digest:
         raise AssertionError(f"partition fixture digest mismatch: {name}")
     return image
+
+
+def discoverable_wii_iso(encrypted_iso: bytes) -> bytes:
+    partition_offset = 0x50000
+    data_relative = 0x20000
+    data_offset = partition_offset + data_relative
+    encrypted_group = encrypted_iso[0x8000:]
+    if len(encrypted_group) != 2 * 1024 * 1024:
+        raise AssertionError("unexpected synthetic partition size")
+    output = bytearray(data_offset + len(encrypted_group))
+    output[:0x80] = encrypted_iso[:0x80]
+    struct.pack_into(">I", output, 0x18, 0x5D1C9EA3)
+    output[0x60:0x62] = b"\0\0"
+    struct.pack_into(">II", output, 0x40000, 1, 0x40020 // 4)
+    struct.pack_into(">II", output, 0x40020, partition_offset // 4, 0)
+    struct.pack_into(">I", output, partition_offset, 0x00010001)
+    output[partition_offset + 0x1BF : partition_offset + 0x1CF] = bytes.fromhex(
+        "5f5e6aa18746d1bbcec4c705fe96583e"
+    )
+    output[partition_offset + 0x1DC : partition_offset + 0x1E4] = bytes.fromhex(
+        "0001000057494931"
+    )
+    output[partition_offset + 0x1F1] = 1
+    struct.pack_into(
+        ">II",
+        output,
+        partition_offset + 0x2B8,
+        data_relative // 4,
+        len(encrypted_group) // 4,
+    )
+    output[data_offset:] = encrypted_group
+    return bytes(output)
 
 
 def payload() -> bytes:
@@ -149,6 +182,7 @@ def main() -> None:
     malformed = 0
     partition_cases = 0
     partition_encode = 0
+    auto_partition_encode = 0
     with tempfile.TemporaryDirectory(prefix="vort-wia-") as temp_text:
         temp = Path(temp_text)
         source = temp / "payload.iso"
@@ -354,6 +388,54 @@ def main() -> None:
                             )
                         external_encode += 1
 
+                discovered_source = temp / "discoverable-wii.iso"
+                discovered_plain = discoverable_wii_iso(decoded)
+                discovered_source.write_bytes(discovered_plain)
+                common_key = "102132435465768798a9bacbdcedfe0f"
+                for (
+                    writer_container,
+                    writer_compression,
+                    writer_chunk_size,
+                    writer_level,
+                ) in (
+                    ("wia", "bzip2", WIA_CHUNK, 6),
+                    ("rvz", "zstd", RVZ_CHUNK, 5),
+                ):
+                    written = temp / f"auto-{writer_container}.{writer_container}"
+                    roundtrip = temp / f"auto-{writer_container}.vort.iso"
+                    run(
+                        args.cli,
+                        f"encode-{writer_container}-disc",
+                        discovered_source,
+                        written,
+                        writer_compression,
+                        1,
+                        common_key,
+                        writer_chunk_size,
+                        writer_level,
+                    )
+                    run(
+                        args.cli,
+                        f"decode-{writer_container}",
+                        written,
+                        roundtrip,
+                        len(discovered_plain),
+                    )
+                    if roundtrip.read_bytes() != discovered_plain:
+                        raise AssertionError(
+                            f"automatic partition mismatch for {writer_container}"
+                        )
+                    auto_partition_encode += 1
+                    if dolphin_tool is not None:
+                        external = temp / f"auto-{writer_container}.dolphin.iso"
+                        dolphin_convert(dolphin_tool, written, external, "iso")
+                        if external.read_bytes() != discovered_plain:
+                            raise AssertionError(
+                                "DolphinTool automatic partition mismatch for "
+                                f"{writer_container}"
+                            )
+                        external_encode += 1
+
         if dolphin_tool is not None:
             dolphin_plain = bytes(
                 (index * 29 + index // 31) & 0xFF
@@ -423,6 +505,7 @@ def main() -> None:
         f"external_encode={external_encode} external_decode={external_decode} "
         f"malformed={malformed} partitions={partition_cases} "
         f"partition_encode={partition_encode} "
+        f"auto_partition_encode={auto_partition_encode} "
         f"rvz_packing_decode=True rvz_packing_write=False"
     )
 

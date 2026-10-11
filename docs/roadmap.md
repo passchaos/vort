@@ -18106,7 +18106,9 @@ reuse, so production keeps the simpler independently owned plans.
   combinations, decrypting encrypted sectors and deriving minimal exception
   lists from caller-provided ranges and title keys. Pinned current-Dolphin
   fixtures, independent encrypted partition fixtures, fuzzing, and
-  bidirectional DolphinTool conversion cover the implementation. Automatic
-  partition/key discovery and writer-side junk packing remain explicit
-  follow-up work rather than silently degrading correctness. See
-  `docs/formats/wia-rvz.md`.
+  bidirectional DolphinTool conversion cover the implementation. A bounded
+  standard-Wii discovery path parses all partition tables and tickets, selects
+  caller-provided common keys by index, and decrypts title keys without hidden
+  state. Filesystem-aware partition splitting and writer-side junk packing
+  remain explicit follow-up work rather than silently degrading correctness.
+  See `docs/formats/wia-rvz.md`.

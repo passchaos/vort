@@ -3,9 +3,10 @@ const codec = @import("codec.zig");
 const format = @import("format.zig");
 const group_writer = @import("group_writer.zig");
 const partition_writer = @import("partition_writer.zig");
+const wii_disc = @import("wii_disc.zig");
 
 pub const Error = format.Error || codec.Error || group_writer.Error ||
-    partition_writer.Error || std.mem.Allocator.Error;
+    partition_writer.Error || wii_disc.Error || std.mem.Allocator.Error;
 
 pub const EncodeOptions = struct {
     container: format.Container = .rvz,
@@ -46,6 +47,37 @@ pub fn encodeAlloc(
     options: EncodeOptions,
 ) Error![]u8 {
     return encodeWithPartitionsAlloc(allocator, input, &.{}, options);
+}
+
+pub fn encodeDiscAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    common_keys: []const wii_disc.CommonKey,
+    options: EncodeOptions,
+) Error![]u8 {
+    var layout = try wii_disc.discoverAlloc(
+        allocator,
+        input,
+        common_keys,
+        .{ .max_partitions = options.max_partitions },
+    );
+    defer layout.deinit();
+    const partitions = try allocator.alloc(Partition, layout.partitions.len);
+    defer {
+        for (partitions) |*partition|
+            std.crypto.secureZero(u8, &partition.key);
+        allocator.free(partitions);
+    }
+    for (partitions, layout.partitions) |*destination, source| {
+        destination.* = .{
+            .key = source.title_key,
+            .data = .{
+                .{ .offset = source.data_offset, .size = source.data_size },
+                .{ .offset = 0, .size = 0 },
+            },
+        };
+    }
+    return encodeWithPartitionsAlloc(allocator, input, partitions, options);
 }
 
 pub fn encodeWithPartitionsAlloc(
