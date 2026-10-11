@@ -37,6 +37,7 @@ pub const xar = @import("xar.zig");
 pub const zfs = @import("zfs.zig");
 pub const qcow2 = @import("qcow2.zig");
 pub const vmdk = @import("vmdk.zig");
+pub const ewf = @import("ewf.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1103,6 +1104,21 @@ pub const vmdkMagic = vmdk.magic;
 pub const parseVmdkHeader = vmdk.parseHeader;
 pub const parseVmdk = vmdk.parse;
 pub const encodeVmdkAlloc = vmdk.encodeAlloc;
+
+pub const EwfError = ewf.Error;
+pub const EwfFileHeader = ewf.FileHeader;
+pub const EwfSection = ewf.Section;
+pub const EwfGeometry = ewf.Geometry;
+pub const EwfChunk = ewf.Chunk;
+pub const EwfArchive = ewf.Archive;
+pub const EwfOpenOptions = ewf.OpenOptions;
+pub const EwfCompression = ewf.Compression;
+pub const EwfEncodeOptions = ewf.EncodeOptions;
+pub const ewfSignature = ewf.signature;
+pub const parseEwfFileHeader = ewf.parseFileHeader;
+pub const parseEwfAlloc = ewf.parseOneAlloc;
+pub const parseEwfSegmentsAlloc = ewf.parseSegmentsAlloc;
+pub const encodeEwfAlloc = ewf.encodeAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3075,6 +3091,7 @@ test {
     _ = zfs;
     _ = qcow2;
     _ = vmdk;
+    _ = ewf;
 }
 
 test "root 7z exports create list and extract Copy archives" {

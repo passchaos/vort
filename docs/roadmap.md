@@ -18014,3 +18014,15 @@ reuse, so production keeps the simpler independently owned plans.
   16 GiB version-3 QEMU iotest fixture. Descriptor-only multi-file, flat/split,
   legacy COWD, SEsparse, and writer-side delta chains remain follow-up work. See
   `docs/formats/vmdk.md`.
+
+- Added dependency-free EWF1/E01 physical-media reading and deterministic
+  EnCase-6-style writing. Explicit caller-ordered segment sets cover E01--E04
+  and beyond without implicit path access. The parser validates file/section
+  numbering and Adler checks, volume geometry, sectors/table/table2 maps, raw
+  chunk checksums, zlib streams with real-world padding, terminal sections, and
+  complete-media MD5. The writer emits raw, forced-zlib, or automatic chunks,
+  bounded table groups, mirrored tables, data/hash/done sections, and sector
+  tail padding. Pinned libewf single/multi-segment fixtures and bidirectional
+  libewf 20260924 generation/export verify both directions. EWF2/Ex01, L01,
+  encryption, typed acquisition metadata, and writer-side segment splitting
+  remain follow-up work. See `docs/formats/ewf.md`.

@@ -146,6 +146,12 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   grains, standard GT/GD/footer/EOS markers, bounded whole-image and random-range
   decoding, a pinned QEMU version-3 fixture, fuzzing, and bidirectional QEMU plus
   7-Zip interoperability;
+- dependency-free EWF1/E01 forensic-image reading and deterministic EnCase-6
+  style writing, with explicit multi-segment sets, checked section chains,
+  volume geometry, sectors/table/table2 chunk maps, raw chunks with Adler-32,
+  zlib chunks, media MD5 verification, bounded whole-image and random-range
+  decoding, pinned libewf single/multi-segment fixtures, fuzzing, and
+  bidirectional libewf interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded
@@ -1541,7 +1547,8 @@ differential validation, `docs/checksum-dispatch.md` for checksum dispatch
 status, `docs/zstd-gap.md` for current zstd comparison limitations, and
 `docs/dynamic-encoder.md` for dynamic encoder status. QCOW2 support and its
 storage-specific limits are documented in `docs/formats/qcow2.md`; VMDK support
-is documented in `docs/formats/vmdk.md`. Local Rust deflate
+is documented in `docs/formats/vmdk.md`, and EWF/E01 support in
+`docs/formats/ewf.md`. Local Rust deflate
 baselines such as `~/Work/fdeflate` and `~/Work/miniz_oxide` should be treated
 as required functionality/performance competitors once their executable harnesses
 are wired into Vort validation.

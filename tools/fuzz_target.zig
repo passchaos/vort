@@ -432,6 +432,31 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedVmdkError(err)) return err;
     }
+    if (vort.parseEwfAlloc(allocator, data, .{
+        .max_sections_per_segment = 256,
+        .max_chunks = 4096,
+        .max_chunk_bytes = 1 << 20,
+    })) |archive_value| {
+        var archive = archive_value;
+        defer archive.deinit();
+        const media_size = std.math.cast(
+            usize,
+            archive.geometry.media_size,
+        ) orelse 0;
+        const length = @min(media_size, 4096);
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            length,
+            length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedEwfError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedEwfError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -1063,6 +1088,14 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(vmdk);
     try fuzzOne(init.gpa, vmdk);
 
+    const ewf = try vort.encodeEwfAlloc(
+        init.gpa,
+        "EWF fuzz target valid chunk\n" ** 128,
+        .{ .sectors_per_chunk = 16, .compression = .auto },
+    );
+    defer init.gpa.free(ewf);
+    try fuzzOne(init.gpa, ewf);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -1078,7 +1111,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 11,
+        samples.len + 12,
         data.len,
     });
     try stdout.flush();
@@ -1264,6 +1297,36 @@ fn isExpectedVmdkError(err: anyerror) bool {
         error.UnsupportedVmdkFeature,
         error.UnsupportedVmdkCompression,
         error.MissingVmdkBackingFile,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.ChecksumMismatch,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.InvalidDeflateBlockType,
+        error.StoredLengthMismatch,
+        error.BadZlibHeader,
+        error.NeedDictionary,
+        error.InvalidHuffmanCode,
+        error.UnsupportedDeflateFeature,
+        error.InvalidMatch,
+        error.InvalidDynamicBlockHeader,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.TrailingData,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedEwfError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidEwf,
+        error.UnsupportedEwfFeature,
+        error.UnsupportedEwfCompression,
+        error.IncompleteEwf,
         error.InvalidMagic,
         error.UnsupportedVersion,
         error.TruncatedFrame,

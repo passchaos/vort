@@ -288,6 +288,14 @@ pub fn build(b: *std.Build) void {
     const run_vmdk_tests = b.addRunArtifact(vmdk_tests);
     const vmdk_test_step = b.step("test-vmdk", "Run focused VMDK image tests");
     vmdk_test_step.dependOn(&run_vmdk_tests.step);
+    const ewf_tests = b.addTest(.{
+        .name = "vort-ewf-tests",
+        .root_module = tests_mod,
+        .filters = &.{"EWF"},
+    });
+    const run_ewf_tests = b.addRunArtifact(ewf_tests);
+    const ewf_test_step = b.step("test-ewf", "Run focused EWF/E01 image tests");
+    ewf_test_step.dependOn(&run_ewf_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1310,6 +1318,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| vmdk_diff.addArgs(args);
     const vmdk_diff_step = b.step("run-vmdk-diff", "Validate VMDK images against optional qemu-img and 7-Zip");
     vmdk_diff_step.dependOn(&vmdk_diff.step);
+
+    const ewf_diff = b.addSystemCommand(&.{ "python3", "tools/ewf/diff.py", "--cli" });
+    ewf_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| ewf_diff.addArgs(args);
+    const ewf_diff_step = b.step("run-ewf-diff", "Validate EWF/E01 images against optional libewf tools");
+    ewf_diff_step.dependOn(&ewf_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

@@ -18,6 +18,7 @@ zig build run-rust-deflate-diff
 zig build run-snappy-interop-probe
 zig build run-qcow2-diff
 zig build run-vmdk-diff
+zig build run-ewf-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
@@ -38,6 +39,14 @@ direct-directory, and backing-chain layouts. A pinned QEMU iotest version-3
 streamOptimized image keeps real footer/marker and large virtual-address range
 coverage available without an installed oracle. Explicit tool paths use the
 same `-- --qemu-img <path> --seven-zip <path>` form.
+
+The EWF differential always checks Vort raw/zlib/automatic E01 round trips and
+decodes pinned libewf EnCase-6 single- and four-segment fixtures. When
+`ewfinfo`, `ewfverify`, `ewfexport`, and `ewfacquirestream` are available, all
+three Vort writer modes are inspected, verified, and exported byte-exactly by
+libewf. The reverse direction generates both mixed compressed/raw single-file
+and explicit multi-segment sets. A locally built tool directory can be supplied
+with `-- --libewf-dir <path>`.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,
