@@ -90,11 +90,12 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   fallback, optional end markers, inter-chunk zero padding, decoded-size
   preflight, bounded/caller-owned APIs, MS-XCA official vectors, and
   bidirectional differential validation against the pinned `lznt1` reference;
-- pure Zig Windows XPRESS plain/LZ77 encoding and decoding with MSB-first flag
-  words, 8 KiB matches, overlapping copies, shared half-byte and byte/u16/u32
-  extended lengths, decoded-size preflight, bounded/caller-owned APIs, exact
-  reproduction of the MS-XCA example, and differential validation against the
-  pinned Rust/Python `xpress-lz77` reference;
+- pure Zig Windows XPRESS plain/LZ77 and XPRESS-Huffman encoding and decoding:
+  plain streams provide MSB-first flag words, 8 KiB matches, overlapping copies,
+  and shared half-byte plus byte/u16/u32 lengths; Huffman blocks provide adaptive
+  512-symbol canonical tables, 64 KiB history, interwoven raw length bytes, and
+  exact-size bounded decode. Both modes have caller-owned APIs, MS-XCA official
+  vectors, fuzzing, and pinned Rust/Python plus wimlib interoperability;
 - pure Zig Apple LZFSE stream and raw LZVN support with `bvx-`, `bvxn`, `bvx1`,
   and `bvx2` decoding, compressed frequency-table and four-way literal FSE
   reconstruction, bounded/caller-owned APIs, deterministic LZVN-or-stored block
@@ -474,6 +475,9 @@ zig build run-lznt1-diff
 zig build run -- encode-xpress-plain-file README.md /tmp/readme.xpress
 zig build run -- decode-xpress-plain-file /tmp/readme.xpress /tmp/readme-xpress.out 1048576
 zig build run -- inspect-xpress-plain-file /tmp/readme.xpress 1048576
+zig build run -- encode-xpress-huffman-file README.md /tmp/readme.xpress-huff
+zig build run -- decode-xpress-huffman-file /tmp/readme.xpress-huff /tmp/readme-xpress-huff.out $(wc -c < README.md)
+zig build run -- inspect-xpress-huffman-file /tmp/readme.xpress-huff $(wc -c < README.md)
 zig build run-xpress-diff
 zig build run-native-summary-error-dashboard
 zig build run-native-summary-error-negative-smoke

@@ -187,7 +187,7 @@ pub fn build(b: *std.Build) void {
     const xpress_tests = b.addTest(.{
         .name = "vort-xpress-tests",
         .root_module = tests_mod,
-        .filters = &.{"XPRESS plain"},
+        .filters = &.{ "XPRESS plain", "XPRESS Huffman" },
     });
     const run_xpress_tests = b.addRunArtifact(xpress_tests);
     const xpress_test_step = b.step("test-xpress", "Run focused Windows XPRESS codec tests");
@@ -1146,7 +1146,7 @@ pub fn build(b: *std.Build) void {
     const xpress_diff = b.addSystemCommand(&.{ "python3", "tools/xpress/diff.py", "--cli" });
     xpress_diff.addArtifactArg(cli_exe);
     if (b.args) |args| xpress_diff.addArgs(args);
-    const xpress_diff_step = b.step("run-xpress-diff", "Validate Windows XPRESS plain against the optional Rust/Python reference");
+    const xpress_diff_step = b.step("run-xpress-diff", "Validate Windows XPRESS plain and Huffman against pinned references");
     xpress_diff_step.dependOn(&xpress_diff.step);
 
     const lzfse_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/diff.py", "--cli" });

@@ -139,6 +139,12 @@ pub fn main(init: std.process.Init) !void {
         try xpress_cli.decodePlain(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-xpress-plain-file")) {
         try xpress_cli.inspectPlain(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-xpress-huffman-file")) {
+        try xpress_cli.encodeHuffman(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-xpress-huffman-file")) {
+        try xpress_cli.decodeHuffman(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-xpress-huffman-file")) {
+        try xpress_cli.inspectHuffman(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzfse-file")) {
         try lzfse_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzfse-file")) {
@@ -2272,6 +2278,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-xpress-plain-file <in> <out>
         \\  decode-xpress-plain-file <in> <out> [max_output]
         \\  inspect-xpress-plain-file <path> [max_output]
+        \\  encode-xpress-huffman-file <in> <out>
+        \\  decode-xpress-huffman-file <in> <out> <decoded_size>
+        \\  inspect-xpress-huffman-file <path> <decoded_size>
         \\  encode-lzfse-file <in> <out> [block_size] [lzvn|stored]
         \\  decode-lzfse-file <in> <out> [max_output]
         \\  inspect-lzfse-file <path> [max_output]

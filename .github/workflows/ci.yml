@@ -27,13 +27,30 @@ jobs:
       - name: Install optional CLI competitors
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf automake cabextract gzip libtool lz4 meson ninja-build p7zip-full squashfs-tools zstd libarchive-dev libbrotli-dev liblz4-dev liblzma-dev libsnappy-dev libssl-dev libzstd-dev zlib1g-dev git
+          sudo apt-get install -y autoconf automake cabextract gzip libtool lz4 meson ninja-build p7zip-full squashfs-tools zstd libarchive-dev libbrotli-dev liblz4-dev liblzma-dev libsnappy-dev libssl-dev libxml2-dev libzstd-dev zlib1g-dev git
 
       - name: Install pinned LZNT1 reference
         run: python3 -m pip install --break-system-packages lznt1==0.2
 
       - name: Install pinned XPRESS reference
         run: python3 -m pip install --break-system-packages xpress-lz77==1.0.1
+
+      - name: Build pinned wimlib XPRESS reference
+        run: |
+          wimlib_reference_dir=$(mktemp -d)
+          git -C "$wimlib_reference_dir" init
+          git -C "$wimlib_reference_dir" remote add origin https://github.com/ebiggers/wimlib.git
+          git -C "$wimlib_reference_dir" fetch --depth 1 origin cd5e231c348c255ae5088873b5a66ee0eb96fa07
+          git -C "$wimlib_reference_dir" checkout --detach FETCH_HEAD
+          cd "$wimlib_reference_dir"
+          ./bootstrap
+          ./configure --without-ntfs-3g --without-fuse --disable-static
+          make -j2
+          sudo make install
+          sudo ldconfig
+          cd "$GITHUB_WORKSPACE"
+          cc -O2 tools/xpress/wimlib_probe.c $(pkg-config --cflags --libs wimlib) -o vort-wimlib-xpress-probe
+          sudo install vort-wimlib-xpress-probe /usr/local/bin/
 
       - name: Check formatting
         run: zig fmt --check build.zig build.zig.zon src examples bench tools
