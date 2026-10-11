@@ -169,6 +169,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   interleaved BAT entries, sparse MiB-aligned payload blocks, parent locators,
   shared sector bitmaps, bounded whole and random-range reads, a pinned QEMU
   fixture, fuzzing, and bidirectional QEMU plus 7-Zip interoperability;
+- dependency-free CISO v1/v2 and ZISO reading and deterministic writing, with
+  raw, raw-DEFLATE, and LZ4 blocks, shifted indexes and alignment padding,
+  per-block CISO v2 codec selection, raw fallback, exact partial tails,
+  bounded whole-image and random-range decoding, fuzzing, and bidirectional
+  maxcso interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded
@@ -1566,7 +1571,8 @@ status, `docs/zstd-gap.md` for current zstd comparison limitations, and
 storage-specific limits are documented in `docs/formats/qcow2.md`; VMDK support
 is documented in `docs/formats/vmdk.md`, EWF/E01 support in
 `docs/formats/ewf.md`, CHD v5 support in `docs/formats/chd.md`, and classic VHD
-support in `docs/formats/vhd.md`, and VHDX support in `docs/formats/vhdx.md`.
+support in `docs/formats/vhd.md`, VHDX support in `docs/formats/vhdx.md`, and
+CISO/ZISO support in `docs/formats/cso.md`.
 Local Rust deflate
 baselines such as `~/Work/fdeflate` and `~/Work/miniz_oxide` should be treated
 as required functionality/performance competitors once their executable harnesses

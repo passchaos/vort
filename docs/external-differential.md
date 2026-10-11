@@ -22,6 +22,7 @@ zig build run-ewf-diff
 zig build run-chd-diff
 zig build run-vhd-diff
 zig build run-vhdx-diff
+zig build run-cso-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
@@ -75,6 +76,14 @@ checks and extracts both Vort modes and generates both modes for Vort, while
 7-Zip independently extracts all three Vort modes, including parent sector
 overrides. It accepts the same explicit QEMU and 7-Zip arguments as the VHD
 differential.
+
+The CISO/ZISO differential always checks deterministic CISO v1, CISO v2, and
+ZISO writer round trips, raw fallback, per-block DEFLATE/LZ4 selection, shifted
+indexes, bounded ranges, and malformed structures. When `maxcso` is available,
+it decodes every Vort layout and generates fresh v1/v2/ZSO images for Vort.
+Use `-- --maxcso /path/to/maxcso --seven-zip /path/to/7zz` for explicit tools.
+7-Zip is counted only if the installed release actually recognizes and
+byte-exactly extracts the image; lack of a CSO handler is reported as skipped.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

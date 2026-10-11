@@ -320,6 +320,14 @@ pub fn build(b: *std.Build) void {
     const run_vhdx_tests = b.addRunArtifact(vhdx_tests);
     const vhdx_test_step = b.step("test-vhdx", "Run focused VHDX image tests");
     vhdx_test_step.dependOn(&run_vhdx_tests.step);
+    const cso_tests = b.addTest(.{
+        .name = "vort-cso-tests",
+        .root_module = tests_mod,
+        .filters = &.{"CSO"},
+    });
+    const run_cso_tests = b.addRunArtifact(cso_tests);
+    const cso_test_step = b.step("test-cso", "Run focused CSO/ZSO image tests");
+    cso_test_step.dependOn(&run_cso_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1366,6 +1374,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| vhdx_diff.addArgs(args);
     const vhdx_diff_step = b.step("run-vhdx-diff", "Validate VHDX images against optional QEMU and 7-Zip");
     vhdx_diff_step.dependOn(&vhdx_diff.step);
+
+    const cso_diff = b.addSystemCommand(&.{ "python3", "tools/cso/diff.py", "--cli" });
+    cso_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| cso_diff.addArgs(args);
+    const cso_diff_step = b.step("run-cso-diff", "Validate CSO/ZSO images against optional maxcso and 7-Zip");
+    cso_diff_step.dependOn(&cso_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

@@ -18061,3 +18061,14 @@ reuse, so production keeps the simpler independently owned plans.
   QEMU 9.2 fixture plus bidirectional QEMU and 7-Zip validation cover both
   modes; 7-Zip additionally validates parent-sector overrides. Active-log replay
   and in-place updates remain follow-up work. See `docs/formats/vhdx.md`.
+
+- Added dependency-free CISO v1/v2 and ZISO reading and deterministic writing.
+  The parser checks bounded power-of-two block geometry, monotonic shifted
+  indexes, physical extents, raw spans, CISO v2 codec flags, and alignment
+  padding while exposing bounded whole-image and random-range reads. The writer
+  emits raw, raw-DEFLATE, and LZ4 blocks with automatic raw fallback and
+  per-block CISO v2 selection, preserves exact partial logical tails, and
+  chooses or accepts an index shift deterministically. Fuzzing and the maxcso
+  differential cover all three layouts in both directions. Streaming file I/O,
+  DAX, parallel encoding, and ratio/throughput tuning remain follow-up work.
+  See `docs/formats/cso.md`.

@@ -528,6 +528,29 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedVhdxError(err)) return err;
     }
+    if (vort.parseCso(data, .{
+        .max_blocks = 4096,
+        .max_block_size = 256 * 1024,
+        .max_compressed_block_bytes = 512 * 1024,
+    })) |archive| {
+        const logical_size = std.math.cast(
+            usize,
+            archive.header.uncompressed_size,
+        ) orelse 0;
+        const length = @min(logical_size, 4096);
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            length,
+            length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedCsoError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedCsoError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -1218,6 +1241,20 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(differencing_vhdx);
     try fuzzOne(init.gpa, differencing_vhdx);
 
+    inline for (.{
+        vort.CsoFormat.cso1,
+        vort.CsoFormat.cso2,
+        vort.CsoFormat.zso,
+    }) |image_format| {
+        const cso = try vort.encodeCsoAlloc(
+            init.gpa,
+            "CSO fuzz target valid block\n" ** 128,
+            .{ .format = image_format, .compression = .auto },
+        );
+        defer init.gpa.free(cso);
+        try fuzzOne(init.gpa, cso);
+    }
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -1233,7 +1270,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 20,
+        samples.len + 23,
         data.len,
     });
     try stdout.flush();
@@ -1540,6 +1577,31 @@ fn isExpectedVhdxError(err: anyerror) bool {
         error.IntegerOverflow,
         error.RangeOutOfBounds,
         error.OutputLimitExceeded,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedCsoError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidCso,
+        error.UnsupportedCsoCodec,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.InvalidDeflateBlockType,
+        error.StoredLengthMismatch,
+        error.InvalidHuffmanCode,
+        error.UnsupportedDeflateFeature,
+        error.InvalidMatch,
+        error.InvalidDynamicBlockHeader,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.TrailingData,
         => true,
         else => false,
     };
