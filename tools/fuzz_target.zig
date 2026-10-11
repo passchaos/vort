@@ -571,6 +571,29 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedDaxError(err)) return err;
     }
+    if (vort.parseGcz(data, .{
+        .max_blocks = 4096,
+        .max_block_size = 1 << 20,
+        .max_compressed_block_bytes = (1 << 20) + 64,
+    })) |archive| {
+        const logical_size = std.math.cast(
+            usize,
+            archive.header.logical_size,
+        ) orelse 0;
+        const length = @min(logical_size, 4096);
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            length,
+            length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedGczError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedGczError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -1283,6 +1306,15 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(dax);
         try fuzzOne(init.gpa, dax);
     }
+    inline for (.{ vort.GczCompression.auto, vort.GczCompression.raw }) |compression| {
+        const gcz = try vort.encodeGczAlloc(
+            init.gpa,
+            "GCZ fuzz target valid block\n" ** 320,
+            .{ .compression = compression, .block_size = 4096 },
+        );
+        defer init.gpa.free(gcz);
+        try fuzzOne(init.gpa, gcz);
+    }
 
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
@@ -1299,7 +1331,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 25,
+        samples.len + 27,
         data.len,
     });
     try stdout.flush();
@@ -1641,6 +1673,32 @@ fn isExpectedDaxError(err: anyerror) bool {
         error.InvalidDax,
         error.InvalidMagic,
         error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.InvalidDeflateBlockType,
+        error.StoredLengthMismatch,
+        error.BadZlibHeader,
+        error.NeedDictionary,
+        error.InvalidHuffmanCode,
+        error.UnsupportedDeflateFeature,
+        error.InvalidMatch,
+        error.InvalidDynamicBlockHeader,
+        error.ChecksumMismatch,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.TrailingData,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedGczError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidGcz,
+        error.InvalidMagic,
         error.TruncatedFrame,
         error.CorruptFrame,
         error.SizeMismatch,

@@ -24,6 +24,7 @@ zig build run-vhd-diff
 zig build run-vhdx-diff
 zig build run-cso-diff
 zig build run-dax-diff
+zig build run-gcz-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
@@ -91,6 +92,13 @@ automatic version-1 output, canonical non-compressed areas, partial tails,
 bounded ranges, and malformed metadata. When `maxcso` is available, it decodes
 all three Vort writer modes and creates a fresh DAX image for Vort. Supply an
 explicit oracle with `-- --maxcso /path/to/maxcso`.
+
+The GCZ differential always checks raw, forced-zlib, and automatic output
+against an independent Python zlib reader and generates a reference GCZ for
+Vort. It also covers partial tails, bounded ranges, stored-payload Adler-32,
+and malformed pointers. When `dolphin-tool` is installed, all Vort writer modes
+are converted back to ISO and DolphinTool creates a fresh GCZ for Vort. Supply
+an explicit binary with `-- --dolphin-tool /path/to/dolphin-tool`.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

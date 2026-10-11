@@ -178,6 +178,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   8192-byte zlib frames, canonical non-compressed area tables, automatic raw
   fallback, exact partial tails, bounded whole-image and random-range decoding,
   a pinned maxcso fixture, fuzzing, and bidirectional maxcso interoperability;
+- dependency-free Dolphin GCZ reading and deterministic writing, with zlib/raw
+  blocks, high-bit block pointers, stored-payload Adler-32 verification,
+  automatic raw fallback, exact partial tails, bounded whole-image and
+  random-range decoding, a pinned current-Dolphin fixture, fuzzing, and Python
+  zlib plus DolphinTool differential coverage;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded
@@ -1578,6 +1583,7 @@ is documented in `docs/formats/vmdk.md`, EWF/E01 support in
 support in `docs/formats/vhd.md`, VHDX support in `docs/formats/vhdx.md`, and
 CISO/ZISO support in `docs/formats/cso.md`, and DAX support in
 `docs/formats/dax.md`.
+GCZ support is documented in `docs/formats/gcz.md`.
 Local Rust deflate
 baselines such as `~/Work/fdeflate` and `~/Work/miniz_oxide` should be treated
 as required functionality/performance competitors once their executable harnesses

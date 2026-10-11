@@ -336,6 +336,14 @@ pub fn build(b: *std.Build) void {
     const run_dax_tests = b.addRunArtifact(dax_tests);
     const dax_test_step = b.step("test-dax", "Run focused DAX image tests");
     dax_test_step.dependOn(&run_dax_tests.step);
+    const gcz_tests = b.addTest(.{
+        .name = "vort-gcz-tests",
+        .root_module = tests_mod,
+        .filters = &.{"GCZ"},
+    });
+    const run_gcz_tests = b.addRunArtifact(gcz_tests);
+    const gcz_test_step = b.step("test-gcz", "Run focused Dolphin GCZ image tests");
+    gcz_test_step.dependOn(&run_gcz_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1394,6 +1402,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| dax_diff.addArgs(args);
     const dax_diff_step = b.step("run-dax-diff", "Validate DAX images against optional maxcso");
     dax_diff_step.dependOn(&dax_diff.step);
+
+    const gcz_diff = b.addSystemCommand(&.{ "python3", "tools/gcz/diff.py", "--cli" });
+    gcz_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| gcz_diff.addArgs(args);
+    const gcz_diff_step = b.step("run-gcz-diff", "Validate GCZ images against optional DolphinTool");
+    gcz_diff_step.dependOn(&gcz_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

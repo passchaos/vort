@@ -18082,3 +18082,14 @@ reuse, so production keeps the simpler independently owned plans.
   validation plus a pinned maxcso 1.13.0 fixture cover both versions. Streaming
   file I/O, parallel encoding, and ratio/throughput tuning remain follow-up
   work. See `docs/formats/dax.md`.
+
+- Added dependency-free Dolphin GCZ reading and deterministic writing. The
+  parser validates exact block geometry, monotonic 63-bit relative pointers,
+  high-bit raw flags, stored extents, Adler-32 values over stored payloads, and
+  complete zlib streams while exposing bounded whole-image and random-range
+  reads. The writer emits raw, forced-zlib, or Dolphin-compatible automatic
+  blocks with deterministic hashes and exact partial logical tails. Fuzzing,
+  an independent Python zlib differential, a pinned current-Dolphin fixture,
+  and DolphinTool conversion cover both directions. Streaming file I/O,
+  parallel encoding, and deeper ratio/throughput tuning remain follow-up work.
+  See `docs/formats/gcz.md`.
