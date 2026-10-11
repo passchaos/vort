@@ -17988,3 +17988,17 @@ reuse, so production keeps the simpler independently owned plans.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
   comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.
+
+- Added dependency-free QCOW2 v2/v3 reading and deterministic writing. The
+  reader covers standard and extended L2 mappings, sparse/zero/normal clusters,
+  raw-DEFLATE and Zstandard compressed clusters, caller-supplied raw backing
+  images, external data files, bounded whole-image decode, and random ranges.
+  The writer emits sector-aligned v2/v3 images with none/zlib/Zstd selection,
+  sparse zeros, compression fallback, complete refcount/L1/L2 metadata, and
+  explicit capacity failure. QEMU 9.2 validates both directions including
+  Zstd, extended subclusters, backing, and external-data layouts; 7-Zip also
+  extracts Vort v2/v3 none/zlib images. The generic raw-byte fuzz target now
+  includes valid and malformed QCOW2 paths. Snapshot traversal, encryption,
+  writer-side extended/external layouts, multi-payload compressed-cluster
+  packing, and broader refcount scaling remain follow-up work. See
+  `docs/formats/qcow2.md`.

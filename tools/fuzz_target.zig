@@ -48,6 +48,7 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         error.InvalidMatch,
         error.UnsupportedSnappyFeature,
         error.TruncatedFrame,
+        error.TrailingData,
         error.IntegerOverflow,
         => {},
         else => return err,
@@ -57,6 +58,7 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         error.InvalidMatch,
         error.UnsupportedSnappyFeature,
         error.TruncatedFrame,
+        error.TrailingData,
         error.IntegerOverflow,
         => {},
         else => return err,
@@ -382,6 +384,29 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
                 if (!isExpectedZfsCompressionError(err)) return err;
             }
         }
+    }
+    if (vort.parseQcow2(data, .{
+        .max_l1_entries = 4096,
+        .max_cluster_size = 1 << 20,
+        .max_compressed_bytes = 1 << 20,
+    })) |archive| {
+        const virtual_size = std.math.cast(
+            usize,
+            archive.header.virtual_size,
+        ) orelse 0;
+        const length = @min(virtual_size, 4096);
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            length,
+            length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedQcow2Error(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedQcow2Error(err)) return err;
     }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
@@ -998,6 +1023,14 @@ pub fn main(init: std.process.Init) !void {
     const zfs_lzjb_len = try base64.decode(zfs_lzjb[5..], zfs_text);
     try fuzzOne(init.gpa, zfs_lzjb[0 .. 5 + zfs_lzjb_len]);
 
+    const qcow2 = try vort.encodeQcow2Alloc(
+        init.gpa,
+        "QCOW2 fuzz target valid cluster\n" ** 128,
+        .{ .cluster_bits = 12, .compression = .zstd },
+    );
+    defer init.gpa.free(qcow2);
+    try fuzzOne(init.gpa, qcow2);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -1013,7 +1046,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 9,
+        samples.len + 10,
         data.len,
     });
     try stdout.flush();
@@ -1152,6 +1185,42 @@ fn isExpectedZfsCompressionError(err: anyerror) bool {
         error.UnsupportedDeflateFeature,
         error.UnsupportedZstdFeature,
         error.CorruptFrame,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedQcow2Error(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidQcow2,
+        error.UnsupportedQcow2Feature,
+        error.UnsupportedQcow2Compression,
+        error.MissingQcow2BackingFile,
+        error.MissingQcow2DataFile,
+        error.EncryptedQcow2,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.ChecksumMismatch,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.InvalidDeflateBlockType,
+        error.StoredLengthMismatch,
+        error.BadZlibHeader,
+        error.BadGzipHeader,
+        error.NeedDictionary,
+        error.InvalidHuffmanCode,
+        error.UnsupportedDeflateFeature,
+        error.UnsupportedZstdFeature,
+        error.InvalidMatch,
+        error.InvalidDynamicBlockHeader,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.TrailingData,
+        error.DuplicateDictionaryId,
+        error.InvalidDictionaryMetadata,
         => true,
         else => false,
     };

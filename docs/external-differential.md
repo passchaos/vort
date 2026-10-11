@@ -16,9 +16,19 @@ zig build run-python-zlib-diff
 zig build run-gzip-cli-diff
 zig build run-rust-deflate-diff
 zig build run-snappy-interop-probe
+zig build run-qcow2-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
+
+The QCOW2 differential always exercises the Vort v2/v3 writer and reader for
+uncompressed, raw-DEFLATE, and Zstandard clusters. When `qemu-img` is available,
+it checks both directions and adds sparse/zero clusters, extended L2
+subclusters, raw backing files, and external data files. When `7zz` or `7z` is
+available, it independently extracts Vort's v2/v3 uncompressed and
+raw-DEFLATE images. Explicit tool paths can be supplied with
+`-- --qemu-img <path> --seven-zip <path>`; the summary reports unavailable
+oracles as skipped instead of counting them as evidence.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

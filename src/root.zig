@@ -35,6 +35,7 @@ pub const dmg = @import("dmg.zig");
 pub const pbzx = @import("pbzx.zig");
 pub const xar = @import("xar.zig");
 pub const zfs = @import("zfs.zig");
+pub const qcow2 = @import("qcow2.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1077,6 +1078,18 @@ pub const decodeZfsZleIntoExactSize = zfs.decodeZleIntoExactSize;
 pub const encodeZfsBlockAlloc = zfs.encodeBlockAlloc;
 pub const decodeZfsBlockAllocExactSize = zfs.decodeBlockAllocExactSize;
 pub const parseZfsZstdMetadata = zfs.parseZstdMetadata;
+
+pub const Qcow2Error = qcow2.Error;
+pub const Qcow2CompressionType = qcow2.CompressionType;
+pub const Qcow2Header = qcow2.Header;
+pub const Qcow2Archive = qcow2.Archive;
+pub const Qcow2OpenOptions = qcow2.OpenOptions;
+pub const Qcow2Compression = qcow2.Compression;
+pub const Qcow2EncodeOptions = qcow2.EncodeOptions;
+pub const qcow2Magic = qcow2.magic;
+pub const parseQcow2Header = qcow2.parseHeader;
+pub const parseQcow2 = qcow2.parse;
+pub const encodeQcow2Alloc = qcow2.encodeAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3047,6 +3060,7 @@ test {
     _ = pbzx;
     _ = xar;
     _ = zfs;
+    _ = qcow2;
 }
 
 test "root 7z exports create list and extract Copy archives" {

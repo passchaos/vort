@@ -135,6 +135,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   padding semantics, Zstd level/version metadata, deterministic writers,
   a pinned OpenZFS LZJB fixture, fuzzing, and bidirectional OpenZFS plus system
   codec differentials;
+- dependency-free QCOW2 v2/v3 image reading and deterministic writing with
+  L1/L2 mapping, sparse and zero clusters, raw-DEFLATE and Zstandard compressed
+  clusters, extended-L2 subclusters, caller-supplied raw backing/external data
+  files, bounded whole-image and random-range decoding, fuzzing, and
+  bidirectional QEMU plus 7-Zip interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded
@@ -1528,7 +1533,8 @@ audit, `docs/validation-json.md` for validation/report JSON schemas,
 `docs/fuzzing.md` for parser fuzzing entrypoints, `docs/external-differential.md` for competitor
 differential validation, `docs/checksum-dispatch.md` for checksum dispatch
 status, `docs/zstd-gap.md` for current zstd comparison limitations, and
-`docs/dynamic-encoder.md` for dynamic encoder status. Local Rust deflate
+`docs/dynamic-encoder.md` for dynamic encoder status. QCOW2 support and its
+storage-specific limits are documented in `docs/formats/qcow2.md`. Local Rust deflate
 baselines such as `~/Work/fdeflate` and `~/Work/miniz_oxide` should be treated
 as required functionality/performance competitors once their executable harnesses
 are wired into Vort validation.

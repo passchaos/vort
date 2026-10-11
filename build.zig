@@ -272,6 +272,14 @@ pub fn build(b: *std.Build) void {
     const run_zfs_compression_tests = b.addRunArtifact(zfs_compression_tests);
     const zfs_compression_test_step = b.step("test-zfs-compression", "Run focused ZFS block compression tests");
     zfs_compression_test_step.dependOn(&run_zfs_compression_tests.step);
+    const qcow2_tests = b.addTest(.{
+        .name = "vort-qcow2-tests",
+        .root_module = tests_mod,
+        .filters = &.{"QCOW2"},
+    });
+    const run_qcow2_tests = b.addRunArtifact(qcow2_tests);
+    const qcow2_test_step = b.step("test-qcow2", "Run focused QCOW2 image tests");
+    qcow2_test_step.dependOn(&run_qcow2_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1282,6 +1290,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| zfs_compression_diff.addArgs(args);
     const zfs_compression_diff_step = b.step("run-zfs-compression-diff", "Validate ZFS block codecs against optional OpenZFS and system codec references");
     zfs_compression_diff_step.dependOn(&zfs_compression_diff.step);
+
+    const qcow2_diff = b.addSystemCommand(&.{ "python3", "tools/qcow2/diff.py", "--cli" });
+    qcow2_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| qcow2_diff.addArgs(args);
+    const qcow2_diff_step = b.step("run-qcow2-diff", "Validate QCOW2 images against optional qemu-img and 7-Zip");
+    qcow2_diff_step.dependOn(&qcow2_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);
