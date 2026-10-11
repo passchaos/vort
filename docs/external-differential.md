@@ -20,6 +20,7 @@ zig build run-qcow2-diff
 zig build run-vmdk-diff
 zig build run-ewf-diff
 zig build run-chd-diff
+zig build run-vhd-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
@@ -58,6 +59,13 @@ When `chdman` is available, it verifies and extracts Vort output byte-exactly;
 the reverse direction creates fresh none/zlib/LZMA/Huffman/Zstandard images
 and a parent-only delta image. An explicit binary can be supplied with
 `-- --chdman <path>`.
+
+The VHD differential always checks fixed/dynamic writer round trips, a
+differencing parent chain, malformed structures, and a pinned QEMU 9.2 dynamic
+fixture. When `qemu-img` is available it decodes both Vort layouts and creates
+fresh fixed/dynamic images for Vort; 7-Zip independently extracts both Vort
+layouts. Explicit tools use
+`-- --qemu-img <path> --seven-zip <path>`.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

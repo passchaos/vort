@@ -484,6 +484,28 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedChdError(err)) return err;
     }
+    if (vort.parseVhd(data, .{
+        .max_table_entries = 4096,
+        .max_block_size = 1 << 20,
+    })) |archive| {
+        const logical_size = std.math.cast(
+            usize,
+            archive.footer.current_size,
+        ) orelse 0;
+        const length = @min(logical_size, 4096);
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            length,
+            length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedVhdError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedVhdError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -1144,6 +1166,16 @@ pub fn main(init: std.process.Init) !void {
         try fuzzOne(init.gpa, codec_chd);
     }
 
+    inline for (.{ vort.VhdDiskType.fixed, vort.VhdDiskType.dynamic }) |disk_type| {
+        const vhd = try vort.encodeVhdAlloc(
+            init.gpa,
+            "VHD fuzz target valid block\n" ** 128,
+            .{ .disk_type = disk_type, .block_size = 4096 },
+        );
+        defer init.gpa.free(vhd);
+        try fuzzOne(init.gpa, vhd);
+    }
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -1159,7 +1191,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 16,
+        samples.len + 18,
         data.len,
     });
     try stdout.flush();
@@ -1432,6 +1464,23 @@ fn isExpectedChdError(err: anyerror) bool {
         error.TrailingData,
         error.DuplicateDictionaryId,
         error.InvalidDictionaryMetadata,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedVhdError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidVhd,
+        error.UnsupportedVhdFeature,
+        error.MissingVhdParent,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.ChecksumMismatch,
+        error.IntegerOverflow,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
         => true,
         else => false,
     };

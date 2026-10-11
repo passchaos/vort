@@ -18040,3 +18040,13 @@ reuse, so production keeps the simpler independently owned plans.
   generation, verification, and extraction validate both directions. Legacy
   v1--v4, FLAC/CD/A-V codecs, unit-shifted parent search, and map RLE emission
   remain follow-up work. See `docs/formats/chd.md`.
+
+- Added dependency-free classic VHD reading and deterministic fixed, dynamic,
+  and differencing writing. Footer/dynamic-header checksums, BAT bounds,
+  sector bitmaps, sparse blocks, explicit parent UUID chains, bounded full and
+  random-range reads, deterministic UUIDs, and sector tail padding are covered.
+  A pinned QEMU 9.2 image plus bidirectional QEMU and 7-Zip validation cover
+  fixed/dynamic interoperability; structural tests cover differencing because
+  QEMU's vpc driver does not resolve parent chains. In-place updates, parent
+  locator path resolution, and VHDX remain follow-up work. See
+  `docs/formats/vhd.md`.

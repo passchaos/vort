@@ -39,6 +39,7 @@ pub const qcow2 = @import("qcow2.zig");
 pub const vmdk = @import("vmdk.zig");
 pub const ewf = @import("ewf.zig");
 pub const chd = @import("chd.zig");
+pub const vhd = @import("vhd.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1136,6 +1137,18 @@ pub const parseChdHeader = chd.parseHeader;
 pub const parseChdAlloc = chd.parseAlloc;
 pub const encodeChdAlloc = chd.encodeAlloc;
 pub const chdTag = chd.tag;
+
+pub const VhdError = vhd.Error;
+pub const VhdDiskType = vhd.DiskType;
+pub const VhdGeometry = vhd.Geometry;
+pub const VhdFooter = vhd.Footer;
+pub const VhdDynamicHeader = vhd.DynamicHeader;
+pub const VhdArchive = vhd.Archive;
+pub const VhdOpenOptions = vhd.OpenOptions;
+pub const VhdEncodeOptions = vhd.EncodeOptions;
+pub const parseVhdFooter = vhd.parseFooter;
+pub const parseVhd = vhd.parse;
+pub const encodeVhdAlloc = vhd.encodeAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3110,6 +3123,7 @@ test {
     _ = vmdk;
     _ = ewf;
     _ = chd;
+    _ = vhd;
 }
 
 test "root 7z exports create list and extract Copy archives" {
