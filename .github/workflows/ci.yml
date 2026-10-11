@@ -29,6 +29,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y autoconf automake cabextract gzip libtool lz4 meson ninja-build p7zip-full squashfs-tools zstd libarchive-dev libbrotli-dev liblz4-dev liblzma-dev libsnappy-dev libssl-dev libzstd-dev zlib1g-dev git
 
+      - name: Install pinned LZNT1 reference
+        run: python3 -m pip install --break-system-packages lznt1==0.2
+
       - name: Check formatting
         run: zig fmt --check build.zig build.zig.zon src examples bench tools
 

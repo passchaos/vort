@@ -176,6 +176,14 @@ pub fn build(b: *std.Build) void {
     const run_lz4_legacy_tests = b.addRunArtifact(lz4_legacy_tests);
     const lz4_legacy_test_step = b.step("test-lz4-legacy", "Run focused LZ4 legacy frame tests");
     lz4_legacy_test_step.dependOn(&run_lz4_legacy_tests.step);
+    const lznt1_tests = b.addTest(.{
+        .name = "vort-lznt1-tests",
+        .root_module = tests_mod,
+        .filters = &.{"LZNT1"},
+    });
+    const run_lznt1_tests = b.addRunArtifact(lznt1_tests);
+    const lznt1_test_step = b.step("test-lznt1", "Run focused Windows LZNT1 codec tests");
+    lznt1_test_step.dependOn(&run_lznt1_tests.step);
     const lzfse_tests = b.addTest(.{
         .name = "vort-lzfse-tests",
         .root_module = tests_mod,
@@ -1120,6 +1128,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lz4_legacy_diff.addArgs(args);
     const lz4_legacy_diff_step = b.step("run-lz4-legacy-diff", "Validate LZ4 legacy frames against the system lz4 CLI");
     lz4_legacy_diff_step.dependOn(&lz4_legacy_diff.step);
+
+    const lznt1_diff = b.addSystemCommand(&.{ "python3", "tools/lznt1/diff.py", "--cli" });
+    lznt1_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| lznt1_diff.addArgs(args);
+    const lznt1_diff_step = b.step("run-lznt1-diff", "Validate Windows LZNT1 against the optional Python reference");
+    lznt1_diff_step.dependOn(&lznt1_diff.step);
 
     const lzfse_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/diff.py", "--cli" });
     lzfse_diff.addArtifactArg(cli_exe);
@@ -4877,6 +4891,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(snappy_framing_diff_step);
     ci_smoke_step.dependOn(hadoop_lz4_diff_step);
     ci_smoke_step.dependOn(lz4_legacy_diff_step);
+    ci_smoke_step.dependOn(lznt1_diff_step);
     ci_smoke_step.dependOn(lzfse_diff_step);
     ci_smoke_step.dependOn(zchunk_diff_step);
     ci_smoke_step.dependOn(squashfs_diff_step);

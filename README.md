@@ -85,6 +85,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   blocks up to 8 MiB, zero-allocation metadata iteration, decoded-size preflight,
   bounded/caller-owned decode, system `lz4 -l` interoperability, and automatic
   TAR/CPIO legacy-magic detection;
+- pure Zig Windows LZNT1 encoding and decoding with 4 KiB chunks, dynamic
+  length/displacement token partitions, overlapping-copy matches, stored-block
+  fallback, optional end markers, inter-chunk zero padding, decoded-size
+  preflight, bounded/caller-owned APIs, MS-XCA official vectors, and
+  bidirectional differential validation against the pinned `lznt1` reference;
 - pure Zig Apple LZFSE stream and raw LZVN support with `bvx-`, `bvxn`, `bvx1`,
   and `bvx2` decoding, compressed frequency-table and four-way literal FSE
   reconstruction, bounded/caller-owned APIs, deterministic LZVN-or-stored block
@@ -457,6 +462,10 @@ zig build run-lz4-native-probe
 zig build run-lz4-native-dictionary-probe
 zig build run-lz4-native-summary-cli-probe
 zig build run-lz4-native-summary-dashboard
+zig build run -- encode-lznt1-file README.md /tmp/readme.lznt1
+zig build run -- decode-lznt1-file /tmp/readme.lznt1 /tmp/readme-lznt1.out 1048576
+zig build run -- inspect-lznt1-file /tmp/readme.lznt1 1048576
+zig build run-lznt1-diff
 zig build run-native-summary-error-dashboard
 zig build run-native-summary-error-negative-smoke
 zig build run-lz4-native-probe -- --path README.md --limit 4096
