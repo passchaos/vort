@@ -248,6 +248,22 @@ pub fn build(b: *std.Build) void {
     const run_dmg_tests = b.addRunArtifact(dmg_tests);
     const dmg_test_step = b.step("test-dmg", "Run focused Apple DMG/UDIF tests");
     dmg_test_step.dependOn(&run_dmg_tests.step);
+    const pbzx_tests = b.addTest(.{
+        .name = "vort-pbzx-tests",
+        .root_module = tests_mod,
+        .filters = &.{"PBZX"},
+    });
+    const run_pbzx_tests = b.addRunArtifact(pbzx_tests);
+    const pbzx_test_step = b.step("test-pbzx", "Run focused Apple PBZX tests");
+    pbzx_test_step.dependOn(&run_pbzx_tests.step);
+    const xar_tests = b.addTest(.{
+        .name = "vort-xar-tests",
+        .root_module = tests_mod,
+        .filters = &.{"XAR"},
+    });
+    const run_xar_tests = b.addRunArtifact(xar_tests);
+    const xar_test_step = b.step("test-xar", "Run focused Apple XAR tests");
+    xar_test_step.dependOn(&run_xar_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1240,6 +1256,18 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| dmg_diff.addArgs(args);
     const dmg_diff_step = b.step("run-dmg-diff", "Validate Apple DMG/UDIF against optional dmg2img, 7-Zip, and Rust udif");
     dmg_diff_step.dependOn(&dmg_diff.step);
+
+    const pbzx_diff = b.addSystemCommand(&.{ "python3", "tools/pbzx/diff.py", "--cli" });
+    pbzx_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| pbzx_diff.addArgs(args);
+    const pbzx_diff_step = b.step("run-pbzx-diff", "Validate Apple PBZX against optional system XZ and independent PBZX tooling");
+    pbzx_diff_step.dependOn(&pbzx_diff.step);
+
+    const xar_diff = b.addSystemCommand(&.{ "python3", "tools/xar/diff.py", "--cli" });
+    xar_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| xar_diff.addArgs(args);
+    const xar_diff_step = b.step("run-xar-diff", "Validate Apple XAR against optional libarchive and 7-Zip");
+    xar_diff_step.dependOn(&xar_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

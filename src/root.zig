@@ -32,6 +32,8 @@ pub const lzfse = @import("lzfse.zig");
 pub const decmpfs = @import("decmpfs.zig");
 pub const apple_adc = @import("apple_adc.zig");
 pub const dmg = @import("dmg.zig");
+pub const pbzx = @import("pbzx.zig");
+pub const xar = @import("xar.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1023,6 +1025,41 @@ pub const parseDmgAlloc = dmg.parseAlloc;
 pub const encodeDmgAlloc = dmg.encodeAlloc;
 pub const encodeDmgAppend = dmg.encodeAppend;
 pub const encodeDmgInto = dmg.encodeInto;
+
+pub const PbzxError = pbzx.Error;
+pub const PbzxChunk = pbzx.Chunk;
+pub const PbzxArchive = pbzx.Archive;
+pub const PbzxIterator = pbzx.Iterator;
+pub const PbzxParseOptions = pbzx.ParseOptions;
+pub const PbzxCompression = pbzx.Compression;
+pub const PbzxEncodeOptions = pbzx.EncodeOptions;
+pub const pbzxMagic = pbzx.magic;
+pub const parsePbzx = pbzx.parse;
+pub const parsePbzxWithOptions = pbzx.parseWithOptions;
+pub const encodePbzxAlloc = pbzx.encodeAlloc;
+pub const encodePbzxAppend = pbzx.encodeAppend;
+pub const encodePbzxInto = pbzx.encodeInto;
+
+pub const XarError = xar.Error;
+pub const XarChecksumAlgorithm = xar.ChecksumAlgorithm;
+pub const XarDigest = xar.Digest;
+pub const XarHeader = xar.Header;
+pub const XarEncoding = xar.Encoding;
+pub const XarEntryKind = xar.EntryKind;
+pub const XarData = xar.Data;
+pub const XarEntry = xar.Entry;
+pub const XarArchive = xar.Archive;
+pub const XarParseOptions = xar.ParseOptions;
+pub const XarCompression = xar.Compression;
+pub const XarEncodeEntryKind = xar.EncodeEntryKind;
+pub const XarEncodeEntry = xar.EncodeEntry;
+pub const XarEncodeOptions = xar.EncodeOptions;
+pub const xarMagic = xar.magic;
+pub const parseXarHeader = xar.parseHeader;
+pub const parseXarAlloc = xar.parseAlloc;
+pub const encodeXarAlloc = xar.encodeAlloc;
+pub const encodeXarAppend = xar.encodeAppend;
+pub const encodeXarInto = xar.encodeInto;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -2990,6 +3027,8 @@ test {
     _ = decmpfs;
     _ = apple_adc;
     _ = dmg;
+    _ = pbzx;
+    _ = xar;
 }
 
 test "root 7z exports create list and extract Copy archives" {

@@ -20,6 +20,8 @@ const wof_cli = @import("cli/wof.zig");
 const lzfse_cli = @import("cli/lzfse.zig");
 const decmpfs_cli = @import("cli/decmpfs.zig");
 const dmg_cli = @import("cli/dmg.zig");
+const pbzx_cli = @import("cli/pbzx.zig");
+const xar_cli = @import("cli/xar.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
@@ -180,6 +182,20 @@ pub fn main(init: std.process.Init) !void {
         try dmg_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-dmg")) {
         try dmg_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-pbzx")) {
+        try pbzx_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-pbzx")) {
+        try pbzx_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-pbzx-range")) {
+        try pbzx_cli.decodeRange(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-pbzx")) {
+        try pbzx_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-xar")) {
+        try xar_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-xar-entry")) {
+        try xar_cli.extract(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-xar-file")) {
+        try xar_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2361,6 +2377,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-dmg-partition <in> <out> <partition> [max_output]
         \\  decode-dmg-range <in> <out> <partition> <offset> <length>
         \\  encode-dmg <in> <out> <copy|adc|zlib|bzip2|lzfse|xz> [block_size] [fallback|always]
+        \\  inspect-pbzx <path>
+        \\  decode-pbzx <in> <out> [max_output]
+        \\  decode-pbzx-range <in> <out> <offset> <length>
+        \\  encode-pbzx <in> <out> <auto|xz|stored> [chunk_size]
+        \\  inspect-xar <path>
+        \\  extract-xar-entry <in> <out> <archive_path> [max_output]
+        \\  encode-xar-file <in> <out> <archive_path> <auto|copy|zlib|bzip2|lzma|xz> [none|sha1|md5|sha256|sha512]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

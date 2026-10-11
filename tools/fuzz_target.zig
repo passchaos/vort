@@ -321,6 +321,49 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedDmgError(err)) return err;
     }
+    if (vort.parsePbzxWithOptions(data, .{
+        .max_output_len = 1 << 20,
+        .max_chunk_decoded_bytes = 1 << 20,
+        .max_chunks = 4096,
+        .max_xz_dictionary_bytes = 1 << 20,
+    })) |archive| {
+        const length = @min(archive.decoded_size, 4096);
+        if (archive.decodeRangeAllocLimited(
+            allocator,
+            0,
+            length,
+            length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedPbzxError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedPbzxError(err)) return err;
+    }
+    if (vort.parseXarAlloc(allocator, data, .{
+        .max_toc_packed_bytes = 1 << 20,
+        .max_toc_bytes = 1 << 20,
+        .max_entries = 256,
+        .max_depth = 64,
+        .max_entry_decoded_bytes = 1 << 20,
+        .max_lzma_dictionary_bytes = 1 << 20,
+        .max_xz_dictionary_bytes = 1 << 20,
+    })) |archive_value| {
+        var archive = archive_value;
+        defer archive.deinit();
+        for (archive.entries, 0..) |entry, index| {
+            if (entry.data == null) continue;
+            if (archive.extractAllocLimited(allocator, index, 1 << 20)) |decoded| {
+                allocator.free(decoded);
+            } else |err| {
+                if (!isExpectedXarError(err)) return err;
+            }
+            break;
+        }
+    } else |err| {
+        if (!isExpectedXarError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -906,6 +949,20 @@ pub fn main(init: std.process.Init) !void {
     const dmg_len = try base64.decode(dmg, dmg_text);
     try fuzzOne(init.gpa, dmg[0..dmg_len]);
 
+    const pbzx = try vort.encodePbzxAlloc(
+        init.gpa,
+        "PBZX fuzz target valid stream" ** 64,
+        .{ .chunk_size = 257 },
+    );
+    defer init.gpa.free(pbzx);
+    try fuzzOne(init.gpa, pbzx);
+
+    const xar_text = vort.fuzz.xar_fixture_base64;
+    const xar = try init.gpa.alloc(u8, base64.calcSizeUpperBound(xar_text.len));
+    defer init.gpa.free(xar);
+    const xar_len = try base64.decode(xar, xar_text);
+    try fuzzOne(init.gpa, xar[0..xar_len]);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -921,7 +978,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 6,
+        samples.len + 8,
         data.len,
     });
     try stdout.flush();
@@ -948,6 +1005,68 @@ fn isExpectedDmgError(err: anyerror) bool {
         error.InvalidLzmaHeader,
         error.InvalidLzmaStream,
         error.UnsupportedLzmaFeature,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.TrailingData,
+        error.ChecksumMismatch,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.RangeOutOfBounds,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.BadZlibHeader,
+        error.NeedDictionary,
+        error.InvalidDeflateBlockType,
+        error.StoredLengthMismatch,
+        error.InvalidHuffmanCode,
+        error.InvalidDynamicBlockHeader,
+        error.InvalidMatch,
+        error.UnsupportedDeflateFeature,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedPbzxError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidPbzx,
+        error.UnsupportedPbzxCompression,
+        error.InvalidXzHeader,
+        error.InvalidXzStream,
+        error.UnsupportedXzFeature,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.TrailingData,
+        error.ChecksumMismatch,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.RangeOutOfBounds,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedXarError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidXar,
+        error.InvalidXarToc,
+        error.UnsupportedXarCompression,
+        error.UnsupportedXarChecksum,
+        error.UnsupportedXarEntry,
+        error.EncryptedXarEntry,
+        error.InvalidBzip2Header,
+        error.InvalidBzip2Stream,
+        error.UnsupportedBzip2Feature,
+        error.InvalidLzmaHeader,
+        error.InvalidLzmaStream,
+        error.UnsupportedLzmaFeature,
+        error.InvalidXzHeader,
+        error.InvalidXzStream,
+        error.UnsupportedXzFeature,
         error.InvalidMagic,
         error.UnsupportedVersion,
         error.TruncatedFrame,

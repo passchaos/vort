@@ -121,6 +121,15 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   zlib/Bzip2/LZFSE/XZ chunks, CRC verification, bounded whole-partition and
   random-range decoding, a standalone Apple ADC codec, a pinned `hdiutil`
   image, fuzzing, and 7-Zip plus dmg2img interoperability;
+- dependency-free Apple PBZX reading/writing with the verified chunk-size
+  header semantics, stored or independent XZ chunks, bounded whole-stream and
+  random-range decoding, explicit XZ dictionary limits, fuzzing, and system-XZ
+  plus independent PBZX interoperability;
+- dependency-free XAR/XIP/PKG container reading and deterministic writing with
+  nested files/directories/symlinks, stored/zlib/Bzip2/LZMA-Alone/XZ payloads,
+  TOC and per-entry SHA-1/MD5/SHA-256/SHA-512 verification, explicit heap and
+  dictionary limits, a pinned Apple `xar` fixture, fuzzing, and bidirectional
+  libarchive plus 7-Zip interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded
