@@ -457,6 +457,33 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedEwfError(err)) return err;
     }
+    if (vort.parseChdAlloc(allocator, data, .{
+        .max_hunks = 4096,
+        .max_expanded_map_bytes = 4096 * 12,
+        .max_metadata_entries = 256,
+        .max_compressed_hunk_bytes = 1 << 20,
+        .max_self_reference_depth = 4096,
+    })) |archive_value| {
+        var archive = archive_value;
+        defer archive.deinit();
+        const logical_size = std.math.cast(
+            usize,
+            archive.header.logical_bytes,
+        ) orelse 0;
+        const length = @min(logical_size, 4096);
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            length,
+            length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedChdError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedChdError(err)) return err;
+    }
     if (vort.parseSquashfs(data)) |_| {} else |err| switch (err) {
         error.InvalidMagic,
         error.InvalidSquashfs,
@@ -1096,6 +1123,14 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(ewf);
     try fuzzOne(init.gpa, ewf);
 
+    const chd = try vort.encodeChdAlloc(
+        init.gpa,
+        "CHD fuzz target valid hunk\n" ** 128,
+        .{ .hunk_bytes = 4096, .unit_bytes = 512, .compression = .auto },
+    );
+    defer init.gpa.free(chd);
+    try fuzzOne(init.gpa, chd);
+
     var stdin_buffer: [4096]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().readerStreaming(init.io, &stdin_buffer);
     const stdin = &stdin_reader.interface;
@@ -1111,7 +1146,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 12,
+        samples.len + 13,
         data.len,
     });
     try stdout.flush();
@@ -1346,6 +1381,44 @@ fn isExpectedEwfError(err: anyerror) bool {
         error.OutputLimitExceeded,
         error.OutputTooSmall,
         error.TrailingData,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedChdError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidChd,
+        error.InvalidChdMap,
+        error.InvalidChdMetadata,
+        error.UnsupportedChdCodec,
+        error.MissingChdParent,
+        error.InvalidLzmaHeader,
+        error.InvalidLzmaStream,
+        error.UnsupportedLzmaFeature,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.ChecksumMismatch,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.InvalidDeflateBlockType,
+        error.StoredLengthMismatch,
+        error.BadZlibHeader,
+        error.BadGzipHeader,
+        error.NeedDictionary,
+        error.InvalidHuffmanCode,
+        error.UnsupportedDeflateFeature,
+        error.UnsupportedZstdFeature,
+        error.InvalidMatch,
+        error.InvalidDynamicBlockHeader,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.TrailingData,
+        error.DuplicateDictionaryId,
+        error.InvalidDictionaryMetadata,
         => true,
         else => false,
     };

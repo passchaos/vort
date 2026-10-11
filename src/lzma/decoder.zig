@@ -77,6 +77,7 @@ pub fn decodeAllocWithOptions(
         header,
         options.max_output_len,
         header.uncompressed_size == null,
+        header.uncompressed_size == null,
     );
 }
 
@@ -227,6 +228,7 @@ pub fn decodeZipPayloadAllocLimited(
         },
         expected_size,
         end_marker,
+        end_marker,
     );
 }
 
@@ -250,6 +252,7 @@ pub fn decodeLzipPayloadAllocLimited(
             .uncompressed_size = null,
         },
         max_output_len,
+        true,
         true,
     );
 }
@@ -280,6 +283,35 @@ pub fn decode7zPayloadAllocLimited(
         },
         expected_size,
         false,
+        false,
+    );
+}
+
+/// Decode the headerless LZMA1 stream stored in a CHD v5 hunk. CHD fixes the
+/// properties to lc/lp/pb=3/0/2 and carries both dictionary and output sizes
+/// out of band. Every encoded byte belongs to exactly one hunk, so trailing
+/// bytes are rejected even though an LZMA end marker is optional.
+pub fn decodeChdPayloadAllocExactSize(
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    expected_size: usize,
+    dictionary_size: u32,
+) ![]u8 {
+    if (dictionary_size < 4096 or dictionary_size > max_lzma_dictionary_size)
+        return error.OutputLimitExceeded;
+    return decodeRawAlloc(
+        allocator,
+        payload,
+        .{
+            .lc = 3,
+            .lp = 0,
+            .pb = 2,
+            .dictionary_size = dictionary_size,
+            .uncompressed_size = expected_size,
+        },
+        expected_size,
+        false,
+        true,
     );
 }
 
@@ -301,6 +333,7 @@ fn decodeRawAlloc(
     header: Header,
     max_output_len: usize,
     require_end_marker: bool,
+    require_full_input: bool,
 ) ![]u8 {
     const declared_size: ?usize = if (header.uncompressed_size) |size|
         std.math.cast(usize, size) orelse return error.OutputLimitExceeded
@@ -355,7 +388,7 @@ fn decodeRawAlloc(
     if (decoded.len > max_output_len) return error.OutputLimitExceeded;
     if (declared_size) |size| if (decoded.len != size) return error.SizeMismatch;
     if (require_end_marker and !saw_end_marker) return error.InvalidLzmaStream;
-    if (require_end_marker and input.seek != payload.len) return error.TrailingData;
+    if (require_full_input and input.seek != payload.len) return error.TrailingData;
     return decoded;
 }
 

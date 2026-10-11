@@ -22,6 +22,7 @@ pub const decodeMicroAllocLimited = decoder.decodeMicroAllocLimited;
 pub const decodeMicroAllocWithOptions = decoder.decodeMicroAllocWithOptions;
 pub const decodeZipPayloadInto = decoder.decodeZipPayloadInto;
 pub const decodeZipPayloadAllocLimited = decoder.decodeZipPayloadAllocLimited;
+pub const decodeChdPayloadAllocExactSize = decoder.decodeChdPayloadAllocExactSize;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
 pub const encodeInto = writer.encodeInto;

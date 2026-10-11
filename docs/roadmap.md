@@ -18026,3 +18026,15 @@ reuse, so production keeps the simpler independently owned plans.
   libewf 20260924 generation/export verify both directions. EWF2/Ex01, L01,
   encryption, typed acquisition metadata, and writer-side segment splitting
   remain follow-up work. See `docs/formats/ewf.md`.
+
+- Added dependency-free CHD v5 reading and deterministic baseline writing.
+  The reader expands simple and canonical-Huffman/RLE maps, verifies their
+  CRC-16, exposes bounded linked metadata, resolves backward self references
+  and unit-addressed parent ranges, and decodes raw, raw-DEFLATE, LZMA,
+  byte-Huffman, and Zstandard hunks with bounded whole-image/range APIs. The
+  writer emits none/zlib/automatic images with sparse zeros, raw fallback,
+  duplicate-hunk self references, per-hunk CRC-16, and raw/overall SHA-1.
+  Pinned chdman 0.289 codec/metadata/parent fixtures and bidirectional chdman
+  generation, verification, and extraction validate both directions. Legacy
+  v1--v4, FLAC/CD/A-V codecs, writer-side parent/metadata, and writer-side
+  LZMA/Huffman/Zstandard remain follow-up work. See `docs/formats/chd.md`.

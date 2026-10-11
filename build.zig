@@ -296,6 +296,14 @@ pub fn build(b: *std.Build) void {
     const run_ewf_tests = b.addRunArtifact(ewf_tests);
     const ewf_test_step = b.step("test-ewf", "Run focused EWF/E01 image tests");
     ewf_test_step.dependOn(&run_ewf_tests.step);
+    const chd_tests = b.addTest(.{
+        .name = "vort-chd-tests",
+        .root_module = tests_mod,
+        .filters = &.{"CHD"},
+    });
+    const run_chd_tests = b.addRunArtifact(chd_tests);
+    const chd_test_step = b.step("test-chd", "Run focused CHD v5 image tests");
+    chd_test_step.dependOn(&run_chd_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1324,6 +1332,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| ewf_diff.addArgs(args);
     const ewf_diff_step = b.step("run-ewf-diff", "Validate EWF/E01 images against optional libewf tools");
     ewf_diff_step.dependOn(&ewf_diff.step);
+
+    const chd_diff = b.addSystemCommand(&.{ "python3", "tools/chd/diff.py", "--cli" });
+    chd_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| chd_diff.addArgs(args);
+    const chd_diff_step = b.step("run-chd-diff", "Validate CHD v5 images against optional chdman");
+    chd_diff_step.dependOn(&chd_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

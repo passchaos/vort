@@ -26,6 +26,7 @@ const zfs_cli = @import("cli/zfs.zig");
 const qcow2_cli = @import("cli/qcow2.zig");
 const vmdk_cli = @import("cli/vmdk.zig");
 const ewf_cli = @import("cli/ewf.zig");
+const chd_cli = @import("cli/chd.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
@@ -230,6 +231,14 @@ pub fn main(init: std.process.Init) !void {
         try ewf_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-ewf")) {
         try ewf_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-chd")) {
+        try chd_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-chd")) {
+        try chd_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-chd-range")) {
+        try chd_cli.decodeRange(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-chd")) {
+        try chd_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2433,6 +2442,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-ewf <first_segment> <out> [max_output] [additional_segments...]
         \\  decode-ewf-range <first_segment> <out> <offset> <length> [additional_segments...]
         \\  encode-ewf <in> <out> <none|zlib|auto> [sectors_per_chunk]
+        \\  inspect-chd <image.chd> [parent.chd]
+        \\  decode-chd <image.chd> <out> [max_output] [parent.chd]
+        \\  decode-chd-range <image.chd> <out> <offset> <length> [parent.chd]
+        \\  encode-chd <in> <out> <none|zlib|auto> [hunk_bytes] [unit_bytes] [level]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>
