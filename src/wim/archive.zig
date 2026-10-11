@@ -2,12 +2,23 @@ const std = @import("std");
 const core = @import("../core.zig");
 const format = @import("format.zig");
 const codec = @import("codec.zig");
+const image_metadata = @import("metadata.zig");
 
-pub const Error = core.Error || format.Error || codec.Error || std.mem.Allocator.Error || error{
+pub const Error = core.Error || format.Error || codec.Error || image_metadata.Error ||
+    std.mem.Allocator.Error || error{
     InvalidWim,
+    WimImageNotFound,
     WimResourceNotFound,
     WimResourceInOtherPart,
     UnsupportedWimFeature,
+};
+
+pub const PathLimits = struct {
+    max_metadata_bytes: usize = 256 * 1024 * 1024,
+    max_lookup_entries: usize = 4 * 1024 * 1024,
+    max_lookup_bytes: usize = 256 * 1024 * 1024,
+    max_directory_entries: usize = 1024 * 1024,
+    max_path_depth: usize = 256,
 };
 
 pub const LookupEntry = struct {
@@ -35,6 +46,13 @@ pub const LookupTable = struct {
     pub fn find(self: LookupTable, sha1: *const [20]u8) ?LookupEntry {
         for (self.entries) |entry|
             if (std.mem.eql(u8, &entry.sha1, sha1)) return entry;
+        return null;
+    }
+
+    pub fn findData(self: LookupTable, sha1: *const [20]u8) ?LookupEntry {
+        for (self.entries) |entry|
+            if (!entry.resource.isMetadata() and std.mem.eql(u8, &entry.sha1, sha1))
+                return entry;
         return null;
     }
 };
@@ -116,6 +134,72 @@ pub const Archive = struct {
         );
         defer lookup.deinit();
         const entry = lookup.find(sha1) orelse return error.WimResourceNotFound;
+        return self.extractEntryAllocLimited(allocator, entry, max_output_len);
+    }
+
+    pub fn readImageMetadataAlloc(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        limits: PathLimits,
+    ) Error!image_metadata.ImageMetadata {
+        var lookup = try self.readLookupTableAlloc(
+            allocator,
+            limits.max_lookup_entries,
+            limits.max_lookup_bytes,
+        );
+        defer lookup.deinit();
+        const entry = try self.imageMetadataEntry(lookup, image_index);
+        const bytes = try self.extractEntryAllocLimited(
+            allocator,
+            entry,
+            limits.max_metadata_bytes,
+        );
+        return image_metadata.ImageMetadata.fromOwnedBytes(allocator, bytes);
+    }
+
+    pub fn extractByPathAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        max_output_len: usize,
+        limits: PathLimits,
+    ) Error![]u8 {
+        var lookup = try self.readLookupTableAlloc(
+            allocator,
+            limits.max_lookup_entries,
+            limits.max_lookup_bytes,
+        );
+        defer lookup.deinit();
+        const metadata_entry = try self.imageMetadataEntry(lookup, image_index);
+        const metadata_bytes = try self.extractEntryAllocLimited(
+            allocator,
+            metadata_entry,
+            limits.max_metadata_bytes,
+        );
+        var parsed_metadata = try image_metadata.ImageMetadata.fromOwnedBytes(
+            allocator,
+            metadata_bytes,
+        );
+        defer parsed_metadata.deinit();
+        const dentry = try parsed_metadata.lookup(
+            allocator,
+            path,
+            limits.max_directory_entries,
+            limits.max_path_depth,
+        );
+        if (dentry.isDirectory()) return error.WimNotRegularFile;
+        if (dentry.isEncrypted() or dentry.isReparsePoint() or
+            try dentry.hasNamedStreams())
+            return error.UnsupportedWimFile;
+        const hash = try dentry.defaultDataSha1() orelse
+            return error.WimNotRegularFile;
+        if (std.mem.allEqual(u8, &hash, 0)) return allocator.alloc(u8, 0);
+        const entry = lookup.findData(&hash) orelse {
+            if (self.header.total_parts > 1) return error.WimResourceInOtherPart;
+            return error.WimResourceNotFound;
+        };
         return self.extractEntryAllocLimited(allocator, entry, max_output_len);
     }
 
@@ -216,6 +300,30 @@ pub const Archive = struct {
         if (output_offset != output.len) return error.SizeMismatch;
         return output;
     }
+
+    fn imageMetadataEntry(
+        self: Archive,
+        lookup: LookupTable,
+        image_index: u32,
+    ) Error!LookupEntry {
+        if (image_index == 0 or image_index > self.header.image_count)
+            return error.WimImageNotFound;
+        if (self.header.part_number != 1) return error.WimResourceInOtherPart;
+        var metadata_count: u32 = 0;
+        var selected: ?LookupEntry = null;
+        for (lookup.entries) |entry| {
+            if (!entry.resource.isMetadata() or entry.reference_count == 0) continue;
+            if (entry.reference_count != 1 or entry.hashIsZero() or
+                entry.part_number != 1 or entry.resource.isSolid() or
+                entry.resource.isSpanned())
+                return error.InvalidWim;
+            metadata_count = std.math.add(u32, metadata_count, 1) catch
+                return error.IntegerOverflow;
+            if (metadata_count == image_index) selected = entry;
+        }
+        if (metadata_count != self.header.image_count) return error.InvalidWim;
+        return selected orelse error.WimImageNotFound;
+    }
 };
 
 fn checkedEnd(start: usize, length: usize, limit: usize) Error!usize {
@@ -281,6 +389,84 @@ test "WIM reads XPRESS lookup XML metadata and stored blobs" {
         error.OutputLimitExceeded,
         archive.readXmlAllocLimited(allocator, 761),
     );
+
+    var image = try archive.readImageMetadataAlloc(allocator, 1, .{
+        .max_metadata_bytes = 4096,
+        .max_lookup_entries = 16,
+        .max_lookup_bytes = 4096,
+        .max_directory_entries = 16,
+        .max_path_depth = 8,
+    });
+    defer image.deinit();
+    try std.testing.expectEqual(@as(usize, 8), image.security.total_length);
+    var root = try image.readDirectoryAlloc(allocator, image.root, 16);
+    defer root.deinit();
+    try std.testing.expectEqual(@as(usize, 1), root.entries.len);
+    const nested_name = try root.entries[0].nameUtf8Alloc(allocator);
+    defer allocator.free(nested_name);
+    try std.testing.expectEqualStrings("nested", nested_name);
+    const nested_file = try image.lookup(allocator, "/nested/file.txt", 16, 8);
+    try std.testing.expect(!nested_file.isDirectory());
+    try std.testing.expectEqual(file_hash, (try nested_file.defaultDataSha1()).?);
+    try std.testing.expectError(
+        error.InvalidWimPath,
+        image.lookup(allocator, "nested//file.txt", 16, 8),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        image.lookup(allocator, "nested/file.txt", 16, 1),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        image.readDirectoryAlloc(allocator, image.root, 0),
+    );
+    const by_path = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "nested/file.txt",
+        1024,
+        .{
+            .max_metadata_bytes = 4096,
+            .max_lookup_entries = 16,
+            .max_lookup_bytes = 4096,
+            .max_directory_entries = 16,
+            .max_path_depth = 8,
+        },
+    );
+    defer allocator.free(by_path);
+    try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", by_path);
+    try std.testing.expectError(
+        error.WimPathNotFound,
+        archive.extractByPathAllocLimited(
+            allocator,
+            1,
+            "nested/missing.txt",
+            1024,
+            .{
+                .max_metadata_bytes = 4096,
+                .max_lookup_entries = 16,
+                .max_lookup_bytes = 4096,
+                .max_directory_entries = 16,
+                .max_path_depth = 8,
+            },
+        ),
+    );
+    try std.testing.expectError(
+        error.WimNotRegularFile,
+        archive.extractByPathAllocLimited(
+            allocator,
+            1,
+            "nested",
+            1024,
+            .{
+                .max_metadata_bytes = 4096,
+                .max_lookup_entries = 16,
+                .max_lookup_bytes = 4096,
+                .max_directory_entries = 16,
+                .max_path_depth = 8,
+            },
+        ),
+    );
 }
 
 test "WIM reads LZX metadata resources" {
@@ -302,4 +488,102 @@ test "WIM reads LZX metadata resources" {
     );
     defer allocator.free(metadata);
     try std.testing.expectEqual(@as(usize, 376), metadata.len);
+    const file = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "/nested/file.txt",
+        1024,
+        .{
+            .max_metadata_bytes = 4096,
+            .max_lookup_entries = 16,
+            .max_lookup_bytes = 4096,
+            .max_directory_entries = 16,
+            .max_path_depth = 8,
+        },
+    );
+    defer allocator.free(file);
+    try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", file);
+}
+
+test "WIM metadata rejects corrupt security names offsets and terminators" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/xpress-small.wim.b64"),
+    );
+    defer allocator.free(bytes);
+    const archive = try Archive.init(bytes);
+    const metadata_hash = try parseSha1("c5071b9147d869a9e7b5efc3e64e7e536e3d64fd");
+    const original = try archive.extractBySha1AllocLimited(
+        allocator,
+        &metadata_hash,
+        4096,
+        16,
+        4096,
+    );
+    defer allocator.free(original);
+
+    const bad_security = try allocator.dupe(u8, original);
+    std.mem.writeInt(u32, bad_security[0..4], 9, .little);
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        image_metadata.ImageMetadata.fromOwnedBytes(allocator, bad_security),
+    );
+
+    const odd_name = try allocator.dupe(u8, original);
+    std.mem.writeInt(u16, odd_name[220..222], 1, .little);
+    var odd_image = try image_metadata.ImageMetadata.fromOwnedBytes(allocator, odd_name);
+    defer odd_image.deinit();
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        odd_image.readDirectoryAlloc(allocator, odd_image.root, 16),
+    );
+
+    const cyclic = try allocator.dupe(u8, original);
+    std.mem.writeInt(u64, cyclic[136..144], 120, .little);
+    var cyclic_image = try image_metadata.ImageMetadata.fromOwnedBytes(allocator, cyclic);
+    defer cyclic_image.deinit();
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        cyclic_image.readDirectoryAlloc(allocator, cyclic_image.root, 16),
+    );
+
+    const bad_terminator = try allocator.dupe(u8, original);
+    std.mem.writeInt(u64, bad_terminator[240..248], 1, .little);
+    var terminated_image = try image_metadata.ImageMetadata.fromOwnedBytes(
+        allocator,
+        bad_terminator,
+    );
+    defer terminated_image.deinit();
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        terminated_image.readDirectoryAlloc(allocator, terminated_image.root, 16),
+    );
+
+    const dot_name = try allocator.dupe(u8, original);
+    std.mem.writeInt(u16, dot_name[220..222], 2, .little);
+    dot_name[222] = '.';
+    dot_name[223] = 0;
+    dot_name[224] = 0;
+    dot_name[225] = 0;
+    var dot_image = try image_metadata.ImageMetadata.fromOwnedBytes(allocator, dot_name);
+    defer dot_image.deinit();
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        dot_image.readDirectoryAlloc(allocator, dot_image.root, 16),
+    );
+
+    const duplicate = try allocator.alloc(u8, 368);
+    @memset(duplicate, 0);
+    @memcpy(duplicate[0..240], original[0..240]);
+    @memcpy(duplicate[240..360], original[120..240]);
+    var duplicate_image = try image_metadata.ImageMetadata.fromOwnedBytes(
+        allocator,
+        duplicate,
+    );
+    defer duplicate_image.deinit();
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        duplicate_image.readDirectoryAlloc(allocator, duplicate_image.root, 16),
+    );
 }
