@@ -14,11 +14,12 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - shared progress/error/frame metadata types;
 - pure Zig LZ4 frame/block
   decode/fallback encode plus byte-exact liblz4-1.9.3-compatible LZ4HC block
-  encoding and independent-block frame writing across levels 1...12, with
+  encoding and independent/linked frame writing across levels 1...12, with
   allocating, caller-buffer, append, and reusable APIs, skippable/concatenated
   stream handling,
   optional content-size/checksum/block-checksum/Dictionary_ID fields,
-  configurable frame block sizes, linked-block history encoding, encoded-block bounds, decoded-size
+  preset-dictionary and dictionary-set HC encoding, configurable frame block
+  sizes, linked-block history encoding, encoded-block bounds, decoded-size
   preflight, bounded allocation for single/concatenated streams, bounded
   raw-block and skippable-frame encode-into/decoded-size preflight, inspectable
   native frame/block/skippable headers plus plain, standard-dictionary-aware, and dictionary-set-aware Zstd sequence-mode summaries, zero-allocation native stream/block

@@ -75,6 +75,7 @@ pub const Encoder = struct {
     hash_table: []u32,
     chain_table: []u16,
     optimal: []Optimal,
+    input_scratch: std.ArrayList(u8) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) std.mem.Allocator.Error!Encoder {
         const hash_table = try allocator.alloc(u32, hash_table_len);
@@ -93,6 +94,7 @@ pub const Encoder = struct {
         self.allocator.free(self.hash_table);
         self.allocator.free(self.chain_table);
         if (self.optimal.len != 0) self.allocator.free(self.optimal);
+        self.input_scratch.deinit(self.allocator);
         self.* = undefined;
     }
 
@@ -102,34 +104,58 @@ pub const Encoder = struct {
         output: []u8,
         compression_level: i32,
     ) Error!Result {
-        if (input.len > max_input_len) return error.InputTooLarge;
+        return self.compressWithPrefix(&.{}, input, output, compression_level);
+    }
+
+    pub fn compressWithPrefix(
+        self: *Encoder,
+        prefix: []const u8,
+        input: []const u8,
+        output: []u8,
+        compression_level: i32,
+    ) Error!Result {
+        const retained_prefix_len = @min(prefix.len, max_distance);
+        if (input.len > max_input_len or retained_prefix_len > max_input_len - input.len)
+            return error.InputTooLarge;
         if (output.len == 0) return error.OutputTooSmall;
+        const retained_prefix = prefix[prefix.len - retained_prefix_len ..];
+        const combined = if (retained_prefix.len == 0)
+            input
+        else blk: {
+            try self.input_scratch.resize(self.allocator, retained_prefix.len + input.len);
+            @memcpy(self.input_scratch.items[0..retained_prefix.len], retained_prefix);
+            @memcpy(self.input_scratch.items[retained_prefix.len..], input);
+            break :blk self.input_scratch.items;
+        };
         var context = Context{
-            .input = input,
+            .input = combined,
             .hash_table = self.hash_table,
             .chain_table = self.chain_table,
         };
-        context.reset(input);
+        context.reset(combined);
         const level = normalizeLevel(compression_level);
         if (level >= 10 and self.optimal.len == 0)
             self.optimal = try self.allocator.alloc(
                 Optimal,
                 optimal_slots + trailing_literals,
             );
-        return switch (level) {
-            1, 2 => compressHashChain(&context, output, 2),
-            3 => compressHashChain(&context, output, 4),
-            4 => compressHashChain(&context, output, 8),
-            5 => compressHashChain(&context, output, 16),
-            6 => compressHashChain(&context, output, 32),
-            7 => compressHashChain(&context, output, 64),
-            8 => compressHashChain(&context, output, 128),
-            9 => compressHashChain(&context, output, 256),
-            10 => compressOptimal(&context, output, self.optimal, 96, 64, false),
-            11 => compressOptimal(&context, output, self.optimal, 512, 128, false),
-            12 => compressOptimal(&context, output, self.optimal, 16_384, optimal_slots, true),
+        var result = switch (level) {
+            1, 2 => compressHashChain(&context, output, 2, retained_prefix.len),
+            3 => compressHashChain(&context, output, 4, retained_prefix.len),
+            4 => compressHashChain(&context, output, 8, retained_prefix.len),
+            5 => compressHashChain(&context, output, 16, retained_prefix.len),
+            6 => compressHashChain(&context, output, 32, retained_prefix.len),
+            7 => compressHashChain(&context, output, 64, retained_prefix.len),
+            8 => compressHashChain(&context, output, 128, retained_prefix.len),
+            9 => compressHashChain(&context, output, 256, retained_prefix.len),
+            10 => compressOptimal(&context, output, self.optimal, 96, 64, false, retained_prefix.len),
+            11 => compressOptimal(&context, output, self.optimal, 512, 128, false, retained_prefix.len),
+            12 => compressOptimal(&context, output, self.optimal, 16_384, optimal_slots, true, retained_prefix.len),
             else => unreachable,
         };
+        std.debug.assert(result.consumed >= retained_prefix.len);
+        result.consumed -= retained_prefix.len;
+        return result;
     }
 };
 
@@ -153,17 +179,18 @@ fn compressHashChain(
     context: *Context,
     output: []u8,
     max_attempts: usize,
+    source_start: usize,
 ) Result {
     const input = context.input;
-    if (input.len < min_input_len)
-        return emitLastLiterals(input, output, 0, 0);
+    if (input.len - source_start < min_input_len)
+        return emitLastLiterals(input, output, 0, source_start);
     const match_find_position_limit = input.len - match_find_margin;
     const match_limit = input.len - last_literals;
     const reserved_end: isize = @as(isize, @intCast(output.len)) - last_literals;
     const pattern_analysis = max_attempts > 128;
 
-    var input_position: usize = 0;
-    var anchor: usize = 0;
+    var input_position: usize = source_start;
+    var anchor: usize = source_start;
     var output_position: usize = 0;
 
     main_loop: while (input_position <= match_find_position_limit) {
@@ -433,17 +460,18 @@ fn compressOptimal(
     search_count: usize,
     requested_sufficient_len: usize,
     full_update: bool,
+    source_start: usize,
 ) Result {
     const input = context.input;
-    if (input.len < min_input_len)
-        return emitLastLiterals(input, output, 0, 0);
+    if (input.len - source_start < min_input_len)
+        return emitLastLiterals(input, output, 0, source_start);
     const match_find_position_limit = input.len - match_find_margin;
     const match_limit = input.len - last_literals;
     const reserved_end: isize = @as(isize, @intCast(output.len)) - last_literals;
     const sufficient_len = @min(requested_sufficient_len, optimal_slots - 1);
 
-    var input_position: usize = 0;
-    var anchor: usize = 0;
+    var input_position: usize = source_start;
+    var anchor: usize = source_start;
     var output_position: usize = 0;
 
     while (input_position <= match_find_position_limit) {

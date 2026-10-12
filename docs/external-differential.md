@@ -5,8 +5,11 @@ system `gzip` CLI, plus library-level interoperability probes against other
 system codecs including libsnappy, liblz4, libbrotli, and libzstd.
 The native LZ4 library probe additionally compares public Vort LZ4HC blocks
 byte-for-byte with `LZ4_compress_HC_destSize` at levels 1, 3, 5, 9, 10, 11,
-12, and an above-maximum level, and compares independent HC frames with
-`LZ4F_compressFrame` for the upstream HC levels 3 and above.
+12, and an above-maximum level. It compares independent and 300 KiB linked HC
+frames with `LZ4F_compressFrame` for upstream HC levels 3 and above, plus
+independent/linked preset-dictionary frames at levels 3, 9, and 12 through
+`LZ4F_compressFrame_usingCDict`. Dictionary frames are also decoded in both
+directions through Vort and `LZ4F_decompress_usingDict`.
 The required libbrotli probe also generates Large Window streams for every
 25...30-bit window. It requires strict Vort entrypoints to reject the reserved
 header and verifies explicit opt-in one-shot, split-input, buffered-incremental,

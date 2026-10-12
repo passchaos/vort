@@ -18283,3 +18283,17 @@ reuse, so production keeps the simpler independently owned plans.
   canonical/context-map machinery with a smaller final-root representation,
   not layer another lookup or specialized parser beside it. Detailed evidence
   is appended to `docs/performance/brotli-decode-stage-profile-x86.md`.
+
+- Extended the public pure-Zig LZ4HC encoder from independent frames to linked
+  history and preset dictionaries. The HC core now accepts a bounded 65,535-byte
+  logical prefix while retaining its hash-chain/optimal workspaces and exact
+  empty-prefix output. `HcFrameEncoder` maintains the rolling window across raw
+  or compressed blocks, seeds it from dictionary tails, and exposes reusable,
+  allocating, append, caller-buffer, dictionary, and dictionary-set surfaces;
+  independent dictionary blocks reuse the preset for every block. Header
+  Block Independence and Dictionary_ID fields, checksums, raw fallback, bounds,
+  mismatch diagnostics, and allocation rollback remain covered. Runtime
+  liblz4 1.9.3 validation requires byte-identical 300 KiB linked frames at HC
+  levels 3/5/9/10/11/12/19 and byte-identical independent/linked CDict frames
+  at levels 3/9/12, with Vort/liblz4 dictionary decode in both directions. The
+  focused probe now reports 253 lib-generated and 304 total cases.

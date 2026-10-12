@@ -48,6 +48,20 @@ pub const HcDestSizeEncoder = struct {
         };
     }
 
+    pub fn encodeWithPrefix(
+        self: *HcDestSizeEncoder,
+        prefix: []const u8,
+        input: []const u8,
+        output: []u8,
+        compression_level: i32,
+    ) Error!DestSizeResult {
+        return self.inner.compressWithPrefix(prefix, input, output, compression_level) catch |err| switch (err) {
+            error.InputTooLarge => error.OutputLimitExceeded,
+            error.OutputTooSmall => error.OutputTooSmall,
+            error.OutOfMemory => error.OutOfMemory,
+        };
+    }
+
     pub fn encodeAlloc(
         self: *HcDestSizeEncoder,
         input: []const u8,
@@ -71,6 +85,33 @@ pub const HcDestSizeEncoder = struct {
             try encodedBlockBound(input.len),
         );
         const result = self.encode(
+            input,
+            self.output_scratch.items,
+            compression_level,
+        ) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        if (result.consumed != input.len) {
+            self.output_scratch.clearRetainingCapacity();
+            return error.SizeMismatch;
+        }
+        self.output_scratch.items.len = result.written;
+        return self.output_scratch.items;
+    }
+
+    pub fn encodeScratchWithPrefix(
+        self: *HcDestSizeEncoder,
+        prefix: []const u8,
+        input: []const u8,
+        compression_level: i32,
+    ) Error![]const u8 {
+        try self.output_scratch.resize(
+            self.inner.allocator,
+            try encodedBlockBound(input.len),
+        );
+        const result = self.encodeWithPrefix(
+            prefix,
             input,
             self.output_scratch.items,
             compression_level,
@@ -144,6 +185,33 @@ pub fn encodeBlockHcIntoSlice(
     return encoder.encodeIntoSlice(input, output, compression_level);
 }
 
+pub fn encodeBlockHcWithPrefixAlloc(
+    allocator: std.mem.Allocator,
+    prefix: []const u8,
+    input: []const u8,
+    compression_level: i32,
+) Error![]u8 {
+    var encoder = try BlockHcEncoder.init(allocator);
+    defer encoder.deinit();
+    const encoded = try encoder.encodeScratchWithPrefix(prefix, input, compression_level);
+    return allocator.dupe(u8, encoded);
+}
+
+pub fn encodeBlockHcWithPrefixIntoSlice(
+    allocator: std.mem.Allocator,
+    prefix: []const u8,
+    input: []const u8,
+    output: []u8,
+    compression_level: i32,
+) Error!usize {
+    var encoder = try BlockHcEncoder.init(allocator);
+    defer encoder.deinit();
+    const encoded = try encoder.encodeScratchWithPrefix(prefix, input, compression_level);
+    if (output.len < encoded.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
+}
+
 pub const default_compression_level: c_int = 10;
 
 const frame_magic = [_]u8{ 0x04, 0x22, 0x4d, 0x18 };
@@ -193,13 +261,15 @@ pub const NativeFrameOptions = struct {
     chain_depth: u8 = native_max_chain_depth,
 };
 
-/// Options for independent-block LZ4 frames encoded with the byte-exact
-/// liblz4 1.9.3-compatible high-compression parser.
+/// Options for LZ4 frames encoded with the liblz4 1.9.3-compatible
+/// high-compression parser.
 pub const HcFrameOptions = struct {
     include_content_size: bool = true,
     content_checksum: bool = true,
     block_checksum: bool = false,
     block_size_id: BlockSizeId = .max4mb,
+    block_mode: BlockMode = .independent,
+    dictionary_id: ?u32 = null,
     compression_level: i32 = 9,
 };
 
@@ -494,8 +564,32 @@ pub fn encodedHcFrameBound(
         .content_checksum = options.content_checksum,
         .block_checksum = options.block_checksum,
         .block_size_id = options.block_size_id,
-        .block_mode = .independent,
+        .block_mode = options.block_mode,
+        .dictionary_id = options.dictionary_id,
     });
+}
+
+pub fn encodedHcFrameBoundWithDictionary(
+    input_len: usize,
+    options: HcFrameOptions,
+    dictionary: NativeDictionary,
+) Error!usize {
+    if (dictionary.id == 0) return error.NeedDictionary;
+    var with_dictionary = options;
+    if (with_dictionary.dictionary_id != null and with_dictionary.dictionary_id.? != dictionary.id)
+        return error.InvalidBlockPlan;
+    with_dictionary.dictionary_id = dictionary.id;
+    return encodedHcFrameBound(input_len, with_dictionary);
+}
+
+pub fn encodedHcFrameBoundWithDictionarySet(
+    input_len: usize,
+    options: HcFrameOptions,
+    dictionary_set: NativeDictionarySet,
+    dictionary_id: u32,
+) Error!usize {
+    const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+    return encodedHcFrameBoundWithDictionary(input_len, options, dictionary);
 }
 
 fn nativeChainDepth(options: NativeFrameOptions) Error!u8 {
@@ -5710,12 +5804,14 @@ pub const NativeFrameEncoder = struct {
 pub const HcFrameEncoder = struct {
     block_encoder: BlockHcEncoder,
     output_scratch: std.ArrayList(u8) = .empty,
+    history: std.ArrayList(u8) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) Error!HcFrameEncoder {
         return .{ .block_encoder = try BlockHcEncoder.init(allocator) };
     }
 
     pub fn deinit(self: *HcFrameEncoder) void {
+        self.history.deinit(self.block_encoder.inner.allocator);
         self.output_scratch.deinit(self.block_encoder.inner.allocator);
         self.block_encoder.deinit();
         self.* = undefined;
@@ -5727,13 +5823,39 @@ pub const HcFrameEncoder = struct {
         input: []const u8,
         options: HcFrameOptions,
     ) Error!void {
+        if (options.dictionary_id != null) return error.NeedDictionary;
+        return self.encodeAppendWithOptionalDictionary(output, input, options, null);
+    }
+
+    pub fn encodeAppendWithDictionary(
+        self: *HcFrameEncoder,
+        output: *std.ArrayList(u8),
+        input: []const u8,
+        options: HcFrameOptions,
+        dictionary: NativeDictionary,
+    ) Error!void {
+        if (dictionary.id == 0) return error.NeedDictionary;
+        if (options.dictionary_id != null and options.dictionary_id.? != dictionary.id)
+            return error.InvalidBlockPlan;
+        return self.encodeAppendWithOptionalDictionary(output, input, options, dictionary);
+    }
+
+    fn encodeAppendWithOptionalDictionary(
+        self: *HcFrameEncoder,
+        output: *std.ArrayList(u8),
+        input: []const u8,
+        options: HcFrameOptions,
+        dictionary: ?NativeDictionary,
+    ) Error!void {
         const allocator = self.block_encoder.inner.allocator;
         try output.appendSlice(allocator, &frame_magic);
         const descriptor_start = output.items.len;
-        var flags: u8 = 0x40 | 0x20;
+        var flags: u8 = 0x40;
+        if (options.block_mode == .independent) flags |= 0x20;
         if (options.block_checksum) flags |= 0x10;
         if (options.include_content_size) flags |= 0x08;
         if (options.content_checksum) flags |= 0x04;
+        if (dictionary != null) flags |= 0x01;
         try output.append(allocator, flags);
         try output.append(
             allocator,
@@ -5749,6 +5871,11 @@ pub const HcFrameEncoder = struct {
             );
             try output.appendSlice(allocator, &content_size);
         }
+        if (dictionary) |dict| {
+            var dictionary_id: [4]u8 = undefined;
+            std.mem.writeInt(u32, &dictionary_id, dict.id, .little);
+            try output.appendSlice(allocator, &dictionary_id);
+        }
         try output.append(
             allocator,
             descriptorChecksum(output.items[descriptor_start..]),
@@ -5756,10 +5883,25 @@ pub const HcFrameEncoder = struct {
 
         var offset: usize = 0;
         const max_block_len = options.block_size_id.maxLen();
+        self.history.clearRetainingCapacity();
+        if (options.block_mode == .linked) {
+            try self.history.ensureTotalCapacity(allocator, max_match_offset);
+            if (dictionary) |dict| {
+                const keep = @min(dict.content.len, max_match_offset);
+                self.history.appendSliceAssumeCapacity(dict.content[dict.content.len - keep ..]);
+            }
+        }
         while (offset < input.len) {
             const block_len = @min(input.len - offset, max_block_len);
             const block = input[offset..][0..block_len];
-            const encoded = try self.block_encoder.encodeScratch(
+            const prefix = if (options.block_mode == .linked)
+                self.history.items
+            else if (dictionary) |dict|
+                dict.content
+            else
+                &[_]u8{};
+            const encoded = try self.block_encoder.encodeScratchWithPrefix(
+                prefix,
                 block,
                 options.compression_level,
             );
@@ -5787,6 +5929,8 @@ pub const HcFrameEncoder = struct {
                 if (options.block_checksum)
                     try emitBlockChecksum(allocator, output, block);
             }
+            if (options.block_mode == .linked)
+                appendHcHistory(&self.history, block);
             offset += block_len;
         }
         try output.appendSlice(allocator, &.{ 0, 0, 0, 0 });
@@ -5813,6 +5957,18 @@ pub const HcFrameEncoder = struct {
         return output.toOwnedSlice(self.block_encoder.inner.allocator);
     }
 
+    pub fn encodeAllocWithDictionary(
+        self: *HcFrameEncoder,
+        input: []const u8,
+        options: HcFrameOptions,
+        dictionary: NativeDictionary,
+    ) Error![]u8 {
+        var output: std.ArrayList(u8) = .empty;
+        errdefer output.deinit(self.block_encoder.inner.allocator);
+        try self.encodeAppendWithDictionary(&output, input, options, dictionary);
+        return output.toOwnedSlice(self.block_encoder.inner.allocator);
+    }
+
     pub fn encodeScratch(
         self: *HcFrameEncoder,
         input: []const u8,
@@ -5820,6 +5976,20 @@ pub const HcFrameEncoder = struct {
     ) Error![]const u8 {
         self.output_scratch.clearRetainingCapacity();
         self.encodeAppend(&self.output_scratch, input, options) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        return self.output_scratch.items;
+    }
+
+    pub fn encodeScratchWithDictionary(
+        self: *HcFrameEncoder,
+        input: []const u8,
+        options: HcFrameOptions,
+        dictionary: NativeDictionary,
+    ) Error![]const u8 {
+        self.output_scratch.clearRetainingCapacity();
+        self.encodeAppendWithDictionary(&self.output_scratch, input, options, dictionary) catch |err| {
             self.output_scratch.clearRetainingCapacity();
             return err;
         };
@@ -5837,7 +6007,34 @@ pub const HcFrameEncoder = struct {
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
     }
+
+    pub fn encodeIntoSliceWithDictionary(
+        self: *HcFrameEncoder,
+        input: []const u8,
+        options: HcFrameOptions,
+        dictionary: NativeDictionary,
+        output: []u8,
+    ) Error!usize {
+        const encoded = try self.encodeScratchWithDictionary(input, options, dictionary);
+        if (output.len < encoded.len) return error.OutputTooSmall;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
 };
+
+fn appendHcHistory(history: *std.ArrayList(u8), block: []const u8) void {
+    std.debug.assert(history.capacity >= max_match_offset);
+    if (block.len >= max_match_offset) {
+        history.clearRetainingCapacity();
+        history.appendSliceAssumeCapacity(block[block.len - max_match_offset ..]);
+        return;
+    }
+    const retained = @min(history.items.len, max_match_offset - block.len);
+    if (retained != history.items.len)
+        std.mem.copyForwards(u8, history.items[0..retained], history.items[history.items.len - retained ..]);
+    history.items.len = retained;
+    history.appendSliceAssumeCapacity(block);
+}
 
 pub fn encodeHcFrameAlloc(
     allocator: std.mem.Allocator,
@@ -5869,6 +6066,76 @@ pub fn encodeHcFrameIntoSlice(
     var encoder = try HcFrameEncoder.init(allocator);
     defer encoder.deinit();
     return encoder.encodeIntoSlice(input, options, output);
+}
+
+pub fn encodeHcFrameWithDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: HcFrameOptions,
+    dictionary: NativeDictionary,
+) Error![]u8 {
+    var encoder = try HcFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeAllocWithDictionary(input, options, dictionary);
+}
+
+pub fn encodeHcFrameAppendWithDictionary(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    options: HcFrameOptions,
+    dictionary: NativeDictionary,
+) Error!void {
+    var encoder = try HcFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeAppendWithDictionary(output, input, options, dictionary);
+}
+
+pub fn encodeHcFrameIntoSliceWithDictionary(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: HcFrameOptions,
+    dictionary: NativeDictionary,
+    output: []u8,
+) Error!usize {
+    var encoder = try HcFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeIntoSliceWithDictionary(input, options, dictionary, output);
+}
+
+pub fn encodeHcFrameWithDictionarySetAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: HcFrameOptions,
+    dictionary_set: NativeDictionarySet,
+    dictionary_id: u32,
+) Error![]u8 {
+    const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+    return encodeHcFrameWithDictionaryAlloc(allocator, input, options, dictionary);
+}
+
+pub fn encodeHcFrameAppendWithDictionarySet(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    options: HcFrameOptions,
+    dictionary_set: NativeDictionarySet,
+    dictionary_id: u32,
+) Error!void {
+    const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+    return encodeHcFrameAppendWithDictionary(allocator, output, input, options, dictionary);
+}
+
+pub fn encodeHcFrameIntoSliceWithDictionarySet(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: HcFrameOptions,
+    dictionary_set: NativeDictionarySet,
+    dictionary_id: u32,
+    output: []u8,
+) Error!usize {
+    const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+    return encodeHcFrameIntoSliceWithDictionary(allocator, input, options, dictionary, output);
 }
 
 fn optionsWithNativeDictionary(options: NativeFrameOptions, dictionary: ?NativeDictionary) NativeFrameOptions {
@@ -6741,6 +7008,125 @@ test "LZ4HC independent frames round trip checksums blocks and caller output" {
     );
 }
 
+test "LZ4HC linked frames reuse the previous block window" {
+    const allocator = std.testing.allocator;
+    const block_len = 64 * 1024;
+    const payload = try allocator.alloc(u8, block_len * 2);
+    defer allocator.free(payload);
+    var state: u32 = 0x243f_6a88;
+    for (payload[0..block_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[block_len..][0 .. block_len - 1], payload[1..block_len]);
+    payload[payload.len - 1] = payload[0] ^ 0xa5;
+
+    var encoder = try HcFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    const linked_options = HcFrameOptions{
+        .block_size_id = .max64kb,
+        .block_mode = .linked,
+        .compression_level = 9,
+        .block_checksum = true,
+    };
+    const linked = try encoder.encodeAlloc(payload, linked_options);
+    defer allocator.free(linked);
+    const independent = try encoder.encodeAlloc(payload, .{
+        .block_size_id = .max64kb,
+        .compression_level = 9,
+        .block_checksum = true,
+    });
+    defer allocator.free(independent);
+    try std.testing.expect(linked.len + block_len / 2 < independent.len);
+
+    const header = try inspectNativeFrameHeader(linked);
+    try std.testing.expect(!header.block_independent);
+    const summary = try summarizeNativeFrameBlocks(linked);
+    try std.testing.expectEqual(@as(usize, 2), summary.block_count);
+    const first = (try inspectNativeFrameFirstBlock(linked)).?;
+    const second = (try inspectNativeFrameBlockAt(linked, first.next_header_offset)).?;
+    try std.testing.expect(second.is_compressed);
+
+    const decoded = try decodeNativeFrameAlloc(allocator, linked);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "LZ4HC preset dictionary frames expose ID and caller-owned output" {
+    const allocator = std.testing.allocator;
+    const dictionary_bytes = try allocator.alloc(u8, 64 * 1024);
+    defer allocator.free(dictionary_bytes);
+    var state: u32 = 0x9e37_79b9;
+    for (dictionary_bytes) |*byte| {
+        state = state *% 22_695_477 +% 1;
+        byte.* = @truncate(state >> 22);
+    }
+    const payload = try allocator.alloc(u8, dictionary_bytes.len);
+    defer allocator.free(payload);
+    @memcpy(payload[0 .. payload.len - 1], dictionary_bytes[1..]);
+    payload[payload.len - 1] = dictionary_bytes[0] ^ 0x5a;
+    const dictionary = NativeDictionary.init(0x3141_5926, dictionary_bytes);
+    const options = HcFrameOptions{
+        .block_size_id = .max64kb,
+        .block_mode = .linked,
+        .compression_level = 9,
+        .dictionary_id = dictionary.id,
+    };
+
+    var encoder = try HcFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    const encoded_block = try encodeBlockHcWithPrefixAlloc(allocator, dictionary.content, payload, options.compression_level);
+    defer allocator.free(encoded_block);
+    const decoded_block = try decodeBlockWithPrefixAlloc(allocator, encoded_block, payload.len, dictionary.content);
+    defer allocator.free(decoded_block);
+    try std.testing.expectEqualSlices(u8, payload, decoded_block);
+
+    const encoded = try encoder.encodeAllocWithDictionary(payload, options, dictionary);
+    defer allocator.free(encoded);
+    try std.testing.expect(encoded.len < payload.len / 2);
+    const header = try inspectNativeFrameHeader(encoded);
+    try std.testing.expectEqual(dictionary.id, header.dictionary_id.?);
+    try std.testing.expect(!header.block_independent);
+    try std.testing.expectError(error.NeedDictionary, decodeNativeFrameAlloc(allocator, encoded));
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(allocator, encoded, dictionary);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const output = try allocator.alloc(u8, try encodedHcFrameBoundWithDictionary(payload.len, options, dictionary));
+    defer allocator.free(output);
+    const written = try encoder.encodeIntoSliceWithDictionary(payload, options, dictionary, output);
+    try std.testing.expectEqualSlices(u8, encoded, output[0..written]);
+    const dictionary_set = try NativeDictionarySet.initChecked(&.{dictionary});
+    try std.testing.expectEqual(
+        try encodedHcFrameBoundWithDictionary(payload.len, options, dictionary),
+        try encodedHcFrameBoundWithDictionarySet(payload.len, options, dictionary_set, dictionary.id),
+    );
+    const set_encoded = try encodeHcFrameWithDictionarySetAlloc(allocator, payload, options, dictionary_set, dictionary.id);
+    defer allocator.free(set_encoded);
+    try std.testing.expectEqualSlices(u8, encoded, set_encoded);
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try encodeHcFrameAppendWithDictionarySet(allocator, &appended, payload, options, dictionary_set, dictionary.id);
+    try std.testing.expectEqualSlices(u8, encoded, appended.items);
+    const set_output = try allocator.alloc(u8, output.len);
+    defer allocator.free(set_output);
+    const set_written = try encodeHcFrameIntoSliceWithDictionarySet(allocator, payload, options, dictionary_set, dictionary.id, set_output);
+    try std.testing.expectEqualSlices(u8, encoded, set_output[0..set_written]);
+    try std.testing.expectError(error.NeedDictionary, encodeHcFrameWithDictionarySetAlloc(
+        allocator,
+        payload,
+        options,
+        dictionary_set,
+        dictionary.id + 1,
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeAllocWithDictionary(
+        payload,
+        .{ .dictionary_id = dictionary.id + 1 },
+        dictionary,
+    ));
+}
+
 test "LZ4HC reusable encoders release every workspace allocation failure" {
     const Test = struct {
         fn run(allocator: std.mem.Allocator) !void {
@@ -6755,6 +7141,13 @@ test "LZ4HC reusable encoders release every workspace allocation failure" {
                 .compression_level = 12,
             });
             defer allocator.free(frame);
+            const dictionary = NativeDictionary.init(7, "allocation-safe HC dictionary prefix");
+            const dictionary_frame = try frame_encoder.encodeAllocWithDictionary(payload, .{
+                .block_mode = .linked,
+                .dictionary_id = dictionary.id,
+                .compression_level = 12,
+            }, dictionary);
+            defer allocator.free(dictionary_frame);
         }
     };
     try std.testing.checkAllAllocationFailures(
