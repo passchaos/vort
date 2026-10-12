@@ -1,7 +1,7 @@
 const std = @import("std");
-const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const lzo1x = @import("../lzo1x.zig");
+const block_decoder = @import("block.zig");
 const header_mod = @import("header.zig");
 
 pub const Error = core.Error || lzo1x.Error || header_mod.Error || error{
@@ -186,11 +186,10 @@ fn process(
             if (payload_end > input.len) return error.TruncatedFrame;
             const payload = input[offset..payload_end];
             offset = payload_end;
-            if (compressed_adler) |expected|
-                if (checksum.adler32(payload) != expected) return error.ChecksumMismatch;
-            if (compressed_crc) |expected|
-                if (checksum.crc32Best(payload) != expected) return error.ChecksumMismatch;
-
+            if (!decode_blocks) try block_decoder.validateCompressed(payload, .{
+                .compressed_adler = compressed_adler,
+                .compressed_crc = compressed_crc,
+            });
             info.block_count = std.math.add(usize, info.block_count, 1) catch
                 return error.IntegerOverflow;
             info.max_block_size = @max(info.max_block_size, uncompressed_size_u32);
@@ -211,30 +210,16 @@ fn process(
 
             const block = try allocator.alloc(u8, uncompressed_size);
             defer allocator.free(block);
-            if (compressed) {
-                const written = lzo1x.decodeInto(payload, block) catch |err| switch (err) {
-                    error.OutputTooSmall => return error.SizeMismatch,
-                    else => |decode_error| return decode_error,
-                };
-                if (written != block.len) return error.SizeMismatch;
-            } else {
-                @memcpy(block, payload);
-            }
-            if (stream_header.filter) |distance| applyDeltaFilter(block, @intCast(distance));
-            if (data_adler) |expected|
-                if (checksum.adler32(block) != expected) return error.ChecksumMismatch;
-            if (data_crc) |expected|
-                if (checksum.crc32Best(block) != expected) return error.ChecksumMismatch;
+            try block_decoder.decodeInto(payload, block, stream_header.filter, .{
+                .data_adler = data_adler,
+                .data_crc = data_crc,
+                .compressed_adler = compressed_adler,
+                .compressed_crc = compressed_crc,
+            });
             try sink.append(block);
         }
     }
     return info;
-}
-
-fn applyDeltaFilter(bytes: []u8, distance_u8: u8) void {
-    if (distance_u8 == 0 or bytes.len <= distance_u8) return;
-    const distance: usize = distance_u8;
-    for (distance..bytes.len) |index| bytes[index] +%= bytes[index - distance];
 }
 
 test "LZOP decoder handles a deterministic stored stream" {
@@ -271,4 +256,29 @@ test "LZOP decoder handles a deterministic stored stream" {
     const concatenated_decoded = try decodeAlloc(std.testing.allocator, concatenated.items);
     defer std.testing.allocator.free(concatenated_decoded);
     try std.testing.expectEqualSlices(u8, input ++ second_input, concatenated_decoded);
+}
+
+test "LZOP inspection validates compressed payload checksums" {
+    const writer = @import("writer.zig");
+    const input = "compressed checksum inspection" ** 64;
+    const encoded = try writer.encodeAlloc(std.testing.allocator, input, .{
+        .block_size = input.len,
+        .compressed_checksum = true,
+    });
+    defer std.testing.allocator.free(encoded);
+    const stream_header = try header_mod.parse(encoded);
+    var offset = stream_header.encoded_size;
+    _ = try header_mod.readU32(encoded, &offset);
+    const compressed_len = try header_mod.readU32(encoded, &offset);
+    try std.testing.expect(compressed_len < input.len);
+    if (stream_header.flags & header_mod.Flag.adler32_data != 0) offset += 4;
+    if (stream_header.flags & header_mod.Flag.crc32_data != 0) offset += 4;
+    if (stream_header.flags & header_mod.Flag.adler32_compressed != 0) offset += 4;
+    if (stream_header.flags & header_mod.Flag.crc32_compressed != 0) offset += 4;
+
+    const corrupt = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(corrupt);
+    corrupt[offset] ^= 0x80;
+    try std.testing.expectError(error.ChecksumMismatch, inspect(corrupt));
+    try std.testing.expectError(error.ChecksumMismatch, decodedSize(std.testing.allocator, corrupt));
 }

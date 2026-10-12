@@ -35,8 +35,40 @@ Available APIs include standalone LZO1X alloc/append/into encoding and
 caller-owned decoding, LZOP header parsing and inspection, caller-owned and
 bounded allocating decode, decoded-size preflight, deterministic
 compressed-or-stored alloc/append/into encoding, and explicit stored-only
-writer variants. The writer accepts blocks up to 256 KiB so its output is
-readable by default lzop installations.
+writer variants. `LzopIncrementalDecoder` adds a true block-bounded streaming
+surface: it accepts arbitrary compressed-input splits, drains through arbitrary
+caller output (including zero-byte backpressure), walks concatenated streams,
+and exposes resettable snapshots and diagnostics. The writer accepts blocks up
+to 256 KiB so its output is readable by default lzop installations.
+
+```zig
+var decoder = vort.LzopIncrementalDecoder.initWithOptions(allocator, .{
+    .max_output_len = 256 * 1024 * 1024,
+    .max_block_size = 16 * 1024 * 1024,
+    .max_header_len = 1024 * 1024,
+    .expected_output_len = expected_size,
+});
+defer decoder.deinit();
+
+var input_offset: usize = 0;
+var output_offset: usize = 0;
+while (input_offset < compressed.len) {
+    const result = try decoder.step(
+        compressed[input_offset..],
+        output[output_offset..],
+    );
+    input_offset += result.progress.input_read;
+    output_offset += result.progress.output_written;
+}
+try decoder.finish();
+```
+
+The incremental decoder retains at most one encoded block and one decoded
+block. It validates compressed-payload checksums before decompression, then
+reverses any delta filter and validates decoded-data checksums before exposing
+the first byte of that block. A terminal zero block is mandatory before
+`finish`; partial headers, checksum fields, payloads, and terminators report
+`TruncatedFrame` with streaming diagnostics.
 
 CLI validation surfaces:
 
@@ -53,5 +85,5 @@ The writer uses bounded greedy LZO1X matching with the complete 48 KiB match
 distance range, then independently falls back to stored representation for any
 block that would not shrink. Data and optional compressed-payload checksums may
 use Adler-32 or CRC-32. The TAR composition layer uses the same adaptive writer
-and decoder for `.tar.lzo` and `.tzo` archives. Deeper parsing remains future
-ratio work.
+and decoder for `.tar.lzo` and `.tzo` archives. Deeper match planning remains
+future ratio work.

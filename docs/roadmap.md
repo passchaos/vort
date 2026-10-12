@@ -18334,3 +18334,17 @@ reuse, so production keeps the simpler independently owned plans.
   11/11 wins; all five ordinary/linked controls have 95% paired confidence
   intervals spanning 1.0. See
   `docs/performance/lz4-hc-frame-baseline-x86.md`.
+
+- Added a public, caller-output incremental LZOP decoder instead of buffering a
+  complete stream behind a streaming facade. The state machine accepts
+  arbitrary input fragmentation and zero-byte output backpressure, decodes
+  concatenated streams, requires terminal zero blocks, supports exact-size and
+  output/header/block limits, retains reusable scratch, and reports phase-aware
+  diagnostics. Each compressed block is held until its compressed checksum,
+  LZO1X decode, optional delta filter, and decoded checksum all succeed, so a
+  corrupt block cannot leak unverified output. The block validator is shared
+  with one-shot decode to keep checksum/error behavior identical. Focused tests
+  cover 3-byte input/7-byte output, mixed compressed/stored concatenation,
+  zero-output draining, extra fields, truncation at every framing layer,
+  checksum-before-output, reset, bounds, and every injected allocation failure.
+  See `docs/formats/lzop.md`.

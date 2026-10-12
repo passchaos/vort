@@ -530,6 +530,7 @@ pub const LzopDecodeOptions = lzop.DecodeOptions;
 pub const LzopFileInfo = lzop.FileInfo;
 pub const LzopChecksum = lzop.Checksum;
 pub const LzopEncodeOptions = lzop.EncodeOptions;
+pub const LzopIncrementalDecoder = lzop.IncrementalDecoder;
 pub const parseLzopHeader = lzop.parseHeader;
 pub const inspectLzop = lzop.inspect;
 pub const decodeLzopInto = lzop.decodeInto;
@@ -3415,6 +3416,17 @@ test "root LZOP exports compressed-or-stored and stored-only writing" {
     const decoded = try decodeLzopAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+
+    var incremental = LzopIncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = input.len,
+        .max_block_size = 128,
+    });
+    defer incremental.deinit();
+    var incremental_output: [input.len]u8 = undefined;
+    const incremental_result = try incremental.step(encoded, &incremental_output);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, incremental_result.status);
+    try incremental.finish();
+    try std.testing.expectEqualSlices(u8, input, &incremental_output);
 
     const stored = try encodeLzopStoredAlloc(std.testing.allocator, input, .{ .block_size = 128 });
     defer std.testing.allocator.free(stored);

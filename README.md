@@ -325,7 +325,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - pure Zig LZO1X encoding/decoding plus LZOP parsing and deterministic
   compressed-or-stored writing, including Adler-32/CRC-32 header, data, and
   compressed-block checks, legacy delta filters, concatenated streams, and
-  bounded output/block APIs;
+  bounded output/block APIs, plus caller-output incremental decoding with
+  arbitrary input splits, zero-sized output backpressure, bounded header/block
+  retention, exact-size pledges, reusable state, and checksum-before-output;
 - pure Zig 7z parsing and deterministic independent-folder writing, with
   Copy/Deflate/Bzip2/LZMA/LZMA2 decode and encode,
   bounded linear Delta/BCJ filter chains including ARM64/RISC-V and BCJ2 four-stream graphs in
