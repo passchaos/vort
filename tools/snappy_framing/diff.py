@@ -32,6 +32,7 @@ def main() -> None:
     self_cases = 0
     java_cases = 0
     incremental_cases = 0
+    incremental_encode_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-snappy-framing-") as temp_text:
         temp = Path(temp_text)
@@ -47,6 +48,16 @@ def main() -> None:
                 run(args.cli, encode_command, source, output)
             if first.read_bytes() != second.read_bytes():
                 raise AssertionError(f"Vort {kind} Snappy output is not deterministic")
+            incremental_stream = temp / f"vort-{kind}-incremental.snappy"
+            run(
+                args.cli,
+                f"encode-{kind}-snappy-incremental-file",
+                source,
+                incremental_stream,
+            )
+            if incremental_stream.read_bytes() != first.read_bytes():
+                raise AssertionError(f"Vort {kind} incremental encode is not one-shot exact")
+            incremental_encode_cases += 1
             decoded = temp / f"vort-{kind}.out"
             run(args.cli, decode_command, first, decoded, len(payload))
             if decoded.read_bytes() != payload:
@@ -106,6 +117,18 @@ def main() -> None:
                 run(java, "-cp", classpath, "SnappyInterop", f"{kind}-decode", vort_stream, java_decoded)
                 if java_decoded.read_bytes() != payload:
                     raise AssertionError(f"snappy-java rejected Vort {kind} stream")
+                java_incremental_decoded = temp / f"java-{kind}-incremental-decoded.out"
+                run(
+                    java,
+                    "-cp",
+                    classpath,
+                    "SnappyInterop",
+                    f"{kind}-decode",
+                    temp / f"vort-{kind}-incremental.snappy",
+                    java_incremental_decoded,
+                )
+                if java_incremental_decoded.read_bytes() != payload:
+                    raise AssertionError(f"snappy-java rejected Vort incremental {kind} stream")
                 java_stream = temp / f"java-{kind}.snappy"
                 run(java, "-cp", classpath, "SnappyInterop", f"{kind}-encode", source, java_stream)
                 vort_decoded = temp / f"vort-{kind}-java.out"
@@ -135,7 +158,8 @@ def main() -> None:
 
     print(
         f"self_cases={self_cases} java_available={java_cases != 0} "
-        f"java_cases={java_cases} incremental_cases={incremental_cases} malformed={malformed}"
+        f"java_cases={java_cases} incremental_encode_cases={incremental_encode_cases} "
+        f"incremental_cases={incremental_cases} malformed={malformed}"
     )
 
 

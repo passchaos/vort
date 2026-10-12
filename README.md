@@ -402,9 +402,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - Xerial Snappy version-1 and Hadoop BlockCompressorStream Snappy framing with
   deterministic multi-block writing, strict big-endian nested lengths,
   exact outer-block accounting, bounded allocation, caller-owned decode, and
-  shared block-bounded incremental decoders with arbitrary input/output
-  fragmentation, zero-output backpressure, pledged output sizes, explicit
-  compressed/decoded chunk limits, reset, snapshots, and diagnostics;
+  shared block-bounded incremental encoders/decoders with arbitrary
+  input/output fragmentation, zero-output backpressure, pledged input/output
+  sizes, deterministic one-shot-exact unflushed encoding, explicit flush,
+  compressed/decoded chunk and pending-output limits, reset, snapshots, and
+  diagnostics;
 - Hadoop LZ4 `BlockCompressorStream` framing with raw inner LZ4 blocks,
   token-derived decoded-size validation, deterministic nested-block writing,
   bounded allocation, and caller-owned decode;

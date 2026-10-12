@@ -2,6 +2,8 @@ const std = @import("std");
 const core = @import("core.zig");
 const snappy = @import("snappy.zig");
 const incremental_decoder = @import("snappy_framing/incremental_decoder.zig");
+const incremental_encoder = @import("snappy_framing/incremental_encoder.zig");
+const incremental_tests = @import("snappy_framing/incremental_tests.zig");
 
 pub const Error = core.Error || snappy.Error || std.mem.Allocator.Error || error{
     InvalidXerialSnappyStream,
@@ -22,11 +24,21 @@ const IncrementalCodec = struct {
     pub fn decodeBlockIntoExactSize(input: []const u8, output: []u8, expected_output_len: usize) snappy_framing.Error!usize {
         return snappy.decodeBlockIntoExactSize(input, output, expected_output_len);
     }
+
+    pub fn encodeBlock(encoder: *snappy.Encoder, input: []const u8, output: *std.ArrayList(u8)) snappy_framing.Error!void {
+        try encoder.encodeBlockAppend(output, input);
+    }
 };
 
 const snappy_framing = @This();
 pub const XerialIncrementalDecoder = incremental_decoder.Decoder(IncrementalCodec, .xerial);
 pub const HadoopIncrementalDecoder = incremental_decoder.Decoder(IncrementalCodec, .hadoop);
+pub const XerialIncrementalEncoder = incremental_encoder.Encoder(snappy.Encoder, IncrementalCodec, .xerial);
+pub const HadoopIncrementalEncoder = incremental_encoder.Encoder(snappy.Encoder, IncrementalCodec, .hadoop);
+
+test {
+    _ = incremental_tests;
+}
 
 pub const XerialOptions = struct {
     block_size: usize = 32 * 1024,

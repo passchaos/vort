@@ -18541,3 +18541,17 @@ reuse, so production keeps the simpler independently owned plans.
   gate passes deterministic Vort streams plus bidirectional snappy-java 1.1.10.7
   Xerial and Hadoop streams; all four self/Java cases also pass the
   17-byte-input / 31-byte-output incremental CLI path.
+
+- Added the symmetric caller-owned incremental encoders for Xerial and Hadoop
+  Snappy framing. Xerial emits its version-1 header and independently encoded
+  chunks; Hadoop compresses nested chunks while retaining one bounded outer
+  block until its big-endian uncompressed-size header is known. Without flush,
+  3/5-byte input and 7/11-byte output fragmentation is byte-exact with one-shot
+  across multi-chunk/multi-block fixtures, including the distinct Xerial-header
+  and empty-Hadoop wires. Explicit flush closes the current Xerial chunk or
+  Hadoop outer block and repeated empty flushes are idempotent. Exact/max input,
+  pending-output limits, zero-output backpressure, reset with retained scratch,
+  round-trip decode, and every allocation failure are covered. The external
+  snappy-java 1.1.10.7 gate now requires two incremental encoder cases to match
+  one-shot bytes and independently decodes both through Java, while retaining
+  the four incremental decoder cases and malformed-stream checks.

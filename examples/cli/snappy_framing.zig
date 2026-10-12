@@ -24,6 +24,29 @@ pub fn encodeXerial(
     });
 }
 
+pub fn encodeXerialIncremental(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const block_size = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 32 * 1024;
+    const input_step = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 17;
+    const output_step = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 31;
+    try encodeIncremental(
+        vort.XerialSnappyIncrementalEncoder,
+        "xerial",
+        init,
+        input_path,
+        output_path,
+        .{ .block_size = block_size, .max_pending_output_len = max_file_size },
+        input_step,
+        output_step,
+        stdout,
+    );
+}
+
 pub fn decodeXerial(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
@@ -89,6 +112,82 @@ pub fn encodeHadoop(
         "hadoop_snappy_input_bytes={d} compressed_bytes={d} block_size={d} chunk_size={d} path={s}\n",
         .{ input.len, encoded.len, block_size, chunk_size, output_path },
     );
+}
+
+pub fn encodeHadoopIncremental(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const block_size = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 256 * 1024;
+    const chunk_size = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 64 * 1024;
+    const input_step = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 17;
+    const output_step = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 31;
+    try encodeIncremental(
+        vort.HadoopSnappyIncrementalEncoder,
+        "hadoop_snappy",
+        init,
+        input_path,
+        output_path,
+        .{
+            .block_size = block_size,
+            .chunk_size = chunk_size,
+            .max_pending_output_len = max_file_size,
+        },
+        input_step,
+        output_step,
+        stdout,
+    );
+}
+
+fn encodeIncremental(
+    comptime EncoderType: type,
+    comptime label: []const u8,
+    init: std.process.Init,
+    input_path: []const u8,
+    output_path: []const u8,
+    options: EncoderType.Options,
+    input_step: usize,
+    output_step: usize,
+    stdout: *std.Io.Writer,
+) !void {
+    if (input_step == 0 or output_step == 0 or output_step > max_file_size)
+        return error.InvalidBlockPlan;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const output_buffer = try init.gpa.alloc(u8, output_step);
+    defer init.gpa.free(output_buffer);
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(init.gpa);
+    var encoder = try EncoderType.initExactSize(init.gpa, options, input.len);
+    defer encoder.deinit();
+    var input_offset: usize = 0;
+    while (input_offset < input.len) {
+        const input_end = @min(input.len, input_offset + input_step);
+        const step = try encoder.step(input[input_offset..input_end], output_buffer);
+        if (step.progress.input_read == 0 and step.progress.output_written == 0)
+            return error.InvalidBlockPlan;
+        input_offset += step.progress.input_read;
+        try encoded.appendSlice(init.gpa, output_buffer[0..step.progress.output_written]);
+    }
+    encoder.finish();
+    while (!encoder.snapshot().done) {
+        const step = try encoder.step("", output_buffer);
+        if (step.progress.output_written == 0 and step.status != .done)
+            return error.InvalidBlockPlan;
+        try encoded.appendSlice(init.gpa, output_buffer[0..step.progress.output_written]);
+    }
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded.items });
+    try stdout.print("{s}_incremental_input_bytes={d} encoded_bytes={d} input_step={d} output_step={d} path={s}\n", .{
+        label,
+        input.len,
+        encoded.items.len,
+        input_step,
+        output_step,
+        output_path,
+    });
 }
 
 pub fn decodeHadoop(

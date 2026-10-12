@@ -25,7 +25,21 @@ shifting the next block boundary.
 and 64 KiB raw Snappy chunks. Bounded and caller-owned decode APIs expose the
 same limits as Xerial framing.
 
-## Incremental decoding
+## Incremental encoding and decoding
+
+`XerialSnappyIncrementalEncoder` and `HadoopSnappyIncrementalEncoder` provide
+the matching caller-input/caller-output write path. Xerial publishes each
+completed independent chunk immediately. Hadoop compresses inner chunks into
+one bounded pending outer block, then writes its final uncompressed-size prefix
+before exposing any bytes from that block. Without `flush`, arbitrary caller
+fragmentation produces exactly the same bytes as the corresponding one-shot
+encoder. `flush` explicitly closes the current Xerial chunk or Hadoop outer
+block; repeated empty flushes are idempotent.
+
+Encoder options bound accepted input and pending output, support an exact input
+pledge, and retain plain/encoded/pending scratch across reset. Both formats
+handle zero-output backpressure; Xerial empty input still emits its version-1
+header, while Hadoop empty input remains an empty stream.
 
 `XerialSnappyIncrementalDecoder` and `HadoopSnappyIncrementalDecoder` share a
 caller-output state machine while preserving their different framing rules.
@@ -55,18 +69,21 @@ any bytes from that chunk reach the caller.
 
 ```sh
 zig build run -- encode-xerial-snappy-file input.bin output.snappy
+zig build run -- encode-xerial-snappy-incremental-file input.bin output.snappy 32768 17 31
 zig build run -- decode-xerial-snappy-file output.snappy decoded.bin 536870912
 zig build run -- decode-xerial-snappy-incremental-file output.snappy decoded.bin 1048576 17 31
 zig build run -- inspect-xerial-snappy-file output.snappy
 
 zig build run -- encode-hadoop-snappy-file input.bin output.snappy
+zig build run -- encode-hadoop-snappy-incremental-file input.bin output.snappy 262144 65536 17 31
 zig build run -- decode-hadoop-snappy-file output.snappy decoded.bin 536870912
 zig build run -- decode-hadoop-snappy-incremental-file output.snappy decoded.bin 1048576 17 31
 zig build run -- inspect-hadoop-snappy-file output.snappy
 ```
 
-`run-snappy-framing-diff` performs deterministic/self validation through both
-one-shot and incremental decode. When an Xerial `snappy-java` jar is supplied,
-it runs Xerial and Hadoop streams in both directions through the Java
-implementation and feeds Java-produced streams through the 17-byte-input /
-31-byte-output incremental path.
+`run-snappy-framing-diff` requires incremental encoding to match one-shot bytes
+and performs deterministic/self validation through both decode paths. When an
+Xerial `snappy-java` jar is supplied, it runs Xerial and Hadoop streams in both
+directions through the Java implementation, decodes Vort incremental output in
+Java, and feeds Java-produced streams through the 17-byte-input / 31-byte-output
+incremental decoder.
