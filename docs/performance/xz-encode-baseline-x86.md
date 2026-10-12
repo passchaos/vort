@@ -61,6 +61,13 @@ JSON, binary, and `wide128k` moved to `0.923x`, `0.938x`, `0.985x`, and
 candidate was fully removed before long pairs; a future large-window index
 must isolate its code/data layout rather than changing this shared binary.
 
+Pre-reserving 128 KiB for the first range-coded candidate was also removed.
+Fifteen pairs improved `binary256k` by `1.0087x` median with 15/15 wins, but
+`wide1m` regressed to `0.9978x` median / `0.9977x` geometric with 4/15 wins;
+text was neutral-positive. Restricting the reserve to 64--512 KiB payloads
+screened all five rows at `0.945x--0.995x` because the policy branch/layout cost
+outweighed allocation savings. Production retains adaptive ArrayList growth.
+
 ## Validation
 
 - LZMA focused suite: 103/103.

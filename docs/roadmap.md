@@ -18746,3 +18746,10 @@ reuse, so production keeps the simpler independently owned plans.
   regressed text/JSON/binary/`wide128k` to roughly 0.923x/0.938x/0.985x/0.980x.
   A noinline initializer made controls worse. No source remains; future
   large-window indexing must isolate code and data placement before long A/B.
+
+- An XZ range-candidate capacity follow-up was also removed. Pre-reserving
+  128 KiB improved `binary256k` by `1.0087x` median / `1.0085x` geometric with
+  15/15 wins, but `wide1m` regressed to `0.9978x` / `0.9977x` with 4/15 wins.
+  A 64--512 KiB-only policy screened every row at `0.945x--0.995x`, exposing a
+  larger branch/layout cost than the saved growth allocations. No source
+  remains; adaptive candidate capacity is retained.

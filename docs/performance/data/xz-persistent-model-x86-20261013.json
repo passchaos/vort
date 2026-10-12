@@ -86,6 +86,14 @@
     "noinline_result": "ordinary controls regressed further",
     "decision": "fully removed before long pairs because ordinary controls failed"
   },
+  "rejected_candidate_reserve_followup": {
+    "description": "Pre-reserve 128 KiB for the first raw-LZMA candidate in payloads of at least 64 KiB.",
+    "text256k": { "speedup_median": 1.001082916838, "speedup_geometric_mean": 1.001347794, "wins": 12 },
+    "binary256k": { "speedup_median": 1.008740937757, "speedup_geometric_mean": 1.008493172, "wins": 15 },
+    "wide1m": { "speedup_median": 0.997790979332, "speedup_geometric_mean": 0.997704361, "wins": 4 },
+    "bounded_64k_to_512k_screen": "all five rows ranged from 0.945x to 0.995x",
+    "decision": "fully removed because the binary gain did not justify the wide1m regression and the bounded policy was layout-negative"
+  },
   "validation": {
     "lzma_tests": "103/103",
     "xz_tests": "114/114",
