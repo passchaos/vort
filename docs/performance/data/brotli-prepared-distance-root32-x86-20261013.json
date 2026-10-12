@@ -1,0 +1,102 @@
+{
+  "date": "2026-10-13",
+  "decision": "rejected_and_fully_removed",
+  "baseline_commit": "93273dedb2bada6b334fd10ec96445d69e967406",
+  "host": {
+    "architecture": "x86_64",
+    "cpu": "Intel Core i7-10700K",
+    "pinned_cpu": 2,
+    "zig": "0.16.0",
+    "mode": "ReleaseFast",
+    "libbrotli_version": "0x1000009"
+  },
+  "candidate": {
+    "description": "Replace the flat multi-tree path's 16-bit distance root slots with 32-bit slots packing 4 Huffman-width bits, 5 extra-width bits, and a 23-bit prepared base. Short symbols and bases above 23 bits use reserved extra-width sentinels.",
+    "fixed_root_scratch_bytes": {
+      "baseline": 65536,
+      "candidate": 131072
+    },
+    "selected_payload_text_bytes": {
+      "baseline": 4309,
+      "candidate": 4440
+    },
+    "elf_text_bytes": {
+      "baseline": 632505,
+      "candidate": 633129
+    },
+    "reference_bench_sha256": {
+      "baseline": "8de85638075c9132dccc7f8e2795dd3157b1403e359ffe67dbf6dc8c1fa85eab",
+      "candidate": "9c9b790e5df684121f06598b46437b66f4271fcfdcfb8518afa1968f4f3a5977"
+    },
+    "stage_profile_sha256": {
+      "baseline": "74e5add1efbd2a14a19d08c26a82d1ad07da2c539a324cd9a61b5b03f5de0542",
+      "candidate": "c185697f2155a99bcf6b870abaa31e650fa86c249dc6eafdc7ce831e85a15659"
+    }
+  },
+  "fixture": {
+    "input_bytes": 1048576,
+    "input_sha256": "d9644e1c8c6e6b29bb8f00a10cf36accb5d592afd7458e94bbd278fe0c32558f",
+    "encoded_bytes": 52623,
+    "encoded_sha256": "9815e2fc82b0b05bf901b760939c7526318f1725a5fca5fce0b3ad6b6fe16a82"
+  },
+  "commands": {
+    "stage": "taskset -c 2 BINARY --iterations 2000 --csv OUTPUT",
+    "whole_frame": "taskset -c 2 BINARY --input FROZEN.raw --encoded-input FROZEN.br --name clustered_q8 --iterations 2000 --vort-only --csv OUTPUT"
+  },
+  "focused_validation": {
+    "command_prepared": "zig test src/br.zig -OReleaseFast --test-filter 'prepared distance'",
+    "prepared_result": "4/4 passed",
+    "command_root": "zig test src/br.zig -OReleaseFast --test-filter 'distance root'",
+    "root_result": "4/4 passed",
+    "coverage": [
+      "short distance symbols",
+      "prepared regular bases and extra widths",
+      "23-bit base overflow through symbol fallback",
+      "zero-bit single-symbol roots",
+      "canonical result and bit-position equivalence",
+      "RFC values and every truncated suffix"
+    ]
+  },
+  "stage_profile": {
+    "iterations": 2000,
+    "checksum": 2939536000,
+    "baseline": {
+      "header_ns": 150602431,
+      "literal_lookup_ns": 20991364,
+      "command_lookup_ns": 11625856,
+      "distance_lookup_ns": 21495538,
+      "payload_ns": 982271375,
+      "total_ns": 1187434317
+    },
+    "candidate": {
+      "header_ns": 150990841,
+      "literal_lookup_ns": 20481507,
+      "command_lookup_ns": 11812144,
+      "distance_lookup_ns": 30425778,
+      "payload_ns": 957555514,
+      "total_ns": 1171668214
+    },
+    "payload_speedup": 1.025811413165,
+    "total_speedup": 1.013456115658,
+    "interpretation": "The isolated stage suggested a payload win, but setup grew by about 8.9 microseconds per frame and the independent complete-frame result contradicted the single stage observation."
+  },
+  "whole_frame_pairs": {
+    "pairs": 15,
+    "decodes_per_internal_round": 2000,
+    "internal_rounds": 5,
+    "baseline_ns": [1148112737, 1142563192, 1143610890, 1150274621, 1143218073, 1146102182, 1145922047, 1144728268, 1144761574, 1147626958, 1142820161, 1145886694, 1143257789, 1144362458, 1144597913],
+    "candidate_ns": [1153843806, 1150427935, 1151505733, 1151337662, 1150174286, 1150451631, 1151272759, 1149634197, 1149844240, 1148246103, 1147861275, 1146089029, 1150710198, 1150949652, 1149372714],
+    "speedup_median": 0.995579691733,
+    "speedup_geometric_mean": 0.995717249152,
+    "speedup_minimum": 0.993143896054,
+    "speedup_maximum": 0.999823456123,
+    "wins": 0,
+    "baseline_median_mib_s": 1747.14,
+    "candidate_median_mib_s": 1738.48
+  },
+  "controls": {
+    "status": "not_run",
+    "reason": "The intended target regressed in all 15 long pairs, so broader controls could not change the rejection decision."
+  },
+  "conclusion": "The compact 32-bit representation avoided the earlier 64-bit root size, but still doubled fixed distance-root scratch, enlarged the selected executor, and regressed complete decode with 0/15 wins. All production and test source was restored. Prepared distance metadata should not be embedded in the flat root again without a representation that is no wider than the existing 16-bit slot."
+}

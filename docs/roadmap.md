@@ -18641,3 +18641,18 @@ reuse, so production keeps the simpler independently owned plans.
   `docs/performance/data/brotli-context-map-compact-root-x86-20261013.json` and
   the stage-profile narrative now rules out standalone compact-root width
   sweeps.
+
+- Tested and fully removed a compact 32-bit prepared-distance root for the
+  Brotli flat multi-tree executor. The slot packed Huffman width, extra-bit
+  width, and a 23-bit base, with short/high-base symbol sentinels, avoiding the
+  older 64-bit metadata layout. Focused canonical/RFC/truncation tests passed,
+  and one 2,000-frame stage sample suggested `1.0258x` payload / `1.0135x`
+  total speedups. The authoritative complete-frame campaign instead regressed
+  all 15 fixed-CPU-2 pairs: `0.99558x` median / `0.99572x` geometric
+  throughput, with median speed falling from 1747.14 to 1738.48 MiB/s. The
+  root scratch doubled from 64 to 128 KiB, the selected payload grew
+  `0x10d5 -> 0x1158`, and ELF `.text` grew 624 bytes. No production change
+  remains. Exact evidence is in
+  `docs/performance/data/brotli-prepared-distance-root32-x86-20261013.json`;
+  prepared metadata should not be embedded in a root wider than the current
+  16-bit slots without a fundamentally smaller execution representation.

@@ -134,3 +134,31 @@ representation can perturb or slow ordinary streams enough to fail the matrix.
 Future context-map work needs an end-to-end representation shared with later
 literal/distance tree selection, or should yield to reductions in actual
 distance/copy execution rather than revisiting standalone root widths.
+
+## Packed 32-bit prepared-distance root follow-up
+
+The next experiment moved to actual distance execution. The flat multi-tree
+path's 16-bit distance slots were replaced by 32-bit entries containing the
+Huffman width, prepared extra-bit width, and a 23-bit distance base. Two
+reserved widths represented short symbols and regular symbols whose base did
+not fit, preserving the canonical fallback. The candidate was narrower than
+the older rejected 64-bit metadata root and changed only the selected
+`clustered_q8` payload instance.
+
+Focused canonical/RFC/truncation tests passed. A 2,000-frame diagnostic looked
+promising: payload time improved from 982.3 to 957.6 ms and complete staged
+time improved by `1.0135x`, although distance-root setup grew from 21.5 to
+30.4 ms. The authoritative independent-binary complete-frame comparison
+reversed that result. Fifteen alternating fixed-CPU-2 pairs, each using five
+2,000-decode rounds over one frozen frame, measured `0.99558x` median /
+`0.99572x` geometric throughput with 0/15 wins and a `0.99314x--0.99982x`
+range. Median throughput fell from 1747.14 to 1738.48 MiB/s.
+
+The fixed distance-root scratch doubled from 64 to 128 KiB, the selected
+payload grew `0x10d5 -> 0x1158`, and ELF `.text` grew by 624 bytes. The
+candidate was fully removed without running broader controls because its only
+target already lost every pair. Exact fixture/binary hashes, stage counters,
+focused coverage, and all paired nanoseconds are retained in
+`data/brotli-prepared-distance-root32-x86-20261013.json`. Together with the
+earlier 64-bit result, this rules out embedding prepared distance metadata in
+a root wider than the existing 16-bit slots for the current flat executor.
