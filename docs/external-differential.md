@@ -128,6 +128,13 @@ available, `wdf` must decode all four Vort outputs and Vort must decode both
 versions produced by `wit --raw`. Select explicit tools with
 `-- --wdf /path/to/wdf --wit /path/to/wit`.
 
+The WUX differential checks deduplicated and store-all Vort output byte-for-byte
+against an independent Python implementation, including repeated sectors,
+partial/range handling, and malformed metadata. When the original WudCompress
+binary is available, it must decode both Vort modes and Vort must decode its
+generated WUX output. Select it explicitly with
+`-- --wudcompress /path/to/WudCompress`.
+
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,
 structured JSON, and binary dictionary inputs. Each file is encoded by

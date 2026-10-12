@@ -18134,3 +18134,14 @@ reuse, so production keeps the simpler independently owned plans.
   `wdf`/`wit` interoperability cover the baseline. Filesystem-aware scrubbing,
   split output, streaming I/O, and more advanced sparse scanning remain
   follow-up work. See `docs/formats/wdf.md`.
+
+- Added pure-Zig Wii U WUX reading and deterministic writing. The reader
+  validates the ABI-padded little-endian header, sector geometry, exact index
+  and data extents, flags, reserved fields, contiguous physical indexes, and
+  bounded cross-sector ranges. The writer supports configurable sector sizes,
+  optional deduplication, deterministic first-occurrence indexes, partial-tail
+  padding, and collision-safe SHA-256-assisted reuse with byte confirmation.
+  Focused tests, fuzzing, independent Python byte comparison, and bidirectional
+  original-WudCompress validation cover the baseline. Streaming I/O and
+  multipart raw-WUD discovery remain follow-up work. See
+  `docs/formats/wux.md`.

@@ -47,6 +47,7 @@ pub const gcz = @import("gcz.zig");
 pub const wia = @import("wia.zig");
 pub const wbfs = @import("wbfs.zig");
 pub const wdf = @import("wdf.zig");
+pub const wux = @import("wux.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1250,6 +1251,15 @@ pub const WdfEncodeOptions = wdf.EncodeOptions;
 pub const parseWdfAlloc = wdf.parseAlloc;
 pub const parseWdfPartsAlloc = wdf.parsePartsAlloc;
 pub const encodeWdfAlloc = wdf.encodeAlloc;
+
+pub const WuxError = wux.Error;
+pub const WuxHeader = wux.Header;
+pub const WuxArchive = wux.Archive;
+pub const WuxOpenOptions = wux.OpenOptions;
+pub const WuxEncodeOptions = wux.EncodeOptions;
+pub const wuxStandardWudSize = wux.standard_wud_size;
+pub const parseWuxAlloc = wux.parseAlloc;
+pub const encodeWuxAlloc = wux.encodeAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3232,6 +3242,7 @@ test {
     _ = wia;
     _ = wbfs;
     _ = wdf;
+    _ = wux;
 }
 
 test "root 7z exports create list and extract Copy archives" {

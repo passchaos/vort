@@ -201,6 +201,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   input, sparse/full modes, partial tails, bounded range reads, independent
   Python comparison, fuzzing, and bidirectional Wiimms `wdf`/`wit`
   interoperability;
+- pure-Zig Wii U WUX reading and deterministic sector-deduplicating writing,
+  with strict little-endian header/index validation, repeated-sector range
+  reads, collision-safe SHA-256-assisted reuse, partial tails, independent
+  Python comparison, fuzzing, and bidirectional original-WudCompress coverage;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded
@@ -1608,6 +1612,8 @@ WBFS support and its explicit multi-disc/filesystem-scrubbing limits are
 documented in `docs/formats/wbfs.md`.
 WDF1/WDF2 support and its split-output/scrubbing limits are documented in
 `docs/formats/wdf.md`.
+WUX support and its raw-WUD/streaming limits are documented in
+`docs/formats/wux.md`.
 Local Rust deflate
 baselines such as `~/Work/fdeflate` and `~/Work/miniz_oxide` should be treated
 as required functionality/performance competitors once their executable harnesses

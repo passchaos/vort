@@ -368,6 +368,14 @@ pub fn build(b: *std.Build) void {
     const run_wdf_tests = b.addRunArtifact(wdf_tests);
     const wdf_test_step = b.step("test-wdf", "Run focused Wiimms WDF image tests");
     wdf_test_step.dependOn(&run_wdf_tests.step);
+    const wux_tests = b.addTest(.{
+        .name = "vort-wux-tests",
+        .root_module = tests_mod,
+        .filters = &.{"WUX"},
+    });
+    const run_wux_tests = b.addRunArtifact(wux_tests);
+    const wux_test_step = b.step("test-wux", "Run focused Wii U WUX image tests");
+    wux_test_step.dependOn(&run_wux_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1450,6 +1458,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| wdf_diff.addArgs(args);
     const wdf_diff_step = b.step("run-wdf-diff", "Validate WDF1/WDF2 images against optional Wiimms tools");
     wdf_diff_step.dependOn(&wdf_diff.step);
+
+    const wux_diff = b.addSystemCommand(&.{ "python3", "tools/wux/diff.py", "--cli" });
+    wux_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| wux_diff.addArgs(args);
+    const wux_diff_step = b.step("run-wux-diff", "Validate WUX images against optional WudCompress");
+    wux_diff_step.dependOn(&wux_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);
