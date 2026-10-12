@@ -20,6 +20,7 @@ const min_entropy_proposal_savings_bits: u64 = min_estimated_savings_bits * 3 / 
 const min_clustered_over_two_savings_bits: u64 = 128;
 const min_three_over_two_savings_bits: u64 = 1024;
 const min_alternating_four_over_best_savings_bits: u64 = 256;
+const min_reuse_first_four_over_best_savings_bits: u64 = 128;
 const entropy_fraction_bits: u6 = 8;
 const entropy_scale: u64 = 1 << entropy_fraction_bits;
 
@@ -37,6 +38,7 @@ pub const Result = struct {
     second_split: ?usize = null,
     third_split: ?usize = null,
     alternate_two_types: bool = false,
+    reuse_first_for_fourth: bool = false,
     savings_bits: u64,
 
     pub fn regionCount(self: Result) usize {
@@ -44,14 +46,17 @@ pub const Result = struct {
     }
 
     pub fn typeCount(self: Result) usize {
-        return if (self.second_split != null and !self.alternate_two_types) 3 else 2;
+        return if (self.alternate_two_types) 2 else if (self.reuse_first_for_fourth) 3 else self.regionCount();
     }
 
     pub fn blockIndex(self: Result, literal_index: usize) usize {
         if (literal_index < self.split) return 0;
         if (self.second_split) |second| {
             if (literal_index < second) return 1;
-            if (self.third_split) |third| return if (literal_index < third) 0 else 1;
+            if (self.third_split) |third| {
+                if (self.alternate_two_types) return if (literal_index < third) 0 else 1;
+                return if (literal_index < third) 2 else if (self.reuse_first_for_fourth) 0 else 3;
+            }
             return if (self.alternate_two_types) 0 else 2;
         }
         return 1;
@@ -63,6 +68,7 @@ pub const Proposals = struct {
     three: ?Result = null,
     clustered: ?Result = null,
     alternating_four: ?Result = null,
+    reuse_first_four: ?Result = null,
 };
 
 /// Choose one literal-stream boundary for a two-type Brotli entropy split.
@@ -229,6 +235,8 @@ pub fn chooseProposals(input: []const u8, commands: []const command_plan.Command
     }
     var best_alternating_bits = baseline_bits;
     var best_alternating_indexes: [3]usize = @splat(candidate_count);
+    var best_reuse_first_bits = baseline_bits;
+    var best_reuse_first_indexes: [3]usize = @splat(candidate_count);
     for (0..target_len) |first_index| {
         for (first_index + 1..target_len) |second_index| {
             for (second_index + 1..target_len) |third_index| {
@@ -254,6 +262,24 @@ pub fn chooseProposals(input: []const u8, commands: []const command_plan.Command
                     best_alternating_bits = alternating_bits;
                     best_alternating_indexes = .{ first_index, second_index, third_index };
                 }
+                var outer: [256]u32 = undefined;
+                var second_region: [256]u32 = undefined;
+                var third_region: [256]u32 = undefined;
+                for (&outer, &second_region, &third_region, &prefix_snapshots[first_index], &prefix_snapshots[second_index], &prefix_snapshots[third_index], &total_frequencies) |*outer_out, *second_out, *third_out, first, second, third, total| {
+                    outer_out.* = @as(u32, first) + total - third;
+                    second_out.* = @as(u32, second) - first;
+                    third_out.* = @as(u32, third) - second;
+                }
+                const outer_lengths = huffman.treeCodeLengths(256, &outer, 15);
+                const second_lengths = huffman.treeCodeLengths(256, &second_region, 15);
+                const third_lengths = huffman.treeCodeLengths(256, &third_region, 15);
+                const reuse_first_bits = weightedBits(&outer, &outer_lengths) +
+                    weightedBits(&second_region, &second_lengths) +
+                    weightedBits(&third_region, &third_lengths);
+                if (reuse_first_bits < best_reuse_first_bits) {
+                    best_reuse_first_bits = reuse_first_bits;
+                    best_reuse_first_indexes = .{ first_index, second_index, third_index };
+                }
             }
         }
     }
@@ -274,6 +300,30 @@ pub fn chooseProposals(input: []const u8, commands: []const command_plan.Command
                 .second_split = targets[best_alternating_indexes[1]],
                 .third_split = targets[best_alternating_indexes[2]],
                 .alternate_two_types = true,
+                .savings_bits = savings,
+            };
+        }
+    }
+    if (best_reuse_first_indexes[0] != candidate_count) {
+        const savings = baseline_bits - best_reuse_first_bits;
+        const refined_baseline = @max(
+            proposals.two.?.savings_bits,
+            @max(
+                if (proposals.clustered) |clustered| clustered.savings_bits else 0,
+                @max(
+                    if (proposals.three) |three| three.savings_bits else 0,
+                    if (proposals.alternating_four) |alternating| alternating.savings_bits else 0,
+                ),
+            ),
+        );
+        if (savings >= 2 * min_estimated_savings_bits and
+            savings -| refined_baseline >= min_reuse_first_four_over_best_savings_bits)
+        {
+            proposals.reuse_first_four = .{
+                .split = targets[best_reuse_first_indexes[0]],
+                .second_split = targets[best_reuse_first_indexes[1]],
+                .third_split = targets[best_reuse_first_indexes[2]],
+                .reuse_first_for_fourth = true,
                 .savings_bits = savings,
             };
         }
@@ -394,6 +444,28 @@ test "literal block split clusters four alternating regions" {
     try std.testing.expectEqual(@as(usize, 1), alternating.blockIndex(alternating.split));
     try std.testing.expectEqual(@as(usize, 0), alternating.blockIndex(alternating.second_split.?));
     try std.testing.expectEqual(@as(usize, 1), alternating.blockIndex(alternating.third_split.?));
+}
+
+test "literal block split reuses the first of three types in region four" {
+    var input: [8192]u8 = undefined;
+    for (&input, 0..) |*byte, i| {
+        const region = i / 2048;
+        byte.* = switch (region) {
+            0, 3 => @intCast(i & 15),
+            1 => @intCast(112 + (i & 15)),
+            2 => @intCast(240 + (i & 15)),
+            else => unreachable,
+        };
+    }
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
+    const reused = chooseProposals(&input, &commands, null).reuse_first_four orelse
+        return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, 4), reused.regionCount());
+    try std.testing.expectEqual(@as(usize, 3), reused.typeCount());
+    try std.testing.expectEqual(@as(usize, 0), reused.blockIndex(0));
+    try std.testing.expectEqual(@as(usize, 1), reused.blockIndex(reused.split));
+    try std.testing.expectEqual(@as(usize, 2), reused.blockIndex(reused.second_split.?));
+    try std.testing.expectEqual(@as(usize, 0), reused.blockIndex(reused.third_split.?));
 }
 
 test "literal block split fixed-point logarithm tracks powers and mantissas" {

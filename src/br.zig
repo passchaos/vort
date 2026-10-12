@@ -731,6 +731,22 @@ pub const IncrementalTestSupport = struct {
         return .{ .encoded = encoded, .payload = payload };
     }
 
+    /// Build a production literal stream whose four regions reuse three
+    /// literal tree types in A-B-C-A order.
+    pub fn encodeReuseFirstOfThreeLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, reuse_first_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillReuseFirstLiteralFixture(payload);
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const proposals = literal_block_split.chooseProposals(payload, &commands, null);
+        const reused = proposals.reuse_first_four orelse return error.InvalidBlockPlan;
+        const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{
+            .literal_split = reused,
+        });
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
     /// Build a four-region production stream whose two command tree types
     /// alternate A-B-A-B across three consecutive implicit type switches.
     pub fn encodeAlternatingCommandTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
@@ -3647,6 +3663,15 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
             best_stats = alternating_literal_stats;
         } else allocator.free(alternating_literal_candidate);
     }
+    if (literal_splits.reuse_first_four) |reused_literal| {
+        var reused_literal_stats = baseline_stats;
+        const reused_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_literal_stats, options, baseline.use_recent_distances, reused_literal, command_split, distance_split);
+        if (reused_literal_candidate.len < best.len) {
+            allocator.free(best);
+            best = reused_literal_candidate;
+            best_stats = reused_literal_stats;
+        } else allocator.free(reused_literal_candidate);
+    }
     if (symbol_splits.command.clustered) |clustered| {
         var clustered_stats = baseline_stats;
         const clustered_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_stats, options, baseline.use_recent_distances, literal_split, clustered, distance_split);
@@ -3863,9 +3888,9 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         if (split.second_split) |second| {
             if (second <= split.split) return error.InvalidBlockPlan;
             if (split.third_split) |third| {
-                if (!split.alternate_two_types or third <= second) return error.InvalidBlockPlan;
-            }
-        } else if (split.third_split != null or split.alternate_two_types) return error.InvalidBlockPlan;
+                if (split.alternate_two_types == split.reuse_first_for_fourth or third <= second) return error.InvalidBlockPlan;
+            } else if (split.reuse_first_for_fourth) return error.InvalidBlockPlan;
+        } else if (split.third_split != null or split.alternate_two_types or split.reuse_first_for_fourth) return error.InvalidBlockPlan;
     }
     // This writer currently fixes NPOSTFIX=0, whose four-bit NDIRECT field
     // directly represents values 0...15.
@@ -14463,11 +14488,91 @@ test "br alternating literal candidate cleans up allocation failures" {
     );
 }
 
+const reuse_first_literal_payload_len = 8192;
+
+fn fillReuseFirstLiteralFixture(payload: []u8) void {
+    std.debug.assert(payload.len == reuse_first_literal_payload_len);
+    for (payload, 0..) |*byte, i| {
+        const region = i / 2048;
+        byte.* = switch (region) {
+            0, 3 => @intCast(i & 15),
+            1 => @intCast(112 + (i & 15)),
+            2 => @intCast(240 + (i & 15)),
+            else => unreachable,
+        };
+    }
+}
+
+test "br planned wire reuses the first of three literal types in region four" {
+    var payload: [reuse_first_literal_payload_len]u8 = undefined;
+    fillReuseFirstLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    const proposals = literal_block_split.chooseProposals(&payload, &commands, null);
+    const reused_plan = proposals.reuse_first_four orelse return error.TestUnexpectedResult;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const reused = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .literal_split = reused_plan,
+    });
+    defer std.testing.allocator.free(reused);
+
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        std.testing.allocator,
+        &payload,
+        &commands,
+        &stats,
+        .{ .try_literal_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    ) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, reused, selected);
+
+    const summary = try summarizeStream(reused);
+    try std.testing.expectEqual(@as(usize, 3), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 3), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, reused, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br four-region three-type literal candidate cleans up allocation failures" {
+    var payload: [reuse_first_literal_payload_len]u8 = undefined;
+    fillReuseFirstLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, base: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(
+                allocator,
+                input,
+                plan,
+                &candidate_stats,
+                .{ .try_literal_split = true },
+                .{ .encoded = base, .use_recent_distances = false },
+            );
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            try std.testing.expect(candidate.?.len < base.len);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload[0..], commands[0..], baseline },
+    );
+}
+
 test "br literal block length code rejects invalid four-way splits" {
     try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .third_split = 3072, .savings_bits = 0 }, 4096));
     try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .third_split = 2048, .alternate_two_types = true, .savings_bits = 0 }, 4096));
     try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .third_split = 3072, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .third_split = 3072, .alternate_two_types = true, .reuse_first_for_fourth = true, .savings_bits = 0 }, 4096));
     try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .third_split = 4096, .alternate_two_types = true, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .reuse_first_for_fourth = true, .savings_bits = 0 }, 4096));
 }
 
 const three_command_region_count = 6144;
@@ -24533,16 +24638,19 @@ const LiteralBlockLengthCode = struct {
             block_lengths[1] = blockLengthEncoding(second - split.split) orelse
                 return error.InvalidBlockPlan;
             if (split.third_split) |third| {
-                if (!split.alternate_two_types or third <= second or third >= literal_count)
+                if (split.alternate_two_types == split.reuse_first_for_fourth or third <= second or third >= literal_count)
                     return error.InvalidBlockPlan;
                 block_lengths[2] = blockLengthEncoding(third - second) orelse
                     return error.InvalidBlockPlan;
                 block_lengths[3] = blockLengthEncoding(literal_count - third) orelse
                     return error.InvalidBlockPlan;
-            } else block_lengths[2] = blockLengthEncoding(literal_count - second) orelse
-                return error.InvalidBlockPlan;
+            } else {
+                if (split.reuse_first_for_fourth) return error.InvalidBlockPlan;
+                block_lengths[2] = blockLengthEncoding(literal_count - second) orelse
+                    return error.InvalidBlockPlan;
+            }
         } else {
-            if (split.third_split != null or split.alternate_two_types) return error.InvalidBlockPlan;
+            if (split.third_split != null or split.alternate_two_types or split.reuse_first_for_fourth) return error.InvalidBlockPlan;
             block_lengths[1] = blockLengthEncoding(literal_count - split.split) orelse
                 return error.InvalidBlockPlan;
         }

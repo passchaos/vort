@@ -874,6 +874,26 @@ pub fn main(init: std.process.Init) !void {
         31,
     );
     planned_literal_split_cases += 1;
+    const planned_reuse_first_literal = try vort.br.IncrementalTestSupport.encodeReuseFirstOfThreeLiteralTypes(init.gpa);
+    defer init.gpa.free(planned_reuse_first_literal.encoded);
+    defer init.gpa.free(planned_reuse_first_literal.payload);
+    const planned_reuse_first_literal_summary = try vort.brSummarizeStream(planned_reuse_first_literal.encoded);
+    if (planned_reuse_first_literal_summary.max_literal_block_types != 3 or
+        planned_reuse_first_literal_summary.max_literal_context_trees != 3) return error.ReferenceEncodeFailed;
+    const planned_reuse_first_literal_decoded = try init.gpa.alloc(u8, planned_reuse_first_literal.payload.len);
+    defer init.gpa.free(planned_reuse_first_literal_decoded);
+    try reference.decode(planned_reuse_first_literal.encoded, planned_reuse_first_literal_decoded);
+    if (!std.mem.eql(u8, planned_reuse_first_literal.payload, planned_reuse_first_literal_decoded))
+        return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(
+        init.gpa,
+        planned_reuse_first_literal.encoded,
+        planned_reuse_first_literal.payload,
+        16,
+        17,
+        31,
+    );
+    planned_literal_split_cases += 1;
     var planned_command_split_cases: usize = 0;
     var planned_distance_split_cases: usize = 0;
     const planned_command_split = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, dictionary_bytes, .{ .level = .ratio });

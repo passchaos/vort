@@ -18493,3 +18493,19 @@ reuse, so production keeps the simpler independently owned plans.
   libbrotli 1.1.0 plus the 17-byte-input/31-byte-output progressive path. The
   focused upstream gate remains green with 7,056 one-shot, 7,056 progressive,
   and 1,401 fragmentation cases; `planned_literal_split_cases=4`.
+
+- Added the complementary four-region A-B-C-A Brotli literal proposal, reusing
+  the first of three Huffman trees in the fourth region. The same bounded
+  quarter/third/sixth candidate grid now scores pooled first/fourth frequencies
+  beside independent second and third regions. It requires at least 4,096 bits
+  of total estimated savings and a 128-bit improvement over the best available
+  two-region, A-B-A, A-B-C, or A-B-A-B proposal before complete-wire
+  arbitration. Literal split state now distinguishes two-tree alternation from
+  first-of-three reuse, rejects ambiguous flags, retains three tree arrays, and
+  relies on Brotli's implicit three-type wrap for switches 0→1→2→0. An
+  8,192-byte low/mid/high/low fixture is selected exactly, round trips, survives
+  every allocation failure, and decodes through libbrotli 1.1.0 plus the
+  17-byte-input/31-byte-output progressive path. The 9-row planned-encode gate
+  and upstream differential remain green with 7,056 one-shot, 7,056
+  progressive, and 1,401 fragmentation cases;
+  `planned_literal_split_cases=5`.
