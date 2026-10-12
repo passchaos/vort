@@ -18509,3 +18509,19 @@ reuse, so production keeps the simpler independently owned plans.
   and upstream differential remain green with 7,056 one-shot, 7,056
   progressive, and 1,401 fragmentation cases;
   `planned_literal_split_cases=5`.
+
+- Completed the bounded four-region Brotli literal family with an A-B-C-D
+  proposal using four independent Huffman trees. Triple-boundary scoring reuses
+  the second/third tree costs already needed by A-B-C-A and adds independent
+  prefix/fourth-region costs; the proposal requires at least 4,096 estimated
+  savings bits and a 1,024-bit lead over every two-/three-/four-region reuse
+  candidate before complete-wire arbitration. Production literal frequency,
+  alphabet, length, and encoder arrays now scale to four types. The header
+  writes four context modes, four literal trees, and a balanced four-symbol
+  identity context map covering all 256 entries; payload switching follows
+  0→1→2→3. An 8,192-byte four-alphabet fixture is selected exactly, round
+  trips, survives every allocation failure, and decodes through libbrotli 1.1.0
+  plus the 17-byte-input/31-byte-output progressive path. The 9-row planned
+  encode gate and upstream differential remain green with 7,056 one-shot,
+  7,056 progressive, and 1,401 fragmentation cases;
+  `planned_literal_split_cases=6`.
