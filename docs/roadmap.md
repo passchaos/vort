@@ -18176,5 +18176,11 @@ reuse, so production keeps the simpler independently owned plans.
   metadata, reversible stored/fixed/dynamic Deflate-to-puff conversion,
   bit-aligned extent mapping, nested BSDIFF, the pinned AOSP update-engine
   fixture, and byte-exact AOSP Puffin codec differentials. Major version 1,
-  vendor signature verification, ZUCCHINI/LZ4DIFF patch engines, and streaming
-  file I/O remain explicit follow-up work. See `docs/formats/android-ota.md`.
+  vendor signature verification, and streaming file I/O remain explicit
+  follow-up work. LZ4DIFF_BSDIFF and LZ4DIFF_PUFFDIFF now parse bounded proto3
+  metadata, expand ordinary and zero-padded clusters, apply nested BSDIFF or
+  PUFFDIFF, reproduce liblz4 1.9.3 `LZ4_compress_destSize` byte-for-byte, verify
+  pre-postfix SHA-256 values, and apply postfix corrections. Independent
+  system-liblz4 fixtures cover both operation kinds and padding layouts. LZ4HC
+  recompression and ZUCCHINI remain explicit unsupported follow-ups. See
+  `docs/formats/android-ota.md`.

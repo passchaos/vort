@@ -5,11 +5,20 @@ const dictionary_mod = @import("dictionary.zig");
 const block_format = @import("lz4/block_format.zig");
 const length = @import("lz4/length.zig");
 const literal_copy = @import("lz4/literal_copy.zig");
+const dest_size = @import("lz4/dest_size.zig");
 const incremental_encoder = @import("lz4/incremental/frame_encoder.zig");
 const incremental_block_decoder = @import("lz4/incremental/block_decoder.zig");
 const incremental_tests = @import("lz4/incremental/tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
+pub const DestSizeResult = dest_size.Result;
+
+pub fn encodeBlockDestSize(input: []const u8, output: []u8) Error!DestSizeResult {
+    return dest_size.compress(input, output) catch |err| switch (err) {
+        error.InputTooLarge => error.OutputLimitExceeded,
+        error.OutputTooSmall => error.OutputTooSmall,
+    };
+}
 
 pub const default_compression_level: c_int = 10;
 

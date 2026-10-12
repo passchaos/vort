@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import bz2
+import ctypes
+import ctypes.util
 import hashlib
 import lzma
 import random
@@ -24,6 +26,8 @@ SOURCE_BSDIFF = 5
 ZERO = 6
 REPLACE_XZ = 8
 PUFFDIFF = 9
+LZ4DIFF_BSDIFF = 12
+LZ4DIFF_PUFFDIFF = 13
 
 PUFFDIFF_FIXTURE = bytes.fromhex(
     "5055463100000051080112270a04081010320a040850100a0a04086010121204"
@@ -213,6 +217,132 @@ def signed_magnitude(value: int) -> bytes:
     if value < 0:
         magnitude |= 1 << 63
     return struct.pack("<Q", magnitude)
+
+
+def bsdiff_patch(source: bytes, target: bytes) -> bytes:
+    if len(source) != len(target):
+        raise AssertionError("test BSDIFF inputs must have the same size")
+    diff = bytes((new - old) & 0xFF for old, new in zip(source, target))
+    control = (
+        signed_magnitude(len(target))
+        + signed_magnitude(0)
+        + signed_magnitude(0)
+    )
+    control_compressed = bz2.compress(control, compresslevel=9)
+    diff_compressed = bz2.compress(diff, compresslevel=9)
+    extra_compressed = bz2.compress(b"", compresslevel=9)
+    return (
+        b"BSDIFF40"
+        + signed_magnitude(len(control_compressed))
+        + signed_magnitude(len(diff_compressed))
+        + signed_magnitude(len(target))
+        + control_compressed
+        + diff_compressed
+        + extra_compressed
+    )
+
+
+def no_deflate_puffdiff_patch(source: bytes, target: bytes) -> bytes:
+    source_info = vfield(3, len(source))
+    target_info = vfield(3, len(target))
+    header = (
+        vfield(1, 1)
+        + bfield(2, source_info)
+        + bfield(3, target_info)
+        + vfield(4, 0)
+    )
+    return b"PUF1" + struct.pack(">I", len(header)) + header + bsdiff_patch(source, target)
+
+
+def load_lz4_oracle() -> tuple[ctypes.CDLL, object] | None:
+    library_name = ctypes.util.find_library("lz4")
+    if library_name is None:
+        return None
+    library = ctypes.CDLL(library_name)
+    compress = library.LZ4_compress_destSize
+    compress.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.c_int,
+    ]
+    compress.restype = ctypes.c_int
+    return library, compress
+
+
+def lz4_dest_size(compress: object, source: bytes, capacity: int) -> tuple[bytes, int]:
+    destination = ctypes.create_string_buffer(capacity)
+    consumed = ctypes.c_int(len(source))
+    written = compress(source, destination, ctypes.byref(consumed), capacity)
+    if written <= 0:
+        raise AssertionError("liblz4 destSize failed")
+    return bytes(destination.raw[:written]), consumed.value
+
+
+def lz4diff_payload(
+    compress: object,
+    inner_type: int,
+    zero_padding: bool,
+) -> tuple[bytes, bytes, bytes]:
+    source_logical = (b"AOSP LZ4DIFF source cluster\n" * 320)[: 2 * BLOCK_SIZE]
+    source_logical += bytes(2 * BLOCK_SIZE - len(source_logical))
+    target_logical = (b"Vort LZ4DIFF target cluster!\n" * 320)[: 2 * BLOCK_SIZE]
+    target_logical += bytes(2 * BLOCK_SIZE - len(target_logical))
+    source_encoded, source_consumed = lz4_dest_size(
+        compress, source_logical, BLOCK_SIZE
+    )
+    target_encoded, target_consumed = lz4_dest_size(
+        compress, target_logical, BLOCK_SIZE
+    )
+    if source_consumed != len(source_logical) or target_consumed != len(target_logical):
+        raise AssertionError("LZ4 fixture did not consume its logical block")
+
+    def pad(encoded: bytes) -> bytes:
+        padding = bytes(BLOCK_SIZE - len(encoded))
+        return padding + encoded if zero_padding else encoded + padding
+
+    source_physical = pad(source_encoded)
+    target_physical = pad(target_encoded)
+    if inner_type == 0:
+        inner_patch = bsdiff_patch(source_logical, target_logical)
+        operation_kind = LZ4DIFF_BSDIFF
+    elif inner_type == 1:
+        inner_patch = no_deflate_puffdiff_patch(source_logical, target_logical)
+        operation_kind = LZ4DIFF_PUFFDIFF
+    else:
+        raise AssertionError("bad LZ4DIFF inner type")
+
+    algorithm = vfield(1, 1)
+    block = vfield(2, len(source_logical)) + vfield(3, BLOCK_SIZE)
+    source_info = bfield(1, algorithm) + bfield(2, block)
+    target_info = bfield(1, algorithm) + bfield(2, block)
+    if zero_padding:
+        source_info += vfield(3, 1)
+        target_info += vfield(3, 1)
+    protobuf_header = bfield(1, source_info) + bfield(2, target_info)
+    if inner_type:
+        protobuf_header += vfield(3, inner_type)
+    patch = (
+        b"LZ4DIFF"
+        + struct.pack(">II", 1, len(protobuf_header))
+        + b"\0"
+        + protobuf_header
+        + inner_patch
+    )
+    operation_message = bytearray(vfield(1, operation_kind))
+    operation_message += vfield(2, 0)
+    operation_message += vfield(3, len(patch))
+    operation_message += bfield(4, extent(0, 1))
+    operation_message += bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source_physical).digest())
+    partition = bytearray(bfield(1, b"lz4diff"))
+    partition += bfield(6, partition_info(source_physical))
+    partition += bfield(7, partition_info(target_physical))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + patch
+    return payload, source_physical, target_physical
 
 
 def source_bsdiff_payload(source: bytes) -> tuple[bytes, bytes, bytes]:
@@ -416,6 +546,7 @@ def main() -> None:
     bspatch_cases = 0
     puffin_cases = 0
     puff_codec_cases = 0
+    lz4diff_cases = 0
     with tempfile.TemporaryDirectory(prefix="vort-android-ota-") as temp_text:
         temp = Path(temp_text)
         source = temp / "system.img"
@@ -699,6 +830,50 @@ def main() -> None:
                     raise AssertionError(f"Vort Puffin {name} huff mismatch")
                 puff_codec_cases += 1
 
+        lz4_oracle = load_lz4_oracle()
+        if lz4_oracle is not None:
+            _, lz4_compress = lz4_oracle
+            for inner_type, zero_padding, name in (
+                (0, False, "bsdiff"),
+                (1, True, "puffdiff"),
+            ):
+                lz4_payload, lz4_source, lz4_expected = lz4diff_payload(
+                    lz4_compress,
+                    inner_type,
+                    zero_padding,
+                )
+                lz4_payload_path = temp / f"lz4diff-{name}.bin"
+                lz4_payload_path.write_bytes(lz4_payload)
+                lz4_source_path = temp / f"lz4diff-{name}-old.img"
+                lz4_source_path.write_bytes(lz4_source)
+                lz4_output = temp / f"lz4diff-{name}-new.img"
+                run(
+                    args.cli,
+                    "extract-android-ota",
+                    lz4_payload_path,
+                    "lz4diff",
+                    lz4_output,
+                    len(lz4_expected),
+                    lz4_source_path,
+                )
+                if lz4_output.read_bytes() != lz4_expected:
+                    raise AssertionError(f"LZ4DIFF {name} decode mismatch")
+                lz4_range = temp / f"lz4diff-{name}-range.img"
+                run(
+                    args.cli,
+                    "extract-android-ota-range",
+                    lz4_payload_path,
+                    "lz4diff",
+                    lz4_range,
+                    211,
+                    733,
+                    lz4_source_path,
+                )
+                if lz4_range.read_bytes() != lz4_expected[211:944]:
+                    raise AssertionError(f"LZ4DIFF {name} range mismatch")
+                lz4diff_cases += 1
+                ranges += 1
+
         short = temp / "short.bin"
         short.write_bytes(MAGIC)
         expect_failure(args.cli, "inspect-android-ota", short, error_name="TruncatedFrame")
@@ -837,6 +1012,7 @@ def main() -> None:
         f"puffin={puffin is not None} puffin_cases={puffin_cases} "
         f"puff_codec={puff_codec_oracle is not None} "
         f"puff_codec_cases={puff_codec_cases} "
+        f"lz4={lz4_oracle is not None} lz4diff_cases={lz4diff_cases} "
         f"aosp={args.aosp_update_engine is not None} aosp_full={aosp_full} "
         f"aosp_delta={aosp_delta}"
     )

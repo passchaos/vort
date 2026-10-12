@@ -2,6 +2,7 @@ const std = @import("std");
 const bzip2 = @import("../bzip2.zig");
 const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
+const lz4diff = @import("lz4diff.zig");
 const protobuf = @import("protobuf.zig");
 const puffin_mod = @import("puffin.zig");
 const writer = @import("writer.zig");
@@ -216,6 +217,75 @@ test "Android OTA PUFFDIFF applies the pinned AOSP patch through extents" {
     );
     defer allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &expected, decoded);
+}
+
+test "Android OTA LZ4DIFF BSDIFF and PUFFDIFF operations apply through extents" {
+    const source = [_]u8{0x25} ** 4096;
+    var expected = [_]u8{0x47} ** 4096;
+    for (&expected, 0..) |*byte, index| {
+        if (index % 97 == 0) byte.* = @truncate(index);
+    }
+
+    const bsdiff_inner = try legacyDiffPatchForSourceAlloc(
+        allocator,
+        &source,
+        &expected,
+    );
+    defer allocator.free(bsdiff_inner);
+    const bsdiff_patch = try rawLz4diffPatchAlloc(
+        allocator,
+        source.len,
+        .bsdiff,
+        bsdiff_inner,
+    );
+    defer allocator.free(bsdiff_patch);
+    const puffdiff_inner = try noDeflatePuffdiffPatchAlloc(
+        allocator,
+        &source,
+        &expected,
+    );
+    defer allocator.free(puffdiff_inner);
+    const puffdiff_patch = try rawLz4diffPatchAlloc(
+        allocator,
+        source.len,
+        .puffdiff,
+        puffdiff_inner,
+    );
+    defer allocator.free(puffdiff_patch);
+
+    for (
+        [_]format.OperationType{ .lz4diff_bsdiff, .lz4diff_puffdiff },
+        [_][]const u8{ bsdiff_patch, puffdiff_patch },
+    ) |kind, patch| {
+        const payload = try sourceDiffPayloadAlloc(
+            allocator,
+            &source,
+            &expected,
+            patch,
+            kind,
+        );
+        defer allocator.free(payload);
+        var archive = try archive_mod.Archive.initAlloc(allocator, payload, .{});
+        defer archive.deinit();
+        const decoded = try archive.decodePartitionAllocLimited(
+            allocator,
+            0,
+            &source,
+            expected.len,
+        );
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, &expected, decoded);
+        const range = try archive.readPartitionRangeAllocLimited(
+            allocator,
+            0,
+            &source,
+            301,
+            911,
+            911,
+        );
+        defer allocator.free(range);
+        try std.testing.expectEqualSlices(u8, expected[301..1212], range);
+    }
 }
 
 test "Android OTA rejects malformed headers blobs and hashes" {
@@ -544,6 +614,85 @@ fn legacyDiffPatchAlloc(
     try output.appendSlice(alloc, control_compressed);
     try output.appendSlice(alloc, diff_compressed);
     try output.appendSlice(alloc, extra_compressed);
+    return output.toOwnedSlice(alloc);
+}
+
+fn legacyDiffPatchForSourceAlloc(
+    alloc: std.mem.Allocator,
+    source: []const u8,
+    expected: []const u8,
+) ![]u8 {
+    if (source.len != expected.len) return error.TestUnexpectedResult;
+    const diff = try alloc.alloc(u8, expected.len);
+    defer alloc.free(diff);
+    for (diff, source, expected) |*byte, old, new|
+        byte.* = new -% old;
+    return legacyDiffPatchAlloc(alloc, expected.len, diff);
+}
+
+fn rawLz4diffPatchAlloc(
+    alloc: std.mem.Allocator,
+    length: usize,
+    inner_type: lz4diff.InnerPatchType,
+    inner_patch: []const u8,
+) ![]u8 {
+    var algorithm: std.ArrayList(u8) = .empty;
+    defer algorithm.deinit(alloc);
+    try protobuf.appendVarintField(alloc, &algorithm, 1, 0);
+    var block: std.ArrayList(u8) = .empty;
+    defer block.deinit(alloc);
+    try protobuf.appendVarintField(alloc, &block, 2, length);
+    try protobuf.appendVarintField(alloc, &block, 3, length);
+    var info: std.ArrayList(u8) = .empty;
+    defer info.deinit(alloc);
+    try protobuf.appendMessageField(alloc, &info, 1, algorithm.items);
+    try protobuf.appendMessageField(alloc, &info, 2, block.items);
+    var header: std.ArrayList(u8) = .empty;
+    defer header.deinit(alloc);
+    try protobuf.appendMessageField(alloc, &header, 1, info.items);
+    try protobuf.appendMessageField(alloc, &header, 2, info.items);
+    try protobuf.appendVarintField(
+        alloc,
+        &header,
+        3,
+        @intFromEnum(inner_type),
+    );
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(alloc);
+    try output.appendSlice(alloc, lz4diff.magic);
+    try format.appendU32Be(alloc, &output, lz4diff.version);
+    try format.appendU32Be(alloc, &output, @intCast(header.items.len));
+    try output.append(alloc, 0);
+    try output.appendSlice(alloc, header.items);
+    try output.appendSlice(alloc, inner_patch);
+    return output.toOwnedSlice(alloc);
+}
+
+fn noDeflatePuffdiffPatchAlloc(
+    alloc: std.mem.Allocator,
+    source: []const u8,
+    expected: []const u8,
+) ![]u8 {
+    const inner = try legacyDiffPatchForSourceAlloc(alloc, source, expected);
+    defer alloc.free(inner);
+    var source_info: std.ArrayList(u8) = .empty;
+    defer source_info.deinit(alloc);
+    try protobuf.appendVarintField(alloc, &source_info, 3, source.len);
+    var destination_info: std.ArrayList(u8) = .empty;
+    defer destination_info.deinit(alloc);
+    try protobuf.appendVarintField(alloc, &destination_info, 3, expected.len);
+    var header: std.ArrayList(u8) = .empty;
+    defer header.deinit(alloc);
+    try protobuf.appendVarintField(alloc, &header, 1, 1);
+    try protobuf.appendMessageField(alloc, &header, 2, source_info.items);
+    try protobuf.appendMessageField(alloc, &header, 3, destination_info.items);
+    try protobuf.appendVarintField(alloc, &header, 4, 0);
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(alloc);
+    try output.appendSlice(alloc, "PUF1");
+    try format.appendU32Be(alloc, &output, @intCast(header.items.len));
+    try output.appendSlice(alloc, header.items);
+    try output.appendSlice(alloc, inner);
     return output.toOwnedSlice(alloc);
 }
 

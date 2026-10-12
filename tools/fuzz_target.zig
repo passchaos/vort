@@ -154,6 +154,35 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
             if (!isExpectedAndroidOtaError(err)) return err;
         }
     }
+    if (data.len >= 4) {
+        const expected_size: usize = std.mem.readInt(u16, data[0..2], .little);
+        const source_len = @min(
+            @as(usize, std.mem.readInt(u16, data[2..4], .little)),
+            data.len - 4,
+        );
+        const source = data[4..][0..source_len];
+        const patch = data[4 + source_len ..];
+        if (vort.applyAndroidLz4diffAlloc(
+            allocator,
+            source,
+            patch,
+            expected_size,
+            .{
+                .max_output_len = 1 << 20,
+                .max_header_len = 1 << 20,
+                .max_blocks = 4096,
+                .max_decompressed_len = 1 << 20,
+                .max_bsdiff_control_bytes = 1 << 20,
+                .max_puffin_header_len = 1 << 20,
+                .max_puffin_extents = 4096,
+                .max_puff_stream_len = 1 << 20,
+            },
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedAndroidOtaError(err)) return err;
+        }
+    }
     if (data.len >= 3) {
         const expected_size: usize = std.mem.readInt(u16, data[0..2], .little);
         const dictionary_size: u32 = @as(u32, 4096) << @intCast(@min(data[2] & 0x0f, 11));
@@ -1676,6 +1705,9 @@ pub fn main(init: std.process.Init) !void {
     const puffin_sample = try makePuffinFuzzSampleAlloc(init.gpa);
     defer init.gpa.free(puffin_sample);
     try fuzzOne(init.gpa, puffin_sample);
+    const lz4diff_sample = try makeLz4diffFuzzSampleAlloc(init.gpa);
+    defer init.gpa.free(lz4diff_sample);
+    try fuzzOne(init.gpa, lz4diff_sample);
     inline for (.{
         .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
         .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },
@@ -2287,6 +2319,9 @@ fn isExpectedAndroidOtaError(err: anyerror) bool {
         error.InvalidPuffinPatch,
         error.InvalidPuffinStream,
         error.UnsupportedPuffinPatch,
+        error.InvalidLz4diffPatch,
+        error.UnsupportedLz4diffPatch,
+        error.UnsupportedLz4diffCompression,
         error.InvalidMagic,
         error.UnsupportedVersion,
         error.TruncatedFrame,
@@ -2374,6 +2409,48 @@ fn makePuffinFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
     try sample.appendSlice(allocator, &sizes);
     try sample.appendSlice(allocator, &source);
     try sample.appendSlice(allocator, &vort.fuzz.android_ota_puffdiff_fixture);
+    return sample.toOwnedSlice(allocator);
+}
+
+fn makeLz4diffFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
+    const bsdiff_sample = try makeBsdiffFuzzSampleAlloc(allocator);
+    defer allocator.free(bsdiff_sample);
+    const info = [_]u8{
+        0x0a, 0x02, 0x08, 0x00,
+        0x12, 0x06, 0x08, 0x00,
+        0x10, 0x04, 0x18, 0x04,
+    };
+    var header: [30]u8 = undefined;
+    var offset: usize = 0;
+    header[offset] = 0x0a;
+    header[offset + 1] = info.len;
+    offset += 2;
+    @memcpy(header[offset..][0..info.len], &info);
+    offset += info.len;
+    header[offset] = 0x12;
+    header[offset + 1] = info.len;
+    offset += 2;
+    @memcpy(header[offset..][0..info.len], &info);
+    offset += info.len;
+    header[offset] = 0x18;
+    header[offset + 1] = 0;
+
+    var sample: std.ArrayList(u8) = .empty;
+    errdefer sample.deinit(allocator);
+    var sizes: [4]u8 = undefined;
+    std.mem.writeInt(u16, sizes[0..2], 4, .little);
+    std.mem.writeInt(u16, sizes[2..4], 4, .little);
+    try sample.appendSlice(allocator, &sizes);
+    try sample.appendNTimes(allocator, 0, 4);
+    try sample.appendSlice(allocator, "LZ4DIFF");
+    var number: [4]u8 = undefined;
+    std.mem.writeInt(u32, &number, 1, .big);
+    try sample.appendSlice(allocator, &number);
+    std.mem.writeInt(u32, &number, header.len, .big);
+    try sample.appendSlice(allocator, &number);
+    try sample.append(allocator, 0);
+    try sample.appendSlice(allocator, &header);
+    try sample.appendSlice(allocator, bsdiff_sample[2..]);
     return sample.toOwnedSlice(allocator);
 }
 

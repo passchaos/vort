@@ -23,6 +23,16 @@ payload. It validates:
 Full OTA extraction supports `REPLACE`, `REPLACE_BZ`, `REPLACE_XZ`, and `ZERO`.
 Delta payload `SOURCE_COPY`, legacy `SOURCE_BSDIFF`, `BROTLI_BSDIFF`, and
 `PUFFDIFF` operations are also supported with an explicit old partition image.
+`LZ4DIFF_BSDIFF` and `LZ4DIFF_PUFFDIFF` are supported for uncompressed and
+ordinary LZ4 clusters. Their bounded proto3 metadata parser validates
+contiguous logical block offsets, exact physical and logical sizes, zero
+padding, hashes, and postfix patches. Source clusters are partially decoded to
+their declared logical lengths, the nested BSDIFF or PUFFDIFF patch is applied,
+and target clusters are reconstructed with a pure-Zig byte-exact equivalent of
+liblz4 1.9.3 `LZ4_compress_destSize`. Optional pre-postfix SHA-256 values and
+per-cluster postfix BSDIFF corrections are enforced. LZ4HC cluster
+recompression is deliberately reported as unsupported until its fill-output
+parser can be reproduced byte-for-byte.
 The bsdiff patch
 reader accepts traditional `BSDIFF40` with three Bzip2 streams and Android's
 `BSDF2`, whose control, diff, and extra streams independently select Bzip2 or
@@ -77,6 +87,15 @@ const puff_patched = try vort.applyAndroidPuffinAlloc(
     .{ .max_output_len = expected_size },
 );
 defer allocator.free(puff_patched);
+
+const lz4diff_patched = try vort.applyAndroidLz4diffAlloc(
+    allocator,
+    old_lz4_clusters,
+    lz4diff_patch,
+    expected_physical_size,
+    .{ .max_output_len = expected_physical_size },
+);
+defer allocator.free(lz4diff_patched);
 ```
 
 The deterministic full-payload writer accepts multiple named, block-aligned
@@ -135,11 +154,16 @@ Vort's puff stream byte-for-byte and huffs stored, fixed, and dynamic Deflate
 streams back to the exact original bytes; supply it with
 `--puff-codec-oracle /path/to/oracle`. An installed AOSP `puffin` command can
 also be selected with `--puffin /path/to/puffin` for the pinned full patch.
+When a system liblz4 is available, the differential additionally generates
+ordinary and zero-padded LZ4DIFF_BSDIFF/LZ4DIFF_PUFFDIFF payloads with
+`LZ4_compress_destSize`; Vort must reconstruct both complete clusters and
+bounded ranges byte-for-byte.
 
 Current explicit limitations are major-version-1 payloads, cryptographic
-verification of vendor metadata/payload signatures, and patch engines for
-ZUCCHINI and LZ4DIFF. Those operations are retained in the parsed model but
-extraction returns
+verification of vendor metadata/payload signatures, ZUCCHINI, and LZ4DIFF
+targets that require LZ4HC recompression. LZ4HC returns
+`UnsupportedLz4diffCompression` instead of silently substituting ordinary LZ4.
+ZUCCHINI is retained in the parsed model but extraction returns
 `UnsupportedAndroidOtaOperation`. DISCARD is likewise rejected by default
 because Android defines its read-back contents as undefined; callers may opt
 into deterministic zero interpretation through `DecodeOptions.discard_as_zero`.

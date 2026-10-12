@@ -13,6 +13,9 @@ pub const Error = core.Error || error{
     InvalidPuffinPatch,
     InvalidPuffinStream,
     UnsupportedPuffinPatch,
+    InvalidLz4diffPatch,
+    UnsupportedLz4diffPatch,
+    UnsupportedLz4diffCompression,
 };
 
 pub const magic = "CrAU";

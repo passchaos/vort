@@ -3,9 +3,10 @@ const bzip2 = @import("../bzip2.zig");
 const xz = @import("../xz.zig");
 const bsdiff = @import("bsdiff.zig");
 const puffin = @import("puffin.zig");
+const lz4diff = @import("lz4diff.zig");
 const format = @import("format.zig");
 
-pub const Error = format.Error || bzip2.Error || xz.Error || bsdiff.Error || puffin.Error ||
+pub const Error = format.Error || bzip2.Error || xz.Error || bsdiff.Error || puffin.Error || lz4diff.Error ||
     std.mem.Allocator.Error;
 
 pub const Options = struct {
@@ -15,6 +16,9 @@ pub const Options = struct {
     max_puffin_header_len: usize = 16 * 1024 * 1024,
     max_puffin_extents: usize = 1 << 20,
     max_puff_stream_len: usize = 1024 * 1024 * 1024,
+    max_lz4diff_header_len: usize = 16 * 1024 * 1024,
+    max_lz4diff_blocks: usize = 1 << 20,
+    max_lz4diff_decompressed_len: usize = 1024 * 1024 * 1024,
     verify_partition_hash: bool = true,
     verify_source_hashes: bool = true,
     discard_as_zero: bool = false,
@@ -225,6 +229,41 @@ pub fn readPartitionRangeInto(
                 const decoded = try allocator.alloc(u8, extent_output_len);
                 @memset(decoded, 0);
                 @memcpy(decoded[0..patched.len], patched);
+                owned = decoded;
+                break :blk decoded;
+            },
+            .lz4diff_bsdiff, .lz4diff_puffdiff => blk: {
+                const old_bytes = try readSourceExtentsAlloc(
+                    allocator,
+                    source_bytes orelse return error.MissingAndroidOtaSource,
+                    view.sourceExtents(operation),
+                    view.block_size,
+                    options.max_operation_output_len,
+                );
+                defer allocator.free(old_bytes);
+                if (operation.src_sha256_hash.len != 0)
+                    try verifySha256(old_bytes, operation.src_sha256_hash);
+                const expected = try operationOutputLength(
+                    destinations,
+                    view.block_size,
+                    options.max_operation_output_len,
+                );
+                const decoded = try lz4diff.applyAlloc(
+                    allocator,
+                    old_bytes,
+                    view.operationBlob(operation),
+                    expected,
+                    .{
+                        .max_output_len = options.max_operation_output_len,
+                        .max_header_len = options.max_lz4diff_header_len,
+                        .max_blocks = options.max_lz4diff_blocks,
+                        .max_decompressed_len = options.max_lz4diff_decompressed_len,
+                        .max_bsdiff_control_bytes = options.max_bsdiff_control_bytes,
+                        .max_puffin_header_len = options.max_puffin_header_len,
+                        .max_puffin_extents = options.max_puffin_extents,
+                        .max_puff_stream_len = options.max_puff_stream_len,
+                    },
+                );
                 owned = decoded;
                 break :blk decoded;
             },
