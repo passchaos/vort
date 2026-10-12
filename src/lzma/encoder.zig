@@ -66,7 +66,7 @@ const LengthEncoder = struct {
     }
 };
 
-const Model = struct {
+pub const Model = struct {
     properties: Properties,
     dictionary_size: usize,
     literal_probabilities: [max_literal_contexts][literal_tree_size]u16 = @splat(@splat(0x400)),
@@ -91,11 +91,33 @@ const Model = struct {
         tokens: []const lz77.Token,
         stats: *EncodeStats,
     ) !void {
+        const consumed = try self.encodeTokensWithDictionary(
+            range,
+            input,
+            &.{},
+            tokens,
+            0,
+            stats,
+        );
+        if (consumed != input.len) return error.InvalidMatch;
+    }
+
+    pub fn encodeTokensWithDictionary(
+        self: *Model,
+        range: *range_encoder.Encoder,
+        input: []const u8,
+        dictionary: []const u8,
+        tokens: []const lz77.Token,
+        stream_start: usize,
+        stats: *EncodeStats,
+    ) !usize {
         var position: usize = 0;
         for (tokens) |token| switch (token) {
             .literal => |byte| {
                 if (position >= input.len or input[position] != byte) return error.InvalidMatch;
-                try self.encodeLiteral(range, input, position, byte);
+                const stream_position = std.math.add(usize, stream_start, position) catch
+                    return error.IntegerOverflow;
+                try self.encodeLiteral(range, dictionary, input, position, stream_position, byte);
                 position += 1;
             },
             .match => |match| {
@@ -103,29 +125,36 @@ const Model = struct {
                 const distance: usize = match.distance;
                 const end = std.math.add(usize, position, length) catch return error.InvalidMatch;
                 if (length < 2 or length > 273 or distance == 0 or
-                    distance > position or distance > self.dictionary_size or end > input.len)
+                    distance > dictionary.len + position or distance > self.dictionary_size or end > input.len)
                     return error.InvalidMatch;
                 for (0..length) |index|
-                    if (input[position + index] != input[position + index - distance])
+                    if (input[position + index] != byteAt(dictionary, input, dictionary.len + position + index - distance))
                         return error.InvalidMatch;
-                try self.encodeMatch(range, position, length, distance, stats);
+                const stream_position = std.math.add(usize, stream_start, position) catch
+                    return error.IntegerOverflow;
+                try self.encodeMatch(range, stream_position, length, distance, stats);
                 position = end;
             },
         };
-        if (position != input.len) return error.InvalidMatch;
+        return position;
     }
 
     fn encodeLiteral(
         self: *Model,
         range: *range_encoder.Encoder,
+        dictionary: []const u8,
         input: []const u8,
         position: usize,
+        stream_position: usize,
         byte: u8,
     ) !void {
-        const position_state = position & ((@as(usize, 1) << self.properties.pb) - 1);
+        const position_state = stream_position & ((@as(usize, 1) << self.properties.pb) - 1);
         try range.encodeBit(&self.is_match[(self.state << 4) + position_state], false);
-        const previous: usize = if (position == 0) 0 else input[position - 1];
-        const literal_context = ((position & ((@as(usize, 1) << self.properties.lp) - 1)) << self.properties.lc) +
+        const previous: usize = if (position == 0)
+            if (dictionary.len == 0) 0 else dictionary[dictionary.len - 1]
+        else
+            input[position - 1];
+        const literal_context = ((stream_position & ((@as(usize, 1) << self.properties.lp) - 1)) << self.properties.lc) +
             (previous >> (8 - self.properties.lc));
         const probabilities = &self.literal_probabilities[literal_context];
         var tree_index: usize = 1;
@@ -133,8 +162,12 @@ const Model = struct {
 
         if (self.state >= 7) {
             const distance = self.reps[0] + 1;
-            if (distance > position) return error.InvalidMatch;
-            var match_byte: usize = input[position - distance];
+            if (distance > dictionary.len + position) return error.InvalidMatch;
+            var match_byte: usize = byteAt(
+                dictionary,
+                input,
+                dictionary.len + position - distance,
+            );
             while (tree_index < 0x100) {
                 remaining_bits -= 1;
                 const match_bit = match_byte >> 7 & 1;
@@ -228,7 +261,7 @@ const Model = struct {
         }
     }
 
-    fn encodeEndMarker(self: *Model, range: *range_encoder.Encoder, position: usize) !void {
+    pub fn encodeEndMarker(self: *Model, range: *range_encoder.Encoder, position: usize) !void {
         const position_state = position & ((@as(usize, 1) << self.properties.pb) - 1);
         try range.encodeBit(&self.is_match[(self.state << 4) + position_state], true);
         try range.encodeBit(&self.is_rep[self.state], false);
@@ -275,7 +308,7 @@ pub fn encodeChunkAppendWithStats(
         .literal_only => {
             var position: usize = 0;
             while (position < input.len) : (position += 1)
-                try model.encodeLiteral(&range, input, position, input[position]);
+                try model.encodeLiteral(&range, &.{}, input, position, position, input[position]);
             stats.literals = input.len;
         },
         .greedy => {
@@ -303,10 +336,17 @@ pub fn encodeChunkAppendWithStats(
     return stats;
 }
 
-fn validateOptions(options: EncodeOptions) Error!void {
+pub fn validateOptions(options: EncodeOptions) Error!void {
     _ = try propertyByte(options.properties);
     if (options.dictionary_size == 0 or options.dictionary_size > std.math.maxInt(u16))
         return error.InvalidLzmaOptions;
+}
+
+fn byteAt(dictionary: []const u8, input: []const u8, position: usize) u8 {
+    return if (position < dictionary.len)
+        dictionary[position]
+    else
+        input[position - dictionary.len];
 }
 
 pub fn propertyByte(properties: Properties) Error!u8 {

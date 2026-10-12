@@ -299,7 +299,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   through the same LZMA core, plus symbol-progressive LZMA-Alone decoding with
   bounded compressed staging, rolling dictionary history, single-symbol output
   staging, arbitrary input/output splits, zero-output backpressure, exact-size
-  pledges, and distinct known-size/end-marker completion semantics;
+  pledges, and distinct known-size/end-marker completion semantics, plus
+  symbol-progressive literal/greedy encoding with persistent probability/range/
+  recent-distance state, bounded lookahead/history, split-independent wire,
+  pledged known-size headers, end-marker streams, reset, and output backpressure;
 - pure Zig Unix `compress` (`.Z`) LZW encoding and decoding with 9..16-bit
   variable-width LSB-first codes, block-mode dictionary clears, non-block
   dictionary freeze, caller-owned/bounded APIs, and decoded-size preflight;

@@ -128,3 +128,33 @@ are staged. This bound exceeds the maximum flags, length tree, distance slot,
 direct distance, and align bits consumed by one LZMA symbol, preventing a split
 input from partially mutating the probability model. Final short tails are
 processed only after `finish`, when input exhaustion can be reported exactly.
+
+`LzmaIncrementalEncoder` provides the symmetric symbol-progressive writer. It
+retains the range coder, probability model, recent distances, a bounded
+dictionary, and at least one complete 258-byte greedy lookahead window across
+calls. A persistent absolute-position hash chain uses the same insertion and
+candidate order as the one-shot planner, so caller fragmentation does not
+change greedy tokens or wire bytes.
+
+```zig
+var encoder = try vort.LzmaIncrementalEncoder.initExactSize(allocator, .{
+    .properties = .{ .lc = 3, .lp = 0, .pb = 2 },
+    .dictionary_size = 32 * 1024,
+    .mode = .greedy, // or .literal_only
+    .size_mode = .end_marker, // .known requires initExactSize
+    .input_buffer_len = 64 * 1024,
+    .max_input_len = 256 * 1024 * 1024,
+    .max_pending_output_len = 1024 * 1024,
+}, input.len);
+defer encoder.deinit();
+```
+
+The encoder supports unknown-size end-marker streams, pledged end-marker or
+known-size streams, zero-output backpressure, input/output limits, resettable
+retained input/history/token/output scratch, and detailed token counters.
+LZMA-Alone has no block-level sync-flush marker and no standardized
+concatenation boundary, so this API intentionally exposes `finish` and `reset`
+but not a misleading flush/next-stream operation. A 40,000-byte repeated
+binary corpus crosses both multiple 1 KiB planning windows and the 32 KiB
+dictionary ring while matching one-shot greedy bytes under one-byte input and
+seven-byte output; literal-only known-size output is independently byte-exact.

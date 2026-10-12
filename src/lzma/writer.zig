@@ -83,12 +83,7 @@ pub fn encodeAppend(
 
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
-    try encoded.append(allocator, try encoder.propertyByte(options.properties));
-    try appendU32(allocator, &encoded, options.dictionary_size);
-    try appendU64(allocator, &encoded, switch (options.size_mode) {
-        .known => std.math.cast(u64, input.len) orelse return error.IntegerOverflow,
-        .end_marker => std.math.maxInt(u64),
-    });
+    try appendStreamHeader(allocator, &encoded, options, input.len);
     _ = try encoder.encodeChunkAppend(allocator, &encoded, input, .{
         .properties = options.properties,
         .dictionary_size = options.dictionary_size,
@@ -143,10 +138,26 @@ pub fn validateZipOptions(options: ZipEncodeOptions) Error!void {
     return validateCoreOptions(options.properties, options.dictionary_size);
 }
 
-fn validateCoreOptions(properties: Properties, dictionary_size: u32) Error!void {
+pub fn validateCoreOptions(properties: Properties, dictionary_size: u32) Error!void {
     _ = try encoder.propertyByte(properties);
     if (dictionary_size < 4096 or dictionary_size > std.math.maxInt(u16))
         return error.InvalidLzmaOptions;
+}
+
+pub fn appendStreamHeader(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    options: EncodeOptions,
+    input_len: ?usize,
+) !void {
+    try validateCoreOptions(options.properties, options.dictionary_size);
+    try output.append(allocator, try encoder.propertyByte(options.properties));
+    try appendU32(allocator, output, options.dictionary_size);
+    try appendU64(allocator, output, switch (options.size_mode) {
+        .known => std.math.cast(u64, input_len orelse return error.InvalidBlockPlan) orelse
+            return error.IntegerOverflow,
+        .end_marker => std.math.maxInt(u64),
+    });
 }
 
 fn appendU16(allocator: std.mem.Allocator, output: *std.ArrayList(u8), value: u16) !void {

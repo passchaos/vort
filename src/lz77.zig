@@ -162,6 +162,149 @@ pub const DictionaryGreedyScratch = struct {
     }
 };
 
+/// Persistent hash-chain state for callers that commit an input stream in
+/// order while retaining at least `max_match_len` bytes of lookahead. Absolute
+/// positions preserve the same insertion/search order as `hashGreedyPlanAlloc`;
+/// the predecessor ring is safe because its period is at least the history
+/// window, so a reachable candidate slot cannot be overwritten.
+pub const StreamingHashGreedy = struct {
+    head: std.ArrayList(i64) = .empty,
+    prev: std.ArrayList(i64) = .empty,
+    window_len: usize,
+
+    pub const Result = struct {
+        token: Token,
+        consumed: usize,
+    };
+
+    pub fn init(allocator: std.mem.Allocator, window_len: usize) !StreamingHashGreedy {
+        if (window_len == 0 or window_len > max_window_len) return error.InvalidBlockPlan;
+        var state = StreamingHashGreedy{ .window_len = window_len };
+        errdefer state.deinit(allocator);
+        try state.head.resize(allocator, hash_head_table_size);
+        @memset(state.head.items, -1);
+        var prev_len: usize = 1;
+        while (prev_len < window_len) prev_len *= 2;
+        try state.prev.resize(allocator, prev_len);
+        @memset(state.prev.items, -1);
+        return state;
+    }
+
+    pub fn deinit(self: *StreamingHashGreedy, allocator: std.mem.Allocator) void {
+        self.head.deinit(allocator);
+        self.prev.deinit(allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *StreamingHashGreedy) void {
+        @memset(self.head.items, -1);
+        @memset(self.prev.items, -1);
+    }
+
+    pub fn next(
+        self: *StreamingHashGreedy,
+        dictionary: []const u8,
+        input: []const u8,
+        position: usize,
+        stream_start: usize,
+        options: GreedyOptions,
+    ) Error!Result {
+        if (options.window_len != self.window_len or position >= input.len)
+            return error.InvalidBlockPlan;
+        const absolute = std.math.add(usize, stream_start, position) catch
+            return error.IntegerOverflow;
+        const max_len = @min(maxMatch(options), input.len - position);
+        var best = MatchCandidate{};
+        const hash = streamingHash(input, position);
+        if (hash) |bucket| {
+            const earliest = absolute -| self.window_len;
+            var candidate_i = self.head.items[bucket];
+            var checked: usize = 0;
+            var walked: usize = 0;
+            const max_walks = maxHashChainWalks(options, minMatch(options));
+            while (candidate_i >= 0 and walked < max_walks) : (walked += 1) {
+                const candidate: usize = @intCast(candidate_i);
+                if (candidate < earliest) break;
+                if (candidate >= absolute) return error.InvalidMatch;
+                if (best.length == max_len) break;
+                const distance = absolute - candidate;
+                const required_prefix = @max(best.length, minMatch(options) - 1);
+                if (streamingByte(dictionary, input, stream_start, candidate + required_prefix) !=
+                    input[position + required_prefix])
+                {
+                    candidate_i = self.prev.items[candidate % self.prev.items.len];
+                    continue;
+                }
+                checked += 1;
+                var length: usize = 0;
+                while (length < max_len and
+                    streamingByte(dictionary, input, stream_start, candidate + length) == input[position + length])
+                {
+                    length += 1;
+                }
+                if (length >= minMatch(options) and length > best.length) {
+                    best = .{ .length = length, .distance = distance };
+                    if (length >= options.nice_len) break;
+                }
+                if (checked == options.max_chain) break;
+                candidate_i = self.prev.items[candidate % self.prev.items.len];
+            }
+        }
+
+        const accepted = acceptMatch(input, position, best.length, best.distance, options);
+        if (accepted) {
+            const end = position + best.length;
+            try self.insert(input, position, stream_start);
+            const tail_start = if (end > position + 4) end - 4 else position + 1;
+            var seed = @max(position + 1, tail_start);
+            while (seed < end) : (seed += 1)
+                try self.insert(input, seed, stream_start);
+            return .{
+                .token = .{ .match = .{
+                    .length = @intCast(best.length),
+                    .distance = @intCast(best.distance),
+                } },
+                .consumed = best.length,
+            };
+        }
+        try self.insert(input, position, stream_start);
+        return .{ .token = .{ .literal = input[position] }, .consumed = 1 };
+    }
+
+    fn insert(
+        self: *StreamingHashGreedy,
+        input: []const u8,
+        position: usize,
+        stream_start: usize,
+    ) Error!void {
+        const bucket = streamingHash(input, position) orelse return;
+        const absolute = std.math.add(usize, stream_start, position) catch
+            return error.IntegerOverflow;
+        const stored_position = std.math.cast(i64, absolute) orelse
+            return error.IntegerOverflow;
+        self.prev.items[absolute % self.prev.items.len] = self.head.items[bucket];
+        self.head.items[bucket] = stored_position;
+    }
+};
+
+fn streamingHash(input: []const u8, position: usize) ?usize {
+    if (input.len - position < min_match_len) return null;
+    return hash3(input[position..][0..3]) & (hash_head_table_size - 1);
+}
+
+fn streamingByte(
+    dictionary: []const u8,
+    input: []const u8,
+    stream_start: usize,
+    absolute: usize,
+) u8 {
+    const history_start = stream_start - dictionary.len;
+    return if (absolute < stream_start)
+        dictionary[absolute - history_start]
+    else
+        input[absolute - stream_start];
+}
+
 pub const OptimalScratch = struct {
     costs: std.ArrayList(usize) = .empty,
     steps: std.ArrayList(Token) = .empty,

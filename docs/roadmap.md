@@ -18433,3 +18433,18 @@ reuse, so production keeps the simpler independently owned plans.
   API also covers zero-output backpressure, max/pledged input, pending-output
   and per-stream block limits, resettable plain/LZO/output scratch, empty
   streams, and every allocation failure. See `docs/formats/lzop.md`.
+
+- Added a true symbol-progressive LZMA-Alone encoder for literal-only and greedy
+  modes, known-size and end-marker headers, and arbitrary caller input/output
+  fragmentation. The range coder, probability model, recent distances,
+  dictionary history, and pending output survive calls. Greedy mode uses a
+  persistent absolute-position hash chain with the same insertion/search order
+  as one-shot and commits only positions with a complete 258-byte lookahead.
+  A 40,000-byte repeated binary fixture crosses multiple 1 KiB planning windows
+  and the 32 KiB predecessor ring yet matches one-shot wire byte-for-byte under
+  one-byte input/seven-byte output; literal-only known-size and both empty wire
+  modes are independently exact. The API also covers zero-output backpressure,
+  max/pledged input, pending-output and planning-buffer limits, deterministic
+  reset, token statistics, and every allocation failure. It intentionally does
+  not invent a flush or concatenation boundary absent from LZMA-Alone. See
+  `docs/formats/lzma.md`.
