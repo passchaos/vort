@@ -18525,3 +18525,19 @@ reuse, so production keeps the simpler independently owned plans.
   encode gate and upstream differential remain green with 7,056 one-shot,
   7,056 progressive, and 1,401 fragmentation cases;
   `planned_literal_split_cases=6`.
+
+- Added caller-owned incremental decoding for both Xerial Snappy version-1 and
+  Hadoop `BlockCompressorStream` Snappy framing. A shared state machine handles
+  Xerial's 16-byte stream header and Hadoop's nested outer-block accounting,
+  while four-byte big-endian chunk headers, complete raw Snappy payloads, and
+  decoded output may cross arbitrary caller calls. Options bound compressed
+  chunk retention, decoded chunk scratch, total output, and pledged output
+  size; zero-output backpressure, finish-at-boundary, reset with retained
+  capacity, snapshots, diagnostics, empty streams, truncation, corrupt magic,
+  outer-size mismatch, and every allocation failure are covered. Hadoop block
+  progress commits only after successful chunk decode, preserving clean OOM
+  rollback/reset semantics. Focused 3/5-byte-input and 7/11-byte-output fixtures
+  cover multiple Xerial chunks and nested Hadoop blocks/chunks. The external
+  gate passes deterministic Vort streams plus bidirectional snappy-java 1.1.10.7
+  Xerial and Hadoop streams; all four self/Java cases also pass the
+  17-byte-input / 31-byte-output incremental CLI path.

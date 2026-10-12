@@ -25,16 +25,48 @@ shifting the next block boundary.
 and 64 KiB raw Snappy chunks. Bounded and caller-owned decode APIs expose the
 same limits as Xerial framing.
 
+## Incremental decoding
+
+`XerialSnappyIncrementalDecoder` and `HadoopSnappyIncrementalDecoder` share a
+caller-output state machine while preserving their different framing rules.
+Headers and compressed chunks may cross arbitrary input calls, decoded chunks
+drain through arbitrary output slices, and zero-length output provides normal
+backpressure. Hadoop outer-block progress commits only after a raw Snappy chunk
+has decoded successfully, so allocation failure does not commit structural
+progress before reset.
+
+```zig
+var decoder = vort.XerialSnappyIncrementalDecoder.initWithOptions(allocator, .{
+    .max_compressed_chunk_len = 1024 * 1024,
+    .max_decoded_chunk_len = 1024 * 1024,
+    .max_output_len = expected_size,
+    .expected_output_len = expected_size,
+});
+defer decoder.deinit();
+
+// Repeated step(input, output) calls consume framing and drain plaintext.
+// finish() accepts only a complete chunk/outer-block boundary.
+```
+
+Both decoders expose retained-capacity snapshots, phase diagnostics, and reset
+without reallocating established scratch. Compressed raw Snappy chunks remain
+input-atomic so their decoded-size varint and copy stream are validated before
+any bytes from that chunk reach the caller.
+
 ```sh
 zig build run -- encode-xerial-snappy-file input.bin output.snappy
 zig build run -- decode-xerial-snappy-file output.snappy decoded.bin 536870912
+zig build run -- decode-xerial-snappy-incremental-file output.snappy decoded.bin 1048576 17 31
 zig build run -- inspect-xerial-snappy-file output.snappy
 
 zig build run -- encode-hadoop-snappy-file input.bin output.snappy
 zig build run -- decode-hadoop-snappy-file output.snappy decoded.bin 536870912
+zig build run -- decode-hadoop-snappy-incremental-file output.snappy decoded.bin 1048576 17 31
 zig build run -- inspect-hadoop-snappy-file output.snappy
 ```
 
-`run-snappy-framing-diff` performs deterministic/self validation and, when an
-Xerial `snappy-java` jar is supplied, runs Xerial and Hadoop streams in both
-directions through the Java implementation.
+`run-snappy-framing-diff` performs deterministic/self validation through both
+one-shot and incremental decode. When an Xerial `snappy-java` jar is supplied,
+it runs Xerial and Hadoop streams in both directions through the Java
+implementation and feeds Java-produced streams through the 17-byte-input /
+31-byte-output incremental path.

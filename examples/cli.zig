@@ -124,12 +124,16 @@ pub fn main(init: std.process.Init) !void {
         try snappy_framing_cli.encodeXerial(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-xerial-snappy-file")) {
         try snappy_framing_cli.decodeXerial(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-xerial-snappy-incremental-file")) {
+        try snappy_framing_cli.decodeXerialIncremental(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-xerial-snappy-file")) {
         try snappy_framing_cli.inspectXerial(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-hadoop-snappy-file")) {
         try snappy_framing_cli.encodeHadoop(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-hadoop-snappy-file")) {
         try snappy_framing_cli.decodeHadoop(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-hadoop-snappy-incremental-file")) {
+        try snappy_framing_cli.decodeHadoopIncremental(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-hadoop-snappy-file")) {
         try snappy_framing_cli.inspectHadoop(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-hadoop-lz4-file")) {
@@ -2502,9 +2506,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
         \\  encode-xerial-snappy-file <in> <out> [block_size]
         \\  decode-xerial-snappy-file <in> <out> [max_output]
+        \\  decode-xerial-snappy-incremental-file <in> <out> <expected_output> [input_step] [output_step]
         \\  inspect-xerial-snappy-file <path>
         \\  encode-hadoop-snappy-file <in> <out> [block_size] [chunk_size]
         \\  decode-hadoop-snappy-file <in> <out> [max_output]
+        \\  decode-hadoop-snappy-incremental-file <in> <out> <expected_output> [input_step] [output_step]
         \\  inspect-hadoop-snappy-file <path>
         \\  encode-hadoop-lz4-file <in> <out> [block_size] [chunk_size]
         \\  decode-hadoop-lz4-file <in> <out> [max_output]

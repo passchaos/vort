@@ -44,6 +44,14 @@ pub fn decodeXerial(
     });
 }
 
+pub fn decodeXerialIncremental(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    return decodeIncremental(vort.XerialSnappyIncrementalDecoder, "xerial", init, args, stdout);
+}
+
 pub fn inspectXerial(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
@@ -99,6 +107,67 @@ pub fn decodeHadoop(
     try stdout.print("hadoop_snappy_bytes={d} decoded_bytes={d} path={s}\n", .{
         input.len,
         decoded.len,
+        output_path,
+    });
+}
+
+pub fn decodeHadoopIncremental(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    return decodeIncremental(vort.HadoopSnappyIncrementalDecoder, "hadoop_snappy", init, args, stdout);
+}
+
+fn decodeIncremental(
+    comptime DecoderType: type,
+    comptime label: []const u8,
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const expected_output_len = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+    const input_step = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 17;
+    const output_step = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 31;
+    if (input_step == 0 or output_step == 0) return error.InvalidBlockPlan;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const output = try init.gpa.alloc(u8, expected_output_len);
+    defer init.gpa.free(output);
+    var decoder = DecoderType.initWithOptions(init.gpa, .{
+        .max_compressed_chunk_len = max_file_size,
+        .max_decoded_chunk_len = max_file_size,
+        .max_output_len = expected_output_len,
+        .expected_output_len = expected_output_len,
+    });
+    defer decoder.deinit();
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < input.len) {
+        const input_end = @min(input.len, input_offset + input_step);
+        const output_end = @min(output.len, output_offset + output_step);
+        const step = try decoder.step(input[input_offset..input_end], output[output_offset..output_end]);
+        if (step.progress.input_read == 0 and step.progress.output_written == 0) return error.InvalidBlockPlan;
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    while (decoder.snapshot().phase != .done) {
+        const output_end = @min(output.len, output_offset + output_step);
+        const step = try decoder.step("", output[output_offset..output_end]);
+        if (step.progress.output_written == 0 and step.status != .done) return error.InvalidBlockPlan;
+        output_offset += step.progress.output_written;
+    }
+    if (output_offset != output.len) return error.SizeMismatch;
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = output });
+    try stdout.print("{s}_incremental_bytes={d} decoded_bytes={d} input_step={d} output_step={d} path={s}\n", .{
+        label,
+        input.len,
+        output.len,
+        input_step,
+        output_step,
         output_path,
     });
 }

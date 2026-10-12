@@ -31,6 +31,7 @@ def main() -> None:
     payload = bytes((index * 29 + index // 17) & 0xFF for index in range(700_000))
     self_cases = 0
     java_cases = 0
+    incremental_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-snappy-framing-") as temp_text:
         temp = Path(temp_text)
@@ -50,6 +51,19 @@ def main() -> None:
             run(args.cli, decode_command, first, decoded, len(payload))
             if decoded.read_bytes() != payload:
                 raise AssertionError(f"Vort {kind} Snappy self decode mismatch")
+            incremental_decoded = temp / f"vort-{kind}-incremental.out"
+            run(
+                args.cli,
+                f"decode-{kind}-snappy-incremental-file",
+                first,
+                incremental_decoded,
+                len(payload),
+                17,
+                31,
+            )
+            if incremental_decoded.read_bytes() != payload:
+                raise AssertionError(f"Vort {kind} Snappy incremental self decode mismatch")
+            incremental_cases += 1
             listing = run(args.cli, inspect_command, first).stdout
             if "decoded_bytes=700000" not in listing:
                 raise AssertionError(f"Vort {kind} metadata mismatch: {listing}")
@@ -104,11 +118,24 @@ def main() -> None:
                 )
                 if vort_decoded.read_bytes() != payload:
                     raise AssertionError(f"Vort rejected snappy-java {kind} stream")
+                vort_incremental_decoded = temp / f"vort-{kind}-java-incremental.out"
+                run(
+                    args.cli,
+                    f"decode-{kind}-snappy-incremental-file",
+                    java_stream,
+                    vort_incremental_decoded,
+                    len(payload),
+                    17,
+                    31,
+                )
+                if vort_incremental_decoded.read_bytes() != payload:
+                    raise AssertionError(f"Vort incremental decoder rejected snappy-java {kind} stream")
+                incremental_cases += 1
                 java_cases += 1
 
     print(
         f"self_cases={self_cases} java_available={java_cases != 0} "
-        f"java_cases={java_cases} malformed={malformed}"
+        f"java_cases={java_cases} incremental_cases={incremental_cases} malformed={malformed}"
     )
 
 
