@@ -107,3 +107,30 @@ canonical parser. A context-map-specific decoder must replace existing work
 while reducing generated code/read-only state, or a future header
 representation must construct the final decode root without retaining a
 second canonical form. Isolated stage wins alone are explicitly insufficient.
+
+## Compact final context-map root follow-up
+
+A subsequent candidate replaced the temporary generic 272-symbol Huffman table
+entirely with a five-bit final root and a canonical-indexed long-code tail. It
+therefore tested the replacement direction above rather than adding another
+lookup wrapper. `readContextMap` shrank from `0x239e` to `0x1b8e` bytes and the
+ReleaseFast ELF `.text` section fell by 960 bytes. In a 2,000-frame stage run,
+header time improved by `1.0376x`; fifteen independent-binary, fixed-CPU-2
+`clustered_q8` pairs improved by `1.0042x` median / `1.0047x` geometric
+throughput with 14/15 wins.
+
+The full controls still rejected it. A seven-pair matrix put `structured_q4`
+at `0.9926x` median / `0.9922x` geometric throughput and ordinary `repetitive`
+at `0.9955x` / `0.9950x`. Four- and six-bit roots did not repair the problem.
+Long 100,000-decode controls for the six-bit layout reproduced the regressions:
+`structured_q4` measured `0.9949x` median / `0.9955x` geometric with 4/15 wins,
+and `repetitive` measured `0.9967x` / `0.9966x` with 2/15 wins. The production
+implementation was fully restored. Exact binaries, observations, commands,
+stage counters, and the complete short-matrix summary are retained in
+`data/brotli-context-map-compact-root-x86-20261013.json`.
+
+This closes the obvious compact-root width sweep: even a smaller final
+representation can perturb or slow ordinary streams enough to fail the matrix.
+Future context-map work needs an end-to-end representation shared with later
+literal/distance tree selection, or should yield to reductions in actual
+distance/copy execution rather than revisiting standalone root widths.

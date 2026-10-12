@@ -18625,3 +18625,19 @@ reuse, so production keeps the simpler independently owned plans.
   observations are in `docs/performance/data/snappy-copy2-exact60-x86-20261013.json`.
   The optional short gate remains red because its historical 1.10x text floor
   exceeds this host's 1.0899x sample; no gate pass is claimed.
+
+- Replaced Brotli's temporary 272-symbol context-map canonical table in an
+  experimental branch with a compact final root plus canonical-indexed long
+  tail, then fully removed it after controls. The five-bit layout shrank
+  `readContextMap` from `0x239e` to `0x1b8e`, reduced ReleaseFast `.text` by 960
+  bytes, improved isolated header time by `1.0376x`, and improved fifteen long
+  `clustered_q8` pairs by `1.0042x` median / `1.0047x` geometric throughput
+  with 14/15 wins. Nevertheless, the seven-pair matrix regressed
+  `structured_q4` to `0.9926x` and ordinary `repetitive` to `0.9955x` at the
+  median. Four-bit and six-bit variants also failed; 100,000-decode long
+  controls left the six-bit layout at `0.9949x` on `structured_q4` and
+  `0.9967x` on `repetitive`, with only 4/15 and 2/15 wins. No production source
+  change remains. Exact negative evidence is in
+  `docs/performance/data/brotli-context-map-compact-root-x86-20261013.json` and
+  the stage-profile narrative now rules out standalone compact-root width
+  sweeps.
