@@ -18704,4 +18704,20 @@ reuse, so production keeps the simpler independently owned plans.
   actual wide-distance stream. The LZMA and XZ focused suites pass 101/101 and
   111/111, including every injected wide-planner allocation failure. The
   expanded XZ differential records the exact sizes and dictionary property.
-  Deeper parsing and properties above 256 KiB remain future ratio work.
+  The later increment below reuses the wide hash state and lifts the property
+  ceiling again.
+
+- Reworked the LZMA wide-distance matcher into a block-local streaming state.
+  Each decoded byte enters its hash chain once even when a compressed candidate
+  falls back to a stored LZMA2 chunk; probability models still reset per chunk.
+  On the locked 139,264-byte three-chunk shape, prior per-chunk reconstruction
+  indexed 335,866 positions versus 139,262 with retained state, a 58.54%
+  reduction, while the encoded 128 KiB-dictionary wire stays byte-identical at
+  131,188 bytes. The same state makes dictionary properties through 1 MiB
+  (property 16) practical without widening shared codec tokens. LZMA and XZ
+  focused suites pass 103/103 and 113/113, including exact once-only indexing,
+  compressed/stored history, tiny incremental output, upper/lower limits, and
+  every allocation failure. AArch64 ReleaseFast compilation and the expanded
+  Python/system-XZ differential pass; the latter retains the exact
+  139,332→131,188-byte wide-distance evidence. Deeper parsing and properties
+  above 1 MiB remain ratio/performance work.

@@ -34,6 +34,8 @@ pub const EncodeStats = struct {
 };
 
 pub const max_dictionary_size: usize = wide_match.max_window_len;
+pub const WideStreamPlanner = wide_match.StreamPlanner;
+pub const WideStreamPlan = wide_match.StreamPlan;
 
 const max_states: usize = 12;
 const max_position_states: usize = 16;
@@ -329,6 +331,48 @@ pub fn encodeChunkAppendWithDictionaryStats(
     stream_start: usize,
     options: EncodeOptions,
 ) !EncodeStats {
+    return encodeChunkAppendWithDictionaryStatsAndPlan(
+        allocator,
+        output,
+        input,
+        dictionary,
+        stream_start,
+        options,
+        null,
+    );
+}
+
+pub fn encodeChunkAppendWithWidePlan(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    dictionary: []const u8,
+    stream_start: usize,
+    options: EncodeOptions,
+    wide_plan: WideStreamPlan,
+) !usize {
+    if (options.mode != .greedy or options.dictionary_size <= std.math.maxInt(u16))
+        return error.InvalidLzmaOptions;
+    return (try encodeChunkAppendWithDictionaryStatsAndPlan(
+        allocator,
+        output,
+        input,
+        dictionary,
+        stream_start,
+        options,
+        wide_plan,
+    )).output_bytes;
+}
+
+fn encodeChunkAppendWithDictionaryStatsAndPlan(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    dictionary: []const u8,
+    stream_start: usize,
+    options: EncodeOptions,
+    prepared_wide_plan: ?WideStreamPlan,
+) !EncodeStats {
     try validateOptions(options);
     if (dictionary.len > stream_start) return error.InvalidLzmaOptions;
     const active_dictionary = dictionary[dictionary.len - @min(dictionary.len, options.dictionary_size) ..];
@@ -367,7 +411,20 @@ pub fn encodeChunkAppendWithDictionaryStats(
             stats.literals = input.len;
         },
         .greedy => {
-            if (options.dictionary_size <= std.math.maxInt(u16)) {
+            if (prepared_wide_plan) |plan| {
+                if (options.dictionary_size <= std.math.maxInt(u16))
+                    return error.InvalidLzmaOptions;
+                try encodeGreedyPlan(
+                    &model,
+                    &range,
+                    input,
+                    active_dictionary,
+                    plan.tokens,
+                    stream_start,
+                    &stats,
+                    plan.stats,
+                );
+            } else if (options.dictionary_size <= std.math.maxInt(u16)) {
                 var plan = try lz77.hashGreedyPlanAllocWithDictionary(allocator, input, active_dictionary, .{
                     .window_len = options.dictionary_size,
                     .max_chain = 64,

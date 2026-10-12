@@ -4,7 +4,7 @@ Vort provides dependency-free XZ decoding for LZMA2 streams with optional
 Delta and x86, PowerPC, IA-64, ARM, ARM-Thumb, SPARC, ARM64, or RISC-V BCJ
 preprocessing filters. Its deterministic writer emits LZMA2 chunks with greedy LZ77 matches,
 repeat-distance coding, literal context coding, a stored fallback, and a
-caller-selected 4 KiB...256 KiB dictionary retained across chunk
+caller-selected 4 KiB...1 MiB dictionary retained across chunk
 boundaries. The
 explicit stored writer remains available, and both paths can apply the same
 filter chains.
@@ -164,11 +164,14 @@ JAL plus the canonical AUIPC/JALR address pairs. Vort output is validated by
 two filter IDs. The current compressor uses bounded greedy match finding. Each
 compressed chunk resets its LZMA probability state and properties while
 retaining the configured preceding dictionary. Requests from 4 KiB through
-256 KiB are encoded with the smallest covering LZMA2 property, so decoder
-memory is rounded to one of 4/6/8/12/16/24/32/48/64/96/128/192/256 KiB while
-match distance never exceeds the caller's requested bound. Requests above
+1 MiB are encoded with the smallest covering LZMA2 property, so decoder
+memory is rounded to one of 4/6/8/12/16/24/32/48/64/96/128/192/256/384/512/
+768/1024 KiB; match distance never exceeds the caller's requested bound.
+Requests above
 65,535 bytes select a dedicated LZMA `u32`-distance hash-chain planner; the
-shared LZ77 token and all other codecs retain their compact u16 distance.
+shared LZ77 token and all other codecs retain their compact u16 distance. One
+block-local hash state advances across every compressed or stored 64 KiB chunk,
+so history positions are indexed once rather than rebuilt for each chunk.
 Stored fallbacks likewise retain history: the first chunk uses dictionary-reset
 control `1` or `0xe0`, while later stored/compressed chunks use `2` or `0xc0`.
 This lets a match cross a 64 KiB chunk boundary without making chunks dependent

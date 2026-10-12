@@ -406,7 +406,7 @@ test "XZ stored writer caller-owned and append APIs are transactional" {
     try std.testing.expectEqualSlices(u8, before, appended.items);
     try std.testing.expectError(
         error.InvalidBlockPlan,
-        encodeStoredAppend(allocator, &appended, input, .{ .dictionary_size = 256 * 1024 + 1 }),
+        encodeStoredAppend(allocator, &appended, input, .{ .dictionary_size = 1024 * 1024 + 1 }),
     );
     try std.testing.expectEqualSlices(u8, before, appended.items);
 }

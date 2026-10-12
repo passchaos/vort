@@ -15,13 +15,13 @@ pub fn dictionaryProperty(requested_size: usize) core.Error!u8 {
     if (requested_size < dictionary_size or requested_size > max_dictionary_size)
         return error.InvalidBlockPlan;
     var property: u8 = 0;
-    while (property <= 12) : (property += 1)
+    while (property <= 16) : (property += 1)
         if (requested_size <= dictionarySize(property)) return property;
     unreachable;
 }
 
 fn dictionarySize(property: u8) usize {
-    std.debug.assert(property <= 12);
+    std.debug.assert(property <= 16);
     return @as(usize, 2 | (property & 1)) << @intCast(property / 2 + 11);
 }
 
@@ -82,6 +82,15 @@ pub fn appendCompressedPayloadWithDictionarySize(
     defer encoded.deinit(allocator);
     var candidate: std.ArrayList(u8) = .empty;
     defer candidate.deinit(allocator);
+    var wide_planner: ?lzma_encoder.WideStreamPlanner = if (requested_dictionary_size > std.math.maxInt(u16) and input.len != 0)
+        try lzma_encoder.WideStreamPlanner.init(
+            allocator,
+            requested_dictionary_size,
+            input.len,
+        )
+    else
+        null;
+    defer if (wide_planner) |*planner| planner.deinit();
 
     var offset: usize = 0;
     while (offset < input.len) {
@@ -90,14 +99,27 @@ pub fn appendCompressedPayloadWithDictionarySize(
         const dictionary_start = offset - @min(offset, requested_dictionary_size);
         const dictionary = input[dictionary_start..offset];
         candidate.clearRetainingCapacity();
-        _ = try lzma_encoder.encodeChunkAppendWithDictionary(
-            allocator,
-            &candidate,
-            chunk,
-            dictionary,
-            offset,
-            .{ .dictionary_size = requested_dictionary_size },
-        );
+        if (wide_planner) |*planner| {
+            const plan = try planner.planChunk(input, offset, offset + chunk_len);
+            _ = try lzma_encoder.encodeChunkAppendWithWidePlan(
+                allocator,
+                &candidate,
+                chunk,
+                dictionary,
+                offset,
+                .{ .dictionary_size = requested_dictionary_size },
+                plan,
+            );
+        } else {
+            _ = try lzma_encoder.encodeChunkAppendWithDictionary(
+                allocator,
+                &candidate,
+                chunk,
+                dictionary,
+                offset,
+                .{ .dictionary_size = requested_dictionary_size },
+            );
+        }
         if (candidate.items.len <= max_uncompressed_chunk and candidate.items.len + 3 < chunk.len) {
             try encoded.append(allocator, if (offset == 0) 0xe0 else 0xc0);
             try appendU16Big(allocator, &encoded, @intCast(chunk.len - 1));
@@ -169,7 +191,8 @@ test "LZMA2 dictionary properties round requested sizes upward" {
         .{ .requested = 48 * 1024, .property = 7, .advertised = 48 * 1024 },
         .{ .requested = 64 * 1024, .property = 8, .advertised = 64 * 1024 },
         .{ .requested = 128 * 1024, .property = 10, .advertised = 128 * 1024 },
-        .{ .requested = max_dictionary_size, .property = 12, .advertised = 256 * 1024 },
+        .{ .requested = 256 * 1024, .property = 12, .advertised = 256 * 1024 },
+        .{ .requested = max_dictionary_size, .property = 16, .advertised = 1024 * 1024 },
     };
     for (cases) |case| {
         try std.testing.expectEqual(case.property, try dictionaryProperty(case.requested));
