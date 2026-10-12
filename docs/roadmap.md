@@ -18611,3 +18611,17 @@ reuse, so production keeps the simpler independently owned plans.
   for control regressions. The retained row still reaches only 0.8751x Ubuntu
   libsnappy 1.1.8, so further token/copy work remains. See
   `docs/performance/snappy-copy2-unroll-x86.md` and its JSON observations.
+
+- Specialized the dominant Snappy COPY_2 length 60 after disassembly showed
+  the generic length-threshold chain remained around the committed 2×8 loop.
+  Seven ordered eight-byte moves plus one exact four-byte tail preserve
+  distance-eight overlap semantics and reuse the exhaustive offset/length
+  oracle. Fifteen fixed-CPU-2, 20,000-decode pairs improve text/structured/
+  repetitive by 1.1927x/1.2566x/1.1657x medians, all with 15/15 wins and
+  1.1892x/1.2523x/1.1626x minima. Each row now leads Ubuntu libsnappy 1.1.8 in
+  every observation, with 1.0907x/1.1014x/1.0176x candidate/reference medians.
+  Incompressible improves 1.0039x and RLE remains 0.9992x median. The complete
+  54-test suite and 16-case bidirectional runtime-libsnappy probe pass. Exact
+  observations are in `docs/performance/data/snappy-copy2-exact60-x86-20261013.json`.
+  The optional short gate remains red because its historical 1.10x text floor
+  exceeds this host's 1.0899x sample; no gate pass is claimed.
