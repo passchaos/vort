@@ -1,5 +1,13 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const dest_size = @import("dest_size.zig");
+
+pub const prepared_text_section = switch (builtin.object_format) {
+    .elf => ".vort_lz4_hc_dict",
+    .macho => "__TEXT,__vort_lz4_hcd",
+    .coff => ".text$vort_lz4_hc_dict",
+    else => ".text",
+};
 
 pub const Error = std.mem.Allocator.Error || error{
     InputTooLarge,
@@ -61,6 +69,30 @@ const Context = struct {
             self.hash_table[hash] = index;
         }
         self.next_to_update = target;
+    }
+};
+
+pub const PreparedPrefix = struct {
+    prefix: std.ArrayList(u8) = .empty,
+    hash_table: []u32,
+    chain_table: []u16,
+    next_to_update: u32 = base_index,
+
+    noinline fn create(allocator: std.mem.Allocator) linksection(prepared_text_section) std.mem.Allocator.Error!*PreparedPrefix {
+        const prepared = try allocator.create(PreparedPrefix);
+        errdefer allocator.destroy(prepared);
+        const hash_table = try allocator.alloc(u32, hash_table_len);
+        errdefer allocator.free(hash_table);
+        const chain_table = try allocator.alloc(u16, chain_table_len);
+        prepared.* = .{ .hash_table = hash_table, .chain_table = chain_table };
+        return prepared;
+    }
+
+    noinline fn destroy(self: *PreparedPrefix, allocator: std.mem.Allocator) linksection(prepared_text_section) void {
+        self.prefix.deinit(allocator);
+        allocator.free(self.hash_table);
+        allocator.free(self.chain_table);
+        allocator.destroy(self);
     }
 };
 
@@ -135,10 +167,7 @@ pub const Encoder = struct {
         context.reset(combined);
         const level = normalizeLevel(compression_level);
         if (level >= 10 and self.optimal.len == 0)
-            self.optimal = try self.allocator.alloc(
-                Optimal,
-                optimal_slots + trailing_literals,
-            );
+            self.optimal = try self.allocator.alloc(Optimal, optimal_slots + trailing_literals);
         var result = switch (level) {
             1, 2 => compressHashChain(&context, output, 2, retained_prefix.len),
             3 => compressHashChain(&context, output, 4, retained_prefix.len),
@@ -155,6 +184,90 @@ pub const Encoder = struct {
         };
         std.debug.assert(result.consumed >= retained_prefix.len);
         result.consumed -= retained_prefix.len;
+        return result;
+    }
+
+    pub noinline fn preparePrefixAlloc(self: *Encoder, prefix: []const u8) linksection(prepared_text_section) Error!*PreparedPrefix {
+        const retained_prefix_len = @min(prefix.len, max_distance);
+        const retained_prefix = prefix[prefix.len - retained_prefix_len ..];
+        const prepared = try PreparedPrefix.create(self.allocator);
+        errdefer prepared.destroy(self.allocator);
+        try prepared.prefix.resize(self.allocator, retained_prefix.len);
+        @memcpy(prepared.prefix.items, retained_prefix);
+
+        var context = Context{
+            .input = prepared.prefix.items,
+            .hash_table = self.hash_table,
+            .chain_table = self.chain_table,
+        };
+        context.reset(prepared.prefix.items);
+        const seed_target = retained_prefix.len -| (min_match - 1);
+        context.insert(seed_target);
+        @memcpy(prepared.hash_table, self.hash_table);
+        @memcpy(prepared.chain_table, self.chain_table);
+        prepared.next_to_update = context.next_to_update;
+        return prepared;
+    }
+
+    pub noinline fn freePreparedPrefix(self: *Encoder, prepared: *PreparedPrefix) linksection(prepared_text_section) void {
+        prepared.destroy(self.allocator);
+    }
+
+    pub noinline fn compressWithPreparedPrefix(
+        self: *Encoder,
+        prepared: *const PreparedPrefix,
+        input: []const u8,
+        output: []u8,
+        compression_level: i32,
+    ) linksection(prepared_text_section) Error!Result {
+        if (prepared.prefix.items.len == 0)
+            return self.compress(input, output, compression_level);
+        if (input.len > max_input_len or prepared.prefix.items.len > max_input_len - input.len)
+            return error.InputTooLarge;
+        if (output.len == 0) return error.OutputTooSmall;
+        try self.input_scratch.resize(self.allocator, prepared.prefix.items.len + input.len);
+        @memcpy(self.input_scratch.items[0..prepared.prefix.items.len], prepared.prefix.items);
+        @memcpy(self.input_scratch.items[prepared.prefix.items.len..], input);
+        @memcpy(self.hash_table, prepared.hash_table);
+        @memcpy(self.chain_table, prepared.chain_table);
+        var context = Context{
+            .input = self.input_scratch.items,
+            .hash_table = self.hash_table,
+            .chain_table = self.chain_table,
+            .next_to_update = prepared.next_to_update,
+        };
+        return self.compressPreparedContext(&context, output, compression_level, prepared.prefix.items.len);
+    }
+
+    noinline fn compressPreparedContext(
+        self: *Encoder,
+        context: *Context,
+        output: []u8,
+        compression_level: i32,
+        source_start: usize,
+    ) linksection(prepared_text_section) Error!Result {
+        const level = normalizeLevel(compression_level);
+        if (level >= 10 and self.optimal.len == 0)
+            self.optimal = try self.allocator.alloc(
+                Optimal,
+                optimal_slots + trailing_literals,
+            );
+        var result = switch (level) {
+            1, 2 => compressHashChain(context, output, 2, source_start),
+            3 => compressHashChain(context, output, 4, source_start),
+            4 => compressHashChain(context, output, 8, source_start),
+            5 => compressHashChain(context, output, 16, source_start),
+            6 => compressHashChain(context, output, 32, source_start),
+            7 => compressHashChain(context, output, 64, source_start),
+            8 => compressHashChain(context, output, 128, source_start),
+            9 => compressHashChain(context, output, 256, source_start),
+            10 => compressOptimal(context, output, self.optimal, 96, 64, false, source_start),
+            11 => compressOptimal(context, output, self.optimal, 512, 128, false, source_start),
+            12 => compressOptimal(context, output, self.optimal, 16_384, optimal_slots, true, source_start),
+            else => unreachable,
+        };
+        std.debug.assert(result.consumed >= source_start);
+        result.consumed -= source_start;
         return result;
     }
 };

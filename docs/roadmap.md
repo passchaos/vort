@@ -18322,3 +18322,15 @@ reuse, so production keeps the simpler independently owned plans.
   the largest gap is setup, especially repeated dictionary hash/chain seeding;
   caching a validated CDict-equivalent state is the next bounded performance
   target. See `docs/performance/lz4-hc-frame-baseline-x86.md`.
+
+- Cached the liblz4-compatible HC dictionary seed for independent dictionary
+  frames. A prepared prefix owns the retained dictionary bytes plus exact
+  hash/chain and next-update snapshots; one-shot frames restore it for every
+  block, while incremental encoders retain it until the dictionary changes.
+  Linked dictionaries keep their rolling-history path. The post-change native
+  probe remains byte-exact across 253 lib-generated and 304 total cases. An
+  alternating fixed-CPU A/B over 11 pairs and 60 iterations per process gives
+  the dictionary-independent level-9 row a 1.6651x geometric-mean speedup and
+  11/11 wins; all five ordinary/linked controls have 95% paired confidence
+  intervals spanning 1.0. See
+  `docs/performance/lz4-hc-frame-baseline-x86.md`.

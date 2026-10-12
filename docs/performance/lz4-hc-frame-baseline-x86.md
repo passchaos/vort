@@ -51,3 +51,46 @@ The next candidate should cache a validated dictionary seed or restore a
 prebuilt HC table snapshot while preserving exact liblz4 bytes. Reusable and
 incremental throughput need separate rows after the one-shot setup cost is
 reduced; they should not be conflated with this allocation-inclusive baseline.
+
+## Prepared-prefix optimization
+
+On 2026-10-13, the independent-dictionary path was changed to build the
+retained dictionary hash/chain state once and restore that snapshot for each
+block. The one-shot frame writer owns one prepared prefix for the complete
+frame, while the incremental HC adapter retains one until the dictionary
+changes or the encoder is released. Linked frames continue through the
+existing rolling-history path. The prepared-prefix setup and independent
+dictionary frame writer use a separate text section so their cold code does
+not expand the ordinary frame writer.
+
+The performance A/B compared the original baseline executable
+`ba9b2160e59c15b5bfccd565df1f8b4052a3372a1b16f29c594b7bc1f9576254`
+with candidate executable
+`2998fc4ab97d1e216d76c158fc1fccd01ea1678ec9dfee6bb13ff821b387d4ca`.
+Both were ReleaseFast binaries. Eleven process pairs were pinned to CPU 2,
+the baseline/candidate order alternated between pairs, and every process used
+60 benchmark iterations. The ratios below are baseline elapsed time divided
+by candidate elapsed time; values above one favor the candidate. The
+confidence interval is calculated over the paired log ratios.
+
+| row | median | geometric mean | 95% CI | candidate wins |
+| --- | ---: | ---: | ---: | ---: |
+| independent level 9 | 0.9985x | 1.0016x | 0.9899x...1.0135x | 5/11 |
+| linked level 9 | 1.0036x | 1.0017x | 0.9869x...1.0168x | 6/11 |
+| linked level 12 | 0.9885x | 0.9961x | 0.9809x...1.0116x | 4/11 |
+| dictionary independent level 9 | 1.6641x | 1.6651x | 1.6310x...1.7000x | 11/11 |
+| dictionary linked level 9 | 0.9913x | 0.9916x | 0.9797x...1.0036x | 3/11 |
+| dictionary linked level 12 | 1.0002x | 0.9960x | 0.9806x...1.0116x | 6/11 |
+
+All paired rows retained identical encoded sizes. The independent-dictionary
+gain is large, stable, and excludes one by a wide margin; every control row's
+interval includes one, so the matrix does not detect a control-path change.
+The dictionary-linked level-9 point estimate remains the weakest control and
+should stay visible in future layout or HC-core work rather than being treated
+as a demonstrated improvement.
+
+Focused correctness evidence after the optimization consists of 13 LZ4HC
+tests, the six-row reference benchmark gate, and the native differential probe:
+253 liblz4-generated frames and 304 total cases, including 13 incremental HC
+linked/CDict cases. The probe continues to require exact Vort/liblz4 frame
+bytes, not only successful round trips.

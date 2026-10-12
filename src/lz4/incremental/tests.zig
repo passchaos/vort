@@ -122,15 +122,18 @@ test "LZ4HC incremental encoder matches preset dictionary frame" {
 
 test "LZ4HC incremental encoder releases allocation failures" {
     const Test = struct {
-        fn run(allocator: std.mem.Allocator) !void {
-            const dictionary = "incremental HC allocation dictionary" ** 8;
-            const payload = "incremental HC allocation dictionary payload" ** 16;
+        fn runMode(
+            allocator: std.mem.Allocator,
+            block_mode: lz4.BlockMode,
+            dictionary: []const u8,
+            payload: []const u8,
+        ) !void {
             const id: u32 = 7;
             var encoder = try lz4.HcIncrementalFrameEncoder.initExactSizeWithDictionary(
                 allocator,
                 .{
                     .include_content_size = true,
-                    .block_mode = .linked,
+                    .block_mode = block_mode,
                     .dictionary_id = id,
                     .compression_level = 12,
                 },
@@ -153,6 +156,13 @@ test "LZ4HC incremental encoder releases allocation failures" {
                 output_offset += result.progress.output_written;
                 if (result.status == .done) break;
             }
+        }
+
+        fn run(allocator: std.mem.Allocator) !void {
+            const dictionary = "incremental HC allocation dictionary" ** 8;
+            const payload = "incremental HC allocation dictionary payload" ** 16;
+            try runMode(allocator, .linked, dictionary, payload);
+            try runMode(allocator, .independent, dictionary, payload);
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});

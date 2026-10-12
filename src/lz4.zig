@@ -13,6 +13,7 @@ const incremental_tests = @import("lz4/incremental/tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 pub const DestSizeResult = dest_size.Result;
+const HcPreparedPrefix = hc_dest_size.PreparedPrefix;
 
 pub fn encodeBlockDestSize(input: []const u8, output: []u8) Error!DestSizeResult {
     return dest_size.compress(input, output) catch |err| switch (err) {
@@ -118,6 +119,46 @@ pub const HcDestSizeEncoder = struct {
         ) catch |err| {
             self.output_scratch.clearRetainingCapacity();
             return err;
+        };
+        if (result.consumed != input.len) {
+            self.output_scratch.clearRetainingCapacity();
+            return error.SizeMismatch;
+        }
+        self.output_scratch.items.len = result.written;
+        return self.output_scratch.items;
+    }
+
+    fn preparePrefixAlloc(self: *HcDestSizeEncoder, prefix: []const u8) Error!*HcPreparedPrefix {
+        return self.inner.preparePrefixAlloc(prefix) catch |err| switch (err) {
+            error.InputTooLarge => error.OutputLimitExceeded,
+            error.OutputTooSmall => error.OutputTooSmall,
+            error.OutOfMemory => error.OutOfMemory,
+        };
+    }
+
+    fn freePreparedPrefix(self: *HcDestSizeEncoder, prepared: *HcPreparedPrefix) void {
+        self.inner.freePreparedPrefix(prepared);
+    }
+
+    pub fn encodeScratchWithPreparedPrefix(
+        self: *HcDestSizeEncoder,
+        prepared: *const HcPreparedPrefix,
+        input: []const u8,
+        compression_level: i32,
+    ) Error![]const u8 {
+        try self.output_scratch.resize(self.inner.allocator, try encodedBlockBound(input.len));
+        const result = self.inner.compressWithPreparedPrefix(
+            prepared,
+            input,
+            self.output_scratch.items,
+            compression_level,
+        ) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return switch (err) {
+                error.InputTooLarge => error.OutputLimitExceeded,
+                error.OutputTooSmall => error.OutputTooSmall,
+                error.OutOfMemory => error.OutOfMemory,
+            };
         };
         if (result.consumed != input.len) {
             self.output_scratch.clearRetainingCapacity();
@@ -341,10 +382,38 @@ const IncrementalEncoderCodec = struct {
 const lz4 = @This();
 pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec);
 
+const IncrementalHcBlockEncoder = struct {
+    encoder: BlockHcEncoder,
+    prepared_prefix: ?*HcPreparedPrefix = null,
+
+    pub fn init(allocator: std.mem.Allocator) Error!IncrementalHcBlockEncoder {
+        return .{ .encoder = try BlockHcEncoder.init(allocator) };
+    }
+
+    pub fn deinit(self: *IncrementalHcBlockEncoder) void {
+        if (self.prepared_prefix) |prepared| self.encoder.freePreparedPrefix(prepared);
+        self.encoder.deinit();
+        self.* = undefined;
+    }
+
+    fn preparePrefix(self: *IncrementalHcBlockEncoder, prefix: []const u8) Error!*HcPreparedPrefix {
+        const keep = @min(prefix.len, max_match_offset);
+        const retained = prefix[prefix.len - keep ..];
+        if (self.prepared_prefix) |prepared| {
+            if (std.mem.eql(u8, prepared.prefix.items, retained)) return prepared;
+            self.encoder.freePreparedPrefix(prepared);
+            self.prepared_prefix = null;
+        }
+        const prepared = try self.encoder.preparePrefixAlloc(retained);
+        self.prepared_prefix = prepared;
+        return prepared;
+    }
+};
+
 const IncrementalHcEncoderCodec = struct {
     pub const Error = lz4.Error;
     pub const Options = lz4.HcFrameOptions;
-    pub const EncoderState = lz4.BlockHcEncoder;
+    pub const EncoderState = IncrementalHcBlockEncoder;
 
     pub fn maxBlockLen(options: Options) usize {
         return options.block_size_id.maxLen();
@@ -360,11 +429,14 @@ const IncrementalHcEncoderCodec = struct {
     }
 
     pub fn writeBlock(state: *EncoderState, out: *std.ArrayList(u8), block: []const u8, history: []const u8, options: Options) lz4.Error!void {
-        const allocator = state.inner.allocator;
+        const allocator = state.encoder.inner.allocator;
         const header_start = out.items.len;
         try out.appendNTimes(allocator, 0, 4);
         const encoded_start = out.items.len;
-        const encoded = try state.encodeScratchWithPrefix(history, block, options.compression_level);
+        const encoded = if (options.block_mode == .independent and history.len != 0) blk: {
+            const prepared = try state.preparePrefix(history);
+            break :blk try state.encoder.encodeScratchWithPreparedPrefix(prepared, block, options.compression_level);
+        } else try state.encoder.encodeScratchWithPrefix(history, block, options.compression_level);
         if (encoded.len < block.len) {
             std.mem.writeInt(u32, out.items[header_start..][0..4], @intCast(encoded.len), .little);
             try out.appendSlice(allocator, encoded);
@@ -5894,6 +5966,8 @@ pub const HcFrameEncoder = struct {
         if (dictionary.id == 0) return error.NeedDictionary;
         if (options.dictionary_id != null and options.dictionary_id.? != dictionary.id)
             return error.InvalidBlockPlan;
+        if (options.block_mode == .independent)
+            return self.encodePreparedDictionaryFrame(output, input, options, dictionary);
         return self.encodeAppendWithOptionalDictionary(output, input, options, dictionary);
     }
 
@@ -5957,37 +6031,20 @@ pub const HcFrameEncoder = struct {
                 dict.content
             else
                 &[_]u8{};
-            const encoded = try self.block_encoder.encodeScratchWithPrefix(
-                prefix,
-                block,
-                options.compression_level,
-            );
+            const encoded = try self.block_encoder.encodeScratchWithPrefix(prefix, block, options.compression_level);
             var block_header: [4]u8 = undefined;
             if (encoded.len < block.len) {
-                std.mem.writeInt(
-                    u32,
-                    &block_header,
-                    @intCast(encoded.len),
-                    .little,
-                );
+                std.mem.writeInt(u32, &block_header, @intCast(encoded.len), .little);
                 try output.appendSlice(allocator, &block_header);
                 try output.appendSlice(allocator, encoded);
-                if (options.block_checksum)
-                    try emitBlockChecksum(allocator, output, encoded);
+                if (options.block_checksum) try emitBlockChecksum(allocator, output, encoded);
             } else {
-                std.mem.writeInt(
-                    u32,
-                    &block_header,
-                    0x8000_0000 | @as(u32, @intCast(block.len)),
-                    .little,
-                );
+                std.mem.writeInt(u32, &block_header, 0x8000_0000 | @as(u32, @intCast(block.len)), .little);
                 try output.appendSlice(allocator, &block_header);
                 try output.appendSlice(allocator, block);
-                if (options.block_checksum)
-                    try emitBlockChecksum(allocator, output, block);
+                if (options.block_checksum) try emitBlockChecksum(allocator, output, block);
             }
-            if (options.block_mode == .linked)
-                appendHcHistory(&self.history, block);
+            if (options.block_mode == .linked) appendHcHistory(&self.history, block);
             offset += block_len;
         }
         try output.appendSlice(allocator, &.{ 0, 0, 0, 0 });
@@ -6000,6 +6057,72 @@ pub const HcFrameEncoder = struct {
                 .little,
             );
             try output.appendSlice(allocator, &content_checksum);
+        }
+    }
+
+    noinline fn encodePreparedDictionaryFrame(
+        self: *HcFrameEncoder,
+        output: *std.ArrayList(u8),
+        input: []const u8,
+        options: HcFrameOptions,
+        dictionary: NativeDictionary,
+    ) linksection(hc_dest_size.prepared_text_section) Error!void {
+        const allocator = self.block_encoder.inner.allocator;
+        try output.appendSlice(allocator, &frame_magic);
+        const descriptor_start = output.items.len;
+        var flags: u8 = 0x40 | 0x20 | 0x01;
+        if (options.block_checksum) flags |= 0x10;
+        if (options.include_content_size) flags |= 0x08;
+        if (options.content_checksum) flags |= 0x04;
+        try output.append(allocator, flags);
+        try output.append(allocator, @intFromEnum(options.block_size_id) << 4);
+        if (options.include_content_size) {
+            var content_size: [8]u8 = undefined;
+            std.mem.writeInt(u64, &content_size, try checkedUsizeToU64(input.len), .little);
+            try output.appendSlice(allocator, &content_size);
+        }
+        var dictionary_id: [4]u8 = undefined;
+        std.mem.writeInt(u32, &dictionary_id, dictionary.id, .little);
+        try output.appendSlice(allocator, &dictionary_id);
+        try output.append(allocator, descriptorChecksum(output.items[descriptor_start..]));
+        try self.encodePreparedDictionaryBlocks(output, input, options, dictionary);
+        try output.appendSlice(allocator, &.{ 0, 0, 0, 0 });
+        if (options.content_checksum) {
+            var content_checksum: [4]u8 = undefined;
+            std.mem.writeInt(u32, &content_checksum, std.hash.XxHash32.hash(0, input), .little);
+            try output.appendSlice(allocator, &content_checksum);
+        }
+    }
+
+    noinline fn encodePreparedDictionaryBlocks(
+        self: *HcFrameEncoder,
+        output: *std.ArrayList(u8),
+        input: []const u8,
+        options: HcFrameOptions,
+        dictionary: NativeDictionary,
+    ) linksection(hc_dest_size.prepared_text_section) Error!void {
+        const allocator = self.block_encoder.inner.allocator;
+        const prepared = try self.block_encoder.preparePrefixAlloc(dictionary.content);
+        defer self.block_encoder.freePreparedPrefix(prepared);
+        const max_block_len = options.block_size_id.maxLen();
+        var offset: usize = 0;
+        while (offset < input.len) {
+            const block_len = @min(input.len - offset, max_block_len);
+            const block = input[offset..][0..block_len];
+            const encoded = try self.block_encoder.encodeScratchWithPreparedPrefix(prepared, block, options.compression_level);
+            var block_header: [4]u8 = undefined;
+            if (encoded.len < block.len) {
+                std.mem.writeInt(u32, &block_header, @intCast(encoded.len), .little);
+                try output.appendSlice(allocator, &block_header);
+                try output.appendSlice(allocator, encoded);
+                if (options.block_checksum) try emitBlockChecksum(allocator, output, encoded);
+            } else {
+                std.mem.writeInt(u32, &block_header, 0x8000_0000 | @as(u32, @intCast(block.len)), .little);
+                try output.appendSlice(allocator, &block_header);
+                try output.appendSlice(allocator, block);
+                if (options.block_checksum) try emitBlockChecksum(allocator, output, block);
+            }
+            offset += block_len;
         }
     }
 
@@ -7205,6 +7328,12 @@ test "LZ4HC reusable encoders release every workspace allocation failure" {
                 .compression_level = 12,
             }, dictionary);
             defer allocator.free(dictionary_frame);
+            const independent_dictionary_frame = try frame_encoder.encodeAllocWithDictionary(payload, .{
+                .block_mode = .independent,
+                .dictionary_id = dictionary.id,
+                .compression_level = 12,
+            }, dictionary);
+            defer allocator.free(independent_dictionary_frame);
         }
     };
     try std.testing.checkAllAllocationFailures(
