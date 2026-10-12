@@ -207,6 +207,76 @@ pub fn decodedSizeConcatenatedLimited(
     return sink.len();
 }
 
+pub const IncrementalPart = union(enum) {
+    block: struct {
+        next_bit_offset: usize,
+        crc32: u32,
+    },
+    end: struct {
+        next_bit_offset: usize,
+        combined_crc32: u32,
+    },
+};
+
+/// Decode one block or end marker from a buffered Bzip2 member body. The bit
+/// offset and returned offset are relative to `input`; transformed and decoded
+/// scratch are caller-owned so retries after split input retain their capacity.
+/// Decoded bytes are published in `decoded` only after the block CRC succeeds.
+pub fn decodeIncrementalPart(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    bit_offset: usize,
+    block_limit: usize,
+    max_decoded_block_len: usize,
+    transformed: *std.ArrayList(u8),
+    decoded: *std.ArrayList(u8),
+) !IncrementalPart {
+    const input_bits = std.math.mul(usize, input.len, 8) catch
+        return error.IntegerOverflow;
+    if (bit_offset > input_bits) return error.TruncatedFrame;
+    transformed.clearRetainingCapacity();
+    decoded.clearRetainingCapacity();
+    errdefer decoded.clearRetainingCapacity();
+    try transformed.ensureTotalCapacityPrecise(allocator, block_limit);
+
+    var reader = bit_reader.BitReader.init(input);
+    reader.bit_offset = bit_offset;
+    const marker = try reader.readMarker();
+    switch (marker) {
+        block_magic => {
+            const stored_crc = try reader.readBits(32);
+            if (try reader.readBit() != 0) return error.UnsupportedBzip2Feature;
+            const original_pointer = try reader.readBits(24);
+            try decodeBlock(&reader, transformed, block_limit);
+            var output = Output{ .dynamic = .{
+                .allocator = allocator,
+                .bytes = decoded,
+                .limit = max_decoded_block_len,
+            } };
+            const actual_crc = try inverseBwtAndWrite(
+                allocator,
+                transformed.items,
+                original_pointer,
+                &output,
+            );
+            if (actual_crc != stored_crc) return error.ChecksumMismatch;
+            return .{ .block = .{
+                .next_bit_offset = reader.bit_offset,
+                .crc32 = actual_crc,
+            } };
+        },
+        end_magic => {
+            const combined_crc32 = try reader.readBits(32);
+            reader.alignToByte();
+            return .{ .end = .{
+                .next_bit_offset = reader.bit_offset,
+                .combined_crc32 = combined_crc32,
+            } };
+        },
+        else => return error.InvalidBzip2Stream,
+    }
+}
+
 fn decodeConcatenated(allocator: std.mem.Allocator, input: []const u8, sink: *Output) !void {
     if (input.len == 0) return error.InvalidMagic;
     var offset: usize = 0;

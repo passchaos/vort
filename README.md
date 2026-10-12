@@ -273,7 +273,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free Bzip2 `BZh1`...`BZh9` encoding and decoding with canonical Huffman,
   selector/inverse move-to-front, RUNA/RUNB, inverse BWT, first-stage RLE,
   multi-block and explicit concatenated-stream support, caller-owned/bounded
-  allocation APIs, decoded-size preflight, and block/combined CRC validation;
+  allocation APIs, decoded-size preflight, and block/combined CRC validation,
+  plus block-bounded caller-output incremental decoding with arbitrary input
+  fragmentation, non-byte-aligned block continuation, zero-output
+  backpressure, concatenated members, exact-size pledges, and reusable scratch;
 - dependency-free XZ decoding for LZMA2 streams with optional Delta and all
   eight BCJ filters including ARM64/RISC-V, strict stream/block/index/footer validation,
   none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream

@@ -175,6 +175,7 @@ pub const zipExtractByNameAllocWithOptions = zip.extractByNameAllocWithOptions;
 
 pub const Bzip2Error = bzip2.Error;
 pub const Bzip2EncodeOptions = bzip2.EncodeOptions;
+pub const Bzip2IncrementalDecoder = bzip2.IncrementalDecoder;
 pub const encodeBzip2Alloc = bzip2.encodeAlloc;
 pub const encodeBzip2Append = bzip2.encodeAppend;
 pub const encodeBzip2Into = bzip2.encodeInto;
@@ -3339,6 +3340,24 @@ test "root 7z exports create list and extract Copy archives" {
     const decoded = try sevenZipExtractByNameAlloc(std.testing.allocator, encoded, "hello.txt");
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, entries[0].data, decoded);
+}
+
+test "root Bzip2 incremental decoder drains a Python stream" {
+    const encoded_hex = "425a6831314159265359e2c777e0000054d100001040000244a00030c002950c9a55855e13c4c2ad157c5dc914e142438b1ddf80";
+    var encoded: [encoded_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&encoded, encoded_hex);
+    const expected = "hello hello hello\n" ** 20;
+    var decoder = Bzip2IncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = expected.len,
+    });
+    defer decoder.deinit();
+    var output: [expected.len]u8 = undefined;
+    const accepted = try decoder.step(&encoded, &output);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, accepted.status);
+    decoder.finish();
+    const done = try decoder.step("", &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, done.status);
+    try std.testing.expectEqualSlices(u8, expected, &output);
 }
 
 test "root 7z exports compressed archive writing" {

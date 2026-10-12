@@ -18348,3 +18348,18 @@ reuse, so production keeps the simpler independently owned plans.
   zero-output draining, extra fields, truncation at every framing layer,
   checksum-before-output, reset, bounds, and every injected allocation failure.
   See `docs/formats/lzop.md`.
+
+- Added a block-bounded public Bzip2 incremental decoder. Unlike a whole-stream
+  buffering facade, it retains only the current compressed candidate plus
+  transformed and decoded block scratch, preserves non-byte-aligned bit state
+  across blocks, and resumes through arbitrary caller input/output splits.
+  Complete blocks pass their BZIP2 CRC before output becomes visible; the
+  rotated/XOR combined CRC is checked at each member terminator. The state
+  machine supports concatenated members, zero-output backpressure, exact-size
+  pledges, independent compressed/decoded/total limits, reset, snapshots, and
+  phase diagnostics. Exponential incomplete-input retry thresholds avoid
+  reparsing a partial Huffman/BWT block on every one-byte fragment. Focused
+  coverage includes byte-at-a-time Python output, 7-byte drains, a generated
+  non-byte-aligned two-block stream, block and combined CRC failures, every
+  truncated fixture prefix, all limits, and injected allocation failures. See
+  `docs/formats/bzip2.md`.

@@ -40,6 +40,38 @@ const encoded = try vort.encodeBzip2Alloc(allocator, input, .{
 defer allocator.free(encoded);
 ```
 
+For caller-driven streaming, `Bzip2IncrementalDecoder` retains compressed data
+only until one complete block or member terminator can be parsed. Bzip2 block
+boundaries are bit-aligned rather than byte-aligned, so the decoder carries the
+remaining 0...7 bits into the next block instead of joining a complete stream:
+
+```zig
+var decoder = vort.Bzip2IncrementalDecoder.initWithOptions(allocator, .{
+    .max_output_len = 256 * 1024 * 1024,
+    .max_compressed_block_len = 4 * 1024 * 1024,
+    .max_decoded_block_len = 64 * 1024 * 1024,
+    .expected_output_len = expected_size,
+});
+defer decoder.deinit();
+
+var input_offset: usize = 0;
+var output_offset: usize = 0;
+while (input_offset < compressed.len) {
+    const result = try decoder.step(
+        compressed[input_offset..],
+        output[output_offset..],
+    );
+    input_offset += result.progress.input_read;
+    output_offset += result.progress.output_written;
+}
+decoder.finish();
+while (true) {
+    const result = try decoder.step("", output[output_offset..]);
+    output_offset += result.progress.output_written;
+    if (result.status == .done) break;
+}
+```
+
 Available APIs:
 
 - `encodeBzip2Alloc`, `encodeBzip2Append`, and `encodeBzip2Into`;
@@ -48,7 +80,9 @@ Available APIs:
 - `bzip2DecodedSize` and `bzip2DecodedSizeLimited` for validated preflight;
 - `decodeBzip2ConcatenatedInto`, `decodeBzip2ConcatenatedAlloc`, and its
   limited variant for concatenated streams;
-- `bzip2DecodedSizeConcatenated` and its limited variant.
+- `bzip2DecodedSizeConcatenated` and its limited variant;
+- `Bzip2IncrementalDecoder` for fragmented input, caller-owned output,
+  concatenated members, resettable scratch, snapshots, and diagnostics.
 
 The allocator supplies bounded block scratch: a stream uses at most the block
 size advertised by its `BZh` level for transformed bytes plus a 32-bit inverse
@@ -56,6 +90,14 @@ BWT index per transformed byte. Allocating decode APIs additionally own their
 output; limited APIs reject expansion before exceeding the caller's limit.
 Encoding uses a doubling cyclic suffix array, so its work memory is bounded by
 the selected block size rather than total input size.
+
+The incremental decoder additionally bounds the compressed candidate buffer
+and decoded-block scratch independently. It retries incomplete Huffman/BWT
+parsing at exponentially growing input thresholds, avoiding a full block
+reparse for every one-byte fragment. A block's CRC is verified before any byte
+from that block is released. The rotated/XOR combined CRC is necessarily
+verified at the member terminator after previously verified blocks may already
+have been streamed, matching ordinary streaming decompressor semantics.
 
 CLI validation surfaces:
 
