@@ -3659,6 +3659,45 @@ pub fn build(b: *std.Build) void {
         &lz4_reference_bench_gate.step,
     );
 
+    const lz4_hc_reference_bench_exe = b.addExecutable(.{
+        .name = "vort-lz4-hc-reference-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/lz4/hc_reference_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_lz4_hc_reference_bench = b.addRunArtifact(lz4_hc_reference_bench_exe);
+    if (b.args) |args| run_lz4_hc_reference_bench.addArgs(args);
+    const lz4_hc_reference_bench_step = b.step(
+        "run-lz4-hc-reference-bench",
+        "Compare one-shot LZ4HC frame encode against runtime liblz4",
+    );
+    lz4_hc_reference_bench_step.dependOn(&run_lz4_hc_reference_bench.step);
+
+    const run_lz4_hc_reference_bench_gate_csv = b.addRunArtifact(lz4_hc_reference_bench_exe);
+    run_lz4_hc_reference_bench_gate_csv.addArgs(&.{
+        "--iterations", "3",
+        "--csv",        "zig-out/vort-lz4-hc-reference-bench.csv",
+    });
+    const lz4_hc_reference_bench_gate = b.addSystemCommand(&.{
+        "python3", "tools/lz4/hc_reference_bench_gate.py",
+        "--csv",   "zig-out/vort-lz4-hc-reference-bench.csv",
+    });
+    lz4_hc_reference_bench_gate.addArg("--executable");
+    lz4_hc_reference_bench_gate.addArtifactArg(lz4_hc_reference_bench_exe);
+    lz4_hc_reference_bench_gate.step.dependOn(&run_lz4_hc_reference_bench_gate_csv.step);
+    const lz4_hc_reference_bench_gate_step = b.step(
+        "run-lz4-hc-reference-bench-gate",
+        "Validate LZ4HC frame encode reference benchmark coverage",
+    );
+    lz4_hc_reference_bench_gate_step.dependOn(&lz4_hc_reference_bench_gate.step);
+
     const lz4_decode_profile_exe = b.addExecutable(.{
         .name = "vort-lz4-decode-profile",
         .root_module = b.createModule(.{
@@ -5243,6 +5282,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&snappy_reference_bench_exe.step);
     check_step.dependOn(&snappy_interop_probe_exe.step);
     check_step.dependOn(&lz4_reference_bench_exe.step);
+    check_step.dependOn(&lz4_hc_reference_bench_exe.step);
     check_step.dependOn(&lz4_decode_profile_exe.step);
     check_step.dependOn(&br_compressed_header_profile_exe.step);
     check_step.dependOn(&br_decode_stage_profile_exe.step);

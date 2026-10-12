@@ -18310,3 +18310,15 @@ reuse, so production keeps the simpler independently owned plans.
   resolution, and cleanup at every injected allocation failure. The runtime
   liblz4 probe additionally requires incremental linked/CDict output to equal
   the same byte-exact 13 external HC frame cases.
+
+- Added a provenance-bearing LZ4HC frame encode comparison against runtime
+  liblz4 1.9.3. Six byte-identical rows cover independent/linked levels 9/12
+  and independent/linked CDict levels 9/12; the gate locks corpus hashes,
+  modes, dictionary presence, sizes, compression, timings, and executable
+  provenance without prematurely imposing throughput floors. A fixed-CPU-2,
+  20-iteration baseline places Vort at 0.6374x independent level 9,
+  0.5101x/0.5532x linked levels 9/12, 0.2502x dictionary-independent level 9,
+  and 0.6603x/0.7408x dictionary-linked levels 9/12. Exact wire parity means
+  the largest gap is setup, especially repeated dictionary hash/chain seeding;
+  caching a validated CDict-equivalent state is the next bounded performance
+  target. See `docs/performance/lz4-hc-frame-baseline-x86.md`.
