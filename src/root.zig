@@ -45,6 +45,7 @@ pub const cso = @import("cso.zig");
 pub const dax = @import("dax.zig");
 pub const gcz = @import("gcz.zig");
 pub const wia = @import("wia.zig");
+pub const wbfs = @import("wbfs.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1227,6 +1228,16 @@ pub const discoverWiiDiscPartitionsAlloc = wia.discoverWiiDiscAlloc;
 pub const encodeWiaAlloc = wia.encodeAlloc;
 pub const encodeWiaWithPartitionsAlloc = wia.encodeWithPartitionsAlloc;
 pub const encodeWiaDiscAlloc = wia.encodeDiscAlloc;
+
+pub const WbfsError = wbfs.Error;
+pub const WbfsHeader = wbfs.Header;
+pub const WbfsArchive = wbfs.Archive;
+pub const WbfsOpenOptions = wbfs.OpenOptions;
+pub const WbfsEncodeOptions = wbfs.EncodeOptions;
+pub const wbfsLogicalSize = wbfs.logical_size;
+pub const parseWbfsAlloc = wbfs.parseAlloc;
+pub const parseWbfsPartsAlloc = wbfs.parsePartsAlloc;
+pub const encodeWbfsAlloc = wbfs.encodeAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3207,6 +3218,7 @@ test {
     _ = dax;
     _ = gcz;
     _ = wia;
+    _ = wbfs;
 }
 
 test "root 7z exports create list and extract Copy archives" {

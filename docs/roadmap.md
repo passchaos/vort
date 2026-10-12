@@ -18112,3 +18112,14 @@ reuse, so production keeps the simpler independently owned plans.
   state. Filesystem-aware partition splitting and writer-side junk packing
   remain explicit follow-up work rather than silently degrading correctness.
   See `docs/formats/wia-rvz.md`.
+
+- Added pure-Zig WBFS reading and deterministic single-disc writing. The reader
+  validates the physical geometry, selected disc slot, disc-info bounds, and
+  every big-endian WLBA mapping while exposing zero-filled holes and bounded
+  range reads across caller-provided split-file slices. The writer emits
+  canonical slot-0 metadata, sequential physical blocks, configurable block
+  size, partial tails, and optional all-zero block omission. Focused tests,
+  fuzzing, an independent Python encoder/reader differential, and DolphinTool
+  header recognition cover the baseline. Multi-disc writing, filesystem-aware
+  scrubbing, automatic `.wbfN` discovery, and streaming file I/O remain
+  follow-up work. See `docs/formats/wbfs.md`.

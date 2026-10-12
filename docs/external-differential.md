@@ -113,6 +113,14 @@ decryption. Vort also decodes four fresh WIA codecs, RVZ Zstandard, and a
 junk-packed RVZ. Select an explicit tool with
 `-- --dolphin-tool /path/to/dolphin-tool`.
 
+The WBFS differential checks sparse and full single-disc writers byte-for-byte
+against an independent Python implementation, then decodes ranges crossing
+stored, omitted, partial-tail, and high logical blocks. It also exercises
+malformed headers, size equations, and range bounds. When DolphinTool is
+available, both Vort images must be recognized as WBFS with the expected block
+size. Select an explicit oracle with
+`-- --dolphin-tool /path/to/dolphin-tool`.
+
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,
 structured JSON, and binary dictionary inputs. Each file is encoded by

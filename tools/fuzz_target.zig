@@ -645,6 +645,36 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedWiaError(err)) return err;
     }
+    if (vort.parseWbfsAlloc(allocator, data, .{
+        .max_hd_sector_size = 4096,
+        .max_wbfs_sector_size = 2 << 20,
+        .max_parts = 4,
+    })) |archive_value| {
+        var archive = archive_value;
+        defer archive.deinit();
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            4096,
+            4096,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedWbfsError(err)) return err;
+        }
+        if (archive.readRangeAllocLimited(
+            allocator,
+            vort.wbfsLogicalSize - 4096,
+            4096,
+            4096,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedWbfsError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedWbfsError(err)) return err;
+    }
     const fuzz_wii_keys = [_]vort.WiaWiiCommonKey{
         .{ .index = 0, .key = @splat(0) },
         .{ .index = 1, .key = @splat(0) },
@@ -1381,6 +1411,16 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(gcz);
         try fuzzOne(init.gpa, gcz);
     }
+    const wbfs_input = try init.gpa.alloc(u8, 2 * 256 * 1024);
+    defer init.gpa.free(wbfs_input);
+    @memset(wbfs_input, 0);
+    for (wbfs_input[0 .. 256 * 1024], 0..) |*byte, index|
+        byte.* = @truncate(index * 17 + index / 31);
+    const wbfs = try vort.encodeWbfsAlloc(init.gpa, wbfs_input, .{
+        .wbfs_sector_shift = 18,
+    });
+    defer init.gpa.free(wbfs);
+    try fuzzOne(init.gpa, wbfs);
     inline for (.{
         .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
         .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },
@@ -1486,7 +1526,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 34,
+        samples.len + 35,
         data.len,
     });
     try stdout.flush();
@@ -1908,6 +1948,21 @@ fn isExpectedWiaError(err: anyerror) bool {
         error.NeedDictionary,
         error.DuplicateDictionaryId,
         error.InvalidDictionaryMetadata,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedWbfsError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidWbfs,
+        error.UnsupportedWbfsFeature,
+        error.InvalidMagic,
+        error.TruncatedFrame,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
         => true,
         else => false,
     };

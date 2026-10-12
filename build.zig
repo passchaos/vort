@@ -352,6 +352,14 @@ pub fn build(b: *std.Build) void {
     const run_wia_tests = b.addRunArtifact(wia_tests);
     const wia_test_step = b.step("test-wia", "Run focused Dolphin WIA/RVZ image tests");
     wia_test_step.dependOn(&run_wia_tests.step);
+    const wbfs_tests = b.addTest(.{
+        .name = "vort-wbfs-tests",
+        .root_module = tests_mod,
+        .filters = &.{"WBFS"},
+    });
+    const run_wbfs_tests = b.addRunArtifact(wbfs_tests);
+    const wbfs_test_step = b.step("test-wbfs", "Run focused Wii WBFS image tests");
+    wbfs_test_step.dependOn(&run_wbfs_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1422,6 +1430,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| wia_diff.addArgs(args);
     const wia_diff_step = b.step("run-wia-diff", "Validate WIA/RVZ images against optional DolphinTool");
     wia_diff_step.dependOn(&wia_diff.step);
+
+    const wbfs_diff = b.addSystemCommand(&.{ "python3", "tools/wbfs/diff.py", "--cli" });
+    wbfs_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| wbfs_diff.addArgs(args);
+    const wbfs_diff_step = b.step("run-wbfs-diff", "Validate WBFS images against Python and optional DolphinTool");
+    wbfs_diff_step.dependOn(&wbfs_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

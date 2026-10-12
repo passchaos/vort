@@ -33,6 +33,7 @@ const cso_cli = @import("cli/cso.zig");
 const dax_cli = @import("cli/dax.zig");
 const gcz_cli = @import("cli/gcz.zig");
 const wia_cli = @import("cli/wia.zig");
+const wbfs_cli = @import("cli/wbfs.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
@@ -309,6 +310,14 @@ pub fn main(init: std.process.Init) !void {
         try wia_cli.encodeWiaDisc(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-rvz-disc")) {
         try wia_cli.encodeRvzDisc(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-wbfs")) {
+        try wbfs_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-wbfs")) {
+        try wbfs_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-wbfs-range")) {
+        try wbfs_cli.decodeRange(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-wbfs")) {
+        try wbfs_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2545,6 +2554,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-rvz-partition <in> <out> <codec> <offset> <size> <key_hex> [chunk_size] [level]
         \\  encode-wia-disc <in> <out> <codec> <common_key_index> <common_key_hex> [chunk_size] [level]
         \\  encode-rvz-disc <in> <out> <codec> <common_key_index> <common_key_hex> [chunk_size] [level]
+        \\  inspect-wbfs <image.wbfs>
+        \\  decode-wbfs <in> <out> [max_output]
+        \\  decode-wbfs-range <in> <out> <offset> <length>
+        \\  encode-wbfs <in> <out> [sector_size] [sparse|full]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>
