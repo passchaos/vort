@@ -54,6 +54,13 @@ puts text at 1.100x liblzma speed and 1.117x its size; JSON at 1.400x speed but
 on binary/wide throughput and JSON parsing ratio rather than another chunk
 state change.
 
+A follow-up enlarged the streaming hash head only for dictionaries above
+256 KiB. The fixed-core screen improved `wide1m` by about `1.65x`, but text,
+JSON, binary, and `wide128k` moved to `0.923x`, `0.938x`, `0.985x`, and
+`0.980x`. Outlining the large initializer made ordinary controls worse. The
+candidate was fully removed before long pairs; a future large-window index
+must isolate its code/data layout rather than changing this shared binary.
+
 ## Validation
 
 - LZMA focused suite: 103/103.

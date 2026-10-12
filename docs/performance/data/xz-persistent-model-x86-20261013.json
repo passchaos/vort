@@ -75,6 +75,17 @@
     "json_speedup_geometric_mean": 0.977853070,
     "reason": "Stored fallback already invalidates LZMA state, so rollback is unnecessary. Direct mutation preserved identical bytes and recovered the copy cost."
   },
+  "rejected_large_head_followup": {
+    "description": "Scale the wide streaming hash head from 65,536 to 1,048,576 slots for a 1 MiB dictionary.",
+    "screen_only": true,
+    "wide1m_speedup": 1.6472,
+    "text256k_speedup": 0.9226,
+    "json256k_speedup": 0.9375,
+    "binary256k_speedup": 0.9846,
+    "wide128k_speedup": 0.9801,
+    "noinline_result": "ordinary controls regressed further",
+    "decision": "fully removed before long pairs because ordinary controls failed"
+  },
   "validation": {
     "lzma_tests": "103/103",
     "xz_tests": "114/114",

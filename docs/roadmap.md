@@ -18739,3 +18739,10 @@ reuse, so production keeps the simpler independently owned plans.
   `docs/performance/data/xz-persistent-model-x86-20261013.json`. Remaining
   priorities are binary/wide throughput (0.559x/0.692x liblzma) and JSON ratio
   (2.076x reference size).
+
+- A larger-head follow-up to the XZ benchmark was screened and removed. Scaling
+  the 1 MiB wide matcher from 65,536 to 1,048,576 hash slots improved the
+  `wide1m` row by about 1.65x with identical output, but shared binary layout
+  regressed text/JSON/binary/`wide128k` to roughly 0.923x/0.938x/0.985x/0.980x.
+  A noinline initializer made controls worse. No source remains; future
+  large-window indexing must isolate code and data placement before long A/B.
