@@ -18172,6 +18172,9 @@ reuse, so production keeps the simpler independently owned plans.
   or automatic raw/Bzip2/XZ selection. Focused tests, shared raw-byte fuzzing,
   an independent Python implementation, upstream `bspatch`, Rust
   `payload_dumper`, and both partitions of AOSP's official full and delta
-  fixtures cover the baseline. Major version 1, vendor signature verification,
-  PUFFDIFF/ZUCCHINI/LZ4DIFF patch engines, and streaming file I/O remain
-  explicit follow-up work. See `docs/formats/android-ota.md`.
+  fixtures cover the baseline. PUFFDIFF support adds bounded PUF1 proto3
+  metadata, reversible stored/fixed/dynamic Deflate-to-puff conversion,
+  bit-aligned extent mapping, nested BSDIFF, the pinned AOSP update-engine
+  fixture, and byte-exact AOSP Puffin codec differentials. Major version 1,
+  vendor signature verification, ZUCCHINI/LZ4DIFF patch engines, and streaming
+  file I/O remain explicit follow-up work. See `docs/formats/android-ota.md`.

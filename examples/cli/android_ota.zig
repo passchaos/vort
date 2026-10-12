@@ -190,6 +190,81 @@ pub fn encode(
     );
 }
 
+pub fn puffDeflate(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const bit_offset = if (args.next()) |text|
+        try std.fmt.parseInt(u64, text, 0)
+    else
+        0;
+    const bit_length = if (args.next()) |text|
+        try std.fmt.parseInt(u64, text, 0)
+    else
+        @as(u64, input.len) * 8 - bit_offset;
+    const result = try vort.puffAndroidDeflatePaddedAlloc(
+        init.gpa,
+        input,
+        bit_offset,
+        bit_length,
+        max_file_size,
+    );
+    defer init.gpa.free(result.bytes);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = result.bytes,
+    });
+    try stdout.print("input_bits={d} consumed_bits={d} puff_bytes={d} path={s}\n", .{
+        bit_length,
+        result.consumed_bits,
+        result.bytes.len,
+        output_path,
+    });
+}
+
+pub fn huffDeflate(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const bit_offset = try std.fmt.parseInt(
+        u3,
+        args.next() orelse return error.MissingCorpusPath,
+        0,
+    );
+    const bit_length = try std.fmt.parseInt(
+        u64,
+        args.next() orelse return error.MissingCorpusPath,
+        0,
+    );
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const output = try vort.huffAndroidDeflateAlloc(
+        init.gpa,
+        input,
+        bit_offset,
+        bit_length,
+    );
+    defer init.gpa.free(output);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = output,
+    });
+    try stdout.print("puff_bytes={d} deflate_bits={d} output_bytes={d} path={s}\n", .{
+        input.len,
+        bit_length,
+        output.len,
+        output_path,
+    });
+}
+
 fn parseCompression(text: []const u8) !vort.AndroidOtaCompression {
     inline for (std.enums.values(vort.AndroidOtaCompression)) |compression|
         if (std.mem.eql(u8, text, @tagName(compression))) return compression;

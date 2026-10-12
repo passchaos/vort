@@ -212,8 +212,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free Android update-engine payload v2 reading and deterministic
   full-payload writing, with a bounded proto2 manifest parser, multi-partition
   RAW/Bzip2/XZ/ZERO operations, SOURCE_COPY/SOURCE_BSDIFF/BROTLI_BSDIFF delta
-  extraction, BSDIFF40/BSDF2 patch streams, SHA-256 checks, bounded range
-  reads, fuzzing, independent Python validation, and Rust
+  extraction, PUFFDIFF with byte- and bit-aligned Deflate extents,
+  BSDIFF40/BSDF2/PUF1 patch streams, SHA-256 checks, bounded range reads,
+  fuzzing, independent Python validation, and Rust
   `payload_dumper` interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,

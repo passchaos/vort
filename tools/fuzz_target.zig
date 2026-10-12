@@ -128,6 +128,32 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
             else => return err,
         }
     }
+    if (data.len >= 4) {
+        const expected_size: usize = std.mem.readInt(u16, data[0..2], .little);
+        const source_len = @min(
+            @as(usize, std.mem.readInt(u16, data[2..4], .little)),
+            data.len - 4,
+        );
+        const source = data[4..][0..source_len];
+        const patch = data[4 + source_len ..];
+        if (vort.applyAndroidPuffinAlloc(
+            allocator,
+            source,
+            patch,
+            expected_size,
+            .{
+                .max_output_len = 1 << 20,
+                .max_header_len = 1 << 20,
+                .max_extents = 4096,
+                .max_puff_stream_len = 1 << 20,
+                .max_bsdiff_control_bytes = 1 << 20,
+            },
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedAndroidOtaError(err)) return err;
+        }
+    }
     if (data.len >= 3) {
         const expected_size: usize = std.mem.readInt(u16, data[0..2], .little);
         const dictionary_size: u32 = @as(u32, 4096) << @intCast(@min(data[2] & 0x0f, 11));
@@ -1647,6 +1673,9 @@ pub fn main(init: std.process.Init) !void {
     const bsdiff_sample = try makeBsdiffFuzzSampleAlloc(init.gpa);
     defer init.gpa.free(bsdiff_sample);
     try fuzzOne(init.gpa, bsdiff_sample);
+    const puffin_sample = try makePuffinFuzzSampleAlloc(init.gpa);
+    defer init.gpa.free(puffin_sample);
+    try fuzzOne(init.gpa, puffin_sample);
     inline for (.{
         .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
         .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },
@@ -2255,6 +2284,9 @@ fn isExpectedAndroidOtaError(err: anyerror) bool {
         error.IncompleteAndroidOtaPartition,
         error.InvalidBsdiffPatch,
         error.UnsupportedBsdiffCompression,
+        error.InvalidPuffinPatch,
+        error.InvalidPuffinStream,
+        error.UnsupportedPuffinPatch,
         error.InvalidMagic,
         error.UnsupportedVersion,
         error.TruncatedFrame,
@@ -2326,6 +2358,22 @@ fn makeBsdiffFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
     try sample.appendSlice(allocator, control_compressed);
     try sample.appendSlice(allocator, diff_compressed);
     try sample.appendSlice(allocator, extra_compressed);
+    return sample.toOwnedSlice(allocator);
+}
+
+fn makePuffinFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
+    const source = [_]u8{
+        0x11, 0x22, 0x63, 0x64, 0x62, 0x66, 0x61, 0x05, 0x00,
+        0x33, 0x03, 0x00, 0x63, 0x04, 0x00, 0x44, 0x55,
+    };
+    var sample: std.ArrayList(u8) = .empty;
+    errdefer sample.deinit(allocator);
+    var sizes: [4]u8 = undefined;
+    std.mem.writeInt(u16, sizes[0..2], 22, .little);
+    std.mem.writeInt(u16, sizes[2..4], source.len, .little);
+    try sample.appendSlice(allocator, &sizes);
+    try sample.appendSlice(allocator, &source);
+    try sample.appendSlice(allocator, &vort.fuzz.android_ota_puffdiff_fixture);
     return sample.toOwnedSlice(allocator);
 }
 

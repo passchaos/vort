@@ -4,6 +4,7 @@ const deflate = @import("deflate.zig");
 const dictionary = @import("dictionary.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
+const android_ota_puffin = @import("android_ota/puffin.zig");
 const lz77 = @import("lz77.zig");
 
 pub const lzms_raw_fixture_base64 = @embedFile("lzms/testdata/lzms-small.bin.b64");
@@ -25,6 +26,7 @@ pub const wia_partition_fixture_base64 = @embedFile(
 pub const rvz_partition_fixture_base64 = @embedFile(
     "wia/testdata/python-partition-smallchunks.rvz.bz2.b64",
 );
+pub const android_ota_puffdiff_fixture = android_ota_puffin.test_puffdiff_fixture;
 
 pub const CorpusStats = struct {
     cases: usize = 0,

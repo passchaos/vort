@@ -21,8 +21,9 @@ payload. It validates:
   the corresponding data is supplied.
 
 Full OTA extraction supports `REPLACE`, `REPLACE_BZ`, `REPLACE_XZ`, and `ZERO`.
-Delta payload `SOURCE_COPY`, legacy `SOURCE_BSDIFF`, and `BROTLI_BSDIFF`
-operations are also supported with an explicit old partition image. The patch
+Delta payload `SOURCE_COPY`, legacy `SOURCE_BSDIFF`, `BROTLI_BSDIFF`, and
+`PUFFDIFF` operations are also supported with an explicit old partition image.
+The bsdiff patch
 reader accepts traditional `BSDIFF40` with three Bzip2 streams and Android's
 `BSDF2`, whose control, diff, and extra streams independently select Bzip2 or
 Brotli. Patch output, decompressed control bytes, stream consumption, signed
@@ -30,6 +31,15 @@ source seeks, and forward progress are bounded and validated. Whole-partition
 and bounded range extraction share the same operation engine; range extraction
 only expands intersecting compressed or patch operations and enforces separate
 per-operation and bsdiff-control limits.
+
+The Puffin layer parses bounded `PUF1` proto3 metadata, validates sorted and
+non-overlapping source/destination bit extents and byte-addressed puff extents,
+converts raw Deflate to Puffin's stable token stream, applies the nested bsdiff
+patch, and reconstructs the target Deflate bit-for-bit. Stored, fixed-Huffman,
+and dynamic-Huffman blocks are supported, including multi-block streams,
+non-byte-aligned extents, exact dynamic-table recreation, and raw bytes between
+multiple deflates. Header, extent count, puff-stream size, nested patch control,
+operation output, and final partition output all have independent bounds.
 
 ```zig
 var payload = try vort.parseAndroidOtaAlloc(allocator, payload_bytes, .{
@@ -58,6 +68,15 @@ const patched = try vort.applyAndroidBsdiffAlloc(
     .{ .max_output_len = expected_size },
 );
 defer allocator.free(patched);
+
+const puff_patched = try vort.applyAndroidPuffinAlloc(
+    allocator,
+    old_bytes,
+    puffdiff_patch,
+    expected_size,
+    .{ .max_output_len = expected_size },
+);
+defer allocator.free(puff_patched);
 ```
 
 The deterministic full-payload writer accepts multiple named, block-aligned
@@ -91,6 +110,8 @@ zig build run -- inspect-android-ota payload.bin
 zig build run -- extract-android-ota payload.bin system system.img 8589934592
 zig build run -- extract-android-ota-range payload.bin system range.bin 1048576 65536
 zig build run -- encode-android-ota system.img payload.bin system auto 4096 1048576
+zig build run -- puff-android-deflate input.deflate output.puff
+zig build run -- huff-android-deflate output.puff restored.deflate 0 12345
 zig build test-android-ota
 zig build run-android-ota-diff
 ```
@@ -108,11 +129,17 @@ outputs; an explicit binary can be supplied with
 checkout with `--aosp-update-engine /path/to/update_engine` additionally checks
 both partitions in its official full payload and both partitions in its delta
 payload, including its genuine all-Brotli BSDF2 kernel patch.
+The retained AOSP update-engine PUFFDIFF fixture validates complete PUF1
+application through an OTA operation. An optional Puffin codec oracle compares
+Vort's puff stream byte-for-byte and huffs stored, fixed, and dynamic Deflate
+streams back to the exact original bytes; supply it with
+`--puff-codec-oracle /path/to/oracle`. An installed AOSP `puffin` command can
+also be selected with `--puffin /path/to/puffin` for the pinned full patch.
 
 Current explicit limitations are major-version-1 payloads, cryptographic
 verification of vendor metadata/payload signatures, and patch engines for
-PUFFDIFF, ZUCCHINI, and LZ4DIFF. Those operations are retained in the parsed
-model but extraction returns
+ZUCCHINI and LZ4DIFF. Those operations are retained in the parsed model but
+extraction returns
 `UnsupportedAndroidOtaOperation`. DISCARD is likewise rejected by default
 because Android defines its read-back contents as undefined; callers may opt
 into deterministic zero interpretation through `DecodeOptions.discard_as_zero`.

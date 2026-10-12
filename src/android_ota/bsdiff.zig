@@ -86,7 +86,7 @@ pub fn applyAlloc(
             return error.InvalidBsdiffPatch;
         const diff_size: usize = @intCast(diff_size_i64);
         const extra_size: usize = @intCast(extra_size_i64);
-        if (diff_size == 0 and extra_size == 0)
+        if (diff_size == 0 and extra_size == 0 and source_advance == 0)
             return error.InvalidBsdiffPatch;
         const after_diff = std.math.add(
             usize,

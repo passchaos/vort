@@ -160,6 +160,13 @@ full payload must extract both partitions byte-exactly, its XZ-only delta
 partition and genuine BSDF2/BROTLI_BSDIFF kernel partition must both extract
 byte-exactly. Select an explicit patch oracle with
 `--bspatch /path/to/bspatch`.
+The same driver applies the pinned AOSP update-engine PUF1/PUFFDIFF fixture as a
+complete OTA operation, including bounded range extraction. With
+`--puff-codec-oracle /path/to/oracle`, an independently built AOSP Puffin codec
+must produce byte-identical puff streams and exact huffed Deflate bytes for
+stored, fixed-Huffman, and dynamic-Huffman multi-block cases. A full AOSP
+`puffin` command may instead be supplied with `--puffin /path/to/puffin` to
+apply the pinned patch directly.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

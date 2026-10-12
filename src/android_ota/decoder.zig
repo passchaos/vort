@@ -2,15 +2,19 @@ const std = @import("std");
 const bzip2 = @import("../bzip2.zig");
 const xz = @import("../xz.zig");
 const bsdiff = @import("bsdiff.zig");
+const puffin = @import("puffin.zig");
 const format = @import("format.zig");
 
-pub const Error = format.Error || bzip2.Error || xz.Error || bsdiff.Error ||
+pub const Error = format.Error || bzip2.Error || xz.Error || bsdiff.Error || puffin.Error ||
     std.mem.Allocator.Error;
 
 pub const Options = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_operation_output_len: usize = 1024 * 1024 * 1024,
     max_bsdiff_control_bytes: usize = 64 * 1024 * 1024,
+    max_puffin_header_len: usize = 16 * 1024 * 1024,
+    max_puffin_extents: usize = 1 << 20,
+    max_puff_stream_len: usize = 1024 * 1024 * 1024,
     verify_partition_hash: bool = true,
     verify_source_hashes: bool = true,
     discard_as_zero: bool = false,
@@ -173,6 +177,54 @@ pub fn readPartitionRangeInto(
                         .max_control_bytes = options.max_bsdiff_control_bytes,
                     },
                 );
+                owned = decoded;
+                break :blk decoded;
+            },
+            .puffdiff => blk: {
+                const old_bytes = try readSourceExtentsAlloc(
+                    allocator,
+                    source_bytes orelse return error.MissingAndroidOtaSource,
+                    view.sourceExtents(operation),
+                    view.block_size,
+                    options.max_operation_output_len,
+                );
+                defer allocator.free(old_bytes);
+                if (operation.src_sha256_hash.len != 0)
+                    try verifySha256(old_bytes, operation.src_sha256_hash);
+                const extent_output_len = try operationOutputLength(
+                    destinations,
+                    view.block_size,
+                    options.max_operation_output_len,
+                );
+                const puff_options = puffin.ApplyOptions{
+                    .max_output_len = options.max_operation_output_len,
+                    .max_header_len = options.max_puffin_header_len,
+                    .max_extents = options.max_puffin_extents,
+                    .max_puff_stream_len = options.max_puff_stream_len,
+                    .max_bsdiff_control_bytes = options.max_bsdiff_control_bytes,
+                };
+                const actual_len = if (operation.dst_length) |length|
+                    std.math.cast(usize, length) orelse
+                        return error.OutputLimitExceeded
+                else
+                    try puffin.decodedSizeAlloc(
+                        allocator,
+                        view.operationBlob(operation),
+                        puff_options,
+                    );
+                if (actual_len > extent_output_len)
+                    return error.InvalidPuffinPatch;
+                const patched = try puffin.applyAlloc(
+                    allocator,
+                    old_bytes,
+                    view.operationBlob(operation),
+                    actual_len,
+                    puff_options,
+                );
+                defer allocator.free(patched);
+                const decoded = try allocator.alloc(u8, extent_output_len);
+                @memset(decoded, 0);
+                @memcpy(decoded[0..patched.len], patched);
                 owned = decoded;
                 break :blk decoded;
             },

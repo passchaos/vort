@@ -3,6 +3,7 @@ const bzip2 = @import("../bzip2.zig");
 const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
 const protobuf = @import("protobuf.zig");
+const puffin_mod = @import("puffin.zig");
 const writer = @import("writer.zig");
 
 const allocator = std.testing.allocator;
@@ -181,6 +182,40 @@ test "Android OTA SOURCE_BSDIFF applies a legacy patch through extents" {
     );
     defer allocator.free(range);
     try std.testing.expectEqualSlices(u8, expected[73..330], range);
+}
+
+test "Android OTA PUFFDIFF applies the pinned AOSP patch through extents" {
+    var source = [_]u8{0} ** 4096;
+    const source_prefix = [_]u8{
+        0x11, 0x22, 0x63, 0x64, 0x62, 0x66, 0x61, 0x05, 0x00,
+        0x33, 0x03, 0x00, 0x63, 0x04, 0x00, 0x44, 0x55,
+    };
+    @memcpy(source[0..source_prefix.len], &source_prefix);
+    var expected = [_]u8{0} ** 4096;
+    const expected_prefix = [_]u8{
+        0x63, 0x64, 0x62, 0x66, 0x61, 0x05, 0x00, 0x33, 0x66,
+        0x01, 0x05, 0x00, 0xfa, 0xff, 1,    2,    3,    4,
+        5,    0x63, 0x04, 0x00,
+    };
+    @memcpy(expected[0..expected_prefix.len], &expected_prefix);
+    const payload = try sourceDiffPayloadAlloc(
+        allocator,
+        &source,
+        &expected,
+        &puffin_mod.test_puffdiff_fixture,
+        .puffdiff,
+    );
+    defer allocator.free(payload);
+    var archive = try archive_mod.Archive.initAlloc(allocator, payload, .{});
+    defer archive.deinit();
+    const decoded = try archive.decodePartitionAllocLimited(
+        allocator,
+        0,
+        &source,
+        expected.len,
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &expected, decoded);
 }
 
 test "Android OTA rejects malformed headers blobs and hashes" {

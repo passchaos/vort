@@ -10,6 +10,9 @@ pub const Error = core.Error || error{
     IncompleteAndroidOtaPartition,
     InvalidBsdiffPatch,
     UnsupportedBsdiffCompression,
+    InvalidPuffinPatch,
+    InvalidPuffinStream,
+    UnsupportedPuffinPatch,
 };
 
 pub const magic = "CrAU";

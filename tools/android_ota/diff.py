@@ -4,11 +4,13 @@ import bz2
 import hashlib
 import lzma
 import random
+import re
 import shutil
 import struct
 import subprocess
 import tarfile
 import tempfile
+import zlib
 from pathlib import Path
 
 
@@ -21,6 +23,19 @@ SOURCE_COPY = 4
 SOURCE_BSDIFF = 5
 ZERO = 6
 REPLACE_XZ = 8
+PUFFDIFF = 9
+
+PUFFDIFF_FIXTURE = bytes.fromhex(
+    "5055463100000051080112270a04081010320a040850100a0a04086010121204"
+    "08101058120408781028120508a8011038181f1a240a0210320a04084810500a"
+    "05089801101212021058120408701058120508c8011038182142534449464634"
+    "30380000000000000034000000000000002100000000000000425a6839314159"
+    "26535965298c9b00000360407a0e08004000200021229a3d4f50400c3bc79bb2"
+    "210ee915987a7c5dc914e1424194a6326c425a6839314159265359f1205f0d00"
+    "00024115420820004000000240002000223d23108603965411165f1772453850"
+    "90f1205f0d425a683931415926535907d4cb6e00000001000100200021184682"
+    "ee48a70a1200fa996dc0"
+)
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -247,6 +262,32 @@ def source_bsdiff_payload(source: bytes) -> tuple[bytes, bytes, bytes]:
     return payload, target, patch
 
 
+def puffdiff_payload() -> tuple[bytes, bytes, bytes]:
+    source_prefix = bytes.fromhex(
+        "1122636462666105003303006304004455"
+    )
+    expected_prefix = bytes.fromhex(
+        "636462666105003366010500faff0102030405630400"
+    )
+    source = source_prefix + bytes(BLOCK_SIZE - len(source_prefix))
+    target = expected_prefix + bytes(BLOCK_SIZE - len(expected_prefix))
+    operation_message = bytearray(vfield(1, PUFFDIFF))
+    operation_message += vfield(2, 0)
+    operation_message += vfield(3, len(PUFFDIFF_FIXTURE))
+    operation_message += bfield(4, extent(0, 1))
+    operation_message += bfield(6, extent(0, 1))
+    operation_message += vfield(7, 22)
+    operation_message += bfield(8, hashlib.sha256(PUFFDIFF_FIXTURE).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition = bytearray(bfield(1, b"puffin"))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + PUFFDIFF_FIXTURE
+    return payload, source, target
+
+
 def decode_reference(payload: bytes) -> dict[str, bytes]:
     if payload[:4] != MAGIC:
         raise AssertionError("bad magic")
@@ -350,6 +391,8 @@ def main() -> None:
     parser.add_argument("--payload-dumper", type=Path)
     parser.add_argument("--aosp-update-engine", type=Path)
     parser.add_argument("--bspatch", type=Path)
+    parser.add_argument("--puffin", type=Path)
+    parser.add_argument("--puff-codec-oracle", type=Path)
     args = parser.parse_args()
     oracle = args.payload_dumper or (
         Path(found) if (found := shutil.which("payload_dumper")) else None
@@ -357,6 +400,10 @@ def main() -> None:
     bspatch = args.bspatch or (
         Path(found) if (found := shutil.which("bspatch")) else None
     )
+    puffin = args.puffin or (
+        Path(found) if (found := shutil.which("puffin")) else None
+    )
+    puff_codec_oracle = args.puff_codec_oracle
 
     source_bytes = writer_payload()
     writer_cases = 0
@@ -367,6 +414,8 @@ def main() -> None:
     aosp_full = 0
     aosp_delta = 0
     bspatch_cases = 0
+    puffin_cases = 0
+    puff_codec_cases = 0
     with tempfile.TemporaryDirectory(prefix="vort-android-ota-") as temp_text:
         temp = Path(temp_text)
         source = temp / "system.img"
@@ -539,6 +588,117 @@ def main() -> None:
                 raise AssertionError("bspatch oracle mismatch")
             bspatch_cases += 1
 
+        puff_payload, puff_source, puff_expected = puffdiff_payload()
+        puff_payload_path = temp / "puffdiff-payload.bin"
+        puff_payload_path.write_bytes(puff_payload)
+        puff_source_path = temp / "puffin-old.img"
+        puff_source_path.write_bytes(puff_source)
+        puff_output = temp / "puffin-new.img"
+        run(
+            args.cli,
+            "extract-android-ota",
+            puff_payload_path,
+            "puffin",
+            puff_output,
+            len(puff_expected),
+            puff_source_path,
+        )
+        if puff_output.read_bytes() != puff_expected:
+            raise AssertionError("PUFFDIFF OTA decode mismatch")
+        reader_cases += 1
+        puff_range = temp / "puffin-range.img"
+        run(
+            args.cli,
+            "extract-android-ota-range",
+            puff_payload_path,
+            "puffin",
+            puff_range,
+            3,
+            257,
+            puff_source_path,
+        )
+        if puff_range.read_bytes() != puff_expected[3:260]:
+            raise AssertionError("PUFFDIFF range mismatch")
+        ranges += 1
+        if puffin is not None:
+            raw_source = temp / "puffin-raw-source.bin"
+            raw_source.write_bytes(puff_source[:17])
+            patch_path = temp / "pinned.puffdiff"
+            patch_path.write_bytes(PUFFDIFF_FIXTURE)
+            raw_output = temp / "puffin-raw-output.bin"
+            run(
+                puffin,
+                "--operation=puffpatch",
+                f"--src_file={raw_source}",
+                f"--dst_file={raw_output}",
+                f"--patch_file={patch_path}",
+            )
+            if raw_output.read_bytes() != puff_expected[:22]:
+                raise AssertionError("AOSP puffpatch mismatch")
+            puffin_cases += 1
+
+        if puff_codec_oracle is not None:
+            codec_payload = (
+                b"Puffin dynamic codec oracle payload with repeated text and bytes.\n"
+                * 64
+            ) + random.Random(0x50554646).randbytes(70_000)
+            codec_cases: list[tuple[str, bytes]] = []
+            for name, level, strategy in (
+                ("stored", 0, zlib.Z_DEFAULT_STRATEGY),
+                ("fixed", 6, zlib.Z_FIXED),
+                ("dynamic", 9, zlib.Z_DEFAULT_STRATEGY),
+            ):
+                compressor = zlib.compressobj(
+                    level=level,
+                    method=zlib.DEFLATED,
+                    wbits=-15,
+                    memLevel=8,
+                    strategy=strategy,
+                )
+                codec_cases.append(
+                    (name, compressor.compress(codec_payload) + compressor.flush())
+                )
+            for name, deflate_bytes in codec_cases:
+                codec_input = temp / f"codec-{name}.deflate"
+                codec_input.write_bytes(deflate_bytes)
+                oracle_puff = temp / f"codec-{name}.oracle.puff"
+                oracle_restored = temp / f"codec-{name}.oracle.deflate"
+                run(
+                    puff_codec_oracle,
+                    codec_input,
+                    oracle_puff,
+                    oracle_restored,
+                )
+                if oracle_restored.read_bytes() != deflate_bytes:
+                    raise AssertionError(f"AOSP Puffin {name} huff mismatch")
+                vort_puff = temp / f"codec-{name}.vort.puff"
+                summary = run(
+                    args.cli,
+                    "puff-android-deflate",
+                    codec_input,
+                    vort_puff,
+                    0,
+                    len(deflate_bytes) * 8,
+                ).stdout.decode()
+                match = re.search(r"consumed_bits=(\d+)", summary)
+                if match is None:
+                    raise AssertionError("missing Puffin consumed bit count")
+                consumed_bits = int(match.group(1))
+                if vort_puff.read_bytes() != oracle_puff.read_bytes():
+                    raise AssertionError(f"AOSP Puffin {name} puff mismatch")
+                vort_restored = temp / f"codec-{name}.vort.deflate"
+                run(
+                    args.cli,
+                    "huff-android-deflate",
+                    vort_puff,
+                    vort_restored,
+                    0,
+                    consumed_bits,
+                )
+                if vort_restored.read_bytes() != deflate_bytes:
+                    raise AssertionError(f"Vort Puffin {name} huff mismatch")
+                puff_codec_cases += 1
+
         short = temp / "short.bin"
         short.write_bytes(MAGIC)
         expect_failure(args.cli, "inspect-android-ota", short, error_name="TruncatedFrame")
@@ -674,6 +834,9 @@ def main() -> None:
         f"malformed={malformed} fuzz={fuzz_cases} "
         f"payload_dumper={oracle is not None} oracle_decode={oracle_decode} "
         f"bspatch={bspatch is not None} bspatch_cases={bspatch_cases} "
+        f"puffin={puffin is not None} puffin_cases={puffin_cases} "
+        f"puff_codec={puff_codec_oracle is not None} "
+        f"puff_codec_cases={puff_codec_cases} "
         f"aosp={args.aosp_update_engine is not None} aosp_full={aosp_full} "
         f"aosp_delta={aosp_delta}"
     )
