@@ -17730,8 +17730,9 @@ reuse, so production keeps the simpler independently owned plans.
   writing now apply Delta plus x86, PowerPC, IA-64, ARM, ARM-Thumb, SPARC,
   ARM64, and RISC-V BCJ preprocessing filters, including a three-stage x86+Delta+LZMA2 chain in
   the required direction, and expose aggregate and per-filter block counts in
-  stream metadata. Deeper parsing and cross-chunk dictionary reuse remain
-  follow-up ratio and performance work. See `docs/formats/xz.md`.
+  stream metadata. Deeper parsing remains follow-up ratio work; the later
+  increment below completes cross-chunk dictionary reuse. See
+  `docs/formats/xz.md`.
 
 - Added dependency-free LZMA-Alone encoding and decoding with strict 13-byte
   property headers, known-size and end-marker streams, explicit dictionary and
@@ -18656,3 +18657,20 @@ reuse, so production keeps the simpler independently owned plans.
   `docs/performance/data/brotli-prepared-distance-root32-x86-20261013.json`;
   prepared metadata should not be embedded in a root wider than the current
   16-bit slots without a fundamentally smaller execution representation.
+
+- Added cross-chunk dictionary reuse to the pure-Zig XZ/LZMA2 writer. The LZMA
+  core now accepts explicit preceding dictionary bytes plus an absolute stream
+  position, bounds active history by its configured window, and preserves
+  existing empty-dictionary one-shot bytes. LZMA2 compressed payloads retain
+  the property-zero 4 KiB dictionary across their 64 KiB chunks while resetting
+  probability state/properties for each range-coded chunk; stored fallbacks
+  use controls `1`/`2` and compressed chunks `0xe0`/`0xc0` according to whether
+  the dictionary must reset. On a frozen 69,632-byte boundary corpus, the raw
+  LZMA2 payload moves from 69,639 bytes with independent chunks to 65,575 bytes
+  with shared history, saving 4,064 bytes (5.84%). One-shot and incremental
+  compressed output remain byte-identical under tiny caller splits. The
+  focused XZ and LZMA suites pass
+  107/107 and 99/99, and the Python/system-XZ differential passes five
+  bidirectional corpora, four multi-block streams, eight standard filter cases,
+  and both compressed/stored writer modes. Deeper parsing and a larger
+  configurable LZMA2 dictionary remain ratio work.

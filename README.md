@@ -285,8 +285,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   eight BCJ filters including ARM64/RISC-V, strict stream/block/index/footer validation,
   none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream
   handling, bounded APIs and metadata inspection, plus deterministic
-  filter-aware XZ writing with greedy LZMA matches, repeat distances, and a
-  stored fallback, plus block-bounded caller-output incremental decoding with
+  filter-aware XZ writing with greedy LZMA matches, repeat distances, a stored
+  fallback, and 4 KiB cross-chunk LZMA2 dictionary reuse across compressed and
+  stored chunks, plus block-bounded caller-output incremental decoding with
   arbitrary input fragmentation, zero-output backpressure, stream padding,
   concatenated members, independent compressed/decoded/dictionary/Index
   limits, exact-size pledges, and reusable container scratch, plus block-bounded

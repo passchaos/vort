@@ -3,7 +3,8 @@
 Vort provides dependency-free XZ decoding for LZMA2 streams with optional
 Delta and x86, PowerPC, IA-64, ARM, ARM-Thumb, SPARC, ARM64, or RISC-V BCJ
 preprocessing filters. Its deterministic writer emits LZMA2 chunks with greedy LZ77 matches,
-repeat-distance coding, literal context coding, and a stored fallback. The
+repeat-distance coding, literal context coding, a stored fallback, and the
+format's 4 KiB dictionary retained across chunk boundaries. The
 explicit stored writer remains available, and both paths can apply the same
 filter chains.
 
@@ -156,7 +157,11 @@ BCJ start offsets are checked for their architecture's alignment. The current
 ARM64 transform covers BL and ADRP instructions; the RISC-V transform covers
 JAL plus the canonical AUIPC/JALR address pairs. Vort output is validated by
 7-Zip 26.02 because the locally installed XZ 5.2/Python binding predates these
-two filter IDs. The current
-compressor uses bounded greedy match finding and resets each chunk
-independently; deeper parsing and cross-chunk dictionary reuse remain later
-ratio and performance work.
+two filter IDs. The current compressor uses bounded greedy match finding. Each
+compressed chunk resets its LZMA probability state and properties while
+retaining the preceding 4 KiB dictionary advertised by LZMA2 property zero.
+Stored fallbacks likewise retain history: the first chunk uses dictionary-reset
+control `1` or `0xe0`, while later stored/compressed chunks use `2` or `0xc0`.
+This lets a match cross a 64 KiB chunk boundary without making chunks dependent
+on hidden state outside their XZ block. Deeper parsing and a larger configurable
+LZMA2 dictionary remain later ratio and performance work.

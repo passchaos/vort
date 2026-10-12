@@ -286,7 +286,49 @@ pub fn encodeChunkAppendWithStats(
     input: []const u8,
     options: EncodeOptions,
 ) !EncodeStats {
+    return encodeChunkAppendWithDictionaryStats(
+        allocator,
+        output,
+        input,
+        &.{},
+        0,
+        options,
+    );
+}
+
+/// Encode one raw LZMA chunk with caller-provided preceding dictionary bytes.
+/// `stream_start` is the absolute uncompressed position of `input[0]`; it
+/// keeps position-state and literal-context modeling correct when an outer
+/// format such as LZMA2 resets the probability model but retains history.
+pub fn encodeChunkAppendWithDictionary(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    dictionary: []const u8,
+    stream_start: usize,
+    options: EncodeOptions,
+) !usize {
+    return (try encodeChunkAppendWithDictionaryStats(
+        allocator,
+        output,
+        input,
+        dictionary,
+        stream_start,
+        options,
+    )).output_bytes;
+}
+
+pub fn encodeChunkAppendWithDictionaryStats(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    dictionary: []const u8,
+    stream_start: usize,
+    options: EncodeOptions,
+) !EncodeStats {
     try validateOptions(options);
+    if (dictionary.len > stream_start) return error.InvalidLzmaOptions;
+    const active_dictionary = dictionary[dictionary.len - @min(dictionary.len, options.dictionary_size) ..];
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
     var range = range_encoder.Encoder.init(allocator, &encoded);
@@ -307,12 +349,22 @@ pub fn encodeChunkAppendWithStats(
     switch (options.mode) {
         .literal_only => {
             var position: usize = 0;
-            while (position < input.len) : (position += 1)
-                try model.encodeLiteral(&range, &.{}, input, position, position, input[position]);
+            while (position < input.len) : (position += 1) {
+                const absolute_position = std.math.add(usize, stream_start, position) catch
+                    return error.IntegerOverflow;
+                try model.encodeLiteral(
+                    &range,
+                    active_dictionary,
+                    input,
+                    position,
+                    absolute_position,
+                    input[position],
+                );
+            }
             stats.literals = input.len;
         },
         .greedy => {
-            const plan = try lz77.hashGreedyPlanAlloc(allocator, input, .{
+            const plan = try lz77.hashGreedyPlanAllocWithDictionary(allocator, input, active_dictionary, .{
                 .window_len = options.dictionary_size,
                 .max_chain = 64,
                 .nice_len = 64,
@@ -324,10 +376,22 @@ pub fn encodeChunkAppendWithStats(
             stats.literals = plan.stats.literals;
             stats.matches = plan.stats.matches;
             stats.matched_bytes = plan.stats.matched_bytes;
-            try model.encodeTokens(&range, input, plan.tokens, &stats);
+            const consumed = try model.encodeTokensWithDictionary(
+                &range,
+                input,
+                active_dictionary,
+                plan.tokens,
+                stream_start,
+                &stats,
+            );
+            if (consumed != input.len) return error.InvalidMatch;
         },
     }
-    if (options.end_marker) try model.encodeEndMarker(&range, input.len);
+    if (options.end_marker) {
+        const end_position = std.math.add(usize, stream_start, input.len) catch
+            return error.IntegerOverflow;
+        try model.encodeEndMarker(&range, end_position);
+    }
     try range.finish();
 
     try output.ensureUnusedCapacity(allocator, encoded.items.len);
@@ -347,6 +411,50 @@ fn byteAt(dictionary: []const u8, input: []const u8, position: usize) u8 {
         dictionary[position]
     else
         input[position - dictionary.len];
+}
+
+test "LZMA chunk encoder uses bounded preset dictionary history" {
+    var dictionary: [4096]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&dictionary) |*byte| {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        byte.* = @truncate(state);
+    }
+    const input = dictionary[dictionary.len - 1024 ..];
+
+    var independent: std.ArrayList(u8) = .empty;
+    defer independent.deinit(std.testing.allocator);
+    _ = try encodeChunkAppend(std.testing.allocator, &independent, input, .{});
+
+    var dependent: std.ArrayList(u8) = .empty;
+    defer dependent.deinit(std.testing.allocator);
+    const stats = try encodeChunkAppendWithDictionaryStats(
+        std.testing.allocator,
+        &dependent,
+        input,
+        &dictionary,
+        dictionary.len,
+        .{},
+    );
+    try std.testing.expect(stats.matches != 0);
+    try std.testing.expectEqual(input.len, stats.matched_bytes);
+    try std.testing.expect(dependent.items.len + 512 < independent.items.len);
+
+    const before_invalid = dependent.items.len;
+    try std.testing.expectError(
+        error.InvalidLzmaOptions,
+        encodeChunkAppendWithDictionary(
+            std.testing.allocator,
+            &dependent,
+            input,
+            &dictionary,
+            dictionary.len - 1,
+            .{},
+        ),
+    );
+    try std.testing.expectEqual(before_invalid, dependent.items.len);
 }
 
 pub fn propertyByte(properties: Properties) Error!u8 {

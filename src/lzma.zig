@@ -1,4 +1,5 @@
 const decoder = @import("lzma/decoder.zig");
+const chunk_encoder = @import("lzma/encoder.zig");
 const incremental_decoder = @import("lzma/incremental_decoder.zig");
 const incremental_encoder = @import("lzma/incremental_encoder.zig");
 const incremental_encoder_tests = @import("lzma/incremental_encoder_tests.zig");
@@ -36,6 +37,7 @@ pub const encodeInto = writer.encodeInto;
 
 test {
     _ = decoder;
+    _ = chunk_encoder;
     _ = incremental_decoder;
     _ = incremental_encoder;
     _ = incremental_encoder_tests;

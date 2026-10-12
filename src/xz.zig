@@ -3,6 +3,7 @@ const incremental_decoder = @import("xz/incremental_decoder.zig");
 const incremental_encoder = @import("xz/incremental_encoder.zig");
 const incremental_encoder_tests = @import("xz/incremental_encoder_tests.zig");
 const incremental_tests = @import("xz/incremental_tests.zig");
+const lzma2_writer = @import("xz/lzma2_writer.zig");
 const writer = @import("xz/writer.zig");
 
 pub const Error = container.Error || writer.Error || incremental_decoder.Decoder.Error || incremental_encoder.Encoder.Error;
@@ -37,5 +38,6 @@ test {
     _ = incremental_encoder;
     _ = incremental_encoder_tests;
     _ = incremental_tests;
+    _ = lzma2_writer;
     _ = writer;
 }
