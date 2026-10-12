@@ -18183,6 +18183,11 @@ reuse, so production keeps the simpler independently owned plans.
   `LZ4_compress_HC_destSize` byte-for-byte across all compression levels,
   verify pre-postfix SHA-256 values, and apply postfix corrections. Independent
   system-liblz4 fixtures cover both operation kinds, padding layouts, and the
-  LZ4HC hash-chain and optimal parsers. ZUCCHINI remains an explicit
-  unsupported follow-up. See
+  LZ4HC hash-chain and optimal parsers. ZUCCHINI now decodes the Brotli OTA
+  envelope and applies bounded v1 NoOp/raw elements with CRC, equivalence,
+  extra-data, and raw-delta validation. A pinned AOSP reader fixture,
+  independent Python wire generator, range tests, malformed cases, and a valid
+  raw-byte fuzz seed cover this baseline. PE/ELF/DEX/ZTF reference correction
+  remains an explicit follow-up rather than silently treating executable
+  elements as raw data. See
   `docs/formats/android-ota.md`.

@@ -16,6 +16,8 @@ pub const Error = core.Error || error{
     InvalidLz4diffPatch,
     UnsupportedLz4diffPatch,
     UnsupportedLz4diffCompression,
+    InvalidZucchiniPatch,
+    UnsupportedZucchiniPatch,
 };
 
 pub const magic = "CrAU";

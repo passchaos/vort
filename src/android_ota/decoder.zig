@@ -1,12 +1,14 @@
 const std = @import("std");
+const br = @import("../br.zig");
 const bzip2 = @import("../bzip2.zig");
 const xz = @import("../xz.zig");
 const bsdiff = @import("bsdiff.zig");
 const puffin = @import("puffin.zig");
 const lz4diff = @import("lz4diff.zig");
+const zucchini = @import("zucchini.zig");
 const format = @import("format.zig");
 
-pub const Error = format.Error || bzip2.Error || xz.Error || bsdiff.Error || puffin.Error || lz4diff.Error ||
+pub const Error = format.Error || bzip2.Error || xz.Error || bsdiff.Error || puffin.Error || lz4diff.Error || zucchini.Error ||
     std.mem.Allocator.Error;
 
 pub const Options = struct {
@@ -19,6 +21,10 @@ pub const Options = struct {
     max_lz4diff_header_len: usize = 16 * 1024 * 1024,
     max_lz4diff_blocks: usize = 1 << 20,
     max_lz4diff_decompressed_len: usize = 1024 * 1024 * 1024,
+    max_zucchini_patch_len: usize = 1024 * 1024 * 1024,
+    max_zucchini_elements: usize = 1 << 20,
+    max_zucchini_equivalences: usize = 1 << 24,
+    max_zucchini_target_pools: usize = 1 << 20,
     verify_partition_hash: bool = true,
     verify_source_hashes: bool = true,
     discard_as_zero: bool = false,
@@ -262,6 +268,43 @@ pub fn readPartitionRangeInto(
                         .max_puffin_header_len = options.max_puffin_header_len,
                         .max_puffin_extents = options.max_puffin_extents,
                         .max_puff_stream_len = options.max_puff_stream_len,
+                    },
+                );
+                owned = decoded;
+                break :blk decoded;
+            },
+            .zucchini => blk: {
+                const old_bytes = try readSourceExtentsAlloc(
+                    allocator,
+                    source_bytes orelse return error.MissingAndroidOtaSource,
+                    view.sourceExtents(operation),
+                    view.block_size,
+                    options.max_operation_output_len,
+                );
+                defer allocator.free(old_bytes);
+                if (operation.src_sha256_hash.len != 0)
+                    try verifySha256(old_bytes, operation.src_sha256_hash);
+                const expected = try operationOutputLength(
+                    destinations,
+                    view.block_size,
+                    options.max_operation_output_len,
+                );
+                const decoded_patch = try br.decodeStreamAllocLimited(
+                    allocator,
+                    view.operationBlob(operation),
+                    options.max_zucchini_patch_len,
+                );
+                defer allocator.free(decoded_patch);
+                const decoded = try zucchini.applyAlloc(
+                    allocator,
+                    old_bytes,
+                    decoded_patch,
+                    expected,
+                    .{
+                        .max_output_len = options.max_operation_output_len,
+                        .max_elements = options.max_zucchini_elements,
+                        .max_equivalences = options.max_zucchini_equivalences,
+                        .max_target_pools = options.max_zucchini_target_pools,
                     },
                 );
                 owned = decoded;

@@ -7,6 +7,7 @@ const bsdiff = @import("android_ota/bsdiff.zig");
 const puffin_codec = @import("android_ota/puffin_codec.zig");
 const puffin = @import("android_ota/puffin.zig");
 const lz4diff = @import("android_ota/lz4diff.zig");
+const zucchini = @import("android_ota/zucchini.zig");
 const writer = @import("android_ota/writer.zig");
 
 pub const Error = format.Error || protobuf.Error || manifest.Error ||
@@ -30,6 +31,12 @@ pub const Lz4diffCompressionInfo = lz4diff.CompressionInfo;
 pub const Lz4diffPatch = lz4diff.Patch;
 pub const Lz4diffParseOptions = lz4diff.ParseOptions;
 pub const Lz4diffApplyOptions = lz4diff.ApplyOptions;
+pub const ZucchiniExecutableType = zucchini.ExecutableType;
+pub const ZucchiniHeader = zucchini.Header;
+pub const ZucchiniElement = zucchini.Element;
+pub const ZucchiniPatch = zucchini.Patch;
+pub const ZucchiniParseOptions = zucchini.ParseOptions;
+pub const ZucchiniApplyOptions = zucchini.ApplyOptions;
 pub const PuffResult = puffin_codec.PuffResult;
 pub const Compression = writer.Compression;
 pub const EncodePartition = writer.EncodePartition;
@@ -40,6 +47,8 @@ pub const applyBsdiffAlloc = bsdiff.applyAlloc;
 pub const applyPuffinAlloc = puffin.applyAlloc;
 pub const parseLz4diffAlloc = lz4diff.parseAlloc;
 pub const applyLz4diffAlloc = lz4diff.applyAlloc;
+pub const parseZucchiniAlloc = zucchini.parseAlloc;
+pub const applyZucchiniAlloc = zucchini.applyAlloc;
 pub const puffinDecodedSizeAlloc = puffin.decodedSizeAlloc;
 pub const puffDeflateAlloc = puffin_codec.puffDeflateAlloc;
 pub const puffDeflatePaddedAlloc = puffin_codec.puffDeflatePaddedAlloc;
@@ -55,6 +64,7 @@ test {
     _ = puffin_codec;
     _ = puffin;
     _ = lz4diff;
+    _ = zucchini;
     _ = writer;
     _ = @import("android_ota/test.zig");
 }

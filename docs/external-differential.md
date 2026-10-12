@@ -176,6 +176,11 @@ and range output. LZ4HC fixtures exercise levels 5, 9, 10, and 12 so both the
 hash-chain and optimal parsers are covered. The pure-Zig fill-output encoders
 are also compared directly against pinned liblz4 1.9.3 vectors in focused
 tests.
+With Python's Brotli module, the driver independently serializes Zucchini v1
+headers, a canonical NoOp element, equivalence streams, and raw byte deltas;
+it then applies the required Brotli OTA envelope and requires byte-identical
+whole-partition and range output. A patch-reader fixture copied from AOSP's
+Zucchini tests separately pins the little-endian v1 wire layout.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

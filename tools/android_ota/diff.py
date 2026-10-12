@@ -15,6 +15,11 @@ import tempfile
 import zlib
 from pathlib import Path
 
+try:
+    import brotli as python_brotli
+except ImportError:
+    python_brotli = None
+
 
 MAGIC = b"CrAU"
 BLOCK_SIZE = 4096
@@ -26,6 +31,7 @@ SOURCE_BSDIFF = 5
 ZERO = 6
 REPLACE_XZ = 8
 PUFFDIFF = 9
+ZUCCHINI = 11
 LZ4DIFF_BSDIFF = 12
 LZ4DIFF_PUFFDIFF = 13
 
@@ -414,6 +420,71 @@ def lz4diff_payload(
     return payload, source_physical, target_physical
 
 
+def zucchini_payload() -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source = random.Random(0x5A554343).randbytes(BLOCK_SIZE)
+    target_mutable = bytearray(source)
+    changed: list[int] = []
+    for index in range(0, len(target_mutable), 97):
+        target_mutable[index] ^= ((index * 13 + 7) & 0xFF) or 1
+        changed.append(index)
+    target = bytes(target_mutable)
+
+    raw_skips = bytearray()
+    raw_diffs = bytearray()
+    compensation = 0
+    for index in changed:
+        raw_skips += varint(index - compensation)
+        raw_diffs.append((target[index] - source[index]) & 0xFF)
+        compensation = index + 1
+
+    zucchini_patch = bytearray(b"Zucc")
+    zucchini_patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    zucchini_patch += struct.pack("<I", 1)
+    zucchini_patch += struct.pack(
+        "<IIII4sH",
+        0,
+        len(source),
+        0,
+        len(target),
+        b"NoOp",
+        1,
+    )
+    zucchini_patch += struct.pack("<I", 1) + b"\0"
+    zucchini_patch += struct.pack("<I", 1) + b"\0"
+    zucchini_patch += struct.pack("<I", len(varint(len(source)))) + varint(len(source))
+    zucchini_patch += struct.pack("<I", 0)
+    zucchini_patch += struct.pack("<I", len(raw_skips)) + raw_skips
+    zucchini_patch += struct.pack("<I", len(raw_diffs)) + raw_diffs
+    zucchini_patch += struct.pack("<I", 0)
+    zucchini_patch += struct.pack("<I", 0)
+    compressed_patch = python_brotli.compress(bytes(zucchini_patch), quality=9)
+
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0)
+    operation_message += vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1))
+    operation_message += bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition = bytearray(bfield(1, b"zucchini"))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
 def source_bsdiff_payload(source: bytes) -> tuple[bytes, bytes, bytes]:
     if len(source) != 2 * BLOCK_SIZE:
         raise AssertionError("SOURCE_BSDIFF fixture must be two blocks")
@@ -616,6 +687,7 @@ def main() -> None:
     puffin_cases = 0
     puff_codec_cases = 0
     lz4diff_cases = 0
+    zucchini_cases = 0
     with tempfile.TemporaryDirectory(prefix="vort-android-ota-") as temp_text:
         temp = Path(temp_text)
         source = temp / "system.img"
@@ -950,6 +1022,40 @@ def main() -> None:
                 lz4diff_cases += 1
                 ranges += 1
 
+        if python_brotli is not None:
+            zucchini_data, zucchini_source, zucchini_expected = zucchini_payload()
+            zucchini_payload_path = temp / "zucchini.bin"
+            zucchini_payload_path.write_bytes(zucchini_data)
+            zucchini_source_path = temp / "zucchini-old.img"
+            zucchini_source_path.write_bytes(zucchini_source)
+            zucchini_output = temp / "zucchini-new.img"
+            run(
+                args.cli,
+                "extract-android-ota",
+                zucchini_payload_path,
+                "zucchini",
+                zucchini_output,
+                len(zucchini_expected),
+                zucchini_source_path,
+            )
+            if zucchini_output.read_bytes() != zucchini_expected:
+                raise AssertionError("ZUCCHINI NoOp decode mismatch")
+            zucchini_range = temp / "zucchini-range.img"
+            run(
+                args.cli,
+                "extract-android-ota-range",
+                zucchini_payload_path,
+                "zucchini",
+                zucchini_range,
+                197,
+                907,
+                zucchini_source_path,
+            )
+            if zucchini_range.read_bytes() != zucchini_expected[197:1104]:
+                raise AssertionError("ZUCCHINI NoOp range mismatch")
+            zucchini_cases += 1
+            ranges += 1
+
         short = temp / "short.bin"
         short.write_bytes(MAGIC)
         expect_failure(args.cli, "inspect-android-ota", short, error_name="TruncatedFrame")
@@ -1089,6 +1195,7 @@ def main() -> None:
         f"puff_codec={puff_codec_oracle is not None} "
         f"puff_codec_cases={puff_codec_cases} "
         f"lz4={lz4_oracle is not None} lz4diff_cases={lz4diff_cases} "
+        f"python_brotli={python_brotli is not None} zucchini_cases={zucchini_cases} "
         f"aosp={args.aosp_update_engine is not None} aosp_full={aosp_full} "
         f"aosp_delta={aosp_delta}"
     )

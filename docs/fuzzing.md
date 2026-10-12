@@ -24,10 +24,11 @@ Coverage-guided fuzzing should target these parser surfaces first:
 The shared raw-byte target also probes bounded container readers, including
 Android sparse v1 metadata and CRC checkpoints plus Android OTA v2 headers,
 protobuf manifests, operation hashes, short partition/range reads, and bounded
-BSDIFF40/BSDF2, PUF1/PUFFDIFF, and LZ4DIFF application. Valid seeds exercise
-all three nested patch surfaces rather than only malformed header rejection;
-the LZ4DIFF seed reaches a complete BSDIFF application and LZ4HC level-5
-target reconstruction.
+BSDIFF40/BSDF2, PUF1/PUFFDIFF, LZ4DIFF, and Zucchini v1 application. Valid
+seeds exercise each nested patch surface rather than only malformed header
+rejection; the LZ4DIFF seed reaches a complete BSDIFF application and LZ4HC
+level-5 target reconstruction, while the Zucchini seed reaches CRC-checked
+NoOp literal application.
 
 The `tools/fuzz_corpus.zig` command is intentionally hex-sample based so corpus
 reducers can feed minimized byte strings without inventing a file format.

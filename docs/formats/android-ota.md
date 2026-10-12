@@ -33,6 +33,20 @@ liblz4 1.9.3 `LZ4_compress_destSize` and `LZ4_compress_HC_destSize`. LZ4HC
 levels 1 through 12, the default-level mapping for non-positive values, and the
 level-12 cap for larger values follow upstream behavior. Optional pre-postfix
 SHA-256 values and per-cluster postfix BSDIFF corrections are enforced.
+
+ZUCCHINI operations first decode Android's Brotli envelope, then parse the
+little-endian Zucchini ensemble-patch v1 format. The bounded reader validates
+file sizes and CRC-32 values, complete destination element coverage, element
+versions and geometry, length-prefixed substreams, synchronized signed/unsigned
+varints, ordered equivalences, exact extra-data accounting, raw-delta offsets,
+target-pool limits, trailing bytes, and output limits. NoOp/raw elements apply
+equivalence copies, literal gaps, and byte deltas and are available through the
+standalone `parseAndroidZucchiniAlloc` and `applyAndroidZucchiniAlloc` APIs as
+well as OTA extraction. Executable elements that require PE/ELF/DEX/ZTF
+reference correction are parsed but explicitly return
+`UnsupportedZucchiniPatch` until their architecture-specific disassemblers are
+implemented.
+
 The bsdiff patch
 reader accepts traditional `BSDIFF40` with three Bzip2 streams and Android's
 `BSDF2`, whose control, diff, and extra streams independently select Bzip2 or
@@ -159,11 +173,14 @@ ordinary and zero-padded LZ4DIFF_BSDIFF/LZ4DIFF_PUFFDIFF payloads with
 `LZ4_compress_destSize` and `LZ4_compress_HC_destSize`; Vort must reconstruct
 both complete clusters and bounded ranges byte-for-byte. The LZ4HC cases span
 hash-chain levels 5 and 9 plus optimal-parser levels 10 and 12.
+When Python's Brotli module is available, the same driver independently emits
+a canonical Zucchini v1 NoOp patch with equivalences and raw deltas, wraps it
+in Brotli, and verifies whole-partition and bounded-range OTA extraction.
 
 Current explicit limitations are major-version-1 payloads, cryptographic
-verification of vendor metadata/payload signatures, and ZUCCHINI. ZUCCHINI is
-retained in the parsed model but extraction returns
-`UnsupportedAndroidOtaOperation`. DISCARD is likewise rejected by default
+verification of vendor metadata/payload signatures, and architecture-specific
+Zucchini reference correction for PE, ELF, DEX, and ZTF elements. DISCARD is
+likewise rejected by default
 because Android defines its read-back contents as undefined; callers may opt
 into deterministic zero interpretation through `DecodeOptions.discard_as_zero`.
 Streaming file I/O remains future work.

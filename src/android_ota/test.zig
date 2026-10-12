@@ -1,8 +1,10 @@
 const std = @import("std");
 const bzip2 = @import("../bzip2.zig");
+const br = @import("../br.zig");
 const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
 const lz4diff = @import("lz4diff.zig");
+const zucchini = @import("zucchini.zig");
 const protobuf = @import("protobuf.zig");
 const puffin_mod = @import("puffin.zig");
 const writer = @import("writer.zig");
@@ -286,6 +288,53 @@ test "Android OTA LZ4DIFF BSDIFF and PUFFDIFF operations apply through extents" 
         defer allocator.free(range);
         try std.testing.expectEqualSlices(u8, expected[301..1212], range);
     }
+}
+
+test "Android OTA ZUCCHINI applies Brotli wrapped NoOp patches through extents" {
+    const source = [_]u8{0x25} ** 4096;
+    var expected = [_]u8{0x47} ** 4096;
+    for (&expected, 0..) |*byte, index| {
+        if (index % 73 == 0) byte.* = @truncate(index * 11);
+    }
+    const raw_patch = try zucchini.testLiteralPatchAlloc(
+        allocator,
+        &source,
+        &expected,
+    );
+    defer allocator.free(raw_patch);
+    const compressed_patch = try br.encodeStoredStreamAlloc(
+        allocator,
+        raw_patch,
+    );
+    defer allocator.free(compressed_patch);
+    const payload = try sourceDiffPayloadAlloc(
+        allocator,
+        &source,
+        &expected,
+        compressed_patch,
+        .zucchini,
+    );
+    defer allocator.free(payload);
+    var archive = try archive_mod.Archive.initAlloc(allocator, payload, .{});
+    defer archive.deinit();
+    const decoded = try archive.decodePartitionAllocLimited(
+        allocator,
+        0,
+        &source,
+        expected.len,
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &expected, decoded);
+    const range = try archive.readPartitionRangeAllocLimited(
+        allocator,
+        0,
+        &source,
+        257,
+        733,
+        733,
+    );
+    defer allocator.free(range);
+    try std.testing.expectEqualSlices(u8, expected[257..990], range);
 }
 
 test "Android OTA rejects malformed headers blobs and hashes" {

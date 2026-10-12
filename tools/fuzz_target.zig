@@ -162,6 +162,31 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         );
         const source = data[4..][0..source_len];
         const patch = data[4 + source_len ..];
+        if (vort.applyAndroidZucchiniAlloc(
+            allocator,
+            source,
+            patch,
+            expected_size,
+            .{
+                .max_output_len = 1 << 20,
+                .max_elements = 4096,
+                .max_equivalences = 1 << 16,
+                .max_target_pools = 4096,
+            },
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedAndroidOtaError(err)) return err;
+        }
+    }
+    if (data.len >= 4) {
+        const expected_size: usize = std.mem.readInt(u16, data[0..2], .little);
+        const source_len = @min(
+            @as(usize, std.mem.readInt(u16, data[2..4], .little)),
+            data.len - 4,
+        );
+        const source = data[4..][0..source_len];
+        const patch = data[4 + source_len ..];
         if (vort.applyAndroidLz4diffAlloc(
             allocator,
             source,
@@ -1708,6 +1733,9 @@ pub fn main(init: std.process.Init) !void {
     const lz4diff_sample = try makeLz4diffFuzzSampleAlloc(init.gpa);
     defer init.gpa.free(lz4diff_sample);
     try fuzzOne(init.gpa, lz4diff_sample);
+    const zucchini_sample = try makeZucchiniFuzzSampleAlloc(init.gpa);
+    defer init.gpa.free(zucchini_sample);
+    try fuzzOne(init.gpa, zucchini_sample);
     inline for (.{
         .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
         .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },
@@ -2322,6 +2350,8 @@ fn isExpectedAndroidOtaError(err: anyerror) bool {
         error.InvalidLz4diffPatch,
         error.UnsupportedLz4diffPatch,
         error.UnsupportedLz4diffCompression,
+        error.InvalidZucchiniPatch,
+        error.UnsupportedZucchiniPatch,
         error.InvalidMagic,
         error.UnsupportedVersion,
         error.TruncatedFrame,
@@ -2485,6 +2515,23 @@ fn makeLz4diffFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
     try sample.appendSlice(allocator, &header);
     try sample.appendSlice(allocator, inner_patch.items);
     return sample.toOwnedSlice(allocator);
+}
+
+fn makeZucchiniFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
+    return allocator.dupe(u8, &.{
+        0x04, 0x00, 0x04, 0x00, 0x61, 0x62, 0x63, 0x64,
+        0x5a, 0x75, 0x63, 0x63, 0x01, 0x00, 0x00, 0x00,
+        0x04, 0x00, 0x00, 0x00, 0x11, 0xcd, 0x82, 0xed,
+        0x04, 0x00, 0x00, 0x00, 0x4c, 0x24, 0x63, 0xc3,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x04, 0x00, 0x00, 0x00, 0x4e, 0x6f, 0x4f, 0x70,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+        0x77, 0x78, 0x79, 0x7a, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    });
 }
 
 fn makeDiscoverableWiiDiscAlloc(
