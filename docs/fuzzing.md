@@ -23,7 +23,8 @@ Coverage-guided fuzzing should target these parser surfaces first:
 
 The shared raw-byte target also probes bounded container readers, including
 Android sparse v1 metadata and CRC checkpoints plus Android OTA v2 headers,
-protobuf manifests, operation hashes, and short partition/range reads.
+protobuf manifests, operation hashes, short partition/range reads, and bounded
+BSDIFF40/BSDF2 patch application.
 
 The `tools/fuzz_corpus.zig` command is intentionally hex-sample based so corpus
 reducers can feed minimized byte strings without inventing a file format.

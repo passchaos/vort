@@ -18162,12 +18162,16 @@ reuse, so production keeps the simpler independently owned plans.
 - Added dependency-free Android update-engine payload v2 reading and
   deterministic full-payload writing. A bounded proto2 wire parser indexes
   partitions, operations, and extents without generated protobuf bindings.
-  Extraction covers RAW, Bzip2, XZ, ZERO, and caller-supplied SOURCE_COPY data,
-  verifies stored-data/source/final SHA-256 values, and exposes bounded whole
-  partition and cross-operation range APIs. The writer emits multiple named
+  Extraction covers RAW, Bzip2, XZ, ZERO, caller-supplied SOURCE_COPY data,
+  legacy SOURCE_BSDIFF, and Android BROTLI_BSDIFF. The bounded patch engine
+  accepts BSDIFF40 plus per-stream Bzip2/Brotli BSDF2, verifies exact stream and
+  control consumption, and handles signed source seeks. It verifies
+  stored-data/source/final SHA-256 values and exposes bounded whole partition
+  and cross-operation range APIs. The writer emits multiple named
   partitions with deterministic chunking, zero detection, forced codec modes,
   or automatic raw/Bzip2/XZ selection. Focused tests, shared raw-byte fuzzing,
-  an independent Python implementation, and Rust `payload_dumper` extraction
-  cover the baseline. Major version 1, vendor signature verification,
-  BSDIFF/BROTLI_BSDIFF/PUFFDIFF/ZUCCHINI/LZ4DIFF patch engines, and streaming
-  file I/O remain explicit follow-up work. See `docs/formats/android-ota.md`.
+  an independent Python implementation, upstream `bspatch`, Rust
+  `payload_dumper`, and both partitions of AOSP's official full and delta
+  fixtures cover the baseline. Major version 1, vendor signature verification,
+  PUFFDIFF/ZUCCHINI/LZ4DIFF patch engines, and streaming file I/O remain
+  explicit follow-up work. See `docs/formats/android-ota.md`.

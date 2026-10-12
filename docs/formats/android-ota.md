@@ -21,10 +21,15 @@ payload. It validates:
   the corresponding data is supplied.
 
 Full OTA extraction supports `REPLACE`, `REPLACE_BZ`, `REPLACE_XZ`, and `ZERO`.
-Delta payload `SOURCE_COPY` operations are also supported with an explicit old
-partition image. Whole-partition and bounded range extraction share the same
-operation engine; range extraction only expands intersecting compressed
-operations and enforces a separate per-operation output limit.
+Delta payload `SOURCE_COPY`, legacy `SOURCE_BSDIFF`, and `BROTLI_BSDIFF`
+operations are also supported with an explicit old partition image. The patch
+reader accepts traditional `BSDIFF40` with three Bzip2 streams and Android's
+`BSDF2`, whose control, diff, and extra streams independently select Bzip2 or
+Brotli. Patch output, decompressed control bytes, stream consumption, signed
+source seeks, and forward progress are bounded and validated. Whole-partition
+and bounded range extraction share the same operation engine; range extraction
+only expands intersecting compressed or patch operations and enforces separate
+per-operation and bsdiff-control limits.
 
 ```zig
 var payload = try vort.parseAndroidOtaAlloc(allocator, payload_bytes, .{
@@ -43,6 +48,16 @@ const system = try payload.decodePartitionAllocLimited(
     max_output,
 );
 defer allocator.free(system);
+
+// The low-level patch API is also available independently of payload.bin.
+const patched = try vort.applyAndroidBsdiffAlloc(
+    allocator,
+    old_bytes,
+    patch_bytes,
+    expected_size,
+    .{ .max_output_len = expected_size },
+);
+defer allocator.free(patched);
 ```
 
 The deterministic full-payload writer accepts multiple named, block-aligned
@@ -83,19 +98,21 @@ zig build run-android-ota-diff
 The differential uses an independent Python protobuf implementation and the
 standard-library Bzip2/XZ decoders. It checks a byte-exact raw manifest, all four
 writer modes, a separately generated mixed-operation payload, bounded ranges,
-malformed metadata, and deterministic mutations. When the Rust
+an independently generated BSDIFF40/SOURCE_BSDIFF payload, malformed metadata,
+and deterministic mutations. When an upstream-compatible `bspatch` is present,
+it independently applies the same Python-generated patch. When the Rust
 `payload_dumper` command is installed, it independently extracts all four Vort
 outputs; an explicit binary can be supplied with
-`-- --payload-dumper /path/to/payload_dumper`. Passing an AOSP update-engine
+`-- --payload-dumper /path/to/payload_dumper`; select bspatch with
+`--bspatch /path/to/bspatch`. Passing an AOSP update-engine
 checkout with `--aosp-update-engine /path/to/update_engine` additionally checks
-both partitions in its official full payload and the independently decodable
-partition in its delta payload; the fixture's BROTLI_BSDIFF partition must fail
-with the documented unsupported-operation error.
+both partitions in its official full payload and both partitions in its delta
+payload, including its genuine all-Brotli BSDF2 kernel patch.
 
 Current explicit limitations are major-version-1 payloads, cryptographic
 verification of vendor metadata/payload signatures, and patch engines for
-SOURCE_BSDIFF, BROTLI_BSDIFF, PUFFDIFF, ZUCCHINI, and LZ4DIFF. Those operations
-are retained in the parsed model but extraction returns
+PUFFDIFF, ZUCCHINI, and LZ4DIFF. Those operations are retained in the parsed
+model but extraction returns
 `UnsupportedAndroidOtaOperation`. DISCARD is likewise rejected by default
 because Android defines its read-back contents as undefined; callers may opt
 into deterministic zero interpretation through `DecodeOptions.discard_as_zero`.

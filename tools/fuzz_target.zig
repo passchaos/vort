@@ -822,6 +822,23 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedAndroidOtaError(err)) return err;
     }
+    if (data.len >= 2) {
+        const expected_size: usize = std.mem.readInt(u16, data[0..2], .little);
+        if (vort.applyAndroidBsdiffAlloc(
+            allocator,
+            "",
+            data[2..],
+            expected_size,
+            .{
+                .max_output_len = 1 << 20,
+                .max_control_bytes = 1 << 20,
+            },
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedAndroidOtaError(err)) return err;
+        }
+    }
     const fuzz_wii_keys = [_]vort.WiaWiiCommonKey{
         .{ .index = 0, .key = @splat(0) },
         .{ .index = 1, .key = @splat(0) },
@@ -1627,6 +1644,9 @@ pub fn main(init: std.process.Init) !void {
     );
     defer init.gpa.free(android_ota);
     try fuzzOne(init.gpa, android_ota);
+    const bsdiff_sample = try makeBsdiffFuzzSampleAlloc(init.gpa);
+    defer init.gpa.free(bsdiff_sample);
+    try fuzzOne(init.gpa, bsdiff_sample);
     inline for (.{
         .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
         .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },
@@ -2233,6 +2253,8 @@ fn isExpectedAndroidOtaError(err: anyerror) bool {
         error.MissingAndroidOtaSource,
         error.DuplicateAndroidOtaPartition,
         error.IncompleteAndroidOtaPartition,
+        error.InvalidBsdiffPatch,
+        error.UnsupportedBsdiffCompression,
         error.InvalidMagic,
         error.UnsupportedVersion,
         error.TruncatedFrame,
@@ -2251,6 +2273,9 @@ fn isExpectedAndroidOtaError(err: anyerror) bool {
         error.InvalidLzmaOptions,
         error.InvalidMatch,
         error.InvalidHuffmanCode,
+        error.CorruptFrame,
+        error.UnsupportedBrotliFeature,
+        error.InputTooSmall,
         error.TrailingData,
         => true,
         else => false,
@@ -2268,6 +2293,40 @@ fn isExpectedWiiDiscError(err: anyerror) bool {
         => true,
         else => false,
     };
+}
+
+fn makeBsdiffFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
+    var control: [24]u8 = @splat(0);
+    std.mem.writeInt(u64, control[0..8], 4, .little);
+    const control_compressed = try vort.encodeBzip2Alloc(
+        allocator,
+        &control,
+        .{},
+    );
+    defer allocator.free(control_compressed);
+    const diff_compressed = try vort.encodeBzip2Alloc(
+        allocator,
+        "abXY",
+        .{},
+    );
+    defer allocator.free(diff_compressed);
+    const extra_compressed = try vort.encodeBzip2Alloc(allocator, "", .{});
+    defer allocator.free(extra_compressed);
+    var sample: std.ArrayList(u8) = .empty;
+    errdefer sample.deinit(allocator);
+    var expected_size: [2]u8 = undefined;
+    std.mem.writeInt(u16, &expected_size, 4, .little);
+    try sample.appendSlice(allocator, &expected_size);
+    try sample.appendSlice(allocator, "BSDIFF40");
+    var lengths: [24]u8 = @splat(0);
+    std.mem.writeInt(u64, lengths[0..8], control_compressed.len, .little);
+    std.mem.writeInt(u64, lengths[8..16], diff_compressed.len, .little);
+    std.mem.writeInt(u64, lengths[16..24], 4, .little);
+    try sample.appendSlice(allocator, &lengths);
+    try sample.appendSlice(allocator, control_compressed);
+    try sample.appendSlice(allocator, diff_compressed);
+    try sample.appendSlice(allocator, extra_compressed);
+    return sample.toOwnedSlice(allocator);
 }
 
 fn makeDiscoverableWiiDiscAlloc(

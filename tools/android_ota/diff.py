@@ -18,6 +18,7 @@ HEADER_SIZE = 24
 REPLACE = 0
 REPLACE_BZ = 1
 SOURCE_COPY = 4
+SOURCE_BSDIFF = 5
 ZERO = 6
 REPLACE_XZ = 8
 
@@ -190,6 +191,62 @@ def source_copy_payload(source: bytes) -> tuple[bytes, bytes]:
     return MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest, target
 
 
+def signed_magnitude(value: int) -> bytes:
+    magnitude = abs(value)
+    if magnitude > (1 << 63) - 1:
+        raise AssertionError("signed-magnitude value is too large")
+    if value < 0:
+        magnitude |= 1 << 63
+    return struct.pack("<Q", magnitude)
+
+
+def source_bsdiff_payload(source: bytes) -> tuple[bytes, bytes, bytes]:
+    if len(source) != 2 * BLOCK_SIZE:
+        raise AssertionError("SOURCE_BSDIFF fixture must be two blocks")
+    target_first = bytearray(source[:BLOCK_SIZE])
+    for index in range(0, BLOCK_SIZE, 31):
+        target_first[index] ^= (index * 17 + 3) & 0xFF
+    target_second = (b"independent BSDIFF40 extra stream\n" * 160)[:BLOCK_SIZE]
+    target_second += bytes(BLOCK_SIZE - len(target_second))
+    target = bytes(target_first) + target_second
+    diff = bytes(
+        (new - old) & 0xFF
+        for old, new in zip(source[:BLOCK_SIZE], target_first)
+    )
+    control = (
+        signed_magnitude(BLOCK_SIZE)
+        + signed_magnitude(BLOCK_SIZE)
+        + signed_magnitude(0)
+    )
+    control_compressed = bz2.compress(control, compresslevel=9)
+    diff_compressed = bz2.compress(diff, compresslevel=9)
+    extra_compressed = bz2.compress(target_second, compresslevel=9)
+    patch = (
+        b"BSDIFF40"
+        + signed_magnitude(len(control_compressed))
+        + signed_magnitude(len(diff_compressed))
+        + signed_magnitude(len(target))
+        + control_compressed
+        + diff_compressed
+        + extra_compressed
+    )
+
+    operation_message = bytearray(vfield(1, SOURCE_BSDIFF))
+    operation_message += vfield(2, 0)
+    operation_message += vfield(3, len(patch))
+    operation_message += bfield(4, extent(0, 2))
+    operation_message += bfield(6, extent(0, 2))
+    operation_message += bfield(8, hashlib.sha256(patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition = bytearray(bfield(1, b"product"))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 4) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + patch
+    return payload, target, patch
+
+
 def decode_reference(payload: bytes) -> dict[str, bytes]:
     if payload[:4] != MAGIC:
         raise AssertionError("bad magic")
@@ -292,9 +349,13 @@ def main() -> None:
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--payload-dumper", type=Path)
     parser.add_argument("--aosp-update-engine", type=Path)
+    parser.add_argument("--bspatch", type=Path)
     args = parser.parse_args()
     oracle = args.payload_dumper or (
         Path(found) if (found := shutil.which("payload_dumper")) else None
+    )
+    bspatch = args.bspatch or (
+        Path(found) if (found := shutil.which("bspatch")) else None
     )
 
     source_bytes = writer_payload()
@@ -305,7 +366,7 @@ def main() -> None:
     malformed = 0
     aosp_full = 0
     aosp_delta = 0
-    aosp_unsupported = 0
+    bspatch_cases = 0
     with tempfile.TemporaryDirectory(prefix="vort-android-ota-") as temp_text:
         temp = Path(temp_text)
         source = temp / "system.img"
@@ -434,6 +495,50 @@ def main() -> None:
             raise AssertionError("SOURCE_COPY range mismatch")
         ranges += 1
 
+        source_bsdiff_bytes = random.Random(0x42534449).randbytes(2 * BLOCK_SIZE)
+        source_bsdiff, source_bsdiff_expected, source_patch = source_bsdiff_payload(
+            source_bsdiff_bytes
+        )
+        source_bsdiff_path = temp / "source-bsdiff.bin"
+        source_bsdiff_path.write_bytes(source_bsdiff)
+        bsdiff_old = temp / "product-old.img"
+        bsdiff_old.write_bytes(source_bsdiff_bytes)
+        bsdiff_output = temp / "product-new.img"
+        run(
+            args.cli,
+            "extract-android-ota",
+            source_bsdiff_path,
+            "product",
+            bsdiff_output,
+            len(source_bsdiff_expected),
+            bsdiff_old,
+        )
+        if bsdiff_output.read_bytes() != source_bsdiff_expected:
+            raise AssertionError("SOURCE_BSDIFF decode mismatch")
+        reader_cases += 1
+        bsdiff_range = temp / "source-bsdiff-range.img"
+        run(
+            args.cli,
+            "extract-android-ota-range",
+            source_bsdiff_path,
+            "product",
+            bsdiff_range,
+            BLOCK_SIZE - 47,
+            131,
+            bsdiff_old,
+        )
+        if bsdiff_range.read_bytes() != source_bsdiff_expected[BLOCK_SIZE - 47 : BLOCK_SIZE + 84]:
+            raise AssertionError("SOURCE_BSDIFF range mismatch")
+        ranges += 1
+        if bspatch is not None:
+            patch_path = temp / "independent.bsdiff"
+            patch_path.write_bytes(source_patch)
+            bspatch_output = temp / "bspatch-product.img"
+            run(bspatch, bsdiff_old, bspatch_output, patch_path)
+            if bspatch_output.read_bytes() != source_bsdiff_expected:
+                raise AssertionError("bspatch oracle mismatch")
+            bspatch_cases += 1
+
         short = temp / "short.bin"
         short.write_bytes(MAGIC)
         expect_failure(args.cli, "inspect-android-ota", short, error_name="TruncatedFrame")
@@ -535,24 +640,42 @@ def main() -> None:
             if output_root.read_bytes() != expected_root:
                 raise AssertionError("AOSP delta root mismatch")
             aosp_delta += 1
-            expect_failure(
+            expected_kernel = (aosp_images / "disk_ext2_4k.img").read_bytes()
+            output_kernel = temp / "aosp-delta-kernel.img"
+            run(
                 args.cli,
                 "extract-android-ota",
                 delta_payload,
                 "kernel",
-                temp / "aosp-delta-kernel.img",
-                (aosp_images / "disk_ext2_4k.img").stat().st_size,
+                output_kernel,
+                len(expected_kernel),
                 aosp_images / "disk_ext2_4k_empty.img",
-                error_name="UnsupportedAndroidOtaOperation",
             )
-            aosp_unsupported += 1
+            if output_kernel.read_bytes() != expected_kernel:
+                raise AssertionError("AOSP BROTLI_BSDIFF kernel mismatch")
+            aosp_delta += 1
+            kernel_range = temp / "aosp-delta-kernel-range.img"
+            run(
+                args.cli,
+                "extract-android-ota-range",
+                delta_payload,
+                "kernel",
+                kernel_range,
+                3897,
+                8192,
+                aosp_images / "disk_ext2_4k_empty.img",
+            )
+            if kernel_range.read_bytes() != expected_kernel[3897 : 3897 + 8192]:
+                raise AssertionError("AOSP BROTLI_BSDIFF range mismatch")
+            ranges += 1
 
     print(
         f"writer={writer_cases} reader={reader_cases} ranges={ranges} "
         f"malformed={malformed} fuzz={fuzz_cases} "
         f"payload_dumper={oracle is not None} oracle_decode={oracle_decode} "
+        f"bspatch={bspatch is not None} bspatch_cases={bspatch_cases} "
         f"aosp={args.aosp_update_engine is not None} aosp_full={aosp_full} "
-        f"aosp_delta={aosp_delta} aosp_unsupported={aosp_unsupported}"
+        f"aosp_delta={aosp_delta}"
     )
 
 

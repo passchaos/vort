@@ -8,6 +8,8 @@ pub const Error = core.Error || error{
     MissingAndroidOtaSource,
     DuplicateAndroidOtaPartition,
     IncompleteAndroidOtaPartition,
+    InvalidBsdiffPatch,
+    UnsupportedBsdiffCompression,
 };
 
 pub const magic = "CrAU";

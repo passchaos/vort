@@ -1284,11 +1284,13 @@ pub const AndroidOtaPartition = android_ota.Partition;
 pub const AndroidOtaArchive = android_ota.Archive;
 pub const AndroidOtaOpenOptions = android_ota.OpenOptions;
 pub const AndroidOtaDecodeOptions = android_ota.DecodeOptions;
+pub const AndroidBsdiffApplyOptions = android_ota.BsdiffApplyOptions;
 pub const AndroidOtaCompression = android_ota.Compression;
 pub const AndroidOtaEncodePartition = android_ota.EncodePartition;
 pub const AndroidOtaEncodeOptions = android_ota.EncodeOptions;
 pub const parseAndroidOtaAlloc = android_ota.parseAlloc;
 pub const encodeAndroidOtaAlloc = android_ota.encodeAlloc;
+pub const applyAndroidBsdiffAlloc = android_ota.applyBsdiffAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;

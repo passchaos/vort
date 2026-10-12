@@ -1,14 +1,16 @@
 const std = @import("std");
 const bzip2 = @import("../bzip2.zig");
 const xz = @import("../xz.zig");
+const bsdiff = @import("bsdiff.zig");
 const format = @import("format.zig");
 
-pub const Error = format.Error || bzip2.Error || xz.Error ||
+pub const Error = format.Error || bzip2.Error || xz.Error || bsdiff.Error ||
     std.mem.Allocator.Error;
 
 pub const Options = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_operation_output_len: usize = 1024 * 1024 * 1024,
+    max_bsdiff_control_bytes: usize = 64 * 1024 * 1024,
     verify_partition_hash: bool = true,
     verify_source_hashes: bool = true,
     discard_as_zero: bool = false,
@@ -143,6 +145,35 @@ pub fn readPartitionRangeInto(
                 owned = decoded;
                 if (operation.src_sha256_hash.len != 0)
                     try verifySha256(decoded, operation.src_sha256_hash);
+                break :blk decoded;
+            },
+            .bsdiff, .source_bsdiff, .brotli_bsdiff => blk: {
+                const old_bytes = try readSourceExtentsAlloc(
+                    allocator,
+                    source_bytes orelse return error.MissingAndroidOtaSource,
+                    view.sourceExtents(operation),
+                    view.block_size,
+                    options.max_operation_output_len,
+                );
+                defer allocator.free(old_bytes);
+                if (operation.src_sha256_hash.len != 0)
+                    try verifySha256(old_bytes, operation.src_sha256_hash);
+                const expected = try operationOutputLength(
+                    destinations,
+                    view.block_size,
+                    options.max_operation_output_len,
+                );
+                const decoded = try bsdiff.applyAlloc(
+                    allocator,
+                    old_bytes,
+                    view.operationBlob(operation),
+                    expected,
+                    .{
+                        .max_output_len = options.max_operation_output_len,
+                        .max_control_bytes = options.max_bsdiff_control_bytes,
+                    },
+                );
+                owned = decoded;
                 break :blk decoded;
             },
             else => return error.UnsupportedAndroidOtaOperation,

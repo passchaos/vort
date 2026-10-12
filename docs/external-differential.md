@@ -148,15 +148,18 @@ fresh `img2simg` image. Select explicit tools with
 The Android OTA differential decodes all four Vort writer modes with an
 independent Python protobuf/Bzip2/XZ implementation, compares the raw writer's
 complete wire image byte-for-byte, and feeds Vort a separately generated
-RAW/Bzip2/XZ/ZERO payload. It also covers cross-operation ranges, corrupt
-hashes, malformed headers, and deterministic mutations. When the Rust
+RAW/Bzip2/XZ/ZERO payload plus a Python-generated BSDIFF40/SOURCE_BSDIFF delta.
+It also covers cross-operation and cross-patch ranges, corrupt hashes,
+malformed headers, and deterministic mutations. When an upstream-compatible
+`bspatch` is available, it applies the independent patch byte-exactly. When the Rust
 `payload_dumper` binary is available, it extracts every Vort output and must
 produce byte-identical partition images. Select it explicitly with
 `-- --payload-dumper /path/to/payload_dumper`. An AOSP update-engine checkout
 can be supplied with `--aosp-update-engine /path/to/update_engine`; its pinned
 full payload must extract both partitions byte-exactly, its XZ-only delta
-partition must extract, and its BROTLI_BSDIFF partition must report the explicit
-unsupported-operation error.
+partition and genuine BSDF2/BROTLI_BSDIFF kernel partition must both extract
+byte-exactly. Select an explicit patch oracle with
+`--bspatch /path/to/bspatch`.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

@@ -1,4 +1,5 @@
 const std = @import("std");
+const bzip2 = @import("../bzip2.zig");
 const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
 const protobuf = @import("protobuf.zig");
@@ -144,6 +145,42 @@ test "Android OTA source copy verifies old image and operation hashes" {
             corrupt.len,
         ),
     );
+}
+
+test "Android OTA SOURCE_BSDIFF applies a legacy patch through extents" {
+    const source = [_]u8{0x5a} ** 4096;
+    const expected = [_]u8{0x5b} ** 4096;
+    const diff = [_]u8{1} ** 4096;
+    const patch = try legacyDiffPatchAlloc(allocator, expected.len, &diff);
+    defer allocator.free(patch);
+    const payload = try sourceDiffPayloadAlloc(
+        allocator,
+        &source,
+        &expected,
+        patch,
+        .source_bsdiff,
+    );
+    defer allocator.free(payload);
+    var archive = try archive_mod.Archive.initAlloc(allocator, payload, .{});
+    defer archive.deinit();
+    const decoded = try archive.decodePartitionAllocLimited(
+        allocator,
+        0,
+        &source,
+        expected.len,
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &expected, decoded);
+    const range = try archive.readPartitionRangeAllocLimited(
+        allocator,
+        0,
+        &source,
+        73,
+        257,
+        257,
+    );
+    defer allocator.free(range);
+    try std.testing.expectEqualSlices(u8, expected[73..330], range);
 }
 
 test "Android OTA rejects malformed headers blobs and hashes" {
@@ -385,6 +422,93 @@ fn sourceCopyPayloadAlloc(
     try format.appendU64Be(alloc, &output, manifest.items.len);
     try format.appendU32Be(alloc, &output, 0);
     try output.appendSlice(alloc, manifest.items);
+    return output.toOwnedSlice(alloc);
+}
+
+fn sourceDiffPayloadAlloc(
+    alloc: std.mem.Allocator,
+    source: []const u8,
+    expected: []const u8,
+    patch: []const u8,
+    kind: format.OperationType,
+) ![]u8 {
+    std.debug.assert(source.len == 4096 and expected.len == 4096);
+    var source_hash: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(source, &source_hash, .{});
+    var expected_hash: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(expected, &expected_hash, .{});
+    var patch_hash: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(patch, &patch_hash, .{});
+
+    var extent_message: std.ArrayList(u8) = .empty;
+    defer extent_message.deinit(alloc);
+    try protobuf.appendVarintField(alloc, &extent_message, 1, 0);
+    try protobuf.appendVarintField(alloc, &extent_message, 2, 1);
+    var operation: std.ArrayList(u8) = .empty;
+    defer operation.deinit(alloc);
+    try protobuf.appendVarintField(alloc, &operation, 1, @intFromEnum(kind));
+    try protobuf.appendVarintField(alloc, &operation, 2, 0);
+    try protobuf.appendVarintField(alloc, &operation, 3, patch.len);
+    try protobuf.appendMessageField(alloc, &operation, 4, extent_message.items);
+    try protobuf.appendMessageField(alloc, &operation, 6, extent_message.items);
+    try protobuf.appendBytesField(alloc, &operation, 8, &patch_hash);
+    try protobuf.appendBytesField(alloc, &operation, 9, &source_hash);
+
+    var old_info: std.ArrayList(u8) = .empty;
+    defer old_info.deinit(alloc);
+    try protobuf.appendVarintField(alloc, &old_info, 1, source.len);
+    try protobuf.appendBytesField(alloc, &old_info, 2, &source_hash);
+    var new_info: std.ArrayList(u8) = .empty;
+    defer new_info.deinit(alloc);
+    try protobuf.appendVarintField(alloc, &new_info, 1, expected.len);
+    try protobuf.appendBytesField(alloc, &new_info, 2, &expected_hash);
+    var partition: std.ArrayList(u8) = .empty;
+    defer partition.deinit(alloc);
+    try protobuf.appendBytesField(alloc, &partition, 1, "system");
+    try protobuf.appendMessageField(alloc, &partition, 6, old_info.items);
+    try protobuf.appendMessageField(alloc, &partition, 7, new_info.items);
+    try protobuf.appendMessageField(alloc, &partition, 8, operation.items);
+    var manifest: std.ArrayList(u8) = .empty;
+    defer manifest.deinit(alloc);
+    try protobuf.appendVarintField(alloc, &manifest, 3, 4096);
+    try protobuf.appendVarintField(alloc, &manifest, 12, 4);
+    try protobuf.appendMessageField(alloc, &manifest, 13, partition.items);
+
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(alloc);
+    try output.appendSlice(alloc, format.magic);
+    try format.appendU64Be(alloc, &output, format.major_version);
+    try format.appendU64Be(alloc, &output, manifest.items.len);
+    try format.appendU32Be(alloc, &output, 0);
+    try output.appendSlice(alloc, manifest.items);
+    try output.appendSlice(alloc, patch);
+    return output.toOwnedSlice(alloc);
+}
+
+fn legacyDiffPatchAlloc(
+    alloc: std.mem.Allocator,
+    output_len: usize,
+    diff: []const u8,
+) ![]u8 {
+    var control: [24]u8 = @splat(0);
+    std.mem.writeInt(u64, control[0..8], output_len, .little);
+    const control_compressed = try bzip2.encodeAlloc(alloc, &control, .{});
+    defer alloc.free(control_compressed);
+    const diff_compressed = try bzip2.encodeAlloc(alloc, diff, .{});
+    defer alloc.free(diff_compressed);
+    const extra_compressed = try bzip2.encodeAlloc(alloc, "", .{});
+    defer alloc.free(extra_compressed);
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(alloc);
+    try output.appendSlice(alloc, "BSDIFF40");
+    var sizes: [24]u8 = @splat(0);
+    std.mem.writeInt(u64, sizes[0..8], control_compressed.len, .little);
+    std.mem.writeInt(u64, sizes[8..16], diff_compressed.len, .little);
+    std.mem.writeInt(u64, sizes[16..24], output_len, .little);
+    try output.appendSlice(alloc, &sizes);
+    try output.appendSlice(alloc, control_compressed);
+    try output.appendSlice(alloc, diff_compressed);
+    try output.appendSlice(alloc, extra_compressed);
     return output.toOwnedSlice(alloc);
 }
 
