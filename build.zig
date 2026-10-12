@@ -387,6 +387,17 @@ pub fn build(b: *std.Build) void {
         "Run focused Android sparse image tests",
     );
     android_sparse_test_step.dependOn(&run_android_sparse_tests.step);
+    const android_ota_tests = b.addTest(.{
+        .name = "vort-android-ota-tests",
+        .root_module = tests_mod,
+        .filters = &.{"Android OTA"},
+    });
+    const run_android_ota_tests = b.addRunArtifact(android_ota_tests);
+    const android_ota_test_step = b.step(
+        "test-android-ota",
+        "Run focused Android OTA payload tests",
+    );
+    android_ota_test_step.dependOn(&run_android_ota_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1488,6 +1499,19 @@ pub fn build(b: *std.Build) void {
         "Validate Android sparse images against Python and optional AOSP tools",
     );
     android_sparse_diff_step.dependOn(&android_sparse_diff.step);
+
+    const android_ota_diff = b.addSystemCommand(&.{
+        "python3",
+        "tools/android_ota/diff.py",
+        "--cli",
+    });
+    android_ota_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| android_ota_diff.addArgs(args);
+    const android_ota_diff_step = b.step(
+        "run-android-ota-diff",
+        "Validate Android OTA payloads against Python and optional payload_dumper",
+    );
+    android_ota_diff_step.dependOn(&android_ota_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

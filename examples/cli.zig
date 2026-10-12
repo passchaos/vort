@@ -37,6 +37,7 @@ const wbfs_cli = @import("cli/wbfs.zig");
 const wdf_cli = @import("cli/wdf.zig");
 const wux_cli = @import("cli/wux.zig");
 const android_sparse_cli = @import("cli/android_sparse.zig");
+const android_ota_cli = @import("cli/android_ota.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
@@ -345,6 +346,14 @@ pub fn main(init: std.process.Init) !void {
         try android_sparse_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-android-sparse")) {
         try android_sparse_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-android-ota")) {
+        try android_ota_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-android-ota")) {
+        try android_ota_cli.extract(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-android-ota-range")) {
+        try android_ota_cli.extractRange(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-android-ota")) {
+        try android_ota_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2597,6 +2606,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-android-sparse <in> <out> [max_output]
         \\  decode-android-sparse-range <in> <out> <offset> <length>
         \\  encode-android-sparse <in> <out> [block_size] [sparse|store-zero] [fill|raw-fill] [crc|no-crc] [checksum|no-checksum]
+        \\  inspect-android-ota <payload.bin>
+        \\  extract-android-ota <payload> <partition> <out> [max_output] [source|-]
+        \\  extract-android-ota-range <payload> <partition> <out> <offset> <length> [source|-]
+        \\  encode-android-ota <in> <out> <partition> [auto|raw|bzip2|xz] [block_size] [operation_size]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

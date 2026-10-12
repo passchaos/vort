@@ -18158,3 +18158,16 @@ reuse, so production keeps the simpler independently owned plans.
   `simg2img`/`img2simg` validation cover the baseline. Streaming file I/O and
   automatic multi-file sparse-set assembly remain follow-up work. See
   `docs/formats/android-sparse.md`.
+
+- Added dependency-free Android update-engine payload v2 reading and
+  deterministic full-payload writing. A bounded proto2 wire parser indexes
+  partitions, operations, and extents without generated protobuf bindings.
+  Extraction covers RAW, Bzip2, XZ, ZERO, and caller-supplied SOURCE_COPY data,
+  verifies stored-data/source/final SHA-256 values, and exposes bounded whole
+  partition and cross-operation range APIs. The writer emits multiple named
+  partitions with deterministic chunking, zero detection, forced codec modes,
+  or automatic raw/Bzip2/XZ selection. Focused tests, shared raw-byte fuzzing,
+  an independent Python implementation, and Rust `payload_dumper` extraction
+  cover the baseline. Major version 1, vendor signature verification,
+  BSDIFF/BROTLI_BSDIFF/PUFFDIFF/ZUCCHINI/LZ4DIFF patch engines, and streaming
+  file I/O remain explicit follow-up work. See `docs/formats/android-ota.md`.

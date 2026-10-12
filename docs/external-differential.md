@@ -27,6 +27,7 @@ zig build run-dax-diff
 zig build run-gcz-diff
 zig build run-wia-diff
 zig build run-android-sparse-diff
+zig build run-android-ota-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
@@ -143,6 +144,19 @@ metadata, and deterministic mutation samples. When AOSP libsparse tools are
 available, `simg2img` expands every Vort output byte-exactly and Vort expands a
 fresh `img2simg` image. Select explicit tools with
 `-- --simg2img /path/to/simg2img --img2simg /path/to/img2simg`.
+
+The Android OTA differential decodes all four Vort writer modes with an
+independent Python protobuf/Bzip2/XZ implementation, compares the raw writer's
+complete wire image byte-for-byte, and feeds Vort a separately generated
+RAW/Bzip2/XZ/ZERO payload. It also covers cross-operation ranges, corrupt
+hashes, malformed headers, and deterministic mutations. When the Rust
+`payload_dumper` binary is available, it extracts every Vort output and must
+produce byte-identical partition images. Select it explicitly with
+`-- --payload-dumper /path/to/payload_dumper`. An AOSP update-engine checkout
+can be supplied with `--aosp-update-engine /path/to/update_engine`; its pinned
+full payload must extract both partitions byte-exactly, its XZ-only delta
+partition must extract, and its BROTLI_BSDIFF partition must report the explicit
+unsupported-operation error.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

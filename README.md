@@ -209,6 +209,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   RAW/FILL/DONT_CARE/CRC32 chunks, extended headers, bounded whole-image and
   range reads, checkpoint and header CRC-32 verification, independent Python
   comparison, fuzzing, and bidirectional AOSP `simg2img`/`img2simg` coverage;
+- dependency-free Android update-engine payload v2 reading and deterministic
+  full-payload writing, with a bounded proto2 manifest parser, multi-partition
+  RAW/Bzip2/XZ/ZERO operations, SOURCE_COPY delta extraction, SHA-256 checks,
+  bounded range reads, fuzzing, independent Python validation, and Rust
+  `payload_dumper` interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded

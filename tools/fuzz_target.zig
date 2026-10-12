@@ -783,6 +783,45 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedAndroidSparseError(err)) return err;
     }
+    if (vort.parseAndroidOtaAlloc(allocator, data, .{
+        .max_manifest_size = 1 << 20,
+        .max_metadata_signature_size = 1 << 20,
+        .max_partitions = 256,
+        .max_operations = 4096,
+        .max_extents = 8192,
+        .max_partition_name_bytes = 256,
+        .max_block_size = 2 << 20,
+        .max_partition_size = 1 << 30,
+        .max_blob_size = 1 << 20,
+        .max_data_hash_bytes = 1 << 20,
+    })) |archive_value| {
+        var archive = archive_value;
+        defer archive.deinit();
+        if (archive.partitions.len != 0) {
+            const length: usize = @intCast(@min(
+                archive.partitions[0].new_info.size,
+                4096,
+            ));
+            const output = try allocator.alloc(u8, length);
+            defer allocator.free(output);
+            archive.readPartitionRangeInto(
+                allocator,
+                0,
+                null,
+                0,
+                output,
+                .{
+                    .max_output_len = length,
+                    .max_operation_output_len = 1 << 20,
+                    .verify_partition_hash = false,
+                },
+            ) catch |err| {
+                if (!isExpectedAndroidOtaError(err)) return err;
+            };
+        }
+    } else |err| {
+        if (!isExpectedAndroidOtaError(err)) return err;
+    }
     const fuzz_wii_keys = [_]vort.WiaWiiCommonKey{
         .{ .index = 0, .key = @splat(0) },
         .{ .index = 1, .key = @splat(0) },
@@ -1574,6 +1613,20 @@ pub fn main(init: std.process.Init) !void {
     );
     defer init.gpa.free(android_sparse);
     try fuzzOne(init.gpa, android_sparse);
+    const android_ota_input = try init.gpa.alloc(u8, 4 * 4096);
+    defer init.gpa.free(android_ota_input);
+    @memset(android_ota_input, 0);
+    for (android_ota_input[0..4096], 0..) |*byte, index|
+        byte.* = @truncate(index * 17 + index / 31);
+    for (android_ota_input[2 * 4096 ..], 0..) |*byte, index|
+        byte.* = @truncate(index * 29 + 7);
+    const android_ota = try vort.encodeAndroidOtaAlloc(
+        init.gpa,
+        &.{.{ .name = "system", .data = android_ota_input }},
+        .{ .operation_size = 4096 },
+    );
+    defer init.gpa.free(android_ota);
+    try fuzzOne(init.gpa, android_ota);
     inline for (.{
         .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
         .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },
@@ -2165,6 +2218,39 @@ fn isExpectedAndroidSparseError(err: anyerror) bool {
         error.IntegerOverflow,
         error.RangeOutOfBounds,
         error.OutputLimitExceeded,
+        error.TrailingData,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedAndroidOtaError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidAndroidOta,
+        error.InvalidProtobuf,
+        error.UnsupportedProtobufWireType,
+        error.UnsupportedAndroidOtaOperation,
+        error.MissingAndroidOtaSource,
+        error.DuplicateAndroidOtaPartition,
+        error.IncompleteAndroidOtaPartition,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.ChecksumMismatch,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        error.InvalidBzip2Header,
+        error.InvalidBzip2Stream,
+        error.UnsupportedBzip2Feature,
+        error.InvalidXzHeader,
+        error.InvalidXzStream,
+        error.UnsupportedXzFeature,
+        error.InvalidLzmaOptions,
+        error.InvalidMatch,
+        error.InvalidHuffmanCode,
         error.TrailingData,
         => true,
         else => false,

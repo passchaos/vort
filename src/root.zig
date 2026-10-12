@@ -49,6 +49,7 @@ pub const wbfs = @import("wbfs.zig");
 pub const wdf = @import("wdf.zig");
 pub const wux = @import("wux.zig");
 pub const android_sparse = @import("android_sparse.zig");
+pub const android_ota = @import("android_ota.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1271,6 +1272,23 @@ pub const AndroidSparseOpenOptions = android_sparse.OpenOptions;
 pub const AndroidSparseEncodeOptions = android_sparse.EncodeOptions;
 pub const parseAndroidSparseAlloc = android_sparse.parseAlloc;
 pub const encodeAndroidSparseAlloc = android_sparse.encodeAlloc;
+
+pub const AndroidOtaError = android_ota.Error;
+pub const AndroidOtaOperationType = android_ota.OperationType;
+pub const AndroidOtaHeader = android_ota.Header;
+pub const AndroidOtaManifest = android_ota.Manifest;
+pub const AndroidOtaPartitionInfo = android_ota.PartitionInfo;
+pub const AndroidOtaExtent = android_ota.Extent;
+pub const AndroidOtaOperation = android_ota.Operation;
+pub const AndroidOtaPartition = android_ota.Partition;
+pub const AndroidOtaArchive = android_ota.Archive;
+pub const AndroidOtaOpenOptions = android_ota.OpenOptions;
+pub const AndroidOtaDecodeOptions = android_ota.DecodeOptions;
+pub const AndroidOtaCompression = android_ota.Compression;
+pub const AndroidOtaEncodePartition = android_ota.EncodePartition;
+pub const AndroidOtaEncodeOptions = android_ota.EncodeOptions;
+pub const parseAndroidOtaAlloc = android_ota.parseAlloc;
+pub const encodeAndroidOtaAlloc = android_ota.encodeAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3255,6 +3273,7 @@ test {
     _ = wdf;
     _ = wux;
     _ = android_sparse;
+    _ = android_ota;
 }
 
 test "root 7z exports create list and extract Copy archives" {
