@@ -68,3 +68,42 @@ removed:
 These results reinforce the project rule that isolated setup improvements are
 not retained without stable complete-frame evidence. All three implementations
 were removed; only the measurement surface and gate remain.
+
+## Post-LUT RLE, canonical, and context-map follow-ups
+
+After the fixed-prefix LUT and direct 18-symbol root builder landed, the same
+fixed-CPU-2 process-pair method evaluated the remaining header stages. Every
+candidate below preserved output sizes and checksums; none met the complete
+matrix retention rule, so production source was restored.
+
+- Packing pending repeat state into `(count, length)` and reusing the Kraft
+  contribution check reduced the complex parser by 10--36 bytes, but 15 long
+  `clustered_q8` pairs measured `0.9987x` median/geometric throughput with only
+  3/15 wins.
+- A caller-supplied code-length histogram removed the canonical builder's
+  second active-symbol scan. Global use improved `clustered_q8` by `1.0091x`
+  median / `1.0088x` geometric mean with 15/15 wins, but a long
+  `structured_q4` control regressed to `0.9957x` median / `0.9946x` geometric
+  mean with 2/15 wins. Restricting it to 16--64 literal trees still changed
+  shared generated layout: the target improved `1.0057x`, while the short
+  matrix put `structured_q4` at `0.9929x`. A fully duplicated clustered parser
+  restored ordinary hot-function sizes but enlarged read-only/unwind metadata;
+  the long q4 control remained `0.9958x` with 1/15 wins.
+- Merging the canonical next-code and bit-width-offset loops shrank the two
+  target complex-tree instances by 81/62 bytes without moving their addresses,
+  but complete decode was neutral-negative at `0.9992x` median / `0.9994x`
+  geometric mean with 5/15 wins.
+- An eight-bit context-map tail root reduced the isolated context-map stage
+  from roughly 5.83 to 3.45 microseconds. The first compile-time hot/fallback
+  split improved the long target by `1.0058x` median / `1.0056x` geometric
+  mean with 15/15 wins, but enlarged `readContextMap` from `0x239e` to
+  `0x2671`; the 13-row matrix fell to `0.9950x` across row medians, with q11
+  rows as low as `0.9724x`. Runtime dispatch, an external packed root, and
+  outlined preparation/fallback variants all grew the parser further and were
+  removed after focused size and smoke checks.
+
+The remaining credible direction is not another wrapper around the compact
+canonical parser. A context-map-specific decoder must replace existing work
+while reducing generated code/read-only state, or a future header
+representation must construct the final decode root without retaining a
+second canonical form. Isolated stage wins alone are explicitly insufficient.

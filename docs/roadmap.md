@@ -18269,3 +18269,17 @@ reuse, so production keeps the simpler independently owned plans.
   gate snapshot moves `clustered_q8` to 1737.71 MiB/s and `0.8424x` libbrotli,
   so parity remains explicit. See
   `docs/performance/brotli-direct-code-length-decoder-x86.md`.
+
+- Re-audited the remaining Brotli high-tree-count header after the static and
+  direct code-length root improvements. Four families were measured and fully
+  removed: pending-repeat state packing (`0.9987x`, 3/15 target wins), merged
+  canonical loops (`0.9992x`, 5/15), precounted canonical construction (target
+  `1.0091x` but long structured-q4 `0.9957x`), and eight-bit context-map roots
+  (target `1.0058x` with 15/15 wins, but a `0.9950x` 13-row matrix and q11 floor
+  `0.9724x`). Global, high-tree-only, fully duplicated, runtime-dispatch,
+  external-root, and outlined variants showed that extra parser/read-only code
+  shifts otherwise unrelated hot layouts even when target setup time falls.
+  Production remains unchanged. Future header work must replace existing
+  canonical/context-map machinery with a smaller final-root representation,
+  not layer another lookup or specialized parser beside it. Detailed evidence
+  is appended to `docs/performance/brotli-decode-stage-profile-x86.md`.
