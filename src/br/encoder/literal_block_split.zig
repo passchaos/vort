@@ -5,11 +5,21 @@ const literal_context = @import("literal_context.zig");
 
 const min_block_literals: usize = 512;
 const max_split_literals: usize = 32 * 1024;
-const candidate_count: usize = 5;
+const candidate_fractions = [_]struct { numerator: usize, denominator: usize }{
+    .{ .numerator = 1, .denominator = 6 },
+    .{ .numerator = 1, .denominator = 4 },
+    .{ .numerator = 1, .denominator = 3 },
+    .{ .numerator = 1, .denominator = 2 },
+    .{ .numerator = 2, .denominator = 3 },
+    .{ .numerator = 3, .denominator = 4 },
+    .{ .numerator = 5, .denominator = 6 },
+};
+const candidate_count: usize = candidate_fractions.len;
 const min_estimated_savings_bits: u64 = 2048;
 const min_entropy_proposal_savings_bits: u64 = min_estimated_savings_bits * 3 / 4;
 const min_clustered_over_two_savings_bits: u64 = 128;
 const min_three_over_two_savings_bits: u64 = 1024;
+const min_alternating_four_over_best_savings_bits: u64 = 256;
 const entropy_fraction_bits: u6 = 8;
 const entropy_scale: u64 = 1 << entropy_fraction_bits;
 
@@ -25,11 +35,12 @@ const log2_fraction_q8 = blk: {
 pub const Result = struct {
     split: usize,
     second_split: ?usize = null,
+    third_split: ?usize = null,
     alternate_two_types: bool = false,
     savings_bits: u64,
 
     pub fn regionCount(self: Result) usize {
-        return if (self.second_split != null) 3 else 2;
+        return if (self.third_split != null) 4 else if (self.second_split != null) 3 else 2;
     }
 
     pub fn typeCount(self: Result) usize {
@@ -40,6 +51,7 @@ pub const Result = struct {
         if (literal_index < self.split) return 0;
         if (self.second_split) |second| {
             if (literal_index < second) return 1;
+            if (self.third_split) |third| return if (literal_index < third) 0 else 1;
             return if (self.alternate_two_types) 0 else 2;
         }
         return 1;
@@ -50,11 +62,12 @@ pub const Proposals = struct {
     two: ?Result = null,
     three: ?Result = null,
     clustered: ?Result = null,
+    alternating_four: ?Result = null,
 };
 
 /// Choose one literal-stream boundary for a two-type Brotli entropy split.
-/// This cheap proposal stage examines at most five evenly spaced boundaries,
-/// including the common midpoint split.
+/// This cheap proposal stage examines seven bounded sixth-, quarter-, third-,
+/// and midpoint boundaries.
 /// The caller still encodes the complete candidate and selects it only when
 /// its exact wire size beats the existing stream.
 pub fn choose(input: []const u8, commands: []const command_plan.Command, utf8_context_cutoff: ?u6) ?Result {
@@ -71,8 +84,8 @@ pub fn chooseProposals(input: []const u8, commands: []const command_plan.Command
 
     var targets: [candidate_count]usize = undefined;
     var target_len: usize = 0;
-    for (1..candidate_count + 1) |i| {
-        const target = total_literals * i / (candidate_count + 1);
+    for (candidate_fractions) |fraction| {
+        const target = total_literals * fraction.numerator / fraction.denominator;
         if (target < min_block_literals or total_literals - target < min_block_literals) continue;
         if (target_len != 0 and targets[target_len - 1] == target) continue;
         targets[target_len] = target;
@@ -214,6 +227,57 @@ pub fn chooseProposals(input: []const u8, commands: []const command_plan.Command
             };
         }
     }
+    var best_alternating_bits = baseline_bits;
+    var best_alternating_indexes: [3]usize = @splat(candidate_count);
+    for (0..target_len) |first_index| {
+        for (first_index + 1..target_len) |second_index| {
+            for (second_index + 1..target_len) |third_index| {
+                const first_split = targets[first_index];
+                const second_split = targets[second_index];
+                const third_split = targets[third_index];
+                if (first_split < min_block_literals or
+                    second_split - first_split < min_block_literals or
+                    third_split - second_split < min_block_literals or
+                    total_literals - third_split < min_block_literals)
+                    continue;
+                var type_a: [256]u32 = undefined;
+                var type_b: [256]u32 = undefined;
+                for (&type_a, &type_b, &prefix_snapshots[first_index], &prefix_snapshots[second_index], &prefix_snapshots[third_index], &total_frequencies) |*a, *b, first, second, third, total| {
+                    a.* = @as(u32, first) + third - second;
+                    b.* = @as(u32, second) - first + total - third;
+                }
+                const type_a_lengths = huffman.treeCodeLengths(256, &type_a, 15);
+                const type_b_lengths = huffman.treeCodeLengths(256, &type_b, 15);
+                const alternating_bits = weightedBits(&type_a, &type_a_lengths) +
+                    weightedBits(&type_b, &type_b_lengths);
+                if (alternating_bits < best_alternating_bits) {
+                    best_alternating_bits = alternating_bits;
+                    best_alternating_indexes = .{ first_index, second_index, third_index };
+                }
+            }
+        }
+    }
+    if (best_alternating_indexes[0] != candidate_count) {
+        const savings = baseline_bits - best_alternating_bits;
+        const refined_baseline = @max(
+            proposals.two.?.savings_bits,
+            @max(
+                if (proposals.clustered) |clustered| clustered.savings_bits else 0,
+                if (proposals.three) |three| three.savings_bits else 0,
+            ),
+        );
+        if (savings >= min_estimated_savings_bits and
+            savings -| refined_baseline >= min_alternating_four_over_best_savings_bits)
+        {
+            proposals.alternating_four = .{
+                .split = targets[best_alternating_indexes[0]],
+                .second_split = targets[best_alternating_indexes[1]],
+                .third_split = targets[best_alternating_indexes[2]],
+                .alternate_two_types = true,
+                .savings_bits = savings,
+            };
+        }
+    }
     return proposals;
 }
 
@@ -310,6 +374,26 @@ test "literal block split selects three distinct regions" {
     try std.testing.expectEqual(@as(usize, 0), three.blockIndex(0));
     try std.testing.expectEqual(@as(usize, 1), three.blockIndex(three.split));
     try std.testing.expectEqual(@as(usize, 2), three.blockIndex(three.second_split.?));
+}
+
+test "literal block split clusters four alternating regions" {
+    var input: [8192]u8 = undefined;
+    for (&input, 0..) |*byte, i| {
+        const region = i / 2048;
+        byte.* = if (region & 1 == 0)
+            @intCast(i & 15)
+        else
+            @intCast(240 + (i & 15));
+    }
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
+    const alternating = chooseProposals(&input, &commands, null).alternating_four orelse
+        return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, 4), alternating.regionCount());
+    try std.testing.expectEqual(@as(usize, 2), alternating.typeCount());
+    try std.testing.expectEqual(@as(usize, 0), alternating.blockIndex(0));
+    try std.testing.expectEqual(@as(usize, 1), alternating.blockIndex(alternating.split));
+    try std.testing.expectEqual(@as(usize, 0), alternating.blockIndex(alternating.second_split.?));
+    try std.testing.expectEqual(@as(usize, 1), alternating.blockIndex(alternating.third_split.?));
 }
 
 test "literal block split fixed-point logarithm tracks powers and mantissas" {

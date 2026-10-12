@@ -854,6 +854,26 @@ pub fn main(init: std.process.Init) !void {
         31,
     );
     planned_literal_split_cases += 1;
+    const planned_alternating_literal = try vort.br.IncrementalTestSupport.encodeAlternatingLiteralTypes(init.gpa);
+    defer init.gpa.free(planned_alternating_literal.encoded);
+    defer init.gpa.free(planned_alternating_literal.payload);
+    const planned_alternating_literal_summary = try vort.brSummarizeStream(planned_alternating_literal.encoded);
+    if (planned_alternating_literal_summary.max_literal_block_types != 2 or
+        planned_alternating_literal_summary.max_literal_context_trees != 2) return error.ReferenceEncodeFailed;
+    const planned_alternating_literal_decoded = try init.gpa.alloc(u8, planned_alternating_literal.payload.len);
+    defer init.gpa.free(planned_alternating_literal_decoded);
+    try reference.decode(planned_alternating_literal.encoded, planned_alternating_literal_decoded);
+    if (!std.mem.eql(u8, planned_alternating_literal.payload, planned_alternating_literal_decoded))
+        return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(
+        init.gpa,
+        planned_alternating_literal.encoded,
+        planned_alternating_literal.payload,
+        16,
+        17,
+        31,
+    );
+    planned_literal_split_cases += 1;
     var planned_command_split_cases: usize = 0;
     var planned_distance_split_cases: usize = 0;
     const planned_command_split = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, dictionary_bytes, .{ .level = .ratio });

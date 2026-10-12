@@ -18479,3 +18479,17 @@ reuse, so production keeps the simpler independently owned plans.
   Vort. The full gate remains green with `planned_literal_split_cases=3` and
   the existing 7,056 one-shot, 7,056 progressive, and 1,401 fragmentation
   cases.
+
+- Extended Brotli literal splitting to four A-B-A-B regions that alternate two
+  reused Huffman trees. The bounded proposal set now preserves sixths and
+  thirds while adding quarter boundaries, then evaluates every valid
+  three-boundary combination by pooling regions zero/two and one/three. A
+  candidate must improve the best two-region, A-B-A, or A-B-C estimate by at
+  least 256 bits and still win complete-wire byte-size arbitration. The writer
+  validates all three ordered boundaries, emits four block lengths, and uses
+  three implicit next-type switches (0→1→0→1). An 8,192-byte low/high/low/high
+  fixture selects the alternating wire exactly, round trips through Vort,
+  survives every injected allocation failure, and decodes independently via
+  libbrotli 1.1.0 plus the 17-byte-input/31-byte-output progressive path. The
+  focused upstream gate remains green with 7,056 one-shot, 7,056 progressive,
+  and 1,401 fragmentation cases; `planned_literal_split_cases=4`.
