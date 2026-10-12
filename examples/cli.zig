@@ -36,6 +36,7 @@ const wia_cli = @import("cli/wia.zig");
 const wbfs_cli = @import("cli/wbfs.zig");
 const wdf_cli = @import("cli/wdf.zig");
 const wux_cli = @import("cli/wux.zig");
+const android_sparse_cli = @import("cli/android_sparse.zig");
 const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
@@ -336,6 +337,14 @@ pub fn main(init: std.process.Init) !void {
         try wux_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-wux")) {
         try wux_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-android-sparse")) {
+        try android_sparse_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-android-sparse")) {
+        try android_sparse_cli.decode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-android-sparse-range")) {
+        try android_sparse_cli.decodeRange(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-android-sparse")) {
+        try android_sparse_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zchunk-file")) {
         try zchunk_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zchunk-file")) {
@@ -2584,6 +2593,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-wux <in> <out> [max_output]
         \\  decode-wux-range <in> <out> <offset> <length>
         \\  encode-wux <in> <out> [sector_size] [deduplicate|store-all]
+        \\  inspect-android-sparse <image.simg>
+        \\  decode-android-sparse <in> <out> [max_output]
+        \\  decode-android-sparse-range <in> <out> <offset> <length>
+        \\  encode-android-sparse <in> <out> [block_size] [sparse|store-zero] [fill|raw-fill] [crc|no-crc] [checksum|no-checksum]
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
         \\  decode-zchunk-file <in> <out> [max_output]
         \\  inspect-zchunk-file <path>

@@ -376,6 +376,17 @@ pub fn build(b: *std.Build) void {
     const run_wux_tests = b.addRunArtifact(wux_tests);
     const wux_test_step = b.step("test-wux", "Run focused Wii U WUX image tests");
     wux_test_step.dependOn(&run_wux_tests.step);
+    const android_sparse_tests = b.addTest(.{
+        .name = "vort-android-sparse-tests",
+        .root_module = tests_mod,
+        .filters = &.{"Android sparse"},
+    });
+    const run_android_sparse_tests = b.addRunArtifact(android_sparse_tests);
+    const android_sparse_test_step = b.step(
+        "test-android-sparse",
+        "Run focused Android sparse image tests",
+    );
+    android_sparse_test_step.dependOn(&run_android_sparse_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1464,6 +1475,19 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| wux_diff.addArgs(args);
     const wux_diff_step = b.step("run-wux-diff", "Validate WUX images against optional WudCompress");
     wux_diff_step.dependOn(&wux_diff.step);
+
+    const android_sparse_diff = b.addSystemCommand(&.{
+        "python3",
+        "tools/android_sparse/diff.py",
+        "--cli",
+    });
+    android_sparse_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| android_sparse_diff.addArgs(args);
+    const android_sparse_diff_step = b.step(
+        "run-android-sparse-diff",
+        "Validate Android sparse images against Python and optional AOSP tools",
+    );
+    android_sparse_diff_step.dependOn(&android_sparse_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);

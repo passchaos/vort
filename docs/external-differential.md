@@ -26,6 +26,7 @@ zig build run-cso-diff
 zig build run-dax-diff
 zig build run-gcz-diff
 zig build run-wia-diff
+zig build run-android-sparse-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
@@ -134,6 +135,14 @@ partial/range handling, and malformed metadata. When the original WudCompress
 binary is available, it must decode both Vort modes and Vort must decode its
 generated WUX output. Select it explicitly with
 `-- --wudcompress /path/to/WudCompress`.
+
+The Android sparse differential checks four Vort writer configurations
+byte-for-byte against an independent Python implementation, covering RAW,
+FILL, DONT_CARE, CRC32 chunks, the header checksum, bounded ranges, malformed
+metadata, and deterministic mutation samples. When AOSP libsparse tools are
+available, `simg2img` expands every Vort output byte-exactly and Vort expands a
+fresh `img2simg` image. Select explicit tools with
+`-- --simg2img /path/to/simg2img --img2simg /path/to/img2simg`.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

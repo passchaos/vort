@@ -745,6 +745,44 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedWuxError(err)) return err;
     }
+    if (vort.parseAndroidSparseAlloc(allocator, data, .{
+        .max_chunks = 4096,
+        .max_block_size = 2 << 20,
+        .max_checksum_bytes = 1 << 20,
+    })) |archive_value| {
+        var archive = archive_value;
+        defer archive.deinit();
+        const first_length: usize = @intCast(@min(
+            archive.header.logical_size,
+            4096,
+        ));
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            first_length,
+            first_length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedAndroidSparseError(err)) return err;
+        }
+        const tail_length: usize = @intCast(@min(
+            archive.header.logical_size,
+            4096,
+        ));
+        if (archive.readRangeAllocLimited(
+            allocator,
+            archive.header.logical_size - tail_length,
+            tail_length,
+            tail_length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedAndroidSparseError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedAndroidSparseError(err)) return err;
+    }
     const fuzz_wii_keys = [_]vort.WiaWiiCommonKey{
         .{ .index = 0, .key = @splat(0) },
         .{ .index = 1, .key = @splat(0) },
@@ -1518,6 +1556,24 @@ pub fn main(init: std.process.Init) !void {
     });
     defer init.gpa.free(wux);
     try fuzzOne(init.gpa, wux);
+    const android_sparse_input = try init.gpa.alloc(u8, 4 * 4096);
+    defer init.gpa.free(android_sparse_input);
+    @memset(android_sparse_input, 0);
+    for (android_sparse_input[0..4096], 0..) |*byte, index|
+        byte.* = @truncate(index * 17 + index / 31);
+    var fill_pattern: [4]u8 = undefined;
+    std.mem.writeInt(u32, &fill_pattern, 0x1122_3344, .little);
+    for (android_sparse_input[2 * 4096 .. 3 * 4096], 0..) |*byte, index|
+        byte.* = fill_pattern[index % fill_pattern.len];
+    for (android_sparse_input[3 * 4096 ..], 0..) |*byte, index|
+        byte.* = @truncate(index * 29 + 7);
+    const android_sparse = try vort.encodeAndroidSparseAlloc(
+        init.gpa,
+        android_sparse_input,
+        .{ .emit_crc32_chunk = true, .write_image_checksum = true },
+    );
+    defer init.gpa.free(android_sparse);
+    try fuzzOne(init.gpa, android_sparse);
     inline for (.{
         .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
         .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },
@@ -2092,6 +2148,24 @@ fn isExpectedWuxError(err: anyerror) bool {
         error.IntegerOverflow,
         error.RangeOutOfBounds,
         error.OutputLimitExceeded,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedAndroidSparseError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidAndroidSparse,
+        error.UnsupportedAndroidSparseFeature,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.ChecksumMismatch,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        error.TrailingData,
         => true,
         else => false,
     };

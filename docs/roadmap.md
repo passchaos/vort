@@ -18145,3 +18145,16 @@ reuse, so production keeps the simpler independently owned plans.
   original-WudCompress validation cover the baseline. Streaming I/O and
   multipart raw-WUD discovery remain follow-up work. See
   `docs/formats/wux.md`.
+
+- Added pure-Zig Android sparse image v1 reading and deterministic writing.
+  The reader validates standard and extended headers, bounded block/chunk
+  geometry, all RAW/FILL/DONT_CARE/CRC32 payload equations, exact physical
+  consumption, intermediate CRC checkpoints, and the optional header CRC while
+  exposing bounded whole-image and cross-chunk range reads. The writer selects
+  and merges all three data chunk kinds deterministically, splits huge RAW runs
+  at the 32-bit physical-size limit, and independently controls CRC chunks and
+  the header checksum. Focused tests, raw-byte fuzzing, deterministic mutations,
+  independent Python byte comparison, and bidirectional AOSP
+  `simg2img`/`img2simg` validation cover the baseline. Streaming file I/O and
+  automatic multi-file sparse-set assembly remain follow-up work. See
+  `docs/formats/android-sparse.md`.

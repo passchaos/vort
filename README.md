@@ -205,6 +205,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   with strict little-endian header/index validation, repeated-sector range
   reads, collision-safe SHA-256-assisted reuse, partial tails, independent
   Python comparison, fuzzing, and bidirectional original-WudCompress coverage;
+- pure-Zig Android sparse image v1 reading and deterministic writing, with
+  RAW/FILL/DONT_CARE/CRC32 chunks, extended headers, bounded whole-image and
+  range reads, checkpoint and header CRC-32 verification, independent Python
+  comparison, fuzzing, and bidirectional AOSP `simg2img`/`img2simg` coverage;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded

@@ -48,6 +48,7 @@ pub const wia = @import("wia.zig");
 pub const wbfs = @import("wbfs.zig");
 pub const wdf = @import("wdf.zig");
 pub const wux = @import("wux.zig");
+pub const android_sparse = @import("android_sparse.zig");
 pub const zstd = @import("zstd.zig");
 pub const zchunk = @import("zchunk.zig");
 pub const squashfs = @import("squashfs.zig");
@@ -1260,6 +1261,16 @@ pub const WuxEncodeOptions = wux.EncodeOptions;
 pub const wuxStandardWudSize = wux.standard_wud_size;
 pub const parseWuxAlloc = wux.parseAlloc;
 pub const encodeWuxAlloc = wux.encodeAlloc;
+
+pub const AndroidSparseError = android_sparse.Error;
+pub const AndroidSparseChunkType = android_sparse.ChunkType;
+pub const AndroidSparseHeader = android_sparse.Header;
+pub const AndroidSparseChunk = android_sparse.Chunk;
+pub const AndroidSparseArchive = android_sparse.Archive;
+pub const AndroidSparseOpenOptions = android_sparse.OpenOptions;
+pub const AndroidSparseEncodeOptions = android_sparse.EncodeOptions;
+pub const parseAndroidSparseAlloc = android_sparse.parseAlloc;
+pub const encodeAndroidSparseAlloc = android_sparse.encodeAlloc;
 
 pub const ZchunkArchive = zchunk.Archive;
 pub const ZchunkCompression = zchunk.Compression;
@@ -3243,6 +3254,7 @@ test {
     _ = wbfs;
     _ = wdf;
     _ = wux;
+    _ = android_sparse;
 }
 
 test "root 7z exports create list and extract Copy archives" {
