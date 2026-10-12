@@ -290,8 +290,7 @@ fn validateInfo(
     }
     if (info.blocks.len == 0) return error.InvalidLz4diffPatch;
     if (for_compression and has_compressed_block) switch (info.compression) {
-        .lz4 => {},
-        .lz4hc => return error.UnsupportedLz4diffCompression,
+        .lz4, .lz4hc => {},
         else => return error.UnsupportedLz4diffCompression,
     };
     return .{ .compressed = compressed, .uncompressed = uncompressed };
@@ -451,6 +450,11 @@ fn compressAlloc(
 ) Error![]u8 {
     const output = try allocator.alloc(u8, output_len);
     errdefer allocator.free(output);
+    var hc_encoder: ?lz4.HcDestSizeEncoder = if (info.compression == .lz4hc)
+        try lz4.HcDestSizeEncoder.init(allocator)
+    else
+        null;
+    defer if (hc_encoder) |*encoder| encoder.deinit();
     var compressed_offset: usize = 0;
     for (info.blocks) |block| {
         const destination = output[compressed_offset..][0..block.compressed_length];
@@ -458,9 +462,15 @@ fn compressAlloc(
         if (!block.isCompressed()) {
             @memcpy(destination, uncompressed[0..block.uncompressed_length]);
         } else {
-            if (info.compression != .lz4)
-                return error.UnsupportedLz4diffCompression;
-            const result = try lz4.encodeBlockDestSize(uncompressed, destination);
+            const result = switch (info.compression) {
+                .lz4 => try lz4.encodeBlockDestSize(uncompressed, destination),
+                .lz4hc => try hc_encoder.?.encode(
+                    uncompressed,
+                    destination,
+                    info.level,
+                ),
+                else => return error.UnsupportedLz4diffCompression,
+            };
             if (result.consumed != block.uncompressed_length)
                 return error.SizeMismatch;
             if (result.written < destination.len) {
@@ -597,7 +607,7 @@ test "Android OTA LZ4DIFF fixed header preserves AOSP seven-byte magic layout" {
     );
 }
 
-test "Android OTA LZ4DIFF applies BSDIFF and exact LZ4 recompression with postfix" {
+test "Android OTA LZ4DIFF applies BSDIFF and exact LZ4HC recompression with postfix" {
     const allocator = std.testing.allocator;
     const source_logical = try allocator.alloc(u8, 8192);
     defer allocator.free(source_logical);
@@ -615,6 +625,8 @@ test "Android OTA LZ4DIFF applies BSDIFF and exact LZ4 recompression with postfi
         source_logical,
         4096,
         true,
+        .lz4hc,
+        7,
     );
     defer allocator.free(source_physical);
     const local_destination = try compressedTestBlockAlloc(
@@ -622,6 +634,8 @@ test "Android OTA LZ4DIFF applies BSDIFF and exact LZ4 recompression with postfi
         destination_logical,
         4096,
         false,
+        .lz4hc,
+        5,
     );
     defer allocator.free(local_destination);
     const expected = try allocator.dupe(u8, local_destination);
@@ -645,10 +659,12 @@ test "Android OTA LZ4DIFF applies BSDIFF and exact LZ4 recompression with postfi
     const patch = try testPatchAlloc(
         allocator,
         .lz4hc,
+        7,
         source_logical.len,
         source_physical.len,
         true,
-        .lz4,
+        .lz4hc,
+        5,
         destination_logical.len,
         expected.len,
         false,
@@ -699,10 +715,12 @@ test "Android OTA LZ4DIFF applies PUFFDIFF through uncompressed blocks" {
     const patch = try testPatchAlloc(
         allocator,
         .uncompressed,
+        0,
         source_prefix.len,
         source_prefix.len,
         false,
         .uncompressed,
+        0,
         expected_prefix.len,
         expected_prefix.len,
         false,
@@ -723,17 +741,19 @@ test "Android OTA LZ4DIFF applies PUFFDIFF through uncompressed blocks" {
     try std.testing.expectEqualSlices(u8, &expected_prefix, decoded);
 }
 
-test "Android OTA LZ4DIFF rejects malformed metadata and unsupported LZ4HC" {
+test "Android OTA LZ4DIFF rejects malformed metadata and unknown compression" {
     const allocator = std.testing.allocator;
     const inner = try testBsdiffPatchAlloc(allocator, "abcd", "wxyz");
     defer allocator.free(inner);
     const patch = try testPatchAlloc(
         allocator,
         .lz4,
+        0,
         8,
         4,
         false,
-        .lz4hc,
+        @enumFromInt(99),
+        0,
         8,
         4,
         false,
@@ -769,10 +789,21 @@ fn compressedTestBlockAlloc(
     input: []const u8,
     capacity: usize,
     zero_padding_enabled: bool,
+    compression: CompressionType,
+    compression_level: i32,
 ) ![]u8 {
     const output = try allocator.alloc(u8, capacity);
     errdefer allocator.free(output);
-    const result = try lz4.encodeBlockDestSize(input, output);
+    const result = switch (compression) {
+        .lz4 => try lz4.encodeBlockDestSize(input, output),
+        .lz4hc => try lz4.encodeBlockHcDestSize(
+            allocator,
+            input,
+            output,
+            compression_level,
+        ),
+        else => return error.TestUnexpectedResult,
+    };
     if (result.consumed != input.len) return error.TestUnexpectedResult;
     const padding = capacity - result.written;
     if (zero_padding_enabled) {
@@ -787,10 +818,12 @@ fn compressedTestBlockAlloc(
 fn testPatchAlloc(
     allocator: std.mem.Allocator,
     source_compression: CompressionType,
+    source_level: i32,
     source_uncompressed_len: usize,
     source_compressed_len: usize,
     source_zero_padding: bool,
     destination_compression: CompressionType,
+    destination_level: i32,
     destination_uncompressed_len: usize,
     destination_compressed_len: usize,
     destination_zero_padding: bool,
@@ -802,6 +835,7 @@ fn testPatchAlloc(
     const source = try testCompressionInfoAlloc(
         allocator,
         source_compression,
+        source_level,
         source_uncompressed_len,
         source_compressed_len,
         source_zero_padding,
@@ -812,6 +846,7 @@ fn testPatchAlloc(
     const destination = try testCompressionInfoAlloc(
         allocator,
         destination_compression,
+        destination_level,
         destination_uncompressed_len,
         destination_compressed_len,
         destination_zero_padding,
@@ -846,6 +881,7 @@ fn testPatchAlloc(
 fn testCompressionInfoAlloc(
     allocator: std.mem.Allocator,
     compression: CompressionType,
+    compression_level: i32,
     uncompressed_len: usize,
     compressed_len: usize,
     zero_padding: bool,
@@ -860,6 +896,13 @@ fn testCompressionInfoAlloc(
         1,
         @intFromEnum(compression),
     );
+    if (compression_level != 0)
+        try protobuf.appendVarintField(
+            allocator,
+            &algorithm,
+            2,
+            @as(u32, @bitCast(compression_level)),
+        );
     var block: std.ArrayList(u8) = .empty;
     defer block.deinit(allocator);
     try protobuf.appendVarintField(allocator, &block, 2, uncompressed_len);

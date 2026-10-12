@@ -6,6 +6,7 @@ const block_format = @import("lz4/block_format.zig");
 const length = @import("lz4/length.zig");
 const literal_copy = @import("lz4/literal_copy.zig");
 const dest_size = @import("lz4/dest_size.zig");
+const hc_dest_size = @import("lz4/hc_dest_size.zig");
 const incremental_encoder = @import("lz4/incremental/frame_encoder.zig");
 const incremental_block_decoder = @import("lz4/incremental/block_decoder.zig");
 const incremental_tests = @import("lz4/incremental/tests.zig");
@@ -18,6 +19,43 @@ pub fn encodeBlockDestSize(input: []const u8, output: []u8) Error!DestSizeResult
         error.InputTooLarge => error.OutputLimitExceeded,
         error.OutputTooSmall => error.OutputTooSmall,
     };
+}
+
+pub const HcDestSizeEncoder = struct {
+    inner: hc_dest_size.Encoder,
+
+    pub fn init(allocator: std.mem.Allocator) Error!HcDestSizeEncoder {
+        return .{ .inner = try hc_dest_size.Encoder.init(allocator) };
+    }
+
+    pub fn deinit(self: *HcDestSizeEncoder) void {
+        self.inner.deinit();
+        self.* = undefined;
+    }
+
+    pub fn encode(
+        self: *HcDestSizeEncoder,
+        input: []const u8,
+        output: []u8,
+        compression_level: i32,
+    ) Error!DestSizeResult {
+        return self.inner.compress(input, output, compression_level) catch |err| switch (err) {
+            error.InputTooLarge => error.OutputLimitExceeded,
+            error.OutputTooSmall => error.OutputTooSmall,
+            error.OutOfMemory => error.OutOfMemory,
+        };
+    }
+};
+
+pub fn encodeBlockHcDestSize(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output: []u8,
+    compression_level: i32,
+) Error!DestSizeResult {
+    var encoder = try HcDestSizeEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encode(input, output, compression_level);
 }
 
 pub const default_compression_level: c_int = 10;

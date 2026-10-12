@@ -18179,8 +18179,10 @@ reuse, so production keeps the simpler independently owned plans.
   vendor signature verification, and streaming file I/O remain explicit
   follow-up work. LZ4DIFF_BSDIFF and LZ4DIFF_PUFFDIFF now parse bounded proto3
   metadata, expand ordinary and zero-padded clusters, apply nested BSDIFF or
-  PUFFDIFF, reproduce liblz4 1.9.3 `LZ4_compress_destSize` byte-for-byte, verify
-  pre-postfix SHA-256 values, and apply postfix corrections. Independent
-  system-liblz4 fixtures cover both operation kinds and padding layouts. LZ4HC
-  recompression and ZUCCHINI remain explicit unsupported follow-ups. See
+  PUFFDIFF, reproduce liblz4 1.9.3 `LZ4_compress_destSize` and
+  `LZ4_compress_HC_destSize` byte-for-byte across all compression levels,
+  verify pre-postfix SHA-256 values, and apply postfix corrections. Independent
+  system-liblz4 fixtures cover both operation kinds, padding layouts, and the
+  LZ4HC hash-chain and optimal parsers. ZUCCHINI remains an explicit
+  unsupported follow-up. See
   `docs/formats/android-ota.md`.

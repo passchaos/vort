@@ -213,8 +213,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   full-payload writing, with a bounded proto2 manifest parser, multi-partition
   RAW/Bzip2/XZ/ZERO operations, SOURCE_COPY/SOURCE_BSDIFF/BROTLI_BSDIFF delta
   extraction, PUFFDIFF with byte- and bit-aligned Deflate extents,
-  LZ4DIFF_BSDIFF/LZ4DIFF_PUFFDIFF with liblz4-compatible fixed-output LZ4
-  reconstruction and postfix correction, BSDIFF40/BSDF2/PUF1 patch streams,
+  LZ4DIFF_BSDIFF/LZ4DIFF_PUFFDIFF with liblz4-compatible fixed-output LZ4 and
+  LZ4HC reconstruction plus postfix correction, BSDIFF40/BSDF2/PUF1 patch streams,
   SHA-256 checks, bounded range reads, fuzzing, independent Python/liblz4
   validation, and Rust
   `payload_dumper` interoperability;

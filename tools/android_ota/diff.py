@@ -254,7 +254,7 @@ def no_deflate_puffdiff_patch(source: bytes, target: bytes) -> bytes:
     return b"PUF1" + struct.pack(">I", len(header)) + header + bsdiff_patch(source, target)
 
 
-def load_lz4_oracle() -> tuple[ctypes.CDLL, object] | None:
+def load_lz4_oracle() -> tuple[ctypes.CDLL, object, object, object, object] | None:
     library_name = ctypes.util.find_library("lz4")
     if library_name is None:
         return None
@@ -267,7 +267,21 @@ def load_lz4_oracle() -> tuple[ctypes.CDLL, object] | None:
         ctypes.c_int,
     ]
     compress.restype = ctypes.c_int
-    return library, compress
+    create_hc = library.LZ4_createStreamHC
+    create_hc.restype = ctypes.c_void_p
+    free_hc = library.LZ4_freeStreamHC
+    free_hc.argtypes = [ctypes.c_void_p]
+    compress_hc = library.LZ4_compress_HC_destSize
+    compress_hc.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.c_int,
+        ctypes.c_int,
+    ]
+    compress_hc.restype = ctypes.c_int
+    return library, compress, create_hc, free_hc, compress_hc
 
 
 def lz4_dest_size(compress: object, source: bytes, capacity: int) -> tuple[bytes, int]:
@@ -279,21 +293,74 @@ def lz4_dest_size(compress: object, source: bytes, capacity: int) -> tuple[bytes
     return bytes(destination.raw[:written]), consumed.value
 
 
+def lz4hc_dest_size(
+    create: object,
+    free: object,
+    compress: object,
+    source: bytes,
+    capacity: int,
+    level: int,
+) -> tuple[bytes, int]:
+    state = create()
+    if not state:
+        raise AssertionError("liblz4 HC allocation failed")
+    try:
+        destination = ctypes.create_string_buffer(capacity)
+        consumed = ctypes.c_int(len(source))
+        written = compress(
+            state,
+            source,
+            destination,
+            ctypes.byref(consumed),
+            capacity,
+            level,
+        )
+        if written <= 0:
+            raise AssertionError("liblz4 HC destSize failed")
+        return bytes(destination.raw[:written]), consumed.value
+    finally:
+        free(state)
+
+
 def lz4diff_payload(
     compress: object,
     inner_type: int,
     zero_padding: bool,
+    compression_type: int = 1,
+    compression_level: int = 0,
+    hc_oracle: tuple[object, object, object] | None = None,
 ) -> tuple[bytes, bytes, bytes]:
     source_logical = (b"AOSP LZ4DIFF source cluster\n" * 320)[: 2 * BLOCK_SIZE]
     source_logical += bytes(2 * BLOCK_SIZE - len(source_logical))
     target_logical = (b"Vort LZ4DIFF target cluster!\n" * 320)[: 2 * BLOCK_SIZE]
     target_logical += bytes(2 * BLOCK_SIZE - len(target_logical))
-    source_encoded, source_consumed = lz4_dest_size(
-        compress, source_logical, BLOCK_SIZE
-    )
-    target_encoded, target_consumed = lz4_dest_size(
-        compress, target_logical, BLOCK_SIZE
-    )
+    if compression_type == 1:
+        source_encoded, source_consumed = lz4_dest_size(
+            compress, source_logical, BLOCK_SIZE
+        )
+        target_encoded, target_consumed = lz4_dest_size(
+            compress, target_logical, BLOCK_SIZE
+        )
+    elif compression_type == 2 and hc_oracle is not None:
+        create_hc, free_hc, compress_hc = hc_oracle
+        source_encoded, source_consumed = lz4hc_dest_size(
+            create_hc,
+            free_hc,
+            compress_hc,
+            source_logical,
+            BLOCK_SIZE,
+            compression_level,
+        )
+        target_encoded, target_consumed = lz4hc_dest_size(
+            create_hc,
+            free_hc,
+            compress_hc,
+            target_logical,
+            BLOCK_SIZE,
+            compression_level,
+        )
+    else:
+        raise AssertionError("bad LZ4DIFF compression type")
     if source_consumed != len(source_logical) or target_consumed != len(target_logical):
         raise AssertionError("LZ4 fixture did not consume its logical block")
 
@@ -312,7 +379,9 @@ def lz4diff_payload(
     else:
         raise AssertionError("bad LZ4DIFF inner type")
 
-    algorithm = vfield(1, 1)
+    algorithm = vfield(1, compression_type)
+    if compression_level:
+        algorithm += vfield(2, compression_level)
     block = vfield(2, len(source_logical)) + vfield(3, BLOCK_SIZE)
     source_info = bfield(1, algorithm) + bfield(2, block)
     target_info = bfield(1, algorithm) + bfield(2, block)
@@ -832,15 +901,22 @@ def main() -> None:
 
         lz4_oracle = load_lz4_oracle()
         if lz4_oracle is not None:
-            _, lz4_compress = lz4_oracle
-            for inner_type, zero_padding, name in (
-                (0, False, "bsdiff"),
-                (1, True, "puffdiff"),
+            _, lz4_compress, create_hc, free_hc, lz4hc_compress = lz4_oracle
+            for inner_type, zero_padding, compression_type, level, name in (
+                (0, False, 1, 0, "lz4-bsdiff"),
+                (1, True, 1, 0, "lz4-puffdiff"),
+                (0, False, 2, 5, "lz4hc5-bsdiff"),
+                (1, True, 2, 9, "lz4hc9-puffdiff"),
+                (0, True, 2, 10, "lz4hc10-bsdiff"),
+                (1, False, 2, 12, "lz4hc12-puffdiff"),
             ):
                 lz4_payload, lz4_source, lz4_expected = lz4diff_payload(
                     lz4_compress,
                     inner_type,
                     zero_padding,
+                    compression_type,
+                    level,
+                    (create_hc, free_hc, lz4hc_compress),
                 )
                 lz4_payload_path = temp / f"lz4diff-{name}.bin"
                 lz4_payload_path.write_bytes(lz4_payload)

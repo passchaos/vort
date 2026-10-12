@@ -168,11 +168,14 @@ stored, fixed-Huffman, and dynamic-Huffman multi-block cases. A full AOSP
 `puffin` command may instead be supplied with `--puffin /path/to/puffin` to
 apply the pinned patch directly.
 When a system liblz4 is discoverable, the driver uses its
-`LZ4_compress_destSize` as an independent encoder oracle, builds both
+`LZ4_compress_destSize` and `LZ4_compress_HC_destSize` as independent encoder
+oracles, builds both
 LZ4DIFF_BSDIFF and LZ4DIFF_PUFFDIFF payloads, covers ordinary trailing padding
 and EROFS-style leading zero padding, and requires byte-identical whole-cluster
-and range output. The pure-Zig fill-output encoder is also compared directly
-against pinned liblz4 1.9.3 vectors in focused tests.
+and range output. LZ4HC fixtures exercise levels 5, 9, 10, and 12 so both the
+hash-chain and optimal parsers are covered. The pure-Zig fill-output encoders
+are also compared directly against pinned liblz4 1.9.3 vectors in focused
+tests.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

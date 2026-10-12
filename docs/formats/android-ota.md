@@ -23,16 +23,16 @@ payload. It validates:
 Full OTA extraction supports `REPLACE`, `REPLACE_BZ`, `REPLACE_XZ`, and `ZERO`.
 Delta payload `SOURCE_COPY`, legacy `SOURCE_BSDIFF`, `BROTLI_BSDIFF`, and
 `PUFFDIFF` operations are also supported with an explicit old partition image.
-`LZ4DIFF_BSDIFF` and `LZ4DIFF_PUFFDIFF` are supported for uncompressed and
-ordinary LZ4 clusters. Their bounded proto3 metadata parser validates
+`LZ4DIFF_BSDIFF` and `LZ4DIFF_PUFFDIFF` are supported for uncompressed,
+ordinary LZ4, and LZ4HC clusters. Their bounded proto3 metadata parser validates
 contiguous logical block offsets, exact physical and logical sizes, zero
 padding, hashes, and postfix patches. Source clusters are partially decoded to
 their declared logical lengths, the nested BSDIFF or PUFFDIFF patch is applied,
-and target clusters are reconstructed with a pure-Zig byte-exact equivalent of
-liblz4 1.9.3 `LZ4_compress_destSize`. Optional pre-postfix SHA-256 values and
-per-cluster postfix BSDIFF corrections are enforced. LZ4HC cluster
-recompression is deliberately reported as unsupported until its fill-output
-parser can be reproduced byte-for-byte.
+and target clusters are reconstructed with pure-Zig byte-exact equivalents of
+liblz4 1.9.3 `LZ4_compress_destSize` and `LZ4_compress_HC_destSize`. LZ4HC
+levels 1 through 12, the default-level mapping for non-positive values, and the
+level-12 cap for larger values follow upstream behavior. Optional pre-postfix
+SHA-256 values and per-cluster postfix BSDIFF corrections are enforced.
 The bsdiff patch
 reader accepts traditional `BSDIFF40` with three Bzip2 streams and Android's
 `BSDF2`, whose control, diff, and extra streams independently select Bzip2 or
@@ -156,14 +156,13 @@ streams back to the exact original bytes; supply it with
 also be selected with `--puffin /path/to/puffin` for the pinned full patch.
 When a system liblz4 is available, the differential additionally generates
 ordinary and zero-padded LZ4DIFF_BSDIFF/LZ4DIFF_PUFFDIFF payloads with
-`LZ4_compress_destSize`; Vort must reconstruct both complete clusters and
-bounded ranges byte-for-byte.
+`LZ4_compress_destSize` and `LZ4_compress_HC_destSize`; Vort must reconstruct
+both complete clusters and bounded ranges byte-for-byte. The LZ4HC cases span
+hash-chain levels 5 and 9 plus optimal-parser levels 10 and 12.
 
 Current explicit limitations are major-version-1 payloads, cryptographic
-verification of vendor metadata/payload signatures, ZUCCHINI, and LZ4DIFF
-targets that require LZ4HC recompression. LZ4HC returns
-`UnsupportedLz4diffCompression` instead of silently substituting ordinary LZ4.
-ZUCCHINI is retained in the parsed model but extraction returns
+verification of vendor metadata/payload signatures, and ZUCCHINI. ZUCCHINI is
+retained in the parsed model but extraction returns
 `UnsupportedAndroidOtaOperation`. DISCARD is likewise rejected by default
 because Android defines its read-back contents as undefined; callers may opt
 into deterministic zero interpretation through `DecodeOptions.discard_as_zero`.

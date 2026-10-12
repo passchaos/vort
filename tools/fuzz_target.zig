@@ -2413,35 +2413,68 @@ fn makePuffinFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
 }
 
 fn makeLz4diffFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
-    const bsdiff_sample = try makeBsdiffFuzzSampleAlloc(allocator);
-    defer allocator.free(bsdiff_sample);
-    const info = [_]u8{
-        0x0a, 0x02, 0x08, 0x00,
-        0x12, 0x06, 0x08, 0x00,
-        0x10, 0x04, 0x18, 0x04,
+    const source = [_]u8{0} ** 32;
+    const target = "abcabcabcabcabcabcabcabc01234567";
+    var control: [24]u8 = @splat(0);
+    std.mem.writeInt(u64, control[0..8], target.len, .little);
+    const control_compressed = try vort.encodeBzip2Alloc(
+        allocator,
+        &control,
+        .{},
+    );
+    defer allocator.free(control_compressed);
+    const diff_compressed = try vort.encodeBzip2Alloc(
+        allocator,
+        target,
+        .{},
+    );
+    defer allocator.free(diff_compressed);
+    const extra_compressed = try vort.encodeBzip2Alloc(allocator, "", .{});
+    defer allocator.free(extra_compressed);
+    var inner_patch: std.ArrayList(u8) = .empty;
+    defer inner_patch.deinit(allocator);
+    try inner_patch.appendSlice(allocator, "BSDIFF40");
+    var lengths: [24]u8 = @splat(0);
+    std.mem.writeInt(u64, lengths[0..8], control_compressed.len, .little);
+    std.mem.writeInt(u64, lengths[8..16], diff_compressed.len, .little);
+    std.mem.writeInt(u64, lengths[16..24], target.len, .little);
+    try inner_patch.appendSlice(allocator, &lengths);
+    try inner_patch.appendSlice(allocator, control_compressed);
+    try inner_patch.appendSlice(allocator, diff_compressed);
+    try inner_patch.appendSlice(allocator, extra_compressed);
+
+    const source_info = [_]u8{
+        0x12, 0x04,
+        0x10, source.len,
+        0x18, source.len,
     };
-    var header: [30]u8 = undefined;
+    const destination_info = [_]u8{
+        0x0a, 0x04,
+        0x08, 0x02,
+        0x10, 0x05,
+        0x12, 0x04,
+        0x10, target.len,
+        0x18, 0x10,
+    };
+    var header: [22]u8 = undefined;
     var offset: usize = 0;
     header[offset] = 0x0a;
-    header[offset + 1] = info.len;
+    header[offset + 1] = source_info.len;
     offset += 2;
-    @memcpy(header[offset..][0..info.len], &info);
-    offset += info.len;
+    @memcpy(header[offset..][0..source_info.len], &source_info);
+    offset += source_info.len;
     header[offset] = 0x12;
-    header[offset + 1] = info.len;
+    header[offset + 1] = destination_info.len;
     offset += 2;
-    @memcpy(header[offset..][0..info.len], &info);
-    offset += info.len;
-    header[offset] = 0x18;
-    header[offset + 1] = 0;
+    @memcpy(header[offset..][0..destination_info.len], &destination_info);
 
     var sample: std.ArrayList(u8) = .empty;
     errdefer sample.deinit(allocator);
     var sizes: [4]u8 = undefined;
-    std.mem.writeInt(u16, sizes[0..2], 4, .little);
-    std.mem.writeInt(u16, sizes[2..4], 4, .little);
+    std.mem.writeInt(u16, sizes[0..2], 16, .little);
+    std.mem.writeInt(u16, sizes[2..4], source.len, .little);
     try sample.appendSlice(allocator, &sizes);
-    try sample.appendNTimes(allocator, 0, 4);
+    try sample.appendSlice(allocator, &source);
     try sample.appendSlice(allocator, "LZ4DIFF");
     var number: [4]u8 = undefined;
     std.mem.writeInt(u32, &number, 1, .big);
@@ -2450,7 +2483,7 @@ fn makeLz4diffFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
     try sample.appendSlice(allocator, &number);
     try sample.append(allocator, 0);
     try sample.appendSlice(allocator, &header);
-    try sample.appendSlice(allocator, bsdiff_sample[2..]);
+    try sample.appendSlice(allocator, inner_patch.items);
     return sample.toOwnedSlice(allocator);
 }
 
