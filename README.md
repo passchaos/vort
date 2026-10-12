@@ -290,7 +290,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   end-marker streams, caller-selected output/dictionary limits, caller-owned
   output, exact-size MicroLZMA decoding with inverted properties and strict
   compressed-size/range termination, and ZIP method-14 writing/extraction
-  through the same LZMA core;
+  through the same LZMA core, plus symbol-progressive LZMA-Alone decoding with
+  bounded compressed staging, rolling dictionary history, single-symbol output
+  staging, arbitrary input/output splits, zero-output backpressure, exact-size
+  pledges, and distinct known-size/end-marker completion semantics;
 - pure Zig Unix `compress` (`.Z`) LZW encoding and decoding with 9..16-bit
   variable-width LSB-first codes, block-mode dictionary clears, non-block
   dictionary freeze, caller-owned/bounded APIs, and decoded-size preflight;

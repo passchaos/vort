@@ -18379,3 +18379,18 @@ reuse, so production keeps the simpler independently owned plans.
   distance and isolates Zig 0.16 LZMA2 scratch in a per-block arena to avoid the
   standard library's partial-reset double-free on OOM. See
   `docs/formats/xz.md`.
+
+- Added a true symbol-progressive LZMA-Alone decoder for both declared-size and
+  end-marker streams. The state retains the range decoder, probability model,
+  and bounded circular dictionary across calls, stages at most a conservative
+  64-byte non-final symbol lookahead, and drains only one committed
+  literal/match through caller output before continuing. This avoids whole
+  stream buffering while supporting arbitrary input fragmentation, zero-output
+  backpressure, compressed/output/dictionary limits, exact-size pledges,
+  reset, snapshots, and phase diagnostics. Unknown-size streams require the
+  end marker and reject trailing bytes; known-size streams preserve the
+  existing accepted range-coder tail behavior until explicit `finish`.
+  Focused tests cover byte-at-a-time Python output, 7-byte drains, random 4 KiB
+  output observed before finish, known/end-marker writers, zero output, all
+  truncated fixture prefixes, limits, reset, and every allocation failure.
+  See `docs/formats/lzma.md`.

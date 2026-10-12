@@ -22,6 +22,38 @@ const encoded = try vort.encodeLzmaAlloc(allocator, input, .{
 defer allocator.free(encoded);
 ```
 
+`LzmaIncrementalDecoder` is a true symbol-progressive LZMA-Alone surface. It
+keeps the range decoder, probability model, and circular dictionary alive
+across calls while retaining only a bounded compressed lookahead and one
+committed literal/match of pending output:
+
+```zig
+var decoder = vort.LzmaIncrementalDecoder.initWithOptions(allocator, .{
+    .max_output_len = 256 * 1024 * 1024,
+    .max_dictionary_size = 64 * 1024 * 1024,
+    .max_compressed_buffer_len = 1024 * 1024,
+    .expected_output_len = expected_size,
+});
+defer decoder.deinit();
+
+var input_offset: usize = 0;
+var output_offset: usize = 0;
+while (input_offset < compressed.len) {
+    const result = try decoder.step(
+        compressed[input_offset..],
+        output[output_offset..],
+    );
+    input_offset += result.progress.input_read;
+    output_offset += result.progress.output_written;
+}
+decoder.finish();
+while (true) {
+    const result = try decoder.step("", output[output_offset..]);
+    output_offset += result.progress.output_written;
+    if (result.status == .done) break;
+}
+```
+
 Available APIs:
 
 - `parseLzmaHeader`;
@@ -29,6 +61,8 @@ Available APIs:
 - `decodeLzmaAlloc` and `decodeLzmaAllocLimited`;
 - `decodeLzmaAllocWithOptions` for independent output and dictionary limits;
 - `lzmaDecodedSize` and `lzmaDecodedSizeLimited`;
+- `LzmaIncrementalDecoder` for fragmented caller input/output, resettable
+  state, snapshots, diagnostics, and exact output pledges;
 - `encodeLzmaAlloc`, `encodeLzmaInto`, and transactional `encodeLzmaAppend`;
 - known-size and end-marker writer modes with configurable LZMA properties and
   a bounded dictionary.
@@ -84,3 +118,13 @@ use XZ or a checksummed container such as ZIP. The current encoder uses a
 bounded greedy parser; deeper parsing remains future ratio work. The decoder's
 local circular dictionary keeps lookbehind validation tied to the declared
 window while safely handling outputs larger than that window.
+
+The incremental decoder preserves the same distinction: unknown-size streams
+must reach an end marker and reject any following bytes, while known-size
+streams complete after the declared output and retain the existing
+LZMA-Alone behavior of accepting range-coder tail bytes until the caller calls
+`finish`. Before a non-final symbol is executed, at least 64 compressed bytes
+are staged. This bound exceeds the maximum flags, length tree, distance slot,
+direct distance, and align bits consumed by one LZMA symbol, preventing a split
+input from partially mutating the probability model. Final short tails are
+processed only after `finish`, when input exhaustion can be reported exactly.

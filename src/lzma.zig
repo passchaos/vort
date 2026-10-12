@@ -1,7 +1,9 @@
 const decoder = @import("lzma/decoder.zig");
+const incremental_decoder = @import("lzma/incremental_decoder.zig");
+const incremental_tests = @import("lzma/incremental_tests.zig");
 const writer = @import("lzma/writer.zig");
 
-pub const Error = decoder.Error || writer.Error;
+pub const Error = decoder.Error || writer.Error || incremental_decoder.Decoder.Error;
 pub const Header = decoder.Header;
 pub const DecodeOptions = decoder.DecodeOptions;
 pub const MicroDecodeOptions = decoder.MicroDecodeOptions;
@@ -9,6 +11,7 @@ pub const EncodeOptions = writer.EncodeOptions;
 pub const Properties = writer.Properties;
 pub const EncodeMode = writer.Mode;
 pub const SizeMode = writer.SizeMode;
+pub const IncrementalDecoder = incremental_decoder.Decoder;
 pub const parseHeader = decoder.parseHeader;
 pub const decodeInto = decoder.decodeInto;
 pub const decodeAlloc = decoder.decodeAlloc;
@@ -30,6 +33,8 @@ pub const encodeInto = writer.encodeInto;
 
 test {
     _ = decoder;
+    _ = incremental_decoder;
+    _ = incremental_tests;
     _ = writer;
 }
 

@@ -223,6 +223,7 @@ pub const LzmaEncodeOptions = lzma.EncodeOptions;
 pub const LzmaProperties = lzma.Properties;
 pub const LzmaEncodeMode = lzma.EncodeMode;
 pub const LzmaSizeMode = lzma.SizeMode;
+pub const LzmaIncrementalDecoder = lzma.IncrementalDecoder;
 pub const parseLzmaHeader = lzma.parseHeader;
 pub const decodeLzmaInto = lzma.decodeInto;
 pub const decodeLzmaAlloc = lzma.decodeAlloc;
@@ -3403,6 +3404,21 @@ test "root LZMA-Alone exports compressed writing" {
     const decoded = try decodeLzmaAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var incremental = LzmaIncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+    });
+    defer incremental.deinit();
+    var incremental_output: [payload.len]u8 = undefined;
+    const initial = try incremental.step(encoded, &incremental_output);
+    incremental.finish();
+    var output_offset = initial.progress.output_written;
+    while (true) {
+        const result = try incremental.step("", incremental_output[output_offset..]);
+        output_offset += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    try std.testing.expectEqualSlices(u8, payload, &incremental_output);
 }
 
 test "root Unix compress exports round trip .Z streams" {

@@ -426,21 +426,21 @@ fn decodeRawAlloc(
     return decoded;
 }
 
-const CircularBuffer = struct {
+pub const CircularBuffer = struct {
     bytes: std.ArrayList(u8) = .empty,
     dictionary_size: usize,
     output_limit: usize,
     cursor: usize = 0,
     len: usize = 0,
 
-    fn init(dictionary_size: usize, output_limit: usize) CircularBuffer {
+    pub fn init(dictionary_size: usize, output_limit: usize) CircularBuffer {
         return .{
             .dictionary_size = dictionary_size,
             .output_limit = output_limit,
         };
     }
 
-    fn deinit(self: *CircularBuffer, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *CircularBuffer, allocator: std.mem.Allocator) void {
         self.bytes.deinit(allocator);
     }
 
