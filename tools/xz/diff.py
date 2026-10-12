@@ -123,19 +123,19 @@ def main() -> None:
             if name in ("text", "runs") and writer_sizes["compressed"] >= writer_sizes["stored"]:
                 raise AssertionError(f"Vort compressed XZ did not reduce {name}")
 
-        dictionary_payload = bytearray(65536 + 8192)
+        dictionary_payload = bytearray(2 * 65536 + 8192)
         dictionary_state = 0x13198A2E
-        for index in range(65536):
+        for index in range(2 * 65536):
             dictionary_state ^= (dictionary_state << 13) & 0xFFFFFFFF
             dictionary_state ^= dictionary_state >> 17
             dictionary_state ^= (dictionary_state << 5) & 0xFFFFFFFF
             dictionary_state &= 0xFFFFFFFF
             dictionary_payload[index] = dictionary_state & 0xFF
-        dictionary_payload[65536:] = dictionary_payload[32768:40960]
+        dictionary_payload[2 * 65536 :] = dictionary_payload[0:8192]
         dictionary_source = temp / "dictionary.source"
         dictionary_source.write_bytes(dictionary_payload)
         dictionary_default = temp / "dictionary-default.xz"
-        dictionary_large = temp / "dictionary-32k.xz"
+        dictionary_large = temp / "dictionary-128k.xz"
         run(
             args.cli,
             "encode-xz-file",
@@ -152,7 +152,7 @@ def main() -> None:
             "crc64",
             "1048576",
             "none",
-            "32768",
+            "131072",
         )
         default_bytes = dictionary_default.read_bytes()
         large_bytes = dictionary_large.read_bytes()
@@ -162,8 +162,8 @@ def main() -> None:
                 f"larger XZ dictionary saved only {dictionary_saved} bytes"
             )
         if lzma.decompress(large_bytes, format=lzma.FORMAT_XZ) != dictionary_payload:
-            raise AssertionError("Python could not decode Vort 32 KiB dictionary output")
-        if "max_dictionary=32768" not in run(
+            raise AssertionError("Python could not decode Vort 128 KiB dictionary output")
+        if "max_dictionary=131072" not in run(
             args.cli, "inspect-xz-file", str(dictionary_large)
         ).stdout:
             raise AssertionError("Vort XZ dictionary property was not preserved")

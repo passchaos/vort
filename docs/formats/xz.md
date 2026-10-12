@@ -4,7 +4,7 @@ Vort provides dependency-free XZ decoding for LZMA2 streams with optional
 Delta and x86, PowerPC, IA-64, ARM, ARM-Thumb, SPARC, ARM64, or RISC-V BCJ
 preprocessing filters. Its deterministic writer emits LZMA2 chunks with greedy LZ77 matches,
 repeat-distance coding, literal context coding, a stored fallback, and a
-caller-selected 4 KiB...65,535-byte dictionary retained across chunk
+caller-selected 4 KiB...256 KiB dictionary retained across chunk
 boundaries. The
 explicit stored writer remains available, and both paths can apply the same
 filter chains.
@@ -47,7 +47,7 @@ const filter_chain = [_]vort.XzFilter{
 const encoded = try vort.encodeXzAlloc(allocator, input, .{
     .check = .crc64,
     .block_size = 1024 * 1024,
-    .dictionary_size = 32 * 1024,
+    .dictionary_size = 128 * 1024,
     .filters = &filter_chain,
 });
 defer allocator.free(encoded);
@@ -119,7 +119,7 @@ same wire regardless of caller input/output fragmentation.
 var encoder = try vort.XzIncrementalEncoder.initExactSize(allocator, .{
     .check = .sha256,
     .block_size = 1024 * 1024,
-    .dictionary_size = 32 * 1024,
+    .dictionary_size = 128 * 1024,
     .filters = &filter_chain,
     .payload_encoding = .compressed, // or .stored
     .max_input_len = 256 * 1024 * 1024,
@@ -144,7 +144,7 @@ CLI validation surfaces:
 
 ```sh
 zig build run -- encode-xz-file input.bin output.xz crc64 1048576 x86,delta:4
-zig build run -- encode-xz-file input.bin output-32k.xz crc64 1048576 none 32768
+zig build run -- encode-xz-file input.bin output-128k.xz crc64 1048576 none 131072
 zig build run -- encode-xz-stored-file input.bin output.xz crc64 1048576 x86,delta:4
 zig build run -- encode-xz-file input.bin output.xz crc64 1048576 arm64:4096
 zig build run -- encode-xz-file input.bin output.xz crc64 1048576 riscv:4096
@@ -164,11 +164,13 @@ JAL plus the canonical AUIPC/JALR address pairs. Vort output is validated by
 two filter IDs. The current compressor uses bounded greedy match finding. Each
 compressed chunk resets its LZMA probability state and properties while
 retaining the configured preceding dictionary. Requests from 4 KiB through
-65,535 bytes are encoded with the smallest covering LZMA2 property, so decoder
-memory is rounded to one of 4/6/8/12/16/24/32/48/64 KiB while match distance
-never exceeds the caller's requested bound.
+256 KiB are encoded with the smallest covering LZMA2 property, so decoder
+memory is rounded to one of 4/6/8/12/16/24/32/48/64/96/128/192/256 KiB while
+match distance never exceeds the caller's requested bound. Requests above
+65,535 bytes select a dedicated LZMA `u32`-distance hash-chain planner; the
+shared LZ77 token and all other codecs retain their compact u16 distance.
 Stored fallbacks likewise retain history: the first chunk uses dictionary-reset
 control `1` or `0xe0`, while later stored/compressed chunks use `2` or `0xc0`.
 This lets a match cross a 64 KiB chunk boundary without making chunks dependent
-on hidden state outside their XZ block. Deeper parsing and a wider-distance
-LZMA matcher remain later ratio and performance work.
+on hidden state outside their XZ block. Deeper lazy/optimal parsing and larger
+dictionary properties remain later ratio and performance work.

@@ -1,6 +1,7 @@
 const std = @import("std");
 const lz77 = @import("../lz77.zig");
 const range_encoder = @import("range_encoder.zig");
+const wide_match = @import("wide_match.zig");
 
 pub const Error = lz77.Error || error{InvalidLzmaOptions};
 
@@ -31,6 +32,8 @@ pub const EncodeStats = struct {
     repeat_matches: usize,
     new_distance_matches: usize,
 };
+
+pub const max_dictionary_size: usize = wide_match.max_window_len;
 
 const max_states: usize = 12;
 const max_position_states: usize = 16;
@@ -88,7 +91,7 @@ pub const Model = struct {
         self: *Model,
         range: *range_encoder.Encoder,
         input: []const u8,
-        tokens: []const lz77.Token,
+        tokens: anytype,
         stats: *EncodeStats,
     ) !void {
         const consumed = try self.encodeTokensWithDictionary(
@@ -107,7 +110,7 @@ pub const Model = struct {
         range: *range_encoder.Encoder,
         input: []const u8,
         dictionary: []const u8,
-        tokens: []const lz77.Token,
+        tokens: anytype,
         stream_start: usize,
         stats: *EncodeStats,
     ) !usize {
@@ -364,27 +367,42 @@ pub fn encodeChunkAppendWithDictionaryStats(
             stats.literals = input.len;
         },
         .greedy => {
-            const plan = try lz77.hashGreedyPlanAllocWithDictionary(allocator, input, active_dictionary, .{
-                .window_len = options.dictionary_size,
-                .max_chain = 64,
-                .nice_len = 64,
-                .max_candidates = 4,
-                .min_match = 3,
-                .max_match = lz77.max_match_len,
-            });
-            defer plan.deinit(allocator);
-            stats.literals = plan.stats.literals;
-            stats.matches = plan.stats.matches;
-            stats.matched_bytes = plan.stats.matched_bytes;
-            const consumed = try model.encodeTokensWithDictionary(
-                &range,
-                input,
-                active_dictionary,
-                plan.tokens,
-                stream_start,
-                &stats,
-            );
-            if (consumed != input.len) return error.InvalidMatch;
+            if (options.dictionary_size <= std.math.maxInt(u16)) {
+                var plan = try lz77.hashGreedyPlanAllocWithDictionary(allocator, input, active_dictionary, .{
+                    .window_len = options.dictionary_size,
+                    .max_chain = 64,
+                    .nice_len = 64,
+                    .max_candidates = 4,
+                    .min_match = 3,
+                    .max_match = lz77.max_match_len,
+                });
+                defer plan.deinit(allocator);
+                try encodeGreedyPlan(
+                    &model,
+                    &range,
+                    input,
+                    active_dictionary,
+                    plan.tokens,
+                    stream_start,
+                    &stats,
+                    plan.stats,
+                );
+            } else {
+                var plan = try wide_match.planAlloc(allocator, input, active_dictionary, .{
+                    .window_len = options.dictionary_size,
+                });
+                defer plan.deinit(allocator);
+                try encodeGreedyPlan(
+                    &model,
+                    &range,
+                    input,
+                    active_dictionary,
+                    plan.tokens,
+                    stream_start,
+                    &stats,
+                    plan.stats,
+                );
+            }
         },
     }
     if (options.end_marker) {
@@ -402,8 +420,32 @@ pub fn encodeChunkAppendWithDictionaryStats(
 
 pub fn validateOptions(options: EncodeOptions) Error!void {
     _ = try propertyByte(options.properties);
-    if (options.dictionary_size == 0 or options.dictionary_size > std.math.maxInt(u16))
+    if (options.dictionary_size == 0 or options.dictionary_size > max_dictionary_size)
         return error.InvalidLzmaOptions;
+}
+
+fn encodeGreedyPlan(
+    model: *Model,
+    range: *range_encoder.Encoder,
+    input: []const u8,
+    dictionary: []const u8,
+    tokens: anytype,
+    stream_start: usize,
+    stats: *EncodeStats,
+    plan_stats: lz77.PlanStats,
+) !void {
+    stats.literals = plan_stats.literals;
+    stats.matches = plan_stats.matches;
+    stats.matched_bytes = plan_stats.matched_bytes;
+    const consumed = try model.encodeTokensWithDictionary(
+        range,
+        input,
+        dictionary,
+        tokens,
+        stream_start,
+        stats,
+    );
+    if (consumed != input.len) return error.InvalidMatch;
 }
 
 fn byteAt(dictionary: []const u8, input: []const u8, position: usize) u8 {

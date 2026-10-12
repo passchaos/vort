@@ -18689,4 +18689,19 @@ reuse, so production keeps the simpler independently owned plans.
   larger-dictionary output. The XZ focused suite passes 109/109, including
   property boundaries, out-of-property-zero matches, tiny incremental buffers,
   concatenated option changes, and limit errors; the expanded differential
-  now locks one larger-dictionary case in addition to its prior matrix.
+  now locks one larger-dictionary case in addition to its prior matrix. The
+  later increment below lifts the shared-u16 distance ceiling.
+
+- Added an LZMA-specific wide-distance hash-chain planner without enlarging the
+  repository's shared `lz77.Token`. Only requested XZ dictionaries above
+  65,535 bytes select its `u32` distance token; all existing codecs and default
+  XZ output retain the established narrow planner. XZ dictionary properties
+  now cover 4 KiB through 256 KiB (property 12), with exact requested match
+  bounds and quantized decoder-memory reporting. A frozen 139,264-byte
+  three-chunk corpus makes the third chunk reference data 128 KiB back: default
+  output is 139,332 bytes, while a 128 KiB dictionary emits 131,188 bytes,
+  saving 8,144 bytes (5.85%). Python `lzma` and system `xz --test` decode that
+  actual wide-distance stream. The LZMA and XZ focused suites pass 101/101 and
+  111/111, including every injected wide-planner allocation failure. The
+  expanded XZ differential records the exact sizes and dictionary property.
+  Deeper parsing and properties above 256 KiB remain future ratio work.

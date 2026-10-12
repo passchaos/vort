@@ -329,7 +329,7 @@ test "XZ compressed writer selects match coding and round trips filters" {
     const encoded = try encodeAlloc(allocator, input, .{
         .check = .crc32,
         .block_size = 8192,
-        .dictionary_size = 32 * 1024,
+        .dictionary_size = 128 * 1024,
         .filters = &chain,
     });
     defer allocator.free(encoded);
@@ -337,7 +337,7 @@ test "XZ compressed writer selects match coding and round trips filters" {
     const repeated = try encodeAlloc(allocator, input, .{
         .check = .crc32,
         .block_size = 8192,
-        .dictionary_size = 32 * 1024,
+        .dictionary_size = 128 * 1024,
         .filters = &chain,
     });
     defer allocator.free(repeated);
@@ -346,14 +346,14 @@ test "XZ compressed writer selects match coding and round trips filters" {
     defer allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
     const info = try container.inspect(allocator, encoded);
-    try std.testing.expectEqual(@as(u64, 32 * 1024), info.max_dictionary_size);
+    try std.testing.expectEqual(@as(u64, 128 * 1024), info.max_dictionary_size);
 
     const output = try allocator.alloc(u8, encoded.len);
     defer allocator.free(output);
     try std.testing.expectEqual(encoded.len, try encodeInto(allocator, input, output, .{
         .check = .crc32,
         .block_size = 8192,
-        .dictionary_size = 32 * 1024,
+        .dictionary_size = 128 * 1024,
         .filters = &chain,
     }));
     try std.testing.expectEqualSlices(u8, encoded, output);
@@ -365,7 +365,7 @@ test "XZ compressed writer selects match coding and round trips filters" {
     try std.testing.expectEqual(encoded.len, try encodeAppend(allocator, &appended, input, .{
         .check = .crc32,
         .block_size = 8192,
-        .dictionary_size = 32 * 1024,
+        .dictionary_size = 128 * 1024,
         .filters = &chain,
     }));
     try std.testing.expectEqualSlices(u8, "prefix:", appended.items[0..prefix_len]);
@@ -402,6 +402,11 @@ test "XZ stored writer caller-owned and append APIs are transactional" {
     try std.testing.expectError(
         error.InvalidBlockPlan,
         encodeStoredAppend(allocator, &appended, input, .{ .dictionary_size = 4095 }),
+    );
+    try std.testing.expectEqualSlices(u8, before, appended.items);
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        encodeStoredAppend(allocator, &appended, input, .{ .dictionary_size = 256 * 1024 + 1 }),
     );
     try std.testing.expectEqualSlices(u8, before, appended.items);
 }

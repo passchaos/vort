@@ -6,23 +6,22 @@ pub const max_uncompressed_chunk: usize = 65_536;
 const lzma_property: u8 = 0x5d;
 pub const dictionary_property: u8 = 0;
 pub const dictionary_size: usize = 4096;
-pub const max_dictionary_size: usize = std.math.maxInt(u16);
+pub const max_dictionary_size: usize = lzma_encoder.max_dictionary_size;
 
 /// Return the smallest LZMA2 dictionary property whose advertised size covers
-/// `requested_size`. The encoder's generic LZ77 token keeps distances in u16,
-/// so this surface deliberately stops at 65,535 bytes; property eight then
-/// advertises the format's quantized 64 KiB decoder window.
+/// `requested_size`. Requests above 65,535 bytes select the LZMA-specific wide
+/// matcher rather than widening the repository's shared LZ77 token.
 pub fn dictionaryProperty(requested_size: usize) core.Error!u8 {
     if (requested_size < dictionary_size or requested_size > max_dictionary_size)
         return error.InvalidBlockPlan;
     var property: u8 = 0;
-    while (property <= 8) : (property += 1)
+    while (property <= 12) : (property += 1)
         if (requested_size <= dictionarySize(property)) return property;
     unreachable;
 }
 
 fn dictionarySize(property: u8) usize {
-    std.debug.assert(property <= 8);
+    std.debug.assert(property <= 12);
     return @as(usize, 2 | (property & 1)) << @intCast(property / 2 + 11);
 }
 
@@ -168,7 +167,9 @@ test "LZMA2 dictionary properties round requested sizes upward" {
         .{ .requested = 6145, .property = 2, .advertised = 8192 },
         .{ .requested = 32 * 1024, .property = 6, .advertised = 32 * 1024 },
         .{ .requested = 48 * 1024, .property = 7, .advertised = 48 * 1024 },
-        .{ .requested = max_dictionary_size, .property = 8, .advertised = 64 * 1024 },
+        .{ .requested = 64 * 1024, .property = 8, .advertised = 64 * 1024 },
+        .{ .requested = 128 * 1024, .property = 10, .advertised = 128 * 1024 },
+        .{ .requested = max_dictionary_size, .property = 12, .advertised = 256 * 1024 },
     };
     for (cases) |case| {
         try std.testing.expectEqual(case.property, try dictionaryProperty(case.requested));
@@ -279,21 +280,21 @@ test "raw LZMA2 compressed payload reuses stored chunk dictionary" {
     try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
-test "raw LZMA2 larger dictionary reaches beyond property-zero history" {
-    const requested_dictionary_size = 32 * 1024;
+test "raw LZMA2 wide dictionary reaches beyond shared u16 history" {
+    const requested_dictionary_size = 128 * 1024;
     const repeated_len = 8192;
-    const input = try std.testing.allocator.alloc(u8, max_uncompressed_chunk + repeated_len);
+    const input = try std.testing.allocator.alloc(u8, max_uncompressed_chunk * 2 + repeated_len);
     defer std.testing.allocator.free(input);
     var state: u32 = 0x1319_8a2e;
-    for (input[0..max_uncompressed_chunk]) |*byte| {
+    for (input[0 .. max_uncompressed_chunk * 2]) |*byte| {
         state ^= state << 13;
         state ^= state >> 17;
         state ^= state << 5;
         byte.* = @truncate(state);
     }
     @memcpy(
-        input[max_uncompressed_chunk..],
-        input[max_uncompressed_chunk - requested_dictionary_size ..][0..repeated_len],
+        input[max_uncompressed_chunk * 2 ..],
+        input[0..repeated_len],
     );
 
     var default_encoded: std.ArrayList(u8) = .empty;
@@ -307,9 +308,9 @@ test "raw LZMA2 larger dictionary reaches beyond property-zero history" {
         input,
         requested_dictionary_size,
     );
-    const second_chunk = 3 + max_uncompressed_chunk;
-    try std.testing.expectEqual(@as(u8, 2), default_encoded.items[second_chunk]);
-    try std.testing.expectEqual(@as(u8, 0xc0), large_encoded.items[second_chunk]);
+    const third_chunk = 2 * (3 + max_uncompressed_chunk);
+    try std.testing.expectEqual(@as(u8, 2), default_encoded.items[third_chunk]);
+    try std.testing.expectEqual(@as(u8, 0xc0), large_encoded.items[third_chunk]);
     try std.testing.expect(large_encoded.items.len + 7000 < default_encoded.items.len);
 
     const property = try dictionaryProperty(requested_dictionary_size);

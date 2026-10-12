@@ -13,7 +13,7 @@ test "XZ incremental compressed encoder is byte exact across tiny buffers" {
     const options = xz.EncodeOptions{
         .check = .sha256,
         .block_size = 1024,
-        .dictionary_size = 32 * 1024,
+        .dictionary_size = 128 * 1024,
         .filters = &chain,
     };
     const one_shot = try xz.encodeAlloc(std.testing.allocator, input, options);
@@ -121,6 +121,10 @@ test "XZ incremental encoder enforces options input block and pending limits" {
         xz.IncrementalEncoder.initWithOptions(std.testing.allocator, .{ .dictionary_size = 4095 }),
     );
     try std.testing.expectError(
+        error.InvalidBlockPlan,
+        xz.IncrementalEncoder.initWithOptions(std.testing.allocator, .{ .dictionary_size = 256 * 1024 + 1 }),
+    );
+    try std.testing.expectError(
         error.OutputLimitExceeded,
         xz.IncrementalEncoder.initWithOptions(std.testing.allocator, .{ .max_block_count = 0 }),
     );
@@ -171,7 +175,7 @@ test "XZ incremental encoder continues concatenated streams" {
     try encoder.nextStreamExactSize(.{
         .check = .sha256,
         .block_size = 193,
-        .dictionary_size = 32 * 1024,
+        .dictionary_size = 128 * 1024,
         .payload_encoding = .stored,
     }, second.len);
     const second_frame = try encodeSplit(&encoder, second, 9, 7);
