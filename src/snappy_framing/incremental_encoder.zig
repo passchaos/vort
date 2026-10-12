@@ -64,7 +64,7 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type, comptime forma
             return .{
                 .allocator = allocator,
                 .options = options,
-                .block_encoder = BlockEncoder.init(allocator),
+                .block_encoder = try Codec.initBlockEncoder(allocator),
             };
         }
 
@@ -73,7 +73,7 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type, comptime forma
             return .{
                 .allocator = allocator,
                 .options = options,
-                .block_encoder = BlockEncoder.init(allocator),
+                .block_encoder = try Codec.initBlockEncoder(allocator),
                 .expected_input_len = expected_input_len,
             };
         }

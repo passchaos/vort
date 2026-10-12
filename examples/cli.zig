@@ -142,8 +142,12 @@ pub fn main(init: std.process.Init) !void {
         try snappy_framing_cli.inspectHadoop(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-hadoop-lz4-file")) {
         try snappy_framing_cli.encodeHadoopLz4(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-hadoop-lz4-incremental-file")) {
+        try snappy_framing_cli.encodeHadoopLz4Incremental(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-hadoop-lz4-file")) {
         try snappy_framing_cli.decodeHadoopLz4(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-hadoop-lz4-incremental-file")) {
+        try snappy_framing_cli.decodeHadoopLz4Incremental(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-hadoop-lz4-file")) {
         try snappy_framing_cli.inspectHadoopLz4(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "create-hadoop-lzo-index")) {
@@ -2519,7 +2523,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-hadoop-snappy-incremental-file <in> <out> <expected_output> [input_step] [output_step]
         \\  inspect-hadoop-snappy-file <path>
         \\  encode-hadoop-lz4-file <in> <out> [block_size] [chunk_size]
+        \\  encode-hadoop-lz4-incremental-file <in> <out> [block_size] [chunk_size] [input_step] [output_step]
         \\  decode-hadoop-lz4-file <in> <out> [max_output]
+        \\  decode-hadoop-lz4-incremental-file <in> <out> <expected_output> [input_step] [output_step]
         \\  inspect-hadoop-lz4-file <path>
         \\  create-hadoop-lzo-index <input.lzo> [output.lzo.index]
         \\  inspect-hadoop-lzo-index <input.lzo> <input.lzo.index>

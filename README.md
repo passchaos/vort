@@ -409,7 +409,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   diagnostics;
 - Hadoop LZ4 `BlockCompressorStream` framing with raw inner LZ4 blocks,
   token-derived decoded-size validation, deterministic nested-block writing,
-  bounded allocation, and caller-owned decode;
+  bounded allocation, caller-owned decode, and block-bounded incremental
+  encode/decode with arbitrary fragmentation, zero-output backpressure,
+  one-shot-exact unflushed output, explicit outer-block flush, pledged sizes,
+  compressed/decoded/pending limits, retained-scratch reset, snapshots, and
+  diagnostics;
 - Hadoop LZO `.lzo.index` parsing/generation with strict LZOP block-boundary
   validation, big-endian offset lookup, indexed block-range decode, filter and
   checksum handling, and explicit output limits;

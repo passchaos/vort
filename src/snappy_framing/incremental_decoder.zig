@@ -12,7 +12,7 @@ pub fn Decoder(comptime Codec: type, comptime format: Format) type {
         allocator: std.mem.Allocator,
         options: Options,
         phase: Phase = initialPhase(),
-        header: [Codec.xerial_header.len]u8 = undefined,
+        header: [if (format == .xerial) Codec.xerial_header.len else 4]u8 = undefined,
         header_len: usize = 0,
         compressed_len: usize = 0,
         compressed: std.ArrayList(u8) = .empty,
@@ -173,14 +173,16 @@ pub fn Decoder(comptime Codec: type, comptime format: Format) type {
                     }
                 }
 
-                if (self.phase == .stream_header) {
-                    const header_complete = self.fillHeader(input, &input_read, Codec.xerial_header.len);
-                    if (!header_complete) return result(input_read, output_written, .need_input);
-                    if (!std.mem.eql(u8, self.header[0..Codec.xerial_header.len], &Codec.xerial_header))
-                        return self.fail(.stream_header, error.InvalidMagic);
-                    self.header_len = 0;
-                    self.saw_xerial_header = true;
-                    self.phase = .chunk_header;
+                if (comptime format == .xerial) {
+                    if (self.phase == .stream_header) {
+                        const header_complete = self.fillHeader(input, &input_read, Codec.xerial_header.len);
+                        if (!header_complete) return result(input_read, output_written, .need_input);
+                        if (!std.mem.eql(u8, self.header[0..Codec.xerial_header.len], &Codec.xerial_header))
+                            return self.fail(.stream_header, error.InvalidMagic);
+                        self.header_len = 0;
+                        self.saw_xerial_header = true;
+                        self.phase = .chunk_header;
+                    }
                 }
 
                 if (self.phase == .outer_header) {
@@ -188,7 +190,7 @@ pub fn Decoder(comptime Codec: type, comptime format: Format) type {
                         return result(input_read, output_written, .need_input);
                     const expected: usize = std.mem.readInt(u32, self.header[0..4], .big);
                     self.header_len = 0;
-                    if (expected == 0) return self.fail(.outer_header, error.InvalidHadoopSnappyStream);
+                    if (expected == 0) return self.fail(.outer_header, invalidStreamError());
                     const stream_end = std.math.add(usize, self.total_output, expected) catch
                         return self.fail(.outer_header, error.IntegerOverflow);
                     if (stream_end > self.options.max_output_len)
@@ -239,7 +241,7 @@ pub fn Decoder(comptime Codec: type, comptime format: Format) type {
             const next_hadoop_block_decoded = if (comptime format == .hadoop) blk: {
                 const next = std.math.add(usize, self.hadoop_block_decoded, decoded_len) catch
                     return error.IntegerOverflow;
-                if (next > self.hadoop_block_expected) return error.InvalidHadoopSnappyStream;
+                if (next > self.hadoop_block_expected) return invalidStreamError();
                 break :blk next;
             } else 0;
             const stream_end = std.math.add(usize, self.total_output, decoded_len) catch
@@ -282,10 +284,7 @@ pub fn Decoder(comptime Codec: type, comptime format: Format) type {
         }
 
         fn invalidStreamError() Error {
-            return if (comptime format == .xerial)
-                error.InvalidXerialSnappyStream
-            else
-                error.InvalidHadoopSnappyStream;
+            return Codec.invalidStreamError(format);
         }
 
         fn fail(self: *Self, phase: Phase, err: Error) Error {

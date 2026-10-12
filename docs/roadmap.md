@@ -18555,3 +18555,18 @@ reuse, so production keeps the simpler independently owned plans.
   snappy-java 1.1.10.7 gate now requires two incremental encoder cases to match
   one-shot bytes and independently decodes both through Java, while retaining
   the four incremental decoder cases and malformed-stream checks.
+
+- Extended the shared Hadoop outer-block state machine to LZ4, exposing
+  `HadoopLz4IncrementalEncoder` and `HadoopLz4IncrementalDecoder`. The codec
+  adapter uses the reusable pure-Zig LZ4 block encoder, token-derived decoded
+  size, and caller-buffer decoder while preserving strict big-endian nested
+  length accounting. A multi-block fixture with 5-byte encoder input, 11-byte
+  encoded output, 3-byte decoder input, and 7-byte plaintext output matches
+  one-shot wire exactly and round trips. Empty streams, explicit/idempotent
+  outer-block flush, zero-output backpressure, exact/max input and output,
+  compressed/decoded/pending limits, corrupt outer lengths, retained-scratch
+  reset, and every encoder/decoder allocation failure are covered. The Python
+  `lz4.block` gate passes one exact incremental encode case and independently
+  decodes it, while both Vort- and Python-generated framing pass the
+  17-byte-input / 31-byte-output incremental decoder; two malformed cases
+  remain rejected.

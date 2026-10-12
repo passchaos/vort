@@ -17,6 +17,17 @@ const IncrementalCodec = struct {
     pub const Error = snappy_framing.Error;
     pub const xerial_header = snappy_framing.xerial_header;
 
+    pub fn invalidStreamError(comptime format: incremental_decoder.Format) snappy_framing.Error {
+        return if (format == .xerial)
+            error.InvalidXerialSnappyStream
+        else
+            error.InvalidHadoopSnappyStream;
+    }
+
+    pub fn initBlockEncoder(allocator: std.mem.Allocator) snappy_framing.Error!snappy.Encoder {
+        return snappy.Encoder.init(allocator);
+    }
+
     pub fn decodedBlockSize(input: []const u8) snappy_framing.Error!usize {
         return snappy.decodedBlockSize(input);
     }

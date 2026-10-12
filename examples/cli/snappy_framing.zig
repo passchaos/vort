@@ -309,6 +309,34 @@ pub fn encodeHadoopLz4(
     );
 }
 
+pub fn encodeHadoopLz4Incremental(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const block_size = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 256 * 1024;
+    const chunk_size = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 64 * 1024;
+    const input_step = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 17;
+    const output_step = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 31;
+    try encodeIncremental(
+        vort.HadoopLz4IncrementalEncoder,
+        "hadoop_lz4",
+        init,
+        input_path,
+        output_path,
+        .{
+            .block_size = block_size,
+            .chunk_size = chunk_size,
+            .max_pending_output_len = max_file_size,
+        },
+        input_step,
+        output_step,
+        stdout,
+    );
+}
+
 pub fn decodeHadoopLz4(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
@@ -327,6 +355,14 @@ pub fn decodeHadoopLz4(
         decoded.len,
         output_path,
     });
+}
+
+pub fn decodeHadoopLz4Incremental(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    return decodeIncremental(vort.HadoopLz4IncrementalDecoder, "hadoop_lz4", init, args, stdout);
 }
 
 pub fn inspectHadoopLz4(
