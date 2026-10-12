@@ -6,6 +6,25 @@ pub const max_uncompressed_chunk: usize = 65_536;
 const lzma_property: u8 = 0x5d;
 pub const dictionary_property: u8 = 0;
 pub const dictionary_size: usize = 4096;
+pub const max_dictionary_size: usize = std.math.maxInt(u16);
+
+/// Return the smallest LZMA2 dictionary property whose advertised size covers
+/// `requested_size`. The encoder's generic LZ77 token keeps distances in u16,
+/// so this surface deliberately stops at 65,535 bytes; property eight then
+/// advertises the format's quantized 64 KiB decoder window.
+pub fn dictionaryProperty(requested_size: usize) core.Error!u8 {
+    if (requested_size < dictionary_size or requested_size > max_dictionary_size)
+        return error.InvalidBlockPlan;
+    var property: u8 = 0;
+    while (property <= 8) : (property += 1)
+        if (requested_size <= dictionarySize(property)) return property;
+    unreachable;
+}
+
+fn dictionarySize(property: u8) usize {
+    std.debug.assert(property <= 8);
+    return @as(usize, 2 | (property & 1)) << @intCast(property / 2 + 11);
+}
 
 pub fn storedPayloadSize(input_len: usize) core.Error!usize {
     const chunk_count = if (input_len == 0) 0 else 1 + (input_len - 1) / max_uncompressed_chunk;
@@ -40,7 +59,7 @@ pub fn appendStoredPayload(
     return encoded_size;
 }
 
-/// Append a raw LZMA2 payload whose chunks retain the preceding 4 KiB LZMA2
+/// Append a raw LZMA2 payload whose chunks retain the configured preceding
 /// dictionary. Each compressed chunk resets its probability state and
 /// properties, while stored fallback chunks preserve the same history.
 /// Greedy range coding is used when it beats an uncompressed chunk; otherwise
@@ -50,6 +69,16 @@ pub fn appendCompressedPayload(
     out: *std.ArrayList(u8),
     input: []const u8,
 ) !usize {
+    return appendCompressedPayloadWithDictionarySize(allocator, out, input, dictionary_size);
+}
+
+pub fn appendCompressedPayloadWithDictionarySize(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    requested_dictionary_size: usize,
+) !usize {
+    _ = try dictionaryProperty(requested_dictionary_size);
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
     var candidate: std.ArrayList(u8) = .empty;
@@ -59,7 +88,7 @@ pub fn appendCompressedPayload(
     while (offset < input.len) {
         const chunk_len = @min(max_uncompressed_chunk, input.len - offset);
         const chunk = input[offset..][0..chunk_len];
-        const dictionary_start = offset - @min(offset, dictionary_size);
+        const dictionary_start = offset - @min(offset, requested_dictionary_size);
         const dictionary = input[dictionary_start..offset];
         candidate.clearRetainingCapacity();
         _ = try lzma_encoder.encodeChunkAppendWithDictionary(
@@ -68,7 +97,7 @@ pub fn appendCompressedPayload(
             chunk,
             dictionary,
             offset,
-            .{ .dictionary_size = dictionary_size },
+            .{ .dictionary_size = requested_dictionary_size },
         );
         if (candidate.items.len <= max_uncompressed_chunk and candidate.items.len + 3 < chunk.len) {
             try encoded.append(allocator, if (offset == 0) 0xe0 else 0xc0);
@@ -129,6 +158,24 @@ test "raw LZMA2 empty stored payload is only an end marker" {
     defer encoded.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 1), try appendStoredPayload(std.testing.allocator, &encoded, ""));
     try std.testing.expectEqualSlices(u8, &.{0}, encoded.items);
+}
+
+test "LZMA2 dictionary properties round requested sizes upward" {
+    const cases = [_]struct { requested: usize, property: u8, advertised: usize }{
+        .{ .requested = 4096, .property = 0, .advertised = 4096 },
+        .{ .requested = 4097, .property = 1, .advertised = 6144 },
+        .{ .requested = 6144, .property = 1, .advertised = 6144 },
+        .{ .requested = 6145, .property = 2, .advertised = 8192 },
+        .{ .requested = 32 * 1024, .property = 6, .advertised = 32 * 1024 },
+        .{ .requested = 48 * 1024, .property = 7, .advertised = 48 * 1024 },
+        .{ .requested = max_dictionary_size, .property = 8, .advertised = 64 * 1024 },
+    };
+    for (cases) |case| {
+        try std.testing.expectEqual(case.property, try dictionaryProperty(case.requested));
+        try std.testing.expectEqual(case.advertised, dictionarySize(case.property));
+    }
+    try std.testing.expectError(error.InvalidBlockPlan, dictionaryProperty(dictionary_size - 1));
+    try std.testing.expectError(error.InvalidBlockPlan, dictionaryProperty(max_dictionary_size + 1));
 }
 
 test "raw LZMA2 match compression round trips and falls back for noise" {
@@ -227,6 +274,51 @@ test "raw LZMA2 compressed payload reuses stored chunk dictionary" {
         dictionary_property,
         input.len,
         dictionary_size,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "raw LZMA2 larger dictionary reaches beyond property-zero history" {
+    const requested_dictionary_size = 32 * 1024;
+    const repeated_len = 8192;
+    const input = try std.testing.allocator.alloc(u8, max_uncompressed_chunk + repeated_len);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x1319_8a2e;
+    for (input[0..max_uncompressed_chunk]) |*byte| {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        byte.* = @truncate(state);
+    }
+    @memcpy(
+        input[max_uncompressed_chunk..],
+        input[max_uncompressed_chunk - requested_dictionary_size ..][0..repeated_len],
+    );
+
+    var default_encoded: std.ArrayList(u8) = .empty;
+    defer default_encoded.deinit(std.testing.allocator);
+    _ = try appendCompressedPayload(std.testing.allocator, &default_encoded, input);
+    var large_encoded: std.ArrayList(u8) = .empty;
+    defer large_encoded.deinit(std.testing.allocator);
+    _ = try appendCompressedPayloadWithDictionarySize(
+        std.testing.allocator,
+        &large_encoded,
+        input,
+        requested_dictionary_size,
+    );
+    const second_chunk = 3 + max_uncompressed_chunk;
+    try std.testing.expectEqual(@as(u8, 2), default_encoded.items[second_chunk]);
+    try std.testing.expectEqual(@as(u8, 0xc0), large_encoded.items[second_chunk]);
+    try std.testing.expect(large_encoded.items.len + 7000 < default_encoded.items.len);
+
+    const property = try dictionaryProperty(requested_dictionary_size);
+    const decoded = try @import("container.zig").decode7zPayloadAllocLimited(
+        std.testing.allocator,
+        large_encoded.items,
+        property,
+        input.len,
+        requested_dictionary_size,
     );
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);

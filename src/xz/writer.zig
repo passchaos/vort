@@ -11,6 +11,7 @@ pub const Filter = filters.Filter;
 pub const EncodeOptions = struct {
     check: Check = .crc64,
     block_size: usize = 1024 * 1024,
+    dictionary_size: usize = lzma2_writer.dictionary_size,
     filters: []const Filter = &.{},
 };
 
@@ -119,6 +120,7 @@ fn encodeWithPayload(
 
 pub fn validateOptions(options: EncodeOptions) Error!void {
     if (options.block_size == 0) return error.InvalidBlockPlan;
+    _ = try lzma2_writer.dictionaryProperty(options.dictionary_size);
     try filters.validateChain(options.filters);
     _ = try checkSize(options.check);
 }
@@ -144,9 +146,15 @@ pub fn appendBlock(
 ) !BlockRecord {
     if (input.len == 0 or input.len > options.block_size) return error.InvalidBlockPlan;
     try filters.validateChain(options.filters);
+    const dictionary_property = try lzma2_writer.dictionaryProperty(options.dictionary_size);
     const check_size = try checkSize(options.check);
     const block_start = output.items.len;
-    const header_size = try appendBlockHeader(allocator, output, options.filters);
+    const header_size = try appendBlockHeader(
+        allocator,
+        output,
+        options.filters,
+        dictionary_property,
+    );
     var filtered_storage: ?[]u8 = null;
     defer if (filtered_storage) |bytes| allocator.free(bytes);
     const filtered = if (options.filters.len == 0)
@@ -159,7 +167,12 @@ pub fn appendBlock(
     };
     const packed_size = switch (payload_encoding) {
         .stored => try lzma2_writer.appendStoredPayload(allocator, output, filtered),
-        .compressed => try lzma2_writer.appendCompressedPayload(allocator, output, filtered),
+        .compressed => try lzma2_writer.appendCompressedPayloadWithDictionarySize(
+            allocator,
+            output,
+            filtered,
+            options.dictionary_size,
+        ),
     };
     const padding_len = (4 - ((header_size + packed_size) % 4)) % 4;
     try output.appendNTimes(allocator, 0, padding_len);
@@ -209,6 +222,7 @@ fn appendBlockHeader(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     filter_chain: []const Filter,
+    dictionary_property: u8,
 ) !usize {
     var header: std.ArrayList(u8) = .empty;
     defer header.deinit(allocator);
@@ -226,7 +240,7 @@ fn appendBlockHeader(
     }
     try appendVli(allocator, &header, 0x21);
     try appendVli(allocator, &header, 1);
-    try header.append(allocator, 0);
+    try header.append(allocator, dictionary_property);
     while (header.items.len % 4 != 0) try header.append(allocator, 0);
     if (header.items.len / 4 > std.math.maxInt(u8)) return error.IntegerOverflow;
     header.items[0] = @intCast(header.items.len / 4);
@@ -304,6 +318,7 @@ test "XZ stored writer round trips checks and multiple blocks" {
         const info = try container.inspect(allocator, encoded);
         try std.testing.expectEqual(check, info.check);
         try std.testing.expectEqual(@as(usize, (input.len + 1023) / 1024), info.block_count);
+        try std.testing.expectEqual(@as(u64, 4096), info.max_dictionary_size);
     }
 }
 
@@ -314,6 +329,7 @@ test "XZ compressed writer selects match coding and round trips filters" {
     const encoded = try encodeAlloc(allocator, input, .{
         .check = .crc32,
         .block_size = 8192,
+        .dictionary_size = 32 * 1024,
         .filters = &chain,
     });
     defer allocator.free(encoded);
@@ -321,6 +337,7 @@ test "XZ compressed writer selects match coding and round trips filters" {
     const repeated = try encodeAlloc(allocator, input, .{
         .check = .crc32,
         .block_size = 8192,
+        .dictionary_size = 32 * 1024,
         .filters = &chain,
     });
     defer allocator.free(repeated);
@@ -328,12 +345,15 @@ test "XZ compressed writer selects match coding and round trips filters" {
     const decoded = try container.decodeAlloc(allocator, encoded);
     defer allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+    const info = try container.inspect(allocator, encoded);
+    try std.testing.expectEqual(@as(u64, 32 * 1024), info.max_dictionary_size);
 
     const output = try allocator.alloc(u8, encoded.len);
     defer allocator.free(output);
     try std.testing.expectEqual(encoded.len, try encodeInto(allocator, input, output, .{
         .check = .crc32,
         .block_size = 8192,
+        .dictionary_size = 32 * 1024,
         .filters = &chain,
     }));
     try std.testing.expectEqualSlices(u8, encoded, output);
@@ -345,6 +365,7 @@ test "XZ compressed writer selects match coding and round trips filters" {
     try std.testing.expectEqual(encoded.len, try encodeAppend(allocator, &appended, input, .{
         .check = .crc32,
         .block_size = 8192,
+        .dictionary_size = 32 * 1024,
         .filters = &chain,
     }));
     try std.testing.expectEqualSlices(u8, "prefix:", appended.items[0..prefix_len]);
@@ -376,6 +397,11 @@ test "XZ stored writer caller-owned and append APIs are transactional" {
     try std.testing.expectError(
         error.InvalidBlockPlan,
         encodeStoredAppend(allocator, &appended, input, .{ .block_size = 0 }),
+    );
+    try std.testing.expectEqualSlices(u8, before, appended.items);
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        encodeStoredAppend(allocator, &appended, input, .{ .dictionary_size = 4095 }),
     );
     try std.testing.expectEqualSlices(u8, before, appended.items);
 }

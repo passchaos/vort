@@ -29,6 +29,7 @@ pub const Encoder = struct {
     pub const Options = struct {
         check: writer.Check = .crc64,
         block_size: usize = 1024 * 1024,
+        dictionary_size: usize = 4096,
         filters: []const writer.Filter = &.{},
         payload_encoding: writer.PayloadEncoding = .compressed,
         max_input_len: usize = std.math.maxInt(usize),
@@ -39,6 +40,7 @@ pub const Encoder = struct {
             return .{
                 .check = self.check,
                 .block_size = self.block_size,
+                .dictionary_size = self.dictionary_size,
                 .filters = self.filters,
             };
         }

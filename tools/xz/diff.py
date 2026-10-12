@@ -123,6 +123,53 @@ def main() -> None:
             if name in ("text", "runs") and writer_sizes["compressed"] >= writer_sizes["stored"]:
                 raise AssertionError(f"Vort compressed XZ did not reduce {name}")
 
+        dictionary_payload = bytearray(65536 + 8192)
+        dictionary_state = 0x13198A2E
+        for index in range(65536):
+            dictionary_state ^= (dictionary_state << 13) & 0xFFFFFFFF
+            dictionary_state ^= dictionary_state >> 17
+            dictionary_state ^= (dictionary_state << 5) & 0xFFFFFFFF
+            dictionary_state &= 0xFFFFFFFF
+            dictionary_payload[index] = dictionary_state & 0xFF
+        dictionary_payload[65536:] = dictionary_payload[32768:40960]
+        dictionary_source = temp / "dictionary.source"
+        dictionary_source.write_bytes(dictionary_payload)
+        dictionary_default = temp / "dictionary-default.xz"
+        dictionary_large = temp / "dictionary-32k.xz"
+        run(
+            args.cli,
+            "encode-xz-file",
+            str(dictionary_source),
+            str(dictionary_default),
+            "crc64",
+            "1048576",
+        )
+        run(
+            args.cli,
+            "encode-xz-file",
+            str(dictionary_source),
+            str(dictionary_large),
+            "crc64",
+            "1048576",
+            "none",
+            "32768",
+        )
+        default_bytes = dictionary_default.read_bytes()
+        large_bytes = dictionary_large.read_bytes()
+        dictionary_saved = len(default_bytes) - len(large_bytes)
+        if dictionary_saved < 7000:
+            raise AssertionError(
+                f"larger XZ dictionary saved only {dictionary_saved} bytes"
+            )
+        if lzma.decompress(large_bytes, format=lzma.FORMAT_XZ) != dictionary_payload:
+            raise AssertionError("Python could not decode Vort 32 KiB dictionary output")
+        if "max_dictionary=32768" not in run(
+            args.cli, "inspect-xz-file", str(dictionary_large)
+        ).stdout:
+            raise AssertionError("Vort XZ dictionary property was not preserved")
+        if xz_tool is not None:
+            subprocess.run([xz_tool, "--test", str(dictionary_large)], check=True)
+
         first = lzma.compress(b"first XZ member\n" * 97, check=lzma.CHECK_CRC32)
         second_payload = bytes(range(251)) * 313
         second = lzma.compress(second_payload, check=lzma.CHECK_CRC64)
@@ -368,6 +415,8 @@ def main() -> None:
         f"xz_diff=ok directions=2 cases={len(cases)} compressed_bytes={compressed_total} "
         f"decoded_bytes={decoded_total} concatenated_bytes={len(expected_concatenated)} "
         f"filter_cases={len(filter_cases)} writer_modes=2 multiblock_count={multiblock_count}"
+        f" dictionary_cases=1 dictionary_default={len(default_bytes)}"
+        f" dictionary_large={len(large_bytes)} dictionary_saved={dictionary_saved}"
         f" modern_filter_cases={len(modern_filter_cases)}"
         f" modern_7zip={modern_seven_zip_tool is not None}"
     )

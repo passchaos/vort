@@ -18672,5 +18672,21 @@ reuse, so production keeps the simpler independently owned plans.
   focused XZ and LZMA suites pass
   107/107 and 99/99, and the Python/system-XZ differential passes five
   bidirectional corpora, four multi-block streams, eight standard filter cases,
-  and both compressed/stored writer modes. Deeper parsing and a larger
-  configurable LZMA2 dictionary remain ratio work.
+  and both compressed/stored writer modes. Deeper parsing remains ratio work;
+  the later increment below makes the dictionary size configurable.
+
+- Extended the XZ writer's retained LZMA2 history from fixed property zero to
+  a caller-selected 4 KiB...65,535-byte dictionary across one-shot, into,
+  transactional append, incremental, concatenated `nextStream`, stored, and
+  CLI surfaces. Requests map upward to the smallest property in
+  4/6/8/12/16/24/32/48/64 KiB, while the matcher remains bounded by the exact
+  requested size and its u16 distance representation. Defaults stay at 4 KiB,
+  preserving the preceding wire. Header inspection reports the quantized
+  decoder allocation; invalid smaller/larger requests fail transactionally.
+  A frozen 73,728-byte stream whose second chunk references bytes 32 KiB back
+  shrinks from 73,792 bytes at the default window to 65,644 bytes at 32 KiB,
+  saving 8,148 bytes (11.04%). Python `lzma` and system `xz --test` decode the
+  larger-dictionary output. The XZ focused suite passes 109/109, including
+  property boundaries, out-of-property-zero matches, tiny incremental buffers,
+  concatenated option changes, and limit errors; the expanded differential
+  now locks one larger-dictionary case in addition to its prior matrix.
