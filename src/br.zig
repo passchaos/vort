@@ -683,6 +683,22 @@ pub const IncrementalTestSupport = struct {
         return .{ .encoded = encoded, .payload = payload };
     }
 
+    /// Build a production literal stream whose three regions reuse two literal
+    /// tree types in A-B-A order.
+    pub fn encodeClusteredLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, clustered_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillClusteredLiteralFixture(payload);
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const proposals = literal_block_split.chooseProposals(payload, &commands, null);
+        const clustered = proposals.clustered orelse return error.InvalidBlockPlan;
+        const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{
+            .literal_split = clustered,
+        });
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
     /// Build a four-region production stream whose two command tree types
     /// alternate A-B-A-B across three consecutive implicit type switches.
     pub fn encodeAlternatingCommandTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
@@ -2679,7 +2695,7 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
 const CommandPlanEncodeOptions = struct {
     use_recent_distances: bool = false,
     use_utf8_text_contexts: bool = false,
-    literal_split: ?usize = null,
+    literal_split: ?literal_block_split.Result = null,
     command_split: ?command_block_split.Result = null,
     distance_split: ?usize = null,
     utf8_context_cutoff: u6 = 56,
@@ -3556,10 +3572,11 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
 /// chooses the two- or three-command-type proposal before one full-wire trial
 /// and strict size arbitration against the chosen unsplit stream.
 fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan) Error!?[]u8 {
-    const literal_split = if (options.try_literal_split)
-        literal_block_split.choose(input, commands, if (baseline.use_recent_distances) 56 else null)
+    const literal_splits = if (options.try_literal_split)
+        literal_block_split.chooseProposals(input, commands, if (baseline.use_recent_distances) 56 else null)
     else
-        null;
+        literal_block_split.Proposals{};
+    const literal_split = literal_splits.two;
     const symbol_splits = try chooseCommandAndDistanceSplitsAlloc(allocator, commands, baseline.use_recent_distances, options.try_command_split, options.try_distance_split);
     const distance_split = symbol_splits.distance;
     const command_split = symbol_splits.command.three orelse symbol_splits.command.two;
@@ -3571,6 +3588,15 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     var best = candidate;
     var best_stats = candidate_stats;
     errdefer allocator.free(best);
+    if (literal_splits.clustered) |clustered_literal| {
+        var clustered_literal_stats = baseline_stats;
+        const clustered_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_literal_stats, options, baseline.use_recent_distances, clustered_literal, command_split, distance_split);
+        if (clustered_literal_candidate.len < best.len) {
+            allocator.free(best);
+            best = clustered_literal_candidate;
+            best_stats = clustered_literal_stats;
+        } else allocator.free(clustered_literal_candidate);
+    }
     if (symbol_splits.command.clustered) |clustered| {
         var clustered_stats = baseline_stats;
         const clustered_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_stats, options, baseline.use_recent_distances, literal_split, clustered, distance_split);
@@ -3606,7 +3632,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     return null;
 }
 
-fn encodeEntropySplitWireCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, use_recent_distances: bool, literal_split: ?usize, command_split: ?command_block_split.Result, distance_split: ?distance_block_split.Result) Error![]u8 {
+fn encodeEntropySplitWireCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, use_recent_distances: bool, literal_split: ?literal_block_split.Result, command_split: ?command_block_split.Result, distance_split: ?distance_block_split.Result) Error![]u8 {
     return encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, stats, .{
         // The ordinary-vs-UTF8 decision is made first. A literal block split
         // then inherits that winner's distance coding instead of accidentally
@@ -3782,6 +3808,13 @@ fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_p
 fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
     if (commands.len == 0) return error.InvalidBlockPlan;
     if (options.literal_split != null and options.use_utf8_text_contexts) return error.InvalidBlockPlan;
+    if (options.literal_split) |split| {
+        if (split.split == 0 or !split.alternate_two_types and split.second_split != null)
+            return error.InvalidBlockPlan;
+        if (split.second_split) |second| {
+            if (second <= split.split) return error.InvalidBlockPlan;
+        } else if (split.alternate_two_types) return error.InvalidBlockPlan;
+    }
     // This writer currently fixes NPOSTFIX=0, whose four-bit NDIRECT field
     // directly represents values 0...15.
     if (options.ndirect > 15) return error.InvalidBlockPlan;
@@ -3847,7 +3880,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         } else try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
             if (options.literal_split) |split| {
-                literal_block_frequencies[@intFromBool(literal_index >= split)][literal] += 1;
+                literal_block_frequencies[split.blockIndex(literal_index)][literal] += 1;
                 literal_index += 1;
             } else {
                 try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
@@ -3879,7 +3912,10 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     // without adding payload bits.
     if (options.literal_split == null and literal_alphabet.len == 0)
         try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, 0);
-    if (options.literal_split) |split| if (split == 0 or literal_index <= split) return error.InvalidBlockPlan;
+    if (options.literal_split) |split| {
+        if (literal_index <= split.split) return error.InvalidBlockPlan;
+        if (split.second_split) |second| if (literal_index <= second) return error.InvalidBlockPlan;
+    }
     const same_last_distance_plan = if (has_same_last_candidate)
         try chooseSameLastDistancePlan(
             allocator,
@@ -3997,7 +4033,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     } else undefined;
     if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
     const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const literal_split_code = if (options.literal_split) |split| try TwoBlockLengthCode.init(split, literal_index - split) else undefined;
+    const literal_split_code = if (options.literal_split) |split| try LiteralBlockLengthCode.init(split, literal_index) else undefined;
     const command_split_code = if (options.command_split) |split| try CommandBlockLengthCode.init(split, commands.len) else undefined;
     const command_split_header: ?CommandBlockSplitHeader = if (options.command_split) |split| .{
         .block_count = split.typeCount(),
@@ -4012,7 +4048,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         .split_code = &distance_split_code,
     } else null;
     if (options.literal_split != null) {
-        try writePlannedCompressedHeaderTwoLiteralBlocks(allocator, writer, &literal_block_alphabets, &literal_block_lengths, &literal_split_code, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
+        try writePlannedCompressedHeaderLiteralBlocks(allocator, writer, &literal_block_alphabets, &literal_block_lengths, &literal_split_code, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
     } else if (options.use_utf8_text_contexts) {
         try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, options.utf8_context_cutoff, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
     } else try writePlannedCompressedHeader(allocator, writer, &literal_alphabet, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, options.ndirect, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
@@ -4101,8 +4137,11 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         try writeCommandLengthExtras(allocator, writer, encoding, command.insert_len, command.copy_len);
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
             if (options.literal_split) |split| {
-                if (literal_index == split) try literal_split_code.writeLength(allocator, writer, 1);
-                const block_index = @intFromBool(literal_index >= split);
+                if (literal_index == split.split) try literal_split_code.writeLength(allocator, writer, 1);
+                if (split.second_split) |second| if (literal_index == second) {
+                    try literal_split_code.writeLength(allocator, writer, 2);
+                };
+                const block_index = split.blockIndex(literal_index);
                 const encoder = &literal_block_encoders[block_index];
                 if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
                 literal_index += 1;
@@ -14120,7 +14159,7 @@ test "br planned wire encodes a two-type literal entropy split" {
     const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
     defer std.testing.allocator.free(baseline);
     const split = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
-        .literal_split = payload.len / 4,
+        .literal_split = .{ .split = payload.len / 4, .savings_bits = 0 },
     });
     defer std.testing.allocator.free(split);
 
@@ -14131,6 +14170,84 @@ test "br planned wire encodes a two-type literal entropy split" {
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, split, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+const clustered_literal_payload_len = 6144;
+
+fn fillClusteredLiteralFixture(payload: []u8) void {
+    std.debug.assert(payload.len == clustered_literal_payload_len);
+    for (payload[0..2048], 0..) |*byte, i| byte.* = @intCast(i & 15);
+    for (payload[2048..4096], 0..) |*byte, i| byte.* = @intCast(240 + (i & 15));
+    for (payload[4096..], 0..) |*byte, i| byte.* = @intCast(i & 15);
+}
+
+test "br planned wire clusters literal tree types in A-B-A order" {
+    var payload: [clustered_literal_payload_len]u8 = undefined;
+    fillClusteredLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    const proposals = literal_block_split.chooseProposals(&payload, &commands, null);
+    const two = proposals.two orelse return error.TestUnexpectedResult;
+    const clustered_plan = proposals.clustered orelse return error.TestUnexpectedResult;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const two_encoded = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .literal_split = two,
+    });
+    defer std.testing.allocator.free(two_encoded);
+    const clustered = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .literal_split = clustered_plan,
+    });
+    defer std.testing.allocator.free(clustered);
+    try std.testing.expect(clustered.len < two_encoded.len);
+
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        std.testing.allocator,
+        &payload,
+        &commands,
+        &stats,
+        .{ .try_literal_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    ) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, clustered, selected);
+
+    const summary = try summarizeStream(clustered);
+    try std.testing.expectEqual(@as(usize, 2), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 2), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, clustered, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br clustered literal candidate cleans up allocation failures" {
+    var payload: [clustered_literal_payload_len]u8 = undefined;
+    fillClusteredLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, base: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(
+                allocator,
+                input,
+                plan,
+                &candidate_stats,
+                .{ .try_literal_split = true },
+                .{ .encoded = base, .use_recent_distances = false },
+            );
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            try std.testing.expect(candidate.?.len < base.len);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload[0..], commands[0..], baseline },
+    );
 }
 
 const three_command_region_count = 6144;
@@ -14262,13 +14379,13 @@ test "br planned wire combines literal command and distance entropy splits" {
     fillThreeCommandRegionFixture(payload, commands);
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const two_command_blocks = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{
-        .literal_split = three_command_region_block_count,
+        .literal_split = .{ .split = three_command_region_block_count, .savings_bits = 0 },
         .command_split = .{ .split = three_command_region_block_count, .savings_bits = 0 },
         .distance_split = three_command_region_count / 2,
     });
     defer std.testing.allocator.free(two_command_blocks);
     const encoded = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{
-        .literal_split = three_command_region_block_count,
+        .literal_split = .{ .split = three_command_region_block_count, .savings_bits = 0 },
         .command_split = .{ .split = three_command_region_block_count, .second_split = 2 * three_command_region_block_count, .savings_bits = 0 },
         .distance_split = three_command_region_count / 2,
     });
@@ -24178,6 +24295,52 @@ const TwoBlockLengthCode = struct {
     }
 };
 
+const LiteralBlockLengthCode = struct {
+    alphabet: command_plan.PrefixAlphabetFor(26),
+    lengths: [26]u4,
+    block_lengths: [3]BlockLengthEncoding,
+    block_count: usize,
+
+    fn init(split: literal_block_split.Result, literal_count: usize) Error!LiteralBlockLengthCode {
+        if (split.split == 0 or split.split >= literal_count) return error.InvalidBlockPlan;
+        var block_lengths: [3]BlockLengthEncoding = undefined;
+        block_lengths[0] = blockLengthEncoding(split.split) orelse return error.InvalidBlockPlan;
+        const block_count = split.regionCount();
+        if (split.second_split) |second| {
+            if (second <= split.split or second >= literal_count or !split.alternate_two_types)
+                return error.InvalidBlockPlan;
+            block_lengths[1] = blockLengthEncoding(second - split.split) orelse
+                return error.InvalidBlockPlan;
+            block_lengths[2] = blockLengthEncoding(literal_count - second) orelse
+                return error.InvalidBlockPlan;
+        } else {
+            if (split.alternate_two_types) return error.InvalidBlockPlan;
+            block_lengths[1] = blockLengthEncoding(literal_count - split.split) orelse
+                return error.InvalidBlockPlan;
+        }
+        var frequencies: [26]u32 = @splat(0);
+        for (block_lengths[0..block_count]) |encoding| frequencies[encoding.symbol] += 1;
+        var alphabet: command_plan.PrefixAlphabetFor(26) = undefined;
+        try command_plan.alphabetFromFrequenciesInto(26, &alphabet, &frequencies);
+        return .{
+            .alphabet = alphabet,
+            .lengths = try alphabet.codeLengths(&frequencies),
+            .block_lengths = block_lengths,
+            .block_count = block_count,
+        };
+    }
+
+    fn writeLength(self: *const LiteralBlockLengthCode, allocator: std.mem.Allocator, writer: *BitWriter, index: usize) Error!void {
+        if (index >= self.block_count) return error.InvalidBlockPlan;
+        const encoding = self.block_lengths[index];
+        if (self.alphabet.len > 1) {
+            const code = self.alphabet.simpleCode(encoding.symbol) orelse return error.InvalidBlockPlan;
+            try writer.writeHuffmanBits(allocator, code.code, code.bits);
+        }
+        try writer.writeBits(allocator, encoding.extra, encoding.extra_bits);
+    }
+};
+
 const CommandBlockLengthCode = struct {
     alphabet: command_plan.PrefixAlphabetFor(26),
     lengths: [26]u4,
@@ -24299,12 +24462,12 @@ fn blockLengthEncoding(len: usize) ?BlockLengthEncoding {
     return null;
 }
 
-fn writePlannedCompressedHeaderTwoLiteralBlocks(
+fn writePlannedCompressedHeaderLiteralBlocks(
     allocator: std.mem.Allocator,
     writer: *BitWriter,
     literal_alphabets: *const [2]command_plan.PrefixAlphabetFor(256),
     literal_lengths: *const [2][256]u4,
-    split_code: *const TwoBlockLengthCode,
+    split_code: *const LiteralBlockLengthCode,
     ndirect: u7,
     command_alphabet: *const command_plan.PrefixAlphabet,
     command_split: ?CommandBlockSplitHeader,

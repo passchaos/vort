@@ -814,6 +814,26 @@ pub fn main(init: std.process.Init) !void {
     if (!std.mem.eql(u8, planned_literal_split_payload, planned_literal_split_decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(init.gpa, planned_literal_split, planned_literal_split_payload, 16, 17, 31);
     planned_literal_split_cases += 1;
+    const planned_clustered_literal = try vort.br.IncrementalTestSupport.encodeClusteredLiteralTypes(init.gpa);
+    defer init.gpa.free(planned_clustered_literal.encoded);
+    defer init.gpa.free(planned_clustered_literal.payload);
+    const planned_clustered_literal_summary = try vort.brSummarizeStream(planned_clustered_literal.encoded);
+    if (planned_clustered_literal_summary.max_literal_block_types != 2 or
+        planned_clustered_literal_summary.max_literal_context_trees != 2) return error.ReferenceEncodeFailed;
+    const planned_clustered_literal_decoded = try init.gpa.alloc(u8, planned_clustered_literal.payload.len);
+    defer init.gpa.free(planned_clustered_literal_decoded);
+    try reference.decode(planned_clustered_literal.encoded, planned_clustered_literal_decoded);
+    if (!std.mem.eql(u8, planned_clustered_literal.payload, planned_clustered_literal_decoded))
+        return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(
+        init.gpa,
+        planned_clustered_literal.encoded,
+        planned_clustered_literal.payload,
+        16,
+        17,
+        31,
+    );
+    planned_literal_split_cases += 1;
     var planned_command_split_cases: usize = 0;
     var planned_distance_split_cases: usize = 0;
     const planned_command_split = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, dictionary_bytes, .{ .level = .ratio });

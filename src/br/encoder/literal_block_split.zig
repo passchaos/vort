@@ -8,6 +8,7 @@ const max_split_literals: usize = 32 * 1024;
 const candidate_count: usize = 5;
 const min_estimated_savings_bits: u64 = 2048;
 const min_entropy_proposal_savings_bits: u64 = min_estimated_savings_bits * 3 / 4;
+const min_clustered_over_two_savings_bits: u64 = 128;
 const entropy_fraction_bits: u6 = 8;
 const entropy_scale: u64 = 1 << entropy_fraction_bits;
 
@@ -20,18 +21,52 @@ const log2_fraction_q8 = blk: {
     break :blk table;
 };
 
+pub const Result = struct {
+    split: usize,
+    second_split: ?usize = null,
+    alternate_two_types: bool = false,
+    savings_bits: u64,
+
+    pub fn regionCount(self: Result) usize {
+        return if (self.second_split != null) 3 else 2;
+    }
+
+    pub fn typeCount(self: Result) usize {
+        _ = self;
+        return 2;
+    }
+
+    pub fn blockIndex(self: Result, literal_index: usize) usize {
+        if (literal_index < self.split) return 0;
+        if (self.second_split) |second| {
+            if (literal_index < second) return 1;
+            return if (self.alternate_two_types) 0 else 1;
+        }
+        return 1;
+    }
+};
+
+pub const Proposals = struct {
+    two: ?Result = null,
+    clustered: ?Result = null,
+};
+
 /// Choose one literal-stream boundary for a two-type Brotli entropy split.
 /// This cheap proposal stage examines at most five evenly spaced boundaries,
 /// including the common midpoint split.
 /// The caller still encodes the complete candidate and selects it only when
 /// its exact wire size beats the existing stream.
-pub fn choose(input: []const u8, commands: []const command_plan.Command, utf8_context_cutoff: ?u6) ?usize {
+pub fn choose(input: []const u8, commands: []const command_plan.Command, utf8_context_cutoff: ?u6) ?Result {
+    return chooseProposals(input, commands, utf8_context_cutoff).two;
+}
+
+pub fn chooseProposals(input: []const u8, commands: []const command_plan.Command, utf8_context_cutoff: ?u6) Proposals {
     var total_literals: usize = 0;
     for (commands) |command| {
-        if (command.insert_start > input.len or command.insert_len > input.len - command.insert_start) return null;
-        total_literals = std.math.add(usize, total_literals, command.insert_len) catch return null;
+        if (command.insert_start > input.len or command.insert_len > input.len - command.insert_start) return .{};
+        total_literals = std.math.add(usize, total_literals, command.insert_len) catch return .{};
     }
-    if (total_literals < 2 * min_block_literals or total_literals > max_split_literals) return null;
+    if (total_literals < 2 * min_block_literals or total_literals > max_split_literals) return .{};
 
     var targets: [candidate_count]usize = undefined;
     var target_len: usize = 0;
@@ -42,7 +77,7 @@ pub fn choose(input: []const u8, commands: []const command_plan.Command, utf8_co
         targets[target_len] = target;
         target_len += 1;
     }
-    if (target_len == 0) return null;
+    if (target_len == 0) return .{};
 
     var total_frequencies: [256]u32 = @splat(0);
     var context_frequencies: [2][256]u32 = @splat(@splat(0));
@@ -64,7 +99,7 @@ pub fn choose(input: []const u8, commands: []const command_plan.Command, utf8_co
             target_index += 1;
         }
     }
-    if (literal_index != total_literals or target_index != target_len) return null;
+    if (literal_index != total_literals or target_index != target_len) return .{};
 
     const baseline_entropy = if (utf8_context_cutoff != null)
         entropyBitsQ8(&context_frequencies[0]) + entropyBitsQ8(&context_frequencies[1])
@@ -84,7 +119,7 @@ pub fn choose(input: []const u8, commands: []const command_plan.Command, utf8_co
             best_prefix_frequencies = prefix_frequencies;
         }
     }
-    if (best_split == null or baseline_entropy - best_entropy < min_entropy_proposal_savings_bits * entropy_scale) return null;
+    if (best_split == null or baseline_entropy - best_entropy < min_entropy_proposal_savings_bits * entropy_scale) return .{};
 
     var best_suffix_frequencies: [256]u32 = undefined;
     for (&best_suffix_frequencies, &total_frequencies, &best_prefix_frequencies) |*suffix, total, prefix|
@@ -102,8 +137,54 @@ pub fn choose(input: []const u8, commands: []const command_plan.Command, utf8_co
     const suffix_lengths = huffman.treeCodeLengths(256, &best_suffix_frequencies, 15);
     const split_bits = weightedBits(&best_prefix_frequencies, &prefix_lengths) +
         weightedBits(&best_suffix_frequencies, &suffix_lengths);
-    if (split_bits >= baseline_bits or baseline_bits - split_bits < min_estimated_savings_bits) return null;
-    return best_split;
+    if (split_bits >= baseline_bits or baseline_bits - split_bits < min_estimated_savings_bits) return .{};
+    var proposals = Proposals{ .two = .{
+        .split = best_split.?,
+        .savings_bits = baseline_bits - split_bits,
+    } };
+
+    var best_clustered_bits = baseline_bits;
+    var best_clustered_first: usize = candidate_count;
+    var best_clustered_second: usize = candidate_count;
+    for (0..target_len) |first_index| {
+        for (first_index + 1..target_len) |second_index| {
+            const first_split = targets[first_index];
+            const second_split = targets[second_index];
+            if (first_split < min_block_literals or
+                second_split - first_split < min_block_literals or
+                total_literals - second_split < min_block_literals)
+                continue;
+            var middle: [256]u32 = undefined;
+            var outer: [256]u32 = undefined;
+            for (&middle, &outer, &prefix_snapshots[first_index], &prefix_snapshots[second_index], &total_frequencies) |*middle_out, *outer_out, first, second, total| {
+                middle_out.* = second - first;
+                outer_out.* = @as(u32, first) + total - second;
+            }
+            const outer_lengths = huffman.treeCodeLengths(256, &outer, 15);
+            const middle_lengths = huffman.treeCodeLengths(256, &middle, 15);
+            const clustered_bits = weightedBits(&outer, &outer_lengths) +
+                weightedBits(&middle, &middle_lengths);
+            if (clustered_bits < best_clustered_bits) {
+                best_clustered_bits = clustered_bits;
+                best_clustered_first = first_index;
+                best_clustered_second = second_index;
+            }
+        }
+    }
+    if (best_clustered_first != candidate_count) {
+        const savings = baseline_bits - best_clustered_bits;
+        if (savings >= min_estimated_savings_bits and
+            savings -| proposals.two.?.savings_bits >= min_clustered_over_two_savings_bits)
+        {
+            proposals.clustered = .{
+                .split = targets[best_clustered_first],
+                .second_split = targets[best_clustered_second],
+                .alternate_two_types = true,
+                .savings_bits = savings,
+            };
+        }
+    }
+    return proposals;
 }
 
 /// Fixed-point approximation of upstream Brotli's `BrotliBitsEntropy`. The
@@ -144,14 +225,14 @@ test "literal block split selects a strong distribution boundary" {
     for (input[2048..], 0..) |*byte, i| byte.* = @intCast(240 + (i & 15));
     const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
     const split = choose(&input, &commands, null) orelse return error.TestUnexpectedResult;
-    try std.testing.expect(split >= 1536 and split <= 2560);
+    try std.testing.expect(split.split >= 1536 and split.split <= 2560);
 }
 
 test "literal block split rejects stationary distributions" {
     var input: [4096]u8 = undefined;
     for (&input, 0..) |*byte, i| byte.* = @intCast(i & 31);
     const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
-    try std.testing.expectEqual(@as(?usize, null), choose(&input, &commands, null));
+    try std.testing.expectEqual(@as(?Result, null), choose(&input, &commands, null));
 }
 
 test "literal block split keeps proposal work bounded" {
@@ -159,7 +240,7 @@ test "literal block split keeps proposal work bounded" {
     defer std.testing.allocator.free(input);
     @memset(input, 'a');
     const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
-    try std.testing.expectEqual(@as(?usize, null), choose(input, &commands, null));
+    try std.testing.expectEqual(@as(?Result, null), choose(input, &commands, null));
 }
 
 test "literal block split avoids work already explained by UTF8 contexts" {
@@ -168,7 +249,22 @@ test "literal block split avoids work already explained by UTF8 contexts" {
     for (input[2048..], 0..) |*byte, i| byte.* = @intCast(i & 15);
     const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
     try std.testing.expect(choose(&input, &commands, null) != null);
-    try std.testing.expectEqual(@as(?usize, null), choose(&input, &commands, 56));
+    try std.testing.expectEqual(@as(?Result, null), choose(&input, &commands, 56));
+}
+
+test "literal block split clusters matching outer regions" {
+    var input: [6144]u8 = undefined;
+    for (input[0..2048], 0..) |*byte, i| byte.* = @intCast(i & 15);
+    for (input[2048..4096], 0..) |*byte, i| byte.* = @intCast(240 + (i & 15));
+    for (input[4096..], 0..) |*byte, i| byte.* = @intCast(i & 15);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
+    const clustered = chooseProposals(&input, &commands, null).clustered orelse
+        return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, 3), clustered.regionCount());
+    try std.testing.expectEqual(@as(usize, 2), clustered.typeCount());
+    try std.testing.expectEqual(@as(usize, 0), clustered.blockIndex(0));
+    try std.testing.expectEqual(@as(usize, 1), clustered.blockIndex(clustered.split));
+    try std.testing.expectEqual(@as(usize, 0), clustered.blockIndex(clustered.second_split.?));
 }
 
 test "literal block split fixed-point logarithm tracks powers and mantissas" {

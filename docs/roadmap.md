@@ -18448,3 +18448,18 @@ reuse, so production keeps the simpler independently owned plans.
   reset, token statistics, and every allocation failure. It intentionally does
   not invent a flush or concatenation boundary absent from LZMA-Alone. See
   `docs/formats/lzma.md`.
+
+- Extended the Brotli ratio encoder from a single literal boundary to adaptive
+  three-region A-B-A clustering over two reused literal trees. The proposal
+  compares five bounded boundary candidates, requires every region to contain
+  at least 512 literals, estimates combined outer/middle entropy, and still
+  materializes complete two-region and clustered wires for strict byte-size
+  arbitration against the unsplit winner. The writer now emits three block
+  lengths, performs two implicit next-type switches (0→1→0), reuses the
+  existing two-tree context map, and selects each region's Huffman tree during
+  payload emission. A 6,144-byte low/high/low fixture selects clustered wire,
+  beats the two-region candidate, round trips through Vort, survives every
+  injected allocation failure, and decodes independently through libbrotli
+  1.1.0 plus the 17-byte-input/31-byte-output progressive path. The full
+  upstream gate remains green with 7,056 one-shot, 7,056 progressive, and
+  1,401 fragmentation cases; `planned_literal_split_cases=2`.
