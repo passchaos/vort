@@ -25,6 +25,9 @@ pub const Options = struct {
     max_zucchini_elements: usize = 1 << 20,
     max_zucchini_equivalences: usize = 1 << 24,
     max_zucchini_target_pools: usize = 1 << 20,
+    max_zucchini_elf_sections: usize = 1 << 20,
+    max_zucchini_references: usize = 1 << 24,
+    max_zucchini_targets: usize = 1 << 24,
     verify_partition_hash: bool = true,
     verify_source_hashes: bool = true,
     discard_as_zero: bool = false,
@@ -305,6 +308,9 @@ pub fn readPartitionRangeInto(
                         .max_elements = options.max_zucchini_elements,
                         .max_equivalences = options.max_zucchini_equivalences,
                         .max_target_pools = options.max_zucchini_target_pools,
+                        .max_elf_sections = options.max_zucchini_elf_sections,
+                        .max_references = options.max_zucchini_references,
+                        .max_targets = options.max_zucchini_targets,
                     },
                 );
                 owned = decoded;

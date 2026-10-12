@@ -181,6 +181,11 @@ headers, a canonical NoOp element, equivalence streams, and raw byte deltas;
 it then applies the required Brotli OTA envelope and requires byte-identical
 whole-partition and range output. A patch-reader fixture copied from AOSP's
 Zucchini tests separately pins the little-endian v1 wire layout.
+The independent generator also builds a synthetic but structurally valid
+AArch64 ELF and an `EA64` patch whose target pool and reference delta retarget
+a `B` immediate. AOSP-derived fixed vectors cover all three AArch64 branch
+immediate encodings, while focused tests cover relocation and 64-bit absolute
+reference groups.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

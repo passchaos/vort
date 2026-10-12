@@ -485,6 +485,62 @@ def zucchini_payload() -> tuple[bytes, bytes, bytes]:
     return payload, source, target
 
 
+def test_aarch64_elf(target_offset: int) -> bytes:
+    image = bytearray(BLOCK_SIZE)
+    image[:4] = b"\x7fELF"
+    image[4:7] = b"\2\1\1"
+    struct.pack_into("<HHI", image, 16, 2, 183, 1)
+    struct.pack_into("<Q", image, 40, BLOCK_SIZE - 0x80)
+    struct.pack_into("<HHHHH", image, 52, 64, 56, 0, 64, 2)
+    section = BLOCK_SIZE - 0x40
+    struct.pack_into("<IIQQQQIIQQ", image, section, 0, 1, 6, 0x10000, 0x100, 0x20, 0, 0, 4, 0)
+    displacement = target_offset - 0x100
+    struct.pack_into("<I", image, 0x100, 0x14000000 | ((displacement >> 2) & 0x03FFFFFF))
+    image[0x104:0x120] = b"\x1f" * 0x1C
+    return bytes(image)
+
+
+def zucchini_aarch64_payload() -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source = test_aarch64_elf(0x108)
+    target = test_aarch64_elf(0x10C)
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 1)
+    patch += struct.pack("<IIII4sH", 0, len(source), 0, len(target), b"EA64", 1)
+    patch += struct.pack("<I", 1) + b"\0"
+    patch += struct.pack("<I", 1) + b"\0"
+    encoded_length = varint(len(source))
+    patch += struct.pack("<I", len(encoded_length)) + encoded_length
+    patch += struct.pack("<I", 0)
+    patch += struct.pack("<I", 0)
+    patch += struct.pack("<I", 0)
+    patch += struct.pack("<I", 1) + b"\2"
+    patch += struct.pack("<I", 1) + b"\2" + struct.pack("<I", 2) + b"\x8c\2"
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition = bytearray(bfield(1, b"zucchini-aarch64"))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
 def source_bsdiff_payload(source: bytes) -> tuple[bytes, bytes, bytes]:
     if len(source) != 2 * BLOCK_SIZE:
         raise AssertionError("SOURCE_BSDIFF fixture must be two blocks")
@@ -1023,38 +1079,42 @@ def main() -> None:
                 ranges += 1
 
         if python_brotli is not None:
-            zucchini_data, zucchini_source, zucchini_expected = zucchini_payload()
-            zucchini_payload_path = temp / "zucchini.bin"
-            zucchini_payload_path.write_bytes(zucchini_data)
-            zucchini_source_path = temp / "zucchini-old.img"
-            zucchini_source_path.write_bytes(zucchini_source)
-            zucchini_output = temp / "zucchini-new.img"
-            run(
-                args.cli,
-                "extract-android-ota",
-                zucchini_payload_path,
-                "zucchini",
-                zucchini_output,
-                len(zucchini_expected),
-                zucchini_source_path,
-            )
-            if zucchini_output.read_bytes() != zucchini_expected:
-                raise AssertionError("ZUCCHINI NoOp decode mismatch")
-            zucchini_range = temp / "zucchini-range.img"
-            run(
-                args.cli,
-                "extract-android-ota-range",
-                zucchini_payload_path,
-                "zucchini",
-                zucchini_range,
-                197,
-                907,
-                zucchini_source_path,
-            )
-            if zucchini_range.read_bytes() != zucchini_expected[197:1104]:
-                raise AssertionError("ZUCCHINI NoOp range mismatch")
-            zucchini_cases += 1
-            ranges += 1
+            for name, fixture in (
+                ("noop", zucchini_payload),
+                ("aarch64", zucchini_aarch64_payload),
+            ):
+                zucchini_data, zucchini_source, zucchini_expected = fixture()
+                zucchini_payload_path = temp / f"zucchini-{name}.bin"
+                zucchini_payload_path.write_bytes(zucchini_data)
+                zucchini_source_path = temp / f"zucchini-{name}-old.img"
+                zucchini_source_path.write_bytes(zucchini_source)
+                zucchini_output = temp / f"zucchini-{name}-new.img"
+                run(
+                    args.cli,
+                    "extract-android-ota",
+                    zucchini_payload_path,
+                    f"zucchini{'-aarch64' if name == 'aarch64' else ''}",
+                    zucchini_output,
+                    len(zucchini_expected),
+                    zucchini_source_path,
+                )
+                if zucchini_output.read_bytes() != zucchini_expected:
+                    raise AssertionError(f"ZUCCHINI {name} decode mismatch")
+                zucchini_range = temp / f"zucchini-{name}-range.img"
+                run(
+                    args.cli,
+                    "extract-android-ota-range",
+                    zucchini_payload_path,
+                    f"zucchini{'-aarch64' if name == 'aarch64' else ''}",
+                    zucchini_range,
+                    197,
+                    907,
+                    zucchini_source_path,
+                )
+                if zucchini_range.read_bytes() != zucchini_expected[197:1104]:
+                    raise AssertionError(f"ZUCCHINI {name} range mismatch")
+                zucchini_cases += 1
+                ranges += 1
 
         short = temp / "short.bin"
         short.write_bytes(MAGIC)

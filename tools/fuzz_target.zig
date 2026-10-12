@@ -1736,6 +1736,11 @@ pub fn main(init: std.process.Init) !void {
     const zucchini_sample = try makeZucchiniFuzzSampleAlloc(init.gpa);
     defer init.gpa.free(zucchini_sample);
     try fuzzOne(init.gpa, zucchini_sample);
+    const zucchini_aarch64_sample = try makeZucchiniAarch64FuzzSampleAlloc(
+        init.gpa,
+    );
+    defer init.gpa.free(zucchini_aarch64_sample);
+    try fuzzOne(init.gpa, zucchini_aarch64_sample);
     inline for (.{
         .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
         .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },
@@ -2532,6 +2537,97 @@ fn makeZucchiniFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     });
+}
+
+fn makeZucchiniAarch64FuzzSampleAlloc(
+    allocator: std.mem.Allocator,
+) ![]u8 {
+    var source: [4096]u8 = @splat(0);
+    @memcpy(source[0..4], "\x7fELF");
+    source[4] = 2;
+    source[5] = 1;
+    source[6] = 1;
+    std.mem.writeInt(u16, source[16..18], 2, .little);
+    std.mem.writeInt(u16, source[18..20], 183, .little);
+    std.mem.writeInt(u32, source[20..24], 1, .little);
+    std.mem.writeInt(u64, source[40..48], 4096 - 128, .little);
+    std.mem.writeInt(u16, source[52..54], 64, .little);
+    std.mem.writeInt(u16, source[54..56], 56, .little);
+    std.mem.writeInt(u16, source[58..60], 64, .little);
+    std.mem.writeInt(u16, source[60..62], 2, .little);
+    const section = 4096 - 64;
+    std.mem.writeInt(u32, source[section + 4 ..][0..4], 1, .little);
+    std.mem.writeInt(u64, source[section + 8 ..][0..8], 6, .little);
+    std.mem.writeInt(u64, source[section + 16 ..][0..8], 0x10000, .little);
+    std.mem.writeInt(u64, source[section + 24 ..][0..8], 0x100, .little);
+    std.mem.writeInt(u64, source[section + 32 ..][0..8], 0x20, .little);
+    std.mem.writeInt(u64, source[section + 48 ..][0..8], 4, .little);
+    std.mem.writeInt(u32, source[0x100..0x104], 0x1400_0002, .little);
+    for (source[0x104..0x120]) |*byte| byte.* = 0x1f;
+    var expected = source;
+    std.mem.writeInt(u32, expected[0x100..0x104], 0x1400_0003, .little);
+
+    var sample: std.ArrayList(u8) = .empty;
+    errdefer sample.deinit(allocator);
+    var prefix: [4]u8 = undefined;
+    std.mem.writeInt(u16, prefix[0..2], 4096, .little);
+    std.mem.writeInt(u16, prefix[2..4], 4096, .little);
+    try sample.appendSlice(allocator, &prefix);
+    try sample.appendSlice(allocator, &source);
+    try sample.appendSlice(allocator, "Zucc");
+    try appendLe16(allocator, &sample, 1);
+    try appendLe16(allocator, &sample, 0);
+    try appendLe32(allocator, &sample, source.len);
+    try appendLe32(allocator, &sample, vort.crc32(&source));
+    try appendLe32(allocator, &sample, expected.len);
+    try appendLe32(allocator, &sample, vort.crc32(&expected));
+    try appendLe32(allocator, &sample, 1);
+    try appendLe32(allocator, &sample, 0);
+    try appendLe32(allocator, &sample, source.len);
+    try appendLe32(allocator, &sample, 0);
+    try appendLe32(allocator, &sample, expected.len);
+    try sample.appendSlice(allocator, "EA64");
+    try appendLe16(allocator, &sample, 1);
+    try appendLengthPrefixed(allocator, &sample, &.{0});
+    try appendLengthPrefixed(allocator, &sample, &.{0});
+    try appendLengthPrefixed(allocator, &sample, &.{ 0x80, 0x20 });
+    try appendLengthPrefixed(allocator, &sample, "");
+    try appendLengthPrefixed(allocator, &sample, "");
+    try appendLengthPrefixed(allocator, &sample, "");
+    try appendLengthPrefixed(allocator, &sample, &.{2});
+    try appendLe32(allocator, &sample, 1);
+    try sample.append(allocator, 2);
+    try appendLengthPrefixed(allocator, &sample, &.{ 0x8c, 0x02 });
+    return sample.toOwnedSlice(allocator);
+}
+
+fn appendLengthPrefixed(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    bytes: []const u8,
+) !void {
+    try appendLe32(allocator, output, bytes.len);
+    try output.appendSlice(allocator, bytes);
+}
+
+fn appendLe16(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    value: u16,
+) !void {
+    var bytes: [2]u8 = undefined;
+    std.mem.writeInt(u16, &bytes, value, .little);
+    try output.appendSlice(allocator, &bytes);
+}
+
+fn appendLe32(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    value: anytype,
+) !void {
+    var bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &bytes, @intCast(value), .little);
+    try output.appendSlice(allocator, &bytes);
 }
 
 fn makeDiscoverableWiiDiscAlloc(

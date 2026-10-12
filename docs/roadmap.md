@@ -18187,7 +18187,11 @@ reuse, so production keeps the simpler independently owned plans.
   envelope and applies bounded v1 NoOp/raw elements with CRC, equivalence,
   extra-data, and raw-delta validation. A pinned AOSP reader fixture,
   independent Python wire generator, range tests, malformed cases, and a valid
-  raw-byte fuzz seed cover this baseline. PE/ELF/DEX/ZTF reference correction
-  remains an explicit follow-up rather than silently treating executable
-  elements as raw data. See
+  raw-byte fuzz seed cover this baseline. AArch64 ELF support adds bounded
+  section/RVA translation, `R_AARCH64_RELATIVE`, absolute-64, and all three
+  branch-immediate reference groups, source-pruned equivalence projection,
+  target pools, and signed reference deltas. Independent EA64 OTA generation
+  and AOSP-derived instruction vectors validate the result. PE, x86/x64 and
+  AArch32 ELF, DEX, and ZTF reference correction remain explicit follow-ups
+  rather than silently treating unsupported executable elements as raw data. See
   `docs/formats/android-ota.md`.

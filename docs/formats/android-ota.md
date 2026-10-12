@@ -42,10 +42,14 @@ varints, ordered equivalences, exact extra-data accounting, raw-delta offsets,
 target-pool limits, trailing bytes, and output limits. NoOp/raw elements apply
 equivalence copies, literal gaps, and byte deltas and are available through the
 standalone `parseAndroidZucchiniAlloc` and `applyAndroidZucchiniAlloc` APIs as
-well as OTA extraction. Executable elements that require PE/ELF/DEX/ZTF
-reference correction are parsed but explicitly return
-`UnsupportedZucchiniPatch` until their architecture-specific disassemblers are
-implemented.
+well as OTA extraction. AArch64 ELF (`EA64`) elements are also supported: the
+bounded ELF64 reader validates headers, sections, program ranges, file/RVA
+mapping units, relocation tables, and reference quotas; correction covers
+`R_AARCH64_RELATIVE` relocation targets, 64-bit absolute targets, and AArch64
+14-, 19-, and 26-bit branch immediates. It reproduces Zucchini's source-pruned
+offset mapper, projected/extra target pools, nearest-key tie breaking, and
+global signed reference-delta order. Other executable elements are parsed but
+explicitly return `UnsupportedZucchiniPatch`.
 
 The bsdiff patch
 reader accepts traditional `BSDIFF40` with three Bzip2 streams and Android's
@@ -174,12 +178,14 @@ ordinary and zero-padded LZ4DIFF_BSDIFF/LZ4DIFF_PUFFDIFF payloads with
 both complete clusters and bounded ranges byte-for-byte. The LZ4HC cases span
 hash-chain levels 5 and 9 plus optimal-parser levels 10 and 12.
 When Python's Brotli module is available, the same driver independently emits
-a canonical Zucchini v1 NoOp patch with equivalences and raw deltas, wraps it
-in Brotli, and verifies whole-partition and bounded-range OTA extraction.
+a canonical Zucchini v1 NoOp patch with equivalences and raw deltas plus an
+`EA64` patch that retargets an AArch64 branch, wraps both in Brotli, and verifies
+whole-partition and bounded-range OTA extraction.
 
 Current explicit limitations are major-version-1 payloads, cryptographic
 verification of vendor metadata/payload signatures, and architecture-specific
-Zucchini reference correction for PE, ELF, DEX, and ZTF elements. DISCARD is
+Zucchini reference correction for PE, x86/x64 and AArch32 ELF, DEX, and ZTF
+elements. DISCARD is
 likewise rejected by default
 because Android defines its read-back contents as undefined; callers may opt
 into deterministic zero interpretation through `DecodeOptions.discard_as_zero`.
