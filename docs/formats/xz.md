@@ -50,11 +50,62 @@ const encoded = try vort.encodeXzAlloc(allocator, input, .{
 defer allocator.free(encoded);
 ```
 
+`XzIncrementalDecoder` exposes the same validation through a caller-driven,
+block-bounded state machine. It retains only the current compressed block or
+Index/Footer candidate plus one check-validated decoded block, rather than
+joining a complete multi-block or concatenated stream:
+
+```zig
+var decoder = vort.XzIncrementalDecoder.initWithOptions(allocator, .{
+    .max_output_len = 256 * 1024 * 1024,
+    .max_dictionary_size = 64 * 1024 * 1024,
+    .max_compressed_block_len = 64 * 1024 * 1024,
+    .max_decoded_block_len = 64 * 1024 * 1024,
+    .max_index_footer_len = 16 * 1024 * 1024,
+    .max_block_count = 1024 * 1024,
+    .expected_output_len = expected_size,
+});
+defer decoder.deinit();
+
+var input_offset: usize = 0;
+var output_offset: usize = 0;
+while (input_offset < compressed.len) {
+    const result = try decoder.step(
+        compressed[input_offset..],
+        output[output_offset..],
+    );
+    input_offset += result.progress.input_read;
+    output_offset += result.progress.output_written;
+}
+decoder.finish();
+while (true) {
+    const result = try decoder.step("", output[output_offset..]);
+    output_offset += result.progress.output_written;
+    if (result.status == .done) break;
+}
+```
+
 Available decoding forms include caller-owned output, bounded allocation,
 separate decoded-output and LZMA2-dictionary limits, validated decoded-size
-preflight, and explicit concatenated-stream variants.
+preflight, explicit concatenated-stream variants, and block-bounded incremental
+decode with snapshots and phase diagnostics.
 The compressed and stored writers provide alloc, transactional append, and
 caller-owned output APIs.
+
+The incremental decoder verifies the stream and block headers before accepting
+payload limits, applies Delta/BCJ filters only after complete LZMA2 decode, and
+publishes a block only after its none/CRC-32/CRC-64/SHA-256 check succeeds.
+Index records, Index CRC, Footer CRC/backward size/flags/magic, four-byte stream
+padding, and concatenated stream headers are then validated incrementally.
+Incomplete block and Index candidates are retried at exponentially growing
+input thresholds so one-byte fragmentation does not trigger a full reparse on
+every byte.
+
+Transient Zig 0.16 LZMA2 state is owned by a per-block arena. This avoids a
+standard-library partial-reset double-free when probability-table allocation
+fails, while preserving caller allocator accounting and deterministic cleanup.
+Decoded output is copied out of that arena only after the complete block check
+passes.
 
 CLI validation surfaces:
 

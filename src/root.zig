@@ -195,6 +195,7 @@ pub const XzCheck = xz.Check;
 pub const XzStreamInfo = xz.StreamInfo;
 pub const XzEncodeOptions = xz.EncodeOptions;
 pub const XzFilter = xz.Filter;
+pub const XzIncrementalDecoder = xz.IncrementalDecoder;
 pub const encodeXzAlloc = xz.encodeAlloc;
 pub const encodeXzAppend = xz.encodeAppend;
 pub const encodeXzInto = xz.encodeInto;
@@ -3381,6 +3382,17 @@ test "root XZ exports compressed LZMA2 writing" {
     const decoded = try decodeXzAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var incremental = XzIncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+    });
+    defer incremental.deinit();
+    var incremental_output: [payload.len]u8 = undefined;
+    _ = try incremental.step(encoded, &incremental_output);
+    incremental.finish();
+    const done = try incremental.step("", &incremental_output);
+    try std.testing.expectEqual(core.StepResult.Status.done, done.status);
+    try std.testing.expectEqualSlices(u8, payload, &incremental_output);
 }
 
 test "root LZMA-Alone exports compressed writing" {

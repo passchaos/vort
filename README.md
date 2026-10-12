@@ -282,7 +282,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream
   handling, bounded APIs and metadata inspection, plus deterministic
   filter-aware XZ writing with greedy LZMA matches, repeat distances, and a
-  stored fallback;
+  stored fallback, plus block-bounded caller-output incremental decoding with
+  arbitrary input fragmentation, zero-output backpressure, stream padding,
+  concatenated members, independent compressed/decoded/dictionary/Index
+  limits, exact-size pledges, and reusable container scratch;
 - dependency-free LZMA-Alone encoding and decoding with known-size or
   end-marker streams, caller-selected output/dictionary limits, caller-owned
   output, exact-size MicroLZMA decoding with inverted properties and strict

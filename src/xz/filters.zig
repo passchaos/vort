@@ -157,6 +157,7 @@ fn apply(bytes: []u8, filter: Filter, encode: bool) void {
 
 fn transformDelta(bytes: []u8, distance: usize, encode: bool) void {
     if (!encode) {
+        if (bytes.len <= distance) return;
         for (distance..bytes.len) |index| bytes[index] +%= bytes[index - distance];
         return;
     }
@@ -537,6 +538,10 @@ test "XZ delta inverse handles distance one and four" {
     var distance_four = [_]u8{ 1, 2, 3, 4, 4, 4, 4, 4 };
     transformDelta(&distance_four, 4, false);
     try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3, 4, 5, 6, 7, 8 }, &distance_four);
+
+    var shorter_than_distance = [_]u8{ 9, 8, 7 };
+    transformDelta(&shorter_than_distance, 4, false);
+    try std.testing.expectEqualSlices(u8, &.{ 9, 8, 7 }, &shorter_than_distance);
 }
 
 test "XZ modern BCJ filters validate aligned start offsets" {

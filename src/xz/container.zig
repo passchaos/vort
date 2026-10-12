@@ -37,17 +37,22 @@ pub const StreamInfo = struct {
 const stream_magic = [_]u8{ 0xfd, '7', 'z', 'X', 'Z', 0x00 };
 const stream_footer_magic = [_]u8{ 'Y', 'Z' };
 
-const BlockHeader = struct {
+pub const StreamHeader = struct {
+    flags: [2]u8,
+    check: Check,
+};
+
+pub const BlockHeader = struct {
     end_offset: usize,
     header_size: usize,
     packed_size: ?u64,
     unpacked_size: ?u64,
     dictionary_size: u64,
-    filters: [3]filters.Filter = undefined,
+    filters: [3]filters.Filter = @splat(.{ .kind = .delta, .parameter = 1 }),
     filter_count: usize = 0,
 };
 
-const BlockRecord = struct {
+pub const BlockRecord = struct {
     unpadded_size: u64,
     uncompressed_size: u64,
 };
@@ -55,6 +60,16 @@ const BlockRecord = struct {
 const Lzma2Scan = struct {
     packed_size: usize,
     unpacked_size: usize,
+};
+
+pub const DecodedBlock = struct {
+    decoded: []u8,
+    consumed: usize,
+    record: BlockRecord,
+
+    pub fn deinit(self: DecodedBlock, allocator: std.mem.Allocator) void {
+        allocator.free(self.decoded);
+    }
 };
 
 pub fn decodeInto(allocator: std.mem.Allocator, input: []const u8, output: []u8) !usize {
@@ -173,6 +188,104 @@ pub fn inspect(allocator: std.mem.Allocator, input: []const u8) !StreamInfo {
 
 const DecodedStream = struct { consumed: usize, info: StreamInfo };
 
+pub fn parseStreamHeader(input: []const u8) Error!StreamHeader {
+    if (input.len < 12) return error.TruncatedFrame;
+    if (!std.mem.eql(u8, input[0..6], &stream_magic)) return error.InvalidMagic;
+    const flags = input[6..8];
+    if (flags[0] != 0 or flags[1] & 0xf0 != 0) return error.InvalidXzHeader;
+    if (std.hash.Crc32.hash(flags) != try readU32(input, 8)) return error.ChecksumMismatch;
+    const check: Check = @enumFromInt(flags[1] & 0x0f);
+    _ = try checkSize(check);
+    return .{ .flags = flags[0..2].*, .check = check };
+}
+
+pub fn parseIncrementalBlockHeader(input: []const u8) Error!BlockHeader {
+    const header = try parseBlockHeader(input, 0);
+    if (header.end_offset != input.len) return error.TrailingData;
+    return header;
+}
+
+/// Decode one complete XZ block body (LZMA2 payload, padding, and block check)
+/// after its header has already been validated. The returned bytes are not
+/// exposed until the selected block check succeeds.
+pub fn decodeIncrementalBlockAlloc(
+    allocator: std.mem.Allocator,
+    header: BlockHeader,
+    input: []const u8,
+    check: Check,
+    max_output_len: usize,
+) !DecodedBlock {
+    const check_size = try checkSize(check);
+    const scan = try scanLzma2(input, max_output_len);
+    if (header.packed_size) |declared|
+        if (declared != scan.packed_size) return error.SizeMismatch;
+    if (header.unpacked_size) |declared|
+        if (declared != scan.unpacked_size) return error.SizeMismatch;
+
+    const data_end = try checkedEnd(0, scan.packed_size, input.len);
+    const block_padding_len = (4 - ((header.header_size + scan.packed_size) % 4)) % 4;
+    const padding_end = try checkedEnd(data_end, block_padding_len, input.len);
+    for (input[data_end..padding_end]) |byte| if (byte != 0) return error.InvalidXzStream;
+    const check_end = try checkedEnd(padding_end, check_size, input.len);
+
+    const decoded = try decodeLzma2Alloc(allocator, input[0..data_end], scan.unpacked_size);
+    errdefer allocator.free(decoded);
+    filters.decodeChain(decoded, header.filters[0..header.filter_count]);
+    try verifyCheck(check, decoded, input[padding_end..check_end]);
+    const unpadded_size = std.math.add(
+        u64,
+        @as(u64, @intCast(header.header_size + scan.packed_size)),
+        check_size,
+    ) catch return error.IntegerOverflow;
+    return .{
+        .decoded = decoded,
+        .consumed = check_end,
+        .record = .{
+            .unpadded_size = unpadded_size,
+            .uncompressed_size = scan.unpacked_size,
+        },
+    };
+}
+
+/// Validate one complete Index plus Stream Footer and return their byte length.
+/// `input` starts at the zero Index indicator.
+pub fn validateIncrementalIndexFooter(
+    input: []const u8,
+    stream_flags: []const u8,
+    records: []const BlockRecord,
+) Error!usize {
+    if (stream_flags.len != 2) return error.InvalidXzHeader;
+    if (try byteAt(input, 0) != 0) return error.InvalidXzStream;
+    const index_start: usize = 0;
+    var offset: usize = 1;
+    const record_count = try readVli(input, &offset, input.len);
+    if (record_count != records.len) return error.InvalidXzStream;
+    for (records) |record| {
+        if (try readVli(input, &offset, input.len) != record.unpadded_size or
+            try readVli(input, &offset, input.len) != record.uncompressed_size)
+            return error.InvalidXzStream;
+    }
+    while ((offset - index_start) % 4 != 0) {
+        if (try readByte(input, &offset, input.len) != 0) return error.InvalidXzStream;
+    }
+    const index_crc_offset = offset;
+    const stored_index_crc = try readU32(input, index_crc_offset);
+    if (stored_index_crc != std.hash.Crc32.hash(input[index_start..index_crc_offset]))
+        return error.ChecksumMismatch;
+    offset = try checkedEnd(offset, 4, input.len);
+    const index_size = offset - index_start;
+
+    const footer_end = try checkedEnd(offset, 12, input.len);
+    const footer = input[offset..footer_end];
+    if (std.hash.Crc32.hash(footer[4..10]) != std.mem.readInt(u32, footer[0..4], .little))
+        return error.ChecksumMismatch;
+    const backward_size = (@as(u64, std.mem.readInt(u32, footer[4..8], .little)) + 1) * 4;
+    if (backward_size != index_size) return error.InvalidXzStream;
+    if (!std.mem.eql(u8, footer[8..10], stream_flags)) return error.InvalidXzStream;
+    if (!std.mem.eql(u8, footer[10..12], &stream_footer_magic)) return error.InvalidXzStream;
+    return footer_end;
+}
+
 fn decodeOne(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -197,13 +310,9 @@ fn decodeOneWithInfo(
 ) !DecodedStream {
     const output_start = output.items.len;
     errdefer output.items.len = output_start;
-    if (input.len < 12) return error.TruncatedFrame;
-    if (!std.mem.eql(u8, input[0..6], &stream_magic)) return error.InvalidMagic;
-    const flags = input[6..8];
-    if (flags[0] != 0 or flags[1] & 0xf0 != 0) return error.InvalidXzHeader;
-    if (std.hash.Crc32.hash(flags) != try readU32(input, 8)) return error.ChecksumMismatch;
-    const check: Check = @enumFromInt(flags[1] & 0x0f);
-    const check_size = try checkSize(check);
+    const stream_header = try parseStreamHeader(input);
+    const flags = &stream_header.flags;
+    const check = stream_header.check;
 
     var records: std.ArrayList(BlockRecord) = .empty;
     defer records.deinit(allocator);
@@ -229,35 +338,19 @@ fn decodeOneWithInfo(
             stream_max_dictionary_size,
             header.dictionary_size,
         );
-        const scan = try scanLzma2(input[header.end_offset..], max_output_len -| output.items.len);
-        if (header.packed_size) |declared|
-            if (declared != scan.packed_size) return error.SizeMismatch;
-        if (header.unpacked_size) |declared|
-            if (declared != scan.unpacked_size) return error.SizeMismatch;
-
-        const data_end = try checkedEnd(header.end_offset, scan.packed_size, input.len);
-        const block_padding_len = (4 - ((header.header_size + scan.packed_size) % 4)) % 4;
-        const padding_end = try checkedEnd(data_end, block_padding_len, input.len);
-        for (input[data_end..padding_end]) |byte| if (byte != 0) return error.InvalidXzStream;
-        const check_end = try checkedEnd(padding_end, check_size, input.len);
-
-        const decoded = try decodeLzma2Alloc(allocator, input[header.end_offset..data_end], scan.unpacked_size);
-        defer allocator.free(decoded);
-        filters.decodeChain(decoded, header.filters[0..header.filter_count]);
-        try verifyCheck(check, decoded, input[padding_end..check_end]);
-        const output_end = std.math.add(usize, output.items.len, decoded.len) catch return error.OutputLimitExceeded;
+        const decoded_block = try decodeIncrementalBlockAlloc(
+            allocator,
+            header,
+            input[header.end_offset..],
+            check,
+            max_output_len -| output.items.len,
+        );
+        defer decoded_block.deinit(allocator);
+        const output_end = std.math.add(usize, output.items.len, decoded_block.decoded.len) catch return error.OutputLimitExceeded;
         if (output_end > max_output_len) return error.OutputLimitExceeded;
-        try output.appendSlice(allocator, decoded);
+        try output.appendSlice(allocator, decoded_block.decoded);
 
-        const unpadded_size = std.math.add(
-            u64,
-            @as(u64, @intCast(header.header_size + scan.packed_size)),
-            check_size,
-        ) catch return error.IntegerOverflow;
-        try records.append(allocator, .{
-            .unpadded_size = unpadded_size,
-            .uncompressed_size = scan.unpacked_size,
-        });
+        try records.append(allocator, decoded_block.record);
         for (header.filters[0..header.filter_count]) |filter| switch (filter.kind) {
             .delta => delta_filter_blocks += 1,
             .x86 => {
@@ -293,36 +386,15 @@ fn decodeOneWithInfo(
                 riscv_filter_blocks += 1;
             },
         };
-        offset = check_end;
+        offset = header.end_offset + decoded_block.consumed;
     }
 
     const index_start = offset;
-    offset += 1;
-    const record_count = try readVli(input, &offset, input.len);
-    if (record_count != records.items.len) return error.InvalidXzStream;
-    for (records.items) |record| {
-        if (try readVli(input, &offset, input.len) != record.unpadded_size or
-            try readVli(input, &offset, input.len) != record.uncompressed_size)
-            return error.InvalidXzStream;
-    }
-    while ((offset - index_start) % 4 != 0) {
-        if (try readByte(input, &offset, input.len) != 0) return error.InvalidXzStream;
-    }
-    const index_crc_offset = offset;
-    const stored_index_crc = try readU32(input, index_crc_offset);
-    if (stored_index_crc != std.hash.Crc32.hash(input[index_start..index_crc_offset]))
-        return error.ChecksumMismatch;
-    offset = try checkedEnd(offset, 4, input.len);
-    const index_size = offset - index_start;
-
-    const footer_end = try checkedEnd(offset, 12, input.len);
-    const footer = input[offset..footer_end];
-    if (std.hash.Crc32.hash(footer[4..10]) != std.mem.readInt(u32, footer[0..4], .little))
-        return error.ChecksumMismatch;
-    const backward_size = (@as(u64, std.mem.readInt(u32, footer[4..8], .little)) + 1) * 4;
-    if (backward_size != index_size) return error.InvalidXzStream;
-    if (!std.mem.eql(u8, footer[8..10], flags)) return error.InvalidXzStream;
-    if (!std.mem.eql(u8, footer[10..12], &stream_footer_magic)) return error.InvalidXzStream;
+    const footer_end = index_start + try validateIncrementalIndexFooter(
+        input[index_start..],
+        flags,
+        records.items,
+    );
 
     const produced = output.items.len - output_start;
     return .{
@@ -362,7 +434,7 @@ fn parseBlockHeader(input: []const u8, start: usize) Error!BlockHeader {
     const filter_count = @as(usize, flags & 0x03) + 1;
     const packed_size = if (flags & 0x40 != 0) try readVli(input, &cursor, crc_offset) else null;
     const unpacked_size = if (flags & 0x80 != 0) try readVli(input, &cursor, crc_offset) else null;
-    var decoded_filters: [3]filters.Filter = undefined;
+    var decoded_filters: [3]filters.Filter = @splat(.{ .kind = .delta, .parameter = 1 });
     var decoded_filter_count: usize = 0;
     var dictionary_property: ?u8 = null;
     for (0..filter_count) |filter_index| {
@@ -444,20 +516,26 @@ fn decodeLzma2Alloc(
     input: []const u8,
     expected_size: usize,
 ) ![]u8 {
+    // Zig 0.16's LZMA probability-table reset releases the old allocation
+    // before allocating its replacement. If that replacement fails, calling
+    // Decode.deinit would free the stale pointer again. Keep the complete
+    // transient decoder/output graph in an arena so every success and partial
+    // OOM state has one safe teardown operation.
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const work_allocator = arena.allocator();
     var source: std.Io.Reader = .fixed(input);
-    var output = try std.Io.Writer.Allocating.initCapacity(allocator, expected_size);
-    defer output.deinit();
-    var decoder = std.compress.lzma2.Decode.init(allocator) catch |err| switch (err) {
+    var output = try std.Io.Writer.Allocating.initCapacity(work_allocator, expected_size);
+    var decoder = std.compress.lzma2.Decode.init(work_allocator) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidXzStream,
     };
-    defer decoder.deinit(allocator);
     const consumed = decoder.decompress(&source, &output) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidXzStream,
     };
     if (consumed != input.len or output.written().len != expected_size) return error.SizeMismatch;
-    return output.toOwnedSlice();
+    return allocator.dupe(u8, output.written());
 }
 
 /// Decode a raw LZMA2 payload stored by a 7z coder. The property byte and

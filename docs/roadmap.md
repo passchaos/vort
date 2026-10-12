@@ -18363,3 +18363,19 @@ reuse, so production keeps the simpler independently owned plans.
   non-byte-aligned two-block stream, block and combined CRC failures, every
   truncated fixture prefix, all limits, and injected allocation failures. See
   `docs/formats/bzip2.md`.
+
+- Added a block-bounded public XZ/LZMA2 incremental decoder. It incrementally
+  validates stream and block headers, buffers only the current block or
+  Index/Footer candidate, applies Delta plus all eight BCJ filters, publishes
+  output only after the selected none/CRC-32/CRC-64/SHA-256 block check, and
+  then validates Index records/CRC, Footer CRC/backward size/flags/magic,
+  four-byte padding, and concatenated stream headers. Independent limits cover
+  compressed blocks, decoded blocks, dictionaries, Index/Footer bytes, block
+  count, total output, and exact pledged output. Focused coverage includes
+  byte-at-a-time input, 7-byte and zero-byte output, padded concatenation,
+  filtered five-block SHA-256 output, block/Footer corruption, every truncated
+  fixture prefix, all limits, reset, and allocation failure injection. The work
+  also fixed Delta inverse handling when the final block is shorter than its
+  distance and isolates Zig 0.16 LZMA2 scratch in a per-block arena to avoid the
+  standard library's partial-reset double-free on OOM. See
+  `docs/formats/xz.md`.

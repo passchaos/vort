@@ -1,9 +1,12 @@
 const container = @import("xz/container.zig");
+const incremental_decoder = @import("xz/incremental_decoder.zig");
+const incremental_tests = @import("xz/incremental_tests.zig");
 const writer = @import("xz/writer.zig");
 
-pub const Error = container.Error || writer.Error;
+pub const Error = container.Error || writer.Error || incremental_decoder.Decoder.Error;
 pub const Check = container.Check;
 pub const StreamInfo = container.StreamInfo;
+pub const IncrementalDecoder = incremental_decoder.Decoder;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const Filter = writer.Filter;
 pub const encodeAlloc = writer.encodeAlloc;
@@ -27,5 +30,7 @@ pub const decodedSizeConcatenatedLimited = container.decodedSizeConcatenatedLimi
 
 test {
     _ = container;
+    _ = incremental_decoder;
+    _ = incremental_tests;
     _ = writer;
 }
