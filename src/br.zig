@@ -6443,6 +6443,127 @@ pub fn benchmarkCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stre
     return .{ .elapsed_ns = elapsedNs(start_time, io), .checksum = checksum };
 }
 
+pub const ClusteredDecodeStageSample = struct {
+    iterations: usize,
+    header_ns: u64,
+    literal_lookup_ns: u64,
+    command_lookup_ns: u64,
+    distance_lookup_ns: u64,
+    payload_ns: u64,
+    total_ns: u64,
+    checksum: usize,
+
+    pub fn lookupNs(self: ClusteredDecodeStageSample) u64 {
+        return self.literal_lookup_ns + self.command_lookup_ns + self.distance_lookup_ns;
+    }
+};
+
+/// Benchmark the three independently actionable stages of the standard
+/// high-tree-count decoder. This diagnostic path requires the exact flat
+/// multi-tree route used by `clustered_q8`; ordinary decode remains the
+/// correctness and end-to-end performance authority.
+pub fn benchmarkClusteredDecodeStages(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    stream: []const u8,
+    expected: []const u8,
+    iterations: usize,
+) Error!ClusteredDecodeStageSample {
+    if (iterations == 0 or expected.len == 0) return error.InvalidBlockPlan;
+    const output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(output);
+
+    var header_ns: u64 = 0;
+    var literal_lookup_ns: u64 = 0;
+    var command_lookup_ns: u64 = 0;
+    var distance_lookup_ns: u64 = 0;
+    var payload_ns: u64 = 0;
+    var checksum: usize = 0;
+    const total_start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        var reader = bitstream.BitReader.init(stream);
+        const window_bits = try readWindowBitsValue(&reader);
+        const meta = switch (try readStreamMetaBlockHeader(&reader)) {
+            .compressed => |compressed| compressed,
+            else => return error.UnsupportedBrotliFeature,
+        };
+        if (!meta.final or meta.decoded_len != expected.len) return error.UnsupportedBrotliFeature;
+
+        var header: MinimalCompressedHeader = undefined;
+        var stage_start = std.Io.Clock.awake.now(io);
+        try readMinimalCompressedHeaderInto(&reader, &header);
+        header_ns +%= elapsedNs(stage_start, io);
+        if (header.literal_tree_count < clustered_literal_tree_threshold or
+            header.literal_tree_count > inline_literal_tree_count or
+            header.command_block.block_type_count == 0 or
+            header.command_block.block_type_count > multi_tree_zero_insert_command_limit or
+            header.distance_tree_count > inline_distance_tree_count) return error.UnsupportedBrotliFeature;
+
+        stage_start = std.Io.Clock.awake.now(io);
+        var literal_lookups: [inline_literal_tree_count]TailLiteralLookup = undefined;
+        if (!try prepareFlatLiteralTailLookups(&header, &literal_lookups)) return error.UnsupportedBrotliFeature;
+        literal_lookup_ns +%= elapsedNs(stage_start, io);
+
+        stage_start = std.Io.Clock.awake.now(io);
+        var command_lookups: [multi_tree_zero_insert_command_limit]single_command_lookup.Lookup = undefined;
+        for (header.insert_copy_trees[0..header.command_block.block_type_count], 0..) |*tree, index| {
+            command_lookups[index] = if (tree.single_symbol) |symbol|
+                try single_command_lookup.Lookup.initSingle(symbol)
+            else
+                try single_command_lookup.Lookup.init(&tree.table);
+        }
+        command_lookup_ns +%= elapsedNs(stage_start, io);
+
+        stage_start = std.Io.Clock.awake.now(io);
+        var distance_lookups: [inline_distance_tree_count]ExternalDistanceLookup = undefined;
+        for (header.distance_trees[0..header.distance_tree_count], 0..) |*tree, index| {
+            distance_lookups[index] = if (tree.single_symbol) |symbol|
+                try ExternalDistanceLookup.initSingle(symbol)
+            else
+                try ExternalDistanceLookup.init(&tree.table);
+        }
+        distance_lookup_ns +%= elapsedNs(stage_start, io);
+
+        var fast_reader = fast_bit_reader.Reader.initFrom(reader);
+        var written: usize = 0;
+        var last_distances = initial_last_distances;
+        stage_start = std.Io.Clock.awake.now(io);
+        try processTailLookupCompressedPayload(
+            true,
+            true,
+            true,
+            &fast_reader,
+            output,
+            &written,
+            expected.len,
+            &last_distances,
+            window_bits,
+            &header,
+            &literal_lookups,
+            null,
+            &command_lookups,
+            &distance_lookups,
+        );
+        payload_ns +%= elapsedNs(stage_start, io);
+        fast_reader.syncTo(&reader);
+        if (written != expected.len) return error.SizeMismatch;
+        try ensureZeroPaddingAndEnd(reader);
+        checksum +%= written + reader.bitPosition() + output[0] + output[output.len - 1];
+    }
+    const total_ns = elapsedNs(total_start, io);
+    if (!std.mem.eql(u8, output, expected)) return error.SizeMismatch;
+    return .{
+        .iterations = iterations,
+        .header_ns = header_ns,
+        .literal_lookup_ns = literal_lookup_ns,
+        .command_lookup_ns = command_lookup_ns,
+        .distance_lookup_ns = distance_lookup_ns,
+        .payload_ns = payload_ns,
+        .total_ns = total_ns,
+        .checksum = checksum,
+    };
+}
+
 fn readCompressedHeaderLiteralTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, profile: *PrefixCodeProfile) Error!void {
     var tree_index: u16 = 0;
     while (tree_index < tree_count) : (tree_index += 1) {

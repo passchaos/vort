@@ -3781,6 +3781,42 @@ pub fn build(b: *std.Build) void {
     );
     br_compressed_header_profile_gate_step.dependOn(&br_compressed_header_profile_gate.step);
 
+    const br_decode_stage_profile_exe = b.addExecutable(.{
+        .name = "vort-br-decode-stage-profile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/decode_stage_profile.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+            },
+        }),
+    });
+    const run_br_decode_stage_profile = b.addRunArtifact(br_decode_stage_profile_exe);
+    if (b.args) |args| run_br_decode_stage_profile.addArgs(args);
+    const br_decode_stage_profile_step = b.step(
+        "run-br-decode-stage-profile",
+        "Profile high-tree-count Brotli header, lookup setup, and payload stages",
+    );
+    br_decode_stage_profile_step.dependOn(&run_br_decode_stage_profile.step);
+
+    const run_br_decode_stage_profile_gate_csv = b.addRunArtifact(br_decode_stage_profile_exe);
+    run_br_decode_stage_profile_gate_csv.addArgs(&.{
+        "--iterations", "1000",
+        "--csv",        "zig-out/vort-br-decode-stage-profile.csv",
+    });
+    const br_decode_stage_profile_gate = b.addSystemCommand(&.{
+        "python3", "tools/br/decode_stage_profile_gate.py",
+        "--csv",   "zig-out/vort-br-decode-stage-profile.csv",
+    });
+    br_decode_stage_profile_gate.step.dependOn(&run_br_decode_stage_profile_gate_csv.step);
+    const br_decode_stage_profile_gate_step = b.step(
+        "run-br-decode-stage-profile-gate",
+        "Validate the focused high-tree-count Brotli decode-stage profile",
+    );
+    br_decode_stage_profile_gate_step.dependOn(&br_decode_stage_profile_gate.step);
+
     const br_upstream_multiblock_diff_exe = b.addExecutable(.{
         .name = "vort-br-upstream-multiblock-diff",
         .root_module = b.createModule(.{
@@ -5209,6 +5245,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&lz4_reference_bench_exe.step);
     check_step.dependOn(&lz4_decode_profile_exe.step);
     check_step.dependOn(&br_compressed_header_profile_exe.step);
+    check_step.dependOn(&br_decode_stage_profile_exe.step);
     check_step.dependOn(&zstd_reference_bench_exe.step);
     check_step.dependOn(&benchmark_provenance_tests.step);
     check_step.dependOn(&zstd_decode_profile_exe.step);

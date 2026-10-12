@@ -18223,3 +18223,18 @@ reuse, so production keeps the simpler independently owned plans.
   high-tree buffered reader and caller-owned simple-tree builder were measured
   and removed as neutral. See
   `docs/performance/brotli-caller-owned-prefix-build-x86.md`.
+
+- Added a ReleaseFast Brotli decode-stage profiler for the deterministic
+  high-tree-count `clustered_q8` route. It separately times compressed-header
+  parsing, 52 literal-root builds, three command-root builds, 17 distance-root
+  builds, and the selected flat payload executor while verifying the complete
+  output. The CSV gate locks the 52/3/17, zero-postfix/zero-direct shape,
+  libbrotli version, stage accounting, shares, and checksum. An initial
+  1,000-frame run attributes about 14.5% to headers, 4.5% to lookup setup, and
+  81.0% to payload execution; the payload alone is already near libbrotli's
+  complete-frame time, making header/setup the principal parity gap. Three
+  candidates were measured and removed: zero-postfix payload specialization
+  improved a long target-only run but regressed common matrix rows,
+  caller-owned block-switch trees measured `0.9974x`, and complete-code-space
+  lookup initialization measured `0.9973x`. See
+  `docs/performance/brotli-decode-stage-profile-x86.md`.
