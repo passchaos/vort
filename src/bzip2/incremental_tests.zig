@@ -5,6 +5,8 @@ const core = @import("../core.zig");
 
 const python_payload = "hello hello hello\n" ** 20;
 const python_frame_hex = "425a6831314159265359e2c777e0000054d100001040000244a00030c002950c9a55855e13c4c2ad157c5dc914e142438b1ddf80";
+const randomized_payload = "a\n" ** 2500;
+const randomized_frame_hex = "425a68313141592653597d0435b980077dc10000186000200050669a052534e42abb456c0d8856d02af5555da546c026d2ab6a889f1772453850907d0435b9";
 
 test "Bzip2 incremental decoder accepts byte input tiny output and concatenation" {
     const frame = pythonFrame();
@@ -53,6 +55,22 @@ test "Bzip2 incremental decoder crosses non-byte-aligned multi-block boundaries"
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
     try std.testing.expect(decoder.snapshot().block_count >= 2);
+    try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().stream_count);
+}
+
+test "Bzip2 incremental decoder accepts legacy randomized blocks" {
+    const frame = randomizedFrame();
+    var decoder = bzip2.IncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = randomized_payload.len,
+        .max_output_len = randomized_payload.len,
+        .max_compressed_block_len = 256,
+        .max_decoded_block_len = randomized_payload.len,
+    });
+    defer decoder.deinit();
+    const decoded = try decodeSplit(&decoder, &frame, 1, 7);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, randomized_payload, decoded);
+    try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().block_count);
     try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().stream_count);
 }
 
@@ -249,5 +267,11 @@ fn drainFinished(decoder: *bzip2.IncrementalDecoder, output: []u8) !void {
 fn pythonFrame() [python_frame_hex.len / 2]u8 {
     var bytes: [python_frame_hex.len / 2]u8 = undefined;
     _ = std.fmt.hexToBytes(&bytes, python_frame_hex) catch unreachable;
+    return bytes;
+}
+
+fn randomizedFrame() [randomized_frame_hex.len / 2]u8 {
+    var bytes: [randomized_frame_hex.len / 2]u8 = undefined;
+    _ = std.fmt.hexToBytes(&bytes, randomized_frame_hex) catch unreachable;
     return bytes;
 }

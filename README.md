@@ -272,8 +272,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   encrypted/multi-disk/unknown-method errors;
 - dependency-free Bzip2 `BZh1`...`BZh9` encoding and decoding with canonical Huffman,
   selector/inverse move-to-front, RUNA/RUNB, inverse BWT, first-stage RLE,
-  multi-block and explicit concatenated-stream support, caller-owned/bounded
-  allocation APIs, decoded-size preflight, and block/combined CRC validation,
+  legacy randomized-block reversal, multi-block and explicit
+  concatenated-stream support, caller-owned/bounded allocation APIs,
+  decoded-size preflight, and block/combined CRC validation,
   plus block-bounded caller-output incremental decoding with arbitrary input
   fragmentation, non-byte-aligned block continuation, zero-output
   backpressure, concatenated members, exact-size pledges, and reusable scratch,

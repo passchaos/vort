@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core.zig");
 const bit_reader = @import("bit_reader.zig");
 const bzip2_crc = @import("crc.zig");
+const randomization = @import("randomization.zig");
 
 pub const Error = core.Error || error{
     InvalidBzip2Header,
@@ -245,7 +246,7 @@ pub fn decodeIncrementalPart(
     switch (marker) {
         block_magic => {
             const stored_crc = try reader.readBits(32);
-            if (try reader.readBit() != 0) return error.UnsupportedBzip2Feature;
+            const randomized = try reader.readBit() != 0;
             const original_pointer = try reader.readBits(24);
             try decodeBlock(&reader, transformed, block_limit);
             var output = Output{ .dynamic = .{
@@ -257,6 +258,7 @@ pub fn decodeIncrementalPart(
                 allocator,
                 transformed.items,
                 original_pointer,
+                randomized,
                 &output,
             );
             if (actual_crc != stored_crc) return error.ChecksumMismatch;
@@ -304,10 +306,10 @@ fn decodeOne(allocator: std.mem.Allocator, input: []const u8, output: *Output) !
             block_magic => {
                 block.clearRetainingCapacity();
                 const stored_crc = try reader.readBits(32);
-                if (try reader.readBit() != 0) return error.UnsupportedBzip2Feature;
+                const randomized = try reader.readBit() != 0;
                 const original_pointer = try reader.readBits(24);
                 try decodeBlock(&reader, &block, block_limit);
-                const actual_crc = try inverseBwtAndWrite(allocator, block.items, original_pointer, output);
+                const actual_crc = try inverseBwtAndWrite(allocator, block.items, original_pointer, randomized, output);
                 if (actual_crc != stored_crc) return error.ChecksumMismatch;
                 combined_crc = std.math.rotl(u32, combined_crc, 1) ^ actual_crc;
             },
@@ -424,6 +426,7 @@ fn inverseBwtAndWrite(
     allocator: std.mem.Allocator,
     block: []const u8,
     original_pointer_u32: u32,
+    randomized: bool,
     output: *Output,
 ) !u32 {
     if (block.len == 0 or original_pointer_u32 >= block.len) return error.InvalidBzip2Stream;
@@ -443,11 +446,13 @@ fn inverseBwtAndWrite(
 
     var crc = bzip2_crc.Crc32{};
     var position: usize = next[original_pointer];
+    var random_state = randomization.State{};
     var previous: u8 = 0;
     var run_length: u8 = 0;
     for (0..block.len) |_| {
-        const byte = block[position];
+        var byte = block[position];
         position = next[position];
+        if (randomized) byte = random_state.decode(byte);
         if (run_length == 4) {
             try output.appendRepeat(previous, byte);
             crc.updateRepeat(previous, byte);
@@ -532,7 +537,22 @@ test "Bzip2 decoder expands first-stage run-length encoding" {
     for (decoded) |byte| try std.testing.expectEqual(@as(u8, 'A'), byte);
 }
 
-test "Bzip2 decoder rejects malformed headers truncation randomization and CRC" {
+test "Bzip2 decoder accepts a legacy randomized block" {
+    const encoded_hex = "425a68313141592653597d0435b980077dc10000186000200050669a052534e42abb456c0d8856d02af5555da546c026d2ab6a889f1772453850907d0435b9";
+    var encoded: [encoded_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&encoded, encoded_hex);
+    const expected = "a\n" ** 2500;
+
+    const decoded = try decodeAlloc(std.testing.allocator, &encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+    try std.testing.expectEqual(expected.len, try decodedSize(std.testing.allocator, &encoded));
+    var output: [expected.len]u8 = undefined;
+    try std.testing.expectEqual(expected.len, try decodeInto(std.testing.allocator, &encoded, &output));
+    try std.testing.expectEqualSlices(u8, expected, &output);
+}
+
+test "Bzip2 decoder rejects malformed headers truncation and CRC" {
     const encoded_hex = "425a6831314159265359e2c777e0000054d100001040000244a00030c002950c9a55855e13c4c2ad157c5dc914e142438b1ddf80";
     var encoded: [encoded_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&encoded, encoded_hex);
@@ -542,10 +562,6 @@ test "Bzip2 decoder rejects malformed headers truncation randomization and CRC" 
     bad_level[3] = '0';
     try std.testing.expectError(error.InvalidBzip2Header, decodeAlloc(std.testing.allocator, &bad_level));
     try std.testing.expectError(error.TruncatedFrame, decodeAlloc(std.testing.allocator, encoded[0 .. encoded.len - 1]));
-
-    var randomized = encoded;
-    randomized[14] |= 0x80;
-    try std.testing.expectError(error.UnsupportedBzip2Feature, decodeAlloc(std.testing.allocator, &randomized));
 
     var bad_crc = encoded;
     bad_crc[10] ^= 1;

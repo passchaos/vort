@@ -17713,8 +17713,8 @@ reuse, so production keeps the simpler independently owned plans.
   `bz2` decodes its empty, text, long-run, binary, random, and multi-block
   outputs. ZIP method 12 now shares the same codec in both directions, with an
   explicit allocator-bearing caller-output API for inverse-BWT scratch.
-  Obsolete randomized blocks remain explicitly unsupported. See
-  `docs/formats/bzip2.md`.
+  Obsolete randomized blocks were initially unsupported; the later compatibility
+  increment below completes that decoder path. See `docs/formats/bzip2.md`.
 
 - Added dependency-free XZ decoding around Zig's pure LZMA2 range decoder, with
   a Vort-owned strict container layer. Stream headers/footers, block headers,
@@ -18570,3 +18570,16 @@ reuse, so production keeps the simpler independently owned plans.
   decodes it, while both Vort- and Python-generated framing pass the
   17-byte-input / 31-byte-output incremental decoder; two malformed cases
   remain rejected.
+
+- Completed legacy Bzip2 randomized-block decoding rather than treating the
+  block flag as unsupported. A dedicated module implements the fixed 512-entry
+  schedule published with bzip2 1.0.8; inverse-BWT bytes are derandomized before
+  RLE1 interpretation, including the fourth-run count byte, so CRC validation
+  remains over final plaintext. The oracle is a 63-byte `BZh1` stream generated
+  by official bzip2 0.1 with `--repetitive-fast`; modern system bzip2 and Python
+  `bz2` independently decode its 5,000-byte payload. Vort now validates it via
+  allocating, caller-buffer, decoded-size, and one-byte-input/seven-byte-output
+  incremental paths. The full 29-test Bzip2 focused suite passes, and the
+  Python differential reports `randomized_cases=1` alongside its seven ordinary
+  bidirectional cases. Modern Vort encoding remains deliberately
+  non-randomized.
