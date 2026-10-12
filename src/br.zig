@@ -45,6 +45,7 @@ const fast_bit_reader = @import("br/fast_bit_reader.zig");
 const paired_literal_lookup = @import("br/paired_literal_lookup.zig");
 const code_sections = @import("br/format/code_sections.zig");
 const distance_history = @import("br/decoder/distance_history.zig");
+const code_length_decoder_mod = @import("br/code_length_decoder.zig");
 
 const distanceWithDelta = distance_history.withDelta;
 const pushLastDistance = distance_history.push;
@@ -581,6 +582,7 @@ test {
     _ = command_block_split;
     _ = distance_block_split;
     _ = header_profile;
+    _ = code_length_decoder_mod;
 }
 
 pub const IncrementalTestSupport = struct {
@@ -12564,8 +12566,8 @@ fn readPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_siz
     return result;
 }
 
-const code_length_alphabet_size = 18;
-const CodeLengthPrefixDecoder = huffman.FastDecoder(code_length_alphabet_size, 5);
+const code_length_alphabet_size = code_length_decoder_mod.alphabet_size;
+const CodeLengthPrefixDecoder = code_length_decoder_mod.Decoder;
 const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
 fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2) Error!PrefixCode(max_alphabet_size) {
@@ -12607,7 +12609,7 @@ fn readComplexPrefixCodeRuntimeInto(comptime max_alphabet_size: usize, alphabet_
     else
         null;
     const code_length_decoder = if (code_length_single_symbol == null)
-        CodeLengthPrefixDecoder.init(try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths))
+        try CodeLengthPrefixDecoder.init(&code_length_lengths)
     else
         undefined;
 
@@ -12718,7 +12720,7 @@ fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alpha
     else
         null;
     const code_length_decoder = if (code_length_single_symbol == null)
-        CodeLengthPrefixDecoder.init(try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths))
+        try CodeLengthPrefixDecoder.init(&code_length_lengths)
     else
         undefined;
     profile.code_length_header_ns +%= elapsedNs(header_start, io);

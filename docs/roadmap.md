@@ -18252,3 +18252,20 @@ reuse, so production keeps the simpler independently owned plans.
   fusion, and table-tail prebuild/copy were measured and removed at
   `0.9893x`, an insufficient `1.0014x`, and `0.9971x` respectively. See
   `docs/performance/brotli-code-length-prefix-lut-x86.md`.
+
+- Complex Brotli prefix trees now construct their 18-symbol, five-bit
+  code-length decoder directly as the final 32-byte root instead of first
+  building a generic canonical table and rescanning it through `FastDecoder`.
+  The format-local builder validates complete Kraft space, assigns canonical
+  LSB-first slots, and preserves exact truncation checks. A ReleaseSafe oracle
+  exhausts every complete 1--5 bit histogram fitting 18 symbols, three sparse
+  symbol placements per histogram, all 32 lookup prefixes, explicit
+  truncations, and malformed descriptions against the generic decoder. Fifteen
+  fixed-CPU `clustered_q8` pairs improve `1.0105x` median / `1.0110x`
+  geometrically with 15/15 wins; a seven-pair 13-row matrix reaches `1.0267x`
+  across row medians with every compressed row winning 7/7 and a `1.0003x`
+  floor. The reference and stage gates plus 98 core / 7,056 one-shot / 7,056
+  progressive / 1,401 fragmentation upstream cases remain green. The current
+  gate snapshot moves `clustered_q8` to 1737.71 MiB/s and `0.8424x` libbrotli,
+  so parity remains explicit. See
+  `docs/performance/brotli-direct-code-length-decoder-x86.md`.
