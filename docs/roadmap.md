@@ -18597,3 +18597,17 @@ reuse, so production keeps the simpler independently owned plans.
   exact hashes, executable provenance, commands, all 13 ratios, and profile
   counters are retained in
   `docs/performance/data/zstd-reference-audit-x86-20261013.json`.
+
+- Unrolled the established Snappy offset-at-least-eight match copier by two
+  ordered eight-byte load/store pairs. The minimum offset-eight dependency is
+  preserved because the second load follows the first store; the exhaustive
+  1...96 offset × 1...64 length oracle remains exact. Fifteen fixed-CPU-2,
+  20,000-decode pairs improve the 546-COPY_2 repetitive row by 1.0157x median /
+  1.0153x geometric throughput with a 1.0079x minimum and 15/15 wins. Text,
+  incompressible, and RLE controls are neutral; structured is 0.9973x median /
+  0.9971x geometric with a 0.9916x minimum. The complete 54-test suite and
+  16-case runtime-libsnappy interoperability probe pass. Wider 16-byte, 4×8,
+  dynamic-tail, run-decoder, and fixed-64-byte wildcopy candidates were removed
+  for control regressions. The retained row still reaches only 0.8751x Ubuntu
+  libsnappy 1.1.8, so further token/copy work remains. See
+  `docs/performance/snappy-copy2-unroll-x86.md` and its JSON observations.
