@@ -197,6 +197,7 @@ pub const XzStreamInfo = xz.StreamInfo;
 pub const XzEncodeOptions = xz.EncodeOptions;
 pub const XzFilter = xz.Filter;
 pub const XzIncrementalDecoder = xz.IncrementalDecoder;
+pub const XzIncrementalEncoder = xz.IncrementalEncoder;
 pub const encodeXzAlloc = xz.encodeAlloc;
 pub const encodeXzAppend = xz.encodeAppend;
 pub const encodeXzInto = xz.encodeInto;
@@ -3420,6 +3421,32 @@ test "root XZ exports compressed LZMA2 writing" {
     const done = try incremental.step("", &incremental_output);
     try std.testing.expectEqual(core.StepResult.Status.done, done.status);
     try std.testing.expectEqualSlices(u8, payload, &incremental_output);
+}
+
+test "root XZ incremental encoder writes a complete stream" {
+    const input = "root XZ incremental encoder" ** 64;
+    var encoder = try XzIncrementalEncoder.initExactSize(std.testing.allocator, .{
+        .check = .crc32,
+        .block_size = 257,
+    }, input.len);
+    defer encoder.deinit();
+    var encoded: [4096]u8 = undefined;
+    var encoded_len: usize = 0;
+    var input_offset: usize = 0;
+    while (input_offset < input.len) {
+        const result = try encoder.step(input[input_offset..], encoded[encoded_len..]);
+        input_offset += result.progress.input_read;
+        encoded_len += result.progress.output_written;
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", encoded[encoded_len..]);
+        encoded_len += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    const decoded = try decodeXzAlloc(std.testing.allocator, encoded[0..encoded_len]);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "root LZMA-Alone exports compressed writing" {

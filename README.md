@@ -288,7 +288,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   stored fallback, plus block-bounded caller-output incremental decoding with
   arbitrary input fragmentation, zero-output backpressure, stream padding,
   concatenated members, independent compressed/decoded/dictionary/Index
-  limits, exact-size pledges, and reusable container scratch;
+  limits, exact-size pledges, and reusable container scratch, plus block-bounded
+  incremental compressed/stored encoding with split-independent wire,
+  Delta/BCJ filters, selectable checks, flushable blocks, Index/Footer
+  generation, concatenated continuation, pledged input, and output backpressure;
 - dependency-free LZMA-Alone encoding and decoding with known-size or
   end-marker streams, caller-selected output/dictionary limits, caller-owned
   output, exact-size MicroLZMA decoding with inverted properties and strict

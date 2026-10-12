@@ -107,6 +107,35 @@ fails, while preserving caller allocator accounting and deterministic cleanup.
 Decoded output is copied out of that arena only after the complete block check
 passes.
 
+`XzIncrementalEncoder` provides the symmetric block-bounded writer for both
+compressed and explicitly stored LZMA2 payloads. It reuses the one-shot stream
+header, block, check, Index, and Footer writers, so omitting `flush` yields the
+same wire regardless of caller input/output fragmentation.
+
+```zig
+var encoder = try vort.XzIncrementalEncoder.initExactSize(allocator, .{
+    .check = .sha256,
+    .block_size = 1024 * 1024,
+    .filters = &filter_chain,
+    .payload_encoding = .compressed, // or .stored
+    .max_input_len = 256 * 1024 * 1024,
+    .max_pending_output_len = 16 * 1024 * 1024,
+    .max_block_count = 1024 * 1024,
+}, input.len);
+defer encoder.deinit();
+
+// step() accepts plaintext and drains XZ bytes through caller output.
+// flush() closes the current block; finish() emits Index and Footer.
+```
+
+The caller keeps the filter slice alive until the stream finishes. The encoder
+supports idempotent flush, resettable retained scratch, unknown or pledged
+input sizes, zero-output backpressure, pending-output/block-count limits, and
+`nextStream`/`nextStreamExactSize` concatenated continuation. Explicit flush
+intentionally changes block boundaries; without it, compressed SHA-256 plus
+x86/delta and stored CRC-32 fixtures are required to match their corresponding
+one-shot streams byte-for-byte under tiny input/output splits.
+
 CLI validation surfaces:
 
 ```sh

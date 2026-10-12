@@ -18407,3 +18407,16 @@ reuse, so production keeps the simpler independently owned plans.
   and concatenated `nextStream` continuation. Focused tests cover empty streams,
   forced block boundaries, exact wire, flush, continuation, all limits, and
   every allocation failure. See `docs/formats/bzip2.md`.
+
+- Added a block-bounded public XZ incremental encoder for both compressed and
+  stored LZMA2 payloads. It reuses the one-shot stream header, filtered block,
+  check, Index, and Footer writers; without flush, wire is independent of input
+  and output fragmentation. A 4,099-byte five-block SHA-256 stream with
+  x86+delta filters matches compressed one-shot bytes under one-byte input and
+  seven-byte output, while a 4,097-byte CRC-32 noise stream similarly matches
+  stored one-shot output. Idempotent flush closes the current block, finish
+  emits Index/Footer, and `nextStream` continues concatenated streams with new
+  checks, block sizes, filters, or payload mode. The API also covers zero-output
+  backpressure, max/pledged input, pending-output and block-count limits,
+  retained scratch snapshots, empty streams, and every allocation failure. See
+  `docs/formats/xz.md`.
