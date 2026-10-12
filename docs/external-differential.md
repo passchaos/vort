@@ -121,6 +121,13 @@ available, both Vort images must be recognized as WBFS with the expected block
 size. Select an explicit oracle with
 `-- --dolphin-tool /path/to/dolphin-tool`.
 
+The WDF differential checks WDF1 and WDF2 in sparse and full modes
+byte-for-byte against an independent Python implementation, including logical
+holes, partial tails, ranges, and malformed metadata. When Wiimms tools are
+available, `wdf` must decode all four Vort outputs and Vort must decode both
+versions produced by `wit --raw`. Select explicit tools with
+`-- --wdf /path/to/wdf --wit /path/to/wit`.
+
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,
 structured JSON, and binary dictionary inputs. Each file is encoded by

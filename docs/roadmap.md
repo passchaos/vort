@@ -18123,3 +18123,14 @@ reuse, so production keeps the simpler independently owned plans.
   header recognition cover the baseline. Multi-disc writing, filesystem-aware
   scrubbing, automatic `.wbfN` discovery, and streaming file I/O remain
   follow-up work. See `docs/formats/wbfs.md`.
+
+- Added pure-Zig WDF1/WDF2 reading and deterministic writing. The shared reader
+  validates versioned big-endian chunk tables, exact physical geometry,
+  logical and physical overlap, alignment, stored-size accounting, zero-filled
+  holes, bounded ranges, and caller-provided split-file slices. The writer
+  emits either chunk layout with deterministic zero-run omission, configurable
+  hole thresholds, full mode, and exact partial logical tails. Focused tests,
+  fuzzing, independent Python byte comparison, and bidirectional Wiimms
+  `wdf`/`wit` interoperability cover the baseline. Filesystem-aware scrubbing,
+  split output, streaming I/O, and more advanced sparse scanning remain
+  follow-up work. See `docs/formats/wdf.md`.

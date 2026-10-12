@@ -196,6 +196,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   blocks, split-file byte-slice input, partial tails, bounded range reads,
   independent Python wire-format comparison, fuzzing, and DolphinTool
   recognition;
+- pure-Zig WDF1/WDF2 reading and deterministic writing, with strict big-endian
+  header/chunk validation, zero-filled logical holes, caller-provided split
+  input, sparse/full modes, partial tails, bounded range reads, independent
+  Python comparison, fuzzing, and bidirectional Wiimms `wdf`/`wit`
+  interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
   writing, SHA-1/SHA-256/SHA-512/SHA-512/128 chunk hashes, dictionaries,
   source hashes, optional/header-only metadata, stream-aware indexes, bounded
@@ -1601,6 +1606,8 @@ The current WIA/RVZ reader, raw/partition writer, and caller-supplied common-key
 model are documented in `docs/formats/wia-rvz.md`.
 WBFS support and its explicit multi-disc/filesystem-scrubbing limits are
 documented in `docs/formats/wbfs.md`.
+WDF1/WDF2 support and its split-output/scrubbing limits are documented in
+`docs/formats/wdf.md`.
 Local Rust deflate
 baselines such as `~/Work/fdeflate` and `~/Work/miniz_oxide` should be treated
 as required functionality/performance competitors once their executable harnesses

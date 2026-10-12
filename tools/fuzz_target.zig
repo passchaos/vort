@@ -675,6 +675,39 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     } else |err| {
         if (!isExpectedWbfsError(err)) return err;
     }
+    if (vort.parseWdfAlloc(allocator, data, .{
+        .max_chunks = 4096,
+        .max_parts = 4,
+        .max_alignment = 1 << 20,
+    })) |archive_value| {
+        var archive = archive_value;
+        defer archive.deinit();
+        const logical_size = archive.header.logical_size;
+        const first_length: usize = @intCast(@min(logical_size, 4096));
+        if (archive.readRangeAllocLimited(
+            allocator,
+            0,
+            first_length,
+            first_length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedWdfError(err)) return err;
+        }
+        const tail_length: usize = @intCast(@min(logical_size, 4096));
+        if (archive.readRangeAllocLimited(
+            allocator,
+            logical_size - tail_length,
+            tail_length,
+            tail_length,
+        )) |decoded| {
+            allocator.free(decoded);
+        } else |err| {
+            if (!isExpectedWdfError(err)) return err;
+        }
+    } else |err| {
+        if (!isExpectedWdfError(err)) return err;
+    }
     const fuzz_wii_keys = [_]vort.WiaWiiCommonKey{
         .{ .index = 0, .key = @splat(0) },
         .{ .index = 1, .key = @splat(0) },
@@ -1421,6 +1454,20 @@ pub fn main(init: std.process.Init) !void {
     });
     defer init.gpa.free(wbfs);
     try fuzzOne(init.gpa, wbfs);
+    const wdf_input = try init.gpa.alloc(u8, 3 * 64 * 1024 + 137);
+    defer init.gpa.free(wdf_input);
+    @memset(wdf_input, 0);
+    for (wdf_input[0 .. 64 * 1024], 0..) |*byte, index|
+        byte.* = @truncate(index * 17 + index / 31);
+    for (wdf_input[2 * 64 * 1024 ..], 0..) |*byte, index|
+        byte.* = @truncate(index * 29 + 3);
+    inline for (.{ vort.WdfVersion.v1, vort.WdfVersion.v2 }) |version| {
+        const wdf = try vort.encodeWdfAlloc(init.gpa, wdf_input, .{
+            .version = version,
+        });
+        defer init.gpa.free(wdf);
+        try fuzzOne(init.gpa, wdf);
+    }
     inline for (.{
         .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
         .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },
@@ -1526,7 +1573,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 35,
+        samples.len + 37,
         data.len,
     });
     try stdout.flush();
@@ -1959,6 +2006,23 @@ fn isExpectedWbfsError(err: anyerror) bool {
         error.UnsupportedWbfsFeature,
         error.InvalidMagic,
         error.TruncatedFrame,
+        error.SizeMismatch,
+        error.IntegerOverflow,
+        error.RangeOutOfBounds,
+        error.OutputLimitExceeded,
+        => true,
+        else => false,
+    };
+}
+
+fn isExpectedWdfError(err: anyerror) bool {
+    return switch (err) {
+        error.InvalidWdf,
+        error.UnsupportedWdfFeature,
+        error.InvalidMagic,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.TrailingData,
         error.SizeMismatch,
         error.IntegerOverflow,
         error.RangeOutOfBounds,

@@ -360,6 +360,14 @@ pub fn build(b: *std.Build) void {
     const run_wbfs_tests = b.addRunArtifact(wbfs_tests);
     const wbfs_test_step = b.step("test-wbfs", "Run focused Wii WBFS image tests");
     wbfs_test_step.dependOn(&run_wbfs_tests.step);
+    const wdf_tests = b.addTest(.{
+        .name = "vort-wdf-tests",
+        .root_module = tests_mod,
+        .filters = &.{"WDF"},
+    });
+    const run_wdf_tests = b.addRunArtifact(wdf_tests);
+    const wdf_test_step = b.step("test-wdf", "Run focused Wiimms WDF image tests");
+    wdf_test_step.dependOn(&run_wdf_tests.step);
     const zchunk_tests = b.addTest(.{
         .name = "vort-zchunk-tests",
         .root_module = tests_mod,
@@ -1436,6 +1444,12 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| wbfs_diff.addArgs(args);
     const wbfs_diff_step = b.step("run-wbfs-diff", "Validate WBFS images against Python and optional DolphinTool");
     wbfs_diff_step.dependOn(&wbfs_diff.step);
+
+    const wdf_diff = b.addSystemCommand(&.{ "python3", "tools/wdf/diff.py", "--cli" });
+    wdf_diff.addArtifactArg(cli_exe);
+    if (b.args) |args| wdf_diff.addArgs(args);
+    const wdf_diff_step = b.step("run-wdf-diff", "Validate WDF1/WDF2 images against optional Wiimms tools");
+    wdf_diff_step.dependOn(&wdf_diff.step);
 
     const zchunk_diff = b.addSystemCommand(&.{ "python3", "tools/zchunk/diff.py", "--cli" });
     zchunk_diff.addArtifactArg(cli_exe);
