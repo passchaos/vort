@@ -341,6 +341,63 @@ const IncrementalEncoderCodec = struct {
 const lz4 = @This();
 pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec);
 
+const IncrementalHcEncoderCodec = struct {
+    pub const Error = lz4.Error;
+    pub const Options = lz4.HcFrameOptions;
+    pub const EncoderState = lz4.BlockHcEncoder;
+
+    pub fn maxBlockLen(options: Options) usize {
+        return options.block_size_id.maxLen();
+    }
+
+    pub fn validate(options: Options, expected_input_len: ?usize, dictionary_id: ?u32) lz4.Error!void {
+        if (options.include_content_size != (expected_input_len != null)) return error.InvalidBlockPlan;
+        if (options.dictionary_id != dictionary_id) return error.InvalidBlockPlan;
+    }
+
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, expected_input_len: ?usize, dictionary_id: ?u32) lz4.Error!void {
+        return IncrementalEncoderCodec.writeHeader(allocator, out, hcNativeOptions(options), expected_input_len, dictionary_id);
+    }
+
+    pub fn writeBlock(state: *EncoderState, out: *std.ArrayList(u8), block: []const u8, history: []const u8, options: Options) lz4.Error!void {
+        const allocator = state.inner.allocator;
+        const header_start = out.items.len;
+        try out.appendNTimes(allocator, 0, 4);
+        const encoded_start = out.items.len;
+        const encoded = try state.encodeScratchWithPrefix(history, block, options.compression_level);
+        if (encoded.len < block.len) {
+            std.mem.writeInt(u32, out.items[header_start..][0..4], @intCast(encoded.len), .little);
+            try out.appendSlice(allocator, encoded);
+            if (options.block_checksum) try emitBlockChecksum(allocator, out, out.items[encoded_start..][0..encoded.len]);
+        } else {
+            std.mem.writeInt(u32, out.items[header_start..][0..4], 0x8000_0000 | @as(u32, @intCast(block.len)), .little);
+            try out.appendSlice(allocator, block);
+            if (options.block_checksum) try emitBlockChecksum(allocator, out, block);
+        }
+    }
+
+    pub fn writeFooter(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash32) lz4.Error!void {
+        return IncrementalEncoderCodec.writeFooter(allocator, out, hcNativeOptions(options), hasher);
+    }
+
+    pub fn writeSkippable(allocator: std.mem.Allocator, out: *std.ArrayList(u8), skippable_id: u4, payload: []const u8) lz4.Error!void {
+        return IncrementalEncoderCodec.writeSkippable(allocator, out, skippable_id, payload);
+    }
+};
+
+fn hcNativeOptions(options: HcFrameOptions) NativeFrameOptions {
+    return .{
+        .include_content_size = options.include_content_size,
+        .content_checksum = options.content_checksum,
+        .block_checksum = options.block_checksum,
+        .block_size_id = options.block_size_id,
+        .block_mode = options.block_mode,
+        .dictionary_id = options.dictionary_id,
+    };
+}
+
+pub const HcIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalHcEncoderCodec);
+
 test {
     _ = incremental_tests;
 }

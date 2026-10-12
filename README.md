@@ -24,7 +24,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   raw-block and skippable-frame encode-into/decoded-size preflight, inspectable
   native frame/block/skippable headers plus plain, standard-dictionary-aware, and dictionary-set-aware Zstd sequence-mode summaries, zero-allocation native stream/block
   iterators, reusable raw-block decoder, and
-  caller-owned encode/decode-into/append, incremental frame encode with optional pledged content size and preset dictionary, plus reusable
+  caller-owned encode/decode-into/append, incremental fast/HC frame encode with
+  optional pledged content size, resumable flush, linked history, preset
+  dictionary, and dictionary-set resolution, plus reusable
   scratch encoder/decoder APIs; oversized incremental data frames release raw
   blocks directly, and compressed blocks use a resumable token cursor under
   arbitrary caller backpressure with no

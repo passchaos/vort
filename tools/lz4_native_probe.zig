@@ -73,6 +73,7 @@ pub fn main(init: std.process.Init) !void {
         "reusable-chunked",
         "dictionary",
         "dictionary-set",
+        "hc-incremental",
         "incremental",
         "lib-generated",
         "malformed",
@@ -81,6 +82,7 @@ pub fn main(init: std.process.Init) !void {
     }, &.{
         .{ .capability = "chunked", .cases = lib_generated_cases },
         .{ .capability = "compressed-block-cursor", .cases = 5 },
+        .{ .capability = "hc-incremental", .cases = 13 },
         .{ .capability = "reusable-chunked", .cases = lib_generated_cases },
         .{ .capability = "incremental", .cases = lib_generated_cases },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
@@ -2082,6 +2084,17 @@ fn checkLibLz4HcDictionaryFrames(allocator: std.mem.Allocator, runtime: liblz4.R
                 );
                 return error.Lz4ProbeMismatch;
             }
+            const incremental = try encodeIncrementalHcFrameAlloc(allocator, payload, .{
+                .include_content_size = false,
+                .content_checksum = true,
+                .block_checksum = true,
+                .block_size_id = .max64kb,
+                .block_mode = block_mode,
+                .dictionary_id = dictionary.id,
+                .compression_level = level,
+            }, dictionary);
+            defer allocator.free(incremental);
+            if (!std.mem.eql(u8, reference, incremental)) return error.Lz4ProbeMismatch;
 
             const native_decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, reference, dictionary);
             defer allocator.free(native_decoded);
@@ -2200,6 +2213,16 @@ fn checkLibLz4HcLinkedFrame(
         );
         return error.Lz4ProbeMismatch;
     }
+    const incremental = try encodeIncrementalHcFrameAlloc(allocator, case.payload, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .block_checksum = true,
+        .block_size_id = .max64kb,
+        .block_mode = .linked,
+        .compression_level = level,
+    }, null);
+    defer allocator.free(incremental);
+    if (!std.mem.eql(u8, reference, incremental)) return error.Lz4ProbeMismatch;
     const decoded = try vort.lz4DecodeFrameAlloc(allocator, encoded);
     defer allocator.free(decoded);
     try expectPayload(case, decoded);
@@ -2609,6 +2632,52 @@ fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {
     checked += 1;
 
     return checked;
+}
+
+fn encodeIncrementalHcFrameAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: vort.Lz4HcFrameOptions,
+    dictionary: ?vort.Lz4NativeDictionary,
+) ![]u8 {
+    var encoder = if (dictionary) |dict|
+        if (options.include_content_size)
+            try vort.Lz4HcIncrementalFrameEncoder.initExactSizeWithDictionary(
+                allocator,
+                options,
+                input.len,
+                dict.id,
+                dict.content,
+            )
+        else
+            try vort.Lz4HcIncrementalFrameEncoder.initWithDictionary(
+                allocator,
+                options,
+                dict.id,
+                dict.content,
+            )
+    else if (options.include_content_size)
+        try vort.Lz4HcIncrementalFrameEncoder.initExactSize(allocator, options, input.len)
+    else
+        try vort.Lz4HcIncrementalFrameEncoder.init(allocator, options);
+    defer encoder.deinit();
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(allocator);
+    var scratch: [17]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const input_end = @min(input.len, offset + 997);
+        const result = try encoder.step(input[offset..input_end], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return frame.toOwnedSlice(allocator);
 }
 
 fn checkSkippableChecksumAndTrailingStreams(allocator: std.mem.Allocator) !usize {

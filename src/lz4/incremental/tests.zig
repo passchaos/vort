@@ -34,6 +34,177 @@ test "LZ4 incremental frame encoder round trips split linked input" {
     encoder.reset();
 }
 
+test "LZ4HC incremental encoder matches linked one-shot frame" {
+    const allocator = std.testing.allocator;
+    const block_len = 64 * 1024;
+    const payload = try allocator.alloc(u8, block_len * 2);
+    defer allocator.free(payload);
+    var state: u32 = 0x243f_6a88;
+    for (payload[0..block_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[block_len..][0 .. block_len - 1], payload[1..block_len]);
+    payload[payload.len - 1] = payload[0] ^ 0xa5;
+    const options: lz4.HcFrameOptions = .{
+        .include_content_size = true,
+        .content_checksum = true,
+        .block_checksum = true,
+        .block_size_id = .max64kb,
+        .block_mode = .linked,
+        .compression_level = 9,
+    };
+    var encoder = try lz4.HcIncrementalFrameEncoder.initExactSize(allocator, options, payload.len);
+    defer encoder.deinit();
+    const incremental = try encodeIncrementalHcFrameTest(&encoder, payload);
+    defer allocator.free(incremental);
+    const one_shot = try lz4.encodeHcFrameAlloc(allocator, payload, options);
+    defer allocator.free(one_shot);
+    try std.testing.expectEqualSlices(u8, one_shot, incremental);
+    const decoded = try lz4.decodeNativeFrameAlloc(allocator, incremental);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "LZ4HC incremental encoder matches preset dictionary frame" {
+    const allocator = std.testing.allocator;
+    var dictionary_bytes: [64 * 1024]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&dictionary_bytes) |*byte| {
+        state = state *% 22_695_477 +% 1;
+        byte.* = @truncate(state >> 22);
+    }
+    var payload: [64 * 1024]u8 = undefined;
+    @memcpy(payload[0 .. payload.len - 1], dictionary_bytes[1..]);
+    payload[payload.len - 1] = dictionary_bytes[0] ^ 0x5a;
+    const dictionary = lz4.NativeDictionary.init(0x3141_5926, &dictionary_bytes);
+    const options: lz4.HcFrameOptions = .{
+        .include_content_size = true,
+        .block_size_id = .max64kb,
+        .block_mode = .linked,
+        .dictionary_id = dictionary.id,
+        .compression_level = 12,
+    };
+    var encoder = try lz4.HcIncrementalFrameEncoder.initExactSizeWithDictionary(
+        allocator,
+        options,
+        payload.len,
+        dictionary.id,
+        dictionary.content,
+    );
+    defer encoder.deinit();
+    const incremental = try encodeIncrementalHcFrameTest(&encoder, &payload);
+    defer allocator.free(incremental);
+    const one_shot = try lz4.encodeHcFrameWithDictionaryAlloc(allocator, &payload, options, dictionary);
+    defer allocator.free(one_shot);
+    try std.testing.expectEqualSlices(u8, one_shot, incremental);
+    const decoded = try lz4.decodeNativeFrameAllocWithDictionary(allocator, incremental, dictionary);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+
+    const set = try lz4.NativeDictionarySet.initChecked(&.{dictionary});
+    var set_encoder = try lz4.HcIncrementalFrameEncoder.initExactSizeWithDictionarySet(
+        allocator,
+        options,
+        payload.len,
+        set,
+        dictionary.id,
+    );
+    defer set_encoder.deinit();
+    const set_frame = try encodeIncrementalHcFrameTest(&set_encoder, &payload);
+    defer allocator.free(set_frame);
+    try std.testing.expectEqualSlices(u8, one_shot, set_frame);
+    try std.testing.expectError(
+        error.NeedDictionary,
+        lz4.HcIncrementalFrameEncoder.initExactSizeWithDictionarySet(allocator, options, payload.len, set, dictionary.id + 1),
+    );
+}
+
+test "LZ4HC incremental encoder releases allocation failures" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const dictionary = "incremental HC allocation dictionary" ** 8;
+            const payload = "incremental HC allocation dictionary payload" ** 16;
+            const id: u32 = 7;
+            var encoder = try lz4.HcIncrementalFrameEncoder.initExactSizeWithDictionary(
+                allocator,
+                .{
+                    .include_content_size = true,
+                    .block_mode = .linked,
+                    .dictionary_id = id,
+                    .compression_level = 12,
+                },
+                payload.len,
+                id,
+                dictionary,
+            );
+            defer encoder.deinit();
+            var output: [4096]u8 = undefined;
+            var input_offset: usize = 0;
+            var output_offset: usize = 0;
+            while (input_offset < payload.len) {
+                const result = try encoder.step(payload[input_offset..], output[output_offset..]);
+                input_offset += result.progress.input_read;
+                output_offset += result.progress.output_written;
+            }
+            encoder.finish();
+            while (true) {
+                const result = try encoder.step("", output[output_offset..]);
+                output_offset += result.progress.output_written;
+                if (result.status == .done) break;
+            }
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
+}
+
+test "LZ4HC incremental encoder flushes linked blocks under backpressure" {
+    const first = "LZ4HC flushed history phrase repeated repeated " ** 128;
+    const second = "LZ4HC flushed history phrase repeated repeated tail " ** 128;
+    var encoder = try lz4.HcIncrementalFrameEncoder.init(std.testing.allocator, .{
+        .include_content_size = false,
+        .block_size_id = .max64kb,
+        .block_mode = .linked,
+        .block_checksum = true,
+        .content_checksum = true,
+        .compression_level = 10,
+    });
+    defer encoder.deinit();
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    var scratch: [7]u8 = undefined;
+
+    var offset: usize = 0;
+    while (offset < first.len) {
+        const result = try encoder.step(first[offset..], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.flush();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .need_input) break;
+    }
+    offset = 0;
+    while (offset < second.len) {
+        const result = try encoder.step(second[offset..], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const summary = try lz4.summarizeNativeFrameBlocks(frame.items);
+    try std.testing.expectEqual(@as(usize, 2), summary.block_count);
+    const decoded = try lz4.decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+}
+
 test "LZ4 incremental frame encoder requires unknown content size" {
     try std.testing.expectError(error.InvalidBlockPlan, lz4.NativeIncrementalFrameEncoder.init(std.testing.allocator, .{}));
 }
@@ -191,6 +362,25 @@ fn encodeIncrementalLz4FrameTest(encoder: *lz4.NativeIncrementalFrameEncoder, pa
     var frame: std.ArrayList(u8) = .empty;
     errdefer frame.deinit(std.testing.allocator);
     var scratch: [19]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const result = try encoder.step(payload[offset..], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return frame.toOwnedSlice(std.testing.allocator);
+}
+
+fn encodeIncrementalHcFrameTest(encoder: *lz4.HcIncrementalFrameEncoder, payload: []const u8) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(std.testing.allocator);
+    var scratch: [11]u8 = undefined;
     var offset: usize = 0;
     while (offset < payload.len) {
         const result = try encoder.step(payload[offset..], &scratch);

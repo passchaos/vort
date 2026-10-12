@@ -1781,6 +1781,7 @@ pub const lz4EncodeBlockDestSize = lz4.encodeBlockDestSize;
 pub const Lz4HcDestSizeEncoder = lz4.HcDestSizeEncoder;
 pub const Lz4BlockHcEncoder = lz4.BlockHcEncoder;
 pub const Lz4HcFrameEncoder = lz4.HcFrameEncoder;
+pub const Lz4HcIncrementalFrameEncoder = lz4.HcIncrementalFrameEncoder;
 pub const Lz4HcFrameOptions = lz4.HcFrameOptions;
 pub const lz4EncodeBlockHcDestSize = lz4.encodeBlockHcDestSize;
 pub const lz4EncodeBlockHcAlloc = lz4.encodeBlockHcAlloc;
@@ -3690,6 +3691,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = Lz4HcDestSizeEncoder;
     _ = Lz4BlockHcEncoder;
     _ = Lz4HcFrameEncoder;
+    _ = Lz4HcIncrementalFrameEncoder;
     _ = Lz4HcFrameOptions;
     _ = lz4EncodeBlockHcDestSize;
     _ = lz4EncodeBlockHcAlloc;

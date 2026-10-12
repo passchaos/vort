@@ -18297,3 +18297,16 @@ reuse, so production keeps the simpler independently owned plans.
   levels 3/5/9/10/11/12/19 and byte-identical independent/linked CDict frames
   at levels 3/9/12, with Vort/liblz4 dictionary decode in both directions. The
   focused probe now reports 253 lib-generated and 304 total cases.
+
+- Added public incremental LZ4HC frame encoding by plugging the HC block state
+  into the existing resumable frame state machine rather than duplicating
+  framing logic. `HcIncrementalFrameEncoder` supports unknown or pledged
+  content size, arbitrary input/output splits, linked rolling history,
+  resumable non-final flush, block/content checksums, preset dictionaries,
+  dictionary sets, continuation/reset/skippable behavior inherited from the
+  shared state machine, and levels 1...12. Focused tests require byte identity
+  with one-shot linked and dictionary frames, exact decode under seven- to
+  eleven-byte output buffers, two-block flush behavior, dictionary-set
+  resolution, and cleanup at every injected allocation failure. The runtime
+  liblz4 probe additionally requires incremental linked/CDict output to equal
+  the same byte-exact 13 external HC frame cases.

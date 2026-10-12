@@ -9,7 +9,9 @@ byte-for-byte with `LZ4_compress_HC_destSize` at levels 1, 3, 5, 9, 10, 11,
 frames with `LZ4F_compressFrame` for upstream HC levels 3 and above, plus
 independent/linked preset-dictionary frames at levels 3, 9, and 12 through
 `LZ4F_compressFrame_usingCDict`. Dictionary frames are also decoded in both
-directions through Vort and `LZ4F_decompress_usingDict`.
+directions through Vort and `LZ4F_decompress_usingDict`; Vort's incremental HC
+encoder must reproduce the same linked/CDict frame bytes under tiny output
+backpressure.
 The required libbrotli probe also generates Large Window streams for every
 25...30-bit window. It requires strict Vort entrypoints to reject the reserved
 header and verifies explicit opt-in one-shot, split-input, buffered-incremental,
