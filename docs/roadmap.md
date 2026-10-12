@@ -18463,3 +18463,19 @@ reuse, so production keeps the simpler independently owned plans.
   1.1.0 plus the 17-byte-input/31-byte-output progressive path. The full
   upstream gate remains green with 7,056 one-shot, 7,056 progressive, and
   1,401 fragmentation cases; `planned_literal_split_cases=2`.
+
+- Extended the same Brotli literal proposal/writer to distinct A-B-C regions
+  with three Huffman trees. Pairwise boundary scoring now evaluates both
+  separate prefix/middle/suffix costs and clustered outer/middle costs; the
+  three-tree candidate must beat the already-profitable two-tree estimate by a
+  conservative 1,024-bit margin before complete-wire arbitration. Production
+  frequency, alphabet, length, encoder, header, context-map, and payload arrays
+  now scale to three literal types. The wire declares three block types and
+  trees, writes three block lengths, uses two implicit next-type switches
+  (0→1→2), and emits a 192-entry type-independent context map. A 6,144-byte
+  low/mid/high fixture beats its two-tree candidate, is selected exactly over
+  unsplit/clustered alternatives, round trips, survives all allocation
+  failures, and decodes through libbrotli plus 17-byte/31-byte progressive
+  Vort. The full gate remains green with `planned_literal_split_cases=3` and
+  the existing 7,056 one-shot, 7,056 progressive, and 1,401 fragmentation
+  cases.
