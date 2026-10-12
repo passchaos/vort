@@ -276,7 +276,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   allocation APIs, decoded-size preflight, and block/combined CRC validation,
   plus block-bounded caller-output incremental decoding with arbitrary input
   fragmentation, non-byte-aligned block continuation, zero-output
-  backpressure, concatenated members, exact-size pledges, and reusable scratch;
+  backpressure, concatenated members, exact-size pledges, and reusable scratch,
+  plus block-bounded incremental encoding with split-independent deterministic
+  wire, cross-call RLE runs, flushable BWT blocks, concatenated continuation,
+  pledged input sizes, and caller-output backpressure;
 - dependency-free XZ decoding for LZMA2 streams with optional Delta and all
   eight BCJ filters including ARM64/RISC-V, strict stream/block/index/footer validation,
   none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream

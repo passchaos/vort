@@ -176,6 +176,7 @@ pub const zipExtractByNameAllocWithOptions = zip.extractByNameAllocWithOptions;
 pub const Bzip2Error = bzip2.Error;
 pub const Bzip2EncodeOptions = bzip2.EncodeOptions;
 pub const Bzip2IncrementalDecoder = bzip2.IncrementalDecoder;
+pub const Bzip2IncrementalEncoder = bzip2.IncrementalEncoder;
 pub const encodeBzip2Alloc = bzip2.encodeAlloc;
 pub const encodeBzip2Append = bzip2.encodeAppend;
 pub const encodeBzip2Into = bzip2.encodeInto;
@@ -3360,6 +3361,31 @@ test "root Bzip2 incremental decoder drains a Python stream" {
     const done = try decoder.step("", &output);
     try std.testing.expectEqual(core.StepResult.Status.done, done.status);
     try std.testing.expectEqualSlices(u8, expected, &output);
+}
+
+test "root Bzip2 incremental encoder writes a complete stream" {
+    const input = "root Bzip2 incremental encoder" ** 32;
+    var encoder = try Bzip2IncrementalEncoder.initExactSize(std.testing.allocator, .{
+        .block_size_100k = 1,
+    }, input.len);
+    defer encoder.deinit();
+    var encoded: [2048]u8 = undefined;
+    var encoded_len: usize = 0;
+    var input_offset: usize = 0;
+    while (input_offset < input.len) {
+        const result = try encoder.step(input[input_offset..], encoded[encoded_len..]);
+        input_offset += result.progress.input_read;
+        encoded_len += result.progress.output_written;
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", encoded[encoded_len..]);
+        encoded_len += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    const decoded = try decodeBzip2Alloc(std.testing.allocator, encoded[0..encoded_len]);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "root 7z exports compressed archive writing" {

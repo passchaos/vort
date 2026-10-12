@@ -18394,3 +18394,16 @@ reuse, so production keeps the simpler independently owned plans.
   output observed before finish, known/end-marker writers, zero output, all
   truncated fixture prefixes, limits, reset, and every allocation failure.
   See `docs/formats/lzma.md`.
+
+- Added a block-bounded public Bzip2 incremental encoder. RLE1 run state crosses
+  arbitrary input calls, canonical 259-byte run groups use the same block-fit
+  rule as one-shot encoding, and the partial MSB-first output byte survives
+  block and caller-output boundaries. Without flush, a 101,321-byte real
+  two-block corpus containing a long run matches one-shot wire byte-for-byte
+  under one-byte input and seven-byte output. Explicit idempotent flush closes
+  the current BWT block without ending the stream; finish emits the combined
+  CRC and terminator. The API also supports zero-output backpressure,
+  max/pledged input, pending-output limits, reset, retained scratch snapshots,
+  and concatenated `nextStream` continuation. Focused tests cover empty streams,
+  forced block boundaries, exact wire, flush, continuation, all limits, and
+  every allocation failure. See `docs/formats/bzip2.md`.

@@ -82,7 +82,9 @@ Available APIs:
   limited variant for concatenated streams;
 - `bzip2DecodedSizeConcatenated` and its limited variant;
 - `Bzip2IncrementalDecoder` for fragmented input, caller-owned output,
-  concatenated members, resettable scratch, snapshots, and diagnostics.
+  concatenated members, resettable scratch, snapshots, and diagnostics;
+- `Bzip2IncrementalEncoder` for block-bounded input, caller-owned output,
+  explicit flush, pledged sizes, and concatenated continuation.
 
 The allocator supplies bounded block scratch: a stream uses at most the block
 size advertised by its `BZh` level for transformed bytes plus a 32-bit inverse
@@ -98,6 +100,34 @@ reparse for every one-byte fragment. A block's CRC is verified before any byte
 from that block is released. The rotated/XOR combined CRC is necessarily
 verified at the member terminator after previously verified blocks may already
 have been streamed, matching ordinary streaming decompressor semantics.
+
+`Bzip2IncrementalEncoder` provides the matching bounded encode surface. RLE1
+runs are retained across input calls and committed in canonical 259-byte
+groups; the BWT block ends only when the next encoded run group would exceed
+the selected `BZh1`...`BZh9` block size. The partially filled MSB-first output
+byte also survives caller output backpressure. Consequently, omitting `flush`
+produces exactly the same bytes as one-shot encoding regardless of input and
+output fragmentation.
+
+```zig
+var encoder = try vort.Bzip2IncrementalEncoder.initExactSize(allocator, .{
+    .block_size_100k = 9,
+    .max_input_len = 256 * 1024 * 1024,
+    .max_pending_output_len = 4 * 1024 * 1024,
+}, input.len);
+defer encoder.deinit();
+
+// Repeated step(input, output) calls accept and drain the stream.
+// flush() closes the current BWT block without ending the stream.
+// finish() emits the combined CRC and terminal marker.
+```
+
+The encoder exposes idempotent `flush`, unknown-size and exact-size
+construction, `reset`, `nextStream`/`nextStreamExactSize` for concatenated
+members, retained-capacity snapshots, and independent input/pending-output
+limits. A flush intentionally changes block boundaries; without one, a
+one-byte input/7-byte output test over a real two-block long-run corpus is
+required to match one-shot wire byte-for-byte.
 
 CLI validation surfaces:
 
