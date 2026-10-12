@@ -18238,3 +18238,17 @@ reuse, so production keeps the simpler independently owned plans.
   caller-owned block-switch trees measured `0.9974x`, and complete-code-space
   lookup initialization measured `0.9973x`. See
   `docs/performance/brotli-decode-stage-profile-x86.md`.
+
+- Brotli's fixed 2--4 bit code-length-code-length prefix now decodes through a
+  16-entry nibble lookup with one strict availability check and one cursor
+  advance instead of two to four checked one-bit reads. An exhaustive test
+  covers all padded nibbles, exact consumed widths, and one-bit-short
+  truncation for every code. Fifteen fixed-CPU `clustered_q8` pairs improve by
+  `1.0109x` median / `1.0115x` geometric throughput with 15/15 wins; a
+  seven-pair 13-row matrix reaches `1.0089x` across row medians, while a longer
+  `repetitive_q11` boundary control is neutral at `1.0003x`. The libbrotli gate
+  and 98-case / 7,056 one-shot / 7,056 progressive / 1,401 fragmentation
+  upstream differential remain green. All-family setup fusion, literal-only
+  fusion, and table-tail prebuild/copy were measured and removed at
+  `0.9893x`, an insufficient `1.0014x`, and `0.9971x` respectively. See
+  `docs/performance/brotli-code-length-prefix-lut-x86.md`.

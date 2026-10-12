@@ -12811,15 +12811,33 @@ fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alpha
     return result;
 }
 
+const code_length_code_prefix_lut = [16]u8{
+    (0 << 3) | 2, (4 << 3) | 2, (3 << 3) | 2, (2 << 3) | 3,
+    (0 << 3) | 2, (4 << 3) | 2, (3 << 3) | 2, (1 << 3) | 4,
+    (0 << 3) | 2, (4 << 3) | 2, (3 << 3) | 2, (2 << 3) | 3,
+    (0 << 3) | 2, (4 << 3) | 2, (3 << 3) | 2, (5 << 3) | 4,
+};
+
 fn readCodeLengthCodeLength(reader: *bitstream.BitReader) Error!u4 {
-    const first = try reader.readBits(u1, 1);
-    const second = try reader.readBits(u1, 1);
-    if (first == 0) return if (second == 0) 0 else 3;
-    if (second == 0) return 4;
-    const third = try reader.readBits(u1, 1);
-    if (third == 0) return 2;
-    const fourth = try reader.readBits(u1, 1);
-    return if (fourth == 0) 1 else 5;
+    const entry = code_length_code_prefix_lut[reader.peekBitsPadded(u4, 4)];
+    const bits: u3 = @truncate(entry);
+    if (!reader.hasBits(bits)) return error.TruncatedFrame;
+    reader.advanceBitsStagedAssumeAvailable(bits);
+    return @truncate(entry >> 3);
+}
+
+test "br code-length-code-length prefix lookup covers every padded nibble" {
+    const expected_values = [16]u4{ 0, 4, 3, 2, 0, 4, 3, 1, 0, 4, 3, 2, 0, 4, 3, 5 };
+    const expected_bits = [16]u3{ 2, 2, 2, 3, 2, 2, 2, 4, 2, 2, 2, 3, 2, 2, 2, 4 };
+    for (0..16) |prefix| {
+        const input = [1]u8{@intCast(prefix)};
+        var reader = bitstream.BitReader.initBitLength(&input, expected_bits[prefix]);
+        try std.testing.expectEqual(expected_values[prefix], try readCodeLengthCodeLength(&reader));
+        try std.testing.expectEqual(@as(usize, expected_bits[prefix]), reader.bitPosition());
+
+        var truncated = bitstream.BitReader.initBitLength(&input, expected_bits[prefix] - 1);
+        try std.testing.expectError(error.TruncatedFrame, readCodeLengthCodeLength(&truncated));
+    }
 }
 
 fn singleSymbolPrefixCode(comptime alphabet_size: usize, lengths: *const [alphabet_size]u4) PrefixCode(alphabet_size) {
