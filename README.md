@@ -13,7 +13,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - portable slice-by-4/slice-by-8/slice-by-16 IEEE CRC-32, slice-by-32 IEEE CRC-32, compile-time feature-gated ARMv8 CRC32 and x86 PCLMUL hardware dispatch, slice-by-8/slice-by-16/slice-by-32 CRC-32C fast paths, checksum dispatch reporting, and Adler-32/CRC-32/CRC-32C combine helpers for block/parallel checksum composition;
 - shared progress/error/frame metadata types;
 - pure Zig LZ4 frame/block
-  decode/fallback encode with skippable/concatenated stream handling,
+  decode/fallback encode plus byte-exact liblz4-1.9.3-compatible LZ4HC block
+  encoding and independent-block frame writing across levels 1...12, with
+  allocating, caller-buffer, append, and reusable APIs, skippable/concatenated
+  stream handling,
   optional content-size/checksum/block-checksum/Dictionary_ID fields,
   configurable frame block sizes, linked-block history encoding, encoded-block bounds, decoded-size
   preflight, bounded allocation for single/concatenated streams, bounded

@@ -14,6 +14,16 @@ const CompressDefaultFn = *const fn (
     c_int,
 ) callconv(.c) c_int;
 const VersionStringFn = *const fn () callconv(.c) [*:0]const u8;
+const CreateStreamHcFn = *const fn () callconv(.c) ?*anyopaque;
+const FreeStreamHcFn = *const fn (?*anyopaque) callconv(.c) c_int;
+const CompressHcDestSizeFn = *const fn (
+    ?*anyopaque,
+    [*]const u8,
+    [*]u8,
+    *c_int,
+    c_int,
+    c_int,
+) callconv(.c) c_int;
 
 const FrameInfo = extern struct {
     block_size_id: c_int = 0,
@@ -63,6 +73,9 @@ pub const Runtime = struct {
     decompress_safe: DecompressSafeFn,
     compress_bound: CompressBoundFn,
     compress_default: CompressDefaultFn,
+    create_stream_hc: CreateStreamHcFn,
+    free_stream_hc: FreeStreamHcFn,
+    compress_hc_dest_size: CompressHcDestSizeFn,
     compress_frame_bound: CompressFrameBoundFn,
     compress_frame: CompressFrameFn,
     create_decompression_context: CreateDecompressionContextFn,
@@ -104,6 +117,27 @@ pub const Runtime = struct {
             const compress_default = library.lookup(
                 CompressDefaultFn,
                 "LZ4_compress_default",
+            ) orelse {
+                library.close();
+                continue;
+            };
+            const create_stream_hc = library.lookup(
+                CreateStreamHcFn,
+                "LZ4_createStreamHC",
+            ) orelse {
+                library.close();
+                continue;
+            };
+            const free_stream_hc = library.lookup(
+                FreeStreamHcFn,
+                "LZ4_freeStreamHC",
+            ) orelse {
+                library.close();
+                continue;
+            };
+            const compress_hc_dest_size = library.lookup(
+                CompressHcDestSizeFn,
+                "LZ4_compress_HC_destSize",
             ) orelse {
                 library.close();
                 continue;
@@ -152,6 +186,9 @@ pub const Runtime = struct {
                 .decompress_safe = decompress_safe,
                 .compress_bound = compress_bound,
                 .compress_default = compress_default,
+                .create_stream_hc = create_stream_hc,
+                .free_stream_hc = free_stream_hc,
+                .compress_hc_dest_size = compress_hc_dest_size,
                 .compress_frame_bound = compress_frame_bound,
                 .compress_frame = compress_frame,
                 .create_decompression_context = create_decompression_context,
@@ -210,6 +247,35 @@ pub const Runtime = struct {
             bound,
         );
         if (written <= 0) return error.ReferenceEncodeFailed;
+        return allocator.realloc(output, @intCast(written));
+    }
+
+    pub fn encodeHcAlloc(
+        self: Runtime,
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        compression_level: c_int,
+    ) ![]u8 {
+        const input_len = std.math.cast(c_int, input.len) orelse
+            return error.InputTooLarge;
+        const bound = self.compress_bound(input_len);
+        if (bound <= 0) return error.ReferenceEncodeFailed;
+        const output = try allocator.alloc(u8, @intCast(bound));
+        errdefer allocator.free(output);
+        const state = self.create_stream_hc() orelse
+            return error.ReferenceUnavailable;
+        defer _ = self.free_stream_hc(state);
+        var consumed = input_len;
+        const written = self.compress_hc_dest_size(
+            state,
+            input.ptr,
+            output.ptr,
+            &consumed,
+            bound,
+            compression_level,
+        );
+        if (written <= 0 or consumed != input_len)
+            return error.ReferenceEncodeFailed;
         return allocator.realloc(output, @intCast(written));
     }
 

@@ -18195,3 +18195,15 @@ reuse, so production keeps the simpler independently owned plans.
   AArch32 ELF, DEX, and ZTF reference correction remain explicit follow-ups
   rather than silently treating unsupported executable elements as raw data. See
   `docs/formats/android-ota.md`.
+
+- Promoted the previously internal LZ4DIFF high-compression engine into public
+  pure-Zig LZ4HC block and independent-frame APIs. Raw blocks reproduce
+  liblz4 1.9.3 `LZ4_compress_HC_destSize` across levels 1...12, including
+  default and maximum-level normalization, through allocating, caller-buffer,
+  append, and reusable scratch surfaces. Independent frames add configurable
+  block size, block/content checksums, optional content size, raw fallback, and
+  exact output bounds. The runtime liblz4 probe now requires byte-identical HC
+  blocks at hash-chain and optimal levels and byte-identical `LZ4F` independent
+  frames for levels 3 and above. Focused allocation-failure tests and a valid
+  fuzz frame cover ownership and malformed-input behavior. Linked-history and
+  preset-dictionary LZ4HC frames remain explicit functionality follow-ups.

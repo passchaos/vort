@@ -3,6 +3,10 @@
 Vort has black-box differential smoke coverage against Python `zlib` and the
 system `gzip` CLI, plus library-level interoperability probes against other
 system codecs including libsnappy, liblz4, libbrotli, and libzstd.
+The native LZ4 library probe additionally compares public Vort LZ4HC blocks
+byte-for-byte with `LZ4_compress_HC_destSize` at levels 1, 3, 5, 9, 10, 11,
+12, and an above-maximum level, and compares independent HC frames with
+`LZ4F_compressFrame` for the upstream HC levels 3 and above.
 The required libbrotli probe also generates Large Window streams for every
 25...30-bit window. It requires strict Vort entrypoints to reject the reserved
 header and verifies explicit opt-in one-shot, split-input, buffered-incremental,

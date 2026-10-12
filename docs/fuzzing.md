@@ -22,6 +22,7 @@ Coverage-guided fuzzing should target these parser surfaces first:
 4. zlib/gzip wrappers and optional gzip headers.
 
 The shared raw-byte target also probes bounded container readers, including
+native LZ4 frames generated through the public LZ4HC encoder, plus
 Android sparse v1 metadata and CRC checkpoints plus Android OTA v2 headers,
 protobuf manifests, operation hashes, short partition/range reads, and bounded
 BSDIFF40/BSDF2, PUF1/PUFFDIFF, LZ4DIFF, and Zucchini v1 application. Valid

@@ -23,12 +23,14 @@ pub fn encodeBlockDestSize(input: []const u8, output: []u8) Error!DestSizeResult
 
 pub const HcDestSizeEncoder = struct {
     inner: hc_dest_size.Encoder,
+    output_scratch: std.ArrayList(u8) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) Error!HcDestSizeEncoder {
         return .{ .inner = try hc_dest_size.Encoder.init(allocator) };
     }
 
     pub fn deinit(self: *HcDestSizeEncoder) void {
+        self.output_scratch.deinit(self.inner.allocator);
         self.inner.deinit();
         self.* = undefined;
     }
@@ -45,7 +47,70 @@ pub const HcDestSizeEncoder = struct {
             error.OutOfMemory => error.OutOfMemory,
         };
     }
+
+    pub fn encodeAlloc(
+        self: *HcDestSizeEncoder,
+        input: []const u8,
+        compression_level: i32,
+    ) Error![]u8 {
+        const bound = try encodedBlockBound(input.len);
+        const output = try self.inner.allocator.alloc(u8, bound);
+        errdefer self.inner.allocator.free(output);
+        const result = try self.encode(input, output, compression_level);
+        if (result.consumed != input.len) return error.SizeMismatch;
+        return self.inner.allocator.realloc(output, result.written);
+    }
+
+    pub fn encodeScratch(
+        self: *HcDestSizeEncoder,
+        input: []const u8,
+        compression_level: i32,
+    ) Error![]const u8 {
+        try self.output_scratch.resize(
+            self.inner.allocator,
+            try encodedBlockBound(input.len),
+        );
+        const result = self.encode(
+            input,
+            self.output_scratch.items,
+            compression_level,
+        ) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        if (result.consumed != input.len) {
+            self.output_scratch.clearRetainingCapacity();
+            return error.SizeMismatch;
+        }
+        self.output_scratch.items.len = result.written;
+        return self.output_scratch.items;
+    }
+
+    pub fn append(
+        self: *HcDestSizeEncoder,
+        output: *std.ArrayList(u8),
+        input: []const u8,
+        compression_level: i32,
+    ) Error!usize {
+        const encoded = try self.encodeScratch(input, compression_level);
+        try output.appendSlice(self.inner.allocator, encoded);
+        return encoded.len;
+    }
+
+    pub fn encodeIntoSlice(
+        self: *HcDestSizeEncoder,
+        input: []const u8,
+        output: []u8,
+        compression_level: i32,
+    ) Error!usize {
+        const encoded = try self.encodeScratch(input, compression_level);
+        if (output.len < encoded.len) return error.OutputTooSmall;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
 };
+
+pub const BlockHcEncoder = HcDestSizeEncoder;
 
 pub fn encodeBlockHcDestSize(
     allocator: std.mem.Allocator,
@@ -56,6 +121,27 @@ pub fn encodeBlockHcDestSize(
     var encoder = try HcDestSizeEncoder.init(allocator);
     defer encoder.deinit();
     return encoder.encode(input, output, compression_level);
+}
+
+pub fn encodeBlockHcAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    compression_level: i32,
+) Error![]u8 {
+    var encoder = try BlockHcEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeAlloc(input, compression_level);
+}
+
+pub fn encodeBlockHcIntoSlice(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output: []u8,
+    compression_level: i32,
+) Error!usize {
+    var encoder = try BlockHcEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeIntoSlice(input, output, compression_level);
 }
 
 pub const default_compression_level: c_int = 10;
@@ -105,6 +191,16 @@ pub const NativeFrameOptions = struct {
     /// Maximum hash-chain candidates to inspect per position. Lower values
     /// favor encode speed; the default keeps the deeper-ratio parser enabled.
     chain_depth: u8 = native_max_chain_depth,
+};
+
+/// Options for independent-block LZ4 frames encoded with the byte-exact
+/// liblz4 1.9.3-compatible high-compression parser.
+pub const HcFrameOptions = struct {
+    include_content_size: bool = true,
+    content_checksum: bool = true,
+    block_checksum: bool = false,
+    block_size_id: BlockSizeId = .max4mb,
+    compression_level: i32 = 9,
 };
 
 const IncrementalEncoderCodec = struct {
@@ -387,6 +483,19 @@ pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrame
     bound = std.math.add(usize, bound, 4) catch return error.IntegerOverflow; // end mark
     if (options.content_checksum) bound = std.math.add(usize, bound, 4) catch return error.IntegerOverflow;
     return bound;
+}
+
+pub fn encodedHcFrameBound(
+    input_len: usize,
+    options: HcFrameOptions,
+) Error!usize {
+    return encodedNativeFrameBoundWithOptions(input_len, .{
+        .include_content_size = options.include_content_size,
+        .content_checksum = options.content_checksum,
+        .block_checksum = options.block_checksum,
+        .block_size_id = options.block_size_id,
+        .block_mode = .independent,
+    });
 }
 
 fn nativeChainDepth(options: NativeFrameOptions) Error!u8 {
@@ -5598,6 +5707,170 @@ pub const NativeFrameEncoder = struct {
     }
 };
 
+pub const HcFrameEncoder = struct {
+    block_encoder: BlockHcEncoder,
+    output_scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) Error!HcFrameEncoder {
+        return .{ .block_encoder = try BlockHcEncoder.init(allocator) };
+    }
+
+    pub fn deinit(self: *HcFrameEncoder) void {
+        self.output_scratch.deinit(self.block_encoder.inner.allocator);
+        self.block_encoder.deinit();
+        self.* = undefined;
+    }
+
+    pub fn encodeAppend(
+        self: *HcFrameEncoder,
+        output: *std.ArrayList(u8),
+        input: []const u8,
+        options: HcFrameOptions,
+    ) Error!void {
+        const allocator = self.block_encoder.inner.allocator;
+        try output.appendSlice(allocator, &frame_magic);
+        const descriptor_start = output.items.len;
+        var flags: u8 = 0x40 | 0x20;
+        if (options.block_checksum) flags |= 0x10;
+        if (options.include_content_size) flags |= 0x08;
+        if (options.content_checksum) flags |= 0x04;
+        try output.append(allocator, flags);
+        try output.append(
+            allocator,
+            @intFromEnum(options.block_size_id) << 4,
+        );
+        if (options.include_content_size) {
+            var content_size: [8]u8 = undefined;
+            std.mem.writeInt(
+                u64,
+                &content_size,
+                try checkedUsizeToU64(input.len),
+                .little,
+            );
+            try output.appendSlice(allocator, &content_size);
+        }
+        try output.append(
+            allocator,
+            descriptorChecksum(output.items[descriptor_start..]),
+        );
+
+        var offset: usize = 0;
+        const max_block_len = options.block_size_id.maxLen();
+        while (offset < input.len) {
+            const block_len = @min(input.len - offset, max_block_len);
+            const block = input[offset..][0..block_len];
+            const encoded = try self.block_encoder.encodeScratch(
+                block,
+                options.compression_level,
+            );
+            var block_header: [4]u8 = undefined;
+            if (encoded.len < block.len) {
+                std.mem.writeInt(
+                    u32,
+                    &block_header,
+                    @intCast(encoded.len),
+                    .little,
+                );
+                try output.appendSlice(allocator, &block_header);
+                try output.appendSlice(allocator, encoded);
+                if (options.block_checksum)
+                    try emitBlockChecksum(allocator, output, encoded);
+            } else {
+                std.mem.writeInt(
+                    u32,
+                    &block_header,
+                    0x8000_0000 | @as(u32, @intCast(block.len)),
+                    .little,
+                );
+                try output.appendSlice(allocator, &block_header);
+                try output.appendSlice(allocator, block);
+                if (options.block_checksum)
+                    try emitBlockChecksum(allocator, output, block);
+            }
+            offset += block_len;
+        }
+        try output.appendSlice(allocator, &.{ 0, 0, 0, 0 });
+        if (options.content_checksum) {
+            var content_checksum: [4]u8 = undefined;
+            std.mem.writeInt(
+                u32,
+                &content_checksum,
+                std.hash.XxHash32.hash(0, input),
+                .little,
+            );
+            try output.appendSlice(allocator, &content_checksum);
+        }
+    }
+
+    pub fn encodeAlloc(
+        self: *HcFrameEncoder,
+        input: []const u8,
+        options: HcFrameOptions,
+    ) Error![]u8 {
+        var output: std.ArrayList(u8) = .empty;
+        errdefer output.deinit(self.block_encoder.inner.allocator);
+        try self.encodeAppend(&output, input, options);
+        return output.toOwnedSlice(self.block_encoder.inner.allocator);
+    }
+
+    pub fn encodeScratch(
+        self: *HcFrameEncoder,
+        input: []const u8,
+        options: HcFrameOptions,
+    ) Error![]const u8 {
+        self.output_scratch.clearRetainingCapacity();
+        self.encodeAppend(&self.output_scratch, input, options) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        return self.output_scratch.items;
+    }
+
+    pub fn encodeIntoSlice(
+        self: *HcFrameEncoder,
+        input: []const u8,
+        options: HcFrameOptions,
+        output: []u8,
+    ) Error!usize {
+        const encoded = try self.encodeScratch(input, options);
+        if (output.len < encoded.len) return error.OutputTooSmall;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
+};
+
+pub fn encodeHcFrameAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: HcFrameOptions,
+) Error![]u8 {
+    var encoder = try HcFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeAlloc(input, options);
+}
+
+pub fn encodeHcFrameAppend(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    options: HcFrameOptions,
+) Error!void {
+    var encoder = try HcFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeAppend(output, input, options);
+}
+
+pub fn encodeHcFrameIntoSlice(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: HcFrameOptions,
+    output: []u8,
+) Error!usize {
+    var encoder = try HcFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeIntoSlice(input, options, output);
+}
+
 fn optionsWithNativeDictionary(options: NativeFrameOptions, dictionary: ?NativeDictionary) NativeFrameOptions {
     var with_dictionary = options;
     if (dictionary) |dict| with_dictionary.dictionary_id = dict.id;
@@ -6412,6 +6685,83 @@ fn markHashOccupied(occupancy_bits: []u64, hash: usize) void {
     const word = hash >> 6;
     const bit: u6 = @intCast(hash & 63);
     occupancy_bits[word] |= @as(u64, 1) << bit;
+}
+
+test "LZ4HC public block APIs round trip levels and preserve caller output" {
+    const allocator = std.testing.allocator;
+    const payload = "public LZ4HC block API with repeated structured bytes\n" ** 256;
+    var reusable = try BlockHcEncoder.init(allocator);
+    defer reusable.deinit();
+    inline for (.{ @as(i32, 0), 1, 3, 5, 9, 10, 11, 12, 99 }) |level| {
+        const encoded = try reusable.encodeAlloc(payload, level);
+        defer allocator.free(encoded);
+        const decoded = try decodeBlockAlloc(allocator, encoded, payload.len);
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+        var into: [4096]u8 = undefined;
+        const written = try reusable.encodeIntoSlice(payload, &into, level);
+        try std.testing.expectEqualSlices(u8, encoded, into[0..written]);
+        try std.testing.expectError(
+            error.OutputTooSmall,
+            reusable.encodeIntoSlice(payload, into[0 .. written - 1], level),
+        );
+    }
+}
+
+test "LZ4HC independent frames round trip checksums blocks and caller output" {
+    const allocator = std.testing.allocator;
+    const payload = ("LZ4HC independent frame block boundary payload\n" ** 2048) ++
+        ([_]u8{0xa5} ** 70_000);
+    var encoder = try HcFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    const options = HcFrameOptions{
+        .include_content_size = true,
+        .content_checksum = true,
+        .block_checksum = true,
+        .block_size_id = .max64kb,
+        .compression_level = 12,
+    };
+    const encoded = try encoder.encodeAlloc(payload, options);
+    defer allocator.free(encoded);
+    try std.testing.expect(encoded.len <= try encodedHcFrameBound(payload.len, options));
+    const header = try inspectNativeFrameHeader(encoded);
+    try std.testing.expect(header.block_independent);
+    try std.testing.expect(header.block_checksum);
+    try std.testing.expect(header.content_checksum);
+    const decoded = try decodeFrameAlloc(allocator, encoded);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    const into = try allocator.alloc(u8, try encodedHcFrameBound(payload.len, options));
+    defer allocator.free(into);
+    const written = try encoder.encodeIntoSlice(payload, options, into);
+    try std.testing.expectEqualSlices(u8, encoded, into[0..written]);
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        encoder.encodeIntoSlice(payload, options, into[0 .. written - 1]),
+    );
+}
+
+test "LZ4HC reusable encoders release every workspace allocation failure" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const payload = "allocation-safe public LZ4HC APIs" ** 64;
+            var block_encoder = try BlockHcEncoder.init(allocator);
+            defer block_encoder.deinit();
+            const block = try block_encoder.encodeAlloc(payload, 12);
+            defer allocator.free(block);
+            var frame_encoder = try HcFrameEncoder.init(allocator);
+            defer frame_encoder.deinit();
+            const frame = try frame_encoder.encodeAlloc(payload, .{
+                .compression_level = 12,
+            });
+            defer allocator.free(frame);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{},
+    );
 }
 
 fn hash4(bytes: *const [4]u8) usize {

@@ -84,6 +84,23 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         => {},
         else => return err,
     }
+    if (vort.lz4DecodeFrameAllocLimited(allocator, data, 1 << 20)) |decoded| {
+        allocator.free(decoded);
+    } else |err| switch (err) {
+        error.CorruptFrame,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.ChecksumMismatch,
+        error.SizeMismatch,
+        error.InvalidMatch,
+        error.NeedDictionary,
+        error.TrailingData,
+        error.IntegerOverflow,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
+        => {},
+        else => return err,
+    }
     if (vort.decodeLznt1AllocLimited(allocator, data, 1 << 20)) |decoded| {
         allocator.free(decoded);
     } else |err| switch (err) {
@@ -1459,6 +1476,17 @@ pub fn main(init: std.process.Init) !void {
         "EROFS",
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
+
+    const lz4hc_frame = try vort.lz4EncodeHcFrameAlloc(
+        init.gpa,
+        "LZ4HC public fuzz frame with repeated content\n" ** 128,
+        .{
+            .block_checksum = true,
+            .compression_level = 12,
+        },
+    );
+    defer init.gpa.free(lz4hc_frame);
+    try fuzzOne(init.gpa, lz4hc_frame);
 
     const base64 = std.base64.standard.decoderWithIgnore(" \r\n\t");
     const raw_lzms_text = vort.fuzz.lzms_raw_fixture_base64;

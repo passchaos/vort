@@ -2007,6 +2007,17 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator, stdout: *std.
     };
 
     var checked: usize = 0;
+    const hc_levels = [_]c_int{ 1, 3, 5, 9, 10, 11, 12, 19 };
+    for (cases) |case| {
+        for (hc_levels) |level| {
+            try checkLibLz4HcBlock(allocator, runtime, case, level);
+            checked += 1;
+            if (level >= 3) {
+                try checkLibLz4HcFrame(allocator, runtime, case, level);
+                checked += 1;
+            }
+        }
+    }
     for (cases) |case| {
         for (levels) |level| {
             for (option_sets) |options| {
@@ -2020,6 +2031,79 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator, stdout: *std.
         .{ runtime.version(), checked },
     );
     return checked;
+}
+
+fn checkLibLz4HcBlock(
+    allocator: std.mem.Allocator,
+    runtime: liblz4.Runtime,
+    case: Case,
+    level: c_int,
+) !void {
+    const reference = try runtime.encodeHcAlloc(
+        allocator,
+        case.payload,
+        level,
+    );
+    defer allocator.free(reference);
+    const encoded = try vort.lz4EncodeBlockHcAlloc(
+        allocator,
+        case.payload,
+        level,
+    );
+    defer allocator.free(encoded);
+    if (!std.mem.eql(u8, reference, encoded)) {
+        std.debug.print(
+            "lz4_hc_block_mismatch case={s} level={d} reference={d} vort={d}\n",
+            .{ case.name, level, reference.len, encoded.len },
+        );
+        return error.Lz4ProbeMismatch;
+    }
+    const decoded = try vort.lz4DecodeBlockAlloc(
+        allocator,
+        encoded,
+        case.payload.len,
+    );
+    defer allocator.free(decoded);
+    try expectPayload(case, decoded);
+}
+
+fn checkLibLz4HcFrame(
+    allocator: std.mem.Allocator,
+    runtime: liblz4.Runtime,
+    case: Case,
+    level: c_int,
+) !void {
+    const reference = try runtime.encodeFrameAlloc(allocator, case.payload, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .block_checksum = true,
+        .block_size_id = 4,
+        .block_independent = true,
+        .compression_level = level,
+    });
+    defer allocator.free(reference);
+    const encoded = try vort.lz4EncodeHcFrameAlloc(
+        allocator,
+        case.payload,
+        .{
+            .include_content_size = false,
+            .content_checksum = true,
+            .block_checksum = true,
+            .block_size_id = .max64kb,
+            .compression_level = level,
+        },
+    );
+    defer allocator.free(encoded);
+    if (!std.mem.eql(u8, reference, encoded)) {
+        std.debug.print(
+            "lz4_hc_frame_mismatch case={s} level={d} reference={d} vort={d}\n",
+            .{ case.name, level, reference.len, encoded.len },
+        );
+        return error.Lz4ProbeMismatch;
+    }
+    const decoded = try vort.lz4DecodeFrameAlloc(allocator, encoded);
+    defer allocator.free(decoded);
+    try expectPayload(case, decoded);
 }
 
 fn checkLibLz4GeneratedLibraryFrame(
