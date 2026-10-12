@@ -18207,3 +18207,19 @@ reuse, so production keeps the simpler independently owned plans.
   frames for levels 3 and above. Focused allocation-failure tests and a valid
   fuzz frame cover ownership and malformed-input behavior. Linked-history and
   preset-dictionary LZ4HC frames remain explicit functionality follow-ups.
+
+- Brotli compressed-header construction now parses inline literal, command,
+  and distance prefix codes directly into their final caller-owned header
+  slots. Complex canonical tables use a matching
+  `HuffmanTable.initSparseTrustedInto` path, removing multiple 1.6--4.4 KiB
+  temporary return copies per tree without changing wire behavior or compact
+  overflow-tree handling. On x86-64 the ReleaseFast header parser shrinks from
+  `0x684c` to `0xde5` bytes. Seven fixed-CPU header pairs improve by `1.1113x`
+  at the median; eleven 1,000-decode `clustered_q8` pairs improve by `1.0122x`
+  with 11/11 wins. A seven-pair 13-row matrix improves `1.0630x` across row
+  medians, with every ordinary compressed row positive and tiny/random controls
+  neutral. The libbrotli gate and the 98-case / 7,056 one-shot / 7,056
+  progressive / 1,401 chunk-matrix upstream differential remain green. A
+  high-tree buffered reader and caller-owned simple-tree builder were measured
+  and removed as neutral. See
+  `docs/performance/brotli-caller-owned-prefix-build-x86.md`.

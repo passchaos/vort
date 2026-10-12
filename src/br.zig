@@ -6169,10 +6169,10 @@ inline fn readCompressedHeaderContextMaps(reader: *bitstream.BitReader, header: 
 inline fn readCompressedHeaderLiteralTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
     var literal_tree_index: u16 = 0;
     while (literal_tree_index < tree_count) : (literal_tree_index += 1) {
-        const tree = try readPrefixCode(256, reader);
         if (literal_tree_index < inline_literal_tree_count) {
-            header.literal_trees[literal_tree_index] = tree;
+            try readPrefixCodeInto(256, reader, &header.literal_trees[literal_tree_index]);
         } else {
+            const tree = try readPrefixCode(256, reader);
             header.packed_literal_trees[literal_tree_index - inline_literal_tree_count] = PackedPrefixCode(256).init(&tree);
         }
     }
@@ -6182,10 +6182,10 @@ inline fn readCompressedHeaderLiteralTrees(reader: *bitstream.BitReader, header:
 inline fn readCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
     var command_tree_index: u16 = 0;
     while (command_tree_index < tree_count) : (command_tree_index += 1) {
-        const tree = try readPrefixCode(704, reader);
         if (command_tree_index < inline_command_tree_count) {
-            header.insert_copy_trees[command_tree_index] = tree;
+            try readPrefixCodeInto(704, reader, &header.insert_copy_trees[command_tree_index]);
         } else {
+            const tree = try readPrefixCode(704, reader);
             header.packed_insert_copy_trees[command_tree_index - inline_command_tree_count] = PackedPrefixCode(704).init(&tree);
         }
     }
@@ -6195,10 +6195,10 @@ inline fn readCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header:
 inline fn readCompressedHeaderDistanceTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, alphabet_size: usize) Error!void {
     var distance_tree_index: u16 = 0;
     while (distance_tree_index < tree_count) : (distance_tree_index += 1) {
-        const tree = try readPrefixCodeRuntime(max_distance_alphabet_size, alphabet_size, reader);
         if (distance_tree_index < inline_distance_tree_count) {
-            header.distance_trees[distance_tree_index] = tree;
+            try readPrefixCodeRuntimeInto(max_distance_alphabet_size, alphabet_size, reader, &header.distance_trees[distance_tree_index]);
         } else {
+            const tree = try readPrefixCodeRuntime(max_distance_alphabet_size, alphabet_size, reader);
             header.packed_distance_trees[distance_tree_index - inline_distance_tree_count] = PackedPrefixCode(max_distance_alphabet_size).init(&tree);
         }
     }
@@ -12266,9 +12266,19 @@ fn readPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader) E
 }
 
 fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader) Error!PrefixCode(max_alphabet_size) {
+    var result: PrefixCode(max_alphabet_size) = undefined;
+    try readPrefixCodeRuntimeInto(max_alphabet_size, alphabet_size, reader, &result);
+    return result;
+}
+
+fn readPrefixCodeInto(comptime alphabet_size: usize, reader: *bitstream.BitReader, result: *PrefixCode(alphabet_size)) Error!void {
+    return readPrefixCodeRuntimeInto(alphabet_size, alphabet_size, reader, result);
+}
+
+fn readPrefixCodeRuntimeInto(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, result: *PrefixCode(max_alphabet_size)) Error!void {
     if (alphabet_size == 0 or alphabet_size > max_alphabet_size) return error.CorruptFrame;
     const kind = try reader.readBits(u2, 2);
-    if (kind != 1) return try readComplexPrefixCodeRuntime(max_alphabet_size, alphabet_size, reader, kind);
+    if (kind != 1) return readComplexPrefixCodeRuntimeInto(max_alphabet_size, alphabet_size, reader, kind, result);
 
     const nsym = @as(usize, try reader.readBits(u2, 2)) + 1;
     const alphabet_bits = alphabetBitsRuntime(alphabet_size);
@@ -12284,7 +12294,10 @@ fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize
 
     var lengths: [max_alphabet_size]u4 = undefined;
     switch (nsym) {
-        1 => return .{ .single_symbol = symbols[0] },
+        1 => {
+            result.* = .{ .single_symbol = symbols[0] };
+            return;
+        },
         2 => {
             lengths[0] = 1;
             lengths[1] = 1;
@@ -12308,7 +12321,8 @@ fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize
         else => unreachable,
     }
 
-    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..nsym], symbols[0..nsym]) };
+    result.single_symbol = null;
+    result.table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..nsym], symbols[0..nsym]);
 }
 
 // Keep Large Window header parsing on distinct generic instantiations. Sharing
@@ -12434,6 +12448,12 @@ const CodeLengthPrefixDecoder = huffman.FastDecoder(code_length_alphabet_size, 5
 const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
 fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2) Error!PrefixCode(max_alphabet_size) {
+    var result: PrefixCode(max_alphabet_size) = undefined;
+    try readComplexPrefixCodeRuntimeInto(max_alphabet_size, alphabet_size, reader, hskip, &result);
+    return result;
+}
+
+fn readComplexPrefixCodeRuntimeInto(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2, result: *PrefixCode(max_alphabet_size)) Error!void {
     if (hskip == 1) return error.CorruptFrame;
 
     var code_length_lengths: [code_length_alphabet_size]u4 = @splat(0);
@@ -12539,7 +12559,8 @@ fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size
         }
     }
     if (active < 2) return error.InvalidHuffmanCode;
-    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).initSparseTrusted(&lengths, active_symbols[0..active]) };
+    result.single_symbol = null;
+    try result.table.initSparseTrustedInto(&lengths, active_symbols[0..active]);
 }
 
 fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2, io: std.Io, profile: *PrefixCodeProfile) Error!PrefixCode(max_alphabet_size) {
