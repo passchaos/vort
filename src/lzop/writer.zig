@@ -22,8 +22,8 @@ pub const EncodeOptions = struct {
     lzo_options: lzo1x.EncodeOptions = .{},
 };
 
-const max_compatible_block_size: usize = 256 * 1024;
-const PayloadMode = enum { compressed_or_stored, stored };
+pub const max_compatible_block_size: usize = 256 * 1024;
+pub const PayloadMode = enum { compressed_or_stored, stored };
 
 pub fn encodeAlloc(allocator: std.mem.Allocator, input: []const u8, options: EncodeOptions) ![]u8 {
     var output: std.ArrayList(u8) = .empty;
@@ -92,12 +92,48 @@ fn encodeWithPayload(
     options: EncodeOptions,
     payload_mode: PayloadMode,
 ) !usize {
-    if (options.block_size == 0 or options.block_size > max_compatible_block_size)
-        return error.InvalidLzopOptions;
-    if (options.filename.len > std.math.maxInt(u8)) return error.InvalidLzopOptions;
+    try validateOptions(options);
 
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
+    try appendStreamHeader(allocator, &encoded, options, payload_mode);
+
+    var compressed_block: std.ArrayList(u8) = .empty;
+    defer compressed_block.deinit(allocator);
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const block_len = @min(options.block_size, input.len - offset);
+        const block = input[offset..][0..block_len];
+        try appendBlock(
+            allocator,
+            &encoded,
+            &compressed_block,
+            block,
+            options,
+            payload_mode,
+        );
+        offset += block.len;
+    }
+    try appendStreamEnd(allocator, &encoded);
+
+    try out.ensureUnusedCapacity(allocator, encoded.items.len);
+    out.appendSliceAssumeCapacity(encoded.items);
+    return encoded.items.len;
+}
+
+pub fn validateOptions(options: EncodeOptions) Error!void {
+    if (options.block_size == 0 or options.block_size > max_compatible_block_size)
+        return error.InvalidLzopOptions;
+    if (options.filename.len > std.math.maxInt(u8)) return error.InvalidLzopOptions;
+}
+
+pub fn appendStreamHeader(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    options: EncodeOptions,
+    payload_mode: PayloadMode,
+) !void {
+    try validateOptions(options);
     const data_flag: u32 = switch (options.checksum) {
         .adler32 => header.Flag.adler32_data,
         .crc32 => header.Flag.crc32_data,
@@ -113,38 +149,40 @@ fn encodeWithPayload(
         }
     else
         0;
-    try header.append(allocator, &encoded, .{
+    try header.append(allocator, output, .{
         .flags = data_flag | compressed_flag | header_flag,
         .filename = options.filename,
         .mode = options.mode,
         .modified_time = options.modified_time,
     });
+}
 
-    var compressed_block: std.ArrayList(u8) = .empty;
-    defer compressed_block.deinit(allocator);
-    var offset: usize = 0;
-    while (offset < input.len) {
-        const block_len = @min(options.block_size, input.len - offset);
-        const block = input[offset..][0..block_len];
-        compressed_block.clearRetainingCapacity();
-        if (payload_mode == .compressed_or_stored)
-            _ = try lzo1x.encodeAppend(allocator, &compressed_block, block, options.lzo_options);
-        const compressed = payload_mode == .compressed_or_stored and
-            compressed_block.items.len < block.len;
-        const payload = if (compressed) compressed_block.items else block;
-        try header.appendU32(allocator, &encoded, @intCast(block.len));
-        try header.appendU32(allocator, &encoded, @intCast(payload.len));
-        try header.appendU32(allocator, &encoded, checksumValue(options.checksum, block));
-        if (compressed and options.compressed_checksum)
-            try header.appendU32(allocator, &encoded, checksumValue(options.checksum, payload));
-        try encoded.appendSlice(allocator, payload);
-        offset += block.len;
-    }
-    try header.appendU32(allocator, &encoded, 0);
+pub fn appendBlock(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    compressed_scratch: *std.ArrayList(u8),
+    input: []const u8,
+    options: EncodeOptions,
+    payload_mode: PayloadMode,
+) !void {
+    if (input.len == 0 or input.len > options.block_size or input.len > max_compatible_block_size)
+        return error.InvalidLzopOptions;
+    compressed_scratch.clearRetainingCapacity();
+    if (payload_mode == .compressed_or_stored)
+        _ = try lzo1x.encodeAppend(allocator, compressed_scratch, input, options.lzo_options);
+    const compressed = payload_mode == .compressed_or_stored and
+        compressed_scratch.items.len < input.len;
+    const payload = if (compressed) compressed_scratch.items else input;
+    try header.appendU32(allocator, output, @intCast(input.len));
+    try header.appendU32(allocator, output, @intCast(payload.len));
+    try header.appendU32(allocator, output, checksumValue(options.checksum, input));
+    if (compressed and options.compressed_checksum)
+        try header.appendU32(allocator, output, checksumValue(options.checksum, payload));
+    try output.appendSlice(allocator, payload);
+}
 
-    try out.ensureUnusedCapacity(allocator, encoded.items.len);
-    out.appendSliceAssumeCapacity(encoded.items);
-    return encoded.items.len;
+pub fn appendStreamEnd(allocator: std.mem.Allocator, output: *std.ArrayList(u8)) !void {
+    try header.appendU32(allocator, output, 0);
 }
 
 fn checksumValue(kind: Checksum, input: []const u8) u32 {

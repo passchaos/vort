@@ -18420,3 +18420,16 @@ reuse, so production keeps the simpler independently owned plans.
   backpressure, max/pledged input, pending-output and block-count limits,
   retained scratch snapshots, empty streams, and every allocation failure. See
   `docs/formats/xz.md`.
+
+- Added a block-bounded public LZOP incremental encoder for adaptive
+  compressed-or-stored and explicit stored-only payloads. Shared one-shot
+  helpers own the header flags/metadata checksum, data/compressed checksums,
+  block serialization, and terminal zero block. A CRC-32 two-block fixture with
+  one compressed and one stored block, compressed checksums, CRC header,
+  filename/mode/time metadata matches one-shot bytes under one-byte input and
+  seven-byte output; a 4,097-byte stored Adler-32 stream independently matches
+  as well. Idempotent flush closes a block, finish emits the terminator, and
+  `nextStream` continues concatenated streams with new metadata or modes. The
+  API also covers zero-output backpressure, max/pledged input, pending-output
+  and per-stream block limits, resettable plain/LZO/output scratch, empty
+  streams, and every allocation failure. See `docs/formats/lzop.md`.

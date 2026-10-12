@@ -1,0 +1,299 @@
+const std = @import("std");
+const core = @import("../core.zig");
+const lzo1x = @import("../lzo1x.zig");
+const writer = @import("writer.zig");
+
+/// Block-bounded LZOP encoder. Plaintext, reusable LZO scratch, and pending
+/// output are caller-visible state rather than hidden whole-stream buffers.
+pub const Encoder = struct {
+    allocator: std.mem.Allocator,
+    options: Options,
+    plain: std.ArrayList(u8) = .empty,
+    compressed_scratch: std.ArrayList(u8) = .empty,
+    pending: std.ArrayList(u8) = .empty,
+    pending_offset: usize = 0,
+    header_written: bool = false,
+    footer_written: bool = false,
+    flush_requested: bool = false,
+    finishing: bool = false,
+    done: bool = false,
+    expected_input_len: ?usize = null,
+    current_input: usize = 0,
+    current_output: usize = 0,
+    total_input: usize = 0,
+    total_output: usize = 0,
+    current_block_count: usize = 0,
+    block_count: usize = 0,
+    stream_count: usize = 0,
+
+    pub const Error = writer.Error || std.mem.Allocator.Error;
+    pub const Options = struct {
+        block_size: usize = 256 * 1024,
+        checksum: writer.Checksum = .adler32,
+        compressed_checksum: bool = false,
+        header_checksum: writer.Checksum = .adler32,
+        filename: []const u8 = "",
+        mode: u32 = 0,
+        modified_time: u64 = 0,
+        lzo_options: lzo1x.EncodeOptions = .{},
+        payload_mode: writer.PayloadMode = .compressed_or_stored,
+        max_input_len: usize = std.math.maxInt(usize),
+        max_pending_output_len: usize = 1024 * 1024,
+        max_block_count: usize = 1024 * 1024,
+
+        fn writerOptions(self: Options) writer.EncodeOptions {
+            return .{
+                .block_size = self.block_size,
+                .checksum = self.checksum,
+                .compressed_checksum = self.compressed_checksum,
+                .header_checksum = self.header_checksum,
+                .filename = self.filename,
+                .mode = self.mode,
+                .modified_time = self.modified_time,
+                .lzo_options = self.lzo_options,
+            };
+        }
+    };
+    pub const Snapshot = struct {
+        input_read: usize,
+        output_written: usize,
+        current_input: usize,
+        current_output: usize,
+        buffered_input: usize,
+        pending_output: usize,
+        current_stream_blocks: usize,
+        block_count: usize,
+        stream_count: usize,
+        stream_index: usize,
+        flush_requested: bool,
+        finishing: bool,
+        done: bool,
+        retained_input_capacity: usize,
+        retained_compressed_capacity: usize,
+        retained_output_capacity: usize,
+    };
+
+    pub fn init(allocator: std.mem.Allocator) Error!Encoder {
+        return initWithOptions(allocator, .{});
+    }
+
+    pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) Error!Encoder {
+        try validateOptions(options);
+        return .{ .allocator = allocator, .options = options };
+    }
+
+    pub fn initExactSize(
+        allocator: std.mem.Allocator,
+        options: Options,
+        expected_input_len: usize,
+    ) Error!Encoder {
+        var state = try initWithOptions(allocator, options);
+        state.expected_input_len = expected_input_len;
+        return state;
+    }
+
+    pub fn deinit(self: *Encoder) void {
+        self.plain.deinit(self.allocator);
+        self.compressed_scratch.deinit(self.allocator);
+        self.pending.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *Encoder) void {
+        self.total_input = 0;
+        self.total_output = 0;
+        self.block_count = 0;
+        self.stream_count = 0;
+        self.resetStream(self.options, self.expected_input_len);
+    }
+
+    pub fn nextStream(self: *Encoder, options: Options) Error!void {
+        if (!self.done or self.pending_offset != self.pending.items.len)
+            return error.InvalidBlockPlan;
+        try validateOptions(options);
+        self.resetStream(options, null);
+    }
+
+    pub fn nextStreamExactSize(
+        self: *Encoder,
+        options: Options,
+        expected_input_len: usize,
+    ) Error!void {
+        if (!self.done or self.pending_offset != self.pending.items.len)
+            return error.InvalidBlockPlan;
+        try validateOptions(options);
+        self.resetStream(options, expected_input_len);
+    }
+
+    fn resetStream(self: *Encoder, options: Options, expected_input_len: ?usize) void {
+        self.options = options;
+        self.plain.clearRetainingCapacity();
+        self.compressed_scratch.clearRetainingCapacity();
+        self.pending.clearRetainingCapacity();
+        self.pending_offset = 0;
+        self.header_written = false;
+        self.footer_written = false;
+        self.flush_requested = false;
+        self.finishing = false;
+        self.done = false;
+        self.expected_input_len = expected_input_len;
+        self.current_input = 0;
+        self.current_output = 0;
+        self.current_block_count = 0;
+    }
+
+    pub fn snapshot(self: *const Encoder) Snapshot {
+        return .{
+            .input_read = self.total_input,
+            .output_written = self.total_output,
+            .current_input = self.current_input,
+            .current_output = self.current_output,
+            .buffered_input = self.plain.items.len,
+            .pending_output = self.pending.items.len - self.pending_offset,
+            .current_stream_blocks = self.current_block_count,
+            .block_count = self.block_count,
+            .stream_count = self.stream_count,
+            .stream_index = if (self.done and self.stream_count != 0) self.stream_count - 1 else self.stream_count,
+            .flush_requested = self.flush_requested,
+            .finishing = self.finishing,
+            .done = self.done,
+            .retained_input_capacity = self.plain.capacity,
+            .retained_compressed_capacity = self.compressed_scratch.capacity,
+            .retained_output_capacity = self.pending.capacity,
+        };
+    }
+
+    pub fn flush(self: *Encoder) void {
+        if (!self.finishing and !self.done) self.flush_requested = true;
+    }
+
+    pub fn finish(self: *Encoder) void {
+        if (!self.done) {
+            self.finishing = true;
+            self.flush_requested = false;
+        }
+    }
+
+    pub fn step(self: *Encoder, input: []const u8, output: []u8) Error!core.StepResult {
+        if (self.done) {
+            if (input.len != 0) return error.TrailingData;
+            return .{ .status = .done };
+        }
+        if ((self.flush_requested or self.finishing) and input.len != 0)
+            return error.TrailingData;
+
+        var input_read: usize = 0;
+        var output_written: usize = 0;
+        while (true) {
+            if (self.pending_offset != self.pending.items.len) {
+                const remaining = self.pending.items[self.pending_offset..];
+                const take = @min(output.len - output_written, remaining.len);
+                @memcpy(output[output_written..][0..take], remaining[0..take]);
+                self.pending_offset += take;
+                output_written += take;
+                self.current_output = std.math.add(usize, self.current_output, take) catch
+                    return error.IntegerOverflow;
+                self.total_output = std.math.add(usize, self.total_output, take) catch
+                    return error.IntegerOverflow;
+                if (self.pending_offset != self.pending.items.len)
+                    return result(input_read, output_written, .need_output);
+                self.pending.clearRetainingCapacity();
+                self.pending_offset = 0;
+            }
+
+            if (!self.header_written) {
+                try writer.appendStreamHeader(
+                    self.allocator,
+                    &self.pending,
+                    self.options.writerOptions(),
+                    self.options.payload_mode,
+                );
+                try self.checkPendingLimit();
+                self.header_written = true;
+                continue;
+            }
+
+            if (input_read < input.len) {
+                const room = self.options.block_size - self.plain.items.len;
+                const take = @min(room, input.len - input_read);
+                const next_input = std.math.add(usize, self.current_input, take) catch
+                    return error.IntegerOverflow;
+                if (next_input > self.options.max_input_len) return error.OutputLimitExceeded;
+                if (self.expected_input_len) |expected|
+                    if (next_input > expected) return error.SizeMismatch;
+                try self.plain.appendSlice(self.allocator, input[input_read..][0..take]);
+                input_read += take;
+                self.current_input = next_input;
+                self.total_input = std.math.add(usize, self.total_input, take) catch
+                    return error.IntegerOverflow;
+                if (self.plain.items.len == self.options.block_size) {
+                    try self.emitBlock();
+                    continue;
+                }
+                continue;
+            }
+
+            if (self.flush_requested or self.finishing) {
+                if (self.finishing) {
+                    if (self.expected_input_len) |expected|
+                        if (self.current_input != expected) return error.SizeMismatch;
+                }
+                if (self.plain.items.len != 0) {
+                    try self.emitBlock();
+                    continue;
+                }
+                if (self.flush_requested) {
+                    self.flush_requested = false;
+                    return result(input_read, output_written, .need_input);
+                }
+                if (!self.footer_written) {
+                    try writer.appendStreamEnd(self.allocator, &self.pending);
+                    try self.checkPendingLimit();
+                    self.footer_written = true;
+                    continue;
+                }
+                self.done = true;
+                self.stream_count = std.math.add(usize, self.stream_count, 1) catch
+                    return error.IntegerOverflow;
+                return result(input_read, output_written, .done);
+            }
+
+            return result(input_read, output_written, .need_input);
+        }
+    }
+
+    fn emitBlock(self: *Encoder) Error!void {
+        if (self.plain.items.len == 0) return error.InvalidBlockPlan;
+        if (self.current_block_count >= self.options.max_block_count)
+            return error.OutputLimitExceeded;
+        try writer.appendBlock(
+            self.allocator,
+            &self.pending,
+            &self.compressed_scratch,
+            self.plain.items,
+            self.options.writerOptions(),
+            self.options.payload_mode,
+        );
+        try self.checkPendingLimit();
+        self.plain.clearRetainingCapacity();
+        self.current_block_count = std.math.add(usize, self.current_block_count, 1) catch
+            return error.IntegerOverflow;
+        self.block_count = std.math.add(usize, self.block_count, 1) catch
+            return error.IntegerOverflow;
+    }
+
+    fn checkPendingLimit(self: *const Encoder) Error!void {
+        if (self.pending.items.len > self.options.max_pending_output_len)
+            return error.OutputLimitExceeded;
+    }
+
+    fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
+        return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
+    }
+};
+
+fn validateOptions(options: Encoder.Options) Encoder.Error!void {
+    try writer.validateOptions(options.writerOptions());
+    if (options.max_pending_output_len == 0 or options.max_block_count == 0)
+        return error.OutputLimitExceeded;
+}

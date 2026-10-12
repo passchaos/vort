@@ -342,7 +342,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   compressed-block checks, legacy delta filters, concatenated streams, and
   bounded output/block APIs, plus caller-output incremental decoding with
   arbitrary input splits, zero-sized output backpressure, bounded header/block
-  retention, exact-size pledges, reusable state, and checksum-before-output;
+  retention, exact-size pledges, reusable state, and checksum-before-output,
+  plus block-bounded incremental compressed-or-stored/stored-only encoding with
+  split-independent wire, Adler/CRC metadata, flushable blocks, concatenated
+  continuation, pledged input sizes, and caller-output backpressure;
 - pure Zig 7z parsing and deterministic independent-folder writing, with
   Copy/Deflate/Bzip2/LZMA/LZMA2 decode and encode,
   bounded linear Delta/BCJ filter chains including ARM64/RISC-V and BCJ2 four-stream graphs in

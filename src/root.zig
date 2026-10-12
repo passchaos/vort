@@ -536,6 +536,7 @@ pub const LzopFileInfo = lzop.FileInfo;
 pub const LzopChecksum = lzop.Checksum;
 pub const LzopEncodeOptions = lzop.EncodeOptions;
 pub const LzopIncrementalDecoder = lzop.IncrementalDecoder;
+pub const LzopIncrementalEncoder = lzop.IncrementalEncoder;
 pub const parseLzopHeader = lzop.parseHeader;
 pub const inspectLzop = lzop.inspect;
 pub const decodeLzopInto = lzop.decodeInto;
@@ -3531,6 +3532,33 @@ test "root LZOP exports compressed-or-stored and stored-only writing" {
     const stored = try encodeLzopStoredAlloc(std.testing.allocator, input, .{ .block_size = 128 });
     defer std.testing.allocator.free(stored);
     try std.testing.expectEqual(@as(usize, 0), (try inspectLzop(stored)).compressed_block_count);
+}
+
+test "root LZOP incremental encoder writes a complete stream" {
+    const input = "root LZOP incremental encoder" ** 64;
+    var encoder = try LzopIncrementalEncoder.initExactSize(std.testing.allocator, .{
+        .block_size = 257,
+        .checksum = .crc32,
+        .compressed_checksum = true,
+    }, input.len);
+    defer encoder.deinit();
+    var encoded: [4096]u8 = undefined;
+    var encoded_len: usize = 0;
+    var input_offset: usize = 0;
+    while (input_offset < input.len) {
+        const result = try encoder.step(input[input_offset..], encoded[encoded_len..]);
+        input_offset += result.progress.input_read;
+        encoded_len += result.progress.output_written;
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", encoded[encoded_len..]);
+        encoded_len += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    const decoded = try decodeLzopAlloc(std.testing.allocator, encoded[0..encoded_len]);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "root exports lz4 and zstd codec helpers" {

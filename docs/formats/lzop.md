@@ -70,6 +70,34 @@ the first byte of that block. A terminal zero block is mandatory before
 `finish`; partial headers, checksum fields, payloads, and terminators report
 `TruncatedFrame` with streaming diagnostics.
 
+`LzopIncrementalEncoder` provides the matching block-bounded writer. It
+supports the normal per-block compressed-or-stored choice and an explicit
+stored-only mode, reusing the exact one-shot header, block checksum, compressed
+checksum, and terminal-zero writers. Without `flush`, output is independent of
+caller fragmentation and matches one-shot bytes exactly.
+
+```zig
+var encoder = try vort.LzopIncrementalEncoder.initExactSize(allocator, .{
+    .block_size = 256 * 1024,
+    .checksum = .crc32,
+    .compressed_checksum = true,
+    .header_checksum = .crc32,
+    .filename = "payload.bin",
+    .payload_mode = .compressed_or_stored, // or .stored
+    .max_input_len = 256 * 1024 * 1024,
+    .max_pending_output_len = 1024 * 1024,
+    .max_block_count = 1024 * 1024,
+}, input.len);
+defer encoder.deinit();
+```
+
+The caller keeps filename metadata alive until the stream finishes. Idempotent
+`flush` closes the current LZOP block, `finish` writes the terminal zero block,
+and `nextStream`/`nextStreamExactSize` continue concatenated streams with new
+metadata, checksum, block-size, or payload-mode options. Reset retains plain,
+LZO, and encoded scratch capacities; max/pledged input, pending-output, block
+count, and zero-output backpressure remain explicit.
+
 CLI validation surfaces:
 
 ```sh
