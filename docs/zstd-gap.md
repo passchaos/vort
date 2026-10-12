@@ -1748,3 +1748,24 @@ Recommended next comparison steps:
 4. Split compatibility-format goals (raw/zlib/gzip deflate behavior) from native
    Vort goals; fixed deflate can be near zstd on small text while still being the
    wrong benchmark for the long-term native-format target.
+
+## 2026-10-13 x86 target refresh
+
+A fixed-CPU-2 ReleaseFast audit against the local 2026-09-18 libzstd 1.6.0
+checkout refreshed the 13 synthetic one-shot rows after the intervening decoder
+work. This is one target-selection snapshot, not a throughput claim. `raw256k`
+now measures 1.0322x libzstd, and a separate 100,000-decode `numbered_json`
+control measures 1.0139x; neither is the current x86 priority. The complete
+5,000-iteration snapshot puts `large_json` last at 0.9188x, followed by
+`ascii64k`/`numbered_json` at 0.9868x/0.9870x.
+
+The matching profile localizes `large_json` to four all-FSE compressed blocks
+with 7,298 sequences, 8,329 literal bytes, and 515,959 match bytes. Those blocks
+contain 7,262 all-far eight-sequence windows, but prior retained evidence has
+already rejected generic record materialization, a separate pair-batch helper,
+larger local copy branches, cached next-pair windows, state packing, and ABI
+outlining. Future x86 work must replace instructions inside the established
+pair/field executor or change table/bitstream organization without increasing
+hot live state; repeating raw-copy or wrapper-layer experiments is no longer
+evidence-aligned. Exact hashes, ratios, commands, and the profile summary are in
+`docs/performance/data/zstd-reference-audit-x86-20261013.json`.

@@ -18583,3 +18583,17 @@ reuse, so production keeps the simpler independently owned plans.
   Python differential reports `randomized_cases=1` alongside its seven ordinary
   bidirectional cases. Modern Vort encoding remains deliberately
   non-randomized.
+
+- Refreshed the x86-64 Zstd performance target against local libzstd 1.6.0
+  before starting another candidate. One fixed-CPU-2 13-row ReleaseFast
+  snapshot places `raw256k` at 1.0322x and a separate 100,000-decode
+  `numbered_json` control at 1.0139x, invalidating their older priority on this
+  host. `large_json` is the current lowest row at 0.9188x. Its profile attributes
+  515,959/524,307 output bytes to 7,298 sequences in four all-FSE blocks; 7,262
+  eight-sequence windows are all-far, but the existing evidence already rejects
+  record materialization and out-of-line pair batching. No source candidate was
+  retained in this audit. Future work is constrained to code-size-stable
+  in-place pair/field or table/bitstream changes. The single-snapshot scope,
+  exact hashes, executable provenance, commands, all 13 ratios, and profile
+  counters are retained in
+  `docs/performance/data/zstd-reference-audit-x86-20261013.json`.

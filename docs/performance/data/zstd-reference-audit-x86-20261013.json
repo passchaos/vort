@@ -1,0 +1,65 @@
+{
+  "schema": "vort-zstd-reference-audit-v1",
+  "date": "2026-10-13",
+  "repository_commit": "93949f84727b893e30d009e270f62161e2512901",
+  "decision": "retarget future x86 decode work from raw256k and numbered_json to large_json; retain no source candidate in this audit",
+  "evidence_scope": "single fixed-CPU snapshot for target selection, not a throughput claim",
+  "environment": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "2",
+    "threads": 1,
+    "zig": "0.16.0",
+    "optimize": "ReleaseFast",
+    "target": "x86_64-linux-gnu",
+    "target_cpu": "skylake+pku+sgx"
+  },
+  "reference": {
+    "version": "1.6.0",
+    "commit": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+    "library": "/home/passchaos/Work/zstd/lib/libzstd.so",
+    "api": "ZSTD_decompress"
+  },
+  "benchmark": {
+    "vort_api": "decodeFrameInto",
+    "iterations_per_row": 5000,
+    "executable_sha256": "30793fc6dd6c081aecc53da700e4f50a6ba23ff72de1d288bf31278ffb25e356",
+    "command": "taskset -c 2 zig build -Doptimize=ReleaseFast run-zstd-reference-bench -j1 -- --iterations 5000 --libzstd /home/passchaos/Work/zstd/lib/libzstd.so --csv /tmp/vort-zstd-current-matrix.csv",
+    "rows": [
+      { "case": "tiny", "input_sha256": "b0759fe310b2c1e52759a18b1426918d2596bf9ff44f5c991ef6eb01db909833", "vort_over_reference": 12.8146 },
+      { "case": "text", "input_sha256": "cd61a904c905aaef8b9e9ee78d1556d30f270e44247171ae1d846a38af05656a", "vort_over_reference": 3.7633 },
+      { "case": "structured", "input_sha256": "9c9ce7f1f5aefeff894e223c23418fdd0ea162df6351099330f8ccb0fe7c2337", "vort_over_reference": 1.2291 },
+      { "case": "repetitive", "input_sha256": "6d70fe77395a71498d4a23b83c7f96834659190c6ff9021f9cb204b2589d116d", "vort_over_reference": 1.6126 },
+      { "case": "incompressible", "input_sha256": "0aa202fa0b471c4ef945dc849496759972ccd2c2ca4b5b96344a0fbf6129bc25", "vort_over_reference": 8.2973 },
+      { "case": "rle64k", "input_sha256": "de2f256064a0af797747c2b97505dc0b9f3df0de4f489eac731c23ae9ca9cc31", "vort_over_reference": 5.2822 },
+      { "case": "raw256k", "input_sha256": "2e45212ce01011167ab4f24cc2e9a045099c7a801f583f98d2bf3bf766cb4eab", "vort_over_reference": 1.0322 },
+      { "case": "numbered_json", "input_sha256": "394cbb2d4c4709369e761604ad29c5b4a2757b77003fae36f4673ec5e979e11d", "vort_over_reference": 0.9870 },
+      { "case": "huffman80k", "input_sha256": "b175e4daec83dc1869cceda78ff399c6b5af3b3b40825ea091d2d879fef02a70", "vort_over_reference": 1.1485 },
+      { "case": "ascii64k", "input_sha256": "48b78891ab08d42cc04191cac973b53fd1c6beb553726eac5547e40a4ed6086c", "vort_over_reference": 0.9868 },
+      { "case": "large_text", "input_sha256": "66be1bc40692170cf1ea5926e75ca2d198abffa8dc61d1a4a5f028b9fc9e523c", "vort_over_reference": 1.0474 },
+      { "case": "large_json", "input_sha256": "b0d873df5fbe94a60e8e10a51cde4b08b3370ae4f251357c16adbfc69fd27c95", "vort_over_reference": 0.9188 },
+      { "case": "binary_mixed", "input_sha256": "9b6baade432a5412676e8e19dbcdbd93346b08f7ed6c320af1235ca33020200d", "vort_over_reference": 1.4848 }
+    ]
+  },
+  "long_numbered_json_control": {
+    "iterations": 100000,
+    "vort_mib_s": 833.49,
+    "reference_mib_s": 822.08,
+    "vort_over_reference": 1.0139,
+    "command": "taskset -c 2 zig build -Doptimize=ReleaseFast run-zstd-reference-bench -j1 -- --case numbered_json --iterations 100000 --libzstd /home/passchaos/Work/zstd/lib/libzstd.so --csv /tmp/vort-zstd-numbered-json-baseline.csv"
+  },
+  "large_json_profile": {
+    "input_bytes": 524307,
+    "encoded_bytes": 9905,
+    "block_count": 5,
+    "compressed_blocks": 5,
+    "all_fse_blocks": 4,
+    "all_fse_sequences": 7298,
+    "all_fse_literal_bytes": 8329,
+    "all_fse_match_bytes": 515959,
+    "total_sequences": 7299,
+    "far_batch8_windows": 7270,
+    "far_batch8_all_far": 7262,
+    "far_batch8_all_far_common": 2589,
+    "command": "taskset -c 2 zig build -Doptimize=ReleaseFast run-zstd-decode-profile -j1 -- --case large_json --iterations 5000 --libzstd /home/passchaos/Work/zstd/lib/libzstd.so --csv /tmp/vort-zstd-large-json-profile.csv"
+  }
+}
