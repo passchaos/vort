@@ -91,6 +91,12 @@ pub fn appendCompressedPayloadWithDictionarySize(
     else
         null;
     defer if (wide_planner) |*planner| planner.deinit();
+    const lzma_options = lzma_encoder.EncodeOptions{
+        .dictionary_size = requested_dictionary_size,
+    };
+    var model = try lzma_encoder.initModel(lzma_options);
+    var model_valid = false;
+    var properties_initialized = false;
 
     var offset: usize = 0;
     while (offset < input.len) {
@@ -99,35 +105,54 @@ pub fn appendCompressedPayloadWithDictionarySize(
         const dictionary_start = offset - @min(offset, requested_dictionary_size);
         const dictionary = input[dictionary_start..offset];
         candidate.clearRetainingCapacity();
+        // A stored LZMA2 chunk invalidates the probability state. Encode the
+        // candidate directly into the retained model: success keeps it, while
+        // fallback marks it invalid and the next chunk constructs a fresh one.
+        if (!model_valid) model = try lzma_encoder.initModel(lzma_options);
+        const reset: u2 = if (offset == 0)
+            3
+        else if (!properties_initialized)
+            2
+        else if (!model_valid)
+            1
+        else
+            0;
         if (wide_planner) |*planner| {
             const plan = try planner.planChunk(input, offset, offset + chunk_len);
-            _ = try lzma_encoder.encodeChunkAppendWithWidePlan(
+            _ = try lzma_encoder.encodeChunkAppendWithModel(
                 allocator,
                 &candidate,
                 chunk,
                 dictionary,
                 offset,
-                .{ .dictionary_size = requested_dictionary_size },
+                lzma_options,
                 plan,
+                &model,
             );
         } else {
-            _ = try lzma_encoder.encodeChunkAppendWithDictionary(
+            _ = try lzma_encoder.encodeChunkAppendWithModel(
                 allocator,
                 &candidate,
                 chunk,
                 dictionary,
                 offset,
-                .{ .dictionary_size = requested_dictionary_size },
+                lzma_options,
+                null,
+                &model,
             );
         }
-        if (candidate.items.len <= max_uncompressed_chunk and candidate.items.len + 3 < chunk.len) {
-            try encoded.append(allocator, if (offset == 0) 0xe0 else 0xc0);
+        const header_delta: usize = if (reset >= 2) 3 else 2;
+        if (candidate.items.len <= max_uncompressed_chunk and candidate.items.len + header_delta < chunk.len) {
+            try encoded.append(allocator, 0x80 | (@as(u8, reset) << 5));
             try appendU16Big(allocator, &encoded, @intCast(chunk.len - 1));
             try appendU16Big(allocator, &encoded, @intCast(candidate.items.len - 1));
-            try encoded.append(allocator, lzma_property);
+            if (reset >= 2) try encoded.append(allocator, lzma_property);
             try encoded.appendSlice(allocator, candidate.items);
+            model_valid = true;
+            properties_initialized = true;
         } else {
             try appendStoredChunk(allocator, &encoded, chunk, offset == 0);
+            model_valid = false;
         }
         offset += chunk_len;
     }
@@ -241,22 +266,56 @@ test "raw LZMA2 match compression round trips and falls back for noise" {
     try std.testing.expectEqualSlices(u8, &noise, decoded_noise);
 }
 
+test "raw LZMA2 consecutive compressed chunks retain probability model" {
+    const input = "persistent LZMA2 probability model and recent distances\n" ** 2400;
+    try std.testing.expect(input.len > max_uncompressed_chunk);
+    inline for (.{ dictionary_size, 128 * 1024 }) |configured_dictionary| {
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(std.testing.allocator);
+        _ = try appendCompressedPayloadWithDictionarySize(
+            std.testing.allocator,
+            &encoded,
+            input,
+            configured_dictionary,
+        );
+        try std.testing.expectEqual(@as(u8, 0xe0), encoded.items[0]);
+        const first_packed_size = @as(usize, std.mem.readInt(u16, encoded.items[3..5], .big)) + 1;
+        const second_chunk = 6 + first_packed_size;
+        try std.testing.expectEqual(@as(u8, 0x80), encoded.items[second_chunk]);
+
+        const property = try dictionaryProperty(configured_dictionary);
+        const decoded = try @import("container.zig").decode7zPayloadAllocLimited(
+            std.testing.allocator,
+            encoded.items,
+            property,
+            input.len,
+            dictionarySize(property),
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+}
+
 test "raw LZMA2 payload switches safely from compressed to stored chunks" {
-    const input = try std.testing.allocator.alloc(u8, max_uncompressed_chunk * 2);
+    const input = try std.testing.allocator.alloc(u8, max_uncompressed_chunk * 3);
     defer std.testing.allocator.free(input);
     @memset(input[0..max_uncompressed_chunk], 'A');
     var state: u32 = 0x9e37_79b9;
-    for (input[max_uncompressed_chunk..]) |*byte| {
+    for (input[max_uncompressed_chunk .. max_uncompressed_chunk * 2]) |*byte| {
         state = state *% 1_664_525 +% 1_013_904_223;
         byte.* = @truncate(state >> 24);
     }
+    @memset(input[max_uncompressed_chunk * 2 ..], 'B');
 
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
     _ = try appendCompressedPayload(std.testing.allocator, &encoded, input);
     try std.testing.expect(encoded.items[0] >= 0xe0);
     const first_packed_size = @as(usize, std.mem.readInt(u16, encoded.items[3..5], .big)) + 1;
-    try std.testing.expectEqual(@as(u8, 2), encoded.items[6 + first_packed_size]);
+    const second_chunk = 6 + first_packed_size;
+    try std.testing.expectEqual(@as(u8, 2), encoded.items[second_chunk]);
+    const third_chunk = second_chunk + 3 + max_uncompressed_chunk;
+    try std.testing.expectEqual(@as(u8, 0xa0), encoded.items[third_chunk]);
 
     const decoded = try @import("container.zig").decode7zPayloadAllocLimited(
         std.testing.allocator,

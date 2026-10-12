@@ -1593,6 +1593,44 @@ pub fn build(b: *std.Build) void {
     const xz_diff_step = b.step("run-xz-diff", "Validate XZ/LZMA2 and standard filter interoperability with Python lzma and xz");
     xz_diff_step.dependOn(&xz_diff.step);
 
+    const xz_encode_bench_exe = b.addExecutable(.{
+        .name = "vort-xz-encode-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/xz/encode_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_xz_encode_bench = b.addRunArtifact(xz_encode_bench_exe);
+    if (b.args) |args| run_xz_encode_bench.addArgs(args);
+    const xz_encode_bench_step = b.step(
+        "run-xz-encode-bench",
+        "Compare pure-Zig XZ encoding with runtime liblzma",
+    );
+    xz_encode_bench_step.dependOn(&run_xz_encode_bench.step);
+
+    const run_xz_encode_bench_gate_csv = b.addRunArtifact(xz_encode_bench_exe);
+    run_xz_encode_bench_gate_csv.addArgs(&.{
+        "--iterations", "1",
+        "--rounds",     "1",
+        "--csv",        "zig-out/vort-xz-encode-bench.csv",
+    });
+    const xz_encode_bench_gate = b.addSystemCommand(&.{
+        "python3", "tools/xz/encode_bench_gate.py",
+        "--csv",   "zig-out/vort-xz-encode-bench.csv",
+    });
+    xz_encode_bench_gate.step.dependOn(&run_xz_encode_bench_gate_csv.step);
+    const xz_encode_bench_gate_step = b.step(
+        "run-xz-encode-bench-gate",
+        "Validate XZ/liblzma encode benchmark coverage",
+    );
+    xz_encode_bench_gate_step.dependOn(&xz_encode_bench_gate.step);
+
     const lzma_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/diff.py", "--cli" });
     lzma_diff.addArtifactArg(cli_exe);
     const lzma_diff_step = b.step("run-lzma-diff", "Validate dependency-free LZMA-Alone encoding and decoding against Python lzma and xz");

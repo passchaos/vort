@@ -37,6 +37,14 @@ pub const max_dictionary_size: usize = wide_match.max_window_len;
 pub const WideStreamPlanner = wide_match.StreamPlanner;
 pub const WideStreamPlan = wide_match.StreamPlan;
 
+pub fn initModel(options: EncodeOptions) Error!Model {
+    try validateOptions(options);
+    return .{
+        .properties = options.properties,
+        .dictionary_size = options.dictionary_size,
+    };
+}
+
 const max_states: usize = 12;
 const max_position_states: usize = 16;
 const max_literal_contexts: usize = 16;
@@ -339,6 +347,7 @@ pub fn encodeChunkAppendWithDictionaryStats(
         stream_start,
         options,
         null,
+        null,
     );
 }
 
@@ -361,6 +370,33 @@ pub fn encodeChunkAppendWithWidePlan(
         stream_start,
         options,
         wide_plan,
+        null,
+    )).output_bytes;
+}
+
+pub fn encodeChunkAppendWithModel(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    dictionary: []const u8,
+    stream_start: usize,
+    options: EncodeOptions,
+    wide_plan: ?WideStreamPlan,
+    model: *Model,
+) !usize {
+    if (options.mode != .greedy or
+        model.dictionary_size != options.dictionary_size or
+        !std.meta.eql(model.properties, options.properties))
+        return error.InvalidLzmaOptions;
+    return (try encodeChunkAppendWithDictionaryStatsAndPlan(
+        allocator,
+        output,
+        input,
+        dictionary,
+        stream_start,
+        options,
+        wide_plan,
+        model,
     )).output_bytes;
 }
 
@@ -372,6 +408,7 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
     stream_start: usize,
     options: EncodeOptions,
     prepared_wide_plan: ?WideStreamPlan,
+    external_model: ?*Model,
 ) !EncodeStats {
     try validateOptions(options);
     if (dictionary.len > stream_start) return error.InvalidLzmaOptions;
@@ -379,10 +416,11 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
     var range = range_encoder.Encoder.init(allocator, &encoded);
-    var model = Model{
+    var local_model = Model{
         .properties = options.properties,
         .dictionary_size = options.dictionary_size,
     };
+    const model = external_model orelse &local_model;
     var stats = EncodeStats{
         .input_bytes = input.len,
         .output_bytes = 0,
@@ -415,7 +453,7 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
                 if (options.dictionary_size <= std.math.maxInt(u16))
                     return error.InvalidLzmaOptions;
                 try encodeGreedyPlan(
-                    &model,
+                    model,
                     &range,
                     input,
                     active_dictionary,
@@ -435,7 +473,7 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
                 });
                 defer plan.deinit(allocator);
                 try encodeGreedyPlan(
-                    &model,
+                    model,
                     &range,
                     input,
                     active_dictionary,
@@ -450,7 +488,7 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
                 });
                 defer plan.deinit(allocator);
                 try encodeGreedyPlan(
-                    &model,
+                    model,
                     &range,
                     input,
                     active_dictionary,

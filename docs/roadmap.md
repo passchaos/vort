@@ -18721,3 +18721,21 @@ reuse, so production keeps the simpler independently owned plans.
   Python/system-XZ differential pass; the latter retains the exact
   139,332→131,188-byte wide-distance evidence. Deeper parsing and properties
   above 1 MiB remain ratio/performance work.
+
+- Added a reproducible XZ/liblzma encode benchmark and used it to retain LZMA2
+  probability-model continuity across compressed chunks. Runtime liblzma 5.2.5
+  preset 1 provides in-process size/throughput comparison, while both decoders
+  verify every output. The first compressed chunk keeps `0xe0`; consecutive
+  chunks use `0x80`, and stored fallback successors use `0xa0`/`0xc0` according
+  to property state. Fifteen fixed-CPU-2 pairs improve text/JSON/binary encode
+  by 1.0550x/1.0552x/1.0355x medians with 15/15 wins, while sizes fall
+  456→268, 3,404→2,948, and 71,048→70,764 bytes. A 128 KiB-wide control is
+  byte-identical and pays a bounded 0.9964x geometric throughput cost; it still
+  leads liblzma at 1.249x speed and 0.9987x size. Copying the complete model
+  transactionally first regressed text/JSON to about 0.978x and was removed;
+  direct mutation is safe because stored fallback invalidates state. LZMA
+  103/103, XZ 114/114, the external differential, and the new five-row gate
+  pass. Exact evidence is in `docs/performance/xz-encode-baseline-x86.md` and
+  `docs/performance/data/xz-persistent-model-x86-20261013.json`. Remaining
+  priorities are binary/wide throughput (0.559x/0.692x liblzma) and JSON ratio
+  (2.076x reference size).

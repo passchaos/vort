@@ -153,6 +153,7 @@ zig build run -- decode-xz-concat-file streams.xz output.bin 268435456
 zig build run -- size-xz-file input.xz 268435456
 zig build run -- inspect-xz-file input.xz
 zig build run-xz-diff
+zig build -Doptimize=ReleaseFast run-xz-encode-bench-gate
 ```
 
 The reader and writer support Delta plus all eight XZ BCJ filters. Filter
@@ -174,6 +175,9 @@ block-local hash state advances across every compressed or stored 64 KiB chunk,
 so history positions are indexed once rather than rebuilt for each chunk.
 Stored fallbacks likewise retain history: the first chunk uses dictionary-reset
 control `1` or `0xe0`, while later stored/compressed chunks use `2` or `0xc0`.
+Consecutive compressed chunks also retain LZMA probability state and recent
+distances through control `0x80`; after a stored fallback, control `0xa0`
+resets that state without redundantly resending unchanged properties.
 This lets a match cross a 64 KiB chunk boundary without making chunks dependent
 on hidden state outside their XZ block. Deeper lazy/optimal parsing and larger
 dictionary properties remain later ratio and performance work.
